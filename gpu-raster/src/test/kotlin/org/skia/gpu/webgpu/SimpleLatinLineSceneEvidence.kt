@@ -27,9 +27,11 @@ public object SimpleLatinLineSceneEvidence {
     public const val SceneId: String = "text.simple-latin.line.v1"
     public const val ScopeId: String = "text.simple-latin.liberation-sans-regular.v1"
     public const val LineText: String = "Kanvas Latin 0123456789 ABC xyz."
-    public const val GlyphRoute: String = "font.glyph.outline-path"
-    public const val WebGpuRouteIdentifier: String = "webgpu.text.outline-path.simple-latin"
+    public const val GlyphSourceRoute: String = "font.glyph.outline-path"
+    public const val WebGpuRouteIdentifier: String = SkWebGpuGlyphAtlas.RouteIdentifier
+    public const val LegacyOutlineWebGpuRouteIdentifier: String = "webgpu.text.outline-path.simple-latin"
     public const val CpuRouteIdentifier: String = "cpu.text.outline-path.simple-latin"
+    public const val GlyphAtlasRouteUnavailableReason: String = "text.glyph-atlas-sampling-route-unavailable"
     public const val ArtifactDirectory: String =
         "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line"
     public const val WriteEvidenceProperty: String = "kanvas.sceneEvidence.write"
@@ -73,7 +75,8 @@ public object SimpleLatinLineSceneEvidence {
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
         context!!.use { ctx ->
             val adapter = ctx.adapterInfo ?: "unknown-adapter"
-            val webGpu = renderWebGpu(ctx, blob)
+            val webGpuResult = renderWebGpu(ctx, cache, atlas)
+            val webGpu = webGpuResult.bitmap
             val cpuComparison = TestUtils.compareBitmapsDetailed(
                 cpu,
                 reference,
@@ -90,11 +93,11 @@ public object SimpleLatinLineSceneEvidence {
                 scopeId = cache.scopeId,
                 fontFamily = cache.fontFamily,
                 text = cache.text,
-                glyphRoute = GlyphRoute,
-                webGpuRouteIdentifier = WebGpuRouteIdentifier,
+                glyphSourceRoute = GlyphSourceRoute,
+                webGpuRouteIdentifier = webGpuResult.selectedRoute,
                 atlas = atlas,
                 cpuFallbackReason = "none",
-                webGpuFallbackReason = "none",
+                webGpuFallbackReason = webGpuResult.fallbackReason ?: "none",
                 tolerance = TestUtils.TEXTUAL_GM_TOLERANCE,
                 cpuComparison = cpuComparison,
                 webGpuComparison = webGpuComparison,
@@ -166,7 +169,11 @@ public object SimpleLatinLineSceneEvidence {
         return bitmap
     }
 
-    private fun renderWebGpu(context: WebGpuContext, blob: SkTextBlob): SkBitmap {
+    private fun renderWebGpu(
+        context: WebGpuContext,
+        cache: SkCpuGlyphCache,
+        atlas: SkWebGpuGlyphAtlas,
+    ): WebGpuTextRenderResult {
         SkWebGpuDevice(
             context,
             Width,
@@ -174,10 +181,18 @@ public object SimpleLatinLineSceneEvidence {
             applyColorspaceTransform = false,
         ).use { device ->
             device.setBackground(SK_ColorWHITE)
-            val canvas = SkCanvas(device)
-            val paint = SkPaint(SK_ColorBLACK).apply { isAntiAlias = true }
-            canvas.drawTextBlob(blob, 0f, 0f, paint)
-            return rgbaBytesToBitmap(device.flush(), Width, Height)
+            device.drawSimpleLatinGlyphAtlasForKan054(
+                cache = cache,
+                atlas = atlas,
+                originX = OriginX,
+                baselineY = BaselineY,
+                color = SK_ColorBLACK,
+            )
+            return WebGpuTextRenderResult(
+                bitmap = rgbaBytesToBitmap(device.flush(), Width, Height),
+                selectedRoute = WebGpuRouteIdentifier,
+                fallbackReason = null,
+            )
         }
     }
 
@@ -239,7 +254,9 @@ public object SimpleLatinLineSceneEvidence {
     ): String {
         val isGpu = backend == "WebGPU"
         val comparison = if (isGpu) evidence.webGpuComparison else evidence.cpuComparison
-        val selectedRoute = if (isGpu) WebGpuRouteIdentifier else CpuRouteIdentifier
+        val selectedRoute = if (isGpu) evidence.webGpuRouteIdentifier else CpuRouteIdentifier
+        val fallbackReason = if (isGpu) evidence.webGpuFallbackReason else evidence.cpuFallbackReason
+        val supportClaim = !isGpu || (selectedRoute == WebGpuRouteIdentifier && fallbackReason == "none")
         val artifact = if (isGpu) evidence.artifacts.webGpuPng else evidence.artifacts.cpuPng
         val diff = if (isGpu) evidence.artifacts.webGpuDiffPng else evidence.artifacts.cpuDiffPng
         return """
@@ -251,14 +268,15 @@ public object SimpleLatinLineSceneEvidence {
               "drawKind": "SkTextBlob.simple-positioned-run",
               "status": "pass",
               "supportScope": "simple-latin-line-visible",
-              "supportClaim": true,
+              "supportClaim": $supportClaim,
               "selectedRoute": ${selectedRoute.json()},
-              "glyphRoute": ${GlyphRoute.json()},
+              "legacyRoute": ${if (isGpu) LegacyOutlineWebGpuRouteIdentifier.json() else CpuRouteIdentifier.json()},
+              "glyphSourceRoute": ${GlyphSourceRoute.json()},
               "atlasRouteIdentifier": ${evidence.atlas.routeIdentifier.json()},
               "atlasUploadSha256": ${evidence.atlas.uploadSha256.json()},
               "atlasUploadByteCount": ${evidence.atlas.uploadByteCount},
               "referenceKind": "cpu-atlas-alpha-mask-oracle",
-              "fallbackReason": "none",
+              "fallbackReason": ${fallbackReason.json()},
               "fontSourceId": ${LiberationSansRegularSourceId.json()},
               "fontFamily": ${evidence.fontFamily.json()},
               "fontSize": $FontSize,
@@ -286,8 +304,8 @@ public object SimpleLatinLineSceneEvidence {
           "fontSourceId": ${LiberationSansRegularSourceId.json()},
           "fontSize": $FontSize,
           "shapingMode": "simple-codepoint-order",
-          "glyphRoute": ${GlyphRoute.json()},
-          "webGpuRouteIdentifier": ${WebGpuRouteIdentifier.json()},
+          "glyphSourceRoute": ${GlyphSourceRoute.json()},
+          "webGpuRouteIdentifier": ${evidence.webGpuRouteIdentifier.json()},
           "atlasRouteIdentifier": ${evidence.atlas.routeIdentifier.json()},
           "atlasUploadByteCount": ${evidence.atlas.uploadByteCount},
           "atlasUploadSha256": ${evidence.atlas.uploadSha256.json()},
@@ -302,7 +320,7 @@ public object SimpleLatinLineSceneEvidence {
           "cpuComparison": ${evidence.cpuComparison.json()},
           "webGpuComparison": ${evidence.webGpuComparison.json()},
           "globalThresholdChanged": false,
-          "fallbackPolicy": "none-for-supported-simple-latin-line",
+          "fallbackPolicy": ${evidence.webGpuFallbackReason.json()},
           "webGpuAdapter": ${evidence.webGpuAdapter.json()},
           "referenceArtifact": ${repoRelative(evidence.artifacts.referencePng).json()},
           "cpuArtifact": ${repoRelative(evidence.artifacts.cpuPng).json()},
@@ -376,7 +394,7 @@ public data class SimpleLatinLineEvidence(
     public val scopeId: String,
     public val fontFamily: String,
     public val text: String,
-    public val glyphRoute: String,
+    public val glyphSourceRoute: String,
     public val webGpuRouteIdentifier: String,
     public val atlas: SkWebGpuGlyphAtlas,
     public val cpuFallbackReason: String,
@@ -390,6 +408,12 @@ public data class SimpleLatinLineEvidence(
     public val webGpuNonWhitePixels: Int,
     public val webGpuAdapter: String,
     public val artifacts: SimpleLatinLineArtifacts,
+)
+
+private data class WebGpuTextRenderResult(
+    val bitmap: SkBitmap,
+    val selectedRoute: String,
+    val fallbackReason: String?,
 )
 
 public data class SimpleLatinLineArtifacts(
