@@ -64,6 +64,9 @@ named for Kanvas responsibilities:
 - `analysis`
 - `passes`
 - `layers`
+- `filters`
+- `materials`
+- `pipelines`
 - `resources`
 - `routing`
 - `diagnostics`
@@ -82,6 +85,8 @@ Public concept names in the new renderer use uppercase acronyms:
 - `GPUTaskList`
 - `GPUDrawAnalysis`
 - `GPUOcclusionTracker`
+- `GPULayerPlan`
+- `GPUFilterPlan`
 - `GPUDrawLayer`
 - `GPUDrawLayerPlanner`
 - `GPUDrawPass`
@@ -124,6 +129,8 @@ into a narrower GPU renderer value object.
 | Draw-list analysis and ordering | `GPUDrawAnalysis` | Explicit analysis product; not hidden in pass construction. |
 | `SortKey` | `SortKey` | Deterministic Kanvas value for legal draw ordering; no Graphite bit-layout requirement. |
 | Occlusion culling | `GPUOcclusionTracker` | Dedicated conservative culling capability; not an incidental pass-builder side effect. |
+| SaveLayer and layer semantics | `GPULayerPlan` | Captured layer/saveLayer semantics, offscreen target needs, restore/composite behavior, and attached filters. |
+| Image filter graph planning | `GPUFilterPlan` | Filter DAG, intermediate resources, render/compute routes, and filter refusals outside `MaterialKey`. |
 | Layer/draw-context planning | `GPUDrawLayer` / `GPUDrawLayerPlanner` | Logical layer and composite scopes from captured state; not Graphite context classes. |
 | `DrawPass` | `GPUDrawPass` | Immutable pass close to what the GPU facade will execute. |
 | `Renderer` / `RenderStep` | `GPURenderStep` | Geometry/coverage technique with fixed shader and state contribution. |
@@ -141,6 +148,7 @@ implementation.
 legacy stateful API
   -> adapter captures transform/clip/layer/material/bounds
   -> NormalizedDrawCommand
+  -> GPULayerPlan / GPUFilterPlan
   -> GPURecorder
   -> GPUDrawAnalysis
   -> GPUOcclusionTracker + GPUDrawLayerPlanner

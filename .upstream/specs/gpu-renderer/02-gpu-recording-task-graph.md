@@ -168,8 +168,9 @@ captured normalized command state. It is not a replay of `saveLayer` and
 `restore` calls.
 
 `GPUDrawLayer` is the low-level pass/layer planning structure used by the GPU
-renderer. It does not by itself decide the higher-level `GPULayerPlan` or full
-`saveLayer` lowering contract, which must be specified separately.
+renderer. It consumes the higher-level `GPULayerPlan` and `GPUFilterPlan`
+contracts defined in `08-layer-and-filter-plans.md`; it does not replace those
+semantic plans.
 
 A layer contains:
 
@@ -185,9 +186,9 @@ A layer contains:
 - culling facts from `GPUOcclusionTracker`;
 - diagnostics and stable refusal reasons.
 
-`GPUDrawLayerPlanner` consumes `GPUDrawAnalysis`, normalized layer facts, target
-facts, and `GPUCapabilities`. It produces a deterministic layer plan and a pass
-partitioning proposal.
+`GPUDrawLayerPlanner` consumes `GPUDrawAnalysis`, `GPULayerPlan`,
+`GPUFilterPlan`, target facts, and `GPUCapabilities`. It produces a
+deterministic low-level draw-layer plan and a pass partitioning proposal.
 
 It is responsible for:
 

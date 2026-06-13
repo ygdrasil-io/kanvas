@@ -71,6 +71,9 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 - Keep WGSL as the shader language. Graphite's SkSL paint machinery maps to
   Kanvas `MaterialKey`, `GPURenderPipelineKey`, and parser-validated WGSL
   fragments. Compute work uses separate compute program and pipeline keys.
+- Model high-level layer/saveLayer semantics with `GPULayerPlan` and filter
+  graph execution with `GPUFilterPlan`; keep `GPUDrawLayer` as the lower-level
+  pass/layer planning structure.
 - Use Kanvas-idiomatic package and class organization. Graphite vocabulary is
   kept as an equivalence table and source-evidence reference, not mirrored as
   a package tree, inheritance hierarchy, or API surface.
@@ -102,6 +105,7 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 | `05-routing-policy.md` | `GPUNative`, `CPUPreparedGPU`, `CPUReferenceOnly`, and `RefuseDiagnostic` selection and diagnostics. |
 | `06-legacy-adapter-cleanup.md` | `gpu-raster`/`SkWebGpuDevice.kt` migration boundary and cleanup rules with no render change. |
 | `07-validation-conformance.md` | Unit, conformance, GPU evidence, PM artifacts, promotion gates, and retirement criteria. |
+| `08-layer-and-filter-plans.md` | `GPULayerPlan`, `GPUFilterPlan`, saveLayer semantics, offscreen targets, filter DAGs, and layer/filter diagnostics. |
 
 ## Target Shape
 
@@ -109,7 +113,9 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 flowchart TD
     legacy["Skia-like API / legacy device"] --> adapter["Legacy state adapter"]
     adapter --> command["NormalizedDrawCommand with captured state"]
+    command --> layerplan["GPULayerPlan / GPUFilterPlan"]
     command --> recorder["GPURecorder"]
+    layerplan --> recorder
     recorder --> recording["GPURecording"]
     recording --> tasks["GPUTaskList"]
     tasks --> drawpass["GPUDrawPass"]

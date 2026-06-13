@@ -145,10 +145,9 @@ and typed `CPUPreparedGPU` artifacts when routing policy allows them. Filter
 graph identity, intermediate ownership, and pass scheduling must not be encoded
 as material identity.
 
-This spec does not decide `GPULayerPlan`, `saveLayer` lowering, or broad layer
-semantics. `GPUDrawLayer` may exist as a low-level pass/layer planning
-structure, but the higher-level layer semantic contract must be validated
-separately before implementation tickets depend on it.
+`GPULayerPlan`, `saveLayer` lowering, and broad layer semantics are defined in
+`08-layer-and-filter-plans.md`. `GPUDrawLayer` remains the low-level pass/layer
+planning structure; it does not replace the higher-level layer semantic plan.
 
 ## `wgsl4k` Validation
 
