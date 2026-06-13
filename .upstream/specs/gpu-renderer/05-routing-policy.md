@@ -28,6 +28,9 @@ Examples:
   generation;
 - text outline, color glyph, bitmap glyph, SVG glyph, A8 atlas, or SDF atlas
   rendering when `21-text-glyph-pipeline.md` accepts the route and resources;
+- scissor, geometric clip intersection, analytic clip coverage, stencil clip
+  producer-consumer work, or registered clip shader GPU work when
+  `24-clip-stencil-mask-pipeline.md` accepts the route;
 - stencil/depth clip preparation on GPU;
 - GPU tessellation or generated geometry buffers when owned by GPU-side logic.
 - destination-read target snapshots, existing intermediates, and layer
@@ -68,6 +71,10 @@ Path and coverage atlas routes are governed by
 `CPUPreparedGPU(CoverageMaskArtifact)` for clip/operation-specific coverage
 only when the artifact key, atlas policy, budget, generation, mutation plan,
 and GPU consumer are all accepted.
+Clip execution routes are governed by `24-clip-stencil-mask-pipeline.md`. A
+route may select `CPUPreparedGPU(CoverageMaskArtifact)` only for a bounded clip
+coverage mask consumed by GPU work. It must not CPU-render the clipped draw,
+layer, filter, or scene result.
 
 Text and glyph routes are governed by `21-text-glyph-pipeline.md`. A route may
 select `CPUPreparedGPU(GlyphAtlasArtifact)`,
@@ -174,6 +181,9 @@ Route selection may use:
 - geometry complexity;
 - transform facts;
 - clip classification;
+- clip descriptor, effective element, scissor, analytic, stencil, mask, shader,
+  budget, and ordering facts for routes governed by
+  `24-clip-stencil-mask-pipeline.md`;
 - material classification;
 - target format;
 - destination-read requirements;
@@ -216,6 +226,11 @@ Diagnostic fields:
 Stable reason-code examples:
 
 - `unsupported.clip.complex_stack`
+- `unsupported.clip.stack_too_deep`
+- `unsupported.clip.analytic_unsupported`
+- `unsupported.clip.stencil_ordering_illegal`
+- `unsupported.clip.mask_budget_exceeded`
+- `unsupported.clip.shader_unregistered`
 - `unsupported.material.unregistered_runtime_effect`
 - `unsupported.wgsl.validation_error`
 - `unsupported.pipeline.capability_missing`

@@ -40,6 +40,9 @@ It records:
 - path/coverage atlas policy, entry, resident byte, upload/compute byte,
   generation, stale-entry, retry/split, eviction, and budget-pressure counters
   when touched;
+- clip descriptor, route, effective-element, scissor, analytic, stencil,
+  mask, shader, pass-split, mask-byte, budget-pressure, and refusal counters
+  when touched;
 - destination-read requirement, strategy, copied byte, pass-split, binding,
   target-generation, stale-generation, active-attachment refusal, and
   budget-pressure counters when touched;
@@ -72,6 +75,7 @@ Cache reporting is grouped by domain:
 | Image/codec cache | codec registry lookups, metadata scans, decode requests, decoded pixel bytes, animated frame selections, composed frame bytes, color/profile conversions, orientation applications, mip preparations, upload artifact lookups, codec refusals, and budget refusals. |
 | Artifact registry | artifact lookups, hits, misses, uploads, evictions, budget refusals. |
 | Atlas cache | atlas descriptor count, policy version, page count, resident entries, resident bytes, lookup hits/misses, entry creations, page activations, evictions, compactions/resets, upload bytes, compute write bytes, stale entries, retry/split counts, hard capability refusals, and budget refusals. |
+| Clip pipeline | descriptor lookups, effective element analysis hits/misses, route counts, scissor counts, analytic plan counts, stencil producer/consumer counts, atomic group counts, mask artifact lookups, mask bytes, clip shader descriptor counts, clip-induced pass splits, hard capability refusals, and budget refusals. |
 | Destination-read resources | requirements, strategies, target-copy descriptors, existing-intermediate bindings, copied bytes, pass splits, generation checks, active-attachment refusals, and budget refusals. |
 | Filter/effect pipeline | graph count, node count, render/compute/copy route counts, intermediate count and bytes, bounds/crop/tile refusals, runtime-effect descriptor counts, folded color-filter counts, destination/backdrop read counts, pass splits, artifact use, and budget refusals. |
 | Text/glyph pipeline | `DrawTextRun` count, text run/subrun count, representation counts, route counts, glyph instances, atlas page count, atlas bytes, upload bytes, instance buffer bytes, stale generation refusals, SDF/color/bitmap/SVG route refusals, text-induced pass splits, and budget refusals. |
@@ -158,6 +162,11 @@ Initial gate families:
 - path/coverage atlas resident bytes;
 - path/coverage atlas upload or compute bytes;
 - path/coverage atlas retry/split and eviction count;
+- clip effective element analysis hit rate;
+- clip stencil atomic group count;
+- clip mask byte count;
+- clip-induced pass split count;
+- clip shader refusal count;
 - destination-read copy bytes;
 - destination-read pass split count;
 - destination-read target snapshot live bytes;

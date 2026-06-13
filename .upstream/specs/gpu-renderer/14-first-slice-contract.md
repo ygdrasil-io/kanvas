@@ -49,6 +49,8 @@ The first slice does not implement:
 - destination copy snapshots, existing-intermediate destination reads, and
   destination-isolated layer composites;
 - complex clip stacks;
+- clip stencil, coverage-mask, and clip shader routes from
+  `24-clip-stencil-mask-pipeline.md`;
 - persistent path, glyph, or coverage atlases;
 - default `gpu-raster` route activation.
 
@@ -57,6 +59,9 @@ fallback, CPU-rendered texture compatibility, or hidden legacy rendering.
 
 Path and coverage atlas routes remain governed by
 `19-path-coverage-atlas-strategy.md` and are not promoted by this slice.
+Clip routes remain governed by `24-clip-stencil-mask-pipeline.md`; the first
+slice may promote only wide-open, empty, and simple device-rect scissor
+behavior.
 Destination-read routes remain governed by `20-destination-read-strategy.md`;
 the first slice promotes only `NoDestinationRead` and the accepted
 fixed-function blend subset.
@@ -91,6 +96,9 @@ The slice must exercise these contracts:
 - `GPUUniformPayloadBlock`;
 - `GPUUniformPayloadSlot`;
 - `GPUDrawPayloadRef`;
+- `GPUClipPlan`, `GPUClipBoundsPlan`, `GPUClipScissorPlan`, and
+  `GPUClipDiagnostic` for wide-open, empty, device-rect scissor, and refusal
+  fixtures;
 - `GPURenderPipelineKey`;
 - `GPUResourceProvider`;
 - `GPUTargetTextureDescriptor` for the render attachment descriptor;

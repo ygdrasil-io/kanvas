@@ -51,8 +51,8 @@ target contracts.
 | Rect/rrect stroke | `TargetNative` | `GPUNative` preferred | Render pass, stroke render step | `MaterialKey` | Analytic stroke coverage for bounded joins/caps; refusals for unsupported stroke style. |
 | Path fill | `TargetPrepared` plus future native | `CPUPreparedGPU` initially, `GPUNative` when proven | Render pass sampling coverage or stencil/cover route | `MaterialKey` | `PathAtlasArtifact`, `CoverageMaskArtifact`, or future GPU stencil/compute coverage governed by `19-path-coverage-atlas-strategy.md`. |
 | Path stroke | `TargetPrepared` plus future native | `CPUPreparedGPU` initially, `GPUNative` when proven | Render pass with prepared geometry/mask or future stencil/cover | `MaterialKey` | `PrecomputedGeometryArtifact`, `PathAtlasArtifact`, `CoverageMaskArtifact`; atlas routes governed by `19-path-coverage-atlas-strategy.md`. |
-| Clip rect | `TargetNative` | `GPUNative` | Scissor, depth/stencil, or analytic clip facts | none or `GPULayerPlan` context | Captured clip facts in `NormalizedDrawCommand`; no CPU artifact. |
-| Clip rrect/path | `TargetPrepared` | `CPUPreparedGPU` or `GPUNative` by strategy | Stencil/depth, coverage mask, or path atlas | none or `GPULayerPlan` context | `CoverageMaskArtifact` or `PathAtlasArtifact` governed by `19-path-coverage-atlas-strategy.md`; stable refusal for unsupported stack interactions. |
+| Clip rect | `TargetNative` | `GPUNative` | `GPUClipPlan`, scissor, geometric intersection, analytic coverage, or stencil/mask when required | `GPUClipStackDescriptor`, `GPUClipBoundsPlan`, `GPUClipScissorPlan`, optional `GPULayerPlan` context | Captured clip facts from `NormalizedDrawCommand`; no CPU artifact for scissor/geometric/analytic routes. |
+| Clip rrect/path | `TargetPrepared` plus native routes | `GPUNative`, `CPUPreparedGPU`, or refusal by strategy | `GPUClipPlan`, `GPUClipAnalyticPlan`, `GPUClipStencilPlan`, `GPUClipMaskPlan`, stencil/depth, coverage mask, or path atlas | `GPUClipStackDescriptor`, `GPUClipElementPlan`, `GPUClipBoundsPlan`, `GPUClipOrderingToken`, optional `GPULayerPlan` context | `CoverageMaskArtifact` or `PathAtlasArtifact` governed by `24-clip-stencil-mask-pipeline.md` and `19-path-coverage-atlas-strategy.md`; stable refusal for unsupported stack interactions. |
 | Image rect | `TargetNative` plus prepared upload | `GPUNative` or `CPUPreparedGPU` upload | Texture sampling render pass | `MaterialKey` image source with `GPUImageSourceDescriptor` and, for encoded/CPU pixels, `GPUImagePipelinePlan` | GPU-native texture resource, or `UploadedTextureArtifact` from `22-image-bitmap-codec-pipeline.md` when CPU prepares pixels. |
 | Bitmap/image decode | `TargetPrepared` with codec dependency gates | `CPUPreparedGPU` upload when accepted | Decode/prepare, upload, then texture sampling | `GPUImageDecodePlan`, `GPUImageColorDecodePlan`, `GPUImageOrientationPlan`, `GPUImageUploadPlan`, and `MaterialKey` image source | `UploadedTextureArtifact`; codec/color/animation policy governed by `22-image-bitmap-codec-pipeline.md`. |
 | Animated image frame | `TargetPrepared` with codec dependency gates | `CPUPreparedGPU` per selected frame | Frame select/compose, upload, then texture sampling | `GPUAnimatedImagePlan`, `GPUImageFrameSelection`, `GPUImageFrameInfo`, `GPUImageUploadPlan`, and `MaterialKey` image source | Per-frame or composed-frame `UploadedTextureArtifact`; loop, disposal, blend, dirty rect, required-frame, cache, and upload scheduling governed by `22-image-bitmap-codec-pipeline.md`. |
@@ -103,9 +103,12 @@ unsupported fill/stroke combinations must refuse with stable reasons.
 
 Evidence must include:
 
-- captured clip facts;
+- captured `GPUClipStackDescriptor` and `GPUClipPlan` facts;
+- `GPUClipElementPlan`, `GPUClipBoundsPlan`, `GPUClipScissorPlan`,
+  `GPUClipAnalyticPlan`, `GPUClipStencilPlan`, `GPUClipMaskPlan`,
+  `GPUClipOrderingToken`, and `GPUClipDiagnostic` dumps when touched;
 - stack interaction diagnostics;
-- proof that ordering, stencil, depth, or mask state is preserved;
+- proof that ordering, stencil, depth, mask, or shader-mask state is preserved;
 - coverage-mask atlas key, generation, retry, upload, and budget diagnostics
   when `CoverageMaskArtifact` or `PathAtlasArtifact` is used;
 - culling refusal when clips make coverage ambiguous;
@@ -212,6 +215,12 @@ Examples:
 - `unsupported.atlas.generation_stale`
 - `unsupported.stroke.dash_complex`
 - `unsupported.clip.stack_difference_path`
+- `unsupported.clip.stack_too_deep`
+- `unsupported.clip.operation`
+- `unsupported.clip.analytic_unsupported`
+- `unsupported.clip.stencil_ordering_illegal`
+- `unsupported.clip.mask_budget_exceeded`
+- `unsupported.clip.shader_unregistered`
 - `unsupported.image.codec_missing`
 - `unsupported.image.codec.unregistered`
 - `unsupported.image.codec.selection_nondeterministic`

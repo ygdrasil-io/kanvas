@@ -349,8 +349,8 @@ intermediates are not `CPUPreparedGPU` artifacts.
 
 ## Atlas Textures
 
-Atlas textures for paths, glyphs, masks, and coverage are owned by their atlas
-or artifact specs.
+Atlas textures for paths, glyphs, clip masks, other masks, and coverage are
+owned by their atlas or artifact specs.
 
 Texture/image ownership rules still apply:
 
@@ -364,6 +364,12 @@ The detailed path/coverage atlas strategy is defined in
 `19-path-coverage-atlas-strategy.md`. That spec owns `GPUPathAtlasPlan`,
 `GPUCoverageAtlasPlan`, atlas entry refs, use tokens, mutation plans,
 retry/split behavior, and atlas-specific diagnostics.
+
+The detailed clip/stencil/mask strategy is defined in
+`24-clip-stencil-mask-pipeline.md`. That spec owns `GPUClipMaskPlan`,
+`GPUClipShaderPlan`, clip coverage-mask resource needs, ordering tokens, and
+clip-specific diagnostics while this spec owns generic texture/view/sampler
+validation.
 
 The detailed text/glyph atlas and bitmap glyph texture strategy is defined in
 `21-text-glyph-pipeline.md`. That spec owns `GPUTextAtlasPlan`,
@@ -393,6 +399,8 @@ ordering.
 - resource generation;
 - atlas coordinates;
 - atlas entry refs and atlas use tokens;
+- clip stack descriptors, clip ordering tokens, clip mask coordinates, and
+  stencil state;
 - text atlas entry refs, glyph IDs, atlas generations, and text upload tokens;
 - payload slot IDs.
 

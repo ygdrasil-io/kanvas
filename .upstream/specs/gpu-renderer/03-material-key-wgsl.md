@@ -60,7 +60,14 @@ It does not include:
 - transient resource handles;
 - command ID;
 - compute entry point, workgroup size, or storage-resource topology;
+- clip stack descriptor identity, scissor bounds, stencil ordering tokens, mask
+  coordinates, atlas entry refs, or clip budget state;
 - image/filter graph identity.
+
+Clip execution is governed by `24-clip-stencil-mask-pipeline.md`. A clip route
+may affect render-step selection, depth/stencil state, WGSL ABI, or
+`GPURenderPipelineKey` validity, but the captured clip stack and per-draw clip
+values are not render-material identity.
 
 ## Material Descriptor To Key
 

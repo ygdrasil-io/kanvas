@@ -13,8 +13,9 @@ material dictionary, payload gathering, pipeline key split, execution
 context, WGSL layout ABI, blend/color state, route policy, telemetry gates,
 texture/image ownership, path/coverage atlas strategy, destination-read
 strategy, text/glyph pipeline target, image/bitmap/codec pipeline target,
-filter/effect pipeline target, legacy cleanup policy, and validation
-expectations that future implementation tickets must follow.
+filter/effect pipeline target, clip/stencil/mask pipeline target, legacy
+cleanup policy, and validation expectations that future implementation tickets
+must follow.
 
 The current `.upstream/target/high-performance-wgsl-pipeline-target.md` and
 `.upstream/target/skia-like-realtime-renderer-target.md` remain active project
@@ -110,6 +111,14 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 - Treat atlas generation, atlas entry coordinates, use tokens, upload/compute
   mutations, and eviction state as resource/payload facts, not material
   identity.
+- Resolve captured clip state through `GPUClipStackDescriptor`,
+  `GPUClipPlan`, `GPUClipBoundsPlan`, `GPUClipScissorPlan`,
+  `GPUClipAnalyticPlan`, `GPUClipStencilPlan`, `GPUClipMaskPlan`,
+  `GPUClipOrderingToken`, and `GPUClipDiagnostic`.
+- Treat clip stack descriptors, effective elements, scissor, stencil
+  producers, coverage masks, clip shaders, budgets, and ordering as explicit
+  plans. Forbid silently approximating unsupported clips or CPU-rendering a
+  complete clipped draw/layer into a texture.
 - Resolve destination-dependent blends, backdrop/filter reads, and layer
   destination reads through `GPUDestinationReadPlan`,
   `GPUDestinationReadStrategy`, `GPUDestinationReadBounds`,
@@ -197,6 +206,7 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 | `21-text-glyph-pipeline.md` | Graphite-inspired text/glyph pipeline target: text run plans, subruns, A8/SDF atlas routes, outline/color/bitmap/SVG glyph routes, text bindings, atlas uploads, budgets, diagnostics, and validation gates. |
 | `22-image-bitmap-codec-pipeline.md` | Graphite-inspired image/bitmap/codec pipeline target: codec registry, still/animated decode, color/profile/orientation/HDR handling, pixel preparation, uploaded image artifacts, upload scheduling, caches, diagnostics, and validation gates. |
 | `23-filter-effect-pipeline.md` | Graphite-inspired filter/effect pipeline target: image-filter DAGs, filter node routes, bounds/crop/tile/sample plans, render/compute intermediates, backdrop/destination reads, registered runtime effects, budgets, diagnostics, and validation gates. |
+| `24-clip-stencil-mask-pipeline.md` | Graphite-inspired clip/stencil/mask pipeline target: captured clip descriptors, effective elements, scissor, analytic clips, stencil producer-consumer routes, coverage masks, clip shaders, budgets, diagnostics, and validation gates. |
 
 ## Target Shape
 
@@ -205,9 +215,11 @@ flowchart TD
     legacy["Skia-like API / legacy device"] --> adapter["Legacy state adapter"]
     adapter --> command["NormalizedDrawCommand with captured state"]
     command --> layerplan["GPULayerPlan / GPUFilterPlan"]
+    command --> clipplan["GPUClipPlan / GPUClipBoundsPlan"]
     command --> recorder["GPURecorder"]
     layerplan --> recorder
     layerplan --> filterdetail["GPUFilterNodePlan / GPUFilterIntermediatePlan"]
+    clipplan --> recorder
     recorder --> recording["GPURecording"]
     recording --> tasks["GPUTaskList"]
     tasks --> drawpass["GPUDrawPass"]
@@ -217,11 +229,13 @@ flowchart TD
     command --> blend["GPUBlendPlan / GPUColorPlan"]
     command --> dstread["GPUDestinationReadPlan"]
     blend --> dstread
+    clipplan --> dstread
     filterdetail --> dstread
     dictionary --> wgsl["WGSLFragment / WGSLModule"]
     filterdetail --> wgsl
     material --> textureplan["GPUImageSourceDescriptor / GPUTextureOwnershipPlan"]
     command --> atlas["GPUPathAtlasPlan / GPUCoverageAtlasPlan"]
+    clipplan --> atlas
     command --> text["GPUTextRunPlan / GPUTextSubRunPlan"]
     wgsl --> abi["WGSL layout / binding ABI"]
     abi --> payload["GPUPayloadGatherer / payload slots"]
@@ -230,12 +244,14 @@ flowchart TD
     imageprep --> resources
     textureplan --> payload
     atlas --> payload
+    clipplan --> payload
     text --> payload
     dstread --> payload
     filterdetail --> payload
     step --> pipeline["GPURenderPipelineKey"]
     blend --> pipeline
     dstread --> pipeline
+    clipplan --> pipeline
     filterdetail --> pipeline
     text --> pipeline
     abi --> pipeline
@@ -243,6 +259,7 @@ flowchart TD
     payload --> resources
     textureplan --> resources
     atlas --> resources
+    clipplan --> resources
     text --> resources
     dstread --> resources
     filterdetail --> resources

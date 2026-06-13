@@ -62,7 +62,10 @@ This spec depends on:
   views, samplers, and imported/surface/target texture ownership;
 - `20-destination-read-strategy.md` for backdrop and destination reads;
 - `22-image-bitmap-codec-pipeline.md` for encoded image inputs used by image
-  filter source nodes.
+  filter source nodes;
+- `24-clip-stencil-mask-pipeline.md` for active clip descriptors, clip bounds,
+  stencil/mask routes, and clip ordering when filters interact with clipped
+  sources or outputs.
 
 ## Graphite And Skia Evidence
 
@@ -123,6 +126,8 @@ Owned by other specs:
   `08-layer-and-filter-plans.md`;
 - destination/backdrop read strategy, bounds, copy/intermediate resources, and
   bindings: `20-destination-read-strategy.md`;
+- clip descriptor execution, final output clipping, clip masks, stencil clip
+  routes, and clip ordering: `24-clip-stencil-mask-pipeline.md`;
 - generic texture/view/sampler ownership and sampled bindings:
   `18-texture-image-ownership.md`;
 - blend/color/target contracts: `12-blend-color-target-state.md`;
@@ -192,6 +197,11 @@ Filter graph normalization must reject:
 - unknown node kinds without a registered descriptor;
 - unbounded dynamic child count beyond policy limits;
 - graph-local transforms that cannot be dumped.
+
+Active clips constrain filter outputs only after `GPUFilterBoundsPlan` has
+preserved required source, backdrop, crop, tile, and sample-radius inputs.
+`GPUClipPlan` owns the final scissor/stencil/mask execution route, while this
+spec owns filter graph expansion and intermediate bounds.
 
 `GPUFilterPlan` records graph-level execution:
 

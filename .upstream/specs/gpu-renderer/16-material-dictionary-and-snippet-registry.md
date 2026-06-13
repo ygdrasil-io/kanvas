@@ -219,9 +219,10 @@ Each root references a `WGSLSnippetNode`. Each node records:
 
 Kanvas does not put clip or render-step coverage roots in the material tree.
 Clip, coverage, stencil, and geometry behavior belong to `GPURenderStep`,
-`GPUDrawLayerPlanner`, `GPULayerPlan`, and future coverage specs. A material
-root set may contribute alpha or source coverage only when an accepted material
-feature explicitly defines that behavior.
+`GPUDrawLayerPlanner`, `GPULayerPlan`,
+`24-clip-stencil-mask-pipeline.md`, and coverage specs. A material root set
+may contribute alpha or source coverage only when an accepted material feature
+explicitly defines that behavior.
 
 ## Module Assembly
 

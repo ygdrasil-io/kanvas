@@ -13,6 +13,10 @@ and geometry/coverage specs. It defines when Kanvas may create a path or
 coverage atlas entry, which keys make that entry valid, how atlas residency is
 budgeted and invalidated, how atlas mutations interact with pass planning, and
 which diagnostics replace silent fallback.
+Detailed captured clip descriptor, effective element, scissor, analytic,
+stencil, mask-route, shader clip, budget, ordering, and clip diagnostic policy
+is defined in `24-clip-stencil-mask-pipeline.md`. This spec owns the atlas and
+coverage artifact mechanics used by those clip routes.
 
 The design is Graphite-inspired but Kanvas-owned:
 
@@ -116,6 +120,9 @@ The default selector stance remains fail-closed:
 - simple clip rect/scissor/stencil strategies should avoid atlas when possible;
 - path or clip atlas use requires an accepted `GPUPathAtlasPlan` or
   `GPUCoverageAtlasPlan`;
+- clip route selection, clip stencil-vs-mask choice, clip shader refusal, and
+  clip-specific ordering diagnostics are governed by
+  `24-clip-stencil-mask-pipeline.md`;
 - persistent atlas residency is enabled only after key, budget, eviction,
   synchronization, profiling, and visual evidence are accepted;
 - if no accepted atlas or non-atlas route exists, route selection returns

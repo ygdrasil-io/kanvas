@@ -15,6 +15,9 @@ planning structures that consume these semantic plans to build pass partitions.
 Detailed filter graph nodes, bounds propagation, crops, tile modes, render and
 compute routes, filter intermediates, registered runtime filter effects,
 budgets, and diagnostics are defined in `23-filter-effect-pipeline.md`.
+Captured clip descriptors, scissor, analytic clips, stencil producer-consumer
+routes, coverage masks, clip shader policy, budgets, ordering, and diagnostics
+are defined in `24-clip-stencil-mask-pipeline.md`.
 
 ## Ownership Boundary
 
@@ -72,6 +75,7 @@ following:
 - layer alpha and composite are equivalent to direct drawing;
 - blend mode does not require a post-layer composite;
 - clip and bounds do not require an isolated target;
+- the active clip plan proves direct-to-parent clipping is equivalent;
 - destination reads are not changed by eliding the layer;
 - no `GPUDestinationReadPlan` observed by the layer requires parent-target
   contents that direct drawing would change;
@@ -155,6 +159,8 @@ When a layer has an attached filter:
 - destination reads and source reads must be explicit;
 - destination/backdrop reads must reference `GPUDestinationReadPlan`;
 - culling cannot remove inputs observed by the filter;
+- clip source/output bounds must preserve required filter inputs before final
+  clipping decisions are applied;
 - diagnostics must show both layer and filter reasons.
 
 An unsupported filter must refuse the layer or draw with a stable reason. It

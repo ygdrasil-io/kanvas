@@ -131,6 +131,8 @@ Command scopes must preserve:
 - upload-before-use dependencies;
 - readback-after-write dependencies;
 - destination-copy-before-sample dependencies;
+- clip stencil producer-before-consumer dependencies;
+- clip mask upload-before-sample and compute-write-before-sample dependencies;
 - atlas mutation ordering;
 - atlas compute-write-before-sample and upload-before-sample dependencies;
 - text atlas upload-before-sample dependencies;
@@ -236,6 +238,9 @@ Stable reason-code examples:
 - `unsupported.execution.active_attachment_sampled`
 - `unsupported.destination_read.copy_unavailable`
 - `unsupported.destination_read.pass_split_illegal`
+- `unsupported.clip.stencil_unavailable`
+- `unsupported.clip.mask_upload_unavailable`
+- `unsupported.clip.stencil_ordering_illegal`
 - `unsupported.atlas.sync_unavailable`
 - `unsupported.atlas.storage_texture_unavailable`
 - `unsupported.text.upload_plan_missing`
@@ -261,6 +266,10 @@ Promoted execution behavior requires:
   routes from `22-image-bitmap-codec-pipeline.md` are promoted;
 - atlas upload-before-sample and compute-write-before-sample ordering tests
   before path/coverage atlas routes are promoted;
+- clip stencil producer-before-consumer, clip mask upload-before-sample,
+  clip mask compute-write-before-sample, clip shader mask production, and clip
+  atomic group ordering tests before routes from
+  `24-clip-stencil-mask-pipeline.md` are promoted;
 - text atlas upload-before-sample, text instance-buffer upload-before-draw, and
   atlas generation ordering tests before text/glyph routes are promoted;
 - filter render/compute/copy ordering tests for `GPUFilterNodePlan`,

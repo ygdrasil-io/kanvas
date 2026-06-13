@@ -145,6 +145,9 @@ Clip facts must distinguish:
 
 The clip descriptor is captured state. The core may choose a GPU clipping
 technique, but it must not reconstruct the original Canvas clip stack.
+Detailed clip descriptor, effective-element, scissor, analytic, stencil,
+coverage-mask, clip shader, budget, ordering, and diagnostic rules are defined
+in `24-clip-stencil-mask-pipeline.md`.
 
 ## Layer Facts
 
@@ -191,6 +194,8 @@ They must include:
 - original paint order;
 - dependency on destination color;
 - dependency on clip or stencil preparation;
+- dependency on clip mask upload/write, atlas mutation, or clip shader
+  preparation;
 - opacity or blend classification when known;
 - barriers required by uploads, atlas mutation, or destination reads.
 

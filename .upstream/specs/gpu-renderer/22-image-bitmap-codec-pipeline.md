@@ -52,7 +52,9 @@ This spec depends on:
 - `18-texture-image-ownership.md` for texture/view/sampler ownership,
   imported textures, surface leases, and sampled texture resource binding;
 - `21-text-glyph-pipeline.md` for the boundary with text-owned bitmap glyph
-  decode and glyph-scoped image plans.
+  decode and glyph-scoped image plans;
+- `24-clip-stencil-mask-pipeline.md` for clipping image draws after accepted
+  image source/upload/texture planning.
 
 ## Graphite And Skia Evidence
 

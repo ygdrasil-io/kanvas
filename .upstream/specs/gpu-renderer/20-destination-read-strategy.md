@@ -75,9 +75,12 @@ Owned by this spec:
 - `GPUDestinationReadDiagnostic`.
 
 `GPUBlendPlan` declares whether a blend route needs a destination read.
-`GPULayerPlan` and `GPUFilterPlan` declare destination/backdrop/source-read
-semantics for layers and filters. Detailed filter node, bounds, sample-radius,
-and intermediate behavior is defined in `23-filter-effect-pipeline.md`.
+`GPULayerPlan`, `GPUFilterPlan`, and `GPUClipPlan` declare
+destination/backdrop/source-read and clip-bound semantics for layers, filters,
+and clipped draws. Detailed filter node, bounds, sample-radius, and
+intermediate behavior is defined in `23-filter-effect-pipeline.md`. Detailed
+clip descriptor, bounds, stencil, mask, and ordering behavior is defined in
+`24-clip-stencil-mask-pipeline.md`.
 `GPUDrawAnalysis` resolves those facts into `GPUDestinationReadPlan` values.
 `GPUDrawLayerPlanner` preserves ordering and split barriers. `GPUTaskList` and
 `GPUResourceProvider` materialize copies, intermediates, texture ownership, and
@@ -137,6 +140,8 @@ Records conservative read bounds:
 - target dimensions and target generation;
 - whether bounds are finite, empty, or unbounded;
 - expansion caused by filter radius, blur, sampling kernel, or backdrop input;
+- clipping intersection only when `GPUClipBoundsPlan` proves that reducing the
+  read bounds preserves all pixels observed by the draw, layer, or filter;
 - diagnostic reason when bounds are invalid.
 
 Bounds must be conservative. If the renderer cannot prove finite bounds for a

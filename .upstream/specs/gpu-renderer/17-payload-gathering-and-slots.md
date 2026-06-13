@@ -274,6 +274,9 @@ Rules:
 - destination-copy snapshots and existing destination intermediates must use
   accepted `GPUDestinationReadBinding` records from
   `20-destination-read-strategy.md`;
+- analytic clip uniforms, clip coverage masks, stencil payload values when
+  used, and registered clip shader resources must use accepted plans from
+  `24-clip-stencil-mask-pipeline.md`;
 - filter intermediates, runtime-effect child bindings, filter node uniforms,
   sampled inputs, storage resources, and ordering tokens must use accepted
   plans from `23-filter-effect-pipeline.md`;
@@ -286,6 +289,12 @@ When a path or coverage atlas entry is accepted, the gatherer consumes
 inverse atlas size, mask transform, sampling mode, atlas generation, and
 resource binding layout. These facts are pass-local payload/resource facts and
 must stay out of `MaterialKey`.
+When a clip route is accepted, the gatherer consumes only the facts produced by
+`GPUClipPlan`: analytic clip payloads, `GPUClipMaskPlan` bindings,
+`GPUClipShaderPlan` uniforms/resources, stencil payload values when represented
+as payload, and `GPUClipOrderingToken` references. It does not normalize clip
+stacks, choose clip routes, allocate mask textures, produce stencil work, or
+mutate atlas state.
 When a text/glyph route is accepted, the gatherer consumes `GPUTextBinding`
 facts: text subrun ID, render step, atlas texture ownership, view/sampler
 descriptors, binding layout, SDF params, instance buffer ref, atlas/page

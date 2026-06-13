@@ -43,6 +43,11 @@ slot assignment during pass construction.
 selection facts, entry keys, mutation requirements, and diagnostics as defined
 in `19-path-coverage-atlas-strategy.md`.
 
+`GPUClipPlan` owns captured clip descriptor execution facts, effective element
+selection, bounds, scissor, analytic clip, stencil producer-consumer plans,
+coverage-mask plans, shader clip plans, budgets, ordering tokens, and
+diagnostics as defined in `24-clip-stencil-mask-pipeline.md`.
+
 `GPUDestinationReadPlan` owns destination-read requirements, bounds, target
 snapshot/intermediate strategy, pass-split actions, and diagnostics as defined
 in `20-destination-read-strategy.md`.
@@ -95,6 +100,9 @@ Each analysis record contains:
 - `MaterialKey` or material refusal;
 - candidate `GPURenderStep` identities or render-step refusal;
 - geometry and coverage strategy facts;
+- clip plan facts, effective element decisions, scissor/analytic/stencil/mask
+  requirements, and `GPUClipOrderingToken` dependencies when a route is
+  clipped;
 - path/coverage atlas plan facts, atlas entry requirements, and
   `GPUAtlasMutationPlan` dependencies when a route may sample atlas coverage;
 - text run/subrun plan facts, text atlas entry requirements, text upload plans,
@@ -263,10 +271,11 @@ Task phases:
 
 1. `prepareResources`: allocate or resolve pipelines, buffers, textures,
    texture views, samplers, imports, surface texture leases, atlases, atlas
-   entry mutations, image upload artifacts, animated image frame uploads,
-   filter intermediates, filter render/compute node resources, text atlas
-   pages, text instance buffers, destination copy/intermediate resources, bind
-   groups, and gathered payload uploads.
+   entry mutations, clip stencil producers, clip mask resources, clip shader
+   resources, image upload artifacts, animated image frame uploads, filter
+   intermediates, filter render/compute node resources, text atlas pages, text
+   instance buffers, destination copy/intermediate resources, bind groups, and
+   gathered payload uploads.
 2. `addCommands`: encode commands through the `GPU` facade.
 
 The split exists so route selection, resource failure, and command encoding
@@ -276,6 +285,12 @@ Atlas mutations from `19-path-coverage-atlas-strategy.md` are resource
 preparation work. A task that samples a path or coverage atlas must depend on
 the upload, compute write, page activation, eviction, or split-pass retry plan
 that made the entry valid.
+Clip stencil producers, clip mask uploads or compute writes, clip shader mask
+resources, and clip ordering tokens from `24-clip-stencil-mask-pipeline.md`
+are resource preparation and ordering work. A task that draws through a clip
+must depend on its accepted `GPUClipPlan`, `GPUClipStencilPlan` or
+`GPUClipMaskPlan` when present, and any `GPUCoverageAtlasPlan` or
+`GPUCoverageAtlasBinding` it references.
 Destination-read target copies and isolated intermediates from
 `20-destination-read-strategy.md` are resource preparation and ordering work. A
 task that samples a copied destination or existing intermediate must depend on
@@ -360,6 +375,7 @@ The task graph must preserve:
 - destination-read dependencies;
 - layer isolation and composite dependencies;
 - occlusion proof boundaries;
+- clip stencil producer, clip mask mutation, and clip shader mask dependencies;
 - atlas mutation and upload dependencies;
 - text atlas upload, instance buffer upload, and atlas generation dependencies;
 - target load/store correctness.

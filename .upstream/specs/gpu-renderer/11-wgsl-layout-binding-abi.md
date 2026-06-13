@@ -68,6 +68,15 @@ layout, access, sample/storage type, and reflection facts. It does not include
 filter intermediate cache residency, node execution timing, destination-copy
 generation, or concrete resource handles.
 
+Clip routes from `24-clip-stencil-mask-pipeline.md` use group `0` for
+render-step intrinsic analytic clip data when it is part of frame/target/step
+state, and group `2` for coverage-mask resources such as
+`GPUCoverageAtlasBinding`. Registered clip shader routes may use group `3`
+when they require a separate shader-mask resource topology. The ABI includes
+layout, access, sample/storage type, and reflection facts. It does not include
+clip stack descriptor identity, mask residency, stencil ordering tokens, atlas
+generations, or concrete resource handles.
+
 A route may use fewer groups. A route may add a new group role only through an
 accepted spec update because group roles affect pipeline-layout compatibility,
 cache keys, and diagnostics.
@@ -116,6 +125,10 @@ surface leases, pixel contents, or uploaded artifact cache keys.
 Path and coverage atlas bindings use `GPUCoverageAtlasBinding` from
 `19-path-coverage-atlas-strategy.md`; the ABI includes the resource layout and
 access facts, not atlas residency as material identity.
+Clip coverage-mask bindings use the same accepted atlas or standalone mask
+binding objects through `24-clip-stencil-mask-pipeline.md`; the ABI includes
+resource layout and access facts, not clip stack identity or stencil ordering
+as material identity.
 Destination-read bindings use `GPUDestinationReadBinding` from
 `20-destination-read-strategy.md`; the ABI includes sampled texture/sampler
 layout and coordinate payload facts, not destination copy residency as material

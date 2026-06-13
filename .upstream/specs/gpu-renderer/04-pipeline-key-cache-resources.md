@@ -132,7 +132,9 @@ preparation, codec registry, animation frame selection, color/orientation
 handling, and uploaded image artifact keys are defined in
 `22-image-bitmap-codec-pipeline.md`. Filter graph descriptors, node plans,
 runtime-effect filter descriptors, and filter intermediate plans are defined
-in `23-filter-effect-pipeline.md`.
+in `23-filter-effect-pipeline.md`. Clip stack descriptors, scissor/analytic
+plans, stencil producer-consumer plans, coverage-mask plans, shader clip plans,
+and clip diagnostics are defined in `24-clip-stencil-mask-pipeline.md`.
 
 It is responsible for:
 
@@ -190,6 +192,11 @@ Expected cache layers:
   `GPUImageOrientationPlan`, and `GPUImageUploadArtifactKey` facts from
   `22-image-bitmap-codec-pipeline.md`;
 - atlas caches with explicit ownership and eviction rules;
+- clip descriptor, effective element, scissor/analytic/stencil/mask, shader
+  clip, budget, and diagnostic cache entries keyed by `GPUClipStackDescriptor`,
+  `GPUClipPlan`, `GPUClipBoundsPlan`, `GPUClipStencilPlan`,
+  `GPUClipMaskPlan`, and `GPUClipShaderPlan` facts from
+  `24-clip-stencil-mask-pipeline.md`;
 - text atlas/resource cache keyed by `GPUTextAtlasDescriptor`,
   `GPUTextAtlasPageDescriptor`, artifact generation, upload plan, and accepted
   text ownership facts from `21-text-glyph-pipeline.md`;
@@ -263,7 +270,7 @@ Accepted artifact families for this kernel are:
 
 | Artifact | CPU preparation | GPU consumption |
 |---|---|---|
-| `CoverageMaskArtifact` | Rasterize or pack coverage/mask data for a bounded geometry/clip strategy. | Sample mask texture or coverage buffer in a GPU draw. |
+| `CoverageMaskArtifact` | Rasterize or pack coverage/mask data for a bounded geometry/clip strategy. | Sample mask texture or coverage buffer in a GPU draw, including clip masks governed by `24-clip-stencil-mask-pipeline.md`. |
 | `PathAtlasArtifact` | Prepare reusable path coverage, mask, or path-specific atlas entry. | Sample or reference atlas entry during a path/coverage draw. |
 | `GlyphAtlasArtifact` | Rasterize and pack A8 glyph masks owned by pure Kotlin text infrastructure. | Sample A8 glyph atlas during text/glyph coverage draws as defined in `21-text-glyph-pipeline.md`. |
 | `SDFGlyphAtlasArtifact` | Generate and pack SDF glyph masks owned by pure Kotlin text infrastructure. | Sample SDF glyph atlas and reconstruct coverage in WGSL as defined in `21-text-glyph-pipeline.md`. |
@@ -321,6 +328,10 @@ Additional key facts are required when they affect contents or validity:
 - filter graph node identity, input bounds, crop, sample mode, intermediate
   format, runtime-effect descriptor, bounds plan, and validated filter-spec
   version from `23-filter-effect-pipeline.md` for filter intermediates;
+- clip stack descriptor, effective element list, clip operations, shape keys,
+  transforms, AA modes, mask bounds, combine/invert semantics, and validated
+  clip-spec version from `24-clip-stencil-mask-pipeline.md` for clip coverage
+  artifacts;
 - device capability facts when they change prepared format, layout, usage, or
   limits.
 

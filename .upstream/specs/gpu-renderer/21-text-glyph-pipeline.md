@@ -45,7 +45,8 @@ GPU renderer specs consumed by this target:
 - `17-payload-gathering-and-slots.md`;
 - `18-texture-image-ownership.md`;
 - `19-path-coverage-atlas-strategy.md`;
-- `20-destination-read-strategy.md`.
+- `20-destination-read-strategy.md`;
+- `24-clip-stencil-mask-pipeline.md`.
 
 ## Graphite Evidence
 

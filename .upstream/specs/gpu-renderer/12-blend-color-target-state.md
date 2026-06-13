@@ -31,6 +31,10 @@ The detailed destination-read contract is defined in
 `20-destination-read-strategy.md`. `GPUBlendPlan` declares the requirement;
 `GPUDestinationReadPlan` defines bounds, strategy, copy/intermediate resources,
 barriers, payload bindings, budgets, diagnostics, and validation gates.
+Clip coverage, stencil, mask, and shader-mask constraints are defined in
+`24-clip-stencil-mask-pipeline.md`; they may constrain render-step selection,
+coverage multiplication, target state, or destination-read requirements but do
+not become material identity.
 
 ## `GPUBlendPlan`
 
@@ -89,6 +93,9 @@ diagnosed before promotion.
 Filter DAG color behavior, including whether a color filter folds into
 `MaterialKey` or executes as a `GPUFilterNodePlan`, is governed by
 `23-filter-effect-pipeline.md`.
+Clip coverage multiplication and mask sampling behavior is governed by
+`24-clip-stencil-mask-pipeline.md`; `GPUColorPlan` records the accepted alpha
+and coverage convention for the final target write.
 For image and bitmap sources, encoded/source profile handling, ICC/CICP
 metadata, bit depth, HDR metadata, orientation-adjacent color facts, and
 premul/unpremul conversion before upload are planned by

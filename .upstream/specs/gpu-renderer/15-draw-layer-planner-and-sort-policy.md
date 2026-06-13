@@ -183,6 +183,11 @@ Path and coverage atlas mutations, including `SplitPassAndRetry`, are defined
 in `19-path-coverage-atlas-strategy.md`. A split retry is legal only when the
 planner can preserve order, layer semantics, destination reads, target state,
 and resource lifetimes.
+Clip effective-element decisions, scissor/analytic plans, stencil
+producer-consumer atomicity, coverage-mask mutation, shader-mask production,
+and `GPUClipOrderingToken` behavior are defined in
+`24-clip-stencil-mask-pipeline.md`. The planner consumes these facts and must
+not invent clip routes.
 Destination-read strategies, copy snapshots, existing intermediates, and
 isolation actions are defined in `20-destination-read-strategy.md`. The planner
 consumes `GPUDestinationReadClass` and `GPUDestinationReadToken`; it does not
@@ -278,6 +283,8 @@ Required axes:
 - original paint-order band or barrier generation;
 - dependency class;
 - stencil or clip atomic group;
+- `GPUClipRoute`, `GPUClipAtomicGroup`, `GPUClipOrderingToken`, and clip
+  resource generation when they affect legal movement;
 - render-step order for multi-step commands;
 - `GPURenderStep` identity;
 - `GPURenderPipelineKey` or pre-resource pipeline group;
@@ -289,6 +296,7 @@ Required axes:
 - scissor or primitive clip group when it affects dynamic state;
 - destination-read class;
 - atlas/upload generation when it affects legality.
+- clip mask upload/write generation when it affects legality.
 - text render step, text route, text atlas/page binding compatibility, text
   ordering token, and instance layout when they affect legality.
 

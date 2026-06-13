@@ -43,6 +43,8 @@ Tests must assert canonical preimages and hashes for:
 - image pipeline, codec descriptor, decode request, animation plan, color
   decode plan, orientation plan, upload plan, and upload artifact key
   preimages;
+- clip stack, save-record, element, bounds, scissor, analytic, stencil, mask,
+  shader, cache, budget, ordering token, and diagnostic preimages;
 - filter graph, node descriptor, bounds, crop, tile, sampling, intermediate,
   runtime-effect, cache, budget, ordering token, and diagnostic preimages;
 - path/coverage atlas plans, content keys, entry refs, and mutation plans;
@@ -210,6 +212,38 @@ Tests must assert:
 - layer elision and culling refuse when destination contents are observed;
 - destination-read bindings stay out of `MaterialKey`.
 
+### Clip, Stencil, And Mask Pipeline Tests
+
+Tests must assert:
+
+- `GPUClipStackDescriptor`, `GPUClipSaveRecordDescriptor`,
+  `GPUClipElementDescriptor`, `GPUClipPlan`, `GPUClipElementPlan`,
+  `GPUClipBoundsPlan`, `GPUClipScissorPlan`, `GPUClipAnalyticPlan`,
+  `GPUClipStencilPlan`, `GPUClipMaskPlan`, `GPUClipShaderPlan`,
+  `GPUClipOrderingToken`, `GPUClipCachePlan`, `GPUClipBudgetPolicy`, and
+  `GPUClipDiagnostic` dumps are deterministic;
+- clip descriptor keys include element order, operation, shape key, transform,
+  AA mode, save-record generation, bounds, difference/inverse semantics, and
+  shader descriptor facts when present;
+- scissor routes prove integer target intersection and refuse invalid or
+  non-equivalent AA cases;
+- geometric and analytic clip routes prove equivalence before support claims;
+- stencil producer-consumer routes preserve clear/load/store, depth/stencil
+  state, atomic groups, and ordering tokens;
+- coverage-mask clip routes validate `GPUCoverageMaskDescriptor`,
+  `CoverageMaskArtifact` or `PathAtlasArtifact`, atlas generation, upload or
+  compute-write before sample, and mask sampling payloads;
+- registered clip shader routes validate descriptor identity, CPU oracle,
+  complete WGSL module reflection, uniform packing, child bindings, bounds, and
+  refusal for unregistered shaders;
+- planner sort/merge cannot cross clip atomic groups, clip mask mutations,
+  clip shader mask production, destination-read barriers, layer boundaries, or
+  unknown overlaps;
+- layer/filter/destination-read interaction tests preserve required source,
+  filter expansion, backdrop read, and restore/composite pixels;
+- no route CPU-renders a complete clipped draw, layer, filter graph, text run,
+  or scene into a texture.
+
 ### Filter Effect Pipeline Tests
 
 Tests must assert:
@@ -318,6 +352,9 @@ Evidence must include:
 - atlas policy counts, resident entry counts, upload/compute bytes, generation
   facts, retry/split counts, eviction counts, and atlas refusal counts when
   path or coverage atlases are used;
+- clip descriptor counts, route counts, effective element counts, scissor
+  counts, analytic/stencil/mask/shader counts, mask bytes, clip-induced pass
+  splits, budget pressure, and clip refusal counts when clipping is touched;
 - destination-read strategy counts, copied bytes, pass splits, binding counts,
   target generation facts, and destination-read refusal counts when previous
   destination contents are observed;
@@ -364,6 +401,8 @@ PM/report artifacts must show:
 - blend/color/target-state plan counts;
 - path/coverage atlas route, generation, retry, budget, and eviction state
   when atlas routes are touched;
+- clip route, effective element, scissor, analytic/stencil/mask/shader, mask
+  bytes, pass split, budget, and refusal state when clipping is touched;
 - destination-read strategy, bounds, copy/intermediate bytes, pass splits,
   budgets, and refusal state when destination reads are touched;
 - cache and pipeline counters when performance is claimed;
@@ -419,6 +458,7 @@ Failures must be classified as:
 - GPU execution/readback failure;
 - WGSL ABI mismatch;
 - blend/color plan refusal;
+- clip plan refusal;
 - execution context or device-generation failure;
 - performance gate failure;
 - CPU oracle mismatch;

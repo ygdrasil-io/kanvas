@@ -51,6 +51,9 @@ The module owns:
   color/orientation, upload artifact, cache, budget, and diagnostic contracts;
 - path atlas, coverage atlas, atlas entry, atlas budget, atlas mutation, atlas
   upload, and atlas diagnostic contracts;
+- captured clip descriptor, clip element, clip bounds, scissor, analytic clip,
+  stencil clip, coverage-mask clip, clip shader, clip budget, clip ordering,
+  and clip diagnostic contracts;
 - destination-read requirement, strategy, bounds, target snapshot, binding,
   budget, token, and diagnostic contracts;
 - filter/effect graph, node, bounds, crop, tile, sampling, intermediate,
@@ -85,6 +88,7 @@ responsibilities:
 - `analysis`
 - `passes`
 - `layers`
+- `clips`
 - `filters`
 - `images`
 - `text`
@@ -232,6 +236,26 @@ Public concept names in the new renderer use uppercase acronyms:
 - `GPUAtlasDiagnostic`
 - `GPUPathAtlasKey`
 - `GPUCoverageAtlasKey`
+- `GPUClipStackDescriptor`
+- `GPUClipSaveRecordDescriptor`
+- `GPUClipElementID`
+- `GPUClipElementDescriptor`
+- `GPUClipState`
+- `GPUClipOperation`
+- `GPUClipPlan`
+- `GPUClipElementPlan`
+- `GPUClipBoundsPlan`
+- `GPUClipScissorPlan`
+- `GPUClipAnalyticPlan`
+- `GPUClipStencilPlan`
+- `GPUClipMaskPlan`
+- `GPUClipShaderPlan`
+- `GPUClipRoute`
+- `GPUClipAtomicGroup`
+- `GPUClipOrderingToken`
+- `GPUClipCachePlan`
+- `GPUClipBudgetPolicy`
+- `GPUClipDiagnostic`
 - `GPUDestinationReadPlan`
 - `GPUDestinationReadRequirement`
 - `GPUDestinationReadStrategy`
@@ -315,6 +339,12 @@ into a narrower GPU renderer value object.
 | `SkImageFilters::RuntimeShader` | `GPUFilterRuntimeEffectPlan` | Runtime filter effects require registered Kanvas descriptors and WGSL validation; no arbitrary SkSL. |
 | Layer/draw-context planning | `GPUDrawLayer` / `GPUDrawLayerPlanner` | Logical layer and composite scopes from captured state; not Graphite context classes. |
 | `DrawListLayer` insertion | `GPUDrawInvocation` / `GPUDrawInsertion` | Graphite-inspired backward/forward insertion, sort windows, and merge policy; no C++ arena or bit-layout inheritance. |
+| `ClipStack` | `GPUClipStackDescriptor` / `GPUClipPlan` | Captured clip state and per-draw effective clip plan; no mutable Graphite or Canvas stack inside the core. |
+| `ClipStack::Element` and save records | `GPUClipElementDescriptor` / `GPUClipSaveRecordDescriptor` | Shape, operation, transform, bounds, generation, and lifetime are dumpable descriptor facts. |
+| Graphite scissor and analytic clip selection | `GPUClipScissorPlan` / `GPUClipAnalyticPlan` | Simple clip routes are explicit and validated; no hidden approximation for complex clips. |
+| Graphite depth-only clip draws | `GPUClipStencilPlan` / `GPUClipAtomicGroup` | Producer-consumer clip sequences are ordering-sensitive planner facts. |
+| `ClipAtlasManager` and coverage mask render step | `GPUClipMaskPlan` plus spec 19 atlas objects | Coverage masks use typed artifacts, atlas generations, bindings, and upload/write-before-sample ordering. |
+| Graphite `clipShader()` open route | `GPUClipShaderPlan` | Only registered descriptor-based clip shaders may route; arbitrary SkSL/source strings refuse. |
 | `DrawPass` | `GPUDrawPass` | Immutable pass close to what the GPU facade will execute. |
 | `Renderer` / `RenderStep` | `GPURenderStep` | Geometry/coverage technique with fixed shader and state contribution. |
 | `PaintParamsKey` | `MaterialKey` | Paint/material identity; no SkSL. |
