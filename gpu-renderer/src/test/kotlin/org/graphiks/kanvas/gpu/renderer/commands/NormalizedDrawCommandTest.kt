@@ -1,4 +1,4 @@
-package org.skia.gpu.renderer.commands
+package org.graphiks.kanvas.gpu.renderer.commands
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

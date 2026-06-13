@@ -1,4 +1,4 @@
-package org.skia.gpu.renderer.commands
+package org.graphiks.kanvas.gpu.renderer.commands
 
 @JvmInline
 value class GPUCommandId(val value: Int) {
