@@ -1,9 +1,14 @@
 package org.graphiks.kanvas.glyph.color
 
-import org.graphiks.kanvas.glyph.GlyphRepresentation
 import org.graphiks.kanvas.glyph.GlyphRouteDiagnostic
 import org.graphiks.kanvas.glyph.GlyphStrikeKey
+import org.graphiks.kanvas.glyph.OutlineGlyphRepresentation
 import org.graphiks.kanvas.glyph.gpu.GPUGlyphRunDescriptor
+import java.io.ByteArrayOutputStream
+import java.util.zip.CRC32
+import java.util.zip.DataFormatException
+import java.util.zip.Inflater
+import kotlin.math.abs
 
 /**
  * Plans color glyph routes for emoji, COLR/CPAL, bitmap strikes, PNG glyphs, and SVG glyphs.
@@ -16,8 +21,59 @@ interface ColorGlyphPlanner {
      * @param strikeKey strike inputs used for color glyph selection.
      * @return color glyph planning result.
      */
-    fun plan(run: GPUGlyphRunDescriptor, strikeKey: GlyphStrikeKey): ColorGlyphPlanningResult =
-        TODO("Plan color glyph routes for the pure Kotlin font stack.")
+    fun plan(run: GPUGlyphRunDescriptor, strikeKey: GlyphStrikeKey): ColorGlyphPlanningResult
+}
+
+/**
+ * Deterministic color glyph planner that dispatches each glyph to the first available route.
+ *
+ * The planner is intentionally metadata-only. It does not decode PNG payloads, render SVG
+ * documents, build COLR paint graphs, rasterize outlines, or allocate GPU resources. It connects
+ * caller-supplied route availability facts to per-glyph [GlyphRepresentation] decisions in the
+ * same route order as [SimpleEmojiGlyphDispatcher]: COLR, bitmap, PNG, SVG, then outline.
+ *
+ * @property availability route availability facts for this planning pass.
+ * @property outlineRepresentations optional outline fallback representations keyed by glyph ID.
+ */
+class SimpleColorGlyphPlanner(
+    availability: EmojiGlyphRouteAvailability,
+    private val outlineRepresentations: Map<Int, OutlineGlyphRepresentation> = emptyMap(),
+) : ColorGlyphPlanner {
+    private val dispatcher = SimpleEmojiGlyphDispatcher(availability)
+
+    /**
+     * Plans one representation per glyph with stable run-order output and route diagnostics.
+     */
+    override fun plan(run: GPUGlyphRunDescriptor, strikeKey: GlyphStrikeKey): ColorGlyphPlanningResult {
+        val routes = ArrayList<ColorGlyphRoute>(run.glyphIDs.size)
+        val diagnostics = ArrayList<ColorGlyphDiagnostic>()
+
+        run.glyphIDs.forEach { glyphId ->
+            val dispatch = dispatcher.dispatch(glyphId = glyphId, strikeKey = strikeKey)
+            diagnostics += dispatch.diagnostics
+            routeFor(dispatch)?.let { route -> routes += route }
+        }
+
+        return ColorGlyphPlanningResult(
+            routes = routes.toList(),
+            diagnostics = diagnostics.toList(),
+        )
+    }
+
+    private fun routeFor(dispatch: EmojiGlyphDispatch): ColorGlyphRoute? =
+        when (dispatch.route) {
+            "colr", "bitmap", "png", "svg" -> ColorGlyphRoute(
+                glyphId = dispatch.glyphId,
+                route = dispatch.route,
+            )
+            "outline" -> ColorGlyphRoute(
+                glyphId = dispatch.glyphId,
+                route = dispatch.route,
+                outline = outlineRepresentations[dispatch.glyphId]
+                    ?: OutlineGlyphRepresentation(glyphId = dispatch.glyphId),
+            )
+            else -> null
+        }
 }
 
 /**
@@ -31,8 +87,7 @@ interface COLRGlyphPlanner {
      * @param palette palette selected for the glyph.
      * @return paint graph for the glyph.
      */
-    fun plan(glyphId: Int, palette: CPALPalette): COLRPaintGraph =
-        TODO("Plan COLR paint graphs for color glyphs.")
+    fun plan(glyphId: Int, palette: CPALPalette): COLRPaintGraph
 }
 
 /**
@@ -53,12 +108,15 @@ data class COLRPaintGraph(
  * @property kind paint operation kind.
  * @property children child node identifiers.
  * @property paletteIndex optional CPAL palette index consumed by this node.
+ * @property glyphId optional glyph identifier referenced by this node. Root nodes use this for the
+ * base glyph, and layer nodes use it for the glyph painted by the layer.
  */
 data class COLRPaintNode(
     val id: Int,
     val kind: String,
     val children: List<Int> = emptyList(),
     val paletteIndex: Int? = null,
+    val glyphId: Int? = null,
 )
 
 /**
@@ -75,6 +133,1306 @@ data class CPALPalette(
 )
 
 /**
+ * Describes one caller-supplied CPAL palette entry override.
+ *
+ * Overrides are renderer-neutral color substitutions applied after a palette has been selected
+ * from a [CPALTable]. They are keyed by palette entry index, not by glyph ID or paint node ID.
+ * The [color] value is a packed ARGB integer in the same representation used by [CPALPalette].
+ *
+ * @property index zero-based palette entry index to replace in the selected palette.
+ * @property color packed ARGB color that replaces the selected palette entry when [index] is in
+ * range for that palette.
+ */
+data class CPALPaletteOverride(
+    val index: Int,
+    val color: Int,
+)
+
+/**
+ * Selects a CPAL palette and applies palette entry overrides without renderer dependencies.
+ *
+ * The selection mirrors only the pure CPAL concepts from font argument data while deliberately
+ * avoiding graphics, color-management, platform image, and platform-specific execution
+ * dependencies. [index] chooses the palette by table order. [overrides] are then applied in list
+ * order to the selected palette; duplicate override indexes therefore use the last supplied color.
+ * Overrides whose indexes are outside the selected palette are ignored so callers can share
+ * override lists across fonts with different palette sizes.
+ *
+ * @property index zero-based palette index requested from a CPAL table.
+ * @property overrides renderer-neutral color substitutions keyed by selected palette entry index.
+ */
+data class CPALPaletteSelection(
+    val index: Int = 0,
+    val overrides: List<CPALPaletteOverride> = emptyList(),
+) {
+    /**
+     * Resolves this selection against a parsed CPAL table.
+     *
+     * @param table CPAL table whose palette list supplies the base palette.
+     * @return the selected palette with in-range overrides applied, or null when [index] does not
+     * name a palette in [table].
+     */
+    fun select(table: CPALTable): CPALPalette? {
+        val palette = table.palettes.getOrNull(index) ?: return null
+        if (overrides.isEmpty()) return palette
+
+        val colors = palette.colors.toMutableList()
+        overrides.forEach { override ->
+            if (override.index in colors.indices) {
+                colors[override.index] = override.color
+            }
+        }
+        return palette.copy(colors = colors.toList())
+    }
+
+    companion object {
+        /**
+         * Default CPAL selection: palette zero with no color overrides.
+         */
+        val Default: CPALPaletteSelection = CPALPaletteSelection()
+    }
+}
+
+/**
+ * Palette index value used by OpenType COLR/COLRv1 records to request the current foreground text
+ * color instead of an entry from the selected CPAL palette.
+ */
+const val COLR_FOREGROUND_PALETTE_INDEX: Int = 0xFFFF
+
+/**
+ * Stores the parsed contents of a CPAL version 0 table.
+ *
+ * The table keeps palettes in font order and preserves colors as packed ARGB integers. OpenType
+ * stores CPAL v0 color records as BGRA bytes; [CPALV0Parser] converts that byte order once during
+ * parsing so downstream color glyph planning does not need to know the table encoding.
+ *
+ * @property numPaletteEntries number of color entries expected in every parsed palette.
+ * @property numColorRecords number of raw color records advertised by the CPAL table.
+ * @property palettes parsed palettes in table order.
+ */
+data class CPALTable(
+    val numPaletteEntries: Int,
+    val numColorRecords: Int,
+    val palettes: List<CPALPalette>,
+)
+
+/**
+ * Parses OpenType CPAL version 0 table bytes into pure Kotlin palette models.
+ *
+ * The parser accepts raw CPAL table bytes whose first byte is the CPAL table header. It performs
+ * all reads through checked big-endian helpers, rejects unsupported versions, and caps advertised
+ * counts before expanding palette records so malformed fonts cannot force unbounded allocation.
+ */
+object CPALV0Parser {
+    /**
+     * Parses a CPAL version 0 table.
+     *
+     * @param bytes raw CPAL table bytes starting at offset zero.
+     * @return parsed CPAL table, or null when the bytes are unsupported, truncated, out of range,
+     * or exceed the defensive color-font caps used by the pure Kotlin parser.
+     */
+    fun parse(bytes: ByteArray): CPALTable? {
+        val reader = ColorTableReader(bytes)
+        if (!reader.fits(0, CPAL_V0_HEADER_SIZE.toLong())) return null
+
+        val version = reader.u16(0) ?: return null
+        if (version != 0) return null
+
+        val numPaletteEntries = reader.u16(2) ?: return null
+        val numPalettes = reader.u16(4) ?: return null
+        val numColorRecords = reader.u16(6) ?: return null
+        val colorRecordsArrayOffset = reader.u32(8)?.toIntOrNull() ?: return null
+
+        if (numPaletteEntries > MAX_COLOR_PALETTE_ENTRIES) return null
+        if (numPalettes > MAX_COLOR_PALETTES) return null
+        if (numColorRecords > MAX_COLOR_RECORDS) return null
+        if (numPalettes.toLong() * numPaletteEntries.toLong() > MAX_EXPANDED_COLOR_RECORDS) {
+            return null
+        }
+        if (!reader.fits(CPAL_V0_HEADER_SIZE, numPalettes.toLong() * U16_SIZE_BYTES.toLong())) return null
+        if (!reader.fits(colorRecordsArrayOffset, numColorRecords.toLong() * CPAL_COLOR_RECORD_SIZE.toLong())) {
+            return null
+        }
+
+        val palettes = ArrayList<CPALPalette>(numPalettes)
+        repeat(numPalettes) { paletteIndex ->
+            val firstColorRecordIndex = reader.u16(CPAL_V0_HEADER_SIZE + paletteIndex * U16_SIZE_BYTES)
+                ?: return null
+            if (firstColorRecordIndex + numPaletteEntries > numColorRecords) return null
+
+            val colors = ArrayList<Int>(numPaletteEntries)
+            repeat(numPaletteEntries) { entryIndex ->
+                val colorOffset = colorRecordsArrayOffset +
+                    (firstColorRecordIndex + entryIndex) * CPAL_COLOR_RECORD_SIZE
+                val blue = reader.u8(colorOffset) ?: return null
+                val green = reader.u8(colorOffset + 1) ?: return null
+                val red = reader.u8(colorOffset + 2) ?: return null
+                val alpha = reader.u8(colorOffset + 3) ?: return null
+                colors += packArgb(alpha = alpha, red = red, green = green, blue = blue)
+            }
+
+            palettes += CPALPalette(
+                index = paletteIndex,
+                colors = colors.toList(),
+            )
+        }
+
+        return CPALTable(
+            numPaletteEntries = numPaletteEntries,
+            numColorRecords = numColorRecords,
+            palettes = palettes.toList(),
+        )
+    }
+}
+
+/**
+ * Describes one COLR version 0 base glyph record.
+ *
+ * Base records map a rendered glyph identifier to a contiguous slice of COLR layer records. The
+ * parser validates that [firstLayerIndex] and [numLayers] stay inside the parsed layer record
+ * array before exposing the record.
+ *
+ * @property glyphId glyph identifier whose color representation is described by this record.
+ * @property firstLayerIndex index of the first layer record for this glyph.
+ * @property numLayers number of layer records consumed by this glyph.
+ */
+data class COLRBaseGlyphRecord(
+    val glyphId: Int,
+    val firstLayerIndex: Int,
+    val numLayers: Int,
+)
+
+/**
+ * Describes one COLR version 0 layer record.
+ *
+ * @property glyphId glyph identifier painted for this layer.
+ * @property paletteIndex CPAL palette entry index used by this layer, or
+ * [COLR_FOREGROUND_PALETTE_INDEX] when the layer should use the current foreground color.
+ */
+data class COLRLayerRecord(
+    val glyphId: Int,
+    val paletteIndex: Int,
+)
+
+/**
+ * Stores the parsed contents of a COLR version 0 table.
+ *
+ * The table keeps base glyph records and layer records in source order. Callers can use
+ * [layersForGlyph] to resolve the validated layer slice for a specific base glyph without knowing
+ * the raw table offsets.
+ *
+ * @property baseGlyphRecords parsed base glyph records in table order.
+ * @property layerRecords parsed layer records in table order.
+ */
+data class COLRV0Table(
+    val baseGlyphRecords: List<COLRBaseGlyphRecord>,
+    val layerRecords: List<COLRLayerRecord>,
+) {
+    /**
+     * Resolves the layer records for one base glyph.
+     *
+     * @param glyphId base glyph identifier to look up.
+     * @return immutable layer records for [glyphId], or an empty list when the glyph has no COLR
+     * version 0 base record.
+     */
+    fun layersForGlyph(glyphId: Int): List<COLRLayerRecord> {
+        val baseRecord = baseGlyphRecords.firstOrNull { record -> record.glyphId == glyphId }
+            ?: return emptyList()
+        return layerRecords.subList(
+            fromIndex = baseRecord.firstLayerIndex,
+            toIndex = baseRecord.firstLayerIndex + baseRecord.numLayers,
+        ).toList()
+    }
+}
+
+/**
+ * Parses OpenType COLR version 0 table bytes into pure Kotlin base and layer records.
+ *
+ * The parser accepts raw COLR table bytes whose first byte is the COLR table header. It supports
+ * only COLR version 0, validates every advertised offset and slice before reading records, and
+ * rejects count expansions that exceed the module-local color glyph caps.
+ */
+object COLRV0Parser {
+    /**
+     * Parses a COLR version 0 table.
+     *
+     * @param bytes raw COLR table bytes starting at offset zero.
+     * @return parsed COLR version 0 table, or null when the bytes are unsupported, truncated,
+     * out of range, or exceed defensive color-font caps.
+     */
+    fun parse(bytes: ByteArray): COLRV0Table? {
+        val reader = ColorTableReader(bytes)
+        if (!reader.fits(0, COLR_V0_HEADER_SIZE.toLong())) return null
+
+        val version = reader.u16(0) ?: return null
+        if (version != 0) return null
+
+        val numBaseGlyphRecords = reader.u16(2) ?: return null
+        val baseGlyphRecordsOffset = reader.u32(4)?.toIntOrNull() ?: return null
+        val layerRecordsOffset = reader.u32(8)?.toIntOrNull() ?: return null
+        val numLayerRecords = reader.u16(12) ?: return null
+
+        if (numBaseGlyphRecords > MAX_COLOR_BASE_GLYPHS) return null
+        if (numLayerRecords > MAX_COLOR_LAYERS) return null
+        if (!reader.fits(baseGlyphRecordsOffset, numBaseGlyphRecords.toLong() * COLR_BASE_RECORD_SIZE.toLong())) {
+            return null
+        }
+        if (!reader.fits(layerRecordsOffset, numLayerRecords.toLong() * COLR_LAYER_RECORD_SIZE.toLong())) {
+            return null
+        }
+
+        val layerRecords = ArrayList<COLRLayerRecord>(numLayerRecords)
+        repeat(numLayerRecords) { layerIndex ->
+            val layerOffset = layerRecordsOffset + layerIndex * COLR_LAYER_RECORD_SIZE
+            layerRecords += COLRLayerRecord(
+                glyphId = reader.u16(layerOffset) ?: return null,
+                paletteIndex = reader.u16(layerOffset + 2) ?: return null,
+            )
+        }
+
+        val baseGlyphRecords = ArrayList<COLRBaseGlyphRecord>(numBaseGlyphRecords)
+        var expandedLayerCount = 0L
+        repeat(numBaseGlyphRecords) { baseIndex ->
+            val baseOffset = baseGlyphRecordsOffset + baseIndex * COLR_BASE_RECORD_SIZE
+            val glyphId = reader.u16(baseOffset) ?: return null
+            val firstLayerIndex = reader.u16(baseOffset + 2) ?: return null
+            val numLayers = reader.u16(baseOffset + 4) ?: return null
+
+            if (numLayers > MAX_LAYERS_PER_COLOR_GLYPH) return null
+            expandedLayerCount += numLayers.toLong()
+            if (expandedLayerCount > MAX_EXPANDED_COLOR_LAYERS) return null
+            if (firstLayerIndex + numLayers > numLayerRecords) return null
+
+            baseGlyphRecords += COLRBaseGlyphRecord(
+                glyphId = glyphId,
+                firstLayerIndex = firstLayerIndex,
+                numLayers = numLayers,
+            )
+        }
+
+        return COLRV0Table(
+            baseGlyphRecords = baseGlyphRecords.toList(),
+            layerRecords = layerRecords.toList(),
+        )
+    }
+}
+
+/**
+ * Builds renderer-neutral COLR paint graphs from parsed COLR version 0 layer records.
+ *
+ * The planner preserves CPAL palette indexes on layer nodes instead of resolving renderer state.
+ * It validates palette indexes against the selected [CPALPalette] where possible so downstream
+ * diagnostics can distinguish a paintable layer from a layer that references a missing palette
+ * entry.
+ *
+ * @property colr parsed COLR version 0 table used for glyph-to-layer lookup.
+ */
+class SimpleCOLRGlyphPlanner(
+    private val colr: COLRV0Table,
+) : COLRGlyphPlanner {
+    /**
+     * Builds a paint graph for one COLR version 0 glyph.
+     *
+     * @param glyphId base glyph identifier to plan.
+     * @param palette selected CPAL palette used to validate layer palette indexes.
+     * @return paint graph whose root represents the base glyph and whose children represent COLR
+     * version 0 layers in paint order.
+     */
+    override fun plan(glyphId: Int, palette: CPALPalette): COLRPaintGraph {
+        val layers = colr.layersForGlyph(glyphId)
+        val layerNodes = layers.mapIndexed { layerIndex, layer ->
+            val nodeId = layerIndex + 1
+            COLRPaintNode(
+                id = nodeId,
+                kind = layerKind(layer.paletteIndex, palette),
+                paletteIndex = layer.paletteIndex,
+                glyphId = layer.glyphId,
+            )
+        }
+        val root = COLRPaintNode(
+            id = 0,
+            kind = "colr-v0-glyph",
+            children = layerNodes.map { node -> node.id },
+            glyphId = glyphId,
+        )
+        return COLRPaintGraph(
+            root = root,
+            nodes = listOf(root) + layerNodes,
+        )
+    }
+
+    /**
+     * Classifies a layer node using the selected CPAL palette.
+     */
+    private fun layerKind(paletteIndex: Int, palette: CPALPalette): String =
+        if (paletteIndex == COLR_FOREGROUND_PALETTE_INDEX || palette.colors.getOrNull(paletteIndex) != null) {
+            "colr-v0-layer"
+        } else {
+            "colr-v0-missing-palette-layer"
+        }
+}
+
+/**
+ * Stores the parsed COLR version 1 paint data supported by the pure Kotlin font stack.
+ *
+ * This is a renderer-neutral metadata model. It proves that a bounded COLRv1 paint graph can be
+ * parsed deterministically, but it does not claim complete COLRv1 rendering support. Unsupported
+ * paint formats, malformed offsets, excessive nesting, and count expansions are rejected by
+ * [COLRV1Parser.parse] with `null`.
+ *
+ * @property baseGlyphPaintRecords COLRv1 base glyph paint records in source order.
+ * @property layerPaints parsed LayerList paints in source order.
+ * @property clipRanges parsed ClipList ranges in source order.
+ */
+data class COLRV1Table(
+    val baseGlyphPaintRecords: List<COLRV1BaseGlyphPaintRecord>,
+    val layerPaints: List<COLRV1Paint> = emptyList(),
+    val clipRanges: List<COLRV1ClipRange> = emptyList(),
+) {
+    /**
+     * Resolves the COLRv1 root paint for [glyphId].
+     *
+     * @param glyphId base glyph identifier to look up.
+     * @return parsed root paint, or null when [glyphId] has no COLRv1 paint record.
+     */
+    fun paintForGlyph(glyphId: Int): COLRV1Paint? =
+        baseGlyphPaintRecords.firstOrNull { record -> record.glyphId == glyphId }?.paint
+
+    /**
+     * Resolves the first ClipList box whose range contains [glyphId].
+     *
+     * @param glyphId glyph identifier to look up.
+     * @return parsed clip box, or null when no parsed range covers [glyphId].
+     */
+    fun clipBoxForGlyph(glyphId: Int): COLRV1ClipBox? =
+        clipRanges.firstOrNull { range -> glyphId in range.startGlyphId..range.endGlyphId }?.box
+
+    /**
+     * Builds a deterministic generic paint graph for [glyphId].
+     *
+     * The returned graph flattens the parsed COLRv1 paint tree into stable pre-order node IDs. It
+     * preserves palette and glyph references needed by route diagnostics, while transform values
+     * remain available on the typed [COLRV1Paint] model returned by [paintForGlyph].
+     *
+     * @param glyphId base glyph identifier to convert.
+     * @return flattened graph, or null when [glyphId] has no COLRv1 paint record.
+     */
+    fun paintGraphForGlyph(glyphId: Int): COLRPaintGraph? {
+        val paint = paintForGlyph(glyphId) ?: return null
+        val nodes = ArrayList<COLRPaintNode>()
+        val root = COLRPaintNode(
+            id = 0,
+            kind = "colr-v1-glyph",
+            glyphId = glyphId,
+        )
+        nodes += root
+        val childId = appendCOLRV1PaintNode(paint = paint, nodes = nodes)
+        nodes[0] = root.copy(children = listOf(childId))
+        return COLRPaintGraph(
+            root = nodes[0],
+            nodes = nodes.toList(),
+        )
+    }
+}
+
+/**
+ * Describes one COLR version 1 base glyph paint record.
+ *
+ * @property glyphId base glyph identifier whose color representation is described by [paint].
+ * @property paint parsed root paint for [glyphId].
+ */
+data class COLRV1BaseGlyphPaintRecord(
+    val glyphId: Int,
+    val paint: COLRV1Paint,
+)
+
+/**
+ * Describes one parsed COLR version 1 ClipList range.
+ *
+ * @property startGlyphId first glyph identifier covered by [box].
+ * @property endGlyphId last glyph identifier covered by [box].
+ * @property box parsed clip box for this inclusive glyph range.
+ */
+data class COLRV1ClipRange(
+    val startGlyphId: Int,
+    val endGlyphId: Int,
+    val box: COLRV1ClipBox,
+)
+
+/**
+ * Describes a COLR version 1 clip box in font design units.
+ *
+ * @property xMin minimum x coordinate.
+ * @property yMin minimum y coordinate.
+ * @property xMax maximum x coordinate.
+ * @property yMax maximum y coordinate.
+ */
+data class COLRV1ClipBox(
+    val xMin: Int,
+    val yMin: Int,
+    val xMax: Int,
+    val yMax: Int,
+)
+
+/**
+ * Renderer-neutral subset of COLR version 1 paint operations parsed by the pure Kotlin font stack.
+ *
+ * The supported subset is intentionally bounded: solid paints, glyph paints, layer groups,
+ * gradients, PaintColrGlyph references, composites, translations, and affine transforms. Scale,
+ * rotate, skew, and other COLRv1 paint formats currently make [COLRV1Parser.parse] return `null`
+ * instead of producing a partial or misleading graph.
+ */
+sealed interface COLRV1Paint {
+    /**
+     * PaintSolid or PaintVarSolid.
+     *
+     * @property paletteIndex CPAL palette index, or [COLR_FOREGROUND_PALETTE_INDEX].
+     * @property alpha alpha in the range 0.0 to 1.0 after F2DOT14 decoding and clamping.
+     * @property varIndexBase variation index base for PaintVarSolid, or null for PaintSolid.
+     */
+    data class Solid(
+        val paletteIndex: Int,
+        val alpha: Float,
+        val varIndexBase: Long? = null,
+    ) : COLRV1Paint
+
+    /**
+     * PaintGlyph.
+     *
+     * @property glyphId glyph identifier whose outline is filled by [paint].
+     * @property paint child paint applied to [glyphId].
+     */
+    data class Glyph(
+        val glyphId: Int,
+        val paint: COLRV1Paint,
+    ) : COLRV1Paint
+
+    /**
+     * PaintColrLayers.
+     *
+     * @property paints layer paints resolved from the COLRv1 LayerList in paint order.
+     */
+    data class Layers(
+        val paints: List<COLRV1Paint>,
+    ) : COLRV1Paint
+
+    /**
+     * PaintLinearGradient or PaintVarLinearGradient.
+     *
+     * @property colorLine renderer-neutral gradient extend mode and color stops.
+     * @property x0 x coordinate of the first gradient control point in font design units.
+     * @property y0 y coordinate of the first gradient control point in font design units.
+     * @property x1 x coordinate of the second gradient control point in font design units.
+     * @property y1 y coordinate of the second gradient control point in font design units.
+     * @property x2 x coordinate of the third gradient control point in font design units.
+     * @property y2 y coordinate of the third gradient control point in font design units.
+     * @property varIndexBase variation index base for PaintVarLinearGradient, or null for
+     * PaintLinearGradient.
+     */
+    data class LinearGradient(
+        val colorLine: COLRV1ColorLine,
+        val x0: Int,
+        val y0: Int,
+        val x1: Int,
+        val y1: Int,
+        val x2: Int,
+        val y2: Int,
+        val varIndexBase: Long? = null,
+    ) : COLRV1Paint
+
+    /**
+     * PaintRadialGradient or PaintVarRadialGradient.
+     *
+     * @property colorLine renderer-neutral gradient extend mode and color stops.
+     * @property x0 x coordinate of the start circle center in font design units.
+     * @property y0 y coordinate of the start circle center in font design units.
+     * @property radius0 radius of the start circle in font design units.
+     * @property x1 x coordinate of the end circle center in font design units.
+     * @property y1 y coordinate of the end circle center in font design units.
+     * @property radius1 radius of the end circle in font design units.
+     * @property varIndexBase variation index base for PaintVarRadialGradient, or null for
+     * PaintRadialGradient.
+     */
+    data class RadialGradient(
+        val colorLine: COLRV1ColorLine,
+        val x0: Int,
+        val y0: Int,
+        val radius0: Int,
+        val x1: Int,
+        val y1: Int,
+        val radius1: Int,
+        val varIndexBase: Long? = null,
+    ) : COLRV1Paint
+
+    /**
+     * PaintSweepGradient or PaintVarSweepGradient.
+     *
+     * @property colorLine renderer-neutral gradient extend mode and color stops.
+     * @property centerX x coordinate of the sweep center in font design units.
+     * @property centerY y coordinate of the sweep center in font design units.
+     * @property startAngle normalized F2DOT14 start angle value preserved from the font.
+     * @property endAngle normalized F2DOT14 end angle value preserved from the font.
+     * @property varIndexBase variation index base for PaintVarSweepGradient, or null for
+     * PaintSweepGradient.
+     */
+    data class SweepGradient(
+        val colorLine: COLRV1ColorLine,
+        val centerX: Int,
+        val centerY: Int,
+        val startAngle: Float,
+        val endAngle: Float,
+        val varIndexBase: Long? = null,
+    ) : COLRV1Paint
+
+    /**
+     * PaintComposite.
+     *
+     * @property source source paint that is composited over [backdrop] using [mode].
+     * @property mode OpenType composite mode preserved without binding to a renderer blend enum.
+     * @property backdrop backdrop paint used as the destination input for [mode].
+     */
+    data class Composite(
+        val source: COLRV1Paint,
+        val mode: COLRV1CompositeMode,
+        val backdrop: COLRV1Paint,
+    ) : COLRV1Paint
+
+    /**
+     * PaintColrGlyph.
+     *
+     * @property glyphId base glyph identifier whose COLRv1 paint graph is referenced.
+     */
+    data class ColrGlyph(
+        val glyphId: Int,
+    ) : COLRV1Paint
+
+    /**
+     * PaintTranslate or PaintVarTranslate.
+     *
+     * @property paint translated child paint.
+     * @property dx x translation in font design units.
+     * @property dy y translation in font design units.
+     * @property varIndexBase variation index base for PaintVarTranslate, or null for
+     * PaintTranslate.
+     */
+    data class Translate(
+        val paint: COLRV1Paint,
+        val dx: Int,
+        val dy: Int,
+        val varIndexBase: Long? = null,
+    ) : COLRV1Paint
+
+    /**
+     * PaintTransform or PaintVarTransform.
+     *
+     * @property paint transformed child paint.
+     * @property xx affine transform xx component.
+     * @property yx affine transform yx component.
+     * @property xy affine transform xy component.
+     * @property yy affine transform yy component.
+     * @property dx affine transform x translation.
+     * @property dy affine transform y translation.
+     * @property varIndexBase variation index base for PaintVarTransform, or null for
+     * PaintTransform.
+     */
+    data class Transform(
+        val paint: COLRV1Paint,
+        val xx: Float,
+        val yx: Float,
+        val xy: Float,
+        val yy: Float,
+        val dx: Float,
+        val dy: Float,
+        val varIndexBase: Long? = null,
+    ) : COLRV1Paint
+}
+
+/**
+ * Describes a COLRv1 ColorLine shared by linear, radial, and sweep gradient paints.
+ *
+ * The model keeps OpenType gradient data as metadata only. It does not resolve CPAL colors,
+ * construct shader stops, apply color spaces, or normalize tile behavior for a renderer.
+ *
+ * @property extend extend mode applied outside the first and last color stops.
+ * @property stops parsed color stops in font order.
+ */
+data class COLRV1ColorLine(
+    val extend: COLRV1ColorLineExtend,
+    val stops: List<COLRV1ColorStop>,
+)
+
+/**
+ * Describes one COLRv1 ColorStop or VarColorStop.
+ *
+ * @property offset normalized F2DOT14 stop offset preserved from the font.
+ * @property paletteIndex CPAL palette entry index, or [COLR_FOREGROUND_PALETTE_INDEX].
+ * @property alpha alpha in the range 0.0 to 1.0 after F2DOT14 decoding and clamping.
+ * @property varIndexBase variation index base for VarColorStop, or null for ColorStop.
+ */
+data class COLRV1ColorStop(
+    val offset: Float,
+    val paletteIndex: Int,
+    val alpha: Float,
+    val varIndexBase: Long? = null,
+)
+
+/**
+ * COLRv1 ColorLine extend mode.
+ *
+ * @property tag stable lowercase label used for deterministic diagnostics and graph summaries.
+ */
+enum class COLRV1ColorLineExtend(val tag: String) {
+    /** Clamp the gradient to the edge stop colors outside the stop range. */
+    PAD("pad"),
+
+    /** Repeat the gradient stop range outside the stop range. */
+    REPEAT("repeat"),
+
+    /** Mirror the gradient stop range outside the stop range. */
+    REFLECT("reflect"),
+}
+
+/**
+ * COLRv1 PaintComposite mode independent of renderer-specific blend enums.
+ *
+ * @property fontValue integer value stored by the OpenType COLR table.
+ * @property graphSuffix stable lowercase label used by flattened paint graph nodes.
+ */
+enum class COLRV1CompositeMode(val fontValue: Int, val graphSuffix: String) {
+    /** Clear both source and backdrop contributions. */
+    CLEAR(0, "clear"),
+
+    /** Use the source contribution. */
+    SRC(1, "src"),
+
+    /** Use the backdrop contribution. */
+    DST(2, "dst"),
+
+    /** Composite source over backdrop. */
+    SRC_OVER(3, "src-over"),
+
+    /** Composite backdrop over source. */
+    DST_OVER(4, "dst-over"),
+
+    /** Keep source only where backdrop exists. */
+    SRC_IN(5, "src-in"),
+
+    /** Keep backdrop only where source exists. */
+    DST_IN(6, "dst-in"),
+
+    /** Keep source only outside backdrop. */
+    SRC_OUT(7, "src-out"),
+
+    /** Keep backdrop only outside source. */
+    DST_OUT(8, "dst-out"),
+
+    /** Place source atop backdrop. */
+    SRC_ATOP(9, "src-atop"),
+
+    /** Place backdrop atop source. */
+    DST_ATOP(10, "dst-atop"),
+
+    /** Exclusive-or blend between source and backdrop. */
+    XOR(11, "xor"),
+
+    /** Add source and backdrop contributions. */
+    PLUS(12, "plus"),
+
+    /** Screen blend between source and backdrop. */
+    SCREEN(13, "screen"),
+
+    /** Overlay blend between source and backdrop. */
+    OVERLAY(14, "overlay"),
+
+    /** Darken blend between source and backdrop. */
+    DARKEN(15, "darken"),
+
+    /** Lighten blend between source and backdrop. */
+    LIGHTEN(16, "lighten"),
+
+    /** Color-dodge blend between source and backdrop. */
+    COLOR_DODGE(17, "color-dodge"),
+
+    /** Color-burn blend between source and backdrop. */
+    COLOR_BURN(18, "color-burn"),
+
+    /** Hard-light blend between source and backdrop. */
+    HARD_LIGHT(19, "hard-light"),
+
+    /** Soft-light blend between source and backdrop. */
+    SOFT_LIGHT(20, "soft-light"),
+
+    /** Difference blend between source and backdrop. */
+    DIFFERENCE(21, "difference"),
+
+    /** Exclusion blend between source and backdrop. */
+    EXCLUSION(22, "exclusion"),
+
+    /** Multiply blend between source and backdrop. */
+    MULTIPLY(23, "multiply"),
+
+    /** Hue component blend between source and backdrop. */
+    HUE(24, "hue"),
+
+    /** Saturation component blend between source and backdrop. */
+    SATURATION(25, "saturation"),
+
+    /** Color component blend between source and backdrop. */
+    COLOR(26, "color"),
+
+    /** Luminosity component blend between source and backdrop. */
+    LUMINOSITY(27, "luminosity");
+
+    companion object {
+        /**
+         * Resolves an OpenType composite mode byte.
+         *
+         * @param value unsigned composite mode value from a PaintComposite record.
+         * @return matching mode, or null when [value] is outside the COLRv1 mode range.
+         */
+        fun fromFontValue(value: Int): COLRV1CompositeMode? =
+            entries.firstOrNull { mode -> mode.fontValue == value }
+    }
+}
+
+/**
+ * Parses a bounded, renderer-neutral COLR version 1 paint graph subset.
+ *
+ * The parser accepts raw COLR table bytes whose first byte is the COLR table header. It supports
+ * COLRv1 BaseGlyphList, LayerList, ClipList format 1, PaintSolid, PaintVarSolid,
+ * PaintLinearGradient, PaintVarLinearGradient, PaintRadialGradient, PaintVarRadialGradient,
+ * PaintSweepGradient, PaintVarSweepGradient, PaintGlyph, PaintColrGlyph, PaintColrLayers,
+ * PaintTranslate, PaintVarTranslate, PaintTransform, PaintVarTransform, and PaintComposite. It
+ * rejects unsupported paint formats and malformed data with `null` and performs all reads through
+ * checked big-endian helpers.
+ */
+object COLRV1Parser {
+    /**
+     * Parses a COLR version 1 table.
+     *
+     * @param bytes raw COLR table bytes starting at offset zero.
+     * @return parsed COLR version 1 table, or null when the bytes are unsupported, truncated,
+     * malformed, or exceed the defensive color-font caps.
+     */
+    fun parse(bytes: ByteArray): COLRV1Table? {
+        val reader = ColorTableReader(bytes)
+        if (!reader.fits(0, COLR_V1_HEADER_SIZE.toLong())) return null
+
+        val version = reader.u16(0) ?: return null
+        if (version != 1) return null
+
+        val layerPaintOffsets = parseLayerPaintOffsets(reader) ?: return null
+        val state = COLRV1PaintParseState()
+        val layerPaints = ArrayList<COLRV1Paint>(layerPaintOffsets.size)
+        layerPaintOffsets.forEach { paintOffset ->
+            layerPaints += parsePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = paintOffset,
+                depth = 0,
+                state = state,
+            ) ?: return null
+        }
+
+        val baseGlyphPaintRecords = parseBaseGlyphPaintRecords(
+            reader = reader,
+            layerPaintOffsets = layerPaintOffsets,
+            state = state,
+        ) ?: return null
+        val clipRanges = parseClipRanges(reader) ?: return null
+
+        return COLRV1Table(
+            baseGlyphPaintRecords = baseGlyphPaintRecords.toList(),
+            layerPaints = layerPaints.toList(),
+            clipRanges = clipRanges.toList(),
+        )
+    }
+
+    private fun parseBaseGlyphPaintRecords(
+        reader: ColorTableReader,
+        layerPaintOffsets: List<Int>,
+        state: COLRV1PaintParseState,
+    ): List<COLRV1BaseGlyphPaintRecord>? {
+        val baseGlyphListOffset = reader.u32(COLR_V1_BASE_GLYPH_LIST_OFFSET)?.toIntOrNull()
+            ?: return null
+        if (baseGlyphListOffset == 0) return emptyList()
+        if (!reader.fits(baseGlyphListOffset, U32_SIZE_BYTES.toLong())) return null
+
+        val baseGlyphPaintCount = reader.u32(baseGlyphListOffset)?.toIntOrNull()
+            ?: return null
+        if (baseGlyphPaintCount > MAX_COLOR_BASE_GLYPHS) return null
+        if (!reader.fits(
+                baseGlyphListOffset + U32_SIZE_BYTES,
+                baseGlyphPaintCount.toLong() * COLR_V1_BASE_GLYPH_PAINT_RECORD_SIZE.toLong(),
+            )
+        ) {
+            return null
+        }
+
+        val records = ArrayList<COLRV1BaseGlyphPaintRecord>(baseGlyphPaintCount)
+        repeat(baseGlyphPaintCount) { recordIndex ->
+            val recordOffset = baseGlyphListOffset +
+                U32_SIZE_BYTES +
+                recordIndex * COLR_V1_BASE_GLYPH_PAINT_RECORD_SIZE
+            val glyphId = reader.u16(recordOffset) ?: return null
+            val paintOffset = reader.u32(recordOffset + U16_SIZE_BYTES)?.toIntOrNull()
+                ?: return null
+            val absolutePaintOffset = absoluteTableOffset(
+                baseOffset = baseGlyphListOffset,
+                relativeOffset = paintOffset,
+                tableSize = reader.size,
+            ) ?: return null
+            val paint = parsePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = absolutePaintOffset,
+                depth = 0,
+                state = state,
+            ) ?: return null
+            records += COLRV1BaseGlyphPaintRecord(glyphId = glyphId, paint = paint)
+        }
+        return records.toList()
+    }
+
+    private fun parseLayerPaintOffsets(reader: ColorTableReader): List<Int>? {
+        val layerListOffset = reader.u32(COLR_V1_LAYER_LIST_OFFSET)?.toIntOrNull()
+            ?: return null
+        if (layerListOffset == 0) return emptyList()
+        if (!reader.fits(layerListOffset, U32_SIZE_BYTES.toLong())) return null
+
+        val layerCount = reader.u32(layerListOffset)?.toIntOrNull() ?: return null
+        if (layerCount > MAX_COLOR_LAYERS) return null
+        if (!reader.fits(
+                layerListOffset + U32_SIZE_BYTES,
+                layerCount.toLong() * U32_SIZE_BYTES.toLong(),
+            )
+        ) {
+            return null
+        }
+
+        return List(layerCount) { index ->
+            val offset = reader.u32(layerListOffset + U32_SIZE_BYTES + index * U32_SIZE_BYTES)
+                ?.toIntOrNull() ?: return null
+            absoluteTableOffset(
+                baseOffset = layerListOffset,
+                relativeOffset = offset,
+                tableSize = reader.size,
+            ) ?: return null
+        }
+    }
+
+    private fun parseClipRanges(reader: ColorTableReader): List<COLRV1ClipRange>? {
+        val clipListOffset = reader.u32(COLR_V1_CLIP_LIST_OFFSET)?.toIntOrNull()
+            ?: return null
+        if (clipListOffset == 0) return emptyList()
+        if (!reader.fits(clipListOffset, COLR_V1_CLIP_LIST_HEADER_SIZE.toLong())) return null
+        if (reader.u8(clipListOffset) != 1) return null
+
+        val clipCount = reader.u32(clipListOffset + 1)?.toIntOrNull() ?: return null
+        if (clipCount > MAX_COLOR_BASE_GLYPHS) return null
+        if (!reader.fits(
+                clipListOffset + COLR_V1_CLIP_LIST_HEADER_SIZE,
+                clipCount.toLong() * COLR_V1_CLIP_RECORD_SIZE.toLong(),
+            )
+        ) {
+            return null
+        }
+
+        val ranges = ArrayList<COLRV1ClipRange>(clipCount)
+        var previousEnd = -1
+        repeat(clipCount) { index ->
+            val recordOffset = clipListOffset + COLR_V1_CLIP_LIST_HEADER_SIZE + index * COLR_V1_CLIP_RECORD_SIZE
+            val startGlyphId = reader.u16(recordOffset) ?: return null
+            val endGlyphId = reader.u16(recordOffset + 2) ?: return null
+            if (startGlyphId > endGlyphId || startGlyphId <= previousEnd) return null
+            previousEnd = endGlyphId
+
+            val clipBoxOffset = reader.u24(recordOffset + 4) ?: return null
+            if (clipBoxOffset == 0) return null
+            val clipBoxStart = absoluteTableOffset(
+                baseOffset = clipListOffset,
+                relativeOffset = clipBoxOffset,
+                tableSize = reader.size,
+            ) ?: return null
+            val clipBox = parseClipBox(reader = reader, clipBoxStart = clipBoxStart) ?: return null
+            ranges += COLRV1ClipRange(
+                startGlyphId = startGlyphId,
+                endGlyphId = endGlyphId,
+                box = clipBox,
+            )
+        }
+        return ranges.toList()
+    }
+
+    private fun parseClipBox(reader: ColorTableReader, clipBoxStart: Int): COLRV1ClipBox? {
+        val format = reader.u8(clipBoxStart) ?: return null
+        val minSize = when (format) {
+            1 -> COLR_V1_CLIP_BOX_FORMAT1_SIZE
+            2 -> COLR_V1_CLIP_BOX_FORMAT2_SIZE
+            else -> return null
+        }
+        if (!reader.fits(clipBoxStart, minSize.toLong())) return null
+
+        val xMin = reader.i16(clipBoxStart + 1) ?: return null
+        val yMin = reader.i16(clipBoxStart + 3) ?: return null
+        val xMax = reader.i16(clipBoxStart + 5) ?: return null
+        val yMax = reader.i16(clipBoxStart + 7) ?: return null
+        if (xMin >= xMax || yMin >= yMax) return null
+        return COLRV1ClipBox(xMin = xMin, yMin = yMin, xMax = xMax, yMax = yMax)
+    }
+
+    private fun parsePaint(
+        reader: ColorTableReader,
+        layerPaintOffsets: List<Int>,
+        paintOffset: Int,
+        depth: Int,
+        state: COLRV1PaintParseState,
+    ): COLRV1Paint? {
+        if (depth > MAX_COLOR_PAINT_DEPTH) return null
+        state.expandedPaintCount += 1
+        if (state.expandedPaintCount > MAX_COLR_V1_EXPANDED_PAINTS) return null
+        if (!reader.fits(paintOffset, 1L)) return null
+
+        return when (val format = reader.u8(paintOffset) ?: return null) {
+            1 -> parseLayersPaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = paintOffset,
+                depth = depth,
+                state = state,
+            )
+            2, 3 -> parseSolidPaint(reader = reader, paintOffset = paintOffset, variable = format == 3)
+            4, 5 -> parseLinearGradientPaint(
+                reader = reader,
+                paintOffset = paintOffset,
+                variable = format == 5,
+            )
+            6, 7 -> parseRadialGradientPaint(
+                reader = reader,
+                paintOffset = paintOffset,
+                variable = format == 7,
+            )
+            8, 9 -> parseSweepGradientPaint(
+                reader = reader,
+                paintOffset = paintOffset,
+                variable = format == 9,
+            )
+            10 -> parseGlyphPaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = paintOffset,
+                depth = depth,
+                state = state,
+            )
+            11 -> parseColrGlyphPaint(reader = reader, paintOffset = paintOffset)
+            12, 13 -> parseTransformPaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = paintOffset,
+                depth = depth,
+                state = state,
+                variable = format == 13,
+            )
+            14, 15 -> parseTranslatePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = paintOffset,
+                depth = depth,
+                state = state,
+                variable = format == 15,
+            )
+            32 -> parseCompositePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = paintOffset,
+                depth = depth,
+                state = state,
+            )
+            else -> null
+        }
+    }
+
+    private fun parseLayersPaint(
+        reader: ColorTableReader,
+        layerPaintOffsets: List<Int>,
+        paintOffset: Int,
+        depth: Int,
+        state: COLRV1PaintParseState,
+    ): COLRV1Paint.Layers? {
+        if (!reader.fits(paintOffset, COLR_V1_PAINT_COLR_LAYERS_SIZE.toLong())) return null
+        val layerCount = reader.u8(paintOffset + 1) ?: return null
+        val firstLayerIndex = reader.u32(paintOffset + 2)?.toIntOrNull() ?: return null
+        if (layerCount == 0 || layerCount > MAX_LAYERS_PER_COLOR_GLYPH) return null
+        if (firstLayerIndex.toLong() + layerCount.toLong() > layerPaintOffsets.size.toLong()) return null
+
+        val paints = ArrayList<COLRV1Paint>(layerCount)
+        repeat(layerCount) { index ->
+            paints += parsePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = layerPaintOffsets[firstLayerIndex + index],
+                depth = depth + 1,
+                state = state,
+            ) ?: return null
+        }
+        return COLRV1Paint.Layers(paints = paints.toList())
+    }
+
+    private fun parseSolidPaint(
+        reader: ColorTableReader,
+        paintOffset: Int,
+        variable: Boolean,
+    ): COLRV1Paint.Solid? {
+        val paintSize = if (variable) COLR_V1_PAINT_VAR_SOLID_SIZE else COLR_V1_PAINT_SOLID_SIZE
+        if (!reader.fits(paintOffset, paintSize.toLong())) return null
+        return COLRV1Paint.Solid(
+            paletteIndex = reader.u16(paintOffset + 1) ?: return null,
+            alpha = reader.f2Dot14(paintOffset + 3)?.coerceIn(0f, 1f) ?: return null,
+            varIndexBase = if (variable) reader.u32(paintOffset + 5) ?: return null else null,
+        )
+    }
+
+    private fun parseLinearGradientPaint(
+        reader: ColorTableReader,
+        paintOffset: Int,
+        variable: Boolean,
+    ): COLRV1Paint.LinearGradient? {
+        val paintSize = if (variable) COLR_V1_PAINT_VAR_LINEAR_GRADIENT_SIZE else COLR_V1_PAINT_LINEAR_GRADIENT_SIZE
+        if (!reader.fits(paintOffset, paintSize.toLong())) return null
+        val colorLineOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 1)
+            ?: return null
+        return COLRV1Paint.LinearGradient(
+            colorLine = parseColorLine(reader = reader, colorLineOffset = colorLineOffset, variableStops = variable)
+                ?: return null,
+            x0 = reader.i16(paintOffset + 4) ?: return null,
+            y0 = reader.i16(paintOffset + 6) ?: return null,
+            x1 = reader.i16(paintOffset + 8) ?: return null,
+            y1 = reader.i16(paintOffset + 10) ?: return null,
+            x2 = reader.i16(paintOffset + 12) ?: return null,
+            y2 = reader.i16(paintOffset + 14) ?: return null,
+            varIndexBase = if (variable) reader.u32(paintOffset + 16) ?: return null else null,
+        )
+    }
+
+    private fun parseRadialGradientPaint(
+        reader: ColorTableReader,
+        paintOffset: Int,
+        variable: Boolean,
+    ): COLRV1Paint.RadialGradient? {
+        val paintSize = if (variable) COLR_V1_PAINT_VAR_RADIAL_GRADIENT_SIZE else COLR_V1_PAINT_RADIAL_GRADIENT_SIZE
+        if (!reader.fits(paintOffset, paintSize.toLong())) return null
+        val colorLineOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 1)
+            ?: return null
+        return COLRV1Paint.RadialGradient(
+            colorLine = parseColorLine(reader = reader, colorLineOffset = colorLineOffset, variableStops = variable)
+                ?: return null,
+            x0 = reader.i16(paintOffset + 4) ?: return null,
+            y0 = reader.i16(paintOffset + 6) ?: return null,
+            radius0 = reader.u16(paintOffset + 8) ?: return null,
+            x1 = reader.i16(paintOffset + 10) ?: return null,
+            y1 = reader.i16(paintOffset + 12) ?: return null,
+            radius1 = reader.u16(paintOffset + 14) ?: return null,
+            varIndexBase = if (variable) reader.u32(paintOffset + 16) ?: return null else null,
+        )
+    }
+
+    private fun parseSweepGradientPaint(
+        reader: ColorTableReader,
+        paintOffset: Int,
+        variable: Boolean,
+    ): COLRV1Paint.SweepGradient? {
+        val paintSize = if (variable) COLR_V1_PAINT_VAR_SWEEP_GRADIENT_SIZE else COLR_V1_PAINT_SWEEP_GRADIENT_SIZE
+        if (!reader.fits(paintOffset, paintSize.toLong())) return null
+        val colorLineOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 1)
+            ?: return null
+        return COLRV1Paint.SweepGradient(
+            colorLine = parseColorLine(reader = reader, colorLineOffset = colorLineOffset, variableStops = variable)
+                ?: return null,
+            centerX = reader.i16(paintOffset + 4) ?: return null,
+            centerY = reader.i16(paintOffset + 6) ?: return null,
+            startAngle = reader.f2Dot14(paintOffset + 8) ?: return null,
+            endAngle = reader.f2Dot14(paintOffset + 10) ?: return null,
+            varIndexBase = if (variable) reader.u32(paintOffset + 12) ?: return null else null,
+        )
+    }
+
+    private fun parseColorLine(
+        reader: ColorTableReader,
+        colorLineOffset: Int,
+        variableStops: Boolean,
+    ): COLRV1ColorLine? {
+        if (!reader.fits(colorLineOffset, COLR_V1_COLOR_LINE_HEADER_SIZE.toLong())) return null
+        val extend = when (reader.u8(colorLineOffset) ?: return null) {
+            0 -> COLRV1ColorLineExtend.PAD
+            1 -> COLRV1ColorLineExtend.REPEAT
+            2 -> COLRV1ColorLineExtend.REFLECT
+            else -> return null
+        }
+        val stopCount = reader.u16(colorLineOffset + 1) ?: return null
+        if (stopCount == 0 || stopCount > MAX_COLOR_STOPS) return null
+        val stopSize = if (variableStops) COLR_V1_VAR_COLOR_STOP_SIZE else COLR_V1_COLOR_STOP_SIZE
+        if (!reader.fits(
+                colorLineOffset + COLR_V1_COLOR_LINE_HEADER_SIZE,
+                stopCount.toLong() * stopSize.toLong(),
+            )
+        ) {
+            return null
+        }
+
+        val stops = ArrayList<COLRV1ColorStop>(stopCount)
+        repeat(stopCount) { index ->
+            val stopOffset = colorLineOffset + COLR_V1_COLOR_LINE_HEADER_SIZE + index * stopSize
+            stops += COLRV1ColorStop(
+                offset = reader.f2Dot14(stopOffset) ?: return null,
+                paletteIndex = reader.u16(stopOffset + 2) ?: return null,
+                alpha = reader.f2Dot14(stopOffset + 4)?.coerceIn(0f, 1f) ?: return null,
+                varIndexBase = if (variableStops) reader.u32(stopOffset + 6) ?: return null else null,
+            )
+        }
+        return COLRV1ColorLine(
+            extend = extend,
+            stops = stops.toList(),
+        )
+    }
+
+    private fun parseGlyphPaint(
+        reader: ColorTableReader,
+        layerPaintOffsets: List<Int>,
+        paintOffset: Int,
+        depth: Int,
+        state: COLRV1PaintParseState,
+    ): COLRV1Paint.Glyph? {
+        if (!reader.fits(paintOffset, COLR_V1_PAINT_GLYPH_SIZE.toLong())) return null
+        val childOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 1)
+            ?: return null
+        return COLRV1Paint.Glyph(
+            glyphId = reader.u16(paintOffset + 4) ?: return null,
+            paint = parsePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = childOffset,
+                depth = depth + 1,
+                state = state,
+            ) ?: return null,
+        )
+    }
+
+    private fun parseColrGlyphPaint(
+        reader: ColorTableReader,
+        paintOffset: Int,
+    ): COLRV1Paint.ColrGlyph? {
+        if (!reader.fits(paintOffset, COLR_V1_PAINT_COLR_GLYPH_SIZE.toLong())) return null
+        return COLRV1Paint.ColrGlyph(
+            glyphId = reader.u16(paintOffset + 1) ?: return null,
+        )
+    }
+
+    private fun parseTranslatePaint(
+        reader: ColorTableReader,
+        layerPaintOffsets: List<Int>,
+        paintOffset: Int,
+        depth: Int,
+        state: COLRV1PaintParseState,
+        variable: Boolean,
+    ): COLRV1Paint.Translate? {
+        val paintSize = if (variable) COLR_V1_PAINT_VAR_TRANSLATE_SIZE else COLR_V1_PAINT_TRANSLATE_SIZE
+        if (!reader.fits(paintOffset, paintSize.toLong())) return null
+        val childOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 1)
+            ?: return null
+        return COLRV1Paint.Translate(
+            paint = parsePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = childOffset,
+                depth = depth + 1,
+                state = state,
+            ) ?: return null,
+            dx = reader.i16(paintOffset + 4) ?: return null,
+            dy = reader.i16(paintOffset + 6) ?: return null,
+            varIndexBase = if (variable) reader.u32(paintOffset + 8) ?: return null else null,
+        )
+    }
+
+    private fun parseTransformPaint(
+        reader: ColorTableReader,
+        layerPaintOffsets: List<Int>,
+        paintOffset: Int,
+        depth: Int,
+        state: COLRV1PaintParseState,
+        variable: Boolean,
+    ): COLRV1Paint.Transform? {
+        if (!reader.fits(paintOffset, COLR_V1_PAINT_TRANSFORM_SIZE.toLong())) return null
+        val childOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 1)
+            ?: return null
+        val transformOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 4)
+            ?: return null
+        val transformSize = if (variable) COLR_V1_VAR_TRANSFORM_SIZE else COLR_V1_TRANSFORM_SIZE
+        if (!reader.fits(transformOffset, transformSize.toLong())) return null
+
+        return COLRV1Paint.Transform(
+            paint = parsePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = childOffset,
+                depth = depth + 1,
+                state = state,
+            ) ?: return null,
+            xx = reader.fixed16Dot16(transformOffset) ?: return null,
+            yx = reader.fixed16Dot16(transformOffset + 4) ?: return null,
+            xy = reader.fixed16Dot16(transformOffset + 8) ?: return null,
+            yy = reader.fixed16Dot16(transformOffset + 12) ?: return null,
+            dx = reader.fixed16Dot16(transformOffset + 16) ?: return null,
+            dy = reader.fixed16Dot16(transformOffset + 20) ?: return null,
+            varIndexBase = if (variable) reader.u32(transformOffset + 24) ?: return null else null,
+        )
+    }
+
+    private fun parseCompositePaint(
+        reader: ColorTableReader,
+        layerPaintOffsets: List<Int>,
+        paintOffset: Int,
+        depth: Int,
+        state: COLRV1PaintParseState,
+    ): COLRV1Paint.Composite? {
+        if (!reader.fits(paintOffset, COLR_V1_PAINT_COMPOSITE_SIZE.toLong())) return null
+        val sourceOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 1)
+            ?: return null
+        val mode = COLRV1CompositeMode.fromFontValue(reader.u8(paintOffset + 4) ?: return null)
+            ?: return null
+        val backdropOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 5)
+            ?: return null
+
+        return COLRV1Paint.Composite(
+            source = parsePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = sourceOffset,
+                depth = depth + 1,
+                state = state,
+            ) ?: return null,
+            mode = mode,
+            backdrop = parsePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = backdropOffset,
+                depth = depth + 1,
+                state = state,
+            ) ?: return null,
+        )
+    }
+
+    private fun childPaintOffset(reader: ColorTableReader, parentOffset: Int, fieldOffset: Int): Int? {
+        val relativeOffset = reader.u24(parentOffset + fieldOffset) ?: return null
+        if (relativeOffset == 0) return null
+        return absoluteTableOffset(
+            baseOffset = parentOffset,
+            relativeOffset = relativeOffset,
+            tableSize = reader.size,
+        )
+    }
+}
+
+/**
  * Selects embedded bitmap strikes for color glyph alternate routes.
  */
 interface BitmapStrikeSelector {
@@ -85,8 +1443,54 @@ interface BitmapStrikeSelector {
      * @param requestedSizePx requested size in pixels.
      * @return selected bitmap strike or null when no suitable strike exists.
      */
-    fun select(glyphId: Int, requestedSizePx: Float): BitmapStrikeSelection? =
-        TODO("Select embedded bitmap strikes for color glyph rendering.")
+    fun select(glyphId: Int, requestedSizePx: Float): BitmapStrikeSelection?
+}
+
+/**
+ * Selects bitmap strikes from a caller-supplied immutable snapshot.
+ *
+ * The selector copies [entries] at construction time so later mutations to the source collection do
+ * not affect route decisions. Selection is intentionally metadata-only: it does not load bitmap
+ * payload bytes, decode PNG images, or consult platform font APIs. For a matching [glyphId], the
+ * selector chooses the strike whose [BitmapStrikeSelection.ppem] is closest to [requestedSizePx].
+ * Equal-distance ties are resolved by lower ppem, then lower width, lower height, and finally the
+ * lexicographic format label so the same inputs always produce the same result.
+ *
+ * Invalid entries with non-positive dimensions, non-positive ppem, or blank format labels are
+ * ignored when the snapshot is built. Invalid requested sizes return null rather than selecting an
+ * arbitrary fallback.
+ *
+ * @property entries embedded bitmap strike metadata entries to snapshot for deterministic
+ * selection.
+ */
+class StaticBitmapStrikeSelector(
+    entries: Iterable<BitmapStrikeSelection>,
+) : BitmapStrikeSelector {
+    private val selections: List<BitmapStrikeSelection> = entries
+        .filter { entry -> entry.isUsable() }
+        .map { entry -> entry.copy(format = entry.format.trim()) }
+        .sortedWith(BITMAP_STRIKE_STABLE_ORDER)
+        .toList()
+
+    /**
+     * Selects the nearest bitmap strike for [glyphId] and [requestedSizePx].
+     *
+     * @param glyphId glyph identifier to resolve.
+     * @param requestedSizePx requested size in pixels; non-finite and non-positive sizes are
+     * rejected.
+     * @return the nearest immutable bitmap strike metadata entry, or null when no usable entry
+     * exists for the glyph.
+     */
+    override fun select(glyphId: Int, requestedSizePx: Float): BitmapStrikeSelection? {
+        if (requestedSizePx <= 0f || requestedSizePx.isNaN() || requestedSizePx.isInfinite()) {
+            return null
+        }
+
+        return selections
+            .asSequence()
+            .filter { selection -> selection.glyphId == glyphId }
+            .minWithOrNull(bitmapStrikeDistanceOrder(requestedSizePx))
+    }
 }
 
 /**
@@ -96,12 +1500,16 @@ interface BitmapStrikeSelector {
  * @property width bitmap width in pixels.
  * @property height bitmap height in pixels.
  * @property format source bitmap format label.
+ * @property ppem pixels-per-em size advertised by the embedded bitmap strike. When callers only
+ * know the bitmap dimensions, the default uses the larger dimension as a conservative square-strike
+ * approximation.
  */
 data class BitmapStrikeSelection(
     val glyphId: Int,
     val width: Int,
     val height: Int,
     val format: String,
+    val ppem: Int = maxOf(width, height),
 )
 
 /**
@@ -115,18 +1523,77 @@ interface PNGGlyphDecoder {
      * @param bytes encoded PNG bytes.
      * @return decoded PNG glyph image.
      */
-    fun decode(glyphId: Int, bytes: ByteArray): PNGGlyphImage =
-        TODO("Decode PNG glyph payloads for color glyph rendering.")
+    fun decode(glyphId: Int, bytes: ByteArray): PNGGlyphImage
 }
 
 /**
- * Stores a decoded PNG glyph image.
+ * Decodes minimal PNG glyph payloads into packed ARGB pixels.
+ *
+ * The decoder accepts bytes whose first byte is the PNG signature, validates that the first chunk
+ * is an IHDR chunk with the required 13-byte payload, and reads the IHDR width and height as
+ * unsigned big-endian integers before decoding non-interlaced 8-bit RGB and RGBA payloads. It does
+ * not use AWT, ImageIO, JNI, native code, GPU, or renderer APIs.
+ */
+object BasicPNGGlyphDecoder : PNGGlyphDecoder {
+    /**
+     * Reads PNG signature and IHDR metadata for one glyph payload.
+     *
+     * @param glyphId glyph identifier associated with the PNG payload.
+     * @param bytes encoded PNG bytes.
+     * @return PNG glyph metadata with decoded packed ARGB pixels.
+     * @throws IllegalArgumentException when the payload is too large, truncated, not a PNG, missing
+     * IHDR as the first chunk, advertising invalid image dimensions, or failing PNG decode.
+     */
+    override fun decode(glyphId: Int, bytes: ByteArray): PNGGlyphImage {
+        require(bytes.size <= MAX_PNG_GLYPH_PAYLOAD_BYTES) {
+            "PNG glyph payload exceeds $MAX_PNG_GLYPH_PAYLOAD_BYTES bytes."
+        }
+        require(hasPngSignature(bytes)) {
+            "PNG glyph payload must start with the PNG signature."
+        }
+        require(bytes.size >= PNG_MIN_HEADER_BYTES) {
+            "PNG glyph payload is truncated before the IHDR header."
+        }
+
+        val reader = ColorTableReader(bytes)
+        val ihdrLength = reader.u32(PNG_IHDR_LENGTH_OFFSET)
+            ?: throw IllegalArgumentException("PNG glyph payload is truncated before the IHDR length.")
+        require(ihdrLength == PNG_IHDR_DATA_SIZE.toLong()) {
+            "PNG glyph IHDR chunk must be $PNG_IHDR_DATA_SIZE bytes, found $ihdrLength."
+        }
+        require(matchesAscii(bytes = bytes, offset = PNG_IHDR_TYPE_OFFSET, text = "IHDR")) {
+            "PNG glyph payload must contain IHDR as the first chunk."
+        }
+
+        val width = reader.u32(PNG_IHDR_WIDTH_OFFSET)?.toIntOrNull()
+            ?: throw IllegalArgumentException("PNG glyph IHDR width is out of range.")
+        val height = reader.u32(PNG_IHDR_HEIGHT_OFFSET)?.toIntOrNull()
+            ?: throw IllegalArgumentException("PNG glyph IHDR height is out of range.")
+        require(width in 1..MAX_PNG_GLYPH_DIMENSION) {
+            "PNG glyph IHDR width must be between 1 and $MAX_PNG_GLYPH_DIMENSION pixels."
+        }
+        require(height in 1..MAX_PNG_GLYPH_DIMENSION) {
+            "PNG glyph IHDR height must be between 1 and $MAX_PNG_GLYPH_DIMENSION pixels."
+        }
+
+        val pixels = decodeMinimalPngGlyphPixels(bytes = bytes, width = width, height = height)
+
+        return PNGGlyphImage(
+            glyphId = glyphId,
+            width = width,
+            height = height,
+            pixels = pixels,
+        )
+    }
+}
+
+/**
+ * Stores parsed PNG glyph image metadata and optional decoded pixels.
  *
  * @property glyphId glyph identifier represented by the image.
  * @property width image width in pixels.
  * @property height image height in pixels.
- * @property pixels Immutable decoded pixels in row-major order as packed ARGB
- * integers.
+ * @property pixels immutable decoded pixels in row-major order as packed ARGB integers.
  */
 data class PNGGlyphImage(
     val glyphId: Int,
@@ -146,8 +1613,7 @@ interface SVGGlyphRenderer {
      * @param sizePx requested render size in pixels.
      * @return rendered SVG glyph image.
      */
-    fun render(document: SVGGlyphDocument, sizePx: Float): SVGGlyphImage =
-        TODO("Render SVG glyph documents for color glyph rendering.")
+    fun render(document: SVGGlyphDocument, sizePx: Float): SVGGlyphImage
 }
 
 /**
@@ -161,8 +1627,53 @@ interface SVGGlyphParser {
      * @param text UTF-8 decoded SVG text.
      * @return parsed SVG glyph document.
      */
-    fun parse(glyphId: Int, text: String): SVGGlyphDocument =
-        TODO("Parse SVG glyph payloads for color glyph rendering.")
+    fun parse(glyphId: Int, text: String): SVGGlyphDocument
+}
+
+/**
+ * Parses a bounded subset of SVG glyph text into renderer-neutral metadata.
+ *
+ * This parser is intentionally small and dependency-free. It treats [text] as already UTF-8
+ * decoded SVG source, rejects payloads beyond [MAX_SVG_GLYPH_TEXT_CHARS], reads the root
+ * `viewBox` attribute, and summarizes common paintable element start tags. It does not execute
+ * scripts, expand entities, resolve external references, apply CSS, or build a full XML DOM. The
+ * output is suitable for route diagnostics and later handoff to a real SVG renderer, not for
+ * claiming complete SVG rendering support.
+ *
+ * Element summaries use the stable form `name{key=value,...}`. Attribute values are trimmed and
+ * internal whitespace is collapsed; attributes are canonicalized to lowercase and sorted by name so
+ * equivalent input ordering produces deterministic metadata.
+ */
+object BasicSVGGlyphParser : SVGGlyphParser {
+    /**
+     * Parses bounded UTF-8 SVG text for one glyph.
+     *
+     * @param glyphId glyph identifier associated with the SVG payload.
+     * @param text UTF-8 decoded SVG text.
+     * @return parsed SVG glyph document containing root viewBox values and simple element
+     * summaries.
+     * @throws IllegalArgumentException when the payload is oversized, lacks a root SVG start tag,
+     * lacks a valid four-number viewBox, has malformed attributes, or exceeds the simple element
+     * summary cap.
+     */
+    override fun parse(glyphId: Int, text: String): SVGGlyphDocument {
+        require(text.length <= MAX_SVG_GLYPH_TEXT_CHARS) {
+            "SVG glyph payload exceeds $MAX_SVG_GLYPH_TEXT_CHARS UTF-16 code units."
+        }
+
+        val source = text.removePrefix("\uFEFF")
+        val rootTag = findSvgStartTag(source, "svg")
+            ?: throw IllegalArgumentException("SVG glyph payload must contain an <svg> root tag.")
+        val rootAttributes = parseSvgTagAttributes(rootTag.source)
+        val viewBoxText = attributeValue(rootAttributes, "viewBox")
+            ?: throw IllegalArgumentException("SVG glyph payload must contain a root viewBox attribute.")
+
+        return SVGGlyphDocument(
+            glyphId = glyphId,
+            viewBox = parseSvgViewBox(viewBoxText),
+            elements = extractSvgElementSummaries(source),
+        )
+    }
 }
 
 /**
@@ -170,7 +1681,9 @@ interface SVGGlyphParser {
  *
  * @property glyphId glyph identifier represented by the document.
  * @property viewBox SVG viewBox values encoded as minX, minY, width, and height.
- * @property elements renderer-neutral element descriptions.
+ * @property elements immutable renderer-neutral element summaries in `name{key=value,...}` form.
+ * The basic parser emits one summary per supported SVG start tag and leaves unsupported content
+ * out of this diagnostic list.
  */
 data class SVGGlyphDocument(
     val glyphId: Int,
@@ -195,6 +1708,28 @@ data class SVGGlyphImage(
 )
 
 /**
+ * Describes route availability for a pure Kotlin emoji glyph dispatch pass.
+ *
+ * The sets are intentionally plain glyph identifiers. They let a caller feed table-level knowledge
+ * from COLR/CPAL parsing, bitmap strike discovery, PNG payload indexing, SVG document discovery,
+ * and outline fallback availability without coupling the dispatcher to any parser, scaler, codec,
+ * cache, or renderer.
+ *
+ * @property colrGlyphs glyph identifiers with parsed COLR color layer records.
+ * @property bitmapGlyphs glyph identifiers with embedded bitmap strike data.
+ * @property pngGlyphs glyph identifiers with PNG-backed glyph image payloads.
+ * @property svgGlyphs glyph identifiers with SVG glyph documents.
+ * @property outlineGlyphs glyph identifiers with outline fallback data.
+ */
+data class EmojiGlyphRouteAvailability(
+    val colrGlyphs: Set<Int> = emptySet(),
+    val bitmapGlyphs: Set<Int> = emptySet(),
+    val pngGlyphs: Set<Int> = emptySet(),
+    val svgGlyphs: Set<Int> = emptySet(),
+    val outlineGlyphs: Set<Int> = emptySet(),
+)
+
+/**
  * Dispatches emoji glyphs to the best available color glyph route.
  */
 interface EmojiGlyphDispatcher {
@@ -205,8 +1740,104 @@ interface EmojiGlyphDispatcher {
      * @param strikeKey strike inputs used for route selection.
      * @return dispatch result for the emoji glyph.
      */
-    fun dispatch(glyphId: Int, strikeKey: GlyphStrikeKey): EmojiGlyphDispatch =
-        TODO("Dispatch emoji glyphs to COLR, bitmap, PNG, SVG, or outline alternate routes.")
+    fun dispatch(glyphId: Int, strikeKey: GlyphStrikeKey): EmojiGlyphDispatch
+}
+
+/**
+ * Deterministic emoji glyph dispatcher with COLR-first route preference.
+ *
+ * Routes are considered in the order COLR, bitmap, PNG, SVG, then outline. The dispatcher emits
+ * diagnostics for unavailable higher-priority routes, the selected route, and any lower-priority
+ * alternatives that were present but skipped. It does not decode or render any glyph content; it
+ * only chooses among availability facts supplied by [availability].
+ *
+ * @property availability route availability facts for the dispatch pass.
+ */
+class SimpleEmojiGlyphDispatcher(
+    private val availability: EmojiGlyphRouteAvailability,
+) : EmojiGlyphDispatcher {
+    /**
+     * Selects the preferred available route for one emoji glyph.
+     *
+     * @param glyphId glyph identifier to dispatch.
+     * @param strikeKey strike inputs included in diagnostics to make route evidence size-aware.
+     * @return dispatch result containing the selected route name and non-fatal diagnostics.
+     */
+    override fun dispatch(glyphId: Int, strikeKey: GlyphStrikeKey): EmojiGlyphDispatch {
+        val candidates = routeCandidates(glyphId)
+        val selectedIndex = candidates.indexOfFirst { candidate -> candidate.available }
+
+        if (selectedIndex < 0) {
+            return EmojiGlyphDispatch(
+                glyphId = glyphId,
+                route = "missing",
+                diagnostics = candidates.map { candidate ->
+                    unavailableDiagnostic(glyphId = glyphId, route = candidate.route, strikeKey = strikeKey)
+                } + ColorGlyphDiagnostic(
+                    glyphId = glyphId,
+                    route = "missing",
+                    message = "No emoji glyph route is available for glyph $glyphId at ${strikeKey.sizePx}px.",
+                    severity = "warning",
+                ),
+            )
+        }
+
+        val selected = candidates[selectedIndex]
+        val diagnostics = ArrayList<ColorGlyphDiagnostic>()
+        candidates.forEachIndexed { index, candidate ->
+            when {
+                index < selectedIndex -> {
+                    diagnostics += unavailableDiagnostic(
+                        glyphId = glyphId,
+                        route = candidate.route,
+                        strikeKey = strikeKey,
+                    )
+                }
+                index == selectedIndex -> {
+                    diagnostics += ColorGlyphDiagnostic(
+                        glyphId = glyphId,
+                        route = candidate.route,
+                        message = "Selected ${candidate.route} route for glyph $glyphId at ${strikeKey.sizePx}px.",
+                    )
+                }
+                candidate.available -> {
+                    diagnostics += ColorGlyphDiagnostic(
+                        glyphId = glyphId,
+                        route = candidate.route,
+                        message = "Skipped ${candidate.route} route for glyph $glyphId because it has lower preference than ${selected.route}.",
+                    )
+                }
+            }
+        }
+
+        return EmojiGlyphDispatch(
+            glyphId = glyphId,
+            route = selected.route,
+            diagnostics = diagnostics.toList(),
+        )
+    }
+
+    /**
+     * Builds route candidates in the public emoji dispatch preference order.
+     */
+    private fun routeCandidates(glyphId: Int): List<EmojiRouteCandidate> =
+        listOf(
+            EmojiRouteCandidate(route = "colr", available = glyphId in availability.colrGlyphs),
+            EmojiRouteCandidate(route = "bitmap", available = glyphId in availability.bitmapGlyphs),
+            EmojiRouteCandidate(route = "png", available = glyphId in availability.pngGlyphs),
+            EmojiRouteCandidate(route = "svg", available = glyphId in availability.svgGlyphs),
+            EmojiRouteCandidate(route = "outline", available = glyphId in availability.outlineGlyphs),
+        )
+
+    /**
+     * Builds an unavailable-route diagnostic for one candidate.
+     */
+    private fun unavailableDiagnostic(glyphId: Int, route: String, strikeKey: GlyphStrikeKey): ColorGlyphDiagnostic =
+        ColorGlyphDiagnostic(
+            glyphId = glyphId,
+            route = route,
+            message = "Route $route is unavailable for glyph $glyphId at ${strikeKey.sizePx}px.",
+        )
 }
 
 /**
@@ -225,13 +1856,35 @@ data class EmojiGlyphDispatch(
 /**
  * Describes a color glyph planning result without duplicating public GPU API plan classes.
  *
- * @property representations glyph representations selected by color planning.
+ * @property routes glyph routes selected by color planning.
  * @property diagnostics color-specific diagnostics.
  */
 data class ColorGlyphPlanningResult(
-    val representations: List<GlyphRepresentation>,
+    val routes: List<ColorGlyphRoute>,
     val diagnostics: List<ColorGlyphDiagnostic> = emptyList(),
 )
+
+/**
+ * Metadata-only color glyph route selected for one glyph.
+ *
+ * @property glyphId glyph identifier represented by the selected route.
+ * @property route selected color route label.
+ * @property outline outline fallback representation when [route] is `outline`.
+ */
+data class ColorGlyphRoute(
+    val glyphId: Int,
+    val route: String,
+    val outline: OutlineGlyphRepresentation? = null,
+) {
+    init {
+        require(route in COLOR_GLYPH_ROUTES) {
+            "Unsupported color glyph route: $route."
+        }
+        require((route == "outline") == (outline != null)) {
+            "Outline color glyph routes must carry an outline representation, and non-outline routes must not."
+        }
+    }
+}
 
 /**
  * Describes a color glyph routing decision, alternate route, or unsupported source condition.
@@ -260,3 +1913,835 @@ data class ColorGlyphDiagnostic(
             severity = severity,
         )
 }
+
+/**
+ * One route candidate considered by [SimpleEmojiGlyphDispatcher].
+ */
+private data class EmojiRouteCandidate(
+    val route: String,
+    val available: Boolean,
+)
+
+private val COLOR_GLYPH_ROUTES = setOf("colr", "bitmap", "png", "svg", "outline")
+
+/**
+ * Bounds-checked big-endian reader for raw OpenType color table bytes.
+ */
+private class ColorTableReader(
+    private val bytes: ByteArray,
+) {
+    /**
+     * Size of the bounded byte source.
+     */
+    val size: Int
+        get() = bytes.size
+
+    /**
+     * Returns true when [offset] and [length] describe a range inside [bytes].
+     */
+    fun fits(offset: Int, length: Long): Boolean {
+        if (offset < 0 || length < 0L) return false
+        val start = offset.toLong()
+        val end = start + length
+        return start <= bytes.size.toLong() && end >= start && end <= bytes.size.toLong()
+    }
+
+    /**
+     * Reads an unsigned 8-bit value.
+     */
+    fun u8(offset: Int): Int? =
+        if (fits(offset, 1L)) bytes[offset].toInt() and 0xFF else null
+
+    /**
+     * Reads an unsigned 16-bit big-endian value.
+     */
+    fun u16(offset: Int): Int? {
+        if (!fits(offset, U16_SIZE_BYTES.toLong())) return null
+        return ((bytes[offset].toInt() and 0xFF) shl 8) or
+            (bytes[offset + 1].toInt() and 0xFF)
+    }
+
+    /**
+     * Reads a signed 16-bit big-endian value.
+     */
+    fun i16(offset: Int): Int? =
+        u16(offset)?.toShort()?.toInt()
+
+    /**
+     * Reads an unsigned 24-bit big-endian value.
+     */
+    fun u24(offset: Int): Int? {
+        if (!fits(offset, U24_SIZE_BYTES.toLong())) return null
+        return ((bytes[offset].toInt() and 0xFF) shl 16) or
+            ((bytes[offset + 1].toInt() and 0xFF) shl 8) or
+            (bytes[offset + 2].toInt() and 0xFF)
+    }
+
+    /**
+     * Reads an unsigned 32-bit big-endian value.
+     */
+    fun u32(offset: Int): Long? {
+        if (!fits(offset, U32_SIZE_BYTES.toLong())) return null
+        return ((bytes[offset].toLong() and 0xFFL) shl 24) or
+            ((bytes[offset + 1].toLong() and 0xFFL) shl 16) or
+            ((bytes[offset + 2].toLong() and 0xFFL) shl 8) or
+            (bytes[offset + 3].toLong() and 0xFFL)
+    }
+
+    /**
+     * Reads a signed OpenType F2DOT14 value.
+     */
+    fun f2Dot14(offset: Int): Float? =
+        i16(offset)?.let { value -> value / 16384f }
+
+    /**
+     * Reads a signed OpenType Fixed 16.16 value.
+     */
+    fun fixed16Dot16(offset: Int): Float? {
+        if (!fits(offset, U32_SIZE_BYTES.toLong())) return null
+        val raw = ((bytes[offset].toInt() and 0xFF) shl 24) or
+            ((bytes[offset + 1].toInt() and 0xFF) shl 16) or
+            ((bytes[offset + 2].toInt() and 0xFF) shl 8) or
+            (bytes[offset + 3].toInt() and 0xFF)
+        return raw / 65536f
+    }
+}
+
+/**
+ * Converts a nullable unsigned 32-bit table offset to a Kotlin Int.
+ */
+private fun Long.toIntOrNull(): Int? =
+    if (this <= Int.MAX_VALUE.toLong()) toInt() else null
+
+/**
+ * Resolves a relative table offset without overflowing the Kotlin Int offset space.
+ */
+private fun absoluteTableOffset(baseOffset: Int, relativeOffset: Int, tableSize: Int): Int? {
+    val absolute = baseOffset.toLong() + relativeOffset.toLong()
+    if (absolute < 0L || absolute >= tableSize.toLong() || absolute > Int.MAX_VALUE.toLong()) return null
+    return absolute.toInt()
+}
+
+/**
+ * Appends one COLRv1 typed paint into a generic flattened paint graph.
+ */
+private fun appendCOLRV1PaintNode(paint: COLRV1Paint, nodes: MutableList<COLRPaintNode>): Int {
+    val id = nodes.size
+    val baseNode = when (paint) {
+        is COLRV1Paint.Solid -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-solid",
+            paletteIndex = paint.paletteIndex,
+        )
+        is COLRV1Paint.Glyph -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-glyph",
+            glyphId = paint.glyphId,
+        )
+        is COLRV1Paint.Layers -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-layers",
+        )
+        is COLRV1Paint.LinearGradient -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-linear-gradient",
+        )
+        is COLRV1Paint.RadialGradient -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-radial-gradient",
+        )
+        is COLRV1Paint.SweepGradient -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-sweep-gradient",
+        )
+        is COLRV1Paint.Composite -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-composite-${paint.mode.graphSuffix}",
+        )
+        is COLRV1Paint.ColrGlyph -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-colr-glyph",
+            glyphId = paint.glyphId,
+        )
+        is COLRV1Paint.Translate -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-translate",
+        )
+        is COLRV1Paint.Transform -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-transform",
+        )
+    }
+    nodes += baseNode
+
+    val childIds = when (paint) {
+        is COLRV1Paint.Solid -> emptyList()
+        is COLRV1Paint.Glyph -> listOf(appendCOLRV1PaintNode(paint = paint.paint, nodes = nodes))
+        is COLRV1Paint.Layers -> paint.paints.map { child -> appendCOLRV1PaintNode(paint = child, nodes = nodes) }
+        is COLRV1Paint.LinearGradient -> emptyList()
+        is COLRV1Paint.RadialGradient -> emptyList()
+        is COLRV1Paint.SweepGradient -> emptyList()
+        is COLRV1Paint.Composite -> listOf(
+            appendCOLRV1PaintNode(paint = paint.source, nodes = nodes),
+            appendCOLRV1PaintNode(paint = paint.backdrop, nodes = nodes),
+        )
+        is COLRV1Paint.ColrGlyph -> emptyList()
+        is COLRV1Paint.Translate -> listOf(appendCOLRV1PaintNode(paint = paint.paint, nodes = nodes))
+        is COLRV1Paint.Transform -> listOf(appendCOLRV1PaintNode(paint = paint.paint, nodes = nodes))
+    }
+    nodes[id] = baseNode.copy(children = childIds)
+    return id
+}
+
+/**
+ * Packs color channels into the module's ARGB integer representation.
+ */
+private fun packArgb(alpha: Int, red: Int, green: Int, blue: Int): Int =
+    ((alpha and 0xFF) shl 24) or
+        ((red and 0xFF) shl 16) or
+        ((green and 0xFF) shl 8) or
+        (blue and 0xFF)
+
+/**
+ * Returns true when a bitmap strike entry contains usable metadata.
+ */
+private fun BitmapStrikeSelection.isUsable(): Boolean =
+    glyphId >= 0 &&
+        width > 0 &&
+        height > 0 &&
+        ppem > 0 &&
+        format.isNotBlank()
+
+/**
+ * Builds the nearest-strike comparator for one requested size.
+ */
+private fun bitmapStrikeDistanceOrder(requestedSizePx: Float): Comparator<BitmapStrikeSelection> =
+    compareBy<BitmapStrikeSelection> { selection ->
+        abs(selection.ppem.toFloat() - requestedSizePx)
+    }.then(BITMAP_STRIKE_STABLE_ORDER)
+
+/**
+ * Returns true when [bytes] starts with the eight-byte PNG signature.
+ */
+private fun hasPngSignature(bytes: ByteArray): Boolean {
+    if (bytes.size < PNG_SIGNATURE.size) return false
+    return PNG_SIGNATURE.indices.all { index -> bytes[index] == PNG_SIGNATURE[index] }
+}
+
+/**
+ * Returns true when [bytes] contains [text] encoded as ASCII at [offset].
+ */
+private fun matchesAscii(bytes: ByteArray, offset: Int, text: String): Boolean {
+    if (offset < 0 || offset + text.length > bytes.size) return false
+    return text.indices.all { index -> bytes[offset + index].toInt() == text[index].code }
+}
+
+/**
+ * Decodes a small, font-glyph-oriented PNG subset: non-interlaced 8-bit RGB/RGBA.
+ */
+private fun decodeMinimalPngGlyphPixels(bytes: ByteArray, width: Int, height: Int): List<Int> {
+    val reader = ColorTableReader(bytes)
+    val idat = ByteArrayOutputStream()
+    var offset = PNG_SIGNATURE.size
+    var sawIhdr = false
+    var sawIdat = false
+    var sawIend = false
+    var bitDepth = -1
+    var colorType = -1
+    var compression = -1
+    var filter = -1
+    var interlace = -1
+
+    while (offset < bytes.size) {
+        if (!reader.fits(offset, PNG_CHUNK_OVERHEAD_BYTES.toLong())) {
+            throw IllegalArgumentException("Could not decode PNG glyph payload: truncated chunk.")
+        }
+        val length = reader.u32(offset)?.toIntOrNull()
+            ?: throw IllegalArgumentException("Could not decode PNG glyph payload: chunk length is out of range.")
+        val typeOffset = offset + U32_SIZE_BYTES
+        val dataOffset = typeOffset + PNG_CHUNK_TYPE_BYTES
+        val crcOffset = dataOffset + length
+        if (!reader.fits(dataOffset, length.toLong() + U32_SIZE_BYTES.toLong())) {
+            throw IllegalArgumentException("Could not decode PNG glyph payload: truncated chunk data.")
+        }
+        requirePngChunkCrc(bytes = bytes, typeOffset = typeOffset, crcOffset = crcOffset)
+
+        when (pngChunkType(bytes, typeOffset)) {
+            PNG_CHUNK_IHDR -> {
+                if (sawIhdr || offset != PNG_SIGNATURE.size || length != PNG_IHDR_DATA_SIZE) {
+                    throw IllegalArgumentException("Could not decode PNG glyph payload: invalid IHDR chunk.")
+                }
+                bitDepth = reader.u8(dataOffset + 8)
+                    ?: throw IllegalArgumentException("Could not decode PNG glyph payload: truncated IHDR.")
+                colorType = reader.u8(dataOffset + 9)
+                    ?: throw IllegalArgumentException("Could not decode PNG glyph payload: truncated IHDR.")
+                compression = reader.u8(dataOffset + 10)
+                    ?: throw IllegalArgumentException("Could not decode PNG glyph payload: truncated IHDR.")
+                filter = reader.u8(dataOffset + 11)
+                    ?: throw IllegalArgumentException("Could not decode PNG glyph payload: truncated IHDR.")
+                interlace = reader.u8(dataOffset + 12)
+                    ?: throw IllegalArgumentException("Could not decode PNG glyph payload: truncated IHDR.")
+                sawIhdr = true
+            }
+            PNG_CHUNK_IDAT -> {
+                if (!sawIhdr || sawIend) {
+                    throw IllegalArgumentException("Could not decode PNG glyph payload: IDAT is out of order.")
+                }
+                idat.write(bytes, dataOffset, length)
+                sawIdat = true
+            }
+            PNG_CHUNK_IEND -> {
+                if (!sawIhdr || !sawIdat || length != 0) {
+                    throw IllegalArgumentException("Could not decode PNG glyph payload: invalid IEND chunk.")
+                }
+                sawIend = true
+                offset = bytes.size
+                continue
+            }
+            else -> {
+                if (isCriticalPngChunk(bytes[typeOffset])) {
+                    throw IllegalArgumentException("Could not decode PNG glyph payload: unsupported critical chunk.")
+                }
+            }
+        }
+
+        offset = crcOffset + U32_SIZE_BYTES
+    }
+
+    if (!sawIhdr || !sawIdat || !sawIend) {
+        throw IllegalArgumentException("Could not decode PNG glyph payload: missing required chunk.")
+    }
+    if (bitDepth != 8 || colorType !in setOf(PNG_COLOR_TYPE_RGB, PNG_COLOR_TYPE_RGBA)) {
+        throw IllegalArgumentException("Could not decode PNG glyph payload: unsupported PNG color type.")
+    }
+    if (compression != 0 || filter != 0 || interlace != 0) {
+        throw IllegalArgumentException("Could not decode PNG glyph payload: unsupported PNG encoding.")
+    }
+
+    val bytesPerPixel = if (colorType == PNG_COLOR_TYPE_RGBA) 4 else 3
+    val rowBytes = width * bytesPerPixel
+    val expectedInflatedSize = height * (rowBytes + 1)
+    val inflated = inflatePngIdat(idat.toByteArray(), expectedInflatedSize)
+    if (inflated.size != expectedInflatedSize) {
+        throw IllegalArgumentException("Could not decode PNG glyph payload: truncated IDAT stream.")
+    }
+
+    val pixels = ArrayList<Int>(width * height)
+    val previous = ByteArray(rowBytes)
+    val current = ByteArray(rowBytes)
+    var source = 0
+    repeat(height) {
+        val filterType = inflated[source++].toInt() and 0xFF
+        inflated.copyInto(current, destinationOffset = 0, startIndex = source, endIndex = source + rowBytes)
+        source += rowBytes
+        if (!unfilterPngRow(filterType, current, previous, bytesPerPixel)) {
+            throw IllegalArgumentException("Could not decode PNG glyph payload: invalid row filter.")
+        }
+        var pixelOffset = 0
+        repeat(width) {
+            val red = current[pixelOffset++].toInt() and 0xFF
+            val green = current[pixelOffset++].toInt() and 0xFF
+            val blue = current[pixelOffset++].toInt() and 0xFF
+            val alpha = if (bytesPerPixel == 4) current[pixelOffset++].toInt() and 0xFF else 0xFF
+            pixels += packArgb(alpha = alpha, red = red, green = green, blue = blue)
+        }
+        current.copyInto(previous)
+    }
+    return pixels.toList()
+}
+
+private fun requirePngChunkCrc(bytes: ByteArray, typeOffset: Int, crcOffset: Int) {
+    val expected = ColorTableReader(bytes).u32(crcOffset)
+        ?: throw IllegalArgumentException("Could not decode PNG glyph payload: missing chunk CRC.")
+    val crc = CRC32()
+    crc.update(bytes, typeOffset, crcOffset - typeOffset)
+    if (crc.value != expected) {
+        throw IllegalArgumentException("Could not decode PNG glyph payload: invalid chunk CRC.")
+    }
+}
+
+private fun pngChunkType(bytes: ByteArray, offset: Int): String =
+    String(
+        charArrayOf(
+            (bytes[offset].toInt() and 0xFF).toChar(),
+            (bytes[offset + 1].toInt() and 0xFF).toChar(),
+            (bytes[offset + 2].toInt() and 0xFF).toChar(),
+            (bytes[offset + 3].toInt() and 0xFF).toChar(),
+        ),
+    )
+
+private fun isCriticalPngChunk(firstTypeByte: Byte): Boolean =
+    firstTypeByte.toInt() and 0x20 == 0
+
+private fun inflatePngIdat(idat: ByteArray, expectedSize: Int): ByteArray {
+    val inflater = Inflater()
+    return try {
+        inflater.setInput(idat)
+        val output = ByteArrayOutputStream(expectedSize)
+        val buffer = ByteArray(4096)
+        while (!inflater.finished()) {
+            val count = inflater.inflate(buffer)
+            if (count == 0) {
+                if (inflater.needsInput() || inflater.needsDictionary()) {
+                    throw IllegalArgumentException("Could not decode PNG glyph payload: truncated IDAT stream.")
+                }
+            } else {
+                output.write(buffer, 0, count)
+                if (output.size() > expectedSize) {
+                    throw IllegalArgumentException("Could not decode PNG glyph payload: oversized IDAT stream.")
+                }
+            }
+        }
+        output.toByteArray()
+    } catch (_: DataFormatException) {
+        throw IllegalArgumentException("Could not decode PNG glyph payload: invalid IDAT stream.")
+    } finally {
+        inflater.end()
+    }
+}
+
+private fun unfilterPngRow(filterType: Int, current: ByteArray, previous: ByteArray, bytesPerPixel: Int): Boolean {
+    for (index in current.indices) {
+        val left = if (index >= bytesPerPixel) current[index - bytesPerPixel].toInt() and 0xFF else 0
+        val up = previous[index].toInt() and 0xFF
+        val upLeft = if (index >= bytesPerPixel) previous[index - bytesPerPixel].toInt() and 0xFF else 0
+        val raw = current[index].toInt() and 0xFF
+        val reconstructed = when (filterType) {
+            0 -> raw
+            1 -> raw + left
+            2 -> raw + up
+            3 -> raw + ((left + up) / 2)
+            4 -> raw + paethPredictor(left, up, upLeft)
+            else -> return false
+        }
+        current[index] = reconstructed.toByte()
+    }
+    return true
+}
+
+private fun paethPredictor(left: Int, up: Int, upLeft: Int): Int {
+    val estimate = left + up - upLeft
+    val leftDistance = abs(estimate - left)
+    val upDistance = abs(estimate - up)
+    val upLeftDistance = abs(estimate - upLeft)
+    return when {
+        leftDistance <= upDistance && leftDistance <= upLeftDistance -> left
+        upDistance <= upLeftDistance -> up
+        else -> upLeft
+    }
+}
+
+/**
+ * Finds the first start tag named [tagName] in [text].
+ */
+private fun findSvgStartTag(text: String, tagName: String): SVGStartTag? {
+    var searchIndex = 0
+    while (searchIndex < text.length) {
+        val openIndex = text.indexOf('<', startIndex = searchIndex)
+        if (openIndex < 0) return null
+
+        val ignoredMarkupEnd = findIgnoredSvgMarkupEnd(text, openIndex)
+        if (ignoredMarkupEnd != null) {
+            searchIndex = ignoredMarkupEnd
+            continue
+        }
+
+        val nameStart = skipSvgWhitespace(text, openIndex + 1)
+        if (nameStart >= text.length || text[nameStart] == '/' || text[nameStart] == '!' || text[nameStart] == '?') {
+            searchIndex = openIndex + 1
+            continue
+        }
+
+        val nameEnd = readSvgNameEnd(text, nameStart)
+        if (nameEnd == nameStart) {
+            searchIndex = openIndex + 1
+            continue
+        }
+
+        val closeIndex = findSvgTagEnd(text, nameEnd)
+            ?: throw IllegalArgumentException("SVG glyph payload contains an unterminated start tag.")
+        val name = text.substring(nameStart, nameEnd)
+        if (name.equals(tagName, ignoreCase = true)) {
+            return SVGStartTag(
+                name = name.lowercase(),
+                source = text.substring(nameStart, closeIndex),
+            )
+        }
+        searchIndex = closeIndex + 1
+    }
+    return null
+}
+
+/**
+ * Extracts deterministic summaries for supported SVG element start tags.
+ */
+private fun extractSvgElementSummaries(text: String): List<String> {
+    val summaries = ArrayList<String>()
+    var searchIndex = 0
+    while (searchIndex < text.length) {
+        val openIndex = text.indexOf('<', startIndex = searchIndex)
+        if (openIndex < 0) break
+
+        val ignoredMarkupEnd = findIgnoredSvgMarkupEnd(text, openIndex)
+        if (ignoredMarkupEnd != null) {
+            searchIndex = ignoredMarkupEnd
+            continue
+        }
+
+        val nameStart = skipSvgWhitespace(text, openIndex + 1)
+        if (nameStart >= text.length || text[nameStart] == '/' || text[nameStart] == '!' || text[nameStart] == '?') {
+            searchIndex = openIndex + 1
+            continue
+        }
+
+        val nameEnd = readSvgNameEnd(text, nameStart)
+        if (nameEnd == nameStart) {
+            searchIndex = openIndex + 1
+            continue
+        }
+
+        val closeIndex = findSvgTagEnd(text, nameEnd)
+            ?: throw IllegalArgumentException("SVG glyph payload contains an unterminated start tag.")
+        val name = text.substring(nameStart, nameEnd).lowercase()
+        if (name != "svg" && name in SVG_SUMMARY_ELEMENT_NAMES) {
+            if (summaries.size == MAX_SVG_GLYPH_ELEMENTS) {
+                throw IllegalArgumentException("SVG glyph element summary count exceeds $MAX_SVG_GLYPH_ELEMENTS.")
+            }
+            val attributes = parseSvgTagAttributes(text.substring(nameStart, closeIndex))
+            summaries += formatSvgElementSummary(name = name, attributes = attributes)
+        }
+
+        searchIndex = closeIndex + 1
+    }
+    return summaries.toList()
+}
+
+/**
+ * Returns the first offset after an ignored XML/SVG markup block at [openIndex].
+ */
+private fun findIgnoredSvgMarkupEnd(text: String, openIndex: Int): Int? =
+    when {
+        text.startsWith("<!--", startIndex = openIndex) ->
+            findRequiredSvgMarkupTerminator(text, openIndex, "-->", "comment")
+
+        text.startsWith("<![CDATA[", startIndex = openIndex) ->
+            findRequiredSvgMarkupTerminator(text, openIndex, "]]>", "CDATA")
+
+        text.startsWith("<?", startIndex = openIndex) ->
+            findRequiredSvgMarkupTerminator(text, openIndex, "?>", "processing instruction")
+
+        text.startsWith("<!", startIndex = openIndex) ->
+            (findSvgTagEnd(text, openIndex + 2)
+                ?: throw IllegalArgumentException("SVG glyph payload contains an unterminated declaration.")) + 1
+
+        else -> null
+    }
+
+/**
+ * Finds the end of an ignored XML/SVG block and reports a bounded parse error when missing.
+ */
+private fun findRequiredSvgMarkupTerminator(
+    text: String,
+    startIndex: Int,
+    terminator: String,
+    blockName: String,
+): Int {
+    val endIndex = text.indexOf(terminator, startIndex = startIndex + terminator.length)
+    require(endIndex >= 0) {
+        "SVG glyph payload contains an unterminated $blockName block."
+    }
+    return endIndex + terminator.length
+}
+
+/**
+ * Parses quoted XML-style attributes from a start tag source without the opening `<` or closing
+ * `>`.
+ */
+private fun parseSvgTagAttributes(tagSource: String): Map<String, String> {
+    val attributes = LinkedHashMap<String, String>()
+    var index = readSvgNameEnd(tagSource, skipSvgWhitespace(tagSource, 0))
+
+    while (index < tagSource.length) {
+        index = skipSvgWhitespace(tagSource, index)
+        if (index >= tagSource.length || tagSource[index] == '/') break
+
+        val nameStart = index
+        val nameEnd = readSvgNameEnd(tagSource, nameStart)
+        require(nameEnd > nameStart) {
+            "SVG glyph payload contains a malformed attribute name."
+        }
+        val name = tagSource.substring(nameStart, nameEnd)
+
+        index = skipSvgWhitespace(tagSource, nameEnd)
+        require(index < tagSource.length && tagSource[index] == '=') {
+            "SVG glyph attribute $name must use a quoted value."
+        }
+        index = skipSvgWhitespace(tagSource, index + 1)
+        require(index < tagSource.length && (tagSource[index] == '"' || tagSource[index] == '\'')) {
+            "SVG glyph attribute $name must use a quoted value."
+        }
+
+        val quote = tagSource[index]
+        val valueStart = index + 1
+        val valueEnd = tagSource.indexOf(quote, startIndex = valueStart)
+        require(valueEnd >= 0) {
+            "SVG glyph attribute $name has an unterminated quoted value."
+        }
+        require(valueEnd - valueStart <= MAX_SVG_ATTRIBUTE_VALUE_CHARS) {
+            "SVG glyph attribute $name exceeds $MAX_SVG_ATTRIBUTE_VALUE_CHARS characters."
+        }
+
+        attributes[name] = normalizeSvgAttributeValue(tagSource.substring(valueStart, valueEnd))
+        index = valueEnd + 1
+    }
+
+    return attributes.toMap()
+}
+
+/**
+ * Reads and validates the four-number SVG viewBox attribute.
+ */
+private fun parseSvgViewBox(value: String): List<Float> {
+    val parts = value.split(SVG_NUMBER_SEPARATOR)
+        .filter { part -> part.isNotEmpty() }
+    require(parts.size == 4) {
+        "SVG glyph viewBox must contain exactly four numbers."
+    }
+
+    val viewBox = parts.map { part ->
+        val number = part.toFloatOrNull()
+            ?: throw IllegalArgumentException("SVG glyph viewBox contains a non-numeric value.")
+        require(!number.isNaN() && !number.isInfinite()) {
+            "SVG glyph viewBox values must be finite."
+        }
+        number
+    }
+    require(viewBox[2] > 0f && viewBox[3] > 0f) {
+        "SVG glyph viewBox width and height must be positive."
+    }
+    return viewBox.toList()
+}
+
+/**
+ * Returns an attribute value using case-insensitive SVG attribute-name matching.
+ */
+private fun attributeValue(attributes: Map<String, String>, name: String): String? =
+    attributes.entries.firstOrNull { (key, _) -> key.equals(name, ignoreCase = true) }?.value
+
+/**
+ * Formats one simple SVG element summary in deterministic key order.
+ */
+private fun formatSvgElementSummary(name: String, attributes: Map<String, String>): String {
+    val summaryAttributes = LinkedHashMap<String, String>()
+    attributes.forEach { (key, value) ->
+        val canonicalKey = canonicalSvgAttributeName(key)
+        if (canonicalKey in SVG_SUMMARY_ATTRIBUTE_NAMES) {
+            summaryAttributes.putIfAbsent(canonicalKey, value)
+        }
+    }
+
+    val body = summaryAttributes.entries
+        .sortedBy { (key, _) -> key }
+        .joinToString(separator = ",") { (key, value) -> "$key=$value" }
+    return "$name{$body}"
+}
+
+/**
+ * Converts equivalent SVG attribute spellings into summary keys.
+ */
+private fun canonicalSvgAttributeName(name: String): String =
+    when (val lowerName = name.lowercase()) {
+        "xlink:href" -> "href"
+        else -> lowerName
+    }
+
+/**
+ * Collapses insignificant whitespace in simple SVG attribute summaries.
+ */
+private fun normalizeSvgAttributeValue(value: String): String =
+    value.trim().replace(SVG_WHITESPACE, " ")
+
+/**
+ * Skips whitespace in [text] starting at [index].
+ */
+private fun skipSvgWhitespace(text: String, index: Int): Int {
+    var cursor = index
+    while (cursor < text.length && text[cursor].isWhitespace()) {
+        cursor += 1
+    }
+    return cursor
+}
+
+/**
+ * Reads an XML-style name end offset in [text] starting at [index].
+ */
+private fun readSvgNameEnd(text: String, index: Int): Int {
+    var cursor = index
+    while (cursor < text.length && isSvgNameCharacter(text[cursor])) {
+        cursor += 1
+    }
+    return cursor
+}
+
+/**
+ * Returns true when [character] is accepted by the basic SVG attribute and element scanner.
+ */
+private fun isSvgNameCharacter(character: Char): Boolean =
+    character.isLetterOrDigit() ||
+        character == '_' ||
+        character == '-' ||
+        character == ':' ||
+        character == '.'
+
+/**
+ * Finds the closing `>` for a start tag while respecting quoted attribute values.
+ */
+private fun findSvgTagEnd(text: String, index: Int): Int? {
+    var quote: Char? = null
+    var cursor = index
+    while (cursor < text.length) {
+        val character = text[cursor]
+        when {
+            quote != null && character == quote -> quote = null
+            quote == null && (character == '"' || character == '\'') -> quote = character
+            quote == null && character == '>' -> return cursor
+        }
+        cursor += 1
+    }
+    return null
+}
+
+/**
+ * One parsed SVG start tag used by the basic SVG scanner.
+ */
+private data class SVGStartTag(
+    val name: String,
+    val source: String,
+)
+
+/**
+ * Tracks total COLRv1 paint expansion during one parse call.
+ */
+private data class COLRV1PaintParseState(
+    var expandedPaintCount: Int = 0,
+)
+
+private const val U16_SIZE_BYTES = 2
+private const val U24_SIZE_BYTES = 3
+private const val U32_SIZE_BYTES = 4
+private const val CPAL_V0_HEADER_SIZE = 12
+private const val CPAL_COLOR_RECORD_SIZE = 4
+private const val COLR_V0_HEADER_SIZE = 14
+private const val COLR_BASE_RECORD_SIZE = 6
+private const val COLR_LAYER_RECORD_SIZE = 4
+private const val COLR_V1_HEADER_SIZE = 34
+private const val COLR_V1_BASE_GLYPH_LIST_OFFSET = 14
+private const val COLR_V1_LAYER_LIST_OFFSET = 18
+private const val COLR_V1_CLIP_LIST_OFFSET = 22
+private const val COLR_V1_BASE_GLYPH_PAINT_RECORD_SIZE = 6
+private const val COLR_V1_CLIP_LIST_HEADER_SIZE = 5
+private const val COLR_V1_CLIP_RECORD_SIZE = 7
+private const val COLR_V1_CLIP_BOX_FORMAT1_SIZE = 9
+private const val COLR_V1_CLIP_BOX_FORMAT2_SIZE = 13
+private const val COLR_V1_PAINT_COLR_LAYERS_SIZE = 6
+private const val COLR_V1_PAINT_SOLID_SIZE = 5
+private const val COLR_V1_PAINT_VAR_SOLID_SIZE = 9
+private const val COLR_V1_PAINT_LINEAR_GRADIENT_SIZE = 16
+private const val COLR_V1_PAINT_VAR_LINEAR_GRADIENT_SIZE = 20
+private const val COLR_V1_PAINT_RADIAL_GRADIENT_SIZE = 16
+private const val COLR_V1_PAINT_VAR_RADIAL_GRADIENT_SIZE = 20
+private const val COLR_V1_PAINT_SWEEP_GRADIENT_SIZE = 12
+private const val COLR_V1_PAINT_VAR_SWEEP_GRADIENT_SIZE = 16
+private const val COLR_V1_COLOR_LINE_HEADER_SIZE = 3
+private const val COLR_V1_COLOR_STOP_SIZE = 6
+private const val COLR_V1_VAR_COLOR_STOP_SIZE = 10
+private const val COLR_V1_PAINT_GLYPH_SIZE = 6
+private const val COLR_V1_PAINT_COLR_GLYPH_SIZE = 3
+private const val COLR_V1_PAINT_TRANSFORM_SIZE = 7
+private const val COLR_V1_TRANSFORM_SIZE = 24
+private const val COLR_V1_VAR_TRANSFORM_SIZE = 28
+private const val COLR_V1_PAINT_TRANSLATE_SIZE = 8
+private const val COLR_V1_PAINT_VAR_TRANSLATE_SIZE = 12
+private const val COLR_V1_PAINT_COMPOSITE_SIZE = 8
+private const val MAX_COLOR_PALETTES = 256
+private const val MAX_COLOR_PALETTE_ENTRIES = 4096
+private const val MAX_COLOR_RECORDS = 4096
+private const val MAX_EXPANDED_COLOR_RECORDS = 65536L
+private const val MAX_COLOR_BASE_GLYPHS = 8192
+private const val MAX_COLOR_LAYERS = 16384
+private const val MAX_LAYERS_PER_COLOR_GLYPH = 256
+private const val MAX_COLOR_STOPS = 4096
+private const val MAX_EXPANDED_COLOR_LAYERS = 65536L
+private const val MAX_COLOR_PAINT_DEPTH = 32
+private const val MAX_COLR_V1_EXPANDED_PAINTS = 65536
+private const val MAX_PNG_GLYPH_PAYLOAD_BYTES = 16 * 1024 * 1024
+private const val MAX_PNG_GLYPH_DIMENSION = 8192
+private const val PNG_MIN_HEADER_BYTES = 33
+private const val PNG_IHDR_LENGTH_OFFSET = 8
+private const val PNG_IHDR_TYPE_OFFSET = 12
+private const val PNG_IHDR_WIDTH_OFFSET = 16
+private const val PNG_IHDR_HEIGHT_OFFSET = 20
+private const val PNG_IHDR_DATA_SIZE = 13
+private const val PNG_CHUNK_OVERHEAD_BYTES = 12
+private const val PNG_CHUNK_TYPE_BYTES = 4
+private const val PNG_CHUNK_IHDR = "IHDR"
+private const val PNG_CHUNK_IDAT = "IDAT"
+private const val PNG_CHUNK_IEND = "IEND"
+private const val PNG_COLOR_TYPE_RGB = 2
+private const val PNG_COLOR_TYPE_RGBA = 6
+private const val MAX_SVG_GLYPH_TEXT_CHARS = 64 * 1024
+private const val MAX_SVG_GLYPH_ELEMENTS = 256
+private const val MAX_SVG_ATTRIBUTE_VALUE_CHARS = 4096
+
+private val BITMAP_STRIKE_STABLE_ORDER: Comparator<BitmapStrikeSelection> =
+    compareBy<BitmapStrikeSelection> { selection -> selection.ppem }
+        .thenBy { selection -> selection.width }
+        .thenBy { selection -> selection.height }
+        .thenBy { selection -> selection.format }
+
+private val PNG_SIGNATURE = byteArrayOf(
+    0x89.toByte(),
+    0x50,
+    0x4E,
+    0x47,
+    0x0D,
+    0x0A,
+    0x1A,
+    0x0A,
+)
+
+private val SVG_NUMBER_SEPARATOR = Regex("[,\\s]+")
+private val SVG_WHITESPACE = Regex("\\s+")
+private val SVG_SUMMARY_ELEMENT_NAMES = setOf(
+    "path",
+    "rect",
+    "circle",
+    "ellipse",
+    "line",
+    "polyline",
+    "polygon",
+    "use",
+)
+private val SVG_SUMMARY_ATTRIBUTE_NAMES = setOf(
+    "cx",
+    "cy",
+    "d",
+    "fill",
+    "height",
+    "href",
+    "opacity",
+    "points",
+    "r",
+    "rx",
+    "ry",
+    "stroke",
+    "stroke-width",
+    "transform",
+    "width",
+    "x",
+    "x1",
+    "x2",
+    "y",
+    "y1",
+    "y2",
+)
