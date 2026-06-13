@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
+import java.nio.file.Files
 
 class FontCoreSurfaceTest {
     @Test
@@ -53,5 +54,315 @@ class FontCoreSurfaceTest {
         assertEquals(collection, catalog.families.getValue("Inter"))
         assertEquals(face, run.face)
         assertTrue(request.preferredFamilies.contains("Inter"))
+    }
+
+    @Test
+    fun scansExplicitFontRootsCatalogsFilesAndReportsDiagnostics() {
+        val root = Files.createTempDirectory("kanvas-font-core-scan")
+        val missing = root.resolveSibling("${root.fileName}-missing")
+        try {
+            val nested = Files.createDirectories(root.resolve("nested"))
+            val regular = Files.write(root.resolve("AlphaSans-Regular.ttf"), byteArrayOf(1, 2, 3))
+            val bold = Files.write(nested.resolve("AlphaSans-Bold.OTF"), byteArrayOf(4, 5, 6))
+            val collection = Files.write(nested.resolve("Symbols.ttc"), byteArrayOf(7, 8, 9))
+            Files.write(nested.resolve("ignored.txt"), byteArrayOf(10))
+
+            val scan = FontFileScanner.scanRoots(listOf(missing, root))
+
+            assertEquals(
+                listOf(
+                    regular.toRealPath(),
+                    bold.toRealPath(),
+                    collection.toRealPath(),
+                ).sortedBy { it.toString() },
+                scan.files,
+            )
+            assertEquals(listOf("font.scan.root-missing"), scan.diagnostics.map { it.code })
+            assertTrue(scan.dumpDiagnostics().contains("font.scan.root-missing"))
+            assertTrue(scan.dumpDiagnostics().contains(missing.toAbsolutePath().normalize().toString()))
+
+            val catalog = FontFileCatalog.fromScan(scan)
+
+            assertEquals(scan.files, catalog.entries.map { it.path })
+            assertEquals(
+                listOf("AlphaSans-Bold.OTF", "AlphaSans-Regular.ttf", "Symbols.ttc").sorted(),
+                catalog.entries.map { it.displayName }.sorted(),
+            )
+            assertEquals(listOf("otf", "ttc", "ttf").sorted(), catalog.entries.map { it.extension }.sorted())
+            assertEquals(scan.dumpDiagnostics(), catalog.dumpDiagnostics())
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun plansPortableFallbackFamiliesFromGenericLocaleScriptAndEmojiPolicy() {
+        val availableFamilies = listOf(
+            "Liberation Sans",
+            "Noto Sans CJK JP",
+            "Noto Sans CJK SC",
+            "Noto Color Emoji",
+            "DejaVu Serif",
+        )
+        val policy = FontFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf(
+                "sans-serif" to listOf("Liberation Sans"),
+                "serif" to listOf("DejaVu Serif"),
+                "monospace" to emptyList(),
+            ),
+            scriptFallbackChains = mapOf(
+                "han" to listOf("Noto Sans CJK JP"),
+                "emoji" to listOf("Noto Color Emoji"),
+            ),
+            localeFallbackChains = mapOf(
+                "zh" to listOf("Noto Sans CJK SC", "Noto Sans CJK JP"),
+                "ja" to listOf("Noto Sans CJK JP", "Noto Sans CJK SC"),
+            ),
+            emojiPreferredFamilies = listOf("Noto Color Emoji"),
+        )
+
+        val zhPlan = policy.planFamilyNames(
+            availableFamilyNames = availableFamilies,
+            requestedFamily = null,
+            locales = listOf("zh-Hans-CN"),
+            codePoint = 0x5203,
+        )
+        val jaPlan = policy.planFamilyNames(
+            availableFamilyNames = availableFamilies,
+            requestedFamily = null,
+            locales = listOf("ja-JP"),
+            codePoint = 0x5203,
+        )
+        val emojiPlan = policy.planFamilyNames(
+            availableFamilyNames = availableFamilies,
+            requestedFamily = "sans serif",
+            locales = listOf("en-US"),
+            codePoint = 0x1F600,
+        )
+
+        assertEquals("Noto Sans CJK SC", zhPlan.orderedFamilies.first())
+        assertEquals("Noto Sans CJK JP", jaPlan.orderedFamilies.first())
+        assertEquals("Noto Color Emoji", emojiPlan.orderedFamilies.first())
+        assertEquals("emoji", emojiPlan.script)
+        assertTrue(emojiPlan.dump().contains("script=emoji"))
+        assertTrue(emojiPlan.dump().contains("Noto Color Emoji"))
+    }
+
+    @Test
+    fun plansGenericFallbackBeforeLatinScriptFallbackForCommonDigits() {
+        val policy = FontFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf(
+                "serif" to listOf("DejaVu Serif"),
+            ),
+            scriptFallbackChains = mapOf(
+                "latin" to listOf("Liberation Sans"),
+            ),
+        )
+
+        val plan = policy.planFamilyNames(
+            availableFamilyNames = listOf("Liberation Sans", "DejaVu Serif"),
+            requestedFamily = "serif",
+            codePoint = '1'.code,
+        )
+
+        assertEquals("default", plan.script)
+        assertEquals("DejaVu Serif", plan.orderedFamilies.first())
+    }
+
+    @Test
+    fun resolvesSurrogatePairToCoveredEmojiFace() {
+        val latin = testFace("550e8400-e29b-41d4-a716-446655440010", "Alpha Sans")
+        val emoji = testFace("550e8400-e29b-41d4-a716-446655440011", "Noto Color Emoji")
+        val resolver = CatalogFontResolver(
+            catalog = FallbackCatalog(
+                families = mapOf(
+                    "Alpha Sans" to FontCollection(listOf(latin)),
+                    "Noto Color Emoji" to FontCollection(listOf(emoji)),
+                ),
+            ),
+            policy = FontFallbackPolicy.Default.copy(
+                emojiPreferredFamilies = listOf("Noto Color Emoji"),
+            ),
+            coverage = testCoverage(
+                latin.typeface.id to setOf('A'.code),
+                emoji.typeface.id to setOf(0x1F600),
+            ),
+        )
+
+        val runs = resolver.resolve(FallbackRequest(text = "A\uD83D\uDE00", preferredFamilies = listOf("Alpha Sans")))
+
+        assertEquals(
+            listOf(
+                ResolvedFontRun(start = 0, end = 1, face = latin),
+                ResolvedFontRun(start = 1, end = 3, face = emoji),
+            ),
+            runs,
+        )
+    }
+
+    @Test
+    fun groupsContiguousCodePointsResolvedToSameFace() {
+        val latin = testFace("550e8400-e29b-41d4-a716-446655440020", "Alpha Sans")
+        val resolver = CatalogFontResolver(
+            catalog = FallbackCatalog(families = mapOf("Alpha Sans" to FontCollection(listOf(latin)))),
+            policy = FontFallbackPolicy.Default,
+            coverage = testCoverage(latin.typeface.id to setOf('a'.code, 'b'.code, 'c'.code)),
+        )
+
+        val runs = resolver.resolve(FallbackRequest(text = "abc", preferredFamilies = listOf("Alpha Sans")))
+
+        assertEquals(listOf(ResolvedFontRun(start = 0, end = 3, face = latin)), runs)
+    }
+
+    @Test
+    fun resolvesRequestedGenericThroughPolicyFallbackOrder() {
+        val requested = testFace("550e8400-e29b-41d4-a716-446655440030", "Requested Sans")
+        val serif = testFace("550e8400-e29b-41d4-a716-446655440031", "Fallback Serif")
+        val resolver = CatalogFontResolver(
+            catalog = FallbackCatalog(
+                families = mapOf(
+                    "Requested Sans" to FontCollection(listOf(requested)),
+                    "Fallback Serif" to FontCollection(listOf(serif)),
+                ),
+            ),
+            policy = FontFallbackPolicy.Default.copy(
+                genericFallbackChains = mapOf(
+                    "serif" to listOf("Fallback Serif"),
+                    "sans-serif" to listOf("Requested Sans"),
+                ),
+            ),
+            coverage = testCoverage(serif.typeface.id to setOf('x'.code)),
+        )
+
+        val runs = resolver.resolve(FallbackRequest(text = "x", preferredFamilies = listOf("serif")))
+
+        assertEquals(listOf(ResolvedFontRun(start = 0, end = 1, face = serif)), runs)
+    }
+
+    @Test
+    fun resolvesLaterPreferredFamilyBeforeGenericOrCatalogFallback() {
+        val first = testFace("550e8400-e29b-41d4-a716-446655440050", "First")
+        val second = testFace("550e8400-e29b-41d4-a716-446655440051", "Second")
+        val fallback = testFace("550e8400-e29b-41d4-a716-446655440052", "Fallback")
+        val resolver = CatalogFontResolver(
+            catalog = FallbackCatalog(
+                families = mapOf(
+                    "First" to FontCollection(listOf(first)),
+                    "Second" to FontCollection(listOf(second)),
+                    "Fallback" to FontCollection(listOf(fallback)),
+                ),
+            ),
+            policy = FontFallbackPolicy.Default.copy(
+                genericFallbackChains = mapOf(
+                    "sans-serif" to listOf("Fallback"),
+                ),
+                scriptFallbackChains = emptyMap(),
+                localeFallbackChains = emptyMap(),
+                emojiPreferredFamilies = emptyList(),
+            ),
+            coverage = testCoverage(
+                second.typeface.id to setOf('x'.code),
+                fallback.typeface.id to setOf('x'.code),
+            ),
+        )
+
+        val runs = resolver.resolve(FallbackRequest(text = "x", preferredFamilies = listOf("Missing", "Second")))
+
+        assertEquals(listOf(ResolvedFontRun(start = 0, end = 1, face = second)), runs)
+    }
+
+    @Test
+    fun resolvesRequestedStyleWithinFamilyBeforeCatalogOrder() {
+        val regular = testFace("550e8400-e29b-41d4-a716-446655440070", "Alpha Sans", "Regular")
+        val bold = testFace("550e8400-e29b-41d4-a716-446655440071", "Alpha Sans", "Bold")
+        val resolver = CatalogFontResolver(
+            catalog = FallbackCatalog.fromFaces(listOf(regular, bold)),
+            policy = FontFallbackPolicy.Default,
+            coverage = testCoverage(
+                regular.typeface.id to setOf('A'.code),
+                bold.typeface.id to setOf('A'.code),
+            ),
+        )
+
+        val runs = resolver.resolve(
+            FallbackRequest(
+                text = "A",
+                preferredFamilies = listOf("Alpha Sans"),
+                style = FontStyle(weight = 700),
+            ),
+        )
+
+        assertEquals(listOf(ResolvedFontRun(start = 0, end = 1, face = bold)), runs)
+    }
+
+    @Test
+    fun returnsEmptyRunsForEmptyCatalog() {
+        val resolver = CatalogFontResolver(
+            catalog = FallbackCatalog(),
+            policy = FontFallbackPolicy.Default,
+            coverage = testCoverage(),
+        )
+
+        assertEquals(emptyList(), resolver.resolve(FallbackRequest(text = "x")))
+    }
+
+    @Test
+    fun usesFirstPlannedFaceForMissingCoverageSoNotdefCanSurface() {
+        val first = testFace("550e8400-e29b-41d4-a716-446655440040", "First Sans")
+        val second = testFace("550e8400-e29b-41d4-a716-446655440041", "Second Sans")
+        val resolver = CatalogFontResolver(
+            catalog = FallbackCatalog(
+                families = mapOf(
+                    "First Sans" to FontCollection(listOf(first)),
+                    "Second Sans" to FontCollection(listOf(second)),
+                ),
+            ),
+            policy = FontFallbackPolicy.Default,
+            coverage = testCoverage(),
+        )
+
+        val runs = resolver.resolve(FallbackRequest(text = "\u0378", preferredFamilies = listOf("First Sans")))
+
+        assertEquals(listOf(ResolvedFontRun(start = 0, end = 1, face = first)), runs)
+    }
+
+    @Test
+    fun buildsFallbackCatalogFromParsedFacesInDeterministicFamilyOrder() {
+        val regular = testFace("550e8400-e29b-41d4-a716-446655440060", "Beta Sans", "Regular")
+        val bold = testFace("550e8400-e29b-41d4-a716-446655440061", "Beta Sans", "Bold")
+        val italicCaseAlias = testFace("550e8400-e29b-41d4-a716-446655440064", " beta sans ", "Italic")
+        val alpha = testFace("550e8400-e29b-41d4-a716-446655440062", "Alpha Serif", "Regular")
+        val blank = testFace("550e8400-e29b-41d4-a716-446655440063", "   ", "Regular")
+
+        val catalog = FallbackCatalog.fromFaces(listOf(regular, blank, bold, alpha, italicCaseAlias, regular))
+
+        assertEquals(listOf("Alpha Serif", "Beta Sans"), catalog.availableFamilyNames())
+        assertEquals(listOf(alpha), catalog.families.getValue("Alpha Serif").faces)
+        assertEquals(listOf(regular, bold, italicCaseAlias), catalog.families.getValue("Beta Sans").faces)
+    }
+
+    private fun testCoverage(vararg entries: Pair<TypefaceID, Set<Int>>): FontCoverageProvider {
+        val supported = entries.toMap()
+        return FontCoverageProvider { typefaceId, codePoint ->
+            supported[typefaceId]?.contains(codePoint) == true
+        }
+    }
+
+    private fun testFace(uuid: String, familyName: String, styleName: String = "Regular"): FontFace {
+        val sourceId = FontSourceID(Uuid.parse(uuid.replaceRange(uuid.length - 1, uuid.length, "0")))
+        val typefaceId = TypefaceID(Uuid.parse(uuid))
+        return FontFace(
+            typeface = TypefaceData(
+                id = typefaceId,
+                source = FontSource(
+                    id = sourceId,
+                    kind = FontSourceKind.MEMORY,
+                    displayName = "$familyName Regular",
+                    bytes = ByteArray(0),
+                ),
+                familyName = familyName,
+                styleName = styleName,
+            ),
+        )
     }
 }
