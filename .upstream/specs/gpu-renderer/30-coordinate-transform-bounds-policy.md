@@ -46,6 +46,9 @@ This spec depends on:
   and task construction;
 - `03-material-key-wgsl.md` for material transform facts that affect WGSL code
   shape;
+- `31-material-source-paint-pipeline.md` for material local-coordinate
+  requirements, local matrix wrappers, gradient unit-space mapping, image
+  shader sampling coordinates, and source payload handoff;
 - `04-pipeline-key-cache-resources.md` for cache, resource, and generation
   policy;
 - `05-routing-policy.md` for `GPUNative`, `CPUPreparedGPU`,
@@ -515,6 +518,11 @@ commands, not accepted draws.
 Material keys include transform facts only when transform class changes WGSL
 code shape, layout, or required helper variants. Concrete matrix values and
 rounded bounds are payload facts unless they affect pipeline validity.
+Material-source planning in `31-material-source-paint-pipeline.md` declares
+which source family needs local coordinates, local matrix inversion, gradient
+unit-space mapping, texture coordinate mapping, or sampling helper variants.
+This spec remains authoritative for inverse availability, precision, payload
+matrix layout, bounds proof, and rounding policy.
 
 `GPUCoordinatePayloadPlan` may contribute:
 

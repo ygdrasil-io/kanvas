@@ -24,6 +24,9 @@ defined in `29-color-management-pipeline.md`.
 Texture texel-space, normalized-space, view-origin, sampling coordinate, and
 payload transform rules are defined in
 `30-coordinate-transform-bounds-policy.md`.
+Material image-shader behavior, image source placement in the paint pipeline,
+source tile/sampling requirements, and material-source diagnostics are defined
+in `31-material-source-paint-pipeline.md`.
 
 The target is Graphite-inspired but Kanvas-owned:
 
@@ -108,6 +111,12 @@ These objects use Kanvas package responsibility names under
 resource contracts. `GPUImageSourceDescriptor` belongs with material
 descriptors. `GPUSampledTextureBinding` belongs with payload contracts.
 `GPUSurfaceTextureLease` belongs with execution contracts.
+
+`GPUImageShaderPlan` from `31-material-source-paint-pipeline.md` may reference
+`GPUImageSourceDescriptor`, tile/sampling requirements, and required sampled
+binding layout. This spec remains authoritative for ownership, usage, view,
+sampler, allocation, import, upload, lease, generation, and concrete resource
+materialization.
 
 ## `GPUImageSourceDescriptor`
 

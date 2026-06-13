@@ -67,7 +67,7 @@ Each command carries the following facts:
 | `transform` | Captured local-to-device `GPUTransformDescriptor` / `GPUTransformPlan` facts. |
 | `clip` | Captured clip descriptor, including conservative bounds and support classification. |
 | `layer` | Captured layer or target scope facts. |
-| `material` | Normalized material descriptor used to derive `MaterialKey`. |
+| `material` | Normalized `GPUPaintDescriptor` / `GPUMaterialSourceDescriptor` input used to plan paint behavior before deriving `MaterialKey`. |
 | `bounds` | Conservative `GPUBoundsPlan` / `GPUBoundsProof` facts used for culling, ordering, and diagnostics. |
 | `ordering` | Paint-order and dependency hints required for correct blending and clipping. |
 | `source` | Adapter provenance for PM/debug dumps. |
@@ -200,15 +200,22 @@ registered runtime effects, and diagnostics governed by
 The command carries a normalized material descriptor, not a compiled shader and
 not a final `GPURenderPipelineKey`.
 
-The descriptor must be complete enough to derive:
+The descriptor must be complete enough to derive or reference:
 
-- `MaterialKey`;
+- `GPUPaintPipelinePlan`;
+- `GPUMaterialSourcePlan`;
+- `MaterialKey` after source planning;
 - material uniform layout;
 - texture/sampler binding requirements;
 - `GPUImageSourceDescriptor` facts when the material samples an image source;
 - registered runtime-effect identity when present;
 - WGSL fragment requirements;
 - stable unsupported reasons.
+
+Material-source and paint-pipeline planning is governed by
+`31-material-source-paint-pipeline.md`. The command descriptor must not include
+payload slot IDs, concrete texture handles, raw pixels, or compiled shader
+modules.
 
 Registered runtime-effect descriptor lookup, compatibility keys, descriptor
 ID/version, uniform schema, child slots, WGSL plan, CPU oracle, route contract,

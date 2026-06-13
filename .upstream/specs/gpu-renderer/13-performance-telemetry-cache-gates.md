@@ -27,6 +27,9 @@ It records:
 - draw-pass, compute-pass, copy, upload, and readback counts;
 - material key, material program, material assembly plan, render pipeline,
   compute pipeline, and WGSL module counts;
+- paint pipeline, material source descriptor, material source plan, gradient
+  stop store, image shader source, local matrix source, and material-source
+  refusal counters when touched;
 - payload slot counts, payload fingerprints, bind group churn, and upload byte
   counts;
 - cache hits, misses, evictions, and creations;
@@ -79,6 +82,7 @@ Cache reporting is grouped by domain:
 
 | Domain | Required counters |
 |---|---|
+| Material source planning | paint descriptor plans, source descriptor plans, source-kind histogram, stage-order refusals, gradient stop store plans, image shader plans, local matrix plans, shader-blend plans, source cache hits/misses, and source budget refusals. |
 | Material dictionary cache | lookups, hits, misses, assigned program IDs, version mismatches, refusals. |
 | Material assembly plan cache | lookups, hits, misses, created plans, unsupported requirements. |
 | Material module cache | lookups, hits, misses, created modules, validation failures. |

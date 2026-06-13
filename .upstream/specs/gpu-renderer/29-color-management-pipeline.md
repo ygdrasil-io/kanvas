@@ -42,6 +42,9 @@ This spec depends on:
   filter, text, vertices, and target facts;
 - `03-material-key-wgsl.md` for `MaterialKey`, material color-space
   requirements, and WGSL module assembly;
+- `31-material-source-paint-pipeline.md` for paint colors, solid sources,
+  gradient stops, image shader sources, material-source color diagnostics, and
+  source payload handoff;
 - `04-pipeline-key-cache-resources.md` for cache, resource, and device
   generation policy;
 - `05-routing-policy.md` for `GPUNative`, `CPUPreparedGPU`,
@@ -495,6 +498,11 @@ are promoted, planar YUV/YUVA routes refuse. The refusal must distinguish
 metadata capture success from missing conversion or sampling support.
 
 ## Source Color Families
+
+Material-facing color sources are planned by
+`31-material-source-paint-pipeline.md`. This spec remains authoritative for the
+color value specs, conversions, interpolation spaces, precision, HDR policy,
+and diagnostics consumed by those source plans.
 
 ### Paint Colors
 

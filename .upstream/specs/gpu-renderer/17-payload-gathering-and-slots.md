@@ -287,6 +287,10 @@ Rules:
 - runtime-effect uniform values, live-edit updates, child slot payloads, and
   descriptor resource bindings must use accepted descriptor contracts from
   `27-registered-runtime-effects-registry.md`;
+- material source uniforms, gradient stop stores, image shader bindings, local
+  matrix payloads, shader-blend child payloads, and folded color-filter
+  source payloads must use accepted `GPUMaterialSourcePayloadPlan` facts from
+  `31-material-source-paint-pipeline.md`;
 - color transform uniforms, LUT bindings, gradient converted stop payloads,
   runtime color uniform transforms, image color conversion facts, and store
   conversion payloads must use accepted plans from
@@ -332,6 +336,13 @@ When an image/bitmap route is accepted, the gatherer consumes only the sampled
 texture binding facts produced after `GPUImageUploadPlan` and
 `GPUTextureOwnershipPlan` acceptance. It does not decode images, compose
 animation frames, generate mips, or upload image pixels.
+When a material-source route is accepted, the gatherer consumes only values and
+bindings described by `GPUMaterialSourcePayloadPlan`: solid/paint colors,
+gradient geometry, gradient stop blocks, image shader subset and sampling
+payloads, local matrices, folded color-filter uniforms, source-blend child
+payloads, and registered material runtime-effect child payloads. It does not
+classify sources, decide paint-stage order, derive `MaterialKey`, or allocate
+texture/image resources.
 When a filter/effect route is accepted, the gatherer consumes only the
 resource and uniform binding facts produced by `GPUFilterNodePlan`,
 `GPUFilterIntermediatePlan`, `GPUFilterRuntimeEffectPlan`, and

@@ -41,6 +41,8 @@ This spec depends on:
 
 - `03-material-key-wgsl.md` for the boundary between material color filters,
   registered runtime-effect descriptors, and filter graph execution;
+- `31-material-source-paint-pipeline.md` for folded material color-filter
+  placement inside `GPUPaintPipelinePlan` and `GPUMaterialSourcePlan`;
 - `04-pipeline-key-cache-resources.md` for render/compute pipeline keys,
   `GPUResourceProvider`, `CPUPreparedGPUArtifactRegistry`, and filter
   intermediate artifacts;
@@ -148,7 +150,8 @@ Owned by other specs:
   `18-texture-image-ownership.md`;
 - blend/color/target contracts: `12-blend-color-target-state.md`;
 - WGSL material snippets and material runtime-effect descriptors:
-  `16-material-dictionary-and-snippet-registry.md`;
+  `16-material-dictionary-and-snippet-registry.md` plus source placement from
+  `31-material-source-paint-pipeline.md`;
 - registered runtime-effect descriptor lifecycle, compatibility lookup,
   uniform schema, child slot rules, WGSL plan, CPU oracle, and live-edit
   metadata: `27-registered-runtime-effects-registry.md`;

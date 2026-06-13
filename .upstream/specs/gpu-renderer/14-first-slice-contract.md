@@ -20,6 +20,9 @@ The first slice includes:
 - `FillShape` commands for rounded rectangles;
 - solid color material descriptors;
 - linear-gradient material descriptors;
+- `GPUPaintPipelinePlan` and `GPUMaterialSourcePlan` lowering for solid and
+  linear-gradient sources as defined in
+  `31-material-source-paint-pipeline.md`;
 - captured transform, clip, layer, material, bounds, and ordering facts;
 - coordinate-space descriptors, finite `GPUTransformPlan` facts,
   conservative `GPUBoundsPlan` proofs, `GPUPixelGridPlan`, and `RoundOut`
@@ -84,6 +87,16 @@ The slice must exercise these contracts:
 - `GPUTaskList`;
 - `GPUDrawPass`;
 - `GPURenderStep`;
+- `GPUPaintDescriptor`;
+- `GPUPaintPipelinePlan`;
+- `GPUMaterialSourceDescriptor`;
+- `GPUMaterialSourcePlan`;
+- `GPUSolidColorPlan`;
+- `GPUGradientPlan`;
+- `GPUGradientStopPlan`;
+- `GPUGradientStopStorePlan`;
+- `GPUMaterialSourcePayloadPlan`;
+- `GPUMaterialSourceDiagnostic`;
 - `MaterialKey`;
 - `GPUMaterialDictionary`;
 - `WGSLSnippet`;
@@ -142,6 +155,10 @@ Perspective transforms, complex clips, inverse fills, path-backed rrects, and
 unsupported stroke styles are outside this slice.
 
 ## Accepted Materials
+
+Accepted material behavior is governed by
+`31-material-source-paint-pipeline.md`. This slice promotes only the source
+families listed below.
 
 Solid color is accepted when:
 

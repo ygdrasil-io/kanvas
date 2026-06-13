@@ -71,6 +71,12 @@ Compatibility adapters produce material descriptors. `MaterialKey` derives from
 those descriptors. `GPUMaterialDictionary` validates, interns, and expands that
 key for the GPU renderer.
 
+Material-facing paint/source planning is defined in
+`31-material-source-paint-pipeline.md`. The dictionary consumes accepted
+`GPUPaintPipelinePlan` and `GPUMaterialSourcePlan` identity through
+`MaterialKey`; it does not reinterpret legacy paint objects or decide source
+family validity locally.
+
 ## Core Objects
 
 | Object | Purpose |
@@ -126,6 +132,10 @@ not pack per-draw payload bytes. The dedicated payload-gathering policy is
 defined in `17-payload-gathering-and-slots.md`. Texture and image ownership,
 imports, surface leases, uploaded CPU pixels, and sampled binding descriptors
 are defined in `18-texture-image-ownership.md`.
+Material-source descriptors, paint-stage order, solid/gradient/image/local
+matrix/shader-blend source plans, source tile/sampling requirements, and
+material-source diagnostics are defined in
+`31-material-source-paint-pipeline.md`.
 Encoded image decode, codec selection, animated frame selection, color/profile
 conversion, orientation, mip preparation, and uploaded image artifact keys are
 defined in `22-image-bitmap-codec-pipeline.md`.

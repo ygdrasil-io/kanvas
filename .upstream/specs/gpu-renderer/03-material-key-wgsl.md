@@ -20,6 +20,11 @@ both render and compute work, but compute programs do not flow through
 command. It is independent from target attachment state and render-step fixed
 state.
 
+Material-facing paint/source planning is defined in
+`31-material-source-paint-pipeline.md`. `MaterialKey` consumes accepted
+`GPUPaintPipelinePlan` and `GPUMaterialSourcePlan` facts; it does not own
+legacy paint interpretation or source-family validation itself.
+
 `MaterialKey` is render-only. It is consumed by `GPURenderStep` and
 `GPURenderPipelineKey` construction. Compute work uses
 `GPUComputeProgramKey`, `WGSLComputeModule`, and `GPUComputePipelineKey`
@@ -80,15 +85,17 @@ coordinate facts that change material WGSL behavior or layout.
 
 ## Material Descriptor To Key
 
-`NormalizedDrawCommand.material` is a descriptor. The recorder derives a
-`MaterialKey` from it.
+`NormalizedDrawCommand.material` is first lowered to `GPUPaintPipelinePlan` and
+`GPUMaterialSourcePlan` as defined in
+`31-material-source-paint-pipeline.md`. The recorder derives `MaterialKey` from
+accepted plan identity.
 
 Derivation must be:
 
 - deterministic;
 - independent of object addresses;
 - stable across equivalent descriptors;
-- explicit about unsupported material features;
+- explicit about unsupported material-source features;
 - dumpable for PM and conformance reports.
 
 If descriptor lowering fails, route selection returns `RefuseDiagnostic` with a

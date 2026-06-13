@@ -18,6 +18,10 @@ plans, diagnostics, and evidence.
 `MaterialKey` identifies render material behavior. It may include source,
 color-filter, and blender identity when those affect shader code, but it does
 not own target attachment state.
+Material-facing source composition, including `GPUShaderBlendSourcePlan`, is
+defined in `31-material-source-paint-pipeline.md`. Final target blending and
+destination-read requirements remain owned by this spec and
+`20-destination-read-strategy.md`.
 
 `GPURenderPipelineKey` owns executable render state, including target format,
 blend state, depth/stencil state, sample count, and compatible WGSL module

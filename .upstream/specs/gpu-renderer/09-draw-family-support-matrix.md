@@ -46,6 +46,7 @@ target contracts.
 
 | Family | Maturity | Target route | GPU primitive or plan | Material / plan | Coverage / artifact model |
 |---|---|---|---|---|---|
+| Material source / paint pipeline | `TargetRequired` | `GPUNative`, `CPUPreparedGPU` only through typed non-shaded artifacts, or `RefuseDiagnostic` | `GPUPaintPipelinePlan`, `GPUMaterialSourcePlan`, source snippets, payload handoff | `GPUPaintDescriptor`, `GPUMaterialSourceDescriptor`, `GPUSolidColorPlan`, `GPUGradientPlan`, `GPUImageShaderPlan`, `GPULocalMatrixShaderPlan`, `GPUShaderBlendSourcePlan` | No coverage artifact; material source plans feed accepted geometry/text/vertex/image/layer routes. |
 | Rect fill | `TargetNative` | `GPUNative` | Render pass, rect render step, sortable draw layer | `MaterialKey` | Analytic rect coverage; no CPU artifact. |
 | Rounded-rect fill | `TargetNative` | `GPUNative` | Render pass, rrect render step | `MaterialKey` | Analytic or segmented rrect coverage; no CPU artifact unless later evidence requires a typed mask route. |
 | Rect/rrect stroke | `TargetNative` | `GPUNative` preferred | Render pass, stroke render step | `MaterialKey` | Analytic stroke coverage for bounded joins/caps; refusals for unsupported stroke style. |
@@ -68,6 +69,29 @@ target contracts.
 | Clear/discard | `TargetNative` | `GPUNative` | Pass load/clear/discard ops | none | Target-state operation, not material rendering. |
 
 ## Required Evidence By Family
+
+### Material Source And Paint Pipeline
+
+Evidence must include:
+
+- `GPUPaintDescriptor`, `GPUPaintPipelinePlan`,
+  `GPUMaterialSourceDescriptor`, and `GPUMaterialSourcePlan` dumps;
+- source-kind diagnostics for solid, gradient, image shader, local matrix,
+  shader blend, folded color-filter, and registered runtime-effect sources
+  when touched;
+- `MaterialKey` preimages that show only behavior/layout identity, not payload
+  values or resource handles;
+- `GPUMaterialDictionary` root/snippet dumps and requirement propagation;
+- `GPUMaterialSourcePayloadPlan`, payload write plan, and related
+  `GPUPayloadGatherer` evidence;
+- linked color, coordinate, texture/image, runtime-effect, blend, and
+  destination-read diagnostics when the source requests those contracts;
+- stable refusal for unsupported source kind, stage order, tile/sampling,
+  gradient stop storage, image ownership, local matrix, runtime effect, or
+  payload budget.
+
+No material-source route may CPU-render a complete draw or layer into a
+texture for compatibility.
 
 ### Rect And Rounded Rect
 
@@ -311,6 +335,16 @@ codes only when they identify an actionable unsupported condition.
 Examples:
 
 - `unsupported.geometry.path_edge_budget`
+- `unsupported.paint_pipeline.stage_order`
+- `unsupported.paint_pipeline.filter_fold_unproven`
+- `unsupported.paint_pipeline.shader_blender_unaccepted`
+- `unsupported.paint_pipeline.CPU_rendered_texture_forbidden`
+- `unsupported.material_source.unknown`
+- `unsupported.material_source.child_count`
+- `unsupported.material_source.payload_budget`
+- `unsupported.gradient.stop_store`
+- `unsupported.image_shader.texture_ownership`
+- `unsupported.local_matrix.non_invertible`
 - `unsupported.geometry.path_key_nondeterministic`
 - `unsupported.geometry.path_fill_rule`
 - `unsupported.geometry.tessellation_unavailable`

@@ -38,6 +38,7 @@ The module owns:
 - occlusion tracking;
 - render-step selection;
 - sort-key generation;
+- material-source and paint-pipeline planning;
 - material and pipeline keys;
 - material dictionary and WGSL snippet registry;
 - payload gathering and payload slot assignment;
@@ -183,6 +184,30 @@ Public concept names in the new renderer use uppercase acronyms:
 - `WGSLPackingPlan`
 - `GPUMaterialDictionary`
 - `GPUMaterialProgramID`
+- `GPUPaintDescriptor`
+- `GPUPaintPipelinePlan`
+- `GPUPaintStagePlan`
+- `GPUPaintEvaluationOrder`
+- `GPUMaterialSourceDescriptor`
+- `GPUMaterialSourceKind`
+- `GPUMaterialSourcePlan`
+- `GPUSolidColorPlan`
+- `GPUGradientPlan`
+- `GPUGradientKind`
+- `GPUGradientGeometryPlan`
+- `GPUGradientStopPlan`
+- `GPUGradientStopStorePlan`
+- `GPUMaterialTileMode`
+- `GPUMaterialSamplingPlan`
+- `GPUImageShaderPlan`
+- `GPULocalMatrixShaderPlan`
+- `GPUShaderBlendSourcePlan`
+- `GPUPaintColorPlan`
+- `GPUMaterialSourcePayloadPlan`
+- `GPUMaterialSourceCachePlan`
+- `GPUMaterialSourceBudgetPolicy`
+- `GPUMaterialSourceDiagnostic`
+- `GPUPaintPipelineDiagnostic`
 - `WGSLSnippet`
 - `WGSLSnippetID`
 - `WGSLSnippetNode`
@@ -497,6 +522,11 @@ into a narrower GPU renderer value object.
 | `DrawPass` | `GPUDrawPass` | Immutable pass close to what the GPU facade will execute. |
 | `Renderer` / `RenderStep` | `GPURenderStep` | Geometry/coverage technique with fixed shader and state contribution. |
 | `PaintParamsKey` | `MaterialKey` | Paint/material identity; no SkSL. |
+| `PaintParams` shading subset | `GPUPaintDescriptor` / `GPUPaintPipelinePlan` | Material-facing paint facts and stage order; geometry style, clip, final target blend, and complex effects stay in their owning specs. |
+| Graphite `KeyHelpers` source lowering | `GPUMaterialSourceDescriptor` / `GPUMaterialSourcePlan` | Solid, gradient, image shader, local matrix, shader blend, folded color-filter, and registered runtime-effect source planning before `MaterialKey`; no SkSL or C++ key block copy. |
+| Graphite gradient blocks | `GPUGradientPlan` / `GPUGradientStopPlan` / `GPUGradientStopStorePlan` | Gradient geometry, stop normalization, interpolation, tile mode, and inline/buffer/texture stop storage are explicit plans with budget/refusal diagnostics. |
+| Graphite image shader block | `GPUImageShaderPlan` | Image source, subset, sampling, tile mode, color behavior, and ownership dependencies are material-source facts; texture lifetime remains resource-owned. |
+| Graphite local matrix block | `GPULocalMatrixShaderPlan` | Local-coordinate wrapper with inverse, affine/perspective helper class, payload layout, and refusal policy. |
 | `ShaderCodeDictionary` | `GPUMaterialDictionary` | Interns material keys, owns WGSL snippet metadata, and produces material assembly plans; no SkSL codegen. |
 | `ShaderSnippet` | `WGSLSnippet` | Structured material WGSL function ABI with uniforms, resources, children, versions, and requirements. |
 | `ShaderNode` | `WGSLSnippetNode` | Decompressed material tree node with propagated requirements and diagnostic provenance. |
@@ -563,6 +593,7 @@ legacy stateful API
   -> GPUGeometryPlan + GPUGeometryRoute
   -> GPUVerticesDescriptor + GPUVerticesRoute when DrawVertices is used
   -> GPURuntimeEffectLookupPlan + GPURuntimeEffectDescriptor when registered runtime effects are used
+  -> GPUPaintPipelinePlan + GPUMaterialSourcePlan for material-facing paint behavior
   -> GPURecorder
   -> GPUDrawAnalysis
   -> GPUOcclusionTracker + GPUDrawLayerPlanner

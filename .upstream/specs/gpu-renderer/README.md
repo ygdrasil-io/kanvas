@@ -8,10 +8,11 @@ facade renderer work.
 This spec pack captures the agreed kernel for a new Kanvas GPU renderer module.
 It is intentionally narrower than a full implementation plan, but it should
 name the full technical scope before implementation slices are planned. It
-defines the module shape, naming policy, command boundary, WGSL material model,
-material dictionary, payload gathering, pipeline key split, execution
-context, WGSL layout ABI, blend/color state, route policy, telemetry gates,
-texture/image ownership, path/coverage atlas strategy, destination-read
+defines the module shape, naming policy, command boundary, material-source
+paint pipeline, WGSL material model, material dictionary, payload gathering,
+pipeline key split, execution context, WGSL layout ABI, blend/color state,
+route policy, telemetry gates, texture/image ownership, path/coverage atlas
+strategy, destination-read
 strategy, text/glyph pipeline target, image/bitmap/codec pipeline target,
 filter/effect pipeline target, clip/stencil/mask pipeline target, legacy
 cleanup policy, path/stroke/geometry pipeline target, layer/saveLayer
@@ -93,6 +94,11 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
   core with high-level normalized draw commands.
 - Capture draw state before it enters the core. The core does not replay a
   Canvas-style save/restore/matrix/clip stack.
+- Resolve material-facing paint behavior through `GPUPaintDescriptor`,
+  `GPUPaintPipelinePlan`, `GPUMaterialSourceDescriptor`,
+  `GPUMaterialSourcePlan`, `GPUSolidColorPlan`, `GPUGradientPlan`,
+  `GPUImageShaderPlan`, `GPULocalMatrixShaderPlan`, and
+  `GPUMaterialSourceDiagnostic` before deriving `MaterialKey`.
 - Separate `MaterialKey` from executable pipeline keys.
 - Expand and intern `MaterialKey` through `GPUMaterialDictionary` and
   `WGSLSnippet` metadata before WGSL module assembly.
@@ -276,6 +282,7 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 | `28-layer-savelayer-execution.md` | Graphite-inspired layer/saveLayer execution target: save records, bounds planning, offscreen targets, initialization/backdrop, filters, restore composite, elision, task ordering, budgets, diagnostics, and validation gates. |
 | `29-color-management-pipeline.md` | Graphite-inspired color-management target: value specs, color-space/profile descriptors, ICC/CICP, transfer/gamut transforms, working spaces, gradients, images, runtime color uniforms, HDR/gainmap, store plans, budgets, diagnostics, and validation gates. |
 | `30-coordinate-transform-bounds-policy.md` | Graphite-inspired coordinate/transform/bounds target: coordinate spaces, transform classification, inverses, pixel grid, conservative bounds proofs, rounding, precision, budgets, diagnostics, and validation gates. |
+| `31-material-source-paint-pipeline.md` | Graphite-inspired material source and paint pipeline target: paint descriptor order, source planning, solid/gradient/image/local-matrix/blend/runtime-effect sources, tile/sampling policy, payload handoff, budgets, diagnostics, and validation gates. |
 
 ## Target Shape
 
@@ -294,7 +301,8 @@ flowchart TD
     recording --> tasks["GPUTaskList"]
     tasks --> drawpass["GPUDrawPass"]
     drawpass --> step["GPURenderStep"]
-    command --> material["MaterialKey"]
+    command --> paintsource["GPUPaintPipelinePlan / GPUMaterialSourcePlan"]
+    paintsource --> material["MaterialKey"]
     command --> geometry["GPUGeometryPlan / GPUGeometryRoute"]
     command --> vertices["GPUVerticesDescriptor / GPUVerticesRoute"]
     command --> rte["GPURuntimeEffectRegistry / GPURuntimeEffectDescriptor"]
@@ -305,6 +313,7 @@ flowchart TD
     command --> coords["GPUCoordinateSpace / GPUTransformPlan / GPUBoundsPlan"]
     command --> dstread["GPUDestinationReadPlan"]
     color --> blend
+    color --> paintsource
     color --> material
     coords --> recorder
     coords --> clipplan
@@ -323,7 +332,8 @@ flowchart TD
     color --> wgsl
     filterdetail --> wgsl
     rte --> filterdetail
-    material --> textureplan["GPUImageSourceDescriptor / GPUTextureOwnershipPlan"]
+    paintsource --> textureplan["GPUImageSourceDescriptor / GPUTextureOwnershipPlan"]
+    coords --> paintsource
     geometry --> atlas["GPUPathAtlasPlan / GPUCoverageAtlasPlan"]
     geometry --> geostep["GPUGeometryRenderStepPlan / GPUStencilCoverPlan"]
     vertices --> vertstep["GPUVerticesRenderStepPlan / GPUVertexBufferPlan"]
@@ -343,6 +353,7 @@ flowchart TD
     rte --> payload
     color --> payload
     coords --> payload
+    paintsource --> payload
     dstread --> payload
     filterdetail --> payload
     step --> pipeline["GPURenderPipelineKey"]
@@ -398,8 +409,10 @@ shrinking the specs to the first deliverable.
 The accepted first implementation vertical slice is:
 
 - rect and rounded-rect geometry;
-- solid color and linear-gradient materials;
+- solid color and linear-gradient material-source plans;
 - parser-validated complete WGSL modules;
+- `GPUPaintPipelinePlan` and `GPUMaterialSourcePlan` diagnostics for accepted
+  and refused first-slice materials;
 - `GPUMaterialDictionary` expansion for solid and linear material snippets;
 - `GPUPayloadGatherer` payload slots for solid, linear, rect, and rrect
   values;

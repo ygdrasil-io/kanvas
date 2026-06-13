@@ -45,6 +45,9 @@ This spec depends on:
   normalized material/filter/clip facts;
 - `03-material-key-wgsl.md` for `MaterialKey`, render `WGSLModule`, compute
   `WGSLComputeModule`, and material runtime-effect boundaries;
+- `31-material-source-paint-pipeline.md` for registered runtime-effect
+  placement as a material source, material child-slot source planning, and
+  material-source diagnostics;
 - `04-pipeline-key-cache-resources.md` for cache, resource, device-generation,
   and typed artifact policy;
 - `05-routing-policy.md` for `GPUNative`, `CPUReferenceOnly`, and
@@ -134,6 +137,12 @@ The compatibility adapter owns:
   diagnostics before it enters product GPU routing;
 - preserving source provenance for PM/debug dumps without treating it as
   executable shader input.
+
+`31-material-source-paint-pipeline.md` owns only the material-source placement
+decision for registered runtime effects. It consumes registry descriptors and
+route contracts from this spec; it must not create descriptors, accept
+arbitrary source strings, or treat WGSL text outside a registered descriptor as
+product support.
 
 This spec owns:
 

@@ -35,6 +35,9 @@ This spec depends on:
 
 - `03-material-key-wgsl.md` for material/image source facts and the rule that
   pixels, handles, and upload artifact keys stay out of `MaterialKey`;
+- `31-material-source-paint-pipeline.md` for image shader source placement,
+  material tile/sampling requirements, and `GPUImageShaderPlan` consumption of
+  accepted image/texture plans;
 - `04-pipeline-key-cache-resources.md` for `GPUResourceProvider`,
   `CPUPreparedGPUArtifactRegistry`, cache domains, and generation policy;
 - `05-routing-policy.md` for `GPUNative`, `CPUPreparedGPU`,
