@@ -177,6 +177,11 @@ The target algorithm is conservative and deterministic:
 10. Every search stop, new-layer creation, and successful insertion records a
     stable reason code.
 
+Path and coverage atlas mutations, including `SplitPassAndRetry`, are defined
+in `19-path-coverage-atlas-strategy.md`. A split retry is legal only when the
+planner can preserve order, layer semantics, destination reads, target state,
+and resource lifetimes.
+
 The search limit is a policy input. It must be deterministic and visible in
 diagnostics. A bounded search may give up batching opportunities, but it must
 not change rendering semantics.
@@ -351,7 +356,10 @@ Stable reason-code examples:
 - `planner.stop.incompatible_overlap`
 - `planner.stop.destination_read`
 - `planner.stop.barrier`
+- `planner.stop.atlas_mutation`
 - `planner.stop.layer_boundary`
+- `planner.split.atlas_try_again`
+- `planner.split.rejected.atlas_retry_illegal`
 - `planner.merge.forward_tail_only`
 - `planner.merge.rejected.multi_step`
 - `planner.merge.rejected.barrier_intersection`
@@ -368,6 +376,8 @@ Promoted planner behavior requires:
 - non-batching fixture for incompatible pipeline or binding layout;
 - destination-read stop fixture;
 - barrier stop fixture;
+- atlas mutation stop fixture and split-pass retry positive/negative fixtures
+  before path or coverage atlas routes are promoted;
 - stencil or clip atomicity fixture before those routes are promoted;
 - disabled or diagnostic-only forward merge fixture for the first slice;
 - forward-merge positive and negative fixtures before enabling forward merge;

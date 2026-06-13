@@ -50,6 +50,9 @@ The first slice does not implement:
 Unsupported inputs must refuse deterministically. They must not use broad CPU
 fallback, CPU-rendered texture compatibility, or hidden legacy rendering.
 
+Path and coverage atlas routes remain governed by
+`19-path-coverage-atlas-strategy.md` and are not promoted by this slice.
+
 ## Required Contracts
 
 The slice must exercise these contracts:
@@ -204,8 +207,10 @@ Minimum isolated fixtures:
 - unsupported complex clip refusal;
 - unsupported gradient tile mode refusal;
 - WGSL validation failure fixture using an intentionally invalid test module;
-- stale device-generation resource refusal using a test double.
+- stale device-generation resource refusal using a test double;
 - illegal active-attachment sampling refusal using target texture descriptors.
+- unsupported path or complex clip atlas-route refusal when such commands enter
+  the isolated module fixture set.
 
 These fixtures are contract fixtures. They do not claim broad Skia GM coverage.
 
@@ -235,4 +240,6 @@ against legacy output. This slice alone does not switch production rendering.
 - Do not claim support for paths, text, images, filters, or runtime effects.
 - Do not create uploaded texture artifacts, import external textures, or sample
   image textures in this slice.
+- Do not create `PathAtlasArtifact`, `CoverageMaskArtifact`, or path/coverage
+  atlas textures as supported routes in this slice.
 - Do not rely on CPU-rendered texture compatibility for unsupported variants.

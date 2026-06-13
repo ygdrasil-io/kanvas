@@ -343,7 +343,10 @@ Texture/image ownership rules still apply:
 - atlas textures are not user image textures unless an accepted spec creates
   such a route explicitly.
 
-The detailed path/coverage atlas strategy remains a separate spec point.
+The detailed path/coverage atlas strategy is defined in
+`19-path-coverage-atlas-strategy.md`. That spec owns `GPUPathAtlasPlan`,
+`GPUCoverageAtlasPlan`, atlas entry refs, use tokens, mutation plans,
+retry/split behavior, and atlas-specific diagnostics.
 
 ## Key Boundaries
 
@@ -365,6 +368,7 @@ The detailed path/coverage atlas strategy remains a separate spec point.
 - surface lease ID;
 - resource generation;
 - atlas coordinates;
+- atlas entry refs and atlas use tokens;
 - payload slot IDs.
 
 `GPURenderPipelineKey` and `GPUComputePipelineKey` include texture/view/sampler

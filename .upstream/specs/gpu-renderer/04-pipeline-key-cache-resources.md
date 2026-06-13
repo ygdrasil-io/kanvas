@@ -186,6 +186,9 @@ Cache hits and misses must be observable in conformance or PM evidence before
 performance claims are made.
 The telemetry, budget, warmup, and performance-gate reporting contract is
 defined in `13-performance-telemetry-cache-gates.md`.
+Path and coverage atlas cache keys, residency facts, budgets, use tokens,
+retry/split actions, and mutation diagnostics are defined in
+`19-path-coverage-atlas-strategy.md`.
 
 ## Resource Lifetimes
 
@@ -265,7 +268,14 @@ that affect their contents:
 - style and stroke facts;
 - coverage quality;
 - color-space or alpha handling when pixels are prepared;
-- atlas generation and coordinates.
+- atlas content key, atlas generation, coordinates, and entry reference facts
+  when an artifact is atlas-resident.
+
+Atlas-resident path and coverage artifacts must distinguish a stable content
+key from mutable residency facts. `GPUPathAtlasKey` and `GPUCoverageAtlasKey`
+identify prepared coverage contents. `GPUAtlasEntryRef`, atlas generation,
+page/plot generation, coordinates, and use tokens validate current residency
+and may change without becoming material identity.
 
 Additional key facts are required when they affect contents or validity:
 

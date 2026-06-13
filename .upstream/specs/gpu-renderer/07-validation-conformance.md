@@ -40,6 +40,7 @@ Tests must assert canonical preimages and hashes for:
 - payload gather plan identity;
 - CPU-prepared artifact keys;
 - texture/image descriptors and ownership plans;
+- path/coverage atlas plans, content keys, entry refs, and mutation plans;
 - route diagnostics.
 
 Equivalent inputs must produce equivalent keys. Different behavior-affecting
@@ -116,6 +117,27 @@ Tests must assert:
 - stale device, target, atlas, upload, or surface generations rebuild, discard,
   or refuse deterministically.
 
+### Path And Coverage Atlas Tests
+
+Tests must assert:
+
+- `GPUPathAtlasPlan`, `GPUCoverageAtlasPlan`, `GPUAtlasPolicy`,
+  `GPUAtlasBudgetPolicy`, `GPUAtlasPageDescriptor`,
+  `GPUAtlasPlotDescriptor`, `GPUAtlasEntryDescriptor`, `GPUAtlasEntryRef`,
+  `GPUAtlasUseToken`, `GPUAtlasMutationPlan`, `GPUAtlasUploadPlan`,
+  `GPUCoverageMaskDescriptor`, and `GPUAtlasDiagnostic` dumps are
+  deterministic;
+- `GPUPathAtlasKey` and `GPUCoverageAtlasKey` include all content-affecting
+  path, stroke, transform, clip, tolerance, coverage, and policy facts;
+- atlas residency facts such as coordinates, page/plot generation, atlas
+  generation, and use tokens stay out of `MaterialKey`;
+- stale, evicted, in-use, upload-failed, and budget-exceeded entries rebuild,
+  split/retry, or refuse deterministically;
+- atlas upload or compute write tasks execute before draws that sample them;
+- planner sort/merge cannot cross atlas mutation barriers;
+- no path/coverage atlas route CPU-renders a complete unsupported draw or
+  layer into a texture.
+
 ### Blend And Color Tests
 
 Tests must assert:
@@ -163,6 +185,9 @@ Evidence must include:
 - payload slot counts, payload fingerprints, and upload bytes;
 - texture provenance, ownership plan counts, sampled binding counts, and upload
   artifact counts when textures/images are used;
+- atlas policy counts, resident entry counts, upload/compute bytes, generation
+  facts, retry/split counts, eviction counts, and atlas refusal counts when
+  path or coverage atlases are used;
 - WGSL module validation result;
 - output artifact, checksum, diff, or readback where applicable;
 - capability facts;
@@ -204,6 +229,8 @@ PM/report artifacts must show:
 - execution context and device-generation facts;
 - WGSL ABI validation status;
 - blend/color/target-state plan counts;
+- path/coverage atlas route, generation, retry, budget, and eviction state
+  when atlas routes are touched;
 - cache and pipeline counters when performance is claimed;
 - telemetry and performance-gate state when realtime readiness is claimed;
 - known limitations.

@@ -103,6 +103,9 @@ Sampled texture bindings use `GPUSampledTextureBinding` records from
 sample type, view dimension, multisample/storage facts, and binding layout. It
 does not include texture handles, imported handles, surface leases, pixel
 contents, or uploaded artifact cache keys.
+Path and coverage atlas bindings use `GPUCoverageAtlasBinding` from
+`19-path-coverage-atlas-strategy.md`; the ABI includes the resource layout and
+access facts, not atlas residency as material identity.
 
 ## Uniform And Storage Packing
 
@@ -183,7 +186,8 @@ Rules:
 - material-owned resources use bind group `1` unless an accepted spec changes
   bind group policy;
 - shared atlases, masks, and CPU-prepared artifacts stay outside the material
-  dictionary and use their accepted resource group;
+  dictionary and use their accepted resource group. Path and coverage atlas
+  bindings follow `19-path-coverage-atlas-strategy.md`;
 - a mismatch between snippet ABI and complete module reflection refuses the
   route with a stable diagnostic.
 

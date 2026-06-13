@@ -260,10 +260,17 @@ Rules:
 - image shader routes require accepted texture ownership and lifetime policy;
 - uploaded CPU pixels must use `UploadedTextureArtifact`;
 - atlas, mask, glyph, and coverage textures must use their accepted artifact or
-  atlas specs;
+  atlas specs, with path/coverage atlas bindings following
+  `19-path-coverage-atlas-strategy.md`;
 - raw resource handles are not sort or cache key facts.
 - import, upload, lease, allocation, eviction, and release are performed by
   `GPUResourceProvider`, not by the gatherer.
+
+When a path or coverage atlas entry is accepted, the gatherer consumes
+`GPUCoverageAtlasBinding` facts: atlas entry ref, texture origin, mask size,
+inverse atlas size, mask transform, sampling mode, atlas generation, and
+resource binding layout. These facts are pass-local payload/resource facts and
+must stay out of `MaterialKey`.
 
 The first rect/rrect solid and linear-gradient slice does not require sampled
 texture payloads except when a later accepted gradient-store route explicitly
@@ -332,6 +339,8 @@ Payload diagnostics must include:
 - binding layout hash;
 - uniform payload byte size and slot;
 - resource binding slot and binding count;
+- atlas entry ref, atlas generation, and atlas binding hash when path or
+  coverage atlas payloads are used;
 - upload bytes and target buffer class;
 - dynamic offset summary when used;
 - gradient payload store offset when used;
@@ -347,6 +356,8 @@ Stable reason-code examples:
 - `unsupported.payload.resource_binding_mismatch`
 - `unsupported.payload.resource_stale_generation`
 - `unsupported.payload.texture_unavailable`
+- `unsupported.payload.atlas_binding_unavailable`
+- `unsupported.payload.atlas_generation_stale`
 - `unsupported.payload.upload_budget_exceeded`
 - `unsupported.payload.dynamic_offset_unavailable`
 - `unsupported.payload.gradient_store_unavailable`

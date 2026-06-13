@@ -33,6 +33,9 @@ It records:
 - CPU-prepared artifact counts, bytes, uploads, and refusals;
 - texture descriptor, texture view, sampler, ownership plan, sampled binding,
   imported texture, surface lease, and stale-generation counters when touched;
+- path/coverage atlas policy, entry, resident byte, upload/compute byte,
+  generation, stale-entry, retry/split, eviction, and budget-pressure counters
+  when touched;
 - submitted bytes for uniforms, vertices, indices, storage, textures, and
   readbacks when available;
 - timing samples when enabled;
@@ -57,7 +60,7 @@ Cache reporting is grouped by domain:
 | Resource cache | textures, buffers, samplers, bind groups, live bytes, evictions. |
 | Texture ownership cache | texture descriptors, view descriptors, sampler descriptors, ownership plans, sampled bindings, imports, uploads, surface leases, stale generations, rebuilds, and refusals. |
 | Artifact registry | artifact lookups, hits, misses, uploads, evictions, budget refusals. |
-| Atlas cache | atlas generation, resident entries, eviction, upload bytes, stale entries. |
+| Atlas cache | atlas descriptor count, policy version, page count, resident entries, resident bytes, lookup hits/misses, entry creations, page activations, evictions, compactions/resets, upload bytes, compute write bytes, stale entries, retry/split counts, hard capability refusals, and budget refusals. |
 
 A cache hit is performance evidence, not correctness evidence. A cache miss
 must never change rendering output.
@@ -133,6 +136,10 @@ Initial gate families:
 - imported texture refusal count;
 - stale texture generation rebuild or refusal count;
 - artifact cache hit rate;
+- path/coverage atlas hit rate;
+- path/coverage atlas resident bytes;
+- path/coverage atlas upload or compute bytes;
+- path/coverage atlas retry/split and eviction count;
 - pass count and draw count stability;
 - readback availability for evidence lanes;
 - frame time or GPU time when accepted by a target milestone.

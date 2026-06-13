@@ -11,8 +11,8 @@ name the full technical scope before implementation slices are planned. It
 defines the module shape, naming policy, command boundary, WGSL material model,
 material dictionary, payload gathering, pipeline key split, execution
 context, WGSL layout ABI, blend/color state, route policy, telemetry gates,
-texture/image ownership, legacy cleanup policy, and validation expectations
-that future implementation tickets must follow.
+texture/image ownership, path/coverage atlas strategy, legacy cleanup policy,
+and validation expectations that future implementation tickets must follow.
 
 The current `.upstream/target/high-performance-wgsl-pipeline-target.md` and
 `.upstream/target/skia-like-realtime-renderer-target.md` remain active project
@@ -85,6 +85,13 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
   `GPUImageSourceDescriptor`, and `GPUSampledTextureBinding` contracts.
 - Keep concrete texture handles, imported handles, surface leases, uploaded
   artifact keys, and pixel contents out of `MaterialKey`.
+- Resolve path and coverage atlas use through `GPUPathAtlasPlan`,
+  `GPUCoverageAtlasPlan`, `GPUAtlasPolicy`, `GPUAtlasBudgetPolicy`,
+  `GPUAtlasEntryRef`, and typed `PathAtlasArtifact` or
+  `CoverageMaskArtifact` routes.
+- Treat atlas generation, atlas entry coordinates, use tokens, upload/compute
+  mutations, and eviction state as resource/payload facts, not material
+  identity.
 - Treat current surface/swapchain textures as `GPUSurfaceTextureLease` values
   scoped to a frame/target generation, not durable resource identities.
 - Define GPU execution, surface/target, command submission, readback, and
@@ -147,6 +154,7 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 | `16-material-dictionary-and-snippet-registry.md` | Graphite-inspired `GPUMaterialDictionary`, `WGSLSnippet`, `WGSLSnippetNode`, `GPUMaterialProgramID`, requirement propagation, runtime-effect registration, and material WGSL assembly policy. |
 | `17-payload-gathering-and-slots.md` | Graphite-inspired `GPUPayloadGatherer`, payload gather/write/binding/upload plans, uniform/resource payload blocks, pass-local slots, gradient payload stores, fingerprints, and payload diagnostics. |
 | `18-texture-image-ownership.md` | Graphite-inspired texture/image ownership policy: descriptors, views, samplers, image sources, uploaded CPU pixels, imported textures, target/surface leases, sampled bindings, and texture diagnostics. |
+| `19-path-coverage-atlas-strategy.md` | Graphite-inspired path/coverage atlas strategy: atlas plans, entry keys, generations, budgets, retry/split actions, payload bindings, diagnostics, and validation gates. |
 
 ## Target Shape
 
@@ -166,15 +174,18 @@ flowchart TD
     command --> blend["GPUBlendPlan / GPUColorPlan"]
     dictionary --> wgsl["WGSLFragment / WGSLModule"]
     material --> textureplan["GPUImageSourceDescriptor / GPUTextureOwnershipPlan"]
+    command --> atlas["GPUPathAtlasPlan / GPUCoverageAtlasPlan"]
     wgsl --> abi["WGSL layout / binding ABI"]
     abi --> payload["GPUPayloadGatherer / payload slots"]
     textureplan --> payload
+    atlas --> payload
     step --> pipeline["GPURenderPipelineKey"]
     blend --> pipeline
     abi --> pipeline
     wgsl --> pipeline
     payload --> resources
     textureplan --> resources
+    atlas --> resources
     pipeline --> resources["GPUResourceProvider"]
     resources --> execution["GPUExecutionContext / submission"]
     execution --> facade["GPU facade used with wgpu4k"]

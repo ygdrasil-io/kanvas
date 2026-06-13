@@ -70,6 +70,8 @@ The renderer uses explicit resource scopes:
 Shared state may be reused only when keys, capabilities, device generation, and
 lifetime facts still match. Recorder-local and frame-local resources must not
 escape into reusable caches unless a spec names the promotion rule.
+Path and coverage atlas scope rules, use tokens, retry/split behavior, and
+mutation diagnostics are defined in `19-path-coverage-atlas-strategy.md`.
 
 This mirrors Graphite's separation of shared context, recorder-owned resource
 provider state, scratch resources, and atlas managers conceptually, but Kanvas
@@ -126,6 +128,7 @@ Command scopes must preserve:
 - upload-before-use dependencies;
 - readback-after-write dependencies;
 - atlas mutation ordering;
+- atlas compute-write-before-sample and upload-before-sample dependencies;
 - device-generation checks.
 
 ## Submission Model
@@ -219,6 +222,8 @@ Stable reason-code examples:
 - `unsupported.execution.surface_unavailable`
 - `unsupported.execution.usage_missing`
 - `unsupported.execution.active_attachment_sampled`
+- `unsupported.atlas.sync_unavailable`
+- `unsupported.atlas.storage_texture_unavailable`
 - `unsupported.texture.surface_lease_stale`
 - `unsupported.execution.device_generation_stale`
 - `unsupported.execution.queue_submission_failed`
@@ -232,6 +237,8 @@ Promoted execution behavior requires:
 - usage-flag validation tests;
 - stale device-generation tests;
 - render/compute/copy ordering tests where supported;
+- atlas upload-before-sample and compute-write-before-sample ordering tests
+  before path/coverage atlas routes are promoted;
 - readback success or skipped-lane diagnostics;
 - device-loss refusal or rebuild tests for touched resources;
 - PM evidence that distinguishes encoded, submitted, completed, skipped, and

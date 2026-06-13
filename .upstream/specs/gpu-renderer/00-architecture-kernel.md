@@ -47,6 +47,8 @@ The module owns:
 - texture descriptors, image-source descriptors, texture ownership plans,
   sampled texture bindings, imported texture descriptors, and surface texture
   leases;
+- path atlas, coverage atlas, atlas entry, atlas budget, atlas mutation, atlas
+  upload, and atlas diagnostic contracts;
 - resource-provider contracts;
 - GPU execution context and submission contracts;
 - telemetry, cache, and performance-gate contracts;
@@ -157,6 +159,25 @@ Public concept names in the new renderer use uppercase acronyms:
 - `GPUSurfaceTextureLease`
 - `GPUSampledTextureBinding`
 - `GPUTextureDiagnostic`
+- `GPUPathAtlasPlan`
+- `GPUCoverageAtlasPlan`
+- `GPUAtlasPolicy`
+- `GPUAtlasBudgetPolicy`
+- `GPUAtlasDescriptor`
+- `GPUAtlasPageDescriptor`
+- `GPUAtlasPlotDescriptor`
+- `GPUAtlasEntryDescriptor`
+- `GPUAtlasEntryRef`
+- `GPUAtlasGeneration`
+- `GPUAtlasUseToken`
+- `GPUAtlasMutationPlan`
+- `GPUAtlasUploadPlan`
+- `GPUCoverageMaskDescriptor`
+- `GPUCoverageAtlasBinding`
+- `GPUComputeCoverageAtlasPlan`
+- `GPUAtlasDiagnostic`
+- `GPUPathAtlasKey`
+- `GPUCoverageAtlasKey`
 - `GPUBlendPlan`
 - `GPUColorPlan`
 - `GPUTargetState`
@@ -218,6 +239,11 @@ into a narrower GPU renderer value object.
 | `Texture` | Provider-owned texture resource behind `GPUTextureResourceRef` | Concrete `GPU` facade object owned by `GPUResourceProvider`, not by material keys. |
 | `Image_Graphite` | `GPUImageSourceDescriptor` | Logical image source plus color/sampling facts without leaking `SkImage` or raw handles into the core. |
 | `TextureDataBlock` / `TextureDataCache` | `GPUSampledTextureBinding` inside `GPUResourceBindingBlock` / `GPUResourceBindingSlot` | Ordered sampled texture and sampler payloads; no raw handle or pointer identity in durable keys. |
+| `DrawAtlas` | `GPUAtlasDescriptor` / `GPUAtlasEntryRef` / `GPUAtlasMutationPlan` | Atlas page/entry/generation/use-token concept; no Graphite page bit packing or C++ cache ownership. |
+| `PathAtlas` / `RasterPathAtlas` | `GPUPathAtlasPlan` plus `PathAtlasArtifact` | Reusable path coverage route through typed `CPUPreparedGPU`; no generic CPU fallback proxy. |
+| `ComputePathAtlas` | `GPUComputeCoverageAtlasPlan` | Future compute-written coverage atlas with WGSL compute validation and explicit storage/transition policy. |
+| `ClipAtlasManager` | `GPUCoverageAtlasPlan` plus `CoverageMaskArtifact` | Clip/coverage mask route with separate path and save-record-style keys; no merged glyph/image/path atlas lifetime. |
+| `AtlasProvider` | `GPUResourceProvider` plus `GPUAtlasScope` | Resource provider owns atlas textures, uploads, compaction, invalidation, and diagnostics. |
 | `GraphicsPipelineDesc` | `GPURenderPipelineKey` | Render step, material, target state, fixed state, and capabilities. |
 | `ResourceProvider` | `GPUResourceProvider` | Pipelines, buffers, textures, samplers, atlases, and cache ownership. |
 | `SharedContext` / `Caps` | `GPUExecutionContext` / `GPUCapabilities` | Facade implementation, device generation, queue facts, and capability snapshot. |

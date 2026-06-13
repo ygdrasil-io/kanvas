@@ -106,6 +106,8 @@ It must not include:
 - uploaded texture artifact keys;
 - pixel contents;
 - transient atlas coordinates;
+- atlas entry refs;
+- atlas use tokens;
 - cache residency;
 - GPU resource handles;
 - CPU-rendered fallback artifacts.
@@ -252,7 +254,9 @@ Rules:
 - material snippets declare texture/sampler ABI slots; they do not own
   texture allocation, import, upload, lease, or release policy;
 - shared atlases, masks, and CPU-prepared artifacts remain outside material
-  ownership and use their accepted artifact or atlas group;
+  ownership and use their accepted artifact or atlas group. Path and coverage
+  atlas ownership, entry refs, and mutations follow
+  `19-path-coverage-atlas-strategy.md`;
 - gradient stop data is material-owned for the first accepted linear-gradient
   route unless a later gradient-buffer spec moves it to a shared resource;
 - per-draw values are not key facts, but their layout and packing plan are key

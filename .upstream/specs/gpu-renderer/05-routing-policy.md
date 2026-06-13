@@ -52,6 +52,13 @@ This route is Graphite-like in spirit for small-path or raster-atlas behavior,
 but it is not a full CPU fallback. The final draw still goes through GPU
 composition or GPU command submission.
 
+Path and coverage atlas routes are governed by
+`19-path-coverage-atlas-strategy.md`. A route may select
+`CPUPreparedGPU(PathAtlasArtifact)` for reusable path coverage or
+`CPUPreparedGPU(CoverageMaskArtifact)` for clip/operation-specific coverage
+only when the artifact key, atlas policy, budget, generation, mutation plan,
+and GPU consumer are all accepted.
+
 GPU-native textures, render targets, swapchain/surface textures, and imported
 GPU handles remain normal `GPUResourceProvider` resources. Their ownership,
 view, sampler, usage, and generation policy is defined in
@@ -143,6 +150,8 @@ Route selection may use:
 - resource availability;
 - `CPUPreparedGPUArtifactRegistry` support;
 - atlas budget;
+- atlas entry dimensions, area, generation, policy, use-token state, and
+  retry/split legality for path or coverage atlas routes;
 - artifact memory/upload budget;
 - feature gates;
 - conformance maturity.
@@ -176,6 +185,9 @@ Stable reason-code examples:
 - `unsupported.wgsl.validation_error`
 - `unsupported.pipeline.capability_missing`
 - `unsupported.atlas.capacity`
+- `unsupported.atlas.entry_too_large`
+- `unsupported.atlas.in_use_try_again_limit`
+- `unsupported.atlas.generation_stale`
 - `unsupported.artifact.unregistered_type`
 - `unsupported.artifact.key_nondeterministic`
 - `unsupported.artifact.budget_exceeded`

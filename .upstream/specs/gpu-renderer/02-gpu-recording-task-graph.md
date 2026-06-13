@@ -39,6 +39,10 @@ pass.
 `GPUPayloadGatherer` owns payload writing and pass-local uniform/resource
 slot assignment during pass construction.
 
+`GPUPathAtlasPlan` and `GPUCoverageAtlasPlan` own path/coverage atlas
+selection facts, entry keys, mutation requirements, and diagnostics as defined
+in `19-path-coverage-atlas-strategy.md`.
+
 ## `GPURecorder`
 
 `GPURecorder` accepts normalized draw commands and a target configuration. It
@@ -82,6 +86,8 @@ Each analysis record contains:
 - `MaterialKey` or material refusal;
 - candidate `GPURenderStep` identities or render-step refusal;
 - geometry and coverage strategy facts;
+- path/coverage atlas plan facts, atlas entry requirements, and
+  `GPUAtlasMutationPlan` dependencies when a route may sample atlas coverage;
 - opacity and blend classification;
 - destination-read requirements;
 - clip, stencil, upload, atlas, and target-load dependencies;
@@ -243,12 +249,17 @@ encode commands, or represent a synchronization boundary.
 Task phases:
 
 1. `prepareResources`: allocate or resolve pipelines, buffers, textures,
-   texture views, samplers, imports, surface texture leases, atlases, bind
-   groups, and gathered payload uploads.
+   texture views, samplers, imports, surface texture leases, atlases, atlas
+   entry mutations, bind groups, and gathered payload uploads.
 2. `addCommands`: encode commands through the `GPU` facade.
 
 The split exists so route selection, resource failure, and command encoding
 failures are reported separately.
+
+Atlas mutations from `19-path-coverage-atlas-strategy.md` are resource
+preparation work. A task that samples a path or coverage atlas must depend on
+the upload, compute write, page activation, eviction, or split-pass retry plan
+that made the entry valid.
 
 Task outcomes:
 
