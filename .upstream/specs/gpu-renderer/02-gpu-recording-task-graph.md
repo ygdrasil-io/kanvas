@@ -52,6 +52,11 @@ diagnostics as defined in `24-clip-stencil-mask-pipeline.md`.
 snapshot/intermediate strategy, pass-split actions, and diagnostics as defined
 in `20-destination-read-strategy.md`.
 
+`GPULayerExecutionPlan` owns executable saveLayer lowering, offscreen targets,
+initialization/backdrop, source filtering, restore composite, layer elision,
+ordering tokens, layer resources, budgets, and diagnostics as defined in
+`28-layer-savelayer-execution.md`.
+
 `GPUTextRunPlan` and `GPUTextSubRunPlan` own text/glyph route selection,
 subrun splitting, text atlas resource needs, upload dependencies, instance
 buffer facts, and text diagnostics as defined in
@@ -219,10 +224,14 @@ A layer contains:
 - diagnostics and stable refusal reasons.
 
 `GPUDrawLayerPlanner` consumes `GPUDrawAnalysis`, `GPULayerPlan`,
-`GPUFilterPlan`, target facts, and `GPUCapabilities`. It produces a
+`GPULayerExecutionPlan`, `GPUFilterPlan`, target facts, and
+`GPUCapabilities`. It produces a
 deterministic low-level draw-layer plan and a pass partitioning proposal.
 The detailed invocation expansion, backward/forward insertion, sort-window,
 and merge policy is defined in `15-draw-layer-planner-and-sort-policy.md`.
+Detailed saveLayer execution classes, layer targets, initialization,
+restore/composite, elision, and ordering tokens are defined in
+`28-layer-savelayer-execution.md`.
 
 It is responsible for:
 
@@ -230,6 +239,9 @@ It is responsible for:
 - assigning commands to `GPUDrawLayer` scopes;
 - deciding whether a layer may draw directly into its parent or requires an
   intermediate target;
+- consuming `GPULayerExecutionPlan` classes such as direct-to-parent,
+  offscreen, backdrop-initialized, filter-isolated, composite-only, cull, or
+  refusal;
 - preserving layer isolation, alpha, blend, and destination-read semantics;
 - creating dependency edges between parent and child layers;
 - applying occlusion facts at layer granularity when proven safe;
@@ -295,6 +307,12 @@ Destination-read target copies and isolated intermediates from
 `20-destination-read-strategy.md` are resource preparation and ordering work. A
 task that samples a copied destination or existing intermediate must depend on
 the corresponding copy/intermediate validation plan.
+Layer target allocation, transparent clear, previous-content copy, backdrop
+filter initialization, child layer rendering, source filter execution,
+restore composite, and layer target release from
+`28-layer-savelayer-execution.md` are resource preparation and ordering work.
+A task that samples or composites a layer source must depend on its accepted
+`GPULayerTaskPlan`, `GPULayerResourcePlan`, and `GPULayerOrderingToken`.
 Filter graph intermediates, render/compute node resources, runtime-effect
 bindings, and ordering tokens from `23-filter-effect-pipeline.md` are resource
 preparation and ordering work. A task that consumes a filter node output must

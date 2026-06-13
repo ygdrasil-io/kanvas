@@ -327,6 +327,9 @@ are defined in `20-destination-read-strategy.md`.
 
 Layer, filter, destination-read, and offscreen targets use
 `GPUTargetTextureDescriptor` plus ordinary `GPUResourceProvider` ownership.
+Layer target role, initialization, source/filter/composite usage, lifetime, and
+budget requirements are defined by `GPULayerTargetPlan` and
+`GPULayerResourcePlan` in `28-layer-savelayer-execution.md`.
 Destination-copy targets are created only through `GPUDestinationCopyPlan` and
 `GPUDestinationCopyTextureDescriptor` from
 `20-destination-read-strategy.md`.

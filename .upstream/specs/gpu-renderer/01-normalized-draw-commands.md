@@ -118,6 +118,13 @@ planning, WGSL binding, and refusal behavior are governed by
 The payload must not leak mutable legacy shape objects into the core. If a path
 or text payload is too expensive to copy, the adapter must use an explicit
 immutable handle with lifetime rules and diagnostic identity.
+Detailed path, stroke, fill-rule, inverse-fill, dash/path-effect, flattening,
+tessellation, prepared-geometry, stencil-cover, and path/stroke diagnostic
+rules are defined in `25-path-stroke-geometry-pipeline.md`.
+Detailed `DrawVertices` topology, vertex/index layout, per-vertex color,
+texcoord, primitive-blender, prepared-buffer, mesh-like descriptor, and
+vertices diagnostic rules are defined in
+`26-draw-vertices-mesh-pipeline.md`.
 
 ## Transform Facts
 
@@ -158,16 +165,27 @@ At minimum, layer facts must include:
 
 - target identity or logical target scope;
 - device size and color format facts;
+- saveLayer scope ID, parent scope ID, child command provenance, and restore
+  provenance when a command belongs to a layer scope;
+- bounds hint, layer paint, side-car filters, backdrop descriptor,
+  backdrop tile mode, color-space request, and saveLayer flags when present;
+- transform and clip facts active at layer creation;
+- restore-time clip and parent target facts when known;
 - alpha and blend semantics that affect the layer composite;
 - whether destination reads are required. Detailed destination-read routes are
   resolved later through `GPUDestinationReadPlan` from
   `20-destination-read-strategy.md`;
 - whether the command depends on prior target contents.
 
-Complex image-filter layer behavior is outside this kernel. It must enter the
-core through `GPULayerPlan` and `GPUFilterPlan`, with detailed graph nodes,
-bounds, crops, intermediates, registered runtime effects, and diagnostics
-governed by `23-filter-effect-pipeline.md`.
+Layer facts are semantic input. Detailed execution of saveLayer bounds,
+offscreen targets, initialization/backdrop, source filters, restore composite,
+direct-to-parent elision, ordering tokens, budgets, and diagnostics is governed
+by `28-layer-savelayer-execution.md`.
+
+Complex image-filter layer behavior must enter the core through `GPULayerPlan`
+and `GPUFilterPlan`, with detailed graph nodes, bounds, crops, intermediates,
+registered runtime effects, and diagnostics governed by
+`23-filter-effect-pipeline.md`.
 
 ## Material Descriptor
 
@@ -183,6 +201,11 @@ The descriptor must be complete enough to derive:
 - registered runtime-effect identity when present;
 - WGSL fragment requirements;
 - stable unsupported reasons.
+
+Registered runtime-effect descriptor lookup, compatibility keys, descriptor
+ID/version, uniform schema, child slots, WGSL plan, CPU oracle, route contract,
+and live-edit metadata are governed by
+`27-registered-runtime-effects-registry.md`.
 
 ## Ordering Facts
 

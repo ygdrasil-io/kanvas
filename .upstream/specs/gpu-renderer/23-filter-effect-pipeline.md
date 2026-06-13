@@ -65,7 +65,13 @@ This spec depends on:
   filter source nodes;
 - `24-clip-stencil-mask-pipeline.md` for active clip descriptors, clip bounds,
   stencil/mask routes, and clip ordering when filters interact with clipped
-  sources or outputs.
+  sources or outputs;
+- `27-registered-runtime-effects-registry.md` for runtime-effect descriptor
+  IDs, uniform schemas, child slots, WGSL plans, CPU oracles, compatibility
+  lookup, live-edit metadata, and descriptor diagnostics;
+- `28-layer-savelayer-execution.md` for saveLayer source targets,
+  initialization/backdrop inputs, filter-chain placement, restore composite,
+  and layer ordering tokens.
 
 ## Graphite And Skia Evidence
 
@@ -133,6 +139,9 @@ Owned by other specs:
 - blend/color/target contracts: `12-blend-color-target-state.md`;
 - WGSL material snippets and material runtime-effect descriptors:
   `16-material-dictionary-and-snippet-registry.md`;
+- registered runtime-effect descriptor lifecycle, compatibility lookup,
+  uniform schema, child slot rules, WGSL plan, CPU oracle, and live-edit
+  metadata: `27-registered-runtime-effects-registry.md`;
 - image decode and upload artifacts for image source nodes:
   `22-image-bitmap-codec-pipeline.md`.
 
@@ -436,7 +445,7 @@ Runtime filter effects are descriptor-based.
 
 `GPUFilterRuntimeEffectPlan` records:
 
-- registered descriptor ID and version;
+- registered descriptor ID, version, and registry snapshot generation;
 - descriptor kind: color filter, shader filter, image filter, blender, or
   compute filter;
 - WGSL fragment or compute module identity;
@@ -453,7 +462,7 @@ Arbitrary Skia `SkRuntimeEffect`, SkSL source, or runtime shader builder input
 is refused. A compatibility adapter may translate a known Skia effect into a
 registered Kanvas descriptor only when the descriptor version, CPU behavior,
 WGSL implementation, child binding contract, and validation fixtures are
-accepted.
+accepted by `27-registered-runtime-effects-registry.md`.
 
 ## Color Filters
 

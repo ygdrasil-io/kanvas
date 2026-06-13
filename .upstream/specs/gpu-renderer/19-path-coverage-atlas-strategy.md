@@ -17,6 +17,10 @@ Detailed captured clip descriptor, effective element, scissor, analytic,
 stencil, mask-route, shader clip, budget, ordering, and clip diagnostic policy
 is defined in `24-clip-stencil-mask-pipeline.md`. This spec owns the atlas and
 coverage artifact mechanics used by those clip routes.
+Detailed path, stroke, fill-rule, inverse-fill, flattening, tessellation,
+stencil-cover, prepared geometry, geometry budget, and geometry diagnostic
+policy is defined in `25-path-stroke-geometry-pipeline.md`. This spec owns the
+atlas residency and coverage artifact mechanics used by those geometry routes.
 
 The design is Graphite-inspired but Kanvas-owned:
 
@@ -113,6 +117,10 @@ Text/glyph atlas ownership is outside this spec. Text uses
 
 The existing `geometry-coverage/` pack remains migration and evidence context.
 This spec refines its `CoverageAtlas` placeholder for the GPU renderer target.
+The target path/stroke geometry semantics are owned by
+`25-path-stroke-geometry-pipeline.md`; this atlas spec is selected only after a
+geometry route has determined that reusable or standalone coverage storage is
+the accepted representation.
 
 The default selector stance remains fail-closed:
 
@@ -575,7 +583,9 @@ generation validation.
 
 Route selection for path and coverage atlas work follows:
 
-1. Validate normalized command and geometry/coverage facts.
+1. Validate normalized command and geometry/coverage facts, including the
+   `GPUGeometryPlan` products required by
+   `25-path-stroke-geometry-pipeline.md` for path fill or stroke commands.
 2. Try a non-atlas `GPUNative` route when analytic, stencil, tessellation,
    or other GPU-native coverage is accepted.
 3. Try `GPUNative(GPUComputeCoverageAtlasPlan)` when compute/storage/capability

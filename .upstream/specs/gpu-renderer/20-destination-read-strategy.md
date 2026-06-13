@@ -81,6 +81,9 @@ and clipped draws. Detailed filter node, bounds, sample-radius, and
 intermediate behavior is defined in `23-filter-effect-pipeline.md`. Detailed
 clip descriptor, bounds, stencil, mask, and ordering behavior is defined in
 `24-clip-stencil-mask-pipeline.md`.
+Detailed layer/saveLayer execution, including previous-content initialization,
+backdrop input, source filters, restore composite, elision, and layer ordering
+tokens, is defined in `28-layer-savelayer-execution.md`.
 `GPUDrawAnalysis` resolves those facts into `GPUDestinationReadPlan` values.
 `GPUDrawLayerPlanner` preserves ordering and split barriers. `GPUTaskList` and
 `GPUResourceProvider` materialize copies, intermediates, texture ownership, and
@@ -381,6 +384,8 @@ instead of a per-draw target copy.
 Examples:
 
 - saveLayer composite whose restore blend needs stable parent destination;
+- saveLayer initialization with previous parent contents;
+- saveLayer backdrop filter input;
 - backdrop filter requiring a parent-content snapshot;
 - filter graph requiring source and destination textures as separate inputs;
 - command groups where one copy per draw would be incorrect or impossible.
@@ -388,6 +393,9 @@ Examples:
 Rules:
 
 - `GPULayerPlan` owns semantic isolation requirements;
+- `GPULayerExecutionPlan`, `GPULayerInitializationPlan`,
+  `GPULayerBackdropPlan`, and `GPULayerCompositePlan` own the executable layer
+  stages that consume this strategy;
 - `GPUFilterPlan` and `23-filter-effect-pipeline.md` own filter DAG reads and
   writes;
 - target texture descriptors follow `18-texture-image-ownership.md`;

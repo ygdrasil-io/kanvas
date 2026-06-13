@@ -274,12 +274,19 @@ Rules:
 - destination-copy snapshots and existing destination intermediates must use
   accepted `GPUDestinationReadBinding` records from
   `20-destination-read-strategy.md`;
+- layer source, backdrop, filter-output, restore composite, and layer target
+  bindings must use accepted `GPULayerResourcePlan` and
+  `GPULayerCompositePlan` records from
+  `28-layer-savelayer-execution.md`;
 - analytic clip uniforms, clip coverage masks, stencil payload values when
   used, and registered clip shader resources must use accepted plans from
   `24-clip-stencil-mask-pipeline.md`;
 - filter intermediates, runtime-effect child bindings, filter node uniforms,
   sampled inputs, storage resources, and ordering tokens must use accepted
   plans from `23-filter-effect-pipeline.md`;
+- runtime-effect uniform values, live-edit updates, child slot payloads, and
+  descriptor resource bindings must use accepted descriptor contracts from
+  `27-registered-runtime-effects-registry.md`;
 - raw resource handles are not sort or cache key facts.
 - import, upload, lease, allocation, eviction, and release are performed by
   `GPUResourceProvider`, not by the gatherer.
@@ -304,6 +311,14 @@ When a destination-read route is accepted, the gatherer consumes
 `GPUDestinationReadBinding` facts: target generation, copied/read bounds,
 texture/view/sampler descriptors, coordinate mapping, binding layout, and
 resource slot. It does not create the target snapshot or decide pass splits.
+When a layer execution route is accepted, the gatherer consumes only binding
+facts produced by `GPULayerResourcePlan`, `GPULayerInitializationPlan`,
+`GPULayerSourcePlan`, `GPULayerFilterChainPlan`, and
+`GPULayerCompositePlan`: layer source texture/view/sampler descriptors,
+coordinate mapping, composite uniforms, destination-read bindings, target
+generation, binding layout, and resource slots. It does not allocate layer
+targets, initialize previous contents, execute backdrop filters, choose
+elision, split passes, or release resources.
 When an image/bitmap route is accepted, the gatherer consumes only the sampled
 texture binding facts produced after `GPUImageUploadPlan` and
 `GPUTextureOwnershipPlan` acceptance. It does not decode images, compose
@@ -314,6 +329,12 @@ resource and uniform binding facts produced by `GPUFilterNodePlan`,
 `GPUFilterOrderingToken`. It does not normalize filter graphs, allocate
 intermediates, execute copies, choose render/compute routes, or fold color
 filters into material keys.
+When a registered runtime-effect route is accepted, the gatherer consumes only
+uniform values, child payload bindings, resource bindings, and live-edit values
+described by `GPURuntimeEffectDescriptor`, `GPURuntimeEffectUniformBlockPlan`,
+`GPURuntimeEffectChildSlotPlan`, `GPURuntimeEffectResourcePlan`, and
+`GPURuntimeEffectLiveEditPlan`. It does not register descriptors, compile
+source text, choose runtime-effect routes, or mutate registry snapshots.
 
 The first rect/rrect solid and linear-gradient slice does not require sampled
 texture payloads except when a later accepted gradient-store route explicitly

@@ -18,6 +18,8 @@ The `:gpu-renderer` core owns:
 
 - renderer WGSL fragment metadata;
 - material snippet ABI contributions from `GPUMaterialDictionary`;
+- registered runtime-effect uniform, child, and resource ABI contributions
+  from `GPURuntimeEffectDescriptor`;
 - complete `WGSLModule` and `WGSLComputeModule` assembly contracts;
 - binding layout descriptors;
 - uniform and storage layout descriptors;
@@ -68,6 +70,16 @@ layout, access, sample/storage type, and reflection facts. It does not include
 filter intermediate cache residency, node execution timing, destination-copy
 generation, or concrete resource handles.
 
+Registered runtime-effect routes from
+`27-registered-runtime-effects-registry.md` contribute bindings through
+`GPURuntimeEffectUniformBlockPlan`, `GPURuntimeEffectChildSlotPlan`,
+`GPURuntimeEffectResourcePlan`, and `GPURuntimeEffectWGSLPlan`. Material
+runtime effects use the material group policy unless their accepted descriptor
+route declares an additional resource topology. Filter, compute, primitive
+blender, destination-dependent, and future clip-shader runtime effects may use
+group `3` only when the descriptor route contract and consuming spec both
+accept that layout.
+
 Clip routes from `24-clip-stencil-mask-pipeline.md` use group `0` for
 render-step intrinsic analytic clip data when it is part of frame/target/step
 state, and group `2` for coverage-mask resources such as
@@ -117,11 +129,18 @@ Each binding records:
 Sampled texture bindings use `GPUSampledTextureBinding` records from
 `18-texture-image-ownership.md` during payload gathering. The ABI includes
 sample type, view dimension, multisample/storage facts, and binding layout. It
+does not include resource residency, concrete handles, or pixel contents.
 For image/bitmap routes from `22-image-bitmap-codec-pipeline.md`, the ABI sees
 only the accepted sampled texture/view/sampler contract after decode,
 preparation, upload artifact, and texture ownership planning. It does not
 include codec selection, frame selection, texture handles, imported handles,
 surface leases, pixel contents, or uploaded artifact cache keys.
+Layer source, backdrop, filter-output, and restore composite bindings use
+`GPULayerResourcePlan` and `GPULayerCompositePlan` from
+`28-layer-savelayer-execution.md`; the ABI includes sampled texture/sampler,
+uniform, storage, and binding-layout facts required by the composite or filter
+route. It does not include layer target residency, task ordering, target
+generation, source pixels, or elision proof as material identity.
 Path and coverage atlas bindings use `GPUCoverageAtlasBinding` from
 `19-path-coverage-atlas-strategy.md`; the ABI includes the resource layout and
 access facts, not atlas residency as material identity.
@@ -139,6 +158,14 @@ texture/sampler layouts, text instance buffer layouts, `GPUTextSDFParams`
 uniform layout, and text render-step access facts. Atlas coordinates, glyph
 IDs, atlas generations, upload tokens, and entry refs remain payload/resource
 facts, not material identity.
+Registered runtime-effect bindings use descriptor-declared uniform schemas,
+child slots, resources, and WGSL plans from
+`27-registered-runtime-effects-registry.md`; the ABI includes only their
+layout/reflection facts. Descriptor ID, descriptor version, registry snapshot
+generation, uniform layout hash, child slot hash, and resource binding hash are
+pipeline-validity facts when they affect module or bind group layout. Uniform
+values, child resource handles, child texture contents, and compatibility
+source text are not ABI identity.
 
 ## Uniform And Storage Packing
 
@@ -218,6 +245,10 @@ Rules:
   material snippet declarations;
 - material-owned resources use bind group `1` unless an accepted spec changes
   bind group policy;
+- registered runtime-effect material snippets may contribute uniforms,
+  textures, samplers, child slots, and helper WGSL only through accepted
+  `GPURuntimeEffectDescriptor` plans from
+  `27-registered-runtime-effects-registry.md`;
 - shared atlases, masks, and CPU-prepared artifacts stay outside the material
   dictionary and use their accepted resource group. Path and coverage atlas
   bindings follow `19-path-coverage-atlas-strategy.md`;
@@ -264,6 +295,8 @@ ABI diagnostics must include:
 
 - module kind: render or compute;
 - module hash;
+- runtime-effect descriptor ID, version, route, and registry snapshot
+  generation when a registered runtime effect contributes ABI facts;
 - binding layout preimage and hash;
 - uniform or storage layout preimage and hash;
 - reflection summary;
@@ -294,6 +327,8 @@ Promoted ABI behavior requires:
 - render and compute key preimages that include ABI hashes;
 - Kotlin packer tests that assert offsets, sizes, and padding;
 - payload gathering tests that write values through the packing plan;
+- runtime-effect descriptor tests proving descriptor-declared uniforms,
+  child slots, resource plans, and WGSL reflection match complete modules;
 - PM evidence that includes module hash, layout hash, and reflection status.
 
 ## Non-Goals

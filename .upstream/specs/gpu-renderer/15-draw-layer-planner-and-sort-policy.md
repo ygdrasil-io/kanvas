@@ -127,6 +127,10 @@ not a cross-recording stable handle.
 `GPUDrawLayer` is the ordered scope for invocation insertion. It is lower-level
 than `GPULayerPlan`; it represents a pass/layer batching and ordering scope,
 not Canvas saveLayer semantics.
+Detailed saveLayer execution classes, offscreen targets, initialization,
+restore composite, elision proofs, resource plans, and layer ordering tokens
+are defined in `28-layer-savelayer-execution.md`. The draw-layer planner
+consumes those products but does not invent layer semantics.
 
 A draw layer records:
 
@@ -279,6 +283,8 @@ sort window. It is not Graphite's bit layout.
 Required axes:
 
 - semantic layer or target scope;
+- `GPULayerExecutionPlan` class and `GPULayerOrderingToken` when an invocation
+  belongs to, initializes, filters, or composites a saveLayer scope;
 - draw-layer order band;
 - original paint-order band or barrier generation;
 - dependency class;

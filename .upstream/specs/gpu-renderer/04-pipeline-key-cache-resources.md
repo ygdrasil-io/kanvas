@@ -135,6 +135,14 @@ runtime-effect filter descriptors, and filter intermediate plans are defined
 in `23-filter-effect-pipeline.md`. Clip stack descriptors, scissor/analytic
 plans, stencil producer-consumer plans, coverage-mask plans, shader clip plans,
 and clip diagnostics are defined in `24-clip-stencil-mask-pipeline.md`.
+Registered runtime-effect descriptors, registry snapshots, compatibility
+lookups, uniform schemas, child slots, WGSL plans, CPU oracle facts, live-edit
+metadata, and route contracts are defined in
+`27-registered-runtime-effects-registry.md`.
+Layer/saveLayer execution plans, offscreen targets, initialization/backdrop
+resources, source filter chains, restore composites, elision proofs, ordering
+tokens, and layer budgets are defined in
+`28-layer-savelayer-execution.md`.
 
 It is responsible for:
 
@@ -191,6 +199,19 @@ Expected cache layers:
   `GPUAnimatedImagePlan`, `GPUImageColorDecodePlan`,
   `GPUImageOrientationPlan`, and `GPUImageUploadArtifactKey` facts from
   `22-image-bitmap-codec-pipeline.md`;
+- runtime-effect registry and lookup cache keyed by registry
+  version/generation, `GPURuntimeEffectID`,
+  `GPURuntimeEffectDescriptorVersion`, compatibility key, requested kind,
+  route contract, uniform schema hash, child slot hash, resource binding hash,
+  WGSL plan hash, CPU oracle version, and capability facts from
+  `27-registered-runtime-effects-registry.md`;
+- layer execution, target, initialization, backdrop, filter-chain, composite,
+  elision, resource, ordering, and budget cache entries keyed by
+  `GPULayerExecutionPlan`, `GPULayerBoundsPlan`, `GPULayerTargetPlan`,
+  `GPULayerInitializationPlan`, `GPULayerBackdropPlan`,
+  `GPULayerFilterChainPlan`, `GPULayerCompositePlan`,
+  `GPULayerElisionPlan`, `GPULayerResourcePlan`, and
+  `GPULayerOrderingToken` facts from `28-layer-savelayer-execution.md`;
 - atlas caches with explicit ownership and eviction rules;
 - clip descriptor, effective element, scissor/analytic/stencil/mask, shader
   clip, budget, and diagnostic cache entries keyed by `GPUClipStackDescriptor`,
@@ -229,6 +250,12 @@ Resources must be tied to:
 - surface texture lease generation when applicable;
 - encoded image source generation and codec registry generation when an
   uploaded image artifact is involved;
+- runtime-effect registry snapshot generation when a module, pipeline, payload
+  plan, filter node, primitive blender, or live-edit plan consumes a registered
+  descriptor;
+- layer target generation, layer scope generation, and parent target
+  generation when a layer target, previous-content copy, backdrop input,
+  filter source, restore composite, or layer destination-read route is used;
 - recording lifetime when one-shot;
 - frame scope when frame-local;
 - cache lifetime when reusable;
@@ -280,7 +307,7 @@ Accepted artifact families for this kernel are:
 | `BitmapGlyphPlan` | Prepare decoded PNG bitmap glyph facts. | Route through glyph-scoped texture ownership and sampling or refuse. |
 | `SVGGlyphPlan` | Prepare bounded pure Kotlin SVG-in-OpenType glyph vector facts. | Route through accepted vector/material primitives or refuse. |
 | `UploadedTextureArtifact` | Decode, convert, repack, color-convert, tile, compose animated frames, or mip-prepare CPU pixels before upload as defined in `22-image-bitmap-codec-pipeline.md`. | Bind uploaded texture and sampler for GPU image sampling through spec 18 ownership. |
-| `PrecomputedGeometryArtifact` | Flatten, stroke, tessellate, or pack vertex/index/edge data on CPU. | Bind GPU buffers for a render step such as fan, stencil-cover, or edge coverage. |
+| `PrecomputedGeometryArtifact` | Flatten, stroke, tessellate, pack vertex/index/edge data, or canonicalize `DrawVertices` buffers on CPU. | Bind GPU buffers for a render step such as fan, stencil-cover, edge coverage, or vertices/mesh drawing governed by `26-draw-vertices-mesh-pipeline.md`. |
 | `FilterIntermediateArtifact` | Materialize a validated bounded filter intermediate according to `23-filter-effect-pipeline.md`. | Bind intermediate texture/view for a later GPU filter or layer-composite pass. |
 
 `FilterIntermediateArtifact` is allowed only for filter shapes whose spec has
@@ -328,6 +355,11 @@ Additional key facts are required when they affect contents or validity:
 - filter graph node identity, input bounds, crop, sample mode, intermediate
   format, runtime-effect descriptor, bounds plan, and validated filter-spec
   version from `23-filter-effect-pipeline.md` for filter intermediates;
+- runtime-effect descriptor ID/version, registry snapshot generation,
+  descriptor route, uniform schema hash, child slot hash, resource binding
+  hash, WGSL plan hash, and CPU oracle version from
+  `27-registered-runtime-effects-registry.md` when a registered runtime effect
+  changes prepared contents or resource validity;
 - clip stack descriptor, effective element list, clip operations, shape keys,
   transforms, AA modes, mask bounds, combine/invert semantics, and validated
   clip-spec version from `24-clip-stencil-mask-pipeline.md` for clip coverage

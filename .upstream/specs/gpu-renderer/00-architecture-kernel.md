@@ -121,6 +121,24 @@ Public concept names in the new renderer use uppercase acronyms:
 - `GPUDrawAnalysis`
 - `GPUOcclusionTracker`
 - `GPULayerPlan`
+- `GPULayerExecutionPlan`
+- `GPULayerScopeID`
+- `GPULayerSaveRecord`
+- `GPULayerRestorePlan`
+- `GPULayerBoundsPlan`
+- `GPULayerTargetPlan`
+- `GPULayerInitializationPlan`
+- `GPULayerBackdropPlan`
+- `GPULayerSourcePlan`
+- `GPULayerFilterChainPlan`
+- `GPULayerCompositePlan`
+- `GPULayerElisionPlan`
+- `GPULayerTaskPlan`
+- `GPULayerResourcePlan`
+- `GPULayerOrderingToken`
+- `GPULayerCachePlan`
+- `GPULayerBudgetPolicy`
+- `GPULayerDiagnostic`
 - `GPUFilterPlan`
 - `GPUFilterGraphDescriptor`
 - `GPUFilterNodeID`
@@ -217,6 +235,73 @@ Public concept names in the new renderer use uppercase acronyms:
 - `GPUImageCachePlan`
 - `GPUImageBudgetPolicy`
 - `GPUImageDiagnostic`
+- `GPUShapeDescriptor`
+- `GPUPathDescriptor`
+- `GPUPathVerbSlice`
+- `GPUPathFillRule`
+- `GPUStrokeDescriptor`
+- `GPUStrokeStyle`
+- `GPUPathEffectDescriptor`
+- `GPUGeometryPlan`
+- `GPUGeometryRoute`
+- `GPUPathRoute`
+- `GPUStrokeRoute`
+- `GPUPathBoundsPlan`
+- `GPUPathTransformPlan`
+- `GPUPathTolerancePlan`
+- `GPUPathFlatteningPlan`
+- `GPUPathTessellationPlan`
+- `GPUStrokeExpansionPlan`
+- `GPUStencilCoverPlan`
+- `GPUPreparedGeometryPlan`
+- `GPUGeometryBufferPlan`
+- `GPUGeometryRenderStepPlan`
+- `GPUGeometryCachePlan`
+- `GPUGeometryBudgetPolicy`
+- `GPUGeometryDiagnostic`
+- `GPUVerticesDescriptor`
+- `GPUVertexMode`
+- `GPUVertexAttributeDescriptor`
+- `GPUVertexLayoutPlan`
+- `GPUVertexPositionPlan`
+- `GPUVertexColorPlan`
+- `GPUVertexTexCoordPlan`
+- `GPUPrimitiveColorPlan`
+- `GPUPrimitiveBlendPlan`
+- `GPUIndexBufferPlan`
+- `GPUVertexBufferPlan`
+- `GPUVerticesRoute`
+- `GPUVerticesRenderStepPlan`
+- `GPUVerticesBoundsPlan`
+- `GPUMeshDescriptor`
+- `GPUMeshAttributeDescriptor`
+- `GPUMeshBufferPlan`
+- `GPUMeshRoute`
+- `GPUVerticesCachePlan`
+- `GPUVerticesBudgetPolicy`
+- `GPUVerticesDiagnostic`
+- `GPURuntimeEffectRegistry`
+- `GPURuntimeEffectRegistrySnapshot`
+- `GPURuntimeEffectID`
+- `GPURuntimeEffectKind`
+- `GPURuntimeEffectDescriptor`
+- `GPURuntimeEffectDescriptorVersion`
+- `GPURuntimeEffectCompatibilityKey`
+- `GPURuntimeEffectLookupPlan`
+- `GPURuntimeEffectRegistrationPlan`
+- `GPURuntimeEffectUniformSchema`
+- `GPURuntimeEffectUniform`
+- `GPURuntimeEffectUniformBlockPlan`
+- `GPURuntimeEffectChildSlotPlan`
+- `GPURuntimeEffectResourcePlan`
+- `GPURuntimeEffectWGSLPlan`
+- `GPURuntimeEffectCPUOracle`
+- `GPURuntimeEffectParameterPlan`
+- `GPURuntimeEffectLiveEditPlan`
+- `GPURuntimeEffectRouteContract`
+- `GPURuntimeEffectCachePlan`
+- `GPURuntimeEffectBudgetPolicy`
+- `GPURuntimeEffectDiagnostic`
 - `GPUPathAtlasPlan`
 - `GPUCoverageAtlasPlan`
 - `GPUAtlasPolicy`
@@ -330,6 +415,10 @@ into a narrower GPU renderer value object.
 | `SortKey` | `SortKey` | Deterministic Kanvas value for legal draw ordering; no Graphite bit-layout requirement. |
 | Occlusion culling | `GPUOcclusionTracker` | Dedicated conservative culling capability; not an incidental pass-builder side effect. |
 | SaveLayer and layer semantics | `GPULayerPlan` | Captured layer/saveLayer semantics, offscreen target needs, restore/composite behavior, and attached filters. |
+| SaveLayer execution | `GPULayerExecutionPlan` / `GPULayerTaskPlan` | Executable layer lowering with bounds, offscreen targets, initialization/backdrop, source filters, restore composite, elision, resources, ordering, budgets, and diagnostics. |
+| Skia device-backed layer surface | `GPULayerTargetPlan` / `GPUTargetTextureDescriptor` | Provider-owned offscreen target with explicit format, usage, load/store, lifetime, generation, and budget facts. |
+| `SkSpecialImage` layer/filter source | `GPULayerSourcePlan` / `GPUFilterIntermediatePlan` | Bounded sampled source or intermediate with texture ownership and provenance; not a Skia class or CPU fallback object. |
+| SaveLayer restore paint | `GPULayerRestorePlan` / `GPULayerCompositePlan` | Restore alpha, color filter, image filter, blend, clip, color-space, and destination-read facts are explicit composite plans. |
 | Image filter graph planning | `GPUFilterPlan` | Filter DAG, intermediate resources, render/compute routes, and filter refusals outside `MaterialKey`. |
 | `SkImageFilter` DAG | `GPUFilterGraphDescriptor` / `GPUFilterNodePlan` | Inputs, node kinds, bounds, crops, local matrices, and source semantics are dumpable graph facts; no Skia flattenable ownership. |
 | `SkImageFilters` factory surface | `GPUFilterNodeDescriptor` / `GPUFilterNodeRoute` | Blur, crop, image, color filter, merge, matrix, morphology, lighting, and runtime shader families are target node descriptors with explicit route/refusal policy. |
@@ -339,6 +428,15 @@ into a narrower GPU renderer value object.
 | `SkImageFilters::RuntimeShader` | `GPUFilterRuntimeEffectPlan` | Runtime filter effects require registered Kanvas descriptors and WGSL validation; no arbitrary SkSL. |
 | Layer/draw-context planning | `GPUDrawLayer` / `GPUDrawLayerPlanner` | Logical layer and composite scopes from captured state; not Graphite context classes. |
 | `DrawListLayer` insertion | `GPUDrawInvocation` / `GPUDrawInsertion` | Graphite-inspired backward/forward insertion, sort windows, and merge policy; no C++ arena or bit-layout inheritance. |
+| `Shape` / `Geometry` | `GPUShapeDescriptor` / `GPUGeometryPlan` | Immutable shape facts and selected geometry route; no mutable Skia objects in the core. |
+| `SkPath` path data | `GPUPathDescriptor` / `GPUPathVerbSlice` | Canonical path verbs, points, fill rule, inverse flag, bounds, and stable key facts. |
+| `SkStrokeRec` / `StrokeStyle` | `GPUStrokeDescriptor` / `GPUStrokeExpansionPlan` | Stroke width, cap, join, miter, hairline, dash/path-effect, and expansion route are explicit diagnostics. |
+| Graphite renderer selection | `GPUGeometryRoute` / `GPUGeometryRenderStepPlan` | Analytic, tessellation, stencil-cover, prepared geometry, atlas, mask, or refusal route with dumpable render-step expansion. |
+| Tessellation render steps | `GPUPathTessellationPlan` / `GPUPreparedGeometryPlan` | GPU-native or CPU-prepared geometry buffers with WGSL/layout evidence and no shaded CPU fallback. |
+| `SkVertices` / mesh geometry | `GPUVerticesDescriptor` / `GPUMeshDescriptor` | Immutable user-provided vertex facts and future 2D mesh descriptors; no mutable source arrays in the core. |
+| Graphite `VerticesRenderStep` | `GPUVerticesRenderStepPlan` | Topology, vertex layout, primitive-color ABI, texcoord ABI, and draw-call facts are explicit executable plans. |
+| `SkVerticesPriv` index/color/texcoord facts | `GPUVertexLayoutPlan` / `GPUIndexBufferPlan` / `GPUVertexColorPlan` / `GPUVertexTexCoordPlan` | Attribute presence, formats, indices, colors, texcoords, and canonicalization are dumpable route facts. |
+| Graphite primitive blender for vertices | `GPUPrimitiveColorPlan` / `GPUPrimitiveBlendPlan` | Per-vertex colors feed material evaluation before final target blend; arbitrary Skia blender source does not enter the core. |
 | `ClipStack` | `GPUClipStackDescriptor` / `GPUClipPlan` | Captured clip state and per-draw effective clip plan; no mutable Graphite or Canvas stack inside the core. |
 | `ClipStack::Element` and save records | `GPUClipElementDescriptor` / `GPUClipSaveRecordDescriptor` | Shape, operation, transform, bounds, generation, and lifetime are dumpable descriptor facts. |
 | Graphite scissor and analytic clip selection | `GPUClipScissorPlan` / `GPUClipAnalyticPlan` | Simple clip routes are explicit and validated; no hidden approximation for complex clips. |
@@ -352,6 +450,9 @@ into a narrower GPU renderer value object.
 | `ShaderSnippet` | `WGSLSnippet` | Structured material WGSL function ABI with uniforms, resources, children, versions, and requirements. |
 | `ShaderNode` | `WGSLSnippetNode` | Decompressed material tree node with propagated requirements and diagnostic provenance. |
 | `UniquePaintParamsID` | `GPUMaterialProgramID` | Dictionary-local compact ID for an equivalent `MaterialKey`; not a portable identity by itself. |
+| Graphite `RuntimeEffectDictionary` | `GPURuntimeEffectRegistrySnapshot` plus usage diagnostics | Recordings pin a runtime-effect descriptor generation; Kanvas does not retain arbitrary SkSL effects for later compilation. |
+| Graphite runtime-effect snippet map | `GPURuntimeEffectRegistry` / `GPURuntimeEffectDescriptor` | Descriptor ID/version, uniform schema, child slots, WGSL plan, CPU oracle, and route contract are the support identity. |
+| Skia `SkRuntimeEffect` compatibility source | `GPURuntimeEffectCompatibilityKey` / `GPURuntimeEffectLookupPlan` | Known source/stable-key inputs may map to registered descriptors; unknown source refuses. |
 | `PipelineDataGatherer` | `GPUPayloadGatherer` | Collects concrete uniform/resource payload values after keys and layouts are accepted. |
 | `UniformDataBlock` / `UniformDataCache` | `GPUUniformPayloadBlock` / `GPUUniformPayloadSlot` | Pass-local payload bytes and de-duplicated slots; values are not durable key facts. |
 | `TextureDataBlock` / `TextureDataCache` | `GPUResourceBindingBlock` / `GPUResourceBindingSlot` | Ordered resource binding payloads and pass-local slots; no raw GPU handle identity. |
@@ -402,7 +503,11 @@ legacy stateful API
   -> adapter captures transform/clip/layer/material/bounds
   -> NormalizedDrawCommand
   -> GPULayerPlan / GPUFilterPlan
+  -> GPULayerExecutionPlan + GPULayerTaskPlan when saveLayer scopes are used
   -> GPUFilterNodePlan + GPUFilterIntermediatePlan when filters are used
+  -> GPUGeometryPlan + GPUGeometryRoute
+  -> GPUVerticesDescriptor + GPUVerticesRoute when DrawVertices is used
+  -> GPURuntimeEffectLookupPlan + GPURuntimeEffectDescriptor when registered runtime effects are used
   -> GPURecorder
   -> GPUDrawAnalysis
   -> GPUOcclusionTracker + GPUDrawLayerPlanner
@@ -413,6 +518,9 @@ legacy stateful API
   -> GPUMaterialDictionary + WGSLSnippetNode tree
   -> GPUImagePipelinePlan + UploadedTextureArtifact when encoded/CPU image pixels are used
   -> GPUImageSourceDescriptor + GPUTextureOwnershipPlan when images/textures are used
+  -> GPUPathAtlasPlan / GPUCoverageAtlasPlan when path or coverage masks are used
+  -> GPUVertexLayoutPlan + GPUVertexBufferPlan when vertices/mesh are used
+  -> GPURuntimeEffectUniformBlockPlan + GPURuntimeEffectChildSlotPlan when effects are used
   -> GPUTextRunPlan + GPUTextSubRunPlan when text/glyph artifacts are used
   -> GPUBlendPlan + GPUColorPlan + GPUTargetState
   -> WGSLBindingLayout + WGSLPackingPlan

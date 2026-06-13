@@ -46,6 +46,9 @@ This spec depends on:
 - `07-validation-conformance.md` for evidence and promotion gates;
 - `08-layer-and-filter-plans.md` for clip facts active at layer creation and
   layer isolation decisions;
+- `28-layer-savelayer-execution.md` for layer creation/restore clip
+  interaction, layer bounds, restore composite clipping, and layer ordering
+  tokens;
 - `09-draw-family-support-matrix.md` for clip family target maturity;
 - `10-gpu-execution-context-submission.md` for render/copy/upload ordering and
   device-generation rules;
@@ -65,7 +68,10 @@ This spec depends on:
 - `20-destination-read-strategy.md` for destination reads whose bounds are
   constrained or expanded by clips;
 - `23-filter-effect-pipeline.md` for filter source/output bounds when filters
-  interact with active clips.
+  interact with active clips;
+- `25-path-stroke-geometry-pipeline.md` for stable path/shape descriptors,
+  fill-rule and inverse-fill facts, geometry bounds, stencil-cover geometry,
+  and path/stroke diagnostics when clip paths share geometry descriptor rules.
 
 ## Graphite And Skia Evidence
 
@@ -163,6 +169,8 @@ Owned by other specs:
   `01-normalized-draw-commands.md`;
 - path/coverage atlas keys, entry refs, use tokens, mutation plans, and mask
   artifacts: `19-path-coverage-atlas-strategy.md`;
+- path/shape descriptor rules and path geometry diagnostics used by clip path
+  elements: `25-path-stroke-geometry-pipeline.md`;
 - texture/view/sampler ownership for mask textures:
   `18-texture-image-ownership.md`;
 - WGSL binding, packing, and reflection: `11-wgsl-layout-binding-abi.md`;

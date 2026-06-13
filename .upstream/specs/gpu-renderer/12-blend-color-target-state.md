@@ -27,6 +27,9 @@ identity.
 the renderer can decide whether a draw can execute natively, needs an isolated
 layer or texture read, or must refuse.
 
+Detailed layer/saveLayer execution, including layer target planning,
+initialization, source filtering, restore composite, direct-to-parent elision,
+and layer ordering, is defined in `28-layer-savelayer-execution.md`.
 The detailed destination-read contract is defined in
 `20-destination-read-strategy.md`. `GPUBlendPlan` declares the requirement;
 `GPUDestinationReadPlan` defines bounds, strategy, copy/intermediate resources,
@@ -153,6 +156,11 @@ being written.
 - filter node execution;
 - final composite into parent;
 - direct-to-parent elision proof.
+
+`GPULayerCompositePlan` from `28-layer-savelayer-execution.md` consumes these
+plans for restore/composite. It records whether the layer can use
+fixed-function blend, a shader composite with a destination-read plan, an
+existing intermediate, or refusal.
 
 Layer elision is legal only when the blend and color plans prove equivalence.
 If layer alpha, color-space conversion, destination reads, or blend behavior

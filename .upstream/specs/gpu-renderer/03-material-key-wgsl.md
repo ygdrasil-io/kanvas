@@ -122,6 +122,8 @@ outputs, uniforms, textures, samplers, and feature requirements.
 Fragment categories:
 
 - material source;
+- primitive-color input and registered primitive blender for
+  `DrawVertices`, governed by `26-draw-vertices-mesh-pipeline.md`;
 - color filter;
 - blender or blend helper;
 - coordinate transform helper;
@@ -196,9 +198,12 @@ as material identity. Detailed filter graph, node route, bounds, crop/tile,
 runtime-effect, and intermediate rules are defined in
 `23-filter-effect-pipeline.md`.
 
-`GPULayerPlan`, `saveLayer` lowering, and broad layer semantics are defined in
-`08-layer-and-filter-plans.md`. `GPUDrawLayer` remains the low-level pass/layer
-planning structure; it does not replace the higher-level layer semantic plan.
+`GPULayerPlan` and broad layer semantics are defined in
+`08-layer-and-filter-plans.md`. Detailed `saveLayer` execution, offscreen
+targets, initialization/backdrop, restore composite, and layer elision are
+defined in `28-layer-savelayer-execution.md`. `GPUDrawLayer` remains the
+low-level pass/layer planning structure; it does not replace the higher-level
+layer semantic or execution plans.
 Color-filter chains may fold into `MaterialKey` only when
 `23-filter-effect-pipeline.md` proves that material placement is equivalent to
 the filter DAG behavior.
@@ -222,11 +227,13 @@ supported GPU route.
 
 ## Runtime Effects
 
-Runtime effects are supported only through registered Kanvas descriptors.
+Runtime effects are supported only through registered Kanvas descriptors owned
+by `27-registered-runtime-effects-registry.md`.
 
 A supported descriptor must define:
 
 - stable effect ID;
+- descriptor version and registry generation;
 - material-key contribution;
 - uniform layout;
 - child shader or texture binding rules;
@@ -246,6 +253,9 @@ SkSL is compatibility vocabulary, not the implementation language.
 Registered runtime effects contribute typed material root or child nodes through
 `GPUMaterialDictionary`. They are not accepted by matching arbitrary shader
 source hashes.
+Uniform values are payload facts from `17-payload-gathering-and-slots.md`; they
+must not enter `MaterialKey` or pipeline keys. Live-editable parameters are
+governed by `GPURuntimeEffectLiveEditPlan`.
 
 ## Diagnostics
 

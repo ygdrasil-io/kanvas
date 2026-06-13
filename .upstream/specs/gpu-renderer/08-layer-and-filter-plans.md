@@ -18,6 +18,10 @@ budgets, and diagnostics are defined in `23-filter-effect-pipeline.md`.
 Captured clip descriptors, scissor, analytic clips, stencil producer-consumer
 routes, coverage masks, clip shader policy, budgets, ordering, and diagnostics
 are defined in `24-clip-stencil-mask-pipeline.md`.
+Detailed saveLayer execution, bounds planning, offscreen target allocation,
+initialization/backdrop handling, source filters, restore composite,
+direct-to-parent elision, layer task ordering, budgets, and diagnostics are
+defined in `28-layer-savelayer-execution.md`.
 
 ## Ownership Boundary
 
@@ -28,6 +32,8 @@ The GPU renderer owns:
 
 - validating captured layer semantics;
 - producing `GPULayerPlan`;
+- producing or refusing `GPULayerExecutionPlan` as defined in
+  `28-layer-savelayer-execution.md`;
 - producing `GPUFilterPlan` when a layer or draw needs filter execution;
 - deciding whether offscreen targets are required;
 - declaring resource and intermediate requirements;
@@ -61,6 +67,10 @@ It includes:
 `GPULayerPlan` is not a draw-pass optimization object. It describes required
 semantics. `GPUDrawLayerPlanner` may later choose a direct-to-parent path,
 offscreen texture path, or refusal, but it must preserve the plan's semantics.
+`GPULayerExecutionPlan` from `28-layer-savelayer-execution.md` is the detailed
+lowering product that records save records, bounds, target plans,
+initialization, backdrop, source filtering, restore composite, elision proof,
+task ordering, resources, budgets, and diagnostics.
 Destination/backdrop reads in a layer are resolved through
 `GPUDestinationReadPlan` from `20-destination-read-strategy.md`; layer plans
 declare the semantic need, while destination-read plans own bounds, strategy,
@@ -104,6 +114,11 @@ typed artifact under `CPUPreparedGPUArtifactRegistry`.
 They must be described with `GPUTargetTextureDescriptor` and follow
 `18-texture-image-ownership.md` for usage flags, sampling, copying, readback,
 generation, and lifetime.
+The executable target descriptor, initialization route, source/filter target
+usage, restore composite source binding, and release policy are specified by
+`GPULayerTargetPlan`, `GPULayerInitializationPlan`, `GPULayerSourcePlan`,
+`GPULayerFilterChainPlan`, `GPULayerCompositePlan`, and
+`GPULayerResourcePlan` in `28-layer-savelayer-execution.md`.
 
 ## `GPUFilterPlan`
 
@@ -215,6 +230,7 @@ Promoted layer/filter behavior requires:
 
 - normalized layer command fixtures;
 - `GPULayerPlan` canonical dumps;
+- `GPULayerExecutionPlan` canonical dumps for promoted executable layer routes;
 - `GPUFilterPlan` canonical dumps;
 - key determinism for intermediate resources and compute/render pipelines;
 - WGSL validation for all render or compute modules used by filter nodes;

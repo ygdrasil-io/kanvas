@@ -46,7 +46,8 @@ pipeline-key construction, and WGSL module assembly.
 It owns:
 
 - built-in `WGSLSnippet` registration;
-- registered runtime-effect descriptor snippets;
+- material snippet registration for descriptors accepted by
+  `GPURuntimeEffectRegistry`;
 - `WGSLSnippetID` allocation;
 - `MaterialKey` to `GPUMaterialProgramID` lookup;
 - `MaterialKey` decompression into `WGSLSnippetNode` trees;
@@ -57,6 +58,8 @@ It owns:
 It does not own:
 
 - public Skia-like paint interpretation;
+- runtime-effect descriptor lifecycle, compatibility lookup, CPU oracle
+  ownership, or live-edit metadata;
 - arbitrary WGSL string loading;
 - SkSL parsing, SkSL IR, or SkSL translation;
 - `GPURenderStep` geometry and coverage code;
@@ -131,6 +134,9 @@ filters are defined in `23-filter-effect-pipeline.md`.
 Text/glyph artifact routes, text atlas bindings, SDF params, instance layouts,
 and text render-step ABI requirements are defined in
 `21-text-glyph-pipeline.md`.
+Registered runtime-effect descriptor lifecycle, compatibility lookup, uniform
+schema, child slots, WGSL plan, CPU oracle, live-edit metadata, and registry
+generation are defined in `27-registered-runtime-effects-registry.md`.
 
 ## `WGSLSnippet`
 
@@ -285,9 +291,10 @@ Rules:
 Runtime effects are accepted only through registered Kanvas descriptors.
 
 `GPUMaterialDictionary` may register a runtime-effect snippet only when the
-descriptor provides:
+descriptor from `GPURuntimeEffectRegistry` provides:
 
 - stable effect ID and descriptor version;
+- registry snapshot generation;
 - WGSL fragment identity and version;
 - uniform layout and packing plan;
 - child shader or texture slot rules;
@@ -302,6 +309,8 @@ Runtime-effect texture child slots must use `GPUImageSourceDescriptor` and the
 ownership rules from `18-texture-image-ownership.md`.
 Runtime effects used inside filter DAGs must also satisfy
 `GPUFilterRuntimeEffectPlan` from `23-filter-effect-pipeline.md`.
+Runtime effects used as primitive blenders must also satisfy
+`GPUPrimitiveBlendPlan` from `26-draw-vertices-mesh-pipeline.md`.
 
 Arbitrary Skia/SkSL runtime shader input is refused with
 `unsupported.material.runtime_effect_unregistered`. SkSL remains compatibility

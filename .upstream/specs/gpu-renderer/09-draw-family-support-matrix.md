@@ -49,18 +49,18 @@ target contracts.
 | Rect fill | `TargetNative` | `GPUNative` | Render pass, rect render step, sortable draw layer | `MaterialKey` | Analytic rect coverage; no CPU artifact. |
 | Rounded-rect fill | `TargetNative` | `GPUNative` | Render pass, rrect render step | `MaterialKey` | Analytic or segmented rrect coverage; no CPU artifact unless later evidence requires a typed mask route. |
 | Rect/rrect stroke | `TargetNative` | `GPUNative` preferred | Render pass, stroke render step | `MaterialKey` | Analytic stroke coverage for bounded joins/caps; refusals for unsupported stroke style. |
-| Path fill | `TargetPrepared` plus future native | `CPUPreparedGPU` initially, `GPUNative` when proven | Render pass sampling coverage or stencil/cover route | `MaterialKey` | `PathAtlasArtifact`, `CoverageMaskArtifact`, or future GPU stencil/compute coverage governed by `19-path-coverage-atlas-strategy.md`. |
-| Path stroke | `TargetPrepared` plus future native | `CPUPreparedGPU` initially, `GPUNative` when proven | Render pass with prepared geometry/mask or future stencil/cover | `MaterialKey` | `PrecomputedGeometryArtifact`, `PathAtlasArtifact`, `CoverageMaskArtifact`; atlas routes governed by `19-path-coverage-atlas-strategy.md`. |
+| Path fill | `TargetPrepared` plus future native | `CPUPreparedGPU` initially, `GPUNative` when proven | Render pass sampling coverage, prepared geometry, tessellation, or stencil-cover route | `MaterialKey` plus `GPUGeometryPlan` | `PathAtlasArtifact`, `CoverageMaskArtifact`, `PrecomputedGeometryArtifact`, or future GPU tessellation/stencil/compute coverage governed by `25-path-stroke-geometry-pipeline.md` and `19-path-coverage-atlas-strategy.md`. |
+| Path stroke | `TargetPrepared` plus future native | `CPUPreparedGPU` initially, `GPUNative` when proven | Render pass with prepared geometry/mask, stroke expansion, tessellation, or future stencil-cover | `MaterialKey` plus `GPUGeometryPlan` | `PrecomputedGeometryArtifact`, `PathAtlasArtifact`, `CoverageMaskArtifact`; geometry routes governed by `25-path-stroke-geometry-pipeline.md`, atlas routes by `19-path-coverage-atlas-strategy.md`. |
 | Clip rect | `TargetNative` | `GPUNative` | `GPUClipPlan`, scissor, geometric intersection, analytic coverage, or stencil/mask when required | `GPUClipStackDescriptor`, `GPUClipBoundsPlan`, `GPUClipScissorPlan`, optional `GPULayerPlan` context | Captured clip facts from `NormalizedDrawCommand`; no CPU artifact for scissor/geometric/analytic routes. |
 | Clip rrect/path | `TargetPrepared` plus native routes | `GPUNative`, `CPUPreparedGPU`, or refusal by strategy | `GPUClipPlan`, `GPUClipAnalyticPlan`, `GPUClipStencilPlan`, `GPUClipMaskPlan`, stencil/depth, coverage mask, or path atlas | `GPUClipStackDescriptor`, `GPUClipElementPlan`, `GPUClipBoundsPlan`, `GPUClipOrderingToken`, optional `GPULayerPlan` context | `CoverageMaskArtifact` or `PathAtlasArtifact` governed by `24-clip-stencil-mask-pipeline.md` and `19-path-coverage-atlas-strategy.md`; stable refusal for unsupported stack interactions. |
 | Image rect | `TargetNative` plus prepared upload | `GPUNative` or `CPUPreparedGPU` upload | Texture sampling render pass | `MaterialKey` image source with `GPUImageSourceDescriptor` and, for encoded/CPU pixels, `GPUImagePipelinePlan` | GPU-native texture resource, or `UploadedTextureArtifact` from `22-image-bitmap-codec-pipeline.md` when CPU prepares pixels. |
 | Bitmap/image decode | `TargetPrepared` with codec dependency gates | `CPUPreparedGPU` upload when accepted | Decode/prepare, upload, then texture sampling | `GPUImageDecodePlan`, `GPUImageColorDecodePlan`, `GPUImageOrientationPlan`, `GPUImageUploadPlan`, and `MaterialKey` image source | `UploadedTextureArtifact`; codec/color/animation policy governed by `22-image-bitmap-codec-pipeline.md`. |
 | Animated image frame | `TargetPrepared` with codec dependency gates | `CPUPreparedGPU` per selected frame | Frame select/compose, upload, then texture sampling | `GPUAnimatedImagePlan`, `GPUImageFrameSelection`, `GPUImageFrameInfo`, `GPUImageUploadPlan`, and `MaterialKey` image source | Per-frame or composed-frame `UploadedTextureArtifact`; loop, disposal, blend, dirty rect, required-frame, cache, and upload scheduling governed by `22-image-bitmap-codec-pipeline.md`. |
 | Text/glyph run | `DependencyGated` until pure Kotlin text artifacts and GPU evidence are promoted | `GPUNative` or `CPUPreparedGPU` by representation | Text render steps, atlas sampling, path/coverage route, texture sampling, or glyph composite route | `GPUTextRunPlan`, `GPUTextSubRunPlan`, `GPUTextBinding`, `MaterialKey` text/glyph material when needed | `GlyphAtlasArtifact`, `SDFGlyphAtlasArtifact`, `GlyphUploadPlan`, `OutlineGlyphPlan`, `ColorGlyphPlan`, `BitmapGlyphPlan`, `SVGGlyphPlan`; routes governed by `21-text-glyph-pipeline.md`. |
-| Vertices | `FutureResearch` | `GPUNative` expected | Render pass with vertex/index buffers | `MaterialKey` or per-vertex color material | GPU buffers; possible `PrecomputedGeometryArtifact` for CPU-packed vertices. |
-| Layer/saveLayer | `TargetNative` with refusals | `GPUNative` render/composite, sometimes `RefuseDiagnostic` | `GPULayerPlan`, offscreen target, parent composite, `GPUDestinationReadPlan` when parent destination is observed | `GPULayerPlan` with optional `GPUFilterPlan` | Offscreen GPU resources; no untyped CPU fallback. |
+| Vertices | `TargetNative` with prepared packing | `GPUNative` preferred, `CPUPreparedGPU` for typed buffer preparation | Render pass with vertex/index buffers, topology-specific render step, optional prepared buffer artifact | `MaterialKey` plus `GPUVerticesDescriptor`, `GPUPrimitiveColorPlan`, and `GPUPrimitiveBlendPlan` | GPU vertex/index buffers; possible `PrecomputedGeometryArtifact` for CPU-packed vertices governed by `26-draw-vertices-mesh-pipeline.md`. |
+| Layer/saveLayer | `TargetNative` with refusals | `GPUNative` render/composite, sometimes `RefuseDiagnostic` | `GPULayerPlan`, `GPULayerExecutionPlan`, `GPULayerTargetPlan`, `GPULayerInitializationPlan`, `GPULayerCompositePlan`, `GPULayerTaskPlan`, and `GPUDestinationReadPlan` when parent destination or backdrop is observed | `GPULayerPlan` with optional `GPUFilterPlan`, `GPUBlendPlan`, and `GPUColorPlan` | Offscreen GPU resources governed by `28-layer-savelayer-execution.md`; bounds hints are not clips; no CPU-rendered full-layer fallback. |
 | Image filter DAG | `TargetNative` plus dependency-gated nodes | `GPUNative`, `CPUPreparedGPU`, or refusal by node | `GPUFilterPlan`, `GPUFilterNodePlan`, render/compute/copy nodes, intermediates, `GPUDestinationReadPlan` for backdrop/destination reads | `GPUFilterGraphDescriptor`, `GPUFilterBoundsPlan`, `GPUFilterIntermediatePlan`, `GPUFilterRuntimeEffectPlan` when needed | Intermediate GPU textures; `FilterIntermediateArtifact` only when validated by `23-filter-effect-pipeline.md`. |
-| Runtime effect | `DependencyGated` | `GPUNative` only for registered descriptors | Render pass or compute where descriptor permits | Registered descriptor contributes to `MaterialKey`, `GPUFilterRuntimeEffectPlan`, or compute program | No arbitrary SkSL; refusal for unregistered effects. |
+| Runtime effect | `DependencyGated` until registry descriptors and GPU evidence are promoted | `GPUNative` only for registered descriptors; `CPUReferenceOnly` for oracle evidence | Render pass, compute pass, material snippet, filter node, primitive blender, or future clip shader only where descriptor permits | `GPURuntimeEffectRegistry`, `GPURuntimeEffectDescriptor`, `GPURuntimeEffectRouteContract`, `MaterialKey`, `GPUFilterRuntimeEffectPlan`, or compute program | Descriptor ID/version, uniform schema, child slots, WGSL plan, CPU oracle, registry snapshot, and diagnostics governed by `27-registered-runtime-effects-registry.md`; no arbitrary SkSL/source string support. |
 | Color filter | `TargetNative` | `GPUNative` | WGSL material fragment or filter render node | `MaterialKey` when folded, `GPUFilterColorPlan` inside filter DAGs | No CPU artifact; refusal for unsupported chains. |
 | Blend mode | `TargetNative` for selected modes | `GPUNative` or refusal | Fixed blend state or shader blend path with `GPUDestinationReadPlan` when needed | `MaterialKey`, `GPUBlendPlan`, `GPUColorPlan`, and `GPURenderPipelineKey` | Destination-read strategy from `20-destination-read-strategy.md`; refusal for unsupported dst-dependent modes. |
 | Clear/discard | `TargetNative` | `GPUNative` | Pass load/clear/discard ops | none | Target-state operation, not material rendering. |
@@ -87,6 +87,11 @@ complete.
 
 Evidence must include:
 
+- `GPUShapeDescriptor`, `GPUPathDescriptor`, `GPUStrokeDescriptor`,
+  `GPUGeometryPlan`, `GPUGeometryRoute`, `GPUPathBoundsPlan`,
+  `GPUStrokeExpansionPlan`, `GPUPreparedGeometryPlan`,
+  `GPUGeometryRenderStepPlan`, and `GPUGeometryDiagnostic` dumps as defined in
+  `25-path-stroke-geometry-pipeline.md`;
 - path identity and bounds diagnostics;
 - stroke style diagnostics for width, cap, join, miter, dash, and transform;
 - artifact key preimages when `CPUPreparedGPU` is used;
@@ -171,6 +176,14 @@ Evidence must include:
 Evidence must include:
 
 - `GPULayerPlan` dumps;
+- `GPULayerExecutionPlan`, `GPULayerSaveRecord`, `GPULayerRestorePlan`,
+  `GPULayerBoundsPlan`, `GPULayerTargetPlan`,
+  `GPULayerInitializationPlan`, `GPULayerBackdropPlan`,
+  `GPULayerSourcePlan`, `GPULayerFilterChainPlan`,
+  `GPULayerCompositePlan`, `GPULayerElisionPlan`,
+  `GPULayerTaskPlan`, `GPULayerResourcePlan`, `GPULayerOrderingToken`,
+  `GPULayerBudgetPolicy`, and `GPULayerDiagnostic` dumps when saveLayer
+  execution is used;
 - `GPUFilterPlan` dumps;
 - `GPUFilterGraphDescriptor`, `GPUFilterNodeDescriptor`,
   `GPUFilterNodePlan`, `GPUFilterBoundsPlan`, `GPUFilterCropPlan`,
@@ -183,6 +196,9 @@ Evidence must include:
 - forward/reverse bounds, crop, tile, local matrix, sample radius, and kernel
   expansion evidence;
 - direct-to-parent and offscreen decisions;
+- layer target descriptor, usage flags, initialization route, source/filter
+  target generation, restore composite route, ordering token, pass split, and
+  resource lifetime evidence;
 - destination-read plan, strategy, bounds, and target/intermediate resource
   diagnostics when parent destination or backdrop is observed;
 - registered runtime-effect descriptor, WGSL validation, uniform packing,
@@ -196,11 +212,52 @@ Evidence must include:
 
 Evidence must include:
 
-- registered descriptor ID;
+- `GPURuntimeEffectRegistry`, `GPURuntimeEffectRegistrySnapshot`,
+  `GPURuntimeEffectDescriptor`, `GPURuntimeEffectLookupPlan`,
+  `GPURuntimeEffectUniformSchema`, `GPURuntimeEffectChildSlotPlan`,
+  `GPURuntimeEffectWGSLPlan`, `GPURuntimeEffectCPUOracle`,
+  `GPURuntimeEffectRouteContract`, and `GPURuntimeEffectDiagnostic` dumps as
+  defined in `27-registered-runtime-effects-registry.md`;
+- registered descriptor ID, descriptor version, and registry generation;
 - uniform and child binding reflection;
 - Kotlin/CPU oracle behavior;
-- WGSL validation;
-- stable refusal for arbitrary Skia/SkSL input and unregistered descriptors.
+- WGSL validation and complete module reflection for promoted GPU routes;
+- route-specific evidence for material, filter, blender, primitive, compute, or
+  future clip placement;
+- live-edit parameter evidence when live editing is claimed;
+- stable refusal for arbitrary Skia/SkSL input, unknown compatibility keys,
+  unregistered descriptors, missing WGSL, missing CPU oracle, and kind
+  mismatches.
+
+### Vertices And Mesh-Like Draws
+
+Evidence must include:
+
+- `GPUVerticesDescriptor`, `GPUVertexLayoutPlan`, `GPUVertexPositionPlan`,
+  `GPUVertexColorPlan`, `GPUVertexTexCoordPlan`,
+  `GPUPrimitiveColorPlan`, `GPUPrimitiveBlendPlan`,
+  `GPUIndexBufferPlan`, `GPUVertexBufferPlan`, `GPUVerticesRoute`,
+  `GPUVerticesRenderStepPlan`, `GPUVerticesBoundsPlan`,
+  `GPUVerticesBudgetPolicy`, and `GPUVerticesDiagnostic` dumps as defined in
+  `26-draw-vertices-mesh-pipeline.md`;
+- topology diagnostics for triangles, triangle strips, and triangle fan
+  canonicalization or refusal;
+- attribute diagnostics for position-only, color, texcoord, and
+  color+texcoord variants;
+- index validation diagnostics for out-of-range, format, and overflow cases;
+- primitive-color and primitive-blender diagnostics;
+- vertex/index buffer upload and resource-owner diagnostics;
+- artifact key preimages when `CPUPreparedGPU(PrecomputedGeometryArtifact)` is
+  used for packing, conversion, or canonicalization;
+- WGSL layout, vertex attribute, varying, and reflection evidence for promoted
+  render-step variants;
+- CPU oracle comparison or stable refusal;
+- GPU evidence before support claims.
+
+Unsupported topology, invalid indices, unvalidated color conversion,
+unsupported primitive blenders, unsupported texcoord/material coordinate
+semantics, excessive buffer budgets, and missing WGSL ABI evidence must refuse
+with stable reasons.
 
 ## Stable Refusal Taxonomy
 
@@ -210,10 +267,24 @@ codes only when they identify an actionable unsupported condition.
 Examples:
 
 - `unsupported.geometry.path_edge_budget`
+- `unsupported.geometry.path_key_nondeterministic`
+- `unsupported.geometry.path_fill_rule`
+- `unsupported.geometry.tessellation_unavailable`
+- `unsupported.geometry.stencil_cover_unavailable`
+- `unsupported.geometry.prepared_buffer_budget_exceeded`
 - `unsupported.atlas.entry_too_large`
 - `unsupported.atlas.in_use_try_again_limit`
 - `unsupported.atlas.generation_stale`
+- `unsupported.stroke.width_invalid`
+- `unsupported.stroke.join`
+- `unsupported.stroke.cap`
 - `unsupported.stroke.dash_complex`
+- `unsupported.vertices.topology`
+- `unsupported.vertices.index_out_of_range`
+- `unsupported.vertices.attribute_layout`
+- `unsupported.vertices.color_conversion_unvalidated`
+- `unsupported.vertices.primitive_blender_unregistered`
+- `unsupported.vertices.buffer_budget_exceeded`
 - `unsupported.clip.stack_difference_path`
 - `unsupported.clip.stack_too_deep`
 - `unsupported.clip.operation`
@@ -240,6 +311,11 @@ Examples:
 - `unsupported.text.upload_plan_missing`
 - `unsupported.text.SDF_route_unavailable`
 - `unsupported.layer.destination_read`
+- `unsupported.layer.init_previous_unaccepted`
+- `unsupported.layer.backdrop_filter`
+- `unsupported.layer.restore_blend`
+- `unsupported.layer.elision_proof_missing`
+- `unsupported.layer.CPU_fallback_forbidden`
 - `unsupported.destination_read.strategy_unaccepted`
 - `unsupported.destination_read.active_attachment_sampled`
 - `unsupported.destination_read.copy_budget_exceeded`
@@ -249,6 +325,12 @@ Examples:
 - `unsupported.filter.runtime_effect_unregistered`
 - `unsupported.filter.intermediate_budget_exceeded`
 - `unsupported.filter.CPU_rendered_texture_forbidden`
+- `unsupported.runtime_effect.compatibility_key_unknown`
+- `unsupported.runtime_effect.kind_mismatch`
+- `unsupported.runtime_effect.WGSL_missing`
+- `unsupported.runtime_effect.WGSL_validation`
+- `unsupported.runtime_effect.CPU_oracle_missing`
+- `unsupported.runtime_effect.dynamic_SkSL_forbidden`
 - `unsupported.runtime_effect.unregistered_descriptor`
 - `unsupported.blend.dst_dependent_mode`
 

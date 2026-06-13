@@ -43,12 +43,20 @@ It records:
 - clip descriptor, route, effective-element, scissor, analytic, stencil,
   mask, shader, pass-split, mask-byte, budget-pressure, and refusal counters
   when touched;
+- layer/saveLayer execution class, elision, cull, offscreen target, target
+  byte, live byte, init-with-previous, backdrop, source filter, restore
+  composite, nesting, pass split, budget-pressure, and refusal counters when
+  touched;
 - destination-read requirement, strategy, copied byte, pass-split, binding,
   target-generation, stale-generation, active-attachment refusal, and
   budget-pressure counters when touched;
 - filter graph, node, render-node, compute-node, intermediate, bounds, crop,
   tile, runtime-effect, folded color-filter, copied/intermediate byte, pass
   count, and refusal counters when touched;
+- runtime-effect registry descriptor, registry generation, lookup,
+  compatibility-key, descriptor kind, WGSL validation/reflection, CPU oracle,
+  uniform byte, child slot, live-parameter, cache, budget, and dynamic SkSL
+  refusal counters when touched;
 - submitted bytes for uniforms, vertices, indices, storage, textures, and
   readbacks when available;
 - timing samples when enabled;
@@ -76,9 +84,11 @@ Cache reporting is grouped by domain:
 | Artifact registry | artifact lookups, hits, misses, uploads, evictions, budget refusals. |
 | Atlas cache | atlas descriptor count, policy version, page count, resident entries, resident bytes, lookup hits/misses, entry creations, page activations, evictions, compactions/resets, upload bytes, compute write bytes, stale entries, retry/split counts, hard capability refusals, and budget refusals. |
 | Clip pipeline | descriptor lookups, effective element analysis hits/misses, route counts, scissor counts, analytic plan counts, stencil producer/consumer counts, atomic group counts, mask artifact lookups, mask bytes, clip shader descriptor counts, clip-induced pass splits, hard capability refusals, and budget refusals. |
+| Layer/saveLayer execution | saveLayer count, execution-class counts, elision/cull counts, offscreen target allocations, target bytes, maximum live bytes, reuse hits/misses, init-with-previous copied bytes, backdrop/filter intermediate bytes, restore composite counts, nesting depth, pass splits, hard capability refusals, and budget refusals. |
 | Destination-read resources | requirements, strategies, target-copy descriptors, existing-intermediate bindings, copied bytes, pass splits, generation checks, active-attachment refusals, and budget refusals. |
 | Filter/effect pipeline | graph count, node count, render/compute/copy route counts, intermediate count and bytes, bounds/crop/tile refusals, runtime-effect descriptor counts, folded color-filter counts, destination/backdrop read counts, pass splits, artifact use, and budget refusals. |
 | Text/glyph pipeline | `DrawTextRun` count, text run/subrun count, representation counts, route counts, glyph instances, atlas page count, atlas bytes, upload bytes, instance buffer bytes, stale generation refusals, SDF/color/bitmap/SVG route refusals, text-induced pass splits, and budget refusals. |
+| Runtime-effect registry | registry version/generation, descriptor count, descriptor-kind histogram, lookup hits/misses/refusals, compatibility-key hits/misses/refusals, descriptor-version invalidations, WGSL validation/reflection successes/failures, CPU oracle availability, uniform bytes, child slot counts, live-parameter updates/refusals, dynamic SkSL refusals, and budget refusals. |
 
 A cache hit is performance evidence, not correctness evidence. A cache miss
 must never change rendering output.
@@ -167,6 +177,11 @@ Initial gate families:
 - clip mask byte count;
 - clip-induced pass split count;
 - clip shader refusal count;
+- layer offscreen target allocation count;
+- layer maximum live bytes;
+- layer target reuse hit rate;
+- layer-induced pass split count;
+- layer elision proof rate;
 - destination-read copy bytes;
 - destination-read pass split count;
 - destination-read target snapshot live bytes;
@@ -174,6 +189,11 @@ Initial gate families:
 - filter render/compute pass count;
 - filter artifact cache hit rate;
 - filter runtime-effect refusal count;
+- runtime-effect registry lookup hit rate;
+- runtime-effect descriptor-version invalidation count;
+- runtime-effect WGSL validation/reflection failure count;
+- runtime-effect live-parameter key stability;
+- runtime-effect dynamic SkSL refusal count;
 - pass count and draw count stability;
 - readback availability for evidence lanes;
 - frame time or GPU time when accepted by a target milestone.
@@ -224,6 +244,8 @@ Stable reason-code examples:
 - `perf.gate.uniform_upload_bytes`
 - `perf.gate.texture_upload_bytes`
 - `perf.gate.artifact_budget_pressure`
+- `perf.gate.runtime_effect_registry_lookup_hit_rate`
+- `perf.gate.runtime_effect_live_parameter_key_stability`
 - `perf.gate.frame_time_candidate`
 - `perf.skip.timestamp_query_unavailable`
 - `perf.skip.adapter_unavailable`
@@ -239,6 +261,9 @@ Promoted telemetry/cache behavior requires:
 
 - deterministic ledger dumps for fixed scenes;
 - cache counter tests for hit, miss, eviction, and stale generation;
+- runtime-effect registry counter tests for lookup, compatibility-key refusal,
+  descriptor-version invalidation, WGSL validation/reflection, CPU oracle
+  availability, live-parameter update, and dynamic SkSL refusal;
 - artifact budget pressure tests when artifacts are used;
 - warmup policy tests for promoted performance gates;
 - skipped-lane tests for unavailable GPU timing or readback;

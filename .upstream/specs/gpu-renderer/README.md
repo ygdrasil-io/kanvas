@@ -14,8 +14,13 @@ context, WGSL layout ABI, blend/color state, route policy, telemetry gates,
 texture/image ownership, path/coverage atlas strategy, destination-read
 strategy, text/glyph pipeline target, image/bitmap/codec pipeline target,
 filter/effect pipeline target, clip/stencil/mask pipeline target, legacy
-cleanup policy, and validation expectations that future implementation tickets
-must follow.
+cleanup policy, path/stroke/geometry pipeline target, layer/saveLayer
+execution, and validation expectations that future implementation tickets must
+follow. It also defines the `DrawVertices` and mesh-like target so
+user-provided vertex geometry has a clear GPU route/refusal contract before
+implementation slicing, and the registered runtime-effect registry so
+material, filter, blender, live-edit, and future clip-shader uses share one
+descriptor source of truth.
 
 The current `.upstream/target/high-performance-wgsl-pipeline-target.md` and
 `.upstream/target/skia-like-realtime-renderer-target.md` remain active project
@@ -51,6 +56,16 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
   does not dynamically compile arbitrary SkSL.
 - Keep supported runtime effects registered through Kanvas descriptors with
   Kotlin/CPU behavior and parser-validated WGSL GPU implementations.
+- Resolve registered runtime effects through `GPURuntimeEffectRegistry`,
+  `GPURuntimeEffectDescriptor`, `GPURuntimeEffectUniformSchema`,
+  `GPURuntimeEffectChildSlotPlan`, `GPURuntimeEffectWGSLPlan`,
+  `GPURuntimeEffectCPUOracle`, `GPURuntimeEffectRouteContract`,
+  `GPURuntimeEffectLiveEditPlan`, and `GPURuntimeEffectDiagnostic`.
+- Treat runtime-effect descriptor ID/version, uniform schema, child slots,
+  WGSL identity, CPU oracle, route placement, registry generation, live
+  parameter metadata, and compatibility lookup keys as explicit contracts.
+  Forbid accepting arbitrary Skia/SkSL source, arbitrary WGSL strings, or
+  source hashes as product shader support.
 - Submit WGSL to the GPU only after the complete assembled module has been
   validated and reflected through `wgsl4k`; fragment-only validation is not a
   support claim.
@@ -119,6 +134,24 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
   producers, coverage masks, clip shaders, budgets, and ordering as explicit
   plans. Forbid silently approximating unsupported clips or CPU-rendering a
   complete clipped draw/layer into a texture.
+- Resolve path, stroke, and geometry execution through `GPUShapeDescriptor`,
+  `GPUPathDescriptor`, `GPUStrokeDescriptor`, `GPUGeometryPlan`,
+  `GPUGeometryRoute`, `GPUPathBoundsPlan`, `GPUStrokeExpansionPlan`,
+  `GPUStencilCoverPlan`, `GPUPreparedGeometryPlan`,
+  `GPUGeometryRenderStepPlan`, and `GPUGeometryDiagnostic`.
+- Treat path fill, inverse fill, stroke, dash, path effects, flattening,
+  tessellation, stencil-cover, prepared geometry, and coverage masks as
+  explicit geometry plans. Forbid silently approximating path/stroke semantics
+  or CPU-rendering a complete unsupported draw into a texture.
+- Resolve `DrawVertices` and future 2D mesh-like draws through
+  `GPUVerticesDescriptor`, `GPUVertexLayoutPlan`, `GPUVertexColorPlan`,
+  `GPUVertexTexCoordPlan`, `GPUPrimitiveBlendPlan`, `GPUIndexBufferPlan`,
+  `GPUVertexBufferPlan`, `GPUVerticesRoute`, `GPUVerticesRenderStepPlan`,
+  `GPUMeshDescriptor`, and `GPUVerticesDiagnostic`.
+- Treat topology, vertex/index layouts, per-vertex colors, texcoords,
+  primitive-color blending, buffer packing, mesh budgets, and upload ordering
+  as explicit plans. Forbid silently CPU-rasterizing vertices/mesh output into
+  a texture.
 - Resolve destination-dependent blends, backdrop/filter reads, and layer
   destination reads through `GPUDestinationReadPlan`,
   `GPUDestinationReadStrategy`, `GPUDestinationReadBounds`,
@@ -146,6 +179,15 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 - Model high-level layer/saveLayer semantics with `GPULayerPlan` and filter
   graph execution with `GPUFilterPlan`; keep `GPUDrawLayer` as the lower-level
   pass/layer planning structure.
+- Execute accepted layer/saveLayer plans through `GPULayerExecutionPlan`,
+  `GPULayerTargetPlan`, `GPULayerInitializationPlan`,
+  `GPULayerBackdropPlan`, `GPULayerFilterChainPlan`,
+  `GPULayerCompositePlan`, `GPULayerElisionPlan`, `GPULayerTaskPlan`,
+  `GPULayerOrderingToken`, `GPULayerBudgetPolicy`, and
+  `GPULayerDiagnostic`.
+- Treat layer bounds as hints, not clips. Layer creation clip, layer source
+  bounds, backdrop/previous-content reads, filter expansion, restore clip, and
+  composite bounds must be separate facts.
 - Resolve detailed filter/effect execution through `GPUFilterGraphDescriptor`,
   `GPUFilterNodePlan`, `GPUFilterBoundsPlan`, `GPUFilterIntermediatePlan`,
   `GPUFilterRuntimeEffectPlan`, `GPUFilterCachePlan`, and
@@ -207,6 +249,10 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 | `22-image-bitmap-codec-pipeline.md` | Graphite-inspired image/bitmap/codec pipeline target: codec registry, still/animated decode, color/profile/orientation/HDR handling, pixel preparation, uploaded image artifacts, upload scheduling, caches, diagnostics, and validation gates. |
 | `23-filter-effect-pipeline.md` | Graphite-inspired filter/effect pipeline target: image-filter DAGs, filter node routes, bounds/crop/tile/sample plans, render/compute intermediates, backdrop/destination reads, registered runtime effects, budgets, diagnostics, and validation gates. |
 | `24-clip-stencil-mask-pipeline.md` | Graphite-inspired clip/stencil/mask pipeline target: captured clip descriptors, effective elements, scissor, analytic clips, stencil producer-consumer routes, coverage masks, clip shaders, budgets, diagnostics, and validation gates. |
+| `25-path-stroke-geometry-pipeline.md` | Graphite-inspired path/stroke/geometry pipeline target: path descriptors, fill/inverse semantics, stroke expansion, dash/path-effect policy, flattening, tessellation, stencil-cover, prepared geometry, render steps, budgets, diagnostics, and validation gates. |
+| `26-draw-vertices-mesh-pipeline.md` | Graphite-inspired DrawVertices/mesh pipeline target: vertices descriptors, topology, vertex/index layouts, colors, texcoords, primitive blending, buffer plans, mesh-like future descriptors, budgets, diagnostics, and validation gates. |
+| `27-registered-runtime-effects-registry.md` | Graphite-inspired registered runtime-effect registry: descriptor IDs/versions, compatibility lookup, uniforms, child slots, WGSL validation, CPU oracle, route contracts, live-edit metadata, budgets, diagnostics, and validation gates. |
+| `28-layer-savelayer-execution.md` | Graphite-inspired layer/saveLayer execution target: save records, bounds planning, offscreen targets, initialization/backdrop, filters, restore composite, elision, task ordering, budgets, diagnostics, and validation gates. |
 
 ## Target Shape
 
@@ -215,9 +261,10 @@ flowchart TD
     legacy["Skia-like API / legacy device"] --> adapter["Legacy state adapter"]
     adapter --> command["NormalizedDrawCommand with captured state"]
     command --> layerplan["GPULayerPlan / GPUFilterPlan"]
+    layerplan --> layerexec["GPULayerExecutionPlan / GPULayerTaskPlan"]
     command --> clipplan["GPUClipPlan / GPUClipBoundsPlan"]
     command --> recorder["GPURecorder"]
-    layerplan --> recorder
+    layerexec --> recorder
     layerplan --> filterdetail["GPUFilterNodePlan / GPUFilterIntermediatePlan"]
     clipplan --> recorder
     recorder --> recording["GPURecording"]
@@ -225,20 +272,30 @@ flowchart TD
     tasks --> drawpass["GPUDrawPass"]
     drawpass --> step["GPURenderStep"]
     command --> material["MaterialKey"]
+    command --> geometry["GPUGeometryPlan / GPUGeometryRoute"]
+    command --> vertices["GPUVerticesDescriptor / GPUVerticesRoute"]
+    command --> rte["GPURuntimeEffectRegistry / GPURuntimeEffectDescriptor"]
     material --> dictionary["GPUMaterialDictionary / WGSLSnippet tree"]
+    rte --> dictionary
     command --> blend["GPUBlendPlan / GPUColorPlan"]
     command --> dstread["GPUDestinationReadPlan"]
     blend --> dstread
+    layerexec --> dstread
     clipplan --> dstread
     filterdetail --> dstread
     dictionary --> wgsl["WGSLFragment / WGSLModule"]
     filterdetail --> wgsl
+    rte --> filterdetail
     material --> textureplan["GPUImageSourceDescriptor / GPUTextureOwnershipPlan"]
-    command --> atlas["GPUPathAtlasPlan / GPUCoverageAtlasPlan"]
+    geometry --> atlas["GPUPathAtlasPlan / GPUCoverageAtlasPlan"]
+    geometry --> geostep["GPUGeometryRenderStepPlan / GPUStencilCoverPlan"]
+    vertices --> vertstep["GPUVerticesRenderStepPlan / GPUVertexBufferPlan"]
     clipplan --> atlas
     command --> text["GPUTextRunPlan / GPUTextSubRunPlan"]
     wgsl --> abi["WGSL layout / binding ABI"]
     abi --> payload["GPUPayloadGatherer / payload slots"]
+    geometry --> payload
+    vertices --> payload
     command --> imageprep["GPUImagePipelinePlan / GPUImageDecodePlan"]
     imageprep --> textureplan
     imageprep --> resources
@@ -246,14 +303,19 @@ flowchart TD
     atlas --> payload
     clipplan --> payload
     text --> payload
+    rte --> payload
     dstread --> payload
     filterdetail --> payload
     step --> pipeline["GPURenderPipelineKey"]
+    geostep --> step
+    vertstep --> step
     blend --> pipeline
+    layerexec --> pipeline
     dstread --> pipeline
     clipplan --> pipeline
     filterdetail --> pipeline
     text --> pipeline
+    rte --> pipeline
     abi --> pipeline
     wgsl --> pipeline
     payload --> resources
@@ -261,6 +323,7 @@ flowchart TD
     atlas --> resources
     clipplan --> resources
     text --> resources
+    layerexec --> resources
     dstread --> resources
     filterdetail --> resources
     pipeline --> resources["GPUResourceProvider"]
