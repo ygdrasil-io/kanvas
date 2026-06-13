@@ -6,10 +6,11 @@ Target: proposed GPU-first successor direction for the active WGSL/WebGPU
 renderer work.
 
 This spec pack captures the agreed kernel for a new Kanvas GPU renderer module.
-It is intentionally narrower than a full implementation plan. It defines the
-module shape, naming policy, command boundary, WGSL material model, pipeline
-key split, route policy, legacy cleanup policy, and validation expectations
-that future implementation tickets must follow.
+It is intentionally narrower than a full implementation plan, but it should
+name the full technical scope before implementation slices are planned. It
+defines the module shape, naming policy, command boundary, WGSL material model,
+pipeline key split, route policy, legacy cleanup policy, and validation
+expectations that future implementation tickets must follow.
 
 The current `.upstream/target/high-performance-wgsl-pipeline-target.md` and
 `.upstream/target/skia-like-realtime-renderer-target.md` remain active project
@@ -39,10 +40,15 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 - Do not introduce a Kanvas-owned multi-API graphics abstraction around the
   `GPU` facade used with `wgpu4k`.
 - Keep the shader implementation target as WGSL.
+- Do not implement SkSL as a renderer shader target, including partial SkSL
+  compiler, IR, VM, or translation behavior.
 - Treat SkSL only as Skia API compatibility vocabulary where required; Kanvas
   does not dynamically compile arbitrary SkSL.
 - Keep supported runtime effects registered through Kanvas descriptors with
   Kotlin/CPU behavior and parser-validated WGSL GPU implementations.
+- Submit WGSL to the GPU only after the complete assembled module has been
+  validated and reflected through `wgsl4k`; fragment-only validation is not a
+  support claim.
 - Keep `ygdrasil-io/wgsl4k` behavior explicit. If parsing, reflection, or
   generation behavior is ambiguous, capture evidence and open a `wgsl4k`
   issue instead of hiding a workaround.
@@ -51,18 +57,23 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 
 ## Accepted Kernel Decisions
 
-- Create a new renderer module for the GPU-first architecture.
+- Create the new GPU-first renderer module as `:gpu-renderer`.
 - Use public concept names with `GPU`, `CPU`, and `WGSL` in uppercase.
 - Interpret `GPU` as the WebGPU-like facade used with `wgpu4k`, not as a browser
   only target and not as a free-form Vulkan/Metal abstraction.
-- Keep the core module pure: it must not depend directly on `SkPaint`,
+- Keep `:gpu-renderer` pure: it must not depend directly on `SkPaint`,
   `SkShader`, `SkPath`, or other Skia-like API types.
-- Feed the core with high-level normalized draw commands.
+- Define the `NormalizedDrawCommand` contracts in `:gpu-renderer` and feed the
+  core with high-level normalized draw commands.
 - Capture draw state before it enters the core. The core does not replay a
   Canvas-style save/restore/matrix/clip stack.
-- Separate `MaterialKey` from `PipelineKey`.
+- Separate `MaterialKey` from executable pipeline keys.
 - Keep WGSL as the shader language. Graphite's SkSL paint machinery maps to
-  Kanvas `MaterialKey`, `PipelineKey`, and parser-validated WGSL fragments.
+  Kanvas `MaterialKey`, `GPURenderPipelineKey`, and parser-validated WGSL
+  fragments. Compute work uses separate compute program and pipeline keys.
+- Use Kanvas-idiomatic package and class organization. Graphite vocabulary is
+  kept as an equivalence table and source-evidence reference, not mirrored as
+  a package tree, inheritance hierarchy, or API surface.
 - Prefer `GPUNative` routes. Allow `CPUPreparedGPU` only when CPU work produces
   an explicit artifact consumed by the GPU. Forbid silent full CPU fallback.
 - Treat `CPUReferenceOnly` as evidence/oracle behavior, not as a product GPU
@@ -71,16 +82,23 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
   supported.
 - Treat `KanvasPipelineIR` as legacy/migration context for the new renderer,
   not as the durable semantic center of the new GPU module.
+- Finish the technical scope specs before narrowing work into implementation
+  slices.
+- After the specs are complete, use rect/rrect geometry with solid and linear
+  materials as the first implementation vertical slice. This is a sequencing
+  decision, not a limit on the renderer specs.
+- Prove isolated `:gpu-renderer` contracts first, then integrate with
+  `gpu-raster`.
 
 ## Spec Index
 
 | Spec | Purpose |
 |---|---|
-| `00-architecture-kernel.md` | Module direction, naming rules, Graphite-inspired boundaries, and non-goals. |
+| `00-architecture-kernel.md` | `:gpu-renderer` module boundary, naming rules, Graphite equivalence table, sequencing, and non-goals. |
 | `01-normalized-draw-commands.md` | High-level draw command contract with captured transform, clip, layer, material, bounds, and ordering facts. |
-| `02-gpu-recording-task-graph.md` | `GPURecorder`, `GPURecording`, `GPUTaskList`, `GPUDrawPass`, and `GPURenderStep` responsibilities. |
-| `03-material-key-wgsl.md` | `MaterialKey`, WGSL fragments/modules, `wgsl4k` validation, and runtime-effect descriptor rules. |
-| `04-pipeline-key-cache-resources.md` | `PipelineKey`, `GPUResourceProvider`, capabilities, caches, resources, and invalidation policy. |
+| `02-gpu-recording-task-graph.md` | `GPURecorder`, `GPUDrawAnalysis`, `GPUOcclusionTracker`, `GPUDrawLayerPlanner`, `GPURecording`, `GPUTaskList`, `GPUDrawPass`, and `GPURenderStep` responsibilities. |
+| `03-material-key-wgsl.md` | Render-only `MaterialKey`, render/compute WGSL modules, `wgsl4k` validation, runtime-effect descriptor rules, and `GPUFilterPlan` boundary. |
+| `04-pipeline-key-cache-resources.md` | `GPURenderPipelineKey`, `GPUComputePipelineKey`, `GPUResourceProvider`, `CPUPreparedGPUArtifactRegistry`, capabilities, caches, resources, and invalidation policy. |
 | `05-routing-policy.md` | `GPUNative`, `CPUPreparedGPU`, `CPUReferenceOnly`, and `RefuseDiagnostic` selection and diagnostics. |
 | `06-legacy-adapter-cleanup.md` | `gpu-raster`/`SkWebGpuDevice.kt` migration boundary and cleanup rules with no render change. |
 | `07-validation-conformance.md` | Unit, conformance, GPU evidence, PM artifacts, promotion gates, and retirement criteria. |
@@ -98,7 +116,7 @@ flowchart TD
     drawpass --> step["GPURenderStep"]
     command --> material["MaterialKey"]
     material --> wgsl["WGSLFragment / WGSLModule"]
-    step --> pipeline["PipelineKey"]
+    step --> pipeline["GPURenderPipelineKey"]
     wgsl --> pipeline
     pipeline --> resources["GPUResourceProvider"]
     resources --> facade["GPU facade used with wgpu4k"]
@@ -119,6 +137,25 @@ GPU renderer work:
 - Any implementation ticket that changes active routing must point to both this
   pack and the older evidence it supersedes.
 
+## Implementation Sequencing
+
+This pack records the full technical contract first. Implementation tickets
+must be cut from that contract after the specs are coherent rather than
+shrinking the specs to the first deliverable.
+
+The accepted first implementation vertical slice is:
+
+- rect and rounded-rect geometry;
+- solid color and linear-gradient materials;
+- parser-validated complete WGSL modules;
+- isolated `:gpu-renderer` tests for command contracts, keys, route decisions,
+  diagnostics, and resource planning;
+- `gpu-raster` integration only after the isolated tests prove the contract.
+
+The slice must not remove or narrow command families, route taxonomy, material
+descriptors, render/compute pipeline-key rules, or validation gates needed for later renderer
+coverage.
+
 ## Status Policy
 
 Specs start as `Draft`. A spec can move to `Accepted` only when the target
@@ -134,10 +171,9 @@ policy, public command shape, key semantics, or cleanup gates must remain
 
 The kernel does not yet choose:
 
-- the first implementation vertical slice;
 - the complete list of supported draw families;
-- final package names inside the new module;
-- final Gradle module name;
+- final package names inside `:gpu-renderer`, beyond the Kanvas-idiomatic style
+  and Graphite equivalence policy above;
 - whether a future explicit CPU-rendered texture compatibility route is worth
   supporting.
 

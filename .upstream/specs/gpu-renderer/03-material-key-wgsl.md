@@ -5,17 +5,24 @@ Date: 2026-06-13
 
 ## Purpose
 
-Define the paint/material identity and WGSL module rules for the new GPU
-renderer.
+Define the render paint/material identity and WGSL module rules for the new
+GPU renderer.
 
 Kanvas replaces Graphite's SkSL-centered paint machinery with
-`MaterialKey`, `WGSLFragment`, and `WGSLModule` contracts. WGSL is the shader
-implementation target.
+`MaterialKey`, `WGSLFragment`, and render `WGSLModule` contracts. WGSL is the
+shader implementation target for both render and compute work, but compute
+programs do not flow through `MaterialKey`.
 
 ## `MaterialKey`
 
-`MaterialKey` identifies the material behavior of a normalized draw command.
-It is independent from target attachment state and render-step fixed state.
+`MaterialKey` identifies the render material behavior of a normalized draw
+command. It is independent from target attachment state and render-step fixed
+state.
+
+`MaterialKey` is render-only. It is consumed by `GPURenderStep` and
+`GPURenderPipelineKey` construction. Compute work uses
+`GPUComputeProgramKey`, `WGSLComputeModule`, and `GPUComputePipelineKey`
+instead.
 
 It includes:
 
@@ -39,7 +46,9 @@ It does not include:
 - depth/stencil state;
 - per-draw uniform values;
 - transient resource handles;
-- command ID.
+- command ID;
+- compute entry point, workgroup size, or storage-resource topology;
+- image/filter graph identity.
 
 ## Material Descriptor To Key
 
@@ -72,18 +81,18 @@ Fragment categories:
 - color-space helper;
 - runtime-effect descriptor contribution.
 
-Fragments are composed into a `WGSLModule` only through deterministic module
-assembly rules.
+Fragments are composed into a render `WGSLModule` only through deterministic
+module assembly rules.
 
 ## `WGSLModule`
 
-`WGSLModule` is the concrete shader-module source and reflection result used by
-the GPU renderer.
+`WGSLModule` is the concrete render shader-module source and reflection result
+used by the GPU renderer.
 
 It must record:
 
 - source fragments and versions;
-- entry points;
+- vertex and fragment entry points;
 - required features such as `f16` if used;
 - bind group layouts;
 - uniform layout and alignment facts;
@@ -94,6 +103,52 @@ It must record:
 
 The module hash must include all code and layout facts that affect execution.
 It must not include per-draw values.
+
+## Compute WGSL Program Model
+
+`WGSLComputeModule` is the concrete compute shader-module source and
+reflection result used by GPU compute tasks.
+
+Compute WGSL is used for GPU-native preparation, filter kernels, reductions,
+prefix-style work, or other non-render-pass work that the renderer explicitly
+supports. It is not a material fragment and is not assembled from
+`MaterialKey`.
+
+`WGSLComputeModule` must record:
+
+- source fragments or generator inputs and versions;
+- compute entry point;
+- required features such as `f16` if used;
+- declared workgroup sizing policy;
+- bind group layouts;
+- storage buffer, storage texture, sampled texture, sampler, and uniform
+  bindings;
+- reflection output;
+- parser diagnostics;
+- module hash.
+
+The module hash must include all code and layout facts that affect execution.
+It must not include per-dispatch values, transient resource handles, or command
+IDs.
+
+`GPUComputeProgramKey` identifies the compute program contract before pipeline
+creation. It includes the algorithm identity, compute module identity,
+resource-layout identity, workgroup sizing policy, required capabilities, and
+renderer version salt. It does not include input texture contents,
+per-dispatch uniform values, output resource handles, or cache residency.
+
+## Filter Planning Boundary
+
+`GPUFilterPlan` is separate from `MaterialKey`. A filter plan may consume
+render pipelines, compute pipelines, intermediate textures, buffers, samplers,
+and typed `CPUPreparedGPU` artifacts when routing policy allows them. Filter
+graph identity, intermediate ownership, and pass scheduling must not be encoded
+as material identity.
+
+This spec does not decide `GPULayerPlan`, `saveLayer` lowering, or broad layer
+semantics. `GPUDrawLayer` may exist as a low-level pass/layer planning
+structure, but the higher-level layer semantic contract must be validated
+separately before implementation tickets depend on it.
 
 ## `wgsl4k` Validation
 
@@ -142,6 +197,11 @@ Material diagnostics must include:
 - unsupported feature code when refused;
 - route consuming the material.
 
+Compute diagnostics are separate from material diagnostics. They must include
+the `GPUComputeProgramKey` preimage, `WGSLComputeModule` hash,
+parser/reflection result, required capabilities, and the route or filter plan
+consuming the compute program.
+
 ## Non-Goals
 
 - Do not compile SkSL.
@@ -149,3 +209,5 @@ Material diagnostics must include:
 - Do not use WGSL string concatenation without structured fragment metadata.
 - Do not hide parser failures behind CPU fallback.
 - Do not include backend target state in `MaterialKey`.
+- Do not encode compute program identity in `MaterialKey`.
+- Do not encode `GPUFilterPlan` identity in `MaterialKey`.

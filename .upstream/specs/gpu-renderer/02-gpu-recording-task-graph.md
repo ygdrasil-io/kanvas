@@ -9,9 +9,23 @@ Define the Graphite-inspired recording and task concepts for the new GPU
 renderer. The design is inline on the Kanvas `GPU` facade and does not preserve
 Graphite's backend plugin architecture.
 
+This document defines the full technical target for recording, draw analysis,
+pass construction, and layer planning. It is not an implementation-slice plan;
+future tickets must choose smaller vertical slices after these contracts are
+accepted.
+
 ## Responsibilities
 
 `GPURecorder` owns command intake and recording construction.
+
+`GPUDrawAnalysis` owns explicit per-draw route, ordering, culling, layer,
+material, render-step, and resource facts.
+
+`GPUOcclusionTracker` owns conservative occlusion state and culling decisions.
+
+`GPUDrawLayer` owns an immutable logical layer or composite scope.
+
+`GPUDrawLayerPlanner` owns layer graph construction and pass partitioning.
 
 `GPURecording` owns the immutable result of recording.
 
@@ -30,9 +44,12 @@ does not accept `SkCanvas` operations.
 It is responsible for:
 
 - validating command invariants;
-- selecting candidate routes;
-- deriving or requesting `MaterialKey` values;
-- selecting `GPURenderStep` candidates;
+- constructing `GPUDrawAnalysis`;
+- selecting candidate routes for analysis records;
+- deriving or requesting `MaterialKey` values for analysis records;
+- selecting `GPURenderStep` candidates for analysis records;
+- invoking `GPUOcclusionTracker` for conservative culling facts;
+- invoking `GPUDrawLayerPlanner` for layer and pass plans;
 - assigning recording-local command IDs;
 - creating tasks;
 - collecting deterministic diagnostics.
@@ -44,6 +61,149 @@ It must not:
 - submit work directly to a surface;
 - silently render unsupported work through CPU fallback.
 
+## `GPUDrawAnalysis`
+
+`GPUDrawAnalysis` is an immutable analysis product for one recorder snap. It is
+explicit: route selection, culling, layer assignment, and ordering facts must
+not be hidden inside `GPUDrawPass` construction.
+
+It contains one analysis record per normalized command that reaches the core,
+including commands that are later culled, discarded, or refused.
+
+Each analysis record contains:
+
+- recording-local command ID and adapter provenance;
+- normalized command family and conservative bounds;
+- transform, clip, layer, material, and ordering summaries;
+- selected route or stable refusal reason;
+- `MaterialKey` or material refusal;
+- candidate `GPURenderStep` identities or render-step refusal;
+- geometry and coverage strategy facts;
+- opacity and blend classification;
+- destination-read requirements;
+- clip, stencil, upload, atlas, and target-load dependencies;
+- layer assignment request;
+- occlusion classification;
+- resource declarations known before allocation;
+- deterministic diagnostic fields.
+
+`GPUDrawAnalysis` may contain Graphite-equivalent notes for review, but its API
+is Kanvas-owned. It must not expose Graphite `DrawList`, `DrawPass`, or
+`Renderer` classes, Graphite package names, or Graphite bit layouts as core
+contracts.
+
+Analysis is allowed to decide that a command is unsupported before pass
+construction. Unsupported analysis records remain visible in diagnostics and PM
+evidence instead of disappearing from the recording.
+
+## `GPUOcclusionTracker`
+
+`GPUOcclusionTracker` is the dedicated occlusion-culling capability for the new
+renderer.
+
+It consumes ordered `GPUDrawAnalysis` records and layer facts, then emits
+conservative culling facts back into the analysis or layer plan. Occlusion is a
+first-class target capability, not an incidental optimization in the pass
+builder.
+
+It may cull only when correctness is proven from explicit facts:
+
+- draw or layer bounds are finite and conservative;
+- clip and transform classifications preserve the culling proof;
+- the covering draw is opaque in the relevant target encoding;
+- blend mode and destination-read facts do not require the hidden draw;
+- layer isolation and composite semantics do not need the hidden contents;
+- barriers, clears, discards, and target changes are respected.
+
+It must not:
+
+- depend on object identity or nondeterministic traversal order;
+- use exact floating-point equality as the only proof for coverage;
+- cull across destination-read, shader-read, image-filter, or layer-composite
+  dependencies unless a later accepted spec defines that proof;
+- hide culling from diagnostics.
+
+Occlusion diagnostics must name the culled command or layer, the covering scope,
+the proof category, and the stable reason code. When proof is incomplete, the
+tracker must leave the command visible.
+
+## `SortKey`
+
+`SortKey` is a deterministic, Graphite-like sort key for draw invocations
+inside the Kanvas renderer.
+
+It is used after `GPUDrawAnalysis` has made dependencies explicit. A `SortKey`
+may improve batching and pipeline locality only within the legal reordering
+window described by the analysis record and layer plan.
+
+A `SortKey` includes behavior-affecting ordering axes such as:
+
+- layer and target scope;
+- original paint-order band or barrier generation;
+- explicit dependency class;
+- render-step identity;
+- `MaterialKey` or material group;
+- render or compute pipeline-key group when known before resource preparation;
+- clip/stencil preparation group;
+- destination-read and blend classification;
+- atlas or upload generation when it affects legality.
+
+It must not include:
+
+- per-draw uniform values;
+- command object addresses;
+- transient buffer offsets;
+- cache hit/miss state;
+- any axis that would allow sorting across an explicit barrier.
+
+The nearest Graphite equivalent is Graphite's `SortKey` ordering concept, but
+Kanvas does not inherit Graphite's bit packing, source package, or class
+ownership. The Kanvas key must expose a diagnostic preimage before any batching
+or culling claim is promoted.
+
+## `GPUDrawLayer` And `GPUDrawLayerPlanner`
+
+`GPUDrawLayer` is an immutable logical layer or composite scope produced from
+captured normalized command state. It is not a replay of `saveLayer` and
+`restore` calls.
+
+`GPUDrawLayer` is the low-level pass/layer planning structure used by the GPU
+renderer. It does not by itself decide the higher-level `GPULayerPlan` or full
+`saveLayer` lowering contract, which must be specified separately.
+
+A layer contains:
+
+- stable layer ID and parent scope;
+- target attachment facts;
+- conservative bounds;
+- command range or command IDs assigned to the layer;
+- opacity, blend, alpha, and color-space composite facts;
+- destination-read and prior-target-content requirements;
+- intermediate texture or direct-to-parent classification;
+- load, clear, discard, and store intent;
+- dependency edges to clip, stencil, upload, and child-layer work;
+- culling facts from `GPUOcclusionTracker`;
+- diagnostics and stable refusal reasons.
+
+`GPUDrawLayerPlanner` consumes `GPUDrawAnalysis`, normalized layer facts, target
+facts, and `GPUCapabilities`. It produces a deterministic layer plan and a pass
+partitioning proposal.
+
+It is responsible for:
+
+- assigning commands to `GPUDrawLayer` scopes;
+- deciding whether a layer may draw directly into its parent or requires an
+  intermediate target;
+- preserving layer isolation, alpha, blend, and destination-read semantics;
+- creating dependency edges between parent and child layers;
+- applying occlusion facts at layer granularity when proven safe;
+- exposing stable refusal diagnostics when layer semantics cannot be executed;
+- producing sort windows that `GPUDrawPass` may use.
+
+It must not allocate GPU resources, create WebGPU pipelines, or encode commands.
+Those responsibilities stay with `GPUResourceProvider`, `GPUTaskList`, and the
+pass tasks.
+
 ## `GPURecording`
 
 `GPURecording` is the immutable product of a recorder snap.
@@ -51,6 +211,8 @@ It must not:
 It contains:
 
 - target facts;
+- `GPUDrawAnalysis`;
+- layer plan;
 - task list;
 - material and pipeline key references;
 - required resource declarations;
@@ -83,20 +245,31 @@ Task outcomes:
 
 ## `GPUDrawPass`
 
-`GPUDrawPass` is immutable after creation.
+`GPUDrawPass` is immutable after creation. It consumes `GPUDrawAnalysis` and
+the `GPUDrawLayerPlanner` output, then materializes immutable pass commands.
+It must not rediscover route, material, layer, culling, or dependency facts
+from raw normalized commands.
 
 It contains:
 
 - target attachment facts;
+- layer scope and pass partition identity;
 - load/store operations;
 - clear/discard intent;
-- draw commands expanded into render-step invocations;
+- immutable pass commands expanded into render-step invocations;
+- `SortKey` preimages for commands that may be sorted;
 - pipeline keys;
 - dynamic uniform and resource binding references;
 - pass-level barriers and diagnostics.
 
 `GPUDrawPass` is allowed to sort, cull, and merge draw-step invocations when
-ordering facts prove correctness.
+analysis and layer ordering facts prove correctness. If the pass changes
+ordering, it must preserve the diagnostic trail from original command ID to
+analysis record, layer, sort key, and materialized pass command.
+
+Pass materialization must preserve refused and discarded analysis outcomes in
+diagnostics. A command that cannot become a pass command must report whether it
+was culled, discarded as redundant, refused, or blocked by resource planning.
 
 ## `GPURenderStep`
 
@@ -110,7 +283,7 @@ It owns:
 - depth/stencil requirements;
 - coverage behavior;
 - WGSL geometry/coverage fragment contribution;
-- fixed state contribution to `PipelineKey`;
+- fixed state contribution to `GPURenderPipelineKey`;
 - supported geometry/material compatibility checks.
 
 A command may produce multiple render-step invocations. For example, a filled
@@ -123,10 +296,13 @@ The task graph must preserve:
 - paint-order dependencies for blending;
 - clip or stencil preparation dependencies;
 - destination-read dependencies;
+- layer isolation and composite dependencies;
+- occlusion proof boundaries;
 - atlas mutation and upload dependencies;
 - target load/store correctness.
 
-Optimization is allowed only after those dependencies are explicit.
+Optimization is allowed only after those dependencies are explicit in
+`GPUDrawAnalysis`, `GPUDrawLayer`, and `SortKey` diagnostics.
 
 ## Resource Preparation
 
@@ -134,9 +310,11 @@ Resource preparation uses `GPUResourceProvider`. It must produce deterministic
 diagnostics for:
 
 - unsupported capabilities;
+- analysis or layer plan refusal;
 - pipeline creation failure;
 - WGSL validation or reflection failure;
 - resource allocation failure;
+- intermediate layer target allocation failure;
 - atlas capacity failure;
 - texture format mismatch;
 - device loss or invalid generation.
@@ -148,3 +326,6 @@ diagnostics for:
 - Do not expose `GPUDrawPass` as a public Skia-like API.
 - Do not assume recordings are reusable across devices or capability changes.
 - Do not implement broad render-graph scheduling in this kernel.
+- Do not hide draw analysis, layer planning, or occlusion decisions as private
+  pass-builder side effects.
+- Do not treat this target spec as an implementation order or vertical slice.

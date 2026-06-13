@@ -28,20 +28,31 @@ Examples:
 
 ### `CPUPreparedGPU`
 
-The CPU prepares an artifact that the GPU consumes.
+The CPU prepares a typed artifact that the GPU consumes.
+
+`CPUPreparedGPU` is broad as a route kind, but every selected route must name a
+registered artifact type from `CPUPreparedGPUArtifactRegistry`. The route is
+not valid if it can only say "prepare on CPU" without identifying the artifact
+key, lifetime, budget, and GPU consumer.
 
 Examples:
 
-- coverage mask;
-- path atlas entry;
-- uploaded bitmap texture;
-- precomputed geometry buffer;
-- packed uniform payload;
-- glyph mask atlas entry when text infrastructure owns glyph rasterization.
+- `CoverageMaskArtifact`;
+- `PathAtlasArtifact`;
+- `GlyphAtlasArtifact`;
+- `UploadedTextureArtifact`;
+- `PrecomputedGeometryArtifact`;
+- `FilterIntermediateArtifact` only when the active filter spec validates the
+  intermediate lifecycle and route.
 
 This route is Graphite-like in spirit for small-path or raster-atlas behavior,
 but it is not a full CPU fallback. The final draw still goes through GPU
 composition or GPU command submission.
+
+GPU-native textures, render targets, swapchain/surface textures, and imported
+GPU handles remain normal `GPUResourceProvider` resources. A texture is an
+`UploadedTextureArtifact` only when CPU work decodes, converts, repacks,
+color-converts, tiles, or mip-prepares pixels before upload.
 
 ### `CPUReferenceOnly`
 
@@ -63,16 +74,45 @@ Route selection follows this order:
 
 1. Validate normalized command invariants.
 2. Try a supported `GPUNative` route.
-3. Try a supported `CPUPreparedGPU` route.
+3. Try a supported `CPUPreparedGPU` route by resolving a typed registered
+   artifact and its GPU consumer.
 4. Return `RefuseDiagnostic`.
 
 `CPUReferenceOnly` is invoked by validation/evidence harnesses, not by product
 route fallback.
 
+## Artifact Routing Contract
+
+A `CPUPreparedGPU` decision must produce:
+
+- artifact type;
+- stable artifact key preimage and compact hash;
+- artifact lifetime class;
+- invalidation facts;
+- memory and upload budget decision;
+- GPU consumer step or pass;
+- resource-provider ownership facts;
+- diagnostic reason for selection or refusal.
+
+The route must refuse when:
+
+- the artifact type is not registered;
+- a required key fact is unavailable or nondeterministic;
+- the artifact would exceed its stable budget policy;
+- the artifact would be stale for the current device, atlas, target, or
+  recording generation;
+- the filter intermediate has not been validated by the active filter spec;
+- CPU preparation would produce a complete rendered draw result instead of a
+  typed GPU-consumed artifact.
+
 ## No Silent CPU Fallback
 
 The renderer must not silently render an unsupported command fully on CPU and
 composite it as though it were GPU support.
+
+`CPUPreparedGPU` cannot be used as a compatibility escape hatch for broad
+unsupported features. It is allowed only when the CPU output is one of the
+registered artifacts and the final rendering operation remains a GPU route.
 
 A future explicit CPU-rendered texture compatibility route is outside this
 kernel. If it is introduced later, it must be a separate route kind with
@@ -91,13 +131,15 @@ Route selection may use:
 - destination-read requirements;
 - `GPUCapabilities`;
 - resource availability;
+- `CPUPreparedGPUArtifactRegistry` support;
 - atlas budget;
+- artifact memory/upload budget;
 - feature gates;
 - conformance maturity.
 
 Route selection must not use nondeterministic facts such as object identity,
-current cache occupancy without a stable budget policy, or hidden environment
-flags.
+current cache occupancy without a stable budget policy, implicit full-CPU
+fallback availability, or hidden environment flags.
 
 ## Diagnostics
 
@@ -113,7 +155,8 @@ Diagnostic fields:
 - pipeline key or pipeline refusal;
 - render step or render-step refusal;
 - capability facts that affected selection;
-- CPU-prepared artifact facts when used;
+- CPU-prepared artifact type, key hash, lifetime, invalidation facts, budget
+  decision, and registry refusal when used;
 - fallback/refusal source.
 
 Stable reason-code examples:
@@ -123,6 +166,12 @@ Stable reason-code examples:
 - `unsupported.wgsl.validation_error`
 - `unsupported.pipeline.capability_missing`
 - `unsupported.atlas.capacity`
+- `unsupported.artifact.unregistered_type`
+- `unsupported.artifact.key_nondeterministic`
+- `unsupported.artifact.budget_exceeded`
+- `unsupported.artifact.stale_generation`
+- `unsupported.texture.cpu_preparation_missing`
+- `unsupported.filter.intermediate_unvalidated`
 - `unsupported.geometry.perspective_path`
 - `unsupported.resource.device_lost`
 
@@ -133,6 +182,8 @@ A route may be promoted only when:
 - command normalization tests pass;
 - route diagnostics are deterministic;
 - key preimages are stable;
+- typed CPU-prepared artifact keys, lifetimes, invalidation rules, budgets, and
+  diagnostics are stable when `CPUPreparedGPU` is used;
 - WGSL validation passes when WGSL is used;
 - CPU reference evidence or explicit refusal exists;
 - GPU evidence exists for GPU claims;
@@ -144,4 +195,6 @@ A route may be promoted only when:
 - Do not treat CPU reference as production rendering.
 - Do not route broad unsupported features through one generic compatibility
   path.
+- Do not treat untyped CPU preparation as a valid `CPUPreparedGPU` route.
+- Do not treat CPU-rendered texture composition as `CPUPreparedGPU`.
 - Do not weaken refusal diagnostics to make dashboards look greener.

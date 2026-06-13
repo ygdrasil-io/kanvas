@@ -148,7 +148,7 @@ core only through a later accepted command contract.
 ## Material Descriptor
 
 The command carries a normalized material descriptor, not a compiled shader and
-not a final `PipelineKey`.
+not a final `GPURenderPipelineKey`.
 
 The descriptor must be complete enough to derive:
 

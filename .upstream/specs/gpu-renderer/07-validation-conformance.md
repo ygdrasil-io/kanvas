@@ -32,7 +32,8 @@ Tests must assert:
 Tests must assert canonical preimages and hashes for:
 
 - `MaterialKey`;
-- `PipelineKey`;
+- `GPURenderPipelineKey`;
+- `GPUComputePipelineKey`;
 - WGSL module identity;
 - CPU-prepared artifact keys;
 - route diagnostics.
