@@ -40,7 +40,9 @@ material-lowering boundaries are centralized in
 `33-key-boundaries-material-lowering.md`. Analysis, materialization, recording
 lifetime, and late-diagnostic rules are centralized in
 `34-analysis-materialization-recording.md`. Package and class ownership is
-centralized in `35-package-class-layout.md`.
+centralized in `35-package-class-layout.md`. Implementation roadmap,
+critical-path order, and parallel implementation lanes are centralized in
+`36-implementation-roadmap.md`.
 
 ## Source Of Truth
 
@@ -299,6 +301,7 @@ centralized in `35-package-class-layout.md`.
 | `33-key-boundaries-material-lowering.md` | Canonical key/payload/resource boundary table, resource topology versus identity rule, `GPUMaterialLoweringContext`, material root set, WGSL snippet I/O ABI, and runtime-effect usage set. |
 | `34-analysis-materialization-recording.md` | Analysis versus materialization boundary, late failure classes, recording replay compatibility, ordered recordings, lazy/promise/imported resources, scratch/intermediate lifetimes, and negative CPU-fallback tests. |
 | `35-package-class-layout.md` | Target package/class ownership layout for `:gpu-renderer`, dependency bands, public/internal surface, Graphite orientation table, and package-boundary validation. |
+| `36-implementation-roadmap.md` | Vertical-first implementation roadmap, critical path, parallel lanes, expansion order, commit/review proposal, stop conditions, and open planning questions. |
 
 ## Target Shape
 
@@ -448,7 +451,9 @@ descriptors, render/compute pipeline-key rules, or validation gates needed for l
 coverage.
 
 The concrete fixture and promotion contract for this first slice is defined in
-`14-first-slice-contract.md`.
+`14-first-slice-contract.md`. The proposed implementation order, parallel
+lanes, review shape, expansion sequence, and stop conditions are defined in
+`36-implementation-roadmap.md`.
 
 ## Status Policy
 
