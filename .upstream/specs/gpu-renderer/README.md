@@ -18,7 +18,8 @@ filter/effect pipeline target, clip/stencil/mask pipeline target, legacy
 cleanup policy, path/stroke/geometry pipeline target, layer/saveLayer
 execution, color-management pipeline, target authority, canonical taxonomy,
 diagnostic registry policy, key/material/resource boundaries, analysis versus
-materialization boundaries, recording lifetime policy, and validation
+materialization boundaries, recording lifetime policy, package/class layout,
+dependency boundaries, and validation
 expectations that future
 implementation tickets must follow. It also defines the `DrawVertices` and
 mesh-like target so
@@ -38,7 +39,8 @@ in `32-target-authority-taxonomy-diagnostics.md`. Key, payload, resource, and
 material-lowering boundaries are centralized in
 `33-key-boundaries-material-lowering.md`. Analysis, materialization, recording
 lifetime, and late-diagnostic rules are centralized in
-`34-analysis-materialization-recording.md`.
+`34-analysis-materialization-recording.md`. Package and class ownership is
+centralized in `35-package-class-layout.md`.
 
 ## Source Of Truth
 
@@ -296,6 +298,7 @@ lifetime, and late-diagnostic rules are centralized in
 | `32-target-authority-taxonomy-diagnostics.md` | Consolidated target authority, status vocabulary, route taxonomy, capability taxonomy, diagnostic registry policy, aliases, and refusal semantics. |
 | `33-key-boundaries-material-lowering.md` | Canonical key/payload/resource boundary table, resource topology versus identity rule, `GPUMaterialLoweringContext`, material root set, WGSL snippet I/O ABI, and runtime-effect usage set. |
 | `34-analysis-materialization-recording.md` | Analysis versus materialization boundary, late failure classes, recording replay compatibility, ordered recordings, lazy/promise/imported resources, scratch/intermediate lifetimes, and negative CPU-fallback tests. |
+| `35-package-class-layout.md` | Target package/class ownership layout for `:gpu-renderer`, dependency bands, public/internal surface, Graphite orientation table, and package-boundary validation. |
 
 ## Target Shape
 
@@ -462,9 +465,8 @@ policy, public command shape, key semantics, or cleanup gates must remain
 
 The kernel does not yet choose:
 
-- exact class-to-subpackage placement inside
-  `org.graphiks.kanvas.gpu.renderer`, beyond the responsibility packages named
-  in `00-architecture-kernel.md`;
+- exact Kotlin file grouping for private helpers inside each package;
+- private helper class names for caches, builders, allocators, and encoders;
 
 These are blocked intentionally. Implementation tickets must not infer answers
 from examples in this pack.

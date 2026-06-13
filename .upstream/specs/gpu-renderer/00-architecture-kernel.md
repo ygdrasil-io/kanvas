@@ -82,7 +82,8 @@ Packages in `:gpu-renderer` use Kanvas responsibility names, not
 Graphite-mirrored source names. All implementation packages must use
 `org.graphiks.kanvas` as the base package. The expected renderer module root is
 `org.graphiks.kanvas.gpu.renderer`, with subpackages named for Kanvas
-responsibilities:
+responsibilities. The detailed package/class ownership table is defined in
+`35-package-class-layout.md`. Responsibility packages include:
 
 - `commands`
 - `recording`
@@ -90,27 +91,36 @@ responsibilities:
 - `passes`
 - `layers`
 - `clips`
+- `geometry`
+- `vertices`
+- `destination`
 - `filters`
 - `images`
 - `text`
 - `materials`
+- `runtimeeffects`
 - `pipelines`
 - `resources`
 - `payloads`
 - `execution`
 - `state`
+- `color`
+- `coordinates`
+- `capabilities`
 - `routing`
 - `diagnostics`
 - `telemetry`
+- `validation`
 - `wgsl`
 
 Specs should document Graphite equivalents in an equivalence table for
 orientation, but implementation packages must not mirror `skgpu::graphite`,
 Graphite file names, or Graphite class ownership as a package taxonomy.
 
-Exact class placement can evolve with implementation evidence, but new package
-roots outside `org.graphiks.kanvas.gpu.renderer` are not allowed for renderer
-core contracts without an explicit spec change.
+Exact private helper layout can evolve with implementation evidence, but core
+class ownership follows `35-package-class-layout.md`. New package roots outside
+`org.graphiks.kanvas.gpu.renderer` are not allowed for renderer core contracts
+without an explicit spec change.
 
 ## Naming Policy
 
