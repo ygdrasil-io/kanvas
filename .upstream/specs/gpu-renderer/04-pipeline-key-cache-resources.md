@@ -180,6 +180,11 @@ Expected cache layers:
   `GPUTextureViewDescriptor`, `GPUSamplerDescriptor`, and accepted ownership
   plan facts;
 - atlas caches with explicit ownership and eviction rules;
+- text atlas/resource cache keyed by `GPUTextAtlasDescriptor`,
+  `GPUTextAtlasPageDescriptor`, artifact generation, upload plan, and accepted
+  text ownership facts from `21-text-glyph-pipeline.md`;
+- text instance buffer cache or allocator keyed by `GPUTextInstanceLayout`,
+  buffer usage, owner scope, and frame/recording generation;
 - destination-read target snapshot and intermediate resources with explicit
   ownership, generation, pass-split, and budget rules from
   `20-destination-read-strategy.md`;
@@ -244,7 +249,13 @@ Accepted artifact families for this kernel are:
 |---|---|---|
 | `CoverageMaskArtifact` | Rasterize or pack coverage/mask data for a bounded geometry/clip strategy. | Sample mask texture or coverage buffer in a GPU draw. |
 | `PathAtlasArtifact` | Prepare reusable path coverage, mask, or path-specific atlas entry. | Sample or reference atlas entry during a path/coverage draw. |
-| `GlyphAtlasArtifact` | Rasterize and pack glyph masks owned by text infrastructure. | Sample glyph atlas during text/glyph coverage draws. |
+| `GlyphAtlasArtifact` | Rasterize and pack A8 glyph masks owned by pure Kotlin text infrastructure. | Sample A8 glyph atlas during text/glyph coverage draws as defined in `21-text-glyph-pipeline.md`. |
+| `SDFGlyphAtlasArtifact` | Generate and pack SDF glyph masks owned by pure Kotlin text infrastructure. | Sample SDF glyph atlas and reconstruct coverage in WGSL as defined in `21-text-glyph-pipeline.md`. |
+| `GlyphUploadPlan` | Describe text-stack-owned atlas or glyph artifact bytes that must reach GPU resources. | Feed `GPUTextUploadPlan` and upload-before-sample ordering. |
+| `OutlineGlyphPlan` | Prepare immutable glyph outline facts owned by text infrastructure. | Route through GPU path/coverage strategy or refuse. |
+| `ColorGlyphPlan` | Prepare glyph-scoped COLR/CPAL paint graph facts. | Route through accepted GPU color glyph composite primitives or refuse. |
+| `BitmapGlyphPlan` | Prepare decoded PNG bitmap glyph facts. | Route through glyph-scoped texture ownership and sampling or refuse. |
+| `SVGGlyphPlan` | Prepare bounded pure Kotlin SVG-in-OpenType glyph vector facts. | Route through accepted vector/material primitives or refuse. |
 | `UploadedTextureArtifact` | Decode, convert, repack, color-convert, tile, or mip-prepare CPU pixels before upload. | Bind uploaded texture and sampler for GPU image sampling. |
 | `PrecomputedGeometryArtifact` | Flatten, stroke, tessellate, or pack vertex/index/edge data on CPU. | Bind GPU buffers for a render step such as fan, stencil-cover, or edge coverage. |
 | `FilterIntermediateArtifact` | Materialize a validated bounded filter intermediate according to the active filter spec. | Bind intermediate texture/view for a later GPU filter or layer-composite pass. |
@@ -283,6 +294,9 @@ and may change without becoming material identity.
 Additional key facts are required when they affect contents or validity:
 
 - font, strike, glyph, subpixel, and text-raster settings for glyph artifacts;
+- text artifact route, text atlas descriptor, SDF spread, glyph artifact
+  generation, and glyph-scoped color/bitmap/SVG plan version when text artifacts
+  are used;
 - path fill rule, stroke expansion, tolerance, edge budget, and atlas policy;
 - image decode source, codec/configuration, pixel format, row stride, tile mode,
   mip policy, and upload format for uploaded textures;

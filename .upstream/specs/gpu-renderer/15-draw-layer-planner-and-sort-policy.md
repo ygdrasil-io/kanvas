@@ -289,6 +289,8 @@ Required axes:
 - scissor or primitive clip group when it affects dynamic state;
 - destination-read class;
 - atlas/upload generation when it affects legality.
+- text render step, text route, text atlas/page binding compatibility, text
+  ordering token, and instance layout when they affect legality.
 
 Forbidden axes:
 
@@ -307,6 +309,11 @@ that created them.
 Texture/image resources participate through `GPUResourceBindingSlot`,
 `GPUSampledTextureBinding`, upload/atlas/target generation, and explicit
 barriers. Raw handles never participate directly.
+Text resources participate through `GPUTextSubRunPlan`, `GPUTextBinding`,
+`GPUTextAtlasEntryRef`, `GPUTextUploadPlan`, and `GPUTextOrderingToken` from
+`21-text-glyph-pipeline.md`. Sort/merge must not cross text upload, atlas
+generation, eviction, instance-buffer, clip, layer, or destination-read
+barriers.
 
 ## Merge And Batching
 
@@ -319,6 +326,8 @@ The planner may merge invocations into one binding list when:
   invariant according to the ABI spec;
 - scissor and primitive clip changes are legal dynamic state;
 - destination-read and barrier classes allow adjacency;
+- text atlas pages, SDF params, instance layouts, and upload/generation tokens
+  are compatible or the text run has been split safely;
 - conservative bounds do not require a stricter ordering boundary.
 
 `GPUDrawPass` may then emit fewer command groups, but it must preserve the

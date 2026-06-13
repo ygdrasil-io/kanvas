@@ -51,6 +51,8 @@ The module owns:
   upload, and atlas diagnostic contracts;
 - destination-read requirement, strategy, bounds, target snapshot, binding,
   budget, token, and diagnostic contracts;
+- text run, text subrun, glyph artifact route, text atlas, text upload, text
+  instance, text binding, and text diagnostic contracts;
 - resource-provider contracts;
 - GPU execution context and submission contracts;
 - telemetry, cache, and performance-gate contracts;
@@ -80,6 +82,7 @@ responsibilities:
 - `passes`
 - `layers`
 - `filters`
+- `text`
 - `materials`
 - `pipelines`
 - `resources`
@@ -192,6 +195,26 @@ Public concept names in the new renderer use uppercase acronyms:
 - `GPUDestinationReadBinding`
 - `GPUDestinationReadToken`
 - `GPUDestinationReadDiagnostic`
+- `GPUTextRunPlan`
+- `GPUTextSubRunPlan`
+- `GPUTextRepresentation`
+- `GPUTextRoute`
+- `GPUTextRenderStep`
+- `GPUTextAtlasPlan`
+- `GPUTextAtlasDescriptor`
+- `GPUTextAtlasPageDescriptor`
+- `GPUTextAtlasEntryRef`
+- `GPUTextUploadPlan`
+- `GPUTextResourcePlan`
+- `GPUTextInstanceLayout`
+- `GPUTextInstanceBufferPlan`
+- `GPUTextBinding`
+- `GPUTextSDFParams`
+- `GPUColorGlyphCompositePlan`
+- `GPUTextBatchKey`
+- `GPUTextOrderingToken`
+- `GPUTextBudgetPolicy`
+- `GPUTextDiagnostic`
 - `GPUBlendPlan`
 - `GPUColorPlan`
 - `GPUTargetState`
@@ -261,6 +284,13 @@ into a narrower GPU renderer value object.
 | `ComputePathAtlas` | `GPUComputeCoverageAtlasPlan` | Future compute-written coverage atlas with WGSL compute validation and explicit storage/transition policy. |
 | `ClipAtlasManager` | `GPUCoverageAtlasPlan` plus `CoverageMaskArtifact` | Clip/coverage mask route with separate path and save-record-style keys; no merged glyph/image/path atlas lifetime. |
 | `AtlasProvider` | `GPUResourceProvider` plus `GPUAtlasScope` | Resource provider owns atlas textures, uploads, compaction, invalidation, and diagnostics. |
+| `GlyphRunList` | `NormalizedDrawCommand.DrawTextRun` plus `GPUTextRunPlan` | Text stack emits glyph descriptors/artifacts; GPU renderer does not shape or own font data. |
+| `SubRunContainer` / `AtlasSubRun` | `GPUTextSubRunPlan` | Renderer-owned subrun value object split by representation, atlas page, transform, material, clip, destination-read, and budget; no Graphite class hierarchy. |
+| `SubRunData` | `GPUTextSubRunPlan` / `GPUTextInstanceLayout` / `GPUTextBinding` | Carries mask bounds, transform, glyph span, SDF facts, atlas references, and binding facts without raw pointers. |
+| `TextAtlasManager` | `GPUTextAtlasPlan` / `GPUTextAtlasDescriptor` / `GPUTextAtlasEntryRef` | Text atlas resource, generation, upload, eviction, and page/entry validation through `GPUResourceProvider`. |
+| `BitmapTextRenderStep` / `SDFTextRenderStep` | `GPUTextRenderStep` with `A8TextMaskStep` / `SDFTextMaskStep` | WGSL text render steps for atlas sampling; no SkSL and no LCD target claim. |
+| `GlyphVector` backend data | `GPUTextAtlasEntryRef` plus `GPUTextUploadPlan` | Per-glyph atlas residency and upload facts are resource/payload data, not material identity. |
+| `Slug` / text blob redraw cache | `GPUTextRunPlan` cacheable diagnostics and text-stack artifact keys | Reuse decisions depend on dumpable artifact keys and generations, not Skia object identity. |
 | `GraphicsPipelineDesc` | `GPURenderPipelineKey` | Render step, material, target state, fixed state, and capabilities. |
 | `ResourceProvider` | `GPUResourceProvider` | Pipelines, buffers, textures, samplers, atlases, and cache ownership. |
 | `SharedContext` / `Caps` | `GPUExecutionContext` / `GPUCapabilities` | Facade implementation, device generation, queue facts, and capability snapshot. |
@@ -289,6 +319,7 @@ legacy stateful API
   -> GPURenderStep + MaterialKey
   -> GPUMaterialDictionary + WGSLSnippetNode tree
   -> GPUImageSourceDescriptor + GPUTextureOwnershipPlan when images/textures are used
+  -> GPUTextRunPlan + GPUTextSubRunPlan when text/glyph artifacts are used
   -> GPUBlendPlan + GPUColorPlan + GPUTargetState
   -> WGSLBindingLayout + WGSLPackingPlan
   -> GPUPayloadGatherer + payload slots

@@ -84,16 +84,14 @@ Text routes must map to GPU renderer route kinds:
 The forbidden route remains forbidden: CPU-rendering a complete unsupported
 text draw into a texture and compositing it as GPU support.
 
-## GPU Renderer Compatibility Delta
+## GPU Renderer Target Contract
 
-At the time this pack is introduced, `.upstream/specs/gpu-renderer/` lists
-`GlyphAtlasArtifact` as the accepted text-related `CPUPreparedGPU` artifact.
-The additional text artifacts in this pack are target requirements, not
-already-promoted GPU renderer contracts.
+The complete GPU renderer target for consuming these artifacts is defined in
+`.upstream/specs/gpu-renderer/21-text-glyph-pipeline.md`.
 
-Before any route using them can be promoted, the GPU renderer specs must be
-extended to register:
+That spec registers the target renderer concepts for:
 
+- `GlyphAtlasArtifact`;
 - `SDFGlyphAtlasArtifact`;
 - `GlyphUploadPlan`;
 - `ColorGlyphPlan`;
@@ -101,9 +99,10 @@ extended to register:
 - `SVGGlyphPlan`;
 - `OutlineGlyphPlan`.
 
-Until that GPU renderer extension is accepted, those routes remain
-`DependencyGated` and must refuse with `text.gpu.artifact-unregistered` or a
-narrower diagnostic.
+Registration in the target spec is not an implementation support claim. Until
+a route has implementation evidence, GPU evidence, deterministic dumps, and
+stable diagnostics, it remains `DependencyGated` or refuses with
+`text.gpu.artifact-unregistered` or a narrower diagnostic.
 
 ## Artifact Registry
 

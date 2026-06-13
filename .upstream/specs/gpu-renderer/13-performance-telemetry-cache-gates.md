@@ -65,6 +65,7 @@ Cache reporting is grouped by domain:
 | Artifact registry | artifact lookups, hits, misses, uploads, evictions, budget refusals. |
 | Atlas cache | atlas descriptor count, policy version, page count, resident entries, resident bytes, lookup hits/misses, entry creations, page activations, evictions, compactions/resets, upload bytes, compute write bytes, stale entries, retry/split counts, hard capability refusals, and budget refusals. |
 | Destination-read resources | requirements, strategies, target-copy descriptors, existing-intermediate bindings, copied bytes, pass splits, generation checks, active-attachment refusals, and budget refusals. |
+| Text/glyph pipeline | `DrawTextRun` count, text run/subrun count, representation counts, route counts, glyph instances, atlas page count, atlas bytes, upload bytes, instance buffer bytes, stale generation refusals, SDF/color/bitmap/SVG route refusals, text-induced pass splits, and budget refusals. |
 
 A cache hit is performance evidence, not correctness evidence. A cache miss
 must never change rendering output.

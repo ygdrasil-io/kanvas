@@ -95,12 +95,21 @@ Geometry payloads are normalized value objects. They may represent:
 - paths;
 - strokes;
 - image source/destination rectangles;
-- glyph-run references;
+- glyph-run references and typed text artifact references;
 - vertices.
 
 Image payloads use `GPUImageSourceDescriptor` and normalized source/destination
 rects. They must not leak `SkImage`, raw `GPU` handles, imported handles,
 mutable pixel storage, or object identity into the core.
+
+Text payloads use `DrawTextRun` with value-object outputs from
+`.upstream/specs/pure-kotlin-text/`: `TextLayoutResult`, `GlyphRunDescriptor`,
+`GlyphArtifactPlan`, `GlyphAtlasArtifact`, `SDFGlyphAtlasArtifact`,
+`OutlineGlyphPlan`, `ColorGlyphPlan`, `BitmapGlyphPlan`, `SVGGlyphPlan`,
+`GlyphUploadPlan`, artifact key hashes, atlas generation tokens, and text route
+diagnostics. `DrawTextRun` route selection, subrun splitting, atlas resource
+planning, WGSL binding, and refusal behavior are governed by
+`21-text-glyph-pipeline.md`.
 
 The payload must not leak mutable legacy shape objects into the core. If a path
 or text payload is too expensive to copy, the adapter must use an explicit

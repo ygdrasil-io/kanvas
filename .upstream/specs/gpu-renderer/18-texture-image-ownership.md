@@ -352,6 +352,13 @@ The detailed path/coverage atlas strategy is defined in
 `GPUCoverageAtlasPlan`, atlas entry refs, use tokens, mutation plans,
 retry/split behavior, and atlas-specific diagnostics.
 
+The detailed text/glyph atlas and bitmap glyph texture strategy is defined in
+`21-text-glyph-pipeline.md`. That spec owns `GPUTextAtlasPlan`,
+`GPUTextAtlasDescriptor`, `GPUTextAtlasPageDescriptor`,
+`GPUTextAtlasEntryRef`, `GPUTextUploadPlan`, and `GPUTextBinding` for A8/SDF
+text atlas sampling, bitmap glyph sampling, and text upload-before-sample
+ordering.
+
 ## Key Boundaries
 
 `MaterialKey` may include:
@@ -373,6 +380,7 @@ retry/split behavior, and atlas-specific diagnostics.
 - resource generation;
 - atlas coordinates;
 - atlas entry refs and atlas use tokens;
+- text atlas entry refs, glyph IDs, atlas generations, and text upload tokens;
 - payload slot IDs.
 
 `GPURenderPipelineKey` and `GPUComputePipelineKey` include texture/view/sampler

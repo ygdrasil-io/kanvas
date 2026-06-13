@@ -110,6 +110,12 @@ Destination-read bindings use `GPUDestinationReadBinding` from
 `20-destination-read-strategy.md`; the ABI includes sampled texture/sampler
 layout and coordinate payload facts, not destination copy residency as material
 identity.
+Text and glyph bindings use `GPUTextBinding` from
+`21-text-glyph-pipeline.md`; the ABI includes text atlas or bitmap glyph
+texture/sampler layouts, text instance buffer layouts, `GPUTextSDFParams`
+uniform layout, and text render-step access facts. Atlas coordinates, glyph
+IDs, atlas generations, upload tokens, and entry refs remain payload/resource
+facts, not material identity.
 
 ## Uniform And Storage Packing
 

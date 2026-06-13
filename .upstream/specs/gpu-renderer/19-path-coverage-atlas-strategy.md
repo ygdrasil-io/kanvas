@@ -100,9 +100,10 @@ artifact lookup, creation, invalidation, budgets, and diagnostic accounting.
 binding records. It must not allocate, import, upload, evict, compact, or reset
 atlas state.
 
-Text/glyph atlas ownership is outside this spec. Text uses `GlyphAtlasArtifact`
-and a later text/glyph spec. Image/bitmap uploads use `UploadedTextureArtifact`
-and `18-texture-image-ownership.md`.
+Text/glyph atlas ownership is outside this spec. Text uses
+`GlyphAtlasArtifact`, `SDFGlyphAtlasArtifact`, and
+`21-text-glyph-pipeline.md`. Image/bitmap uploads use
+`UploadedTextureArtifact` and `18-texture-image-ownership.md`.
 
 ## Relationship To Geometry/Coverage
 
@@ -203,8 +204,8 @@ cost dominates enough to justify long-lived residency.
 
 Describes an atlas texture family without exposing a raw handle:
 
-- atlas purpose: path, clip, coverage, filter mask, or future text/glyph owned
-  by another spec;
+- atlas purpose: path, clip, coverage, filter mask, or text/glyph owned by
+  `21-text-glyph-pipeline.md`;
 - format and sample type;
 - dimensions and page size;
 - plot/tile layout when used;

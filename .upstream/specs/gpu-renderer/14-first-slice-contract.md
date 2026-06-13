@@ -35,7 +35,8 @@ state. Clear/discard support remains governed by the draw-family matrix.
 The first slice does not implement:
 
 - path fill or stroke;
-- glyphs or text;
+- glyphs or text, which remain governed by the target contract in
+  `21-text-glyph-pipeline.md`;
 - image decoding or bitmap upload;
 - sampled image textures;
 - runtime effects;

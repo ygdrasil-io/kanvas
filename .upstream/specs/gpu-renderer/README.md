@@ -12,8 +12,8 @@ defines the module shape, naming policy, command boundary, WGSL material model,
 material dictionary, payload gathering, pipeline key split, execution
 context, WGSL layout ABI, blend/color state, route policy, telemetry gates,
 texture/image ownership, path/coverage atlas strategy, destination-read
-strategy, legacy cleanup policy, and validation expectations that future
-implementation tickets must follow.
+strategy, text/glyph pipeline target, legacy cleanup policy, and validation
+expectations that future implementation tickets must follow.
 
 The current `.upstream/target/high-performance-wgsl-pipeline-target.md` and
 `.upstream/target/skia-like-realtime-renderer-target.md` remain active project
@@ -98,6 +98,10 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
   `GPUDestinationReadStrategy`, `GPUDestinationReadBounds`,
   `GPUDestinationReadBinding`, and explicit copy/intermediate/layer-isolation
   routes.
+- Consume pure Kotlin text stack outputs through `GPUTextRunPlan`,
+  `GPUTextSubRunPlan`, `GPUTextRoute`, `GPUTextRenderStep`,
+  `GPUTextAtlasPlan`, `GPUTextBinding`, and typed text artifacts registered by
+  `21-text-glyph-pipeline.md`.
 - Forbid framebuffer-fetch assumptions and active-attachment sampling in the
   WebGPU target. Destination reads require fixed-function blend, target copy,
   existing intermediate, layer isolation, or stable refusal.
@@ -165,6 +169,7 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 | `18-texture-image-ownership.md` | Graphite-inspired texture/image ownership policy: descriptors, views, samplers, image sources, uploaded CPU pixels, imported textures, target/surface leases, sampled bindings, and texture diagnostics. |
 | `19-path-coverage-atlas-strategy.md` | Graphite-inspired path/coverage atlas strategy: atlas plans, entry keys, generations, budgets, retry/split actions, payload bindings, diagnostics, and validation gates. |
 | `20-destination-read-strategy.md` | Graphite-inspired destination-read strategy: requirements, bounds, target copy snapshots, existing intermediates, layer isolation, bindings, budgets, barriers, diagnostics, and validation gates. |
+| `21-text-glyph-pipeline.md` | Graphite-inspired text/glyph pipeline target: text run plans, subruns, A8/SDF atlas routes, outline/color/bitmap/SVG glyph routes, text bindings, atlas uploads, budgets, diagnostics, and validation gates. |
 
 ## Target Shape
 
@@ -187,19 +192,23 @@ flowchart TD
     dictionary --> wgsl["WGSLFragment / WGSLModule"]
     material --> textureplan["GPUImageSourceDescriptor / GPUTextureOwnershipPlan"]
     command --> atlas["GPUPathAtlasPlan / GPUCoverageAtlasPlan"]
+    command --> text["GPUTextRunPlan / GPUTextSubRunPlan"]
     wgsl --> abi["WGSL layout / binding ABI"]
     abi --> payload["GPUPayloadGatherer / payload slots"]
     textureplan --> payload
     atlas --> payload
+    text --> payload
     dstread --> payload
     step --> pipeline["GPURenderPipelineKey"]
     blend --> pipeline
     dstread --> pipeline
+    text --> pipeline
     abi --> pipeline
     wgsl --> pipeline
     payload --> resources
     textureplan --> resources
     atlas --> resources
+    text --> resources
     dstread --> resources
     pipeline --> resources["GPUResourceProvider"]
     resources --> execution["GPUExecutionContext / submission"]

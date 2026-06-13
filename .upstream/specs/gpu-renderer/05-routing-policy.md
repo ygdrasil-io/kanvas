@@ -26,6 +26,8 @@ Examples:
 - GPU-native, imported, surface-leased, offscreen, or atlas-backed texture
   sampling when `GPUTextureOwnershipPlan` accepts ownership, usage, and
   generation;
+- text outline, color glyph, bitmap glyph, SVG glyph, A8 atlas, or SDF atlas
+  rendering when `21-text-glyph-pipeline.md` accepts the route and resources;
 - stencil/depth clip preparation on GPU;
 - GPU tessellation or generated geometry buffers when owned by GPU-side logic.
 - destination-read target snapshots, existing intermediates, and layer
@@ -45,6 +47,12 @@ Examples:
 - `CoverageMaskArtifact`;
 - `PathAtlasArtifact`;
 - `GlyphAtlasArtifact`;
+- `SDFGlyphAtlasArtifact`;
+- `GlyphUploadPlan`;
+- `OutlineGlyphPlan`;
+- `ColorGlyphPlan`;
+- `BitmapGlyphPlan`;
+- `SVGGlyphPlan`;
 - `UploadedTextureArtifact`;
 - `PrecomputedGeometryArtifact`;
 - `FilterIntermediateArtifact` only when the active filter spec validates the
@@ -60,6 +68,12 @@ Path and coverage atlas routes are governed by
 `CPUPreparedGPU(CoverageMaskArtifact)` for clip/operation-specific coverage
 only when the artifact key, atlas policy, budget, generation, mutation plan,
 and GPU consumer are all accepted.
+
+Text and glyph routes are governed by `21-text-glyph-pipeline.md`. A route may
+select `CPUPreparedGPU(GlyphAtlasArtifact)`,
+`CPUPreparedGPU(SDFGlyphAtlasArtifact)`, or another registered text artifact
+only when artifact keys, text atlas/page generation, upload plans, instance
+buffer plans, WGSL text render steps, and GPU consumers are all accepted.
 
 GPU-native textures, render targets, swapchain/surface textures, and imported
 GPU handles remain normal `GPUResourceProvider` resources. Their ownership,
@@ -156,6 +170,8 @@ Route selection may use:
 - atlas budget;
 - atlas entry dimensions, area, generation, policy, use-token state, and
   retry/split legality for path or coverage atlas routes;
+- text representation, text route, text atlas/page generation, upload plan,
+  instance buffer budget, and glyph artifact registration for text/glyph routes;
 - artifact memory/upload budget;
 - feature gates;
 - conformance maturity.
@@ -203,6 +219,10 @@ Stable reason-code examples:
 - `unsupported.destination_read.strategy_unaccepted`
 - `unsupported.destination_read.active_attachment_sampled`
 - `unsupported.destination_read.pass_split_illegal`
+- `unsupported.text.artifact_unregistered`
+- `unsupported.text.atlas_generation_stale`
+- `unsupported.text.upload_plan_missing`
+- `unsupported.text.instance_buffer_budget_exceeded`
 - `unsupported.texture.device_generation_stale`
 - `unsupported.filter.intermediate_unvalidated`
 - `unsupported.geometry.perspective_path`

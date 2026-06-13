@@ -110,6 +110,8 @@ It must not include:
 - atlas use tokens;
 - destination copy descriptors;
 - destination-read bounds, target generations, bindings, and tokens;
+- text atlas coordinates, text atlas entry refs, glyph IDs, text atlas
+  generations, `GPUTextBinding` values, and text upload tokens;
 - cache residency;
 - GPU resource handles;
 - CPU-rendered fallback artifacts.
@@ -120,6 +122,9 @@ not pack per-draw payload bytes. The dedicated payload-gathering policy is
 defined in `17-payload-gathering-and-slots.md`. Texture and image ownership,
 imports, surface leases, uploaded CPU pixels, and sampled binding descriptors
 are defined in `18-texture-image-ownership.md`.
+Text/glyph artifact routes, text atlas bindings, SDF params, instance layouts,
+and text render-step ABI requirements are defined in
+`21-text-glyph-pipeline.md`.
 
 ## `WGSLSnippet`
 

@@ -133,6 +133,9 @@ Command scopes must preserve:
 - destination-copy-before-sample dependencies;
 - atlas mutation ordering;
 - atlas compute-write-before-sample and upload-before-sample dependencies;
+- text atlas upload-before-sample dependencies;
+- text instance-buffer upload-before-draw dependencies;
+- text atlas generation and eviction/compaction ordering;
 - device-generation checks.
 
 ## Submission Model
@@ -235,6 +238,9 @@ Stable reason-code examples:
 - `unsupported.destination_read.pass_split_illegal`
 - `unsupported.atlas.sync_unavailable`
 - `unsupported.atlas.storage_texture_unavailable`
+- `unsupported.text.upload_plan_missing`
+- `unsupported.text.atlas_generation_stale`
+- `unsupported.text.instance_buffer_upload_failed`
 - `unsupported.texture.surface_lease_stale`
 - `unsupported.execution.device_generation_stale`
 - `unsupported.execution.queue_submission_failed`
@@ -252,6 +258,8 @@ Promoted execution behavior requires:
   destination-read routes are promoted;
 - atlas upload-before-sample and compute-write-before-sample ordering tests
   before path/coverage atlas routes are promoted;
+- text atlas upload-before-sample, text instance-buffer upload-before-draw, and
+  atlas generation ordering tests before text/glyph routes are promoted;
 - readback success or skipped-lane diagnostics;
 - device-loss refusal or rebuild tests for touched resources;
 - PM evidence that distinguishes encoded, submitted, completed, skipped, and

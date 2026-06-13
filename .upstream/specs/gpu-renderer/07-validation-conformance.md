@@ -118,6 +118,37 @@ Tests must assert:
 - stale device, target, atlas, upload, or surface generations rebuild, discard,
   or refuse deterministically.
 
+### Text And Glyph Pipeline Tests
+
+Tests must assert:
+
+- `GPUTextRunPlan`, `GPUTextSubRunPlan`, `GPUTextRepresentation`,
+  `GPUTextRoute`, `GPUTextRenderStep`, `GPUTextAtlasPlan`,
+  `GPUTextAtlasDescriptor`, `GPUTextAtlasPageDescriptor`,
+  `GPUTextAtlasEntryRef`, `GPUTextUploadPlan`, `GPUTextResourcePlan`,
+  `GPUTextInstanceLayout`, `GPUTextInstanceBufferPlan`, `GPUTextBinding`,
+  `GPUTextSDFParams`, `GPUColorGlyphCompositePlan`, `GPUTextBatchKey`,
+  `GPUTextOrderingToken`, `GPUTextBudgetPolicy`, and `GPUTextDiagnostic`
+  dumps are deterministic;
+- `DrawTextRun` payloads contain pure Kotlin text value objects and no `Sk*`
+  mutable API types;
+- `GlyphAtlasArtifact`, `SDFGlyphAtlasArtifact`, `GlyphUploadPlan`,
+  `OutlineGlyphPlan`, `ColorGlyphPlan`, `BitmapGlyphPlan`, and `SVGGlyphPlan`
+  are registered typed artifacts before routes using them are promoted;
+- A8, SDF, outline, color glyph, bitmap glyph, and SVG glyph routes have
+  positive GPU evidence before support claims;
+- unregistered, stale, evicted, upload-missing, upload-failed, and
+  budget-exceeded text artifacts refuse with stable diagnostics;
+- text atlas uploads and instance buffer uploads execute before draws that
+  sample or consume them;
+- text atlas coordinates, glyph IDs, atlas generation, entry refs, and upload
+  tokens stay out of `MaterialKey`;
+- text bindings use `GPUTextBinding` and match WGSL reflection for text render
+  steps;
+- planner sort/merge cannot cross text upload, atlas generation, layer, clip,
+  or destination-read barriers;
+- no route CPU-renders a complete unsupported text run into a texture.
+
 ### Destination Read Tests
 
 Tests must assert:

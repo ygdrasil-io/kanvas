@@ -55,7 +55,7 @@ target contracts.
 | Clip rrect/path | `TargetPrepared` | `CPUPreparedGPU` or `GPUNative` by strategy | Stencil/depth, coverage mask, or path atlas | none or `GPULayerPlan` context | `CoverageMaskArtifact` or `PathAtlasArtifact` governed by `19-path-coverage-atlas-strategy.md`; stable refusal for unsupported stack interactions. |
 | Image rect | `TargetNative` plus prepared upload | `GPUNative` or `CPUPreparedGPU` upload | Texture sampling render pass | `MaterialKey` image source | GPU-native texture resource, or `UploadedTextureArtifact` when CPU prepares pixels. |
 | Bitmap/image decode | `DependencyGated` | `CPUPreparedGPU` upload when accepted | Upload then texture sampling | `MaterialKey` image source | `UploadedTextureArtifact`; codec/color conversion policy must be accepted separately. |
-| Text/glyph run | `DependencyGated` | `CPUPreparedGPU` initially | Glyph atlas sampling render pass | `MaterialKey` text/glyph material when needed | `GlyphAtlasArtifact`; font/shaping/glyph ownership remains dependency-gated. |
+| Text/glyph run | `DependencyGated` until pure Kotlin text artifacts and GPU evidence are promoted | `GPUNative` or `CPUPreparedGPU` by representation | Text render steps, atlas sampling, path/coverage route, texture sampling, or glyph composite route | `GPUTextRunPlan`, `GPUTextSubRunPlan`, `GPUTextBinding`, `MaterialKey` text/glyph material when needed | `GlyphAtlasArtifact`, `SDFGlyphAtlasArtifact`, `GlyphUploadPlan`, `OutlineGlyphPlan`, `ColorGlyphPlan`, `BitmapGlyphPlan`, `SVGGlyphPlan`; routes governed by `21-text-glyph-pipeline.md`. |
 | Vertices | `FutureResearch` | `GPUNative` expected | Render pass with vertex/index buffers | `MaterialKey` or per-vertex color material | GPU buffers; possible `PrecomputedGeometryArtifact` for CPU-packed vertices. |
 | Layer/saveLayer | `TargetNative` with refusals | `GPUNative` render/composite, sometimes `RefuseDiagnostic` | `GPULayerPlan`, offscreen target, parent composite, `GPUDestinationReadPlan` when parent destination is observed | `GPULayerPlan` with optional `GPUFilterPlan` | Offscreen GPU resources; no untyped CPU fallback. |
 | Image filter DAG | `DependencyGated` | `GPUNative`, `CPUPreparedGPU`, or refusal by node | `GPUFilterPlan`, render/compute passes, intermediates, `GPUDestinationReadPlan` for backdrop/destination reads | `GPUFilterPlan` | Intermediate GPU textures; `FilterIntermediateArtifact` only when validated. |
@@ -132,11 +132,19 @@ Decoded or transformed CPU pixels must not be hidden as normal GPU resources.
 
 Evidence must include:
 
-- dependency gate to font/shaping/glyph specs;
-- glyph atlas artifact keys;
-- strike, subpixel, transform, and color-font facts when relevant;
-- stable refusal for unsupported shaping, font fallback, emoji, or color font
-  behavior.
+- dependency gate to `.upstream/specs/pure-kotlin-text/` for font, shaping,
+  paragraph, glyph artifact, color glyph, and handoff contracts;
+- `GPUTextRunPlan`, `GPUTextSubRunPlan`, `GPUTextRoute`,
+  `GPUTextRenderStep`, `GPUTextAtlasPlan`, `GPUTextBinding`, and
+  `GPUTextDiagnostic` dumps;
+- glyph atlas artifact keys, SDF artifact keys, upload plans, atlas page
+  generations, entry refs, instance buffer plans, and upload-before-sample
+  ordering;
+- strike, transform, SDF, subpixel, palette, color-font, bitmap, SVG, and emoji
+  facts when relevant;
+- WGSL validation and binding ABI evidence for promoted text render steps;
+- stable refusal for unsupported shaping, font fallback, emoji, color font,
+  SDF, bitmap, SVG, LCD, atlas, upload, or GPU route behavior.
 
 ### Layers And Filters
 
@@ -182,6 +190,10 @@ Examples:
 - `unsupported.texture.active_attachment_sampled`
 - `unsupported.text.shaping_dependency`
 - `unsupported.text.color_font_dependency`
+- `unsupported.text.artifact_unregistered`
+- `unsupported.text.atlas_generation_stale`
+- `unsupported.text.upload_plan_missing`
+- `unsupported.text.SDF_route_unavailable`
 - `unsupported.layer.destination_read`
 - `unsupported.destination_read.strategy_unaccepted`
 - `unsupported.destination_read.active_attachment_sampled`

@@ -150,6 +150,8 @@ Material descriptors may contribute:
 - source color;
 - gradient color stops;
 - image sampling color facts;
+- text/glyph fill, coverage, SDF, bitmap, color glyph, and SVG glyph material
+  facts when routed through `21-text-glyph-pipeline.md`;
 - color-filter chain identity;
 - blender identity when the blend is shader-owned;
 - runtime-effect color behavior when registered.
@@ -157,6 +159,9 @@ Material descriptors may contribute:
 `MaterialKey` must include the material-owned pieces that affect WGSL code or
 layout. `GPUBlendPlan`, `GPUColorPlan`, and `GPUTargetState` carry target and
 composite facts outside `MaterialKey`.
+Text atlas coordinates, glyph IDs, text atlas generations, `GPUTextBinding`
+values, and upload tokens are not material facts. Color glyph composites that
+need prior destination pixels must carry `GPUDestinationReadPlan`.
 
 ## Diagnostics
 

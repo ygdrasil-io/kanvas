@@ -262,6 +262,9 @@ Rules:
 - atlas, mask, glyph, and coverage textures must use their accepted artifact or
   atlas specs, with path/coverage atlas bindings following
   `19-path-coverage-atlas-strategy.md`;
+- text/glyph atlas textures, bitmap glyph textures, SDF params, and text
+  instance buffers must use accepted `GPUTextBinding` records from
+  `21-text-glyph-pipeline.md`;
 - destination-copy snapshots and existing destination intermediates must use
   accepted `GPUDestinationReadBinding` records from
   `20-destination-read-strategy.md`;
@@ -274,6 +277,11 @@ When a path or coverage atlas entry is accepted, the gatherer consumes
 inverse atlas size, mask transform, sampling mode, atlas generation, and
 resource binding layout. These facts are pass-local payload/resource facts and
 must stay out of `MaterialKey`.
+When a text/glyph route is accepted, the gatherer consumes `GPUTextBinding`
+facts: text subrun ID, render step, atlas texture ownership, view/sampler
+descriptors, binding layout, SDF params, instance buffer ref, atlas/page
+generation, material/color plan IDs, and resource slot. It does not create text
+atlases, upload glyph data, split subruns, or choose text routes.
 When a destination-read route is accepted, the gatherer consumes
 `GPUDestinationReadBinding` facts: target generation, copied/read bounds,
 texture/view/sampler descriptors, coordinate mapping, binding layout, and
