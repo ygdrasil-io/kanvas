@@ -106,10 +106,10 @@ It must not include:
 - GPU resource handles;
 - CPU-rendered fallback artifacts.
 
-Uniform, texture, sampler, and buffer values are gathered later by the pipeline
-data path. The dictionary declares their layout and binding requirements; it
-does not pack per-draw payload bytes. The dedicated payload-gathering policy is
-covered by a later spec point.
+Uniform, texture, sampler, and buffer values are gathered later by the payload
+path. The dictionary declares their layout and binding requirements; it does
+not pack per-draw payload bytes. The dedicated payload-gathering policy is
+defined in `17-payload-gathering-and-slots.md`.
 
 ## `WGSLSnippet`
 

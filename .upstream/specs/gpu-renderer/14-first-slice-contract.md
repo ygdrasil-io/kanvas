@@ -70,6 +70,15 @@ The slice must exercise these contracts:
 - `GPUMaterialProgramID`;
 - `WGSLFragment` and `WGSLModule`;
 - `WGSLBindingLayout` and `WGSLPackingPlan`;
+- `GPUPayloadGatherer`;
+- `GPUPayloadGatherPlan`;
+- `GPUMaterialPayload`;
+- `GPUPayloadWritePlan`;
+- `GPUPayloadBindingPlan`;
+- `GPUPayloadUploadPlan`;
+- `GPUUniformPayloadBlock`;
+- `GPUUniformPayloadSlot`;
+- `GPUDrawPayloadRef`;
 - `GPURenderPipelineKey`;
 - `GPUResourceProvider`;
 - `GPUExecutionContext` or a deterministic test double;
@@ -110,6 +119,8 @@ Solid color is accepted when:
 - alpha and premul conventions are known;
 - color-space behavior is covered by `GPUColorPlan`;
 - `GPUMaterialDictionary` resolves the solid source snippet;
+- `GPUPayloadGatherer` writes the solid color payload through a validated
+  payload write plan;
 - uniform packing is validated against WGSL reflection.
 
 Linear gradient is accepted when:
@@ -120,6 +131,8 @@ Linear gradient is accepted when:
 - color interpolation behavior is explicit;
 - `GPUMaterialDictionary` resolves the linear-gradient source snippet and
   local-coordinate requirements;
+- gradient payload shape is accepted by the first-slice inline or
+  `GPUGradientPayloadStore` route;
 - uniform layout and WGSL fragment composition validate.
 
 Unsupported color filters, blend helpers, runtime-effect children, gradient
@@ -143,6 +156,7 @@ Each promoted module requires:
 - reflection dump;
 - binding layout dump;
 - packing plan dump;
+- payload gather, write, binding, upload, and slot dumps;
 - module hash;
 - render pipeline key preimage.
 
@@ -180,6 +194,8 @@ Minimum isolated fixtures:
 - rounded-rect linear gradient;
 - equivalent solid material descriptors producing the same
   `GPUMaterialProgramID`;
+- equivalent solid payload values de-duplicating to the same
+  `GPUUniformPayloadSlot`;
 - empty clip producing discard or cull diagnostic;
 - opaque covering rect culling a previous covered rect;
 - unsupported perspective rect refusal;

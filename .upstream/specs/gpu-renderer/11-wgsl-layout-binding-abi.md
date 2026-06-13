@@ -22,6 +22,7 @@ The `:gpu-renderer` core owns:
 - binding layout descriptors;
 - uniform and storage layout descriptors;
 - Kotlin-side packing contracts;
+- payload write contracts that consume those packing plans;
 - reflection comparison rules;
 - diagnostics for ABI mismatches.
 
@@ -43,6 +44,7 @@ The renderer defines explicit ABI objects:
 | `WGSLStorageLayout` | Canonical storage-buffer or storage-texture layout, access, and element contract. |
 | `WGSLResourceBindingPlan` | Per-pass or per-dispatch binding plan connecting descriptors to actual GPU resources. |
 | `WGSLPackingPlan` | Kotlin-side write contract for uniforms, storage payloads, dynamic offsets, and padding. |
+| `GPUPayloadWritePlan` | Renderer-side value write recipe that must obey `WGSLPackingPlan`. |
 
 These objects are part of key preimages when they affect pipeline validity or
 module behavior. They must be dumpable and independent of Kotlin object
@@ -117,6 +119,9 @@ Per-draw uniform values are not key inputs, but their layout is. A command may
 write values only through a packing plan that matches the module reflection and
 pipeline key preimage.
 
+Concrete value gathering and pass-local payload slots are defined in
+`17-payload-gathering-and-slots.md`.
+
 ## Reflection Contract
 
 For every promoted WGSL route, the renderer must compare:
@@ -174,6 +179,19 @@ Rules:
 - a mismatch between snippet ABI and complete module reflection refuses the
   route with a stable diagnostic.
 
+## Payload Gathering Integration
+
+`GPUPayloadGatherer` consumes this ABI contract.
+
+Rules:
+
+- every payload write must reference a field in `WGSLPackingPlan`;
+- every resource binding must reference an entry in `WGSLResourceBindingPlan`;
+- payload slots must not change pipeline-key identity;
+- payload gather/write/binding/upload plans must be validated by fixtures
+  against reflected layouts;
+- packing or binding mismatch refuses the route instead of falling back to CPU.
+
 ## Compute Module ABI
 
 `WGSLComputeModule` ABI includes:
@@ -202,6 +220,7 @@ ABI diagnostics must include:
 - uniform or storage layout preimage and hash;
 - reflection summary;
 - packing plan summary;
+- payload write plan summary when values were gathered;
 - mismatch field when refused;
 - consuming material, render step, filter node, or compute program.
 
@@ -215,6 +234,7 @@ Stable reason-code examples:
 - `unsupported.wgsl.resource_kind_unavailable`
 - `unsupported.wgsl.feature_unrepresented_by_wgsl4k`
 - `unsupported.wgsl.packing_plan_missing`
+- `unsupported.wgsl.payload_write_plan_mismatch`
 
 ## Validation Requirements
 
@@ -225,6 +245,7 @@ Promoted ABI behavior requires:
 - negative tests for binding, alignment, size, and resource-kind mismatch;
 - render and compute key preimages that include ABI hashes;
 - Kotlin packer tests that assert offsets, sizes, and padding;
+- payload gathering tests that write values through the packing plan;
 - PM evidence that includes module hash, layout hash, and reflection status.
 
 ## Non-Goals

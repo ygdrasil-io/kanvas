@@ -41,6 +41,8 @@ render and compute keys.
 It does not include:
 
 - per-draw uniform values;
+- payload slot IDs;
+- bind group instances;
 - command ID;
 - transient buffer offsets;
 - texture contents;
@@ -136,6 +138,8 @@ It is responsible for:
 - buffers;
 - textures;
 - samplers;
+- materializing gathered uniform, storage, texture, sampler, and artifact
+  payload bindings;
 - coverage/path/glyph atlases when owned by this renderer;
 - `CPUPreparedGPUArtifactRegistry` lookup and accounting;
 - upload staging resources;
@@ -165,6 +169,7 @@ Expected cache layers:
   `WGSLComputeModule` identity;
 - compute pipeline cache keyed by `GPUComputePipelineKey`;
 - layout cache keyed by bind group and uniform layout identity;
+- payload cache keyed by pass-local uniform/resource payload blocks;
 - sampler cache keyed by sampler descriptor;
 - texture/resource cache keyed by explicit resource descriptors;
 - atlas caches with explicit ownership and eviction rules;

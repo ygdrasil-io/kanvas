@@ -27,6 +27,8 @@ It records:
 - draw-pass, compute-pass, copy, upload, and readback counts;
 - material key, material program, material assembly plan, render pipeline,
   compute pipeline, and WGSL module counts;
+- payload slot counts, payload fingerprints, bind group churn, and upload byte
+  counts;
 - cache hits, misses, evictions, and creations;
 - CPU-prepared artifact counts, bytes, uploads, and refusals;
 - submitted bytes for uniforms, vertices, indices, storage, textures, and
@@ -49,6 +51,7 @@ Cache reporting is grouped by domain:
 | Render pipeline cache | lookups, hits, misses, created pipelines, creation failures. |
 | Compute pipeline cache | lookups, hits, misses, created pipelines, creation failures. |
 | Layout cache | bind group layouts, uniform layouts, packing plans, mismatches. |
+| Payload cache | uniform payload slots, resource binding slots, scoped fingerprints, hits, misses, bytes uploaded, materialization failures. |
 | Resource cache | textures, buffers, samplers, bind groups, live bytes, evictions. |
 | Artifact registry | artifact lookups, hits, misses, uploads, evictions, budget refusals. |
 | Atlas cache | atlas generation, resident entries, eviction, upload bytes, stale entries. |
@@ -119,6 +122,8 @@ Initial gate families:
 - material assembly plan creation after warmup;
 - WGSL module creation after warmup;
 - uniform upload bytes;
+- uniform payload slot reuse;
+- bind group churn;
 - vertex/index/storage upload bytes;
 - texture upload bytes;
 - artifact cache hit rate;

@@ -36,6 +36,9 @@ material, render-step, and resource facts.
 `GPURenderStep` owns the geometry/coverage technique used by a draw inside a
 pass.
 
+`GPUPayloadGatherer` owns payload writing and pass-local uniform/resource
+slot assignment during pass construction.
+
 ## `GPURecorder`
 
 `GPURecorder` accepts normalized draw commands and a target configuration. It
@@ -221,6 +224,7 @@ It contains:
 - layer plan;
 - task list;
 - material and pipeline key references;
+- payload write plans and payload slot references;
 - required resource declarations;
 - route diagnostics;
 - feature and capability assumptions.
@@ -237,7 +241,7 @@ encode commands, or represent a synchronization boundary.
 Task phases:
 
 1. `prepareResources`: allocate or resolve pipelines, buffers, textures,
-   samplers, atlases, bind groups, and upload payloads.
+   samplers, atlases, bind groups, and gathered payload uploads.
 2. `addCommands`: encode commands through the `GPU` facade.
 
 The split exists so route selection, resource failure, and command encoding

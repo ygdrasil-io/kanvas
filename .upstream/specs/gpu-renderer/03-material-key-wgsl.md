@@ -48,6 +48,10 @@ It does not include:
 - vertex topology;
 - depth/stencil state;
 - per-draw uniform values;
+- payload slot IDs;
+- bind group instances;
+- texture object handles;
+- pixel contents;
 - transient resource handles;
 - command ID;
 - compute entry point, workgroup size, or storage-resource topology;
@@ -222,6 +226,7 @@ Material diagnostics must include:
 - WGSL fragment list;
 - material dictionary version and snippet tree summary;
 - `GPUMaterialAssemblyPlan` hash/preimage label;
+- payload write plan label when material values are gathered;
 - module hash;
 - parser/reflection result;
 - unsupported feature code when refused;
@@ -238,6 +243,7 @@ consuming the compute program.
 - Do not implement Graphite's `PaintParamsKey` machinery.
 - Do not use WGSL string concatenation without structured fragment metadata.
 - Do not bypass `GPUMaterialDictionary` for material WGSL assembly.
+- Do not pack per-draw material values during material-key construction.
 - Do not hide parser failures behind CPU fallback.
 - Do not include backend target state in `MaterialKey`.
 - Do not encode compute program identity in `MaterialKey`.

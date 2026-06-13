@@ -90,6 +90,8 @@ Each invocation records:
 
 Per-draw uniform values may be referenced by slot identity, but they are not
 part of durable pipeline identity.
+Payload slot semantics are defined in
+`17-payload-gathering-and-slots.md`.
 
 ## `GPUDrawInsertion`
 

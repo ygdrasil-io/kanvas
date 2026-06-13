@@ -40,6 +40,7 @@ The module owns:
 - sort-key generation;
 - material and pipeline keys;
 - material dictionary and WGSL snippet registry;
+- payload gathering and payload slot assignment;
 - WGSL module assembly requests;
 - WGSL layout and binding ABI contracts;
 - blend, color, and target-state planning;
@@ -75,6 +76,7 @@ responsibilities:
 - `materials`
 - `pipelines`
 - `resources`
+- `payloads`
 - `execution`
 - `state`
 - `routing`
@@ -126,6 +128,20 @@ Public concept names in the new renderer use uppercase acronyms:
 - `WGSLSnippetID`
 - `WGSLSnippetNode`
 - `GPUMaterialAssemblyPlan`
+- `GPUPayloadGatherer`
+- `GPUPayloadGatherPlan`
+- `GPUPayloadWritePlan`
+- `GPUMaterialPayload`
+- `GPUPayloadSlotID`
+- `GPUUniformPayloadBlock`
+- `GPUUniformPayloadSlot`
+- `GPUResourceBindingBlock`
+- `GPUResourceBindingSlot`
+- `GPUPayloadBindingPlan`
+- `GPUPayloadUploadPlan`
+- `GPUPayloadFingerprint`
+- `GPUGradientPayloadStore`
+- `GPUDrawPayloadRef`
 - `GPUBlendPlan`
 - `GPUColorPlan`
 - `GPUTargetState`
@@ -178,12 +194,16 @@ into a narrower GPU renderer value object.
 | `ShaderSnippet` | `WGSLSnippet` | Structured material WGSL function ABI with uniforms, resources, children, versions, and requirements. |
 | `ShaderNode` | `WGSLSnippetNode` | Decompressed material tree node with propagated requirements and diagnostic provenance. |
 | `UniquePaintParamsID` | `GPUMaterialProgramID` | Dictionary-local compact ID for an equivalent `MaterialKey`; not a portable identity by itself. |
+| `PipelineDataGatherer` | `GPUPayloadGatherer` | Collects concrete uniform/resource payload values after keys and layouts are accepted. |
+| `UniformDataBlock` / `UniformDataCache` | `GPUUniformPayloadBlock` / `GPUUniformPayloadSlot` | Pass-local payload bytes and de-duplicated slots; values are not durable key facts. |
+| `TextureDataBlock` / `TextureDataCache` | `GPUResourceBindingBlock` / `GPUResourceBindingSlot` | Ordered resource binding payloads and pass-local slots; no raw GPU handle identity. |
+| `FloatStorageManager` | `GPUGradientPayloadStore` | Pass-local gradient stop storage when an accepted route uses buffer-backed gradient data. |
 | `GraphicsPipelineDesc` | `GPURenderPipelineKey` | Render step, material, target state, fixed state, and capabilities. |
 | `ResourceProvider` | `GPUResourceProvider` | Pipelines, buffers, textures, samplers, atlases, and cache ownership. |
 | `SharedContext` / `Caps` | `GPUExecutionContext` / `GPUCapabilities` | Facade implementation, device generation, queue facts, and capability snapshot. |
 | `CommandBuffer` / `QueueManager` | `GPUCommandSubmission` | Encoded command scopes, submission result, readback, and device-loss diagnostics. |
 | `RenderPassDesc` | `GPUTargetState` | Attachment format, load/store, sample count, write state, and target assumptions. |
-| `Uniform` / pipeline data gathering | `WGSLUniformLayout` / `WGSLPackingPlan` | WGSL reflection-backed ABI and Kotlin packing; no SkSL type ownership. |
+| `Uniform` / payload layout | `WGSLUniformLayout` / `WGSLPackingPlan` | WGSL reflection-backed ABI and Kotlin packing; no SkSL type ownership. |
 | `GlobalCache` / recorder-local resources | `GPUSharedScope` / `GPURecorderScope` | Conceptual scope split for cache and transient resource lifetimes. |
 
 The mapping is conceptual. Kanvas is not required to preserve Graphite class
@@ -207,6 +227,7 @@ legacy stateful API
   -> GPUMaterialDictionary + WGSLSnippetNode tree
   -> GPUBlendPlan + GPUColorPlan + GPUTargetState
   -> WGSLBindingLayout + WGSLPackingPlan
+  -> GPUPayloadGatherer + payload slots
   -> GPURenderPipelineKey
   -> GPUResourceProvider
   -> GPUExecutionContext + GPUCommandSubmission

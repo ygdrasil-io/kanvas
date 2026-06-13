@@ -37,6 +37,7 @@ Tests must assert canonical preimages and hashes for:
 - `GPURenderPipelineKey`;
 - `GPUComputePipelineKey`;
 - WGSL module identity;
+- payload gather plan identity;
 - CPU-prepared artifact keys;
 - route diagnostics.
 
@@ -77,6 +78,20 @@ Tests must assert:
 - Kotlin packing offsets, sizes, alignment, and padding;
 - reflection mismatch refusals;
 - render and compute key preimages include ABI hashes.
+
+### Payload Gathering Tests
+
+Tests must assert:
+
+- `GPUPayloadGatherPlan`, `GPUPayloadWritePlan`, `GPUPayloadBindingPlan`, and
+  `GPUPayloadUploadPlan` dumps are deterministic;
+- uniform payload bytes match `WGSLPackingPlan` offsets, sizes, padding, and
+  numeric conversion;
+- equal payload values de-duplicate to the same pass-local slot or scoped
+  `GPUPayloadFingerprint`;
+- distinct payload values do not change durable material or pipeline keys;
+- resource binding order matches `WGSLResourceBindingPlan`;
+- stale, missing, or incompatible resources refuse with stable diagnostics.
 
 ### Blend And Color Tests
 
@@ -122,6 +137,7 @@ Evidence must include:
 - material key count;
 - material dictionary version and material program count;
 - material assembly plan count;
+- payload slot counts, payload fingerprints, and upload bytes;
 - WGSL module validation result;
 - output artifact, checksum, diff, or readback where applicable;
 - capability facts;
@@ -207,6 +223,7 @@ Failures must be classified as:
 - normalization failure;
 - material-key failure;
 - material-dictionary failure;
+- payload-gathering failure;
 - WGSL validation failure;
 - pipeline-key failure;
 - resource-preparation failure;
