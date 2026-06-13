@@ -7,8 +7,9 @@
               "status": "pass",
               "supportScope": "simple-latin-line-visible",
               "supportClaim": true,
-              "selectedRoute": "webgpu.text.outline-path.simple-latin",
-              "glyphRoute": "font.glyph.outline-path",
+              "selectedRoute": "webgpu.text.glyph-atlas.simple-latin",
+              "legacyRoute": "webgpu.text.outline-path.simple-latin",
+              "glyphSourceRoute": "font.glyph.outline-path",
               "atlasRouteIdentifier": "webgpu.text.glyph-atlas.simple-latin",
               "atlasUploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
               "atlasUploadByteCount": 12928,
@@ -22,10 +23,10 @@
               "glyphInventoryCount": 32,
               "dedupedGlyphCount": 26,
               "comparison": {
-  "similarity": 99.010417,
+  "similarity": 99.801432,
   "totalPixels": 61440,
-  "matchingPixels": 60832,
-  "mismatchingPixels": 608,
+  "matchingPixels": 61318,
+  "mismatchingPixels": 122,
   "tolerance": 8,
   "maxChannelDiff": {
     "a": 0,
@@ -35,9 +36,9 @@
   },
   "meanMismatchDiff": {
     "a": 0,
-    "r": 41,
-    "g": 41,
-    "b": 41
+    "r": 107,
+    "g": 107,
+    "b": 107
   }
 },
               "similarityThreshold": 95.00,

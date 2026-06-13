@@ -2,8 +2,8 @@
   "artifactAudit": [
     {
       "exists": true,
-      "key": "reference",
-      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png"
+      "key": "atlas",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json"
     },
     {
       "exists": true,
@@ -12,18 +12,13 @@
     },
     {
       "exists": true,
-      "key": "webGpu",
-      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png"
-    },
-    {
-      "exists": true,
       "key": "cpuDiff",
       "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu-diff.png"
     },
     {
       "exists": true,
-      "key": "webGpuDiff",
-      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png"
+      "key": "reference",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png"
     },
     {
       "exists": true,
@@ -42,8 +37,13 @@
     },
     {
       "exists": true,
-      "key": "atlas",
-      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json"
+      "key": "webGpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png"
+    },
+    {
+      "exists": true,
+      "key": "webGpuDiff",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png"
     }
   ],
   "blocked": true,

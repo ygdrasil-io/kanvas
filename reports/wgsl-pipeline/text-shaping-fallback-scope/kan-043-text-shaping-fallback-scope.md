@@ -22,7 +22,7 @@ renderer behavior.
 
 | Row | Status | Category | Font | Shaping mode | Reason | CPU route | GPU route |
 |---|---|---|---|---|---|---|---|
-| `text.simple-latin.line.v1` | `pass` | `simple-latin-support` | `Liberation Sans` | `simple-codepoint-order` | `none` | `cpu.text.outline-path.simple-latin` | `webgpu.text.outline-path.simple-latin` |
+| `text.simple-latin.line.v1` | `pass` | `simple-latin-support` | `Liberation Sans` | `simple-codepoint-order` | `none` | `cpu.text.outline-path.simple-latin` | `webgpu.text.glyph-atlas.simple-latin` |
 | `font-kerning-style-fixture` | `pass` | `bounded-shaping-support` | `Liberation Sans Bold` | `simple-kerning-fixture` | `none` | `cpu.text.outline.kerning-style` | `webgpu.text.outline.kerning-style-fixture` |
 | `font-complex-shaping-refusal` | `expected-unsupported` | `bounded-shaping-refusal` | `Liberation Serif Italic` | `unsupported` | `font.shaping-feature-unsupported` | `cpu.text.refusal-oracle.complex-shaping` | `webgpu.text.refuse` |
 | `m62-missing-glyph-fallback-refusal` | `expected-unsupported` | `fallback-missing-glyph-refusal` | `Liberation Sans` | `simple-glyph-id-map-missing-glyph` | `font.shaping-fallback-missing` | `cpu.text.outline.missing-glyph-oracle` | `webgpu.text.refuse.missing-glyph-fallback` |

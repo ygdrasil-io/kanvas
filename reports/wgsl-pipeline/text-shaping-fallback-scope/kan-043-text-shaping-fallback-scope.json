@@ -116,8 +116,8 @@
       ],
       "route": {
         "cpu": "cpu.text.outline-path.simple-latin",
-        "gpu": "webgpu.text.outline-path.simple-latin",
-        "glyph": "font.glyph.outline-path",
+        "gpu": "webgpu.text.glyph-atlas.simple-latin",
+        "glyphSource": "font.glyph.outline-path",
         "referenceKind": "cpu-atlas-alpha-mask-oracle"
       },
       "fallbackPolicy": {

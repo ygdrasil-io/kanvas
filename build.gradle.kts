@@ -414,7 +414,7 @@ fun renderPipelineConformanceReport(
         |${row("WebGPU coverage strategy inventory", webGpuCoverageInventoryStatus, "`WebGpuCoverageStrategyInventory` separates selector-only `proven` mask/atlas route selection, adapter-evidence promoted candidates (analytic rect/rrect, convex fan, stencil-cover) with explicit statuses (`adapter-pass`, `adapter-fail`, `adapter-skipped`, `adapter-timeout`; `blocked-no-adapter-lane` only when the lane is missing), `compatibility` full-scissor, and `refused` span-runs/alpha-mask/coverage-atlas/edge-overflow/arbitrary-AA-clip branches with stable diagnostics; `coverage.edge-count-exceeded` remains a known unsupported GPU breadth gap and `image-filter.crop-input-nonnull-prepass-required` is retained only for out-of-scope Crop(input nonNull) graph shapes, not the M38 SimpleOffset pre-pass target.")}
         |${row("CoverageAtlas policy gate", "blocked", "`CoverageAtlasPolicyGate` keeps persistent atlas caching disabled by default: persistent policy verdict `no-go`, shape-key/transform-key/invalidation/memory-budget/eviction/CPU-GPU-sync/owner-thread checks are missing by policy, static gate counters remain hits=0 misses=0 residentBytes=0 evictions=0 because runtime atlas telemetry is not enabled, and unsupported persistent atlas use emits `coverage.atlas-policy-unavailable`")}
         |${row("Glyph mask ownership", status("org.skia.pipeline.GeometryCoverageContractsTest", "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest", "org.skia.gpu.webgpu.SkWebGpuGlyphAtlasTest"), "`GlyphMaskLowering` defines the descriptor boundary for glyph-run mask handoff: text/glyph infrastructure owns discovery, rasterization, atlas lifetime, and invalidation; geometry only consumes an opaque alpha-mask ref or emits `coverage.glyph-mask-dependency-unavailable`; `SkWebGpuGlyphAtlasTest` proves a bounded KAN-010 A8/R8 upload-plan atlas with coordinates and sampling diagnostics; WebGPU still refuses standalone alpha-mask coverage with `coverage.alpha-mask-unsupported`")}
-        |${row("Simple Latin text line", status("org.skia.gpu.webgpu.SimpleLatinLineSceneEvidenceTest"), "`SimpleLatinLineSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `text.simple-latin.line.v1`; WebGPU selects `webgpu.text.outline-path.simple-latin` with `fallbackReason=none`, compares against a CPU atlas alpha-mask oracle at local threshold 95%, attaches `SkWebGpuGlyphAtlas` upload evidence, and keeps non-claims for shaping, fallback fonts, emoji/color fonts, SDF/LCD, RTL/BiDi, ligatures, and broad text support")}
+        |${row("Simple Latin text line", status("org.skia.gpu.webgpu.SimpleLatinLineSceneEvidenceTest"), "`SimpleLatinLineSceneEvidenceTest` writes bounded simple-latin reference/CPU/WebGPU/diff/stats artifacts for `text.simple-latin.line.v1`; WebGPU selects `webgpu.text.glyph-atlas.simple-latin` with `fallbackReason=none`, compares against a CPU atlas alpha-mask oracle at local threshold 95%, attaches `SkWebGpuGlyphAtlas` upload evidence, and keeps non-claims for shaping, fallback fonts, emoji/color fonts, SDF/LCD, RTL/BiDi, ligatures, and broad text support")}
         |${row("Simple linear gradient", status("org.skia.gpu.webgpu.SimpleLinearGradientSceneEvidenceTest"), "`SimpleLinearGradientSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `paint.linear-gradient.rect.v1`; WebGPU selects `webgpu.generated.linear-gradient.rect` with generated `fs_clamp` WGSL validation, `fallbackReason=none`, compares against an analytic sRGB two-stop oracle at local threshold 99%, and keeps non-claims for wide-gamut color management, all tile modes, gradient meshes, advanced color spaces, broad gradient-family support, color-filter chains, and codec/mipmap work")}
         |${row("Simple bitmap rect", status("org.skia.gpu.webgpu.SimpleBitmapRectSceneEvidenceTest"), "`SimpleBitmapRectSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `paint.bitmap-rect.nearest.fixture.v1`; WebGPU selects `webgpu.image.bitmap-rect.nearest.fixture`, uses fixture-backed `SkCanvas.drawImageRect` with `sampler=nearest`, `tileMode=kClamp`, `srcRectConstraint=kStrict`, `fallbackReason=none`, compares against an analytic strict-nearest fixture oracle at local threshold 99%, and keeps non-claims for broad image support, codec decode, arbitrary textures, mipmaps, tile-mode breadth, color-managed decode, texture atlases, and perspective transforms")}
         |${row("Simple SrcOver alpha", status("org.skia.gpu.webgpu.SimpleSrcOverAlphaSceneEvidenceTest"), "`SimpleSrcOverAlphaSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `paint.src-over-alpha.rect-stack.v1`; WebGPU selects `webgpu.blend.src-over.partial-alpha.fixed-function`, validates generated solid-rect WGSL, records `blendPlan=FixedFunction`, uses two `kSrcOver` partial-alpha rect commands, `fallbackReason=none`, compares against an analytic SrcOver oracle at local threshold 99%, and keeps non-claims for arbitrary blend modes, advanced blend chains, saveLayer blend composition, shader destination reads, wide/color-managed color pipeline, and broad layer compositing")}
@@ -480,7 +480,7 @@ fun renderPipelineConformanceReport(
         |  coordinates, upload bytes, a sampling diagnostic, and non-claims for line text, shaping,
         |  fallback fonts, emoji/color fonts, SDF/LCD, and dynamic eviction).
         |- Simple Latin text line artifacts: `reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/`
-        |  (`route-webgpu.json` records `selectedRoute=webgpu.text.outline-path.simple-latin`,
+        |  (`route-webgpu.json` records `selectedRoute=webgpu.text.glyph-atlas.simple-latin`,
         |  `fallbackReason=none`, the KAN-011 atlas upload SHA/byte count, and non-claims for
         |  shaping, fallback fonts, emoji/color fonts, SDF/LCD, RTL/BiDi, ligatures, and broad text).
         |- Simple linear gradient evidence: `reports/wgsl-pipeline/scenes/artifacts/kan-013-linear-gradient-wave/`
@@ -838,6 +838,7 @@ tasks.register("pipelineConformance") {
         "validateKan051RendererVisualDelta",
         "validateKan052ImageFilterVisualDelta",
         "validateKan053TextGlyphVisualDelta",
+        "validateKan054WebGpuGlyphAtlasSamplingRoute",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -876,6 +877,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED KAN-051 renderer visual delta and before/after metric guards: validateKan051RendererVisualDelta
             |- REQUIRED KAN-052 image-filter visual delta blocker guard: validateKan052ImageFilterVisualDelta
             |- REQUIRED KAN-053 text glyph visual delta blocker guard: validateKan053TextGlyphVisualDelta
+            |- REQUIRED KAN-054 WebGPU glyph atlas sampling route guard: validateKan054WebGpuGlyphAtlasSamplingRoute
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
@@ -5631,6 +5633,30 @@ tasks.register<Exec>("validateKan053TextGlyphVisualDelta") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("validateKan054WebGpuGlyphAtlasSamplingRoute") {
+    group = "verification"
+    description = "Materializes and validates the KAN-054 WebGPU glyph atlas sampling route evidence."
+    mustRunAfter("validateKan053TextGlyphVisualDelta")
+    dependsOn(":gpu-raster:kan054WebGpuGlyphAtlasSamplingRouteTest")
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/webgpu-glyph-atlas-sampling-route")
+    commandLine(
+        "python3",
+        "scripts/validate_kan054_webgpu_glyph_atlas_sampling_route.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan054_webgpu_glyph_atlas_sampling_route.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/text-glyph-visual-delta/kan-053-text-glyph-visual-delta.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/glyph-mask-atlas-ownership/kan-044-glyph-mask-atlas-ownership.json"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuGlyphAtlas.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/resources/shaders/text_glyph_atlas.wgsl"))
+    outputs.file(outputDir.file("kan-054-webgpu-glyph-atlas-sampling-route.json"))
+    outputs.file(outputDir.file("kan-054-webgpu-glyph-atlas-sampling-route.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateKan047CodecProvenanceMatrix") {
     group = "verification"
     description = "Materializes and validates the KAN-047 codec provenance matrix."
@@ -5969,6 +5995,7 @@ tasks.register("pipelinePmBundle") {
         "validateKan051RendererVisualDelta",
         "validateKan052ImageFilterVisualDelta",
         "validateKan053TextGlyphVisualDelta",
+        "validateKan054WebGpuGlyphAtlasSamplingRoute",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",
@@ -6008,6 +6035,7 @@ tasks.register("pipelinePmBundle") {
     val m91MepRcScenePackDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m91-mep-rc-scene-pack")
     val m92KadreRuntimeRcDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m92-kadre-runtime-rc")
     val kan046TileModesMipmapDir = layout.projectDirectory.dir("reports/wgsl-pipeline/tile-modes-mipmap-boundary")
+    val kan054WebGpuGlyphAtlasSamplingRouteDir = layout.projectDirectory.dir("reports/wgsl-pipeline/webgpu-glyph-atlas-sampling-route")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -6044,6 +6072,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m91MepRcScenePackDir)
     inputs.dir(m92KadreRuntimeRcDir)
     inputs.dir(kan046TileModesMipmapDir)
+    inputs.dir(kan054WebGpuGlyphAtlasSamplingRouteDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -6119,6 +6148,7 @@ tasks.register("pipelinePmBundle") {
         val m91MepRcScenePackRoot = m91MepRcScenePackDir.asFile
         val m92KadreRuntimeRcRoot = m92KadreRuntimeRcDir.asFile
         val kan046TileModesMipmapRoot = kan046TileModesMipmapDir.asFile
+        val kan054WebGpuGlyphAtlasSamplingRouteRoot = kan054WebGpuGlyphAtlasSamplingRouteDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -6236,6 +6266,9 @@ tasks.register("pipelinePmBundle") {
         }
         if (kan046TileModesMipmapRoot.isDirectory) {
             kan046TileModesMipmapRoot.copyRecursively(targetRoot.resolve("release/kan-046-tile-modes-mipmap-boundary"), overwrite = true)
+        }
+        if (kan054WebGpuGlyphAtlasSamplingRouteRoot.isDirectory) {
+            kan054WebGpuGlyphAtlasSamplingRouteRoot.copyRecursively(targetRoot.resolve("release/kan-054-webgpu-glyph-atlas-sampling-route"), overwrite = true)
         }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)

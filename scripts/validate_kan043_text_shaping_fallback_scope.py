@@ -155,12 +155,16 @@ def support_proofs(root: Path, root_name: str, webgpu_route_name: str = "route-g
     }
 
 
+def is_simple_latin_no_fallback_policy(policy: Any) -> bool:
+    return policy in {"none-for-supported-simple-latin-line", "none"}
+
+
 def build_simple_latin_row(root: Path) -> dict[str, Any]:
     stats = load_json(root, KAN012_STATS_PATH)
     atlas = load_json(root, KAN012_ATLAS_PATH)
     scene_id = stats.get("sceneId")
     require(scene_id == "text.simple-latin.line.v1", f"KAN-012 scene id changed: {scene_id}")
-    require(stats.get("fallbackPolicy") == "none-for-supported-simple-latin-line", "KAN-012 fallback policy changed")
+    require(is_simple_latin_no_fallback_policy(stats.get("fallbackPolicy")), "KAN-012 fallback policy changed")
     require(stats.get("globalThresholdChanged") is False, "KAN-012 threshold changed")
     text = stats.get("text")
     require(isinstance(text, str) and text, "KAN-012 text missing")
@@ -191,7 +195,7 @@ def build_simple_latin_row(root: Path) -> dict[str, Any]:
         "route": {
             "cpu": "cpu.text.outline-path.simple-latin",
             "gpu": stats.get("webGpuRouteIdentifier"),
-            "glyph": stats.get("glyphRoute"),
+            "glyphSource": stats.get("glyphSourceRoute"),
             "referenceKind": "cpu-atlas-alpha-mask-oracle",
         },
         "fallbackPolicy": {

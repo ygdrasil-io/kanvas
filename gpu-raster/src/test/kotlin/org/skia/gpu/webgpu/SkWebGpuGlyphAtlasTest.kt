@@ -3,6 +3,7 @@ package org.skia.gpu.webgpu
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkCpuGlyphCache
@@ -78,6 +79,51 @@ class SkWebGpuGlyphAtlasTest {
         out.parentFile.mkdirs()
         out.writeText(dump)
         assertTrue(out.readText().contains("\"uploadByteCount\": ${atlas.uploadByteCount}"))
+    }
+
+    @Test
+    fun `positioned glyph quads use mask bounds and skip empty masks`() {
+        val cache = simpleLatinCache()
+        val atlas = SkWebGpuGlyphAtlas.build(
+            cache = cache,
+            generation = 1,
+            maxTextureWidth = 128,
+        )
+        val visibleKey = cache.glyphs.first { it.mask.width > 0 && it.mask.height > 0 }.key
+        val spaceKey = cache.glyphs.first { it.codePoints.contains(' '.code) }.key
+        val visibleEntry = atlas.entryForKey(visibleKey)
+
+        val quads = atlas.quadsForPositionedGlyphs(
+            glyphKeysInDrawOrder = listOf(visibleKey, spaceKey),
+            glyphDeviceX = listOf(10.5f, 24f),
+            baselineY = 30f,
+        )
+
+        assertEquals(1, quads.size)
+        assertEquals(
+            SkWebGpuGlyphAtlasQuad(
+                glyphKey = visibleKey,
+                glyphId = visibleEntry.glyphId,
+                left = 10.5f + visibleEntry.maskLeft,
+                top = 30f + visibleEntry.maskTop,
+                right = 10.5f + visibleEntry.maskLeft + visibleEntry.maskWidth,
+                bottom = 30f + visibleEntry.maskTop + visibleEntry.maskHeight,
+                u0 = visibleEntry.u0,
+                v0 = visibleEntry.v0,
+                u1 = visibleEntry.u1,
+                v1 = visibleEntry.v1,
+            ),
+            quads.single(),
+        )
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            atlas.quadsForPositionedGlyphs(
+                glyphKeysInDrawOrder = listOf(visibleKey, spaceKey),
+                glyphDeviceX = listOf(10.5f),
+                baselineY = 30f,
+            )
+        }
+        assertEquals("glyph key count 2 must match x count 1", error.message)
     }
 
     private fun simpleLatinCache(): SkCpuGlyphCache =

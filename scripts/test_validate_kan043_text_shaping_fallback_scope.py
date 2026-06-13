@@ -14,6 +14,11 @@ import validate_kan043_text_shaping_fallback_scope as kan043
 
 
 class TextShapingFallbackScopeTest(unittest.TestCase):
+    def test_simple_latin_no_fallback_policy_accepts_historical_and_current_none(self) -> None:
+        self.assertTrue(kan043.is_simple_latin_no_fallback_policy("none-for-supported-simple-latin-line"))
+        self.assertTrue(kan043.is_simple_latin_no_fallback_policy("none"))
+        self.assertFalse(kan043.is_simple_latin_no_fallback_policy("font.shaping-fallback-missing"))
+
     def test_build_evidence_exposes_explicit_text_scope(self) -> None:
         evidence = kan043.build_evidence(PROJECT_ROOT)
 

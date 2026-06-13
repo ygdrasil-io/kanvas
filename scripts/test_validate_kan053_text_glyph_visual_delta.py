@@ -42,6 +42,10 @@ class TextGlyphVisualDeltaTest(unittest.TestCase):
         self.assertEqual(581, current["stats"]["cpuMismatchingPixels"])
         self.assertEqual(608, current["stats"]["webGpuMismatchingPixels"])
         self.assertEqual(27, current["stats"]["webGpuMinusCpuReferenceMismatches"])
+        self.assertEqual("webgpu.text.outline-path.simple-latin", current["routeWebGpu"]["selectedRoute"])
+
+        mutable_stats = json.loads((PROJECT_ROOT / kan053.CURRENT_ARTIFACTS["stats"]).read_text(encoding="utf-8"))
+        self.assertEqual("webgpu.text.glyph-atlas.simple-latin", mutable_stats["webGpuRouteIdentifier"])
 
         blocker = evidence["blocker"]
         self.assertEqual("text-atlas-alpha-mask-draw-route-not-materialized", blocker["rootCause"])
