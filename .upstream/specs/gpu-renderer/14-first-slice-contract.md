@@ -58,6 +58,7 @@ The slice must exercise these contracts:
 - `GPUOcclusionTracker` for conservative non-culling and at least one safe
   culling proof;
 - `GPUDrawLayerPlanner` for the root target scope;
+- `GPUDrawInvocation` and `GPUDrawInsertion` dumps for accepted draw steps;
 - `GPURecording`;
 - `GPUTaskList`;
 - `GPUDrawPass`;
@@ -165,6 +166,7 @@ Minimum isolated fixtures:
 - solid rect identity transform;
 - solid rect translated;
 - solid rect clipped by device rect;
+- adjacent compatible solid rect batching under the conservative planner;
 - linear-gradient rect;
 - rounded-rect solid;
 - rounded-rect linear gradient;

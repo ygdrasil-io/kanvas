@@ -34,6 +34,7 @@ The module owns:
 - explicit draw analysis;
 - task lists and draw passes;
 - draw-layer planning;
+- draw invocation insertion and sort-window policy;
 - occlusion tracking;
 - render-step selection;
 - sort-key generation;
@@ -101,6 +102,8 @@ Public concept names in the new renderer use uppercase acronyms:
 - `GPUFilterPlan`
 - `GPUDrawLayer`
 - `GPUDrawLayerPlanner`
+- `GPUDrawInvocation`
+- `GPUDrawInsertion`
 - `GPUDrawPass`
 - `GPURenderStep`
 - `GPUResourceProvider`
@@ -160,6 +163,7 @@ into a narrower GPU renderer value object.
 | SaveLayer and layer semantics | `GPULayerPlan` | Captured layer/saveLayer semantics, offscreen target needs, restore/composite behavior, and attached filters. |
 | Image filter graph planning | `GPUFilterPlan` | Filter DAG, intermediate resources, render/compute routes, and filter refusals outside `MaterialKey`. |
 | Layer/draw-context planning | `GPUDrawLayer` / `GPUDrawLayerPlanner` | Logical layer and composite scopes from captured state; not Graphite context classes. |
+| `DrawListLayer` insertion | `GPUDrawInvocation` / `GPUDrawInsertion` | Graphite-inspired backward/forward insertion, sort windows, and merge policy; no C++ arena or bit-layout inheritance. |
 | `DrawPass` | `GPUDrawPass` | Immutable pass close to what the GPU facade will execute. |
 | `Renderer` / `RenderStep` | `GPURenderStep` | Geometry/coverage technique with fixed shader and state contribution. |
 | `PaintParamsKey` | `MaterialKey` | Paint/material identity; no SkSL. |

@@ -189,9 +189,12 @@ A layer contains:
 `GPUDrawLayerPlanner` consumes `GPUDrawAnalysis`, `GPULayerPlan`,
 `GPUFilterPlan`, target facts, and `GPUCapabilities`. It produces a
 deterministic low-level draw-layer plan and a pass partitioning proposal.
+The detailed invocation expansion, backward/forward insertion, sort-window,
+and merge policy is defined in `15-draw-layer-planner-and-sort-policy.md`.
 
 It is responsible for:
 
+- expanding accepted analysis records into `GPUDrawInvocation` values;
 - assigning commands to `GPUDrawLayer` scopes;
 - deciding whether a layer may draw directly into its parent or requires an
   intermediate target;
@@ -200,6 +203,8 @@ It is responsible for:
 - applying occlusion facts at layer granularity when proven safe;
 - exposing stable refusal diagnostics when layer semantics cannot be executed;
 - producing sort windows that `GPUDrawPass` may use.
+- producing `GPUDrawInsertion` diagnostics for reordered, merged, or original
+  order invocations.
 
 It must not allocate GPU resources, create WebGPU pipelines, or encode commands.
 Those responsibilities stay with `GPUResourceProvider`, `GPUTaskList`, and the

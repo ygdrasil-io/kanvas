@@ -130,6 +130,7 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 | `12-blend-color-target-state.md` | `GPUBlendPlan`, `GPUColorPlan`, `GPUTargetState`, destination reads, layer/filter interaction, and blend/color diagnostics. |
 | `13-performance-telemetry-cache-gates.md` | `GPUTelemetryLedger`, cache domains, budgets, warmup, performance gates, quarantine, and PM evidence. |
 | `14-first-slice-contract.md` | First isolated rect/rrect plus solid/linear slice contracts, fixtures, WGSL requirements, diagnostics, and promotion gates. |
+| `15-draw-layer-planner-and-sort-policy.md` | Graphite-inspired draw invocation expansion, layer insertion, sort windows, stencil/destination-read ordering, merge policy, and planner diagnostics. |
 
 ## Target Shape
 
