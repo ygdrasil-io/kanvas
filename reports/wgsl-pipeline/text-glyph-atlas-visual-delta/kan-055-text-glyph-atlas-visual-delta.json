@@ -1,0 +1,376 @@
+{
+  "after": {
+    "artifacts": {
+      "atlas": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/atlas.json",
+      "cpu": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/cpu.png",
+      "cpuDiff": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/cpu-diff.png",
+      "reference": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/reference.png",
+      "routeCpu": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/route-cpu.json",
+      "routeWebGpu": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/route-webgpu.json",
+      "stats": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/stats.json",
+      "webGpu": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/webgpu.png",
+      "webGpuDiff": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/webgpu-diff.png"
+    },
+    "routeWebGpu": {
+      "atlasRouteIdentifier": "webgpu.text.glyph-atlas.simple-latin",
+      "fallbackReason": "none",
+      "legacyRoute": "webgpu.text.outline-path.simple-latin",
+      "nonClaims": [
+        "no-shaping-claim",
+        "no-fallback-font-claim",
+        "no-emoji-or-color-font-claim",
+        "no-sdf-or-lcd-claim",
+        "no-rtl-or-bidi-claim",
+        "no-ligature-claim",
+        "no-broad-text-claim"
+      ],
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-webgpu.json",
+      "sceneId": "text.simple-latin.line.v1",
+      "selectedRoute": "webgpu.text.glyph-atlas.simple-latin"
+    },
+    "source": "KAN-054",
+    "sourceArtifacts": {
+      "atlas": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json",
+      "cpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu.png",
+      "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu-diff.png",
+      "reference": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
+      "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json",
+      "routeWebGpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-webgpu.json",
+      "stats": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json",
+      "webGpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png",
+      "webGpuDiff": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png"
+    },
+    "stats": {
+      "cpuMismatchingPixels": 581,
+      "cpuSimilarity": 99.054362,
+      "cpuSimilarityThreshold": 95.0,
+      "globalThresholdChanged": false,
+      "sceneId": "text.simple-latin.line.v1",
+      "tolerance": 8,
+      "webGpuMinusCpuReferenceMismatches": -459,
+      "webGpuMismatchingPixels": 122,
+      "webGpuSimilarity": 99.801432,
+      "webGpuSimilarityThreshold": 95.0
+    }
+  },
+  "artifactAudit": [
+    {
+      "exists": true,
+      "key": "before.atlas",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/atlas.json",
+      "sha256": "be99b6cd75bc9f64e9b6305a22ba629165c18740f84dfd3ca615f25a3898a9d4",
+      "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/atlas.json",
+      "sourceSha256": "be99b6cd75bc9f64e9b6305a22ba629165c18740f84dfd3ca615f25a3898a9d4"
+    },
+    {
+      "exists": true,
+      "key": "before.cpu",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/cpu.png",
+      "sha256": "477c653c80ffc8163c0bd9a740121fb2878bc192f34aec755b17ee91abedd8cc",
+      "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/cpu.png",
+      "sourceSha256": "477c653c80ffc8163c0bd9a740121fb2878bc192f34aec755b17ee91abedd8cc"
+    },
+    {
+      "exists": true,
+      "key": "before.cpuDiff",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/cpu-diff.png",
+      "sha256": "4ad54e7a7ecf2b6bdfae687031538460293cd63962dc3cd43065db0ab5d4ee50",
+      "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/cpu-diff.png",
+      "sourceSha256": "4ad54e7a7ecf2b6bdfae687031538460293cd63962dc3cd43065db0ab5d4ee50"
+    },
+    {
+      "exists": true,
+      "key": "before.reference",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/reference.png",
+      "sha256": "1cb7110d407ee1bd964d3187899914fa7ba6504a36eceb5094443bd2262b1904",
+      "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/reference.png",
+      "sourceSha256": "1cb7110d407ee1bd964d3187899914fa7ba6504a36eceb5094443bd2262b1904"
+    },
+    {
+      "exists": true,
+      "key": "before.routeCpu",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/route-cpu.json",
+      "sha256": "ef5ae5a6b6fb1cb30a0d8c9ea3035dc6ee281bcb0280e9ffda7cf8feecc6141b",
+      "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/route-cpu.json",
+      "sourceSha256": "ef5ae5a6b6fb1cb30a0d8c9ea3035dc6ee281bcb0280e9ffda7cf8feecc6141b"
+    },
+    {
+      "exists": true,
+      "key": "before.routeWebGpu",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/route-webgpu.json",
+      "sha256": "4c0e5b4c910fee976cc0d834f725b6cd4aae460cd4c4c8ec851108aae9e5e94d",
+      "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/route-webgpu.json",
+      "sourceSha256": "4c0e5b4c910fee976cc0d834f725b6cd4aae460cd4c4c8ec851108aae9e5e94d"
+    },
+    {
+      "exists": true,
+      "key": "before.stats",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/stats.json",
+      "sha256": "d6fe658edb465c36693176f4bc68a78b255e07e46549b8144705a940bda48a76",
+      "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/stats.json",
+      "sourceSha256": "d6fe658edb465c36693176f4bc68a78b255e07e46549b8144705a940bda48a76"
+    },
+    {
+      "exists": true,
+      "key": "before.webGpu",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/webgpu.png",
+      "sha256": "d780b62297e3529e4b71ae3ef8949700ae994e94c17936540acee3fc6ab3cdd8",
+      "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/webgpu.png",
+      "sourceSha256": "d780b62297e3529e4b71ae3ef8949700ae994e94c17936540acee3fc6ab3cdd8"
+    },
+    {
+      "exists": true,
+      "key": "before.webGpuDiff",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/webgpu-diff.png",
+      "sha256": "d877defbfc6f4f5b66840b9102b00b08e71a04c03a4c55905ee92499d5ba876b",
+      "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/webgpu-diff.png",
+      "sourceSha256": "d877defbfc6f4f5b66840b9102b00b08e71a04c03a4c55905ee92499d5ba876b"
+    },
+    {
+      "exists": true,
+      "key": "after.atlas",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/atlas.json",
+      "sha256": "5327174f2de31f0c752738c349f002406691082a6c9164a3f137e15ebfae9ed3",
+      "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json",
+      "sourceSha256": "5327174f2de31f0c752738c349f002406691082a6c9164a3f137e15ebfae9ed3"
+    },
+    {
+      "exists": true,
+      "key": "after.cpu",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/cpu.png",
+      "sha256": "c37300cbc1fbcc0d43aab8dcd123ce281ad04a9eefac78b8d264704b3e368645",
+      "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu.png",
+      "sourceSha256": "c37300cbc1fbcc0d43aab8dcd123ce281ad04a9eefac78b8d264704b3e368645"
+    },
+    {
+      "exists": true,
+      "key": "after.cpuDiff",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/cpu-diff.png",
+      "sha256": "a218a45be9eb0899b1da12d3f2446a4b52811724725a9b54a4967e55f59d23e3",
+      "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu-diff.png",
+      "sourceSha256": "a218a45be9eb0899b1da12d3f2446a4b52811724725a9b54a4967e55f59d23e3"
+    },
+    {
+      "exists": true,
+      "key": "after.reference",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/reference.png",
+      "sha256": "a0dc1fd98509f211ab3764731963465b2f3aa4088b4e7ded1d19be78719a3489",
+      "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
+      "sourceSha256": "a0dc1fd98509f211ab3764731963465b2f3aa4088b4e7ded1d19be78719a3489"
+    },
+    {
+      "exists": true,
+      "key": "after.routeCpu",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/route-cpu.json",
+      "sha256": "4922d07284039c306bd024fab5a932de4f18ebb1b83b3b7dee0ea0b28dfd4ce9",
+      "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json",
+      "sourceSha256": "4922d07284039c306bd024fab5a932de4f18ebb1b83b3b7dee0ea0b28dfd4ce9"
+    },
+    {
+      "exists": true,
+      "key": "after.routeWebGpu",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/route-webgpu.json",
+      "sha256": "3c303bd0ea9168efcef294ba662ef374973162dbecd8acfb2e7731fd3115d760",
+      "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-webgpu.json",
+      "sourceSha256": "3c303bd0ea9168efcef294ba662ef374973162dbecd8acfb2e7731fd3115d760"
+    },
+    {
+      "exists": true,
+      "key": "after.stats",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/stats.json",
+      "sha256": "fd3d74d80504ed6a4215d690fc5ab05ecad6b244751e63f94a6e6212c5421e13",
+      "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json",
+      "sourceSha256": "fd3d74d80504ed6a4215d690fc5ab05ecad6b244751e63f94a6e6212c5421e13"
+    },
+    {
+      "exists": true,
+      "key": "after.webGpu",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/webgpu.png",
+      "sha256": "d5b6690c4ba1636ac9c2e1fa054b25ec272fc4e2ada0464870c56c7746da0a80",
+      "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png",
+      "sourceSha256": "d5b6690c4ba1636ac9c2e1fa054b25ec272fc4e2ada0464870c56c7746da0a80"
+    },
+    {
+      "exists": true,
+      "key": "after.webGpuDiff",
+      "matchesSource": true,
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/webgpu-diff.png",
+      "sha256": "bf85fe9ce3966e09a11156342869bb3ca84960e1ea5c39ddd24fb14f63b917bf",
+      "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png",
+      "sourceSha256": "bf85fe9ce3966e09a11156342869bb3ca84960e1ea5c39ddd24fb14f63b917bf"
+    }
+  ],
+  "before": {
+    "artifacts": {
+      "atlas": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/atlas.json",
+      "cpu": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/cpu.png",
+      "cpuDiff": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/cpu-diff.png",
+      "reference": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/reference.png",
+      "routeCpu": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/route-cpu.json",
+      "routeWebGpu": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/route-webgpu.json",
+      "stats": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/stats.json",
+      "webGpu": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/webgpu.png",
+      "webGpuDiff": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/webgpu-diff.png"
+    },
+    "blocked": true,
+    "blocker": {
+      "admissibleNextStep": "Implement the text-owned atlas sampling draw path or explicitly keep standalone alpha-mask WebGPU unsupported via coverage.alpha-mask-unsupported; do not move glyph atlas ownership into coverage.",
+      "reasonCode": "requires-production-glyph-atlas-sampling-route",
+      "rootCause": "text-atlas-alpha-mask-draw-route-not-materialized",
+      "summary": "The selected simple Latin text scene has existing reference/CPU/WebGPU/diff/stat/route artifacts, but its actual CPU and WebGPU draw routes are outline-path text routes. The glyph atlas route is proven as a text-owned R8/A8 upload plan and CPU mask oracle, not as a production WebGPU text draw route. Closing the visible delta requires a real glyph atlas alpha-mask sampling route with after artifacts, not a local outline-path threshold or AA tweak.",
+      "supportingEvidence": [
+        "KAN-043",
+        "KAN-044",
+        "KAN-012"
+      ]
+    },
+    "routeWebGpu": {
+      "adapter": "Apple M2 Max",
+      "atlasRouteIdentifier": "webgpu.text.glyph-atlas.simple-latin",
+      "atlasUploadByteCount": 12928,
+      "atlasUploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
+      "backend": "WebGPU",
+      "comparison": {
+        "matchingPixels": 60832,
+        "maxChannelDiff": {
+          "a": 0,
+          "b": 255,
+          "g": 255,
+          "r": 255
+        },
+        "meanMismatchDiff": {
+          "a": 0,
+          "b": 41,
+          "g": 41,
+          "r": 41
+        },
+        "mismatchingPixels": 608,
+        "similarity": 99.010417,
+        "tolerance": 8,
+        "totalPixels": 61440
+      },
+      "dedupedGlyphCount": 26,
+      "diffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png",
+      "drawKind": "SkTextBlob.simple-positioned-run",
+      "fallbackReason": "none",
+      "fontFamily": "Liberation Sans",
+      "fontSize": 32.0,
+      "fontSourceId": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+      "globalThresholdChanged": false,
+      "glyphInventoryCount": 32,
+      "glyphRoute": "font.glyph.outline-path",
+      "nonClaims": [
+        "no-shaping-claim",
+        "no-fallback-font-claim",
+        "no-emoji-or-color-font-claim",
+        "no-sdf-or-lcd-claim",
+        "no-rtl-or-bidi-claim",
+        "no-ligature-claim",
+        "no-broad-text-claim"
+      ],
+      "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
+      "referenceKind": "cpu-atlas-alpha-mask-oracle",
+      "renderArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png",
+      "sceneId": "text.simple-latin.line.v1",
+      "scopeId": "text.simple-latin.liberation-sans-regular.v1",
+      "selectedRoute": "webgpu.text.outline-path.simple-latin",
+      "shapingMode": "simple-codepoint-order",
+      "similarityThreshold": 95.0,
+      "status": "pass",
+      "supportClaim": true,
+      "supportScope": "simple-latin-line-visible",
+      "text": "Kanvas Latin 0123456789 ABC xyz."
+    },
+    "source": "reports/wgsl-pipeline/text-glyph-visual-delta/kan-053-text-glyph-visual-delta.json",
+    "sourceArtifacts": {
+      "atlas": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/atlas.json",
+      "cpu": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/cpu.png",
+      "cpuDiff": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/cpu-diff.png",
+      "reference": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/reference.png",
+      "routeCpu": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/route-cpu.json",
+      "routeWebGpu": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/route-webgpu.json",
+      "stats": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/stats.json",
+      "webGpu": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/webgpu.png",
+      "webGpuDiff": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/webgpu-diff.png"
+    },
+    "stats": {
+      "atlasUploadByteCount": 12928,
+      "atlasUploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
+      "cpuMatchingPixels": 60859,
+      "cpuMaxChannelDiff": {
+        "a": 0,
+        "b": 255,
+        "g": 255,
+        "r": 255
+      },
+      "cpuMismatchingPixels": 581,
+      "cpuNonWhitePixels": 4392,
+      "cpuSimilarity": 99.054362,
+      "cpuSimilarityThreshold": 95.0,
+      "dedupedGlyphCount": 26,
+      "fallbackPolicy": "none-for-supported-simple-latin-line",
+      "fontSourceId": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+      "globalThresholdChanged": false,
+      "glyphInventoryCount": 32,
+      "sceneId": "text.simple-latin.line.v1",
+      "scopeId": "text.simple-latin.liberation-sans-regular.v1",
+      "sourceCacheSha256": "f85ddf1dd6b62ecb46df77559ef78b9ad0e1f51cea70b90932fe2550b398d433",
+      "text": "Kanvas Latin 0123456789 ABC xyz.",
+      "tolerance": 8,
+      "webGpuAdapter": "Apple M2 Max",
+      "webGpuMatchingPixels": 60832,
+      "webGpuMaxChannelDiff": {
+        "a": 0,
+        "b": 255,
+        "g": 255,
+        "r": 255
+      },
+      "webGpuMinusCpuReferenceMismatches": 27,
+      "webGpuMismatchingPixels": 608,
+      "webGpuNonWhitePixels": 4396,
+      "webGpuSimilarity": 99.010417,
+      "webGpuSimilarityThreshold": 95.0
+    }
+  },
+  "delta": {
+    "mode": "before-after-route-delta",
+    "webGpuMinusCpuReferenceMismatchesAfter": -459,
+    "webGpuMinusCpuReferenceMismatchesBefore": 27,
+    "webGpuMismatchingPixelsAfter": 122,
+    "webGpuMismatchingPixelsBefore": 608,
+    "webGpuMismatchingPixelsImprovement": 486
+  },
+  "kan053Decision": "close-root-cause-resolved",
+  "kan054RendererChanged": true,
+  "nonClaims": [
+    "no-broad-text-claim",
+    "no-shaping-claim",
+    "no-fallback-font-claim",
+    "no-emoji-or-color-font-claim",
+    "no-sdf-or-lcd-claim",
+    "no-threshold-change-claim"
+  ],
+  "packId": "kan-055-text-glyph-atlas-visual-delta",
+  "rendererChangedSource": "KAN-054",
+  "schemaVersion": 1,
+  "selectedRowId": "text.simple-latin.line.v1",
+  "status": "pass",
+  "ticket": "KAN-055"
+}
