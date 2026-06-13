@@ -375,6 +375,31 @@ Public concept names in the new renderer use uppercase acronyms:
 - `GPUTextDiagnostic`
 - `GPUBlendPlan`
 - `GPUColorPlan`
+- `GPUColorManagementPlan`
+- `GPUColorSpaceDescriptor`
+- `GPUColorSpaceID`
+- `GPUColorProfileDescriptor`
+- `GPUICCProfileDescriptor`
+- `GPUCICPDescriptor`
+- `GPUTransferFunctionDescriptor`
+- `GPUGamutDescriptor`
+- `GPUColorValueSpec`
+- `GPUAlphaDomain`
+- `GPUColorSpaceRole`
+- `GPUPrecisionDomain`
+- `GPUColorEncoding`
+- `GPUColorConversionPlan`
+- `GPUColorTransformPlan`
+- `GPUWorkingColorSpacePlan`
+- `GPUGradientColorPlan`
+- `GPUImageColorManagementPlan`
+- `GPUColorUniformPlan`
+- `GPUHDRColorPlan`
+- `GPUGainmapPlan`
+- `GPUColorStorePlan`
+- `GPUColorCachePlan`
+- `GPUColorBudgetPolicy`
+- `GPUColorDiagnostic`
 - `GPUTargetState`
 - `GPUTelemetryLedger`
 - `GPUPerformanceGate`
@@ -463,10 +488,13 @@ into a narrower GPU renderer value object.
 | `Image_Graphite` | `GPUImageSourceDescriptor` | Logical image source plus color/sampling facts without leaking `SkImage` or raw handles into the core. |
 | `SkCodec` | `KanvasImageCodec` plus `GPUImageCodecDescriptor` | Codec capability, metadata, decode result, and error behavior are selected through the Kanvas registry; no Skia codec API leaks into renderer core. |
 | `SkAndroidCodec` output policy | `GPUImageDecodeRequest` / `GPUImageColorDecodePlan` / `GPUImagePixelPlan` | Output color type, alpha type, color space, sample size, and profile behavior are explicit plan facts. |
+| `SkColorInfo` | `GPUColorValueSpec` plus `GPUColorSpaceDescriptor` | Color type, alpha type, precision, encoding, and color-space role are explicit value-domain facts. |
+| `SkColorSpace` / `SkColorSpaceXformSteps` | `GPUColorConversionPlan` / `GPUColorTransformPlan` | Source-to-destination transforms are descriptor-backed CPU/WGSL plans, not object identity or hidden platform conversion. |
+| ICC/CICP metadata | `GPUColorProfileDescriptor` / `GPUICCProfileDescriptor` / `GPUCICPDescriptor` | Profiles and codec metadata are captured, hashed, parsed when supported, transformed when validated, or refused. |
 | `SkCodecAnimation` | `GPUAnimatedImagePlan` / `GPUImageFrameInfo` / `GPUImageFrameSelection` | Frame duration, required prior frame, disposal, blend, loop count, and selected-frame upload are planned explicitly. |
 | `SkPixmapUtils::Orient` | `GPUImageOrientationPlan` | Encoded origin/orientation is either applied during preparation, represented in sampling, or refused. |
-| `SkCodec::queryYUVAInfo()` / `SkYUVAPixmaps` | `GPUImagePixelPlan` plus future multi-plane route | Planar YUV/YUVA sources convert to accepted interleaved texture formats or refuse until a multi-plane WGSL route is specified. |
-| `SkGainmapInfo` / gainmap codec paths | `GPUImageColorDecodePlan` plus `GPUColorPlan` | Gainmap/HDR metadata is preserved, tone-mapped, or refused through explicit color planning; platform codec success alone is not conformance. |
+| `SkCodec::queryYUVAInfo()` / `SkYUVAPixmaps` | `GPUImagePixelPlan` plus `GPUImageColorManagementPlan` | Planar YUV/YUVA sources convert to accepted interleaved texture formats, use a validated multi-plane WGSL route, or refuse as defined by the color-management target. |
+| `SkGainmapInfo` / gainmap codec paths | `GPUGainmapPlan` / `GPUHDRColorPlan` plus `GPUColorPlan` | Gainmap/HDR metadata is preserved, tone-mapped, or refused through explicit color planning; platform codec success alone is not conformance. |
 | `MakeBitmapProxyView()` | `GPUImageDecodePlan` / `GPUImageUploadPlan` / `UploadedTextureArtifact` / `GPUTextureOwnershipPlan` | CPU pixels become an explicit upload artifact, then ordinary texture ownership; no CPU-rendered fallback texture. |
 | `TextureDataBlock` / `TextureDataCache` | `GPUSampledTextureBinding` inside `GPUResourceBindingBlock` / `GPUResourceBindingSlot` | Ordered sampled texture and sampler payloads; no raw handle or pointer identity in durable keys. |
 | `DstUsage` | `GPUDestinationReadRequirement` / `GPUDestinationReadClass` | Destination dependency and planner ordering facts; no Skia bitmask API. |
@@ -522,6 +550,7 @@ legacy stateful API
   -> GPUVertexLayoutPlan + GPUVertexBufferPlan when vertices/mesh are used
   -> GPURuntimeEffectUniformBlockPlan + GPURuntimeEffectChildSlotPlan when effects are used
   -> GPUTextRunPlan + GPUTextSubRunPlan when text/glyph artifacts are used
+  -> GPUColorManagementPlan + GPUColorValueSpec for color-domain facts
   -> GPUBlendPlan + GPUColorPlan + GPUTargetState
   -> WGSLBindingLayout + WGSLPackingPlan
   -> GPUPayloadGatherer + payload slots

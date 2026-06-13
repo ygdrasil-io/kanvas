@@ -166,6 +166,11 @@ generation, uniform layout hash, child slot hash, and resource binding hash are
 pipeline-validity facts when they affect module or bind group layout. Uniform
 values, child resource handles, child texture contents, and compatibility
 source text are not ABI identity.
+Color-management bindings use `GPUColorTransformPlan`, `GPUColorStorePlan`,
+and related payload descriptors from `29-color-management-pipeline.md`; the ABI
+includes transform uniform/storage/LUT binding layout, WGSL helper reflection,
+and packing facts. It does not include concrete profile object identity,
+decoded pixel contents, or platform conversion state.
 
 ## Uniform And Storage Packing
 

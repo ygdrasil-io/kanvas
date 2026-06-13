@@ -46,6 +46,9 @@ This spec depends on:
 - `11-wgsl-layout-binding-abi.md` for sampled texture binding ABI;
 - `12-blend-color-target-state.md` for `GPUColorPlan`, premul, alpha, and
   target color behavior;
+- `29-color-management-pipeline.md` for color-space descriptors, ICC/CICP
+  metadata, transfer/gamut transforms, image color management, HDR/gainmap,
+  and store/readback color behavior;
 - `13-performance-telemetry-cache-gates.md` for budgets, telemetry, and
   quarantine;
 - `17-payload-gathering-and-slots.md` for sampled image payload bindings;
@@ -148,7 +151,7 @@ material identity.
 | `GPUImageFrameInfo` | Per-frame animation metadata: index, duration, required prior frame, dirty rect, disposal method, blend mode, completeness, and dependency facts. |
 | `GPUAnimatedImagePlan` | Target plan for animated images: loop count, frame list, frame selection policy, frame cache policy, upload scheduling, and refusal behavior. |
 | `GPUImageFrameSelection` | Concrete selection of a frame by time, index, loop iteration, or still-image policy. |
-| `GPUImageColorDecodePlan` | Source-to-output color/profile plan before upload: ICC/CICP/profile metadata, transfer, gamut, alpha type, premul policy, bit depth, HDR metadata, and gainmap handling. |
+| `GPUImageColorDecodePlan` | Source-to-output color/profile plan before upload: ICC/CICP/profile metadata, transfer, gamut, alpha type, premul policy, bit depth, HDR metadata, and gainmap handling, interpreted through `GPUImageColorManagementPlan` from spec 29. |
 | `GPUImageOrientationPlan` | EXIF/origin/orientation handling and whether pixels are physically reoriented before upload. |
 | `GPUImagePixelPlan` | CPU pixel memory contract: width, height, format, component type, row stride, alignment, premul convention, color tag, plane layout when accepted, and zero-copy eligibility. |
 | `GPUImageMipmapPlan` | Mip requirements, source level policy, generation route, validation, and refusal behavior. |
@@ -368,8 +371,11 @@ The plan records:
   shader-owned, or refused.
 
 If conversion is not validated for the selected codec, profile, bit depth,
-alpha type, and target format, the route refuses with
-`unsupported.image.color.conversion_unvalidated`.
+alpha type, and target format, the route refuses with a color-owned diagnostic
+from `29-color-management-pipeline.md`, typically
+`unsupported.color.image_profile_conversion`,
+`unsupported.color.precision_conversion`, `unsupported.color.YUV_conversion`,
+or `unsupported.color.HDR_transfer`.
 
 `GPUImageOrientationPlan` records:
 
@@ -407,11 +413,13 @@ The target upload formats are limited to formats exposed by the selected
 include `R8Unorm`, `RG8Unorm`, `RGBA8Unorm`, `BGRA8Unorm`, and `RGBA16Float`
 when capabilities and color policy allow them.
 
-Planar YUV/YCbCr source formats may be decoded by codecs, but WebGPU does not
-provide a portable arbitrary YCbCr sampler contract for this renderer target.
-The accepted target route is conversion to an interleaved sampled texture
-format, or a future explicit multi-plane shader route. Until that route is
-specified and validated, unsupported planar cases refuse.
+Planar YUV/YCbCr source formats may be decoded by codecs, but the selected
+`GPU` facade must expose enough plane, binding, sampling, and conversion facts
+before the renderer accepts a portable YCbCr sampling route. The accepted
+target route is conversion to an interleaved sampled texture format, or an
+explicit multi-plane WGSL shader route from
+`29-color-management-pipeline.md`. Until that route is specified and
+validated, unsupported planar cases refuse.
 
 `GPUImageUploadArtifactKey` must include:
 
@@ -534,7 +542,7 @@ spec. It is not an implementation order.
 | Mipmapped image sampling | `GPUNative` or `CPUPreparedGPU` | Provide complete validated mips through codec scale, CPU resample, GPU generation, or refuse. |
 | Animated image as animation | `CPUPreparedGPU` per selected frame | Use `GPUAnimatedImagePlan`, frame selection, required-frame composition/cache, and per-frame upload artifact. |
 | Animated image as still | `CPUPreparedGPU` only with explicit policy | Use `FirstFrameStill` or another recorded still-selection policy; never silently collapse animation. |
-| Planar YUV/YUVA encoded source | `CPUPreparedGPU` conversion or future route | Convert to accepted interleaved upload texture format, or refuse until a multi-plane WGSL route is specified. |
+| Planar YUV/YUVA encoded source | `CPUPreparedGPU` conversion or `GPUNative` multi-plane route when accepted | Convert to accepted interleaved upload texture format, sample through a validated multi-plane WGSL route, or refuse. |
 | HDR or gainmap source | `CPUPreparedGPU` with accepted color plan or refusal | Preserve through accepted HDR target, tone-map through validated `GPUColorPlan`, or refuse. |
 | Imported/provider GPU texture | `GPUNative` | No decode. Spec 18 validates import/provider ownership, usage, lifetime, and release facts. |
 | Compressed GPU texture upload | `FutureResearch` | Refuse unless a future spec accepts compressed texture formats, upload layout, sampling ABI, and codec/container mapping. |
@@ -613,10 +621,11 @@ Required refusal codes include:
 - `unsupported.image.animation.required_frame_missing`
 - `unsupported.image.animation.disposal`
 - `unsupported.image.animation.blend`
-- `unsupported.image.color.profile`
-- `unsupported.image.color.conversion_unvalidated`
-- `unsupported.image.color.HDR_unvalidated`
-- `unsupported.image.color.gainmap_unvalidated`
+- `unsupported.color.profile_parse`
+- `unsupported.color.image_profile_conversion`
+- `unsupported.color.YUV_conversion`
+- `unsupported.color.HDR_transfer`
+- `unsupported.color.gainmap`
 - `unsupported.image.orientation`
 - `unsupported.image.pixel.format`
 - `unsupported.image.pixel.row_stride`

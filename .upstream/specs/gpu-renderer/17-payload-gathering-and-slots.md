@@ -287,6 +287,10 @@ Rules:
 - runtime-effect uniform values, live-edit updates, child slot payloads, and
   descriptor resource bindings must use accepted descriptor contracts from
   `27-registered-runtime-effects-registry.md`;
+- color transform uniforms, LUT bindings, gradient converted stop payloads,
+  runtime color uniform transforms, image color conversion facts, and store
+  conversion payloads must use accepted plans from
+  `29-color-management-pipeline.md`;
 - raw resource handles are not sort or cache key facts.
 - import, upload, lease, allocation, eviction, and release are performed by
   `GPUResourceProvider`, not by the gatherer.
@@ -335,6 +339,13 @@ described by `GPURuntimeEffectDescriptor`, `GPURuntimeEffectUniformBlockPlan`,
 `GPURuntimeEffectChildSlotPlan`, `GPURuntimeEffectResourcePlan`, and
 `GPURuntimeEffectLiveEditPlan`. It does not register descriptors, compile
 source text, choose runtime-effect routes, or mutate registry snapshots.
+When a color-management route is accepted, the gatherer consumes only payload
+facts produced by `GPUColorTransformPlan`, `GPUGradientColorPlan`,
+`GPUColorUniformPlan`, `GPUHDRColorPlan`, `GPUGainmapPlan`, and
+`GPUColorStorePlan`: transform uniforms, LUT resource bindings, converted stop
+blocks, color-uniform values, store conversion data, and diagnostic IDs. It
+does not parse profiles, choose working spaces, generate transforms, tone-map
+HDR, or reinterpret untagged bytes.
 
 The first rect/rrect solid and linear-gradient slice does not require sampled
 texture payloads except when a later accepted gradient-store route explicitly

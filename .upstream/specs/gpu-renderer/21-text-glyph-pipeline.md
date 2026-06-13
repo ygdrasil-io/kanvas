@@ -46,7 +46,10 @@ GPU renderer specs consumed by this target:
 - `18-texture-image-ownership.md`;
 - `19-path-coverage-atlas-strategy.md`;
 - `20-destination-read-strategy.md`;
-- `24-clip-stencil-mask-pipeline.md`.
+- `24-clip-stencil-mask-pipeline.md`;
+- `29-color-management-pipeline.md` for text paint colors, glyph palette
+  colors, bitmap glyph profile facts, SVG glyph color facts, SDF/glyph
+  coverage output value specs, and color glyph composite conversions.
 
 ## Graphite Evidence
 
@@ -76,6 +79,8 @@ Kanvas adopts these invariants:
 - uploads happen before sampling;
 - text render steps are separate from generic path, image, and coverage steps;
 - material identity is separate from pass-local glyph resource bindings;
+- text color value specs are explicit for paint, palette, bitmap/SVG glyph,
+  SDF, mask modulation, and color-glyph composite outputs;
 - text draws can split by atlas page, atlas generation, representation,
   transform, material, clip, and destination-read requirements;
 - failure to materialize a valid text route returns stable diagnostics.
@@ -148,6 +153,8 @@ Planning product for one normalized `DrawTextRun` command:
 - ordered glyph run descriptors;
 - accepted or refused glyph artifact plans;
 - transform, clip, layer, blend, destination-read, and color facts;
+- `GPUColorValueSpec` / `GPUColorPlan` references for paint, glyph, palette,
+  bitmap/SVG glyph, or composite color domains;
 - selected text routes and subruns;
 - resource/upload dependencies;
 - render step requirements;
@@ -238,6 +245,8 @@ Every render step must declare:
 
 - required vertex/instance buffers;
 - required uniform/resource bindings;
+- text/glyph source and output color value specs from
+  `29-color-management-pipeline.md`;
 - color target state;
 - blend requirements;
 - clip/stencil/depth requirements;
@@ -490,6 +499,9 @@ Budget policy for text:
 - maximum bitmap glyph texture bytes;
 - maximum color/SVG glyph primitive count;
 - maximum text-induced pass splits;
+- maximum text color transform, palette conversion, bitmap glyph profile, and
+  color glyph composite color-management cost inherited from
+  `GPUColorBudgetPolicy`;
 - maximum route diagnostics retained per text run.
 
 Diagnostics must distinguish hard capability refusals from configurable budget

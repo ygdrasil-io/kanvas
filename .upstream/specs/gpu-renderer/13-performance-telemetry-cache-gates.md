@@ -57,6 +57,10 @@ It records:
   compatibility-key, descriptor kind, WGSL validation/reflection, CPU oracle,
   uniform byte, child slot, live-parameter, cache, budget, and dynamic SkSL
   refusal counters when touched;
+- color-management plan, value-spec, profile, ICC/CICP, transform,
+  gradient-interpolation, image-profile, runtime color uniform, layer
+  restoration, F16, HDR, gainmap, store/readback, cache, budget, and refusal
+  counters when touched;
 - submitted bytes for uniforms, vertices, indices, storage, textures, and
   readbacks when available;
 - timing samples when enabled;
@@ -89,6 +93,7 @@ Cache reporting is grouped by domain:
 | Filter/effect pipeline | graph count, node count, render/compute/copy route counts, intermediate count and bytes, bounds/crop/tile refusals, runtime-effect descriptor counts, folded color-filter counts, destination/backdrop read counts, pass splits, artifact use, and budget refusals. |
 | Text/glyph pipeline | `DrawTextRun` count, text run/subrun count, representation counts, route counts, glyph instances, atlas page count, atlas bytes, upload bytes, instance buffer bytes, stale generation refusals, SDF/color/bitmap/SVG route refusals, text-induced pass splits, and budget refusals. |
 | Runtime-effect registry | registry version/generation, descriptor count, descriptor-kind histogram, lookup hits/misses/refusals, compatibility-key hits/misses/refusals, descriptor-version invalidations, WGSL validation/reflection successes/failures, CPU oracle availability, uniform bytes, child slot counts, live-parameter updates/refusals, dynamic SkSL refusals, and budget refusals. |
+| Color management | color management plans, value-spec histograms, color-space descriptors, ICC profile parses/refusals, CICP metadata/refusals, transform cache hits/misses, CPU/WGSL transform counts, gradient interpolation spaces, image profile conversions, runtime color uniforms, layer color restoration, F16/HDR/gainmap counts, LUT bytes, store/readback conversions, and budget refusals. |
 
 A cache hit is performance evidence, not correctness evidence. A cache miss
 must never change rendering output.
@@ -194,6 +199,10 @@ Initial gate families:
 - runtime-effect WGSL validation/reflection failure count;
 - runtime-effect live-parameter key stability;
 - runtime-effect dynamic SkSL refusal count;
+- color transform cache hit rate;
+- color WGSL transform creation after warmup;
+- color profile parse refusal count;
+- HDR/gainmap refusal count;
 - pass count and draw count stability;
 - readback availability for evidence lanes;
 - frame time or GPU time when accepted by a target milestone.

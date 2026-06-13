@@ -27,6 +27,11 @@ identity.
 the renderer can decide whether a draw can execute natively, needs an isolated
 layer or texture read, or must refuse.
 
+Detailed color-management descriptors, value specs, ICC/CICP/profile metadata,
+transfer/gamut transforms, working-space selection, gradient interpolation,
+runtime color uniforms, HDR/gainmap policy, and final store behavior are
+defined in `29-color-management-pipeline.md`. `GPUColorPlan` consumes those
+facts for a specific draw, layer, filter, blend, or target write.
 Detailed layer/saveLayer execution, including layer target planning,
 initialization, source filtering, restore composite, direct-to-parent elision,
 and layer ordering, is defined in `28-layer-savelayer-execution.md`.
@@ -79,6 +84,9 @@ intermediate, or target write.
 
 It records:
 
+- `GPUColorManagementPlan` and `GPUColorValueSpec` references when color
+  behavior is profile, precision, transfer, gamut, interpolation, HDR, gainmap,
+  runtime-uniform, or store dependent;
 - source color-space tag;
 - working-space tag;
 - target color-space tag;
@@ -93,6 +101,8 @@ It records:
 The plan must preserve existing Kanvas reference behavior unless an accepted
 target update changes the color contract. Any lossy conversion must be
 diagnosed before promotion.
+Detailed conversion and refusal rules are owned by
+`29-color-management-pipeline.md`.
 Filter DAG color behavior, including whether a color filter folds into
 `MaterialKey` or executes as a `GPUFilterNodePlan`, is governed by
 `23-filter-effect-pipeline.md`.

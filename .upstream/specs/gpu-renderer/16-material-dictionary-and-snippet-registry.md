@@ -63,7 +63,8 @@ It does not own:
 - arbitrary WGSL string loading;
 - SkSL parsing, SkSL IR, or SkSL translation;
 - `GPURenderStep` geometry and coverage code;
-- `GPUBlendPlan`, `GPUColorPlan`, or target attachment policy;
+- `GPUBlendPlan`, `GPUColorPlan`, detailed color-management policy, or target
+  attachment policy;
 - GPU resource allocation or command encoding.
 
 Compatibility adapters produce material descriptors. `MaterialKey` derives from
@@ -128,6 +129,9 @@ are defined in `18-texture-image-ownership.md`.
 Encoded image decode, codec selection, animated frame selection, color/profile
 conversion, orientation, mip preparation, and uploaded image artifact keys are
 defined in `22-image-bitmap-codec-pipeline.md`.
+Detailed color-management descriptors, value specs, transform helpers,
+gradient interpolation, runtime color uniforms, and store behavior are defined
+in `29-color-management-pipeline.md`.
 Filter DAG node placement, filter intermediates, runtime filter effects,
 filter bounds/crop/tile behavior, and material-fold equivalence for DAG color
 filters are defined in `23-filter-effect-pipeline.md`.

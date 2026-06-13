@@ -56,6 +56,9 @@ This spec depends on:
 - `11-wgsl-layout-binding-abi.md` for layer composite bindings and packing;
 - `12-blend-color-target-state.md` for `GPUBlendPlan`, `GPUColorPlan`, and
   `GPUTargetState`;
+- `29-color-management-pipeline.md` for layer target value specs, F16 color
+  behavior, color-space restoration, source/filter/composite conversions, and
+  store diagnostics;
 - `13-performance-telemetry-cache-gates.md` for layer counters and performance
   gates;
 - `15-draw-layer-planner-and-sort-policy.md` for low-level draw layer
@@ -479,7 +482,7 @@ Composite rules:
   isolation and restore, this flag refuses or downgrades only when explicitly
   accepted by text diagnostics.
 - F16 target requests require an accepted F16 format, color plan, filter plan,
-  and composite route.
+  color-management plan, filter plan, and composite route.
 
 ## Ordering And Task Graph
 

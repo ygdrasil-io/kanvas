@@ -19,6 +19,8 @@ uploaded image artifact key construction are defined in
 `22-image-bitmap-codec-pipeline.md`. This spec consumes the resulting
 `UploadedTextureArtifact` and owns the generic texture/view/sampler resource
 plan.
+Detailed color-management descriptors and sampled image value specs are
+defined in `29-color-management-pipeline.md`.
 
 The target is Graphite-inspired but Kanvas-owned:
 

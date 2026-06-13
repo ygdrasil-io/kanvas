@@ -139,6 +139,9 @@ Registered runtime-effect descriptors, registry snapshots, compatibility
 lookups, uniform schemas, child slots, WGSL plans, CPU oracle facts, live-edit
 metadata, and route contracts are defined in
 `27-registered-runtime-effects-registry.md`.
+Color-management descriptors, value specs, profiles, transforms, LUTs, HDR,
+gainmap, and store plans are defined in
+`29-color-management-pipeline.md`.
 Layer/saveLayer execution plans, offscreen targets, initialization/backdrop
 resources, source filter chains, restore composites, elision proofs, ordering
 tokens, and layer budgets are defined in
@@ -205,6 +208,12 @@ Expected cache layers:
   route contract, uniform schema hash, child slot hash, resource binding hash,
   WGSL plan hash, CPU oracle version, and capability facts from
   `27-registered-runtime-effects-registry.md`;
+- color-management caches keyed by `GPUColorSpaceDescriptor`,
+  `GPUColorProfileDescriptor`, `GPUColorValueSpec`,
+  `GPUColorConversionPlan`, `GPUColorTransformPlan`,
+  `GPUWorkingColorSpacePlan`, `GPUColorStorePlan`, `GPUColorCachePlan`,
+  profile hashes, transform versions, helper WGSL versions, LUT descriptors,
+  and capability facts from `29-color-management-pipeline.md`;
 - layer execution, target, initialization, backdrop, filter-chain, composite,
   elision, resource, ordering, and budget cache entries keyed by
   `GPULayerExecutionPlan`, `GPULayerBoundsPlan`, `GPULayerTargetPlan`,

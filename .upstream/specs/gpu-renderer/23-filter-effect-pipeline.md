@@ -22,6 +22,8 @@ The target is Graphite-inspired but Kanvas-owned:
 
 - filter DAGs are explicit plans, not hidden paint or layer behavior;
 - every node has a route, resource plan, bounds plan, and diagnostics;
+- every node that observes or produces color states explicit input and output
+  `GPUColorValueSpec` facts;
 - intermediate textures are ordinary `GPUResourceProvider` resources unless a
   validated typed `CPUPreparedGPU` artifact owns their prepared contents;
 - destination/backdrop reads use `GPUDestinationReadPlan`;
@@ -71,7 +73,10 @@ This spec depends on:
   lookup, live-edit metadata, and descriptor diagnostics;
 - `28-layer-savelayer-execution.md` for saveLayer source targets,
   initialization/backdrop inputs, filter-chain placement, restore composite,
-  and layer ordering tokens.
+  and layer ordering tokens;
+- `29-color-management-pipeline.md` for filter DAG input/output value specs,
+  color-filter working spaces, runtime-effect color uniforms, intermediate
+  store specs, HDR/gainmap refusal, and final filter output conversion.
 
 ## Graphite And Skia Evidence
 
@@ -143,7 +148,10 @@ Owned by other specs:
   uniform schema, child slot rules, WGSL plan, CPU oracle, and live-edit
   metadata: `27-registered-runtime-effects-registry.md`;
 - image decode and upload artifacts for image source nodes:
-  `22-image-bitmap-codec-pipeline.md`.
+  `22-image-bitmap-codec-pipeline.md`;
+- color-space descriptors, conversion plans, working-space policy, transform
+  helpers, HDR/gainmap policy, and store/readback facts:
+  `29-color-management-pipeline.md`.
 
 `MaterialKey` may include color-filter or runtime-effect facts only when they
 affect material WGSL code or layout for a draw. It must not include filter DAG
@@ -194,6 +202,9 @@ responsibilities. Public names keep `GPU`, `CPU`, and `WGSL` uppercase.
 - local matrix facts;
 - graph-level crop and clip facts;
 - graph-level color and alpha facts;
+- graph-level `GPUColorManagementPlan` / `GPUColorValueSpec` references when
+  color conversion, working space, profile, HDR, gainmap, or store behavior
+  affects execution;
 - adapter provenance and compatibility notes;
 - stable refusal reason when normalization cannot produce a graph.
 

@@ -15,8 +15,9 @@ texture/image ownership, path/coverage atlas strategy, destination-read
 strategy, text/glyph pipeline target, image/bitmap/codec pipeline target,
 filter/effect pipeline target, clip/stencil/mask pipeline target, legacy
 cleanup policy, path/stroke/geometry pipeline target, layer/saveLayer
-execution, and validation expectations that future implementation tickets must
-follow. It also defines the `DrawVertices` and mesh-like target so
+execution, color-management pipeline, and validation expectations that future
+implementation tickets must follow. It also defines the `DrawVertices` and
+mesh-like target so
 user-provided vertex geometry has a clear GPU route/refusal contract before
 implementation slicing, and the registered runtime-effect registry so
 material, filter, blender, live-edit, and future clip-shader uses share one
@@ -176,6 +177,17 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
   support claim.
 - Use explicit `GPUBlendPlan`, `GPUColorPlan`, and `GPUTargetState` contracts
   for blend, color, alpha, premul, and target behavior.
+- Resolve complete color-management behavior through
+  `GPUColorManagementPlan`, `GPUColorValueSpec`,
+  `GPUColorSpaceDescriptor`, `GPUColorConversionPlan`,
+  `GPUColorTransformPlan`, `GPUWorkingColorSpacePlan`,
+  `GPUGradientColorPlan`, `GPUColorUniformPlan`, `GPUHDRColorPlan`,
+  `GPUGainmapPlan`, `GPUColorStorePlan`, `GPUColorCachePlan`, and
+  `GPUColorDiagnostic`.
+- Treat ICC/CICP/profile metadata, transfer functions, gamut, alpha domain,
+  precision, interpolation space, HDR/gainmap policy, and final store
+  conversion as explicit plans. Forbid silently reinterpreting raw, premul,
+  unpremul, untagged, HDR, or profile-dependent values.
 - Model high-level layer/saveLayer semantics with `GPULayerPlan` and filter
   graph execution with `GPUFilterPlan`; keep `GPUDrawLayer` as the lower-level
   pass/layer planning structure.
@@ -253,6 +265,7 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 | `26-draw-vertices-mesh-pipeline.md` | Graphite-inspired DrawVertices/mesh pipeline target: vertices descriptors, topology, vertex/index layouts, colors, texcoords, primitive blending, buffer plans, mesh-like future descriptors, budgets, diagnostics, and validation gates. |
 | `27-registered-runtime-effects-registry.md` | Graphite-inspired registered runtime-effect registry: descriptor IDs/versions, compatibility lookup, uniforms, child slots, WGSL validation, CPU oracle, route contracts, live-edit metadata, budgets, diagnostics, and validation gates. |
 | `28-layer-savelayer-execution.md` | Graphite-inspired layer/saveLayer execution target: save records, bounds planning, offscreen targets, initialization/backdrop, filters, restore composite, elision, task ordering, budgets, diagnostics, and validation gates. |
+| `29-color-management-pipeline.md` | Graphite-inspired color-management target: value specs, color-space/profile descriptors, ICC/CICP, transfer/gamut transforms, working spaces, gradients, images, runtime color uniforms, HDR/gainmap, store plans, budgets, diagnostics, and validation gates. |
 
 ## Target Shape
 
@@ -278,12 +291,16 @@ flowchart TD
     material --> dictionary["GPUMaterialDictionary / WGSLSnippet tree"]
     rte --> dictionary
     command --> blend["GPUBlendPlan / GPUColorPlan"]
+    command --> color["GPUColorManagementPlan / GPUColorValueSpec"]
     command --> dstread["GPUDestinationReadPlan"]
+    color --> blend
+    color --> material
     blend --> dstread
     layerexec --> dstread
     clipplan --> dstread
     filterdetail --> dstread
     dictionary --> wgsl["WGSLFragment / WGSLModule"]
+    color --> wgsl
     filterdetail --> wgsl
     rte --> filterdetail
     material --> textureplan["GPUImageSourceDescriptor / GPUTextureOwnershipPlan"]
@@ -304,6 +321,7 @@ flowchart TD
     clipplan --> payload
     text --> payload
     rte --> payload
+    color --> payload
     dstread --> payload
     filterdetail --> payload
     step --> pipeline["GPURenderPipelineKey"]
@@ -311,6 +329,7 @@ flowchart TD
     vertstep --> step
     blend --> pipeline
     layerexec --> pipeline
+    color --> pipeline
     dstread --> pipeline
     clipplan --> pipeline
     filterdetail --> pipeline
@@ -324,6 +343,7 @@ flowchart TD
     clipplan --> resources
     text --> resources
     layerexec --> resources
+    color --> resources
     dstread --> resources
     filterdetail --> resources
     pipeline --> resources["GPUResourceProvider"]

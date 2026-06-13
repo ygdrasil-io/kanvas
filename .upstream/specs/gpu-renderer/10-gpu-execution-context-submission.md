@@ -13,6 +13,11 @@ does not introduce a backend plugin layer. It defines the renderer-owned
 execution boundary that prevents task, resource, and evidence code from
 depending on ad hoc surface or queue behavior.
 
+Target color-space descriptors, surface value specs, store conversions, and
+readback interpretation are defined by `29-color-management-pipeline.md`.
+This execution spec records and validates the target facts needed to encode
+commands; it does not invent color conversion behavior.
+
 ## Ownership Boundary
 
 The `:gpu-renderer` core owns:
@@ -90,6 +95,8 @@ It includes:
 - logical target ID and generation;
 - dimensions and device-pixel scale;
 - color format, alpha type, premul convention, and color-space tag;
+- `GPUColorValueSpec` / `GPUColorStorePlan` references when target color
+  behavior affects writes, presentation, or readback;
 - usage flags: render attachment, texture binding, storage binding, copy
   source, copy destination, and presentation;
 - sample count or coverage mode;
@@ -177,7 +184,8 @@ It must record:
 
 - target, texture, or buffer source identity;
 - bounds and pixel format requested;
-- color-space and premul interpretation;
+- color-space, value spec, premul interpretation, and readback conversion plan
+  from `29-color-management-pipeline.md`;
 - synchronization point;
 - expected checksum, diff, or artifact path when used by a test harness;
 - failure reason when readback is unavailable.
@@ -276,6 +284,9 @@ Promoted execution behavior requires:
   `GPUFilterIntermediatePlan`, `GPUFilterOrderingToken`,
   destination/backdrop reads, read/write aliasing, and runtime-effect bindings
   before filter routes from `23-filter-effect-pipeline.md` are promoted;
+- target color value spec, final store conversion, and readback interpretation
+  tests before color-managed target routes from
+  `29-color-management-pipeline.md` are promoted;
 - readback success or skipped-lane diagnostics;
 - device-loss refusal or rebuild tests for touched resources;
 - PM evidence that distinguishes encoded, submitted, completed, skipped, and

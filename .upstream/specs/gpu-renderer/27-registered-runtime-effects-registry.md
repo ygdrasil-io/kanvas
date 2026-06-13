@@ -55,6 +55,9 @@ This spec depends on:
   child binding ABI;
 - `12-blend-color-target-state.md` for alpha, premul, destination color, and
   color-space behavior;
+- `29-color-management-pipeline.md` for color uniforms, `layout(color)`-like
+  behavior, color value specs, working-space policy, and runtime-effect color
+  diagnostics;
 - `13-performance-telemetry-cache-gates.md` for registry and runtime-effect
   counters;
 - `16-material-dictionary-and-snippet-registry.md` for material snippet
@@ -332,6 +335,9 @@ Rules:
 - valid range and clamp/refusal policy;
 - live-edit eligibility;
 - color-space interpretation when the role is color;
+- `GPUColorUniformPlan` reference when the uniform participates in
+  `layout(color)`-like transforms, raw color behavior, or compatibility color
+  semantics;
 - diagnostic label.
 
 `GPURuntimeEffectUniformBlockPlan` records:

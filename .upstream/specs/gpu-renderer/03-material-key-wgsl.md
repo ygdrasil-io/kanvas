@@ -190,6 +190,13 @@ per-dispatch uniform values, output resource handles, or cache residency.
 
 ## Filter Planning Boundary
 
+Color-management facts that affect material WGSL code shape, helper selection,
+gradient interpolation, runtime color uniform handling, or profile-dependent
+sampling are defined in `29-color-management-pipeline.md`. `MaterialKey` may
+include the color behavior identity required to assemble WGSL, but it must not
+include payload values, decoded pixel contents, concrete profile object
+identity, or platform conversion state.
+
 `GPUFilterPlan` is separate from `MaterialKey`. A filter plan may consume
 render pipelines, compute pipelines, intermediate textures, buffers, samplers,
 and typed `CPUPreparedGPU` artifacts when routing policy allows them. Filter

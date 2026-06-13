@@ -61,6 +61,7 @@ target contracts.
 | Layer/saveLayer | `TargetNative` with refusals | `GPUNative` render/composite, sometimes `RefuseDiagnostic` | `GPULayerPlan`, `GPULayerExecutionPlan`, `GPULayerTargetPlan`, `GPULayerInitializationPlan`, `GPULayerCompositePlan`, `GPULayerTaskPlan`, and `GPUDestinationReadPlan` when parent destination or backdrop is observed | `GPULayerPlan` with optional `GPUFilterPlan`, `GPUBlendPlan`, and `GPUColorPlan` | Offscreen GPU resources governed by `28-layer-savelayer-execution.md`; bounds hints are not clips; no CPU-rendered full-layer fallback. |
 | Image filter DAG | `TargetNative` plus dependency-gated nodes | `GPUNative`, `CPUPreparedGPU`, or refusal by node | `GPUFilterPlan`, `GPUFilterNodePlan`, render/compute/copy nodes, intermediates, `GPUDestinationReadPlan` for backdrop/destination reads | `GPUFilterGraphDescriptor`, `GPUFilterBoundsPlan`, `GPUFilterIntermediatePlan`, `GPUFilterRuntimeEffectPlan` when needed | Intermediate GPU textures; `FilterIntermediateArtifact` only when validated by `23-filter-effect-pipeline.md`. |
 | Runtime effect | `DependencyGated` until registry descriptors and GPU evidence are promoted | `GPUNative` only for registered descriptors; `CPUReferenceOnly` for oracle evidence | Render pass, compute pass, material snippet, filter node, primitive blender, or future clip shader only where descriptor permits | `GPURuntimeEffectRegistry`, `GPURuntimeEffectDescriptor`, `GPURuntimeEffectRouteContract`, `MaterialKey`, `GPUFilterRuntimeEffectPlan`, or compute program | Descriptor ID/version, uniform schema, child slots, WGSL plan, CPU oracle, registry snapshot, and diagnostics governed by `27-registered-runtime-effects-registry.md`; no arbitrary SkSL/source string support. |
+| Color management | `DependencyGated` beyond SDR sRGB lane | `GPUNative`, `CPUPreparedGPU` for typed pixel preparation, `CPUReferenceOnly` for oracle evidence, or `RefuseDiagnostic` | Color transform helpers, profile conversion, gradient interpolation, image/profile preparation, layer/store conversion, or target refusal | `GPUColorManagementPlan`, `GPUColorValueSpec`, `GPUColorConversionPlan`, `GPUColorTransformPlan`, `GPUColorStorePlan`, and `GPUColorDiagnostic` | ICC/CICP/profile, transfer/gamut, premul/unpremul, precision, F16, HDR, gainmap, runtime color uniforms, and store behavior governed by `29-color-management-pipeline.md`; no silent reinterpretation. |
 | Color filter | `TargetNative` | `GPUNative` | WGSL material fragment or filter render node | `MaterialKey` when folded, `GPUFilterColorPlan` inside filter DAGs | No CPU artifact; refusal for unsupported chains. |
 | Blend mode | `TargetNative` for selected modes | `GPUNative` or refusal | Fixed blend state or shader blend path with `GPUDestinationReadPlan` when needed | `MaterialKey`, `GPUBlendPlan`, `GPUColorPlan`, and `GPURenderPipelineKey` | Destination-read strategy from `20-destination-read-strategy.md`; refusal for unsupported dst-dependent modes. |
 | Clear/discard | `TargetNative` | `GPUNative` | Pass load/clear/discard ops | none | Target-state operation, not material rendering. |
@@ -208,6 +209,28 @@ Evidence must include:
 - culling and layer-elision negative tests;
 - refusal for unsupported filter DAG nodes or layer composite semantics.
 
+### Color Management
+
+Evidence must include:
+
+- `GPUColorManagementPlan`, `GPUColorSpaceDescriptor`,
+  `GPUColorProfileDescriptor`, `GPUICCProfileDescriptor`,
+  `GPUCICPDescriptor`, `GPUTransferFunctionDescriptor`,
+  `GPUGamutDescriptor`, `GPUColorValueSpec`,
+  `GPUColorConversionPlan`, `GPUColorTransformPlan`,
+  `GPUWorkingColorSpacePlan`, `GPUGradientColorPlan`,
+  `GPUImageColorManagementPlan`, `GPUColorUniformPlan`,
+  `GPUHDRColorPlan`, `GPUGainmapPlan`, `GPUColorStorePlan`,
+  `GPUColorCachePlan`, `GPUColorBudgetPolicy`, and
+  `GPUColorDiagnostic` dumps;
+- source and destination value specs for paint, gradient, image, vertex, text,
+  runtime-effect, filter, layer, blend, destination-read, and store boundaries
+  when touched;
+- CPU/WGSL transform descriptor parity and `wgsl4k` validation for promoted
+  shader transforms;
+- stable refusals for unsupported ICC/CICP profiles, custom transfers, HDR,
+  gainmaps, F16 targets, untagged policies, and platform-only conversions.
+
 ### Runtime Effects
 
 Evidence must include:
@@ -297,7 +320,12 @@ Examples:
 - `unsupported.image.codec.selection_nondeterministic`
 - `unsupported.image.decode.invalid_input`
 - `unsupported.image.animation.required_frame_missing`
-- `unsupported.image.color.conversion_unvalidated`
+- `unsupported.color.image_profile_conversion`
+- `unsupported.color.YUV_conversion`
+- `unsupported.color.profile_parse`
+- `unsupported.color.transfer_function`
+- `unsupported.color.gainmap`
+- `unsupported.color.WGSL_validation`
 - `unsupported.image.orientation`
 - `unsupported.image.upload.budget_exceeded`
 - `unsupported.image.tile_mode`

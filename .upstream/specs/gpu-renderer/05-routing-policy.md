@@ -250,7 +250,8 @@ Stable reason-code examples:
 - `unsupported.image.codec.selection_nondeterministic`
 - `unsupported.image.decode.invalid_input`
 - `unsupported.image.animation.required_frame_missing`
-- `unsupported.image.color.conversion_unvalidated`
+- `unsupported.color.image_profile_conversion`
+- `unsupported.color.YUV_conversion`
 - `unsupported.image.upload.budget_exceeded`
 - `unsupported.destination_read.strategy_unaccepted`
 - `unsupported.destination_read.active_attachment_sampled`
