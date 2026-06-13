@@ -86,6 +86,8 @@ Each invocation records:
 - texture/sampler/artifact binding slot identity;
 - texture ownership or target/surface generation when it affects legal
   movement;
+- `GPUDestinationReadClass`, bounds, and token when the invocation observes
+  previous destination pixels;
 - conservative bounds;
 - original paint order;
 - diagnostic provenance.
@@ -181,6 +183,10 @@ Path and coverage atlas mutations, including `SplitPassAndRetry`, are defined
 in `19-path-coverage-atlas-strategy.md`. A split retry is legal only when the
 planner can preserve order, layer semantics, destination reads, target state,
 and resource lifetimes.
+Destination-read strategies, copy snapshots, existing intermediates, and
+isolation actions are defined in `20-destination-read-strategy.md`. The planner
+consumes `GPUDestinationReadClass` and `GPUDestinationReadToken`; it does not
+invent destination-read routes.
 
 The search limit is a policy input. It must be deterministic and visible in
 diagnostics. A bounded search may give up batching opportunities, but it must
@@ -225,6 +231,8 @@ clip work.
 Destination-read work is conservative:
 
 - a destination-read invocation records its read bounds;
+- it references a `GPUDestinationReadPlan` and planner-local
+  `GPUDestinationReadClass`;
 - it cannot move before a prior intersecting shading invocation whose output it
   observes;
 - it cannot merge across an incompatible destination-read boundary;
@@ -234,8 +242,9 @@ Destination-read work is conservative:
 - failed destination-read movement must refuse or keep original order, never
   silently drop the read.
 
-This keeps the draw-layer planner compatible with future texture-copy or
-intermediate destination-read strategies without accepting them prematurely.
+This keeps the draw-layer planner compatible with target-copy, existing
+intermediate, and layer-isolation destination-read strategies without accepting
+active-attachment sampling.
 
 ## Forward Merge
 
@@ -355,11 +364,14 @@ Stable reason-code examples:
 - `planner.insert.new_layer.no_candidate`
 - `planner.stop.incompatible_overlap`
 - `planner.stop.destination_read`
+- `planner.stop.destination_read_observed`
 - `planner.stop.barrier`
 - `planner.stop.atlas_mutation`
 - `planner.stop.layer_boundary`
 - `planner.split.atlas_try_again`
 - `planner.split.rejected.atlas_retry_illegal`
+- `planner.split.destination_copy_snapshot`
+- `planner.split.rejected.destination_read`
 - `planner.merge.forward_tail_only`
 - `planner.merge.rejected.multi_step`
 - `planner.merge.rejected.barrier_intersection`
@@ -375,6 +387,8 @@ Promoted planner behavior requires:
 - adjacent batching fixture;
 - non-batching fixture for incompatible pipeline or binding layout;
 - destination-read stop fixture;
+- destination-read target-copy pass-split and existing-intermediate ordering
+  fixtures before those routes are promoted;
 - barrier stop fixture;
 - atlas mutation stop fixture and split-pass retry positive/negative fixtures
   before path or coverage atlas routes are promoted;

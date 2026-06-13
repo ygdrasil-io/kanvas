@@ -262,6 +262,9 @@ Rules:
 - atlas, mask, glyph, and coverage textures must use their accepted artifact or
   atlas specs, with path/coverage atlas bindings following
   `19-path-coverage-atlas-strategy.md`;
+- destination-copy snapshots and existing destination intermediates must use
+  accepted `GPUDestinationReadBinding` records from
+  `20-destination-read-strategy.md`;
 - raw resource handles are not sort or cache key facts.
 - import, upload, lease, allocation, eviction, and release are performed by
   `GPUResourceProvider`, not by the gatherer.
@@ -271,6 +274,10 @@ When a path or coverage atlas entry is accepted, the gatherer consumes
 inverse atlas size, mask transform, sampling mode, atlas generation, and
 resource binding layout. These facts are pass-local payload/resource facts and
 must stay out of `MaterialKey`.
+When a destination-read route is accepted, the gatherer consumes
+`GPUDestinationReadBinding` facts: target generation, copied/read bounds,
+texture/view/sampler descriptors, coordinate mapping, binding layout, and
+resource slot. It does not create the target snapshot or decide pass splits.
 
 The first rect/rrect solid and linear-gradient slice does not require sampled
 texture payloads except when a later accepted gradient-store route explicitly
@@ -341,6 +348,8 @@ Payload diagnostics must include:
 - resource binding slot and binding count;
 - atlas entry ref, atlas generation, and atlas binding hash when path or
   coverage atlas payloads are used;
+- destination-read binding hash, target generation, and read bounds when
+  destination snapshots or intermediates are sampled;
 - upload bytes and target buffer class;
 - dynamic offset summary when used;
 - gradient payload store offset when used;
@@ -358,6 +367,8 @@ Stable reason-code examples:
 - `unsupported.payload.texture_unavailable`
 - `unsupported.payload.atlas_binding_unavailable`
 - `unsupported.payload.atlas_generation_stale`
+- `unsupported.payload.destination_read_binding_unavailable`
+- `unsupported.payload.destination_read_generation_stale`
 - `unsupported.payload.upload_budget_exceeded`
 - `unsupported.payload.dynamic_offset_unavailable`
 - `unsupported.payload.gradient_store_unavailable`

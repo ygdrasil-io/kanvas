@@ -72,6 +72,9 @@ lifetime facts still match. Recorder-local and frame-local resources must not
 escape into reusable caches unless a spec names the promotion rule.
 Path and coverage atlas scope rules, use tokens, retry/split behavior, and
 mutation diagnostics are defined in `19-path-coverage-atlas-strategy.md`.
+Destination-read target snapshots, existing intermediate validation,
+copy-before-sample ordering, and pass-split actions are defined in
+`20-destination-read-strategy.md`.
 
 This mirrors Graphite's separation of shared context, recorder-owned resource
 provider state, scratch resources, and atlas managers conceptually, but Kanvas
@@ -127,6 +130,7 @@ Command scopes must preserve:
 - render/compute/copy ordering;
 - upload-before-use dependencies;
 - readback-after-write dependencies;
+- destination-copy-before-sample dependencies;
 - atlas mutation ordering;
 - atlas compute-write-before-sample and upload-before-sample dependencies;
 - device-generation checks.
@@ -158,6 +162,11 @@ reported separately.
 
 `GPUReadbackRequest` exists for tests, PM evidence, diagnostics, and migration
 comparison. It is not a production fallback route.
+
+Product destination reads use `GPUDestinationReadPlan`,
+`GPUDestinationCopyPlan`, `GPUDestinationReadBinding`, and GPU copy or
+intermediate resources from `20-destination-read-strategy.md`. They are
+separate from CPU-facing readback requests.
 
 It must record:
 
@@ -222,6 +231,8 @@ Stable reason-code examples:
 - `unsupported.execution.surface_unavailable`
 - `unsupported.execution.usage_missing`
 - `unsupported.execution.active_attachment_sampled`
+- `unsupported.destination_read.copy_unavailable`
+- `unsupported.destination_read.pass_split_illegal`
 - `unsupported.atlas.sync_unavailable`
 - `unsupported.atlas.storage_texture_unavailable`
 - `unsupported.texture.surface_lease_stale`
@@ -237,6 +248,8 @@ Promoted execution behavior requires:
 - usage-flag validation tests;
 - stale device-generation tests;
 - render/compute/copy ordering tests where supported;
+- destination-copy-before-sample and pass-split ordering tests before shader
+  destination-read routes are promoted;
 - atlas upload-before-sample and compute-write-before-sample ordering tests
   before path/coverage atlas routes are promoted;
 - readback success or skipped-lane diagnostics;

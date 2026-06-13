@@ -307,12 +307,16 @@ pipeline keys, reusable recordings, artifact keys, or shared caches.
 
 Sampling a texture that is active as the current render attachment is refused
 unless an accepted intermediate/copy route has created a separate sampled
-resource with validated ordering.
+resource with validated ordering. Destination-read copy/intermediate routes
+are defined in `20-destination-read-strategy.md`.
 
 ## Render Targets And Intermediates
 
 Layer, filter, destination-read, and offscreen targets use
 `GPUTargetTextureDescriptor` plus ordinary `GPUResourceProvider` ownership.
+Destination-copy targets are created only through `GPUDestinationCopyPlan` and
+`GPUDestinationCopyTextureDescriptor` from
+`20-destination-read-strategy.md`.
 
 An intermediate target descriptor records:
 
@@ -404,6 +408,10 @@ release the texture.
 If the gatherer observes a missing or refused ownership plan, the draw remains
 refused or unpromoted with a stable diagnostic. It must not substitute an
 uploaded CPU fallback texture.
+When the sampled resource is a destination copy or existing destination
+intermediate, `GPUDestinationReadBinding` from
+`20-destination-read-strategy.md` records the destination-read-specific bounds,
+target generation, and binding facts.
 
 ## Routing Policy
 

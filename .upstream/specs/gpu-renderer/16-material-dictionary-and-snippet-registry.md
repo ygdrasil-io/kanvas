@@ -108,6 +108,8 @@ It must not include:
 - transient atlas coordinates;
 - atlas entry refs;
 - atlas use tokens;
+- destination copy descriptors;
+- destination-read bounds, target generations, bindings, and tokens;
 - cache residency;
 - GPU resource handles;
 - CPU-rendered fallback artifacts.
@@ -152,7 +154,7 @@ Kanvas defines `WGSLSnippetRequirement` flags as stable, dumpable facts:
 |---|---|
 | `NeedsLocalCoords` | The node or one of its children requires local coordinates. |
 | `NeedsPriorStageColor` | The node consumes the previous color in a filter or blend chain. |
-| `NeedsDestinationColor` | The node needs destination color and must be accepted by destination-read policy. |
+| `NeedsDestinationColor` | The node needs destination color and must be accepted by `GPUDestinationReadPlan`. |
 | `NeedsPrimitiveColor` | The node consumes render-step or per-primitive color. |
 | `NeedsGradientBuffer` | The node consumes material-owned gradient stop data. |
 | `NeedsSamplerDescriptorData` | The node carries sampler descriptor facts that affect module or binding layout. |
@@ -165,8 +167,8 @@ Requirement propagation is deterministic:
 - a parent starts with its own snippet requirements;
 - child requirements propagate to the parent unless the child slot explicitly
   consumes the requirement through an argument;
-- destination-color requirements are preserved until `GPUBlendPlan` or a later
-  destination-read strategy accepts them;
+- destination-color requirements are preserved until `GPUBlendPlan` and
+  `GPUDestinationReadPlan` accept them;
 - liftability is advisory and never required for correctness;
 - any unsupported aggregate requirement refuses with a stable diagnostic.
 
@@ -257,6 +259,8 @@ Rules:
   ownership and use their accepted artifact or atlas group. Path and coverage
   atlas ownership, entry refs, and mutations follow
   `19-path-coverage-atlas-strategy.md`;
+- destination-read snapshots and bindings remain outside material ownership and
+  follow `20-destination-read-strategy.md`;
 - gradient stop data is material-owned for the first accepted linear-gradient
   route unless a later gradient-buffer spec moves it to a shared resource;
 - per-draw values are not key facts, but their layout and packing plan are key

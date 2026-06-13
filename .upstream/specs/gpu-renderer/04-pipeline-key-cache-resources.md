@@ -180,6 +180,9 @@ Expected cache layers:
   `GPUTextureViewDescriptor`, `GPUSamplerDescriptor`, and accepted ownership
   plan facts;
 - atlas caches with explicit ownership and eviction rules;
+- destination-read target snapshot and intermediate resources with explicit
+  ownership, generation, pass-split, and budget rules from
+  `20-destination-read-strategy.md`;
 - `CPUPreparedGPUArtifactRegistry` keyed by typed artifact descriptors.
 
 Cache hits and misses must be observable in conformance or PM evidence before

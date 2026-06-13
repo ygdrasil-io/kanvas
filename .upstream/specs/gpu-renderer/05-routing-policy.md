@@ -28,6 +28,8 @@ Examples:
   generation;
 - stencil/depth clip preparation on GPU;
 - GPU tessellation or generated geometry buffers when owned by GPU-side logic.
+- destination-read target snapshots, existing intermediates, and layer
+  isolation when accepted by `20-destination-read-strategy.md`.
 
 ### `CPUPreparedGPU`
 
@@ -146,6 +148,8 @@ Route selection may use:
 - material classification;
 - target format;
 - destination-read requirements;
+- destination-read strategy, bounds, target generation, and pass-split legality
+  for routes that observe previous destination pixels;
 - `GPUCapabilities`;
 - resource availability;
 - `CPUPreparedGPUArtifactRegistry` support;
@@ -196,6 +200,9 @@ Stable reason-code examples:
 - `unsupported.texture.ownership_missing`
 - `unsupported.texture.import_unvalidated`
 - `unsupported.texture.active_attachment_sampled`
+- `unsupported.destination_read.strategy_unaccepted`
+- `unsupported.destination_read.active_attachment_sampled`
+- `unsupported.destination_read.pass_split_illegal`
 - `unsupported.texture.device_generation_stale`
 - `unsupported.filter.intermediate_unvalidated`
 - `unsupported.geometry.perspective_path`

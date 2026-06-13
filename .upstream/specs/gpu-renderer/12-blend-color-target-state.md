@@ -27,6 +27,11 @@ identity.
 the renderer can decide whether a draw can execute natively, needs an isolated
 layer or texture read, or must refuse.
 
+The detailed destination-read contract is defined in
+`20-destination-read-strategy.md`. `GPUBlendPlan` declares the requirement;
+`GPUDestinationReadPlan` defines bounds, strategy, copy/intermediate resources,
+barriers, payload bindings, budgets, diagnostics, and validation gates.
+
 ## `GPUBlendPlan`
 
 `GPUBlendPlan` is the explicit blend decision for one draw, layer composite, or
@@ -37,6 +42,8 @@ It records:
 - blend mode identity;
 - source opacity and alpha classification;
 - destination-read requirement;
+- `GPUDestinationReadPlan` reference when shader blend, coverage blend, layer
+  composite, or filter behavior needs previous destination pixels;
 - fixed-function blend eligibility;
 - shader blend eligibility;
 - offscreen isolation requirement;
@@ -50,12 +57,13 @@ Plan kinds:
 |---|---|
 | `FixedFunctionBlend` | The blend can use GPU attachment blend state. |
 | `ShaderBlendNoDstRead` | The blend math is implemented in WGSL without sampling destination. |
-| `ShaderBlendWithDstRead` | The blend requires destination color as an input and therefore requires an accepted texture-read or isolated-layer strategy. |
+| `ShaderBlendWithDstRead` | The blend requires destination color as an input and therefore requires an accepted `GPUDestinationReadPlan`. |
 | `LayerCompositeBlend` | The blend is applied while compositing an isolated `GPULayerPlan`. |
 | `UnsupportedBlend` | The renderer must refuse with a stable reason. |
 
-`ShaderBlendWithDstRead` is not promoted until the required target-read,
-intermediate, ordering, and validation rules are accepted for that route.
+`ShaderBlendWithDstRead` is not promoted until the required target-copy,
+existing-intermediate, layer-isolation, ordering, payload, and validation rules
+from `20-destination-read-strategy.md` are accepted for that route.
 
 ## `GPUColorPlan`
 
@@ -112,12 +120,14 @@ Destination reads are legal only through explicit routes:
   intermediate texture with validated ordering.
 
 The renderer must refuse when a draw requires sampling the active color
-attachment and no accepted intermediate route exists. It must not rely on
-undefined read/write attachment behavior.
+attachment and no accepted target-copy, existing-intermediate, or
+layer-isolation route exists. It must not rely on undefined read/write
+attachment behavior.
 Target-copy and intermediate texture routes must follow
-`18-texture-image-ownership.md`: the sampled resource must have a
-`GPUTargetTextureDescriptor`, valid usage flags, compatible generation, and a
-separate texture/view from the active attachment being written.
+`20-destination-read-strategy.md` and `18-texture-image-ownership.md`: the
+sampled resource must have a `GPUTargetTextureDescriptor`, valid usage flags,
+compatible generation, and a separate texture/view from the active attachment
+being written.
 
 ## Layer And Filter Interaction
 
@@ -156,6 +166,7 @@ Blend and color diagnostics must include:
 - plan kind;
 - source opacity;
 - destination-read requirement;
+- destination-read plan ID, strategy, bounds, and refusal reason when present;
 - fixed-function state when used;
 - shader blend module when used;
 - layer isolation requirement;
@@ -185,6 +196,8 @@ Promoted blend/color behavior requires:
 - CPU reference or explicit refusal evidence for each promoted blend mode;
 - GPU evidence for fixed-function and shader blend routes;
 - negative tests for unsupported destination-read modes;
+- `GPUDestinationReadPlan` fixture references for shader-destination-read
+  refusal and any promoted target-copy/intermediate route;
 - layer-elision tests that prove equivalence or refusal;
 - PM-visible counts by blend plan and color refusal reason.
 

@@ -106,6 +106,10 @@ contents, or uploaded artifact cache keys.
 Path and coverage atlas bindings use `GPUCoverageAtlasBinding` from
 `19-path-coverage-atlas-strategy.md`; the ABI includes the resource layout and
 access facts, not atlas residency as material identity.
+Destination-read bindings use `GPUDestinationReadBinding` from
+`20-destination-read-strategy.md`; the ABI includes sampled texture/sampler
+layout and coordinate payload facts, not destination copy residency as material
+identity.
 
 ## Uniform And Storage Packing
 
@@ -188,6 +192,9 @@ Rules:
 - shared atlases, masks, and CPU-prepared artifacts stay outside the material
   dictionary and use their accepted resource group. Path and coverage atlas
   bindings follow `19-path-coverage-atlas-strategy.md`;
+- destination-read snapshots and existing intermediates stay outside the
+  material dictionary and use their accepted destination-read binding group from
+  `20-destination-read-strategy.md`;
 - a mismatch between snippet ABI and complete module reflection refuses the
   route with a stable diagnostic.
 

@@ -55,6 +55,10 @@ It includes:
 `GPULayerPlan` is not a draw-pass optimization object. It describes required
 semantics. `GPUDrawLayerPlanner` may later choose a direct-to-parent path,
 offscreen texture path, or refusal, but it must preserve the plan's semantics.
+Destination/backdrop reads in a layer are resolved through
+`GPUDestinationReadPlan` from `20-destination-read-strategy.md`; layer plans
+declare the semantic need, while destination-read plans own bounds, strategy,
+copy/intermediate resources, and ordering diagnostics.
 
 ## Direct-To-Parent Eligibility
 
@@ -66,6 +70,8 @@ following:
 - blend mode does not require a post-layer composite;
 - clip and bounds do not require an isolated target;
 - destination reads are not changed by eliding the layer;
+- no `GPUDestinationReadPlan` observed by the layer requires parent-target
+  contents that direct drawing would change;
 - child draws do not rely on layer-local clears or prior contents;
 - diagnostics can explain the elision.
 
@@ -142,6 +148,7 @@ When a layer has an attached filter:
 - the filter plan owns intermediate graph execution;
 - the layer plan owns final composite into the parent;
 - destination reads and source reads must be explicit;
+- destination/backdrop reads must reference `GPUDestinationReadPlan`;
 - culling cannot remove inputs observed by the filter;
 - diagnostics must show both layer and filter reasons.
 
@@ -174,6 +181,8 @@ Layer and filter diagnostics must include:
 - attached filter plan ID when present;
 - filter node route decisions;
 - intermediate resource declarations;
+- destination-read plan IDs and strategies when layer/filter behavior observes
+  previous target contents;
 - culling and elision decisions;
 - stable reason codes;
 - PM/report counters.
@@ -201,6 +210,8 @@ Promoted layer/filter behavior requires:
 - CPU reference or explicit refusal evidence;
 - GPU evidence for GPU support claims;
 - PM-visible route and refusal counters.
+- destination-read fixtures from `20-destination-read-strategy.md` when
+  layer/filter behavior observes previous target contents.
 
 Layer elision and culling must have negative tests that prove refusal when
 alpha, blend, destination reads, filters, or target boundaries make the

@@ -41,6 +41,7 @@ Tests must assert canonical preimages and hashes for:
 - CPU-prepared artifact keys;
 - texture/image descriptors and ownership plans;
 - path/coverage atlas plans, content keys, entry refs, and mutation plans;
+- destination-read plans, strategies, bounds, copy plans, bindings, and tokens;
 - route diagnostics.
 
 Equivalent inputs must produce equivalent keys. Different behavior-affecting
@@ -117,6 +118,26 @@ Tests must assert:
 - stale device, target, atlas, upload, or surface generations rebuild, discard,
   or refuse deterministically.
 
+### Destination Read Tests
+
+Tests must assert:
+
+- `GPUDestinationReadPlan`, `GPUDestinationReadRequirement`,
+  `GPUDestinationReadStrategy`, `GPUDestinationReadBounds`,
+  `GPUDestinationReadAction`, `GPUDestinationReadBudgetPolicy`,
+  `GPUDestinationCopyPlan`, `GPUDestinationCopyTextureDescriptor`,
+  `GPUDestinationReadBinding`, `GPUDestinationReadToken`, and
+  `GPUDestinationReadDiagnostic` dumps are deterministic;
+- fixed-function blend routes do not create destination texture bindings;
+- shader destination-read routes refuse until target-copy, intermediate,
+  ordering, payload, and validation rules are accepted;
+- active color attachment sampling refuses;
+- stale target or surface generation refuses;
+- destination-copy usage flags and copy-before-sample ordering are validated;
+- planner sort/merge cannot cross destination-read barriers;
+- layer elision and culling refuse when destination contents are observed;
+- destination-read bindings stay out of `MaterialKey`.
+
 ### Path And Coverage Atlas Tests
 
 Tests must assert:
@@ -188,6 +209,9 @@ Evidence must include:
 - atlas policy counts, resident entry counts, upload/compute bytes, generation
   facts, retry/split counts, eviction counts, and atlas refusal counts when
   path or coverage atlases are used;
+- destination-read strategy counts, copied bytes, pass splits, binding counts,
+  target generation facts, and destination-read refusal counts when previous
+  destination contents are observed;
 - WGSL module validation result;
 - output artifact, checksum, diff, or readback where applicable;
 - capability facts;
@@ -231,6 +255,8 @@ PM/report artifacts must show:
 - blend/color/target-state plan counts;
 - path/coverage atlas route, generation, retry, budget, and eviction state
   when atlas routes are touched;
+- destination-read strategy, bounds, copy/intermediate bytes, pass splits,
+  budgets, and refusal state when destination reads are touched;
 - cache and pipeline counters when performance is claimed;
 - telemetry and performance-gate state when realtime readiness is claimed;
 - known limitations.

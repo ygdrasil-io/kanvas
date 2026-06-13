@@ -143,7 +143,9 @@ At minimum, layer facts must include:
 - target identity or logical target scope;
 - device size and color format facts;
 - alpha and blend semantics that affect the layer composite;
-- whether destination reads are required;
+- whether destination reads are required. Detailed destination-read routes are
+  resolved later through `GPUDestinationReadPlan` from
+  `20-destination-read-strategy.md`;
 - whether the command depends on prior target contents.
 
 Complex image-filter layer behavior is outside this kernel. It must enter the
@@ -178,6 +180,8 @@ They must include:
 - barriers required by uploads, atlas mutation, or destination reads.
 
 The core may reorder only when these facts prove the output is unchanged.
+Destination-color dependencies become `GPUDestinationReadRequirement` and
+`GPUDestinationReadClass` facts during analysis and layer planning.
 
 ## Diagnostics
 

@@ -57,11 +57,11 @@ target contracts.
 | Bitmap/image decode | `DependencyGated` | `CPUPreparedGPU` upload when accepted | Upload then texture sampling | `MaterialKey` image source | `UploadedTextureArtifact`; codec/color conversion policy must be accepted separately. |
 | Text/glyph run | `DependencyGated` | `CPUPreparedGPU` initially | Glyph atlas sampling render pass | `MaterialKey` text/glyph material when needed | `GlyphAtlasArtifact`; font/shaping/glyph ownership remains dependency-gated. |
 | Vertices | `FutureResearch` | `GPUNative` expected | Render pass with vertex/index buffers | `MaterialKey` or per-vertex color material | GPU buffers; possible `PrecomputedGeometryArtifact` for CPU-packed vertices. |
-| Layer/saveLayer | `TargetNative` with refusals | `GPUNative` render/composite, sometimes `RefuseDiagnostic` | `GPULayerPlan`, offscreen target, parent composite | `GPULayerPlan` with optional `GPUFilterPlan` | Offscreen GPU resources; no untyped CPU fallback. |
-| Image filter DAG | `DependencyGated` | `GPUNative`, `CPUPreparedGPU`, or refusal by node | `GPUFilterPlan`, render/compute passes, intermediates | `GPUFilterPlan` | Intermediate GPU textures; `FilterIntermediateArtifact` only when validated. |
+| Layer/saveLayer | `TargetNative` with refusals | `GPUNative` render/composite, sometimes `RefuseDiagnostic` | `GPULayerPlan`, offscreen target, parent composite, `GPUDestinationReadPlan` when parent destination is observed | `GPULayerPlan` with optional `GPUFilterPlan` | Offscreen GPU resources; no untyped CPU fallback. |
+| Image filter DAG | `DependencyGated` | `GPUNative`, `CPUPreparedGPU`, or refusal by node | `GPUFilterPlan`, render/compute passes, intermediates, `GPUDestinationReadPlan` for backdrop/destination reads | `GPUFilterPlan` | Intermediate GPU textures; `FilterIntermediateArtifact` only when validated. |
 | Runtime effect | `DependencyGated` | `GPUNative` only for registered descriptors | Render pass or compute where descriptor permits | Registered descriptor contributes to `MaterialKey` or compute program | No arbitrary SkSL; refusal for unregistered effects. |
 | Color filter | `TargetNative` | `GPUNative` | WGSL material fragment | `MaterialKey` | No CPU artifact; refusal for unsupported chains. |
-| Blend mode | `TargetNative` for selected modes | `GPUNative` or refusal | Fixed blend state or shader blend path | `MaterialKey` and `GPURenderPipelineKey` | Destination-read facts explicit; refusal for unsupported dst-dependent modes. |
+| Blend mode | `TargetNative` for selected modes | `GPUNative` or refusal | Fixed blend state or shader blend path with `GPUDestinationReadPlan` when needed | `MaterialKey`, `GPUBlendPlan`, `GPUColorPlan`, and `GPURenderPipelineKey` | Destination-read strategy from `20-destination-read-strategy.md`; refusal for unsupported dst-dependent modes. |
 | Clear/discard | `TargetNative` | `GPUNative` | Pass load/clear/discard ops | none | Target-state operation, not material rendering. |
 
 ## Required Evidence By Family
@@ -147,6 +147,8 @@ Evidence must include:
 - intermediate resource keys;
 - render/compute pipeline keys for filter nodes;
 - direct-to-parent and offscreen decisions;
+- destination-read plan, strategy, bounds, and target/intermediate resource
+  diagnostics when parent destination or backdrop is observed;
 - culling and layer-elision negative tests;
 - refusal for unsupported filter DAG nodes or layer composite semantics.
 
@@ -181,6 +183,9 @@ Examples:
 - `unsupported.text.shaping_dependency`
 - `unsupported.text.color_font_dependency`
 - `unsupported.layer.destination_read`
+- `unsupported.destination_read.strategy_unaccepted`
+- `unsupported.destination_read.active_attachment_sampled`
+- `unsupported.destination_read.copy_budget_exceeded`
 - `unsupported.filter.node_unimplemented`
 - `unsupported.runtime_effect.unregistered_descriptor`
 - `unsupported.blend.dst_dependent_mode`

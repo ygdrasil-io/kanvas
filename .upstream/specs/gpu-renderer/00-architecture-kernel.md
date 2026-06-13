@@ -49,6 +49,8 @@ The module owns:
   leases;
 - path atlas, coverage atlas, atlas entry, atlas budget, atlas mutation, atlas
   upload, and atlas diagnostic contracts;
+- destination-read requirement, strategy, bounds, target snapshot, binding,
+  budget, token, and diagnostic contracts;
 - resource-provider contracts;
 - GPU execution context and submission contracts;
 - telemetry, cache, and performance-gate contracts;
@@ -178,6 +180,18 @@ Public concept names in the new renderer use uppercase acronyms:
 - `GPUAtlasDiagnostic`
 - `GPUPathAtlasKey`
 - `GPUCoverageAtlasKey`
+- `GPUDestinationReadPlan`
+- `GPUDestinationReadRequirement`
+- `GPUDestinationReadStrategy`
+- `GPUDestinationReadClass`
+- `GPUDestinationReadBounds`
+- `GPUDestinationReadAction`
+- `GPUDestinationReadBudgetPolicy`
+- `GPUDestinationCopyPlan`
+- `GPUDestinationCopyTextureDescriptor`
+- `GPUDestinationReadBinding`
+- `GPUDestinationReadToken`
+- `GPUDestinationReadDiagnostic`
 - `GPUBlendPlan`
 - `GPUColorPlan`
 - `GPUTargetState`
@@ -239,6 +253,9 @@ into a narrower GPU renderer value object.
 | `Texture` | Provider-owned texture resource behind `GPUTextureResourceRef` | Concrete `GPU` facade object owned by `GPUResourceProvider`, not by material keys. |
 | `Image_Graphite` | `GPUImageSourceDescriptor` | Logical image source plus color/sampling facts without leaking `SkImage` or raw handles into the core. |
 | `TextureDataBlock` / `TextureDataCache` | `GPUSampledTextureBinding` inside `GPUResourceBindingBlock` / `GPUResourceBindingSlot` | Ordered sampled texture and sampler payloads; no raw handle or pointer identity in durable keys. |
+| `DstUsage` | `GPUDestinationReadRequirement` / `GPUDestinationReadClass` | Destination dependency and planner ordering facts; no Skia bitmask API. |
+| `DstReadStrategy` | `GPUDestinationReadStrategy` / `GPUDestinationReadPlan` | WebGPU-safe destination reads through fixed-function blend, target copy snapshots, existing intermediates, layer isolation, or refusal; no framebuffer-fetch assumption. |
+| Graphite `dstCopy` texture | `GPUDestinationCopyPlan` / `GPUDestinationCopyTextureDescriptor` / `GPUDestinationReadBinding` | Explicit provider-owned target snapshot with bounds, generation, usage flags, payload binding, and budget diagnostics. |
 | `DrawAtlas` | `GPUAtlasDescriptor` / `GPUAtlasEntryRef` / `GPUAtlasMutationPlan` | Atlas page/entry/generation/use-token concept; no Graphite page bit packing or C++ cache ownership. |
 | `PathAtlas` / `RasterPathAtlas` | `GPUPathAtlasPlan` plus `PathAtlasArtifact` | Reusable path coverage route through typed `CPUPreparedGPU`; no generic CPU fallback proxy. |
 | `ComputePathAtlas` | `GPUComputeCoverageAtlasPlan` | Future compute-written coverage atlas with WGSL compute validation and explicit storage/transition policy. |

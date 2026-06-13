@@ -43,6 +43,8 @@ The first slice does not implement:
 - complex saveLayer behavior;
 - arbitrary blend modes;
 - destination-read shader blending;
+- destination copy snapshots, existing-intermediate destination reads, and
+  destination-isolated layer composites;
 - complex clip stacks;
 - persistent path, glyph, or coverage atlases;
 - default `gpu-raster` route activation.
@@ -52,6 +54,9 @@ fallback, CPU-rendered texture compatibility, or hidden legacy rendering.
 
 Path and coverage atlas routes remain governed by
 `19-path-coverage-atlas-strategy.md` and are not promoted by this slice.
+Destination-read routes remain governed by `20-destination-read-strategy.md`;
+the first slice promotes only `NoDestinationRead` and the accepted
+fixed-function blend subset.
 
 ## Required Contracts
 
@@ -206,6 +211,7 @@ Minimum isolated fixtures:
 - unsupported perspective rect refusal;
 - unsupported complex clip refusal;
 - unsupported gradient tile mode refusal;
+- unsupported destination-read shader blend refusal;
 - WGSL validation failure fixture using an intentionally invalid test module;
 - stale device-generation resource refusal using a test double;
 - illegal active-attachment sampling refusal using target texture descriptors.
@@ -242,4 +248,7 @@ against legacy output. This slice alone does not switch production rendering.
   image textures in this slice.
 - Do not create `PathAtlasArtifact`, `CoverageMaskArtifact`, or path/coverage
   atlas textures as supported routes in this slice.
+- Do not create destination copy textures, sample existing destination
+  intermediates, or isolate layers as supported destination-read routes in this
+  slice.
 - Do not rely on CPU-rendered texture compatibility for unsupported variants.

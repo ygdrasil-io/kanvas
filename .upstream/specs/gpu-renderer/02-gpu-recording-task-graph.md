@@ -43,6 +43,10 @@ slot assignment during pass construction.
 selection facts, entry keys, mutation requirements, and diagnostics as defined
 in `19-path-coverage-atlas-strategy.md`.
 
+`GPUDestinationReadPlan` owns destination-read requirements, bounds, target
+snapshot/intermediate strategy, pass-split actions, and diagnostics as defined
+in `20-destination-read-strategy.md`.
+
 ## `GPURecorder`
 
 `GPURecorder` accepts normalized draw commands and a target configuration. It
@@ -90,6 +94,8 @@ Each analysis record contains:
   `GPUAtlasMutationPlan` dependencies when a route may sample atlas coverage;
 - opacity and blend classification;
 - destination-read requirements;
+- `GPUDestinationReadPlan` references when a route observes previous
+  destination pixels;
 - clip, stencil, upload, atlas, and target-load dependencies;
 - `GPUTextureOwnershipPlan` references for image or texture sources;
 - layer assignment request;
@@ -250,7 +256,8 @@ Task phases:
 
 1. `prepareResources`: allocate or resolve pipelines, buffers, textures,
    texture views, samplers, imports, surface texture leases, atlases, atlas
-   entry mutations, bind groups, and gathered payload uploads.
+   entry mutations, destination copy/intermediate resources, bind groups, and
+   gathered payload uploads.
 2. `addCommands`: encode commands through the `GPU` facade.
 
 The split exists so route selection, resource failure, and command encoding
@@ -260,6 +267,10 @@ Atlas mutations from `19-path-coverage-atlas-strategy.md` are resource
 preparation work. A task that samples a path or coverage atlas must depend on
 the upload, compute write, page activation, eviction, or split-pass retry plan
 that made the entry valid.
+Destination-read target copies and isolated intermediates from
+`20-destination-read-strategy.md` are resource preparation and ordering work. A
+task that samples a copied destination or existing intermediate must depend on
+the corresponding copy/intermediate validation plan.
 
 Task outcomes:
 
