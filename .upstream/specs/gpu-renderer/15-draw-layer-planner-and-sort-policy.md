@@ -15,6 +15,11 @@ Kanvas should be deeply inspired by Graphite's `DrawList` and experimental
 `DrawListLayer` behavior while keeping Kanvas-owned names, diagnostics, and
 data shapes.
 
+Common coordinate-space, transform, bounds, pixel-grid, rounding, and
+precision policy is defined in `30-coordinate-transform-bounds-policy.md`.
+This planner consumes `GPUBoundsProof` and `GPUClipReductionProof` facts for
+sort, cull, overlap, and merge decisions.
+
 ## Graphite Evidence
 
 Relevant Graphite concepts:
@@ -137,8 +142,9 @@ A draw layer records:
 - stable layer ID;
 - parent semantic layer or target scope;
 - layer order band;
-- conservative bounds;
-- destination-read bounds;
+- conservative bounds backed by `GPUBoundsProof`;
+- destination-read bounds backed by `GPUDestinationReadBounds` and the common
+  rounding policy from `30-coordinate-transform-bounds-policy.md`;
 - depth/stencil requirements;
 - MSAA or coverage requirements;
 - load/clear/discard/store intent inherited from target state;

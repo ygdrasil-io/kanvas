@@ -71,7 +71,10 @@ This spec depends on:
   interact with active clips;
 - `25-path-stroke-geometry-pipeline.md` for stable path/shape descriptors,
   fill-rule and inverse-fill facts, geometry bounds, stencil-cover geometry,
-  and path/stroke diagnostics when clip paths share geometry descriptor rules.
+  and path/stroke diagnostics when clip paths share geometry descriptor rules;
+- `30-coordinate-transform-bounds-policy.md` for clip coordinate spaces,
+  transform classification, clip bounds proofs, scissor rounding, mask/stencil
+  bounds, and `GPUClipReductionProof`.
 
 ## Graphite And Skia Evidence
 

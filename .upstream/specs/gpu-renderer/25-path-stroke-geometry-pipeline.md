@@ -59,7 +59,10 @@ This spec depends on:
   mutation, upload, retry, and atlas diagnostics;
 - `20-destination-read-strategy.md` for destination-dependent geometry routes;
 - `24-clip-stencil-mask-pipeline.md` for clipping interaction, stencil
-  producers, coverage masks, and clip ordering.
+  producers, coverage masks, and clip ordering;
+- `30-coordinate-transform-bounds-policy.md` for path coordinate spaces,
+  transform classification, inverse policy, precision, stroke/AA expansion,
+  conservative bounds proofs, and integer rounding.
 
 The older `.upstream/specs/geometry-coverage/` pack remains migration and CPU
 oracle context. This spec is the target GPU-renderer contract.
@@ -98,7 +101,8 @@ Kanvas adopts these invariants:
 - path atlas insertion is a resource mutation before later sampling;
 - stroke and fill can become separate planned geometry work;
 - path/stroke bounds must include AA, stroke inflation, and route-specific
-  outsets before sorting, culling, and destination-read decisions;
+  outsets through `GPUBoundsExpansionPlan` before sorting, culling, and
+  destination-read decisions;
 - prepared geometry and masks are typed artifacts, not hidden CPU fallback
   pixels.
 

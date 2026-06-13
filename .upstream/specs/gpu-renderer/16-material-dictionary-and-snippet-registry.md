@@ -132,6 +132,9 @@ defined in `22-image-bitmap-codec-pipeline.md`.
 Detailed color-management descriptors, value specs, transform helpers,
 gradient interpolation, runtime color uniforms, and store behavior are defined
 in `29-color-management-pipeline.md`.
+Detailed coordinate transform helpers, inverse/local-coordinate payloads,
+pixel-grid facts, rounded bounds uniforms, and transform precision policy are
+defined in `30-coordinate-transform-bounds-policy.md`.
 Filter DAG node placement, filter intermediates, runtime filter effects,
 filter bounds/crop/tile behavior, and material-fold equivalence for DAG color
 filters are defined in `23-filter-effect-pipeline.md`.

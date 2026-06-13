@@ -76,7 +76,10 @@ This spec depends on:
   and layer ordering tokens;
 - `29-color-management-pipeline.md` for filter DAG input/output value specs,
   color-filter working spaces, runtime-effect color uniforms, intermediate
-  store specs, HDR/gainmap refusal, and final filter output conversion.
+  store specs, HDR/gainmap refusal, and final filter output conversion;
+- `30-coordinate-transform-bounds-policy.md` for filter graph coordinate
+  spaces, local matrices, forward/reverse bounds proofs, sample-radius
+  expansion, crop rounding, precision policy, and stable refusals.
 
 ## Graphite And Skia Evidence
 
@@ -137,6 +140,8 @@ Owned by other specs:
   `08-layer-and-filter-plans.md`;
 - destination/backdrop read strategy, bounds, copy/intermediate resources, and
   bindings: `20-destination-read-strategy.md`;
+- common coordinate-space, transform, bounds, precision, and rounding policy:
+  `30-coordinate-transform-bounds-policy.md`;
 - clip descriptor execution, final output clipping, clip masks, stencil clip
   routes, and clip ordering: `24-clip-stencil-mask-pipeline.md`;
 - generic texture/view/sampler ownership and sampled bindings:

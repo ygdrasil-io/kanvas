@@ -55,6 +55,9 @@ This spec depends on:
 - `12-blend-color-target-state.md` for final target blend and color behavior;
 - `29-color-management-pipeline.md` for vertex color value specs,
   primitive-color conversions, precision, premul policy, and diagnostics;
+- `30-coordinate-transform-bounds-policy.md` for vertex attribute coordinate
+  spaces, transform classification, primitive bounds, precision, and rounded
+  target bounds;
 - `13-performance-telemetry-cache-gates.md` for mesh counters and gates;
 - `15-draw-layer-planner-and-sort-policy.md` for sort windows and draw
   ordering;

@@ -80,6 +80,9 @@ mutation diagnostics are defined in `19-path-coverage-atlas-strategy.md`.
 Destination-read target snapshots, existing intermediate validation,
 copy-before-sample ordering, and pass-split actions are defined in
 `20-destination-read-strategy.md`.
+Coordinate-space, pixel-grid, target rounding, readback bounds, and
+device-pixel-scale invalidation policy is defined in
+`30-coordinate-transform-bounds-policy.md`.
 
 This mirrors Graphite's separation of shared context, recorder-owned resource
 provider state, scratch resources, and atlas managers conceptually, but Kanvas
@@ -94,6 +97,8 @@ It includes:
 
 - logical target ID and generation;
 - dimensions and device-pixel scale;
+- `GPUPixelGridPlan` facts when target size, scale, origin, sample count, or
+  resize affects coordinates or rounded bounds;
 - color format, alpha type, premul convention, and color-space tag;
 - `GPUColorValueSpec` / `GPUColorStorePlan` references when target color
   behavior affects writes, presentation, or readback;

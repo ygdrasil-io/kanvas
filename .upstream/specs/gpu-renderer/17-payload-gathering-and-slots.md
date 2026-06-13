@@ -291,6 +291,11 @@ Rules:
   runtime color uniform transforms, image color conversion facts, and store
   conversion payloads must use accepted plans from
   `29-color-management-pipeline.md`;
+- coordinate transform matrices, inverse matrices, scale/bias values,
+  pixel-grid facts, rounded bounds, destination-copy coordinate mappings, and
+  layer/atlas/texture origin payloads must use accepted
+  `GPUCoordinatePayloadPlan` facts from
+  `30-coordinate-transform-bounds-policy.md`;
 - raw resource handles are not sort or cache key facts.
 - import, upload, lease, allocation, eviction, and release are performed by
   `GPUResourceProvider`, not by the gatherer.
@@ -346,6 +351,12 @@ facts produced by `GPUColorTransformPlan`, `GPUGradientColorPlan`,
 blocks, color-uniform values, store conversion data, and diagnostic IDs. It
 does not parse profiles, choose working spaces, generate transforms, tone-map
 HDR, or reinterpret untagged bytes.
+When a coordinate/transform/bounds route is accepted, the gatherer consumes
+only payload facts produced by `GPUCoordinatePayloadPlan`: matrices, inverse
+matrices, scale/bias, rounded bounds, pixel-grid data, coordinate-space IDs
+when needed by diagnostics, and WGSL helper payloads. It does not classify
+transforms, compute bounds, choose full-target widening, snap geometry, or
+relax precision.
 
 The first rect/rrect solid and linear-gradient slice does not require sampled
 texture payloads except when a later accepted gradient-store route explicitly

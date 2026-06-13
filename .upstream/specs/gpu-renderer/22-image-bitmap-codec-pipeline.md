@@ -49,6 +49,10 @@ This spec depends on:
 - `29-color-management-pipeline.md` for color-space descriptors, ICC/CICP
   metadata, transfer/gamut transforms, image color management, HDR/gainmap,
   and store/readback color behavior;
+- `30-coordinate-transform-bounds-policy.md` for image source/destination
+  coordinate spaces, orientation transforms, subset/destination bounds,
+  texel/normalized sampling coordinates, mip footprints, and upload/readback
+  rounding;
 - `13-performance-telemetry-cache-gates.md` for budgets, telemetry, and
   quarantine;
 - `17-payload-gathering-and-slots.md` for sampled image payload bindings;

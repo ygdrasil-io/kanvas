@@ -252,6 +252,12 @@ Stable reason-code examples:
 - `unsupported.image.animation.required_frame_missing`
 - `unsupported.color.image_profile_conversion`
 - `unsupported.color.YUV_conversion`
+- `unsupported.transform.perspective`
+- `unsupported.transform.inverse_required`
+- `unsupported.transform.non_finite`
+- `unsupported.bounds.unbounded`
+- `unsupported.bounds.clip_reduction_unproven`
+- `unsupported.bounds.integer_overflow`
 - `unsupported.image.upload.budget_exceeded`
 - `unsupported.destination_read.strategy_unaccepted`
 - `unsupported.destination_read.active_attachment_sampled`

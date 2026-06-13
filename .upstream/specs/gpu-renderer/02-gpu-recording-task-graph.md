@@ -20,6 +20,9 @@ accepted.
 
 `GPUDrawAnalysis` owns explicit per-draw route, ordering, culling, layer,
 material, render-step, texture/image ownership, and resource facts.
+Common coordinate-space, transform, bounds, pixel-grid, rounding, and precision
+facts are governed by `30-coordinate-transform-bounds-policy.md`; draw analysis
+consumes those facts instead of reinterpreting matrices ad hoc.
 
 `GPUOcclusionTracker` owns conservative occlusion state and culling decisions.
 
@@ -47,10 +50,14 @@ in `19-path-coverage-atlas-strategy.md`.
 selection, bounds, scissor, analytic clip, stencil producer-consumer plans,
 coverage-mask plans, shader clip plans, budgets, ordering tokens, and
 diagnostics as defined in `24-clip-stencil-mask-pipeline.md`.
+Common clip bounds and clip-reduction proof policy comes from
+`30-coordinate-transform-bounds-policy.md`.
 
 `GPUDestinationReadPlan` owns destination-read requirements, bounds, target
 snapshot/intermediate strategy, pass-split actions, and diagnostics as defined
 in `20-destination-read-strategy.md`.
+Common reverse bounds, copy rounding, and fragment-to-copy coordinate policy
+comes from `30-coordinate-transform-bounds-policy.md`.
 
 `GPULayerExecutionPlan` owns executable saveLayer lowering, offscreen targets,
 initialization/backdrop, source filtering, restore composite, layer elision,
@@ -128,9 +135,9 @@ is Kanvas-owned. It must not expose Graphite `DrawList`, `DrawPass`, or
 `Renderer` classes, Graphite package names, or Graphite bit layouts as core
 contracts.
 
-Analysis is allowed to decide that a command is unsupported before pass
-construction. Unsupported analysis records remain visible in diagnostics and PM
-evidence instead of disappearing from the recording.
+Analysis may classify a command as unsupported before pass construction.
+Unsupported analysis records remain visible in diagnostics and PM evidence
+instead of disappearing from the recording.
 
 ## `GPUOcclusionTracker`
 

@@ -19,6 +19,11 @@ This spec is a target contract, not an implementation slice. It defines the
 full architecture surface required by future blend modes, shader blends,
 backdrop/filter work, saveLayer interactions, and advanced compositing.
 
+Common coordinate-space, reverse-bounds, pixel-grid, copy rounding, and
+precision policy is defined in `30-coordinate-transform-bounds-policy.md`.
+This spec owns destination-read strategy and resources; it consumes common
+`GPUBoundsPlan`, `GPUBoundsProof`, and `GPURoundingPlan` facts.
+
 ## Graphite Evidence
 
 Graphite's useful model is conceptual:
@@ -84,6 +89,8 @@ clip descriptor, bounds, stencil, mask, and ordering behavior is defined in
 Detailed layer/saveLayer execution, including previous-content initialization,
 backdrop input, source filters, restore composite, elision, and layer ordering
 tokens, is defined in `28-layer-savelayer-execution.md`.
+Common coordinate, transform, and bounds proof policy is defined in
+`30-coordinate-transform-bounds-policy.md`.
 `GPUDrawAnalysis` resolves those facts into `GPUDestinationReadPlan` values.
 `GPUDrawLayerPlanner` preserves ordering and split barriers. `GPUTaskList` and
 `GPUResourceProvider` materialize copies, intermediates, texture ownership, and

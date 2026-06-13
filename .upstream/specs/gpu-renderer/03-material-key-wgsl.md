@@ -33,7 +33,9 @@ It includes:
 - color filter chain identity when supported;
 - blender identity when supported;
 - color-space requirements;
-- local coordinate requirements;
+- local coordinate requirements from
+  `30-coordinate-transform-bounds-policy.md` when they affect WGSL code shape,
+  helper selection, or ABI layout;
 - uniform layout identity;
 - texture and sampler binding layout identity;
 - registered runtime-effect descriptor identity;
@@ -59,6 +61,9 @@ It does not include:
 - pixel contents;
 - transient resource handles;
 - command ID;
+- concrete transform matrix values, rounded bounds, coordinate-space
+  generations, and pixel-grid facts unless they affect WGSL code shape,
+  layout, or pipeline validity;
 - compute entry point, workgroup size, or storage-resource topology;
 - clip stack descriptor identity, scissor bounds, stencil ordering tokens, mask
   coordinates, atlas entry refs, or clip budget state;
@@ -68,6 +73,10 @@ Clip execution is governed by `24-clip-stencil-mask-pipeline.md`. A clip route
 may affect render-step selection, depth/stencil state, WGSL ABI, or
 `GPURenderPipelineKey` validity, but the captured clip stack and per-draw clip
 values are not render-material identity.
+Common coordinate-space, transform, bounds, pixel-grid, rounding, and
+precision behavior is governed by
+`30-coordinate-transform-bounds-policy.md`. `MaterialKey` may include only the
+coordinate facts that change material WGSL behavior or layout.
 
 ## Material Descriptor To Key
 

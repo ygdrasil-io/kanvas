@@ -62,6 +62,7 @@ target contracts.
 | Image filter DAG | `TargetNative` plus dependency-gated nodes | `GPUNative`, `CPUPreparedGPU`, or refusal by node | `GPUFilterPlan`, `GPUFilterNodePlan`, render/compute/copy nodes, intermediates, `GPUDestinationReadPlan` for backdrop/destination reads | `GPUFilterGraphDescriptor`, `GPUFilterBoundsPlan`, `GPUFilterIntermediatePlan`, `GPUFilterRuntimeEffectPlan` when needed | Intermediate GPU textures; `FilterIntermediateArtifact` only when validated by `23-filter-effect-pipeline.md`. |
 | Runtime effect | `DependencyGated` until registry descriptors and GPU evidence are promoted | `GPUNative` only for registered descriptors; `CPUReferenceOnly` for oracle evidence | Render pass, compute pass, material snippet, filter node, primitive blender, or future clip shader only where descriptor permits | `GPURuntimeEffectRegistry`, `GPURuntimeEffectDescriptor`, `GPURuntimeEffectRouteContract`, `MaterialKey`, `GPUFilterRuntimeEffectPlan`, or compute program | Descriptor ID/version, uniform schema, child slots, WGSL plan, CPU oracle, registry snapshot, and diagnostics governed by `27-registered-runtime-effects-registry.md`; no arbitrary SkSL/source string support. |
 | Color management | `DependencyGated` beyond SDR sRGB lane | `GPUNative`, `CPUPreparedGPU` for typed pixel preparation, `CPUReferenceOnly` for oracle evidence, or `RefuseDiagnostic` | Color transform helpers, profile conversion, gradient interpolation, image/profile preparation, layer/store conversion, or target refusal | `GPUColorManagementPlan`, `GPUColorValueSpec`, `GPUColorConversionPlan`, `GPUColorTransformPlan`, `GPUColorStorePlan`, and `GPUColorDiagnostic` | ICC/CICP/profile, transfer/gamut, premul/unpremul, precision, F16, HDR, gainmap, runtime color uniforms, and store behavior governed by `29-color-management-pipeline.md`; no silent reinterpretation. |
+| Coordinate / transform / bounds | `TargetRequired` for accepted GPU routes | `GPUNative`, `CPUReferenceOnly` for oracle evidence, or `RefuseDiagnostic` | Coordinate-space descriptors, transform chains, inverse plans, pixel-grid plans, conservative bounds proofs, rounding plans, clip reduction proofs, and payload facts | `GPUCoordinateSpace`, `GPUTransformPlan`, `GPUBoundsPlan`, `GPUBoundsProof`, `GPURoundingPlan`, `GPUCoordinatePayloadPlan`, and `GPUTransformDiagnostic` | Common transform/bounds behavior governed by `30-coordinate-transform-bounds-policy.md`; unknown bounds, unsupported perspective, singular inverses, and unsafe rounding refuse unless a specialized route proves acceptance. |
 | Color filter | `TargetNative` | `GPUNative` | WGSL material fragment or filter render node | `MaterialKey` when folded, `GPUFilterColorPlan` inside filter DAGs | No CPU artifact; refusal for unsupported chains. |
 | Blend mode | `TargetNative` for selected modes | `GPUNative` or refusal | Fixed blend state or shader blend path with `GPUDestinationReadPlan` when needed | `MaterialKey`, `GPUBlendPlan`, `GPUColorPlan`, and `GPURenderPipelineKey` | Destination-read strategy from `20-destination-read-strategy.md`; refusal for unsupported dst-dependent modes. |
 | Clear/discard | `TargetNative` | `GPUNative` | Pass load/clear/discard ops | none | Target-state operation, not material rendering. |
@@ -230,6 +231,26 @@ Evidence must include:
   shader transforms;
 - stable refusals for unsupported ICC/CICP profiles, custom transfers, HDR,
   gainmaps, F16 targets, untagged policies, and platform-only conversions.
+
+### Coordinate / Transform / Bounds
+
+Evidence must include:
+
+- `GPUCoordinateSpace`, `GPUTransformDescriptor`, `GPUTransformPlan`,
+  `GPUTransformChain`, `GPUInverseTransformPlan`,
+  `GPUTransformPrecisionPlan`, `GPUPixelGridPlan`,
+  `GPUBoundsDescriptor`, `GPUBoundsPlan`, `GPUBoundsProof`,
+  `GPUBoundsExpansionPlan`, `GPURoundingPlan`, `GPUClipReductionProof`,
+  `GPUCoordinatePayloadPlan`, `GPUTransformCachePlan`,
+  `GPUTransformBudgetPolicy`, and `GPUTransformDiagnostic` dumps;
+- identity, translate, scale, rect-stays-rect affine, general affine,
+  perspective refusal/promotion, singular, non-finite, and near-singular
+  fixtures;
+- conservative forward/reverse bounds, expansion, clip reduction, full-target
+  widening, and integer rounding evidence for every promoted route family;
+- CPU/WGSL parity evidence when transform math runs in WGSL;
+- stable refusals for unproven bounds, unsafe layer-hint clipping,
+  unsupported perspective, integer overflow, and missing inverse transforms.
 
 ### Runtime Effects
 

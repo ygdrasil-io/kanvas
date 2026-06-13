@@ -308,6 +308,21 @@ Tests must assert:
 - refusal for unsupported destination-read or color-conversion paths;
 - layer elision only when blend and color plans prove equivalence.
 
+### Coordinate, Transform, And Bounds Tests
+
+Tests must assert:
+
+- `GPUCoordinateSpace`, `GPUTransformPlan`, `GPUInverseTransformPlan`,
+  `GPUPixelGridPlan`, `GPUBoundsPlan`, `GPUBoundsProof`,
+  `GPURoundingPlan`, and `GPUTransformDiagnostic` dumps for promoted routes;
+- identity, translate, scale, affine, perspective refusal/promotion, singular,
+  non-finite, and near-singular fixtures;
+- conservative forward/reverse bounds, expansion, clip reduction, full-target
+  widening, and integer rounding evidence when touched;
+- CPU/WGSL parity for promoted transform helper math;
+- refusal for unproven bounds, unsafe layer-hint clipping, unsupported
+  perspective, missing inverse transforms, and integer overflow.
+
 ### Execution And Submission Tests
 
 Tests must assert:

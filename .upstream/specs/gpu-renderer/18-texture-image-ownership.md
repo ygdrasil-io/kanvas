@@ -21,6 +21,9 @@ uploaded image artifact key construction are defined in
 plan.
 Detailed color-management descriptors and sampled image value specs are
 defined in `29-color-management-pipeline.md`.
+Texture texel-space, normalized-space, view-origin, sampling coordinate, and
+payload transform rules are defined in
+`30-coordinate-transform-bounds-policy.md`.
 
 The target is Graphite-inspired but Kanvas-owned:
 

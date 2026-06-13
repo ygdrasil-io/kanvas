@@ -21,6 +21,9 @@ Detailed path, stroke, fill-rule, inverse-fill, flattening, tessellation,
 stencil-cover, prepared geometry, geometry budget, and geometry diagnostic
 policy is defined in `25-path-stroke-geometry-pipeline.md`. This spec owns the
 atlas residency and coverage artifact mechanics used by those geometry routes.
+Common coordinate-space, transform, bounds, pixel-grid, padding, and rounding
+policy is defined in `30-coordinate-transform-bounds-policy.md`. This spec
+owns atlas-specific residency and mutation; it consumes common bounds proofs.
 
 The design is Graphite-inspired but Kanvas-owned:
 
@@ -116,7 +119,8 @@ Text/glyph atlas ownership is outside this spec. Text uses
 ## Relationship To Geometry/Coverage
 
 The existing `geometry-coverage/` pack remains migration and evidence context.
-This spec refines its `CoverageAtlas` placeholder for the GPU renderer target.
+This spec refines its earlier `CoverageAtlas` sketch for the GPU renderer
+target.
 The target path/stroke geometry semantics are owned by
 `25-path-stroke-geometry-pipeline.md`; this atlas spec is selected only after a
 geometry route has determined that reusable or standalone coverage storage is

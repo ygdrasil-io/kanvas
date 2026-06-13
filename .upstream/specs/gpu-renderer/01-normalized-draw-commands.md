@@ -12,6 +12,11 @@ The renderer core receives high-level normalized draw commands with captured
 state. It does not receive a stateful stream of `save`, `restore`,
 `concatMatrix`, `clipPath`, or `saveLayer` operations.
 
+Common coordinate-space, transform, bounds, pixel-grid, rounding, and
+precision policy is defined in `30-coordinate-transform-bounds-policy.md`.
+This spec owns command capture; it does not redefine transform or bounds
+semantics locally.
+
 ## Ownership Boundary
 
 The legacy adapter owns:
@@ -59,11 +64,11 @@ Each command carries the following facts:
 | `commandId` | Stable per-recording identifier for diagnostics. |
 | `drawKind` | High-level operation family such as fill, stroke, image, text, or layer composite. |
 | `geometry` | Shape, image rect, glyph run, or other high-level payload in normalized form. |
-| `transform` | Captured local-to-device transform facts. |
+| `transform` | Captured local-to-device `GPUTransformDescriptor` / `GPUTransformPlan` facts. |
 | `clip` | Captured clip descriptor, including conservative bounds and support classification. |
 | `layer` | Captured layer or target scope facts. |
 | `material` | Normalized material descriptor used to derive `MaterialKey`. |
-| `bounds` | Conservative device-space bounds used for culling, ordering, and diagnostics. |
+| `bounds` | Conservative `GPUBoundsPlan` / `GPUBoundsProof` facts used for culling, ordering, and diagnostics. |
 | `ordering` | Paint-order and dependency hints required for correct blending and clipping. |
 | `source` | Adapter provenance for PM/debug dumps. |
 
@@ -130,14 +135,17 @@ vertices diagnostic rules are defined in
 
 Transform facts must include:
 
-- matrix values or a stable transform handle;
+- `GPUCoordinateSpace` endpoints;
+- matrix values or a stable transform descriptor;
 - transform classification such as identity, translate, scale, affine, or
   perspective;
 - invertibility and finiteness classification;
 - local-to-device and, where required, device-to-local availability;
 - pixel-snapping facts when normalization applied snapping.
 
-Invalid or non-finite transforms do not enter the core as draw commands.
+Invalid or non-finite transforms do not enter accepted GPU routes. When the
+adapter can preserve provenance, it may emit a refused diagnostic command whose
+reason code follows `30-coordinate-transform-bounds-policy.md`.
 
 ## Clip Facts
 

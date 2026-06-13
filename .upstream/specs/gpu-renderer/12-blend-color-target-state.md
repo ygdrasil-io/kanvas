@@ -39,6 +39,8 @@ The detailed destination-read contract is defined in
 `20-destination-read-strategy.md`. `GPUBlendPlan` declares the requirement;
 `GPUDestinationReadPlan` defines bounds, strategy, copy/intermediate resources,
 barriers, payload bindings, budgets, diagnostics, and validation gates.
+Common destination-read coordinate mapping, bounds proof, and rounding policy
+is defined in `30-coordinate-transform-bounds-policy.md`.
 Clip coverage, stencil, mask, and shader-mask constraints are defined in
 `24-clip-stencil-mask-pipeline.md`; they may constrain render-step selection,
 coverage multiplication, target state, or destination-read requirements but do

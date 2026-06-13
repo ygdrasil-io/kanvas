@@ -171,6 +171,12 @@ and related payload descriptors from `29-color-management-pipeline.md`; the ABI
 includes transform uniform/storage/LUT binding layout, WGSL helper reflection,
 and packing facts. It does not include concrete profile object identity,
 decoded pixel contents, or platform conversion state.
+Coordinate bindings use `GPUCoordinatePayloadPlan`, `GPUTransformPlan`,
+`GPUInverseTransformPlan`, `GPUPixelGridPlan`, `GPUBoundsPlan`, and
+`GPURoundingPlan` from `30-coordinate-transform-bounds-policy.md`; the ABI
+includes matrix, scale/bias, bounds, pixel-grid, instance/vertex coordinate,
+and WGSL helper reflection facts. It does not include mutable canvas state,
+live resource handles, or cache residency.
 
 ## Uniform And Storage Packing
 

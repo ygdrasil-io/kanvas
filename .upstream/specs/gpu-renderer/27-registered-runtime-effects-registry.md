@@ -58,6 +58,9 @@ This spec depends on:
 - `29-color-management-pipeline.md` for color uniforms, `layout(color)`-like
   behavior, color value specs, working-space policy, and runtime-effect color
   diagnostics;
+- `30-coordinate-transform-bounds-policy.md` for runtime-effect coordinate
+  contracts, child sample radius, local-coordinate helpers, transform
+  uniforms, and bounds diagnostics;
 - `13-performance-telemetry-cache-gates.md` for registry and runtime-effect
   counters;
 - `16-material-dictionary-and-snippet-registry.md` for material snippet

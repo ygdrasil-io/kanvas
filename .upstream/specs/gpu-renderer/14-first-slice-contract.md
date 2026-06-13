@@ -21,6 +21,10 @@ The first slice includes:
 - solid color material descriptors;
 - linear-gradient material descriptors;
 - captured transform, clip, layer, material, bounds, and ordering facts;
+- coordinate-space descriptors, finite `GPUTransformPlan` facts,
+  conservative `GPUBoundsPlan` proofs, `GPUPixelGridPlan`, and `RoundOut`
+  target/scissor/readback bounds from
+  `30-coordinate-transform-bounds-policy.md`;
 - `GPUNative` route selection;
 - `RefuseDiagnostic` for unsupported variants;
 - complete WGSL module assembly and validation;
@@ -88,6 +92,11 @@ The slice must exercise these contracts:
 - `WGSLFragment` and `WGSLModule`;
 - `WGSLBindingLayout` and `WGSLPackingPlan`;
 - `GPUPayloadGatherer`;
+- `GPUCoordinateSpace`;
+- `GPUTransformPlan`;
+- `GPUBoundsPlan`;
+- `GPUBoundsProof`;
+- `GPURoundingPlan`;
 - `GPUPayloadGatherPlan`;
 - `GPUMaterialPayload`;
 - `GPUPayloadWritePlan`;

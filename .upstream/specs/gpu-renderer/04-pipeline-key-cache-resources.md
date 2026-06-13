@@ -142,6 +142,9 @@ metadata, and route contracts are defined in
 Color-management descriptors, value specs, profiles, transforms, LUTs, HDR,
 gainmap, and store plans are defined in
 `29-color-management-pipeline.md`.
+Coordinate-space descriptors, transform plans, inverse plans, bounds proofs,
+pixel-grid facts, rounding plans, coordinate payload plans, and transform
+caches are defined in `30-coordinate-transform-bounds-policy.md`.
 Layer/saveLayer execution plans, offscreen targets, initialization/backdrop
 resources, source filter chains, restore composites, elision proofs, ordering
 tokens, and layer budgets are defined in
@@ -214,6 +217,13 @@ Expected cache layers:
   `GPUWorkingColorSpacePlan`, `GPUColorStorePlan`, `GPUColorCachePlan`,
   profile hashes, transform versions, helper WGSL versions, LUT descriptors,
   and capability facts from `29-color-management-pipeline.md`;
+- coordinate/transform/bounds caches keyed by `GPUCoordinateSpace`,
+  `GPUTransformDescriptor`, `GPUTransformPlan`, `GPUTransformChain`,
+  `GPUInverseTransformPlan`, `GPUTransformPrecisionPlan`,
+  `GPUPixelGridPlan`, `GPUBoundsDescriptor`, `GPUBoundsPlan`,
+  `GPUBoundsProof`, `GPUBoundsExpansionPlan`, `GPURoundingPlan`,
+  `GPUClipReductionProof`, `GPUCoordinatePayloadPlan`, and capability facts
+  from `30-coordinate-transform-bounds-policy.md`;
 - layer execution, target, initialization, backdrop, filter-chain, composite,
   elision, resource, ordering, and budget cache entries keyed by
   `GPULayerExecutionPlan`, `GPULayerBoundsPlan`, `GPULayerTargetPlan`,

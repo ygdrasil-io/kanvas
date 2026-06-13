@@ -22,6 +22,8 @@ Detailed saveLayer execution, bounds planning, offscreen target allocation,
 initialization/backdrop handling, source filters, restore composite,
 direct-to-parent elision, layer task ordering, budgets, and diagnostics are
 defined in `28-layer-savelayer-execution.md`.
+Common coordinate-space, transform, bounds, pixel-grid, precision, and rounding
+policy is defined in `30-coordinate-transform-bounds-policy.md`.
 
 ## Ownership Boundary
 
@@ -50,8 +52,9 @@ It includes:
 
 - stable layer ID and parent ID;
 - source command provenance;
-- layer bounds and conservative device bounds;
-- local-to-device transform facts at layer creation;
+- layer bounds and conservative device bounds backed by `GPUBoundsProof`;
+- local-to-device transform facts at layer creation backed by
+  `GPUTransformPlan`;
 - clip facts active at layer creation;
 - target format, color-space, alpha, and premul facts;
 - load, clear, discard, and store intent;

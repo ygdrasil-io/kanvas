@@ -400,6 +400,27 @@ Public concept names in the new renderer use uppercase acronyms:
 - `GPUColorCachePlan`
 - `GPUColorBudgetPolicy`
 - `GPUColorDiagnostic`
+- `GPUCoordinateSpace`
+- `GPUCoordinateSpaceID`
+- `GPUCoordinateSpaceRole`
+- `GPUTransformDescriptor`
+- `GPUTransformClass`
+- `GPUTransformPlan`
+- `GPUTransformChain`
+- `GPUInverseTransformPlan`
+- `GPUTransformPrecisionPlan`
+- `GPUPixelGridPlan`
+- `GPUBoundsDescriptor`
+- `GPUBoundsKind`
+- `GPUBoundsPlan`
+- `GPUBoundsProof`
+- `GPUBoundsExpansionPlan`
+- `GPURoundingPlan`
+- `GPUClipReductionProof`
+- `GPUCoordinatePayloadPlan`
+- `GPUTransformCachePlan`
+- `GPUTransformBudgetPolicy`
+- `GPUTransformDiagnostic`
 - `GPUTargetState`
 - `GPUTelemetryLedger`
 - `GPUPerformanceGate`
@@ -439,6 +460,11 @@ into a narrower GPU renderer value object.
 | Draw-list analysis and ordering | `GPUDrawAnalysis` | Explicit analysis product; not hidden in pass construction. |
 | `SortKey` | `SortKey` | Deterministic Kanvas value for legal draw ordering; no Graphite bit-layout requirement. |
 | Occlusion culling | `GPUOcclusionTracker` | Dedicated conservative culling capability; not an incidental pass-builder side effect. |
+| `SkMatrix` / `SkM44` | `GPUTransformDescriptor` / `GPUTransformPlan` | Matrix values, classification, finite proof, inverse availability, perspective policy, and precision are explicit plan facts. |
+| Graphite `geom::Transform` | `GPUTransformPlan` / `GPUTransformChain` | Local-to-device and composed transforms are value descriptors shared by routes; no mutable canvas matrix stack in core. |
+| `SkRect` / `SkIRect` bounds mapping | `GPUBoundsDescriptor` / `GPUBoundsPlan` / `GPURoundingPlan` | Floating bounds, integer allocation/copy/scissor bounds, rounding, and target intersection are separate proof artifacts. |
+| Graphite pass/dst-read bounds accumulation | `GPUBoundsProof` / `GPUDestinationReadBounds` | Pass and destination-read bounds are conservative accumulated facts with explicit full-target/refusal policy. |
+| Graphite pixel snapping and mask bounds | `GPUPixelGridPlan` / `GPUBoundsExpansionPlan` | Device-pixel scale, pixel centers, AA/stroke/filter/sample expansion, padding, and rounding are explicit diagnostics. |
 | SaveLayer and layer semantics | `GPULayerPlan` | Captured layer/saveLayer semantics, offscreen target needs, restore/composite behavior, and attached filters. |
 | SaveLayer execution | `GPULayerExecutionPlan` / `GPULayerTaskPlan` | Executable layer lowering with bounds, offscreen targets, initialization/backdrop, source filters, restore composite, elision, resources, ordering, budgets, and diagnostics. |
 | Skia device-backed layer surface | `GPULayerTargetPlan` / `GPUTargetTextureDescriptor` | Provider-owned offscreen target with explicit format, usage, load/store, lifetime, generation, and budget facts. |
@@ -530,6 +556,7 @@ implementation.
 legacy stateful API
   -> adapter captures transform/clip/layer/material/bounds
   -> NormalizedDrawCommand
+  -> GPUCoordinateSpace + GPUTransformPlan + GPUBoundsPlan for common coordinate proofs
   -> GPULayerPlan / GPUFilterPlan
   -> GPULayerExecutionPlan + GPULayerTaskPlan when saveLayer scopes are used
   -> GPUFilterNodePlan + GPUFilterIntermediatePlan when filters are used

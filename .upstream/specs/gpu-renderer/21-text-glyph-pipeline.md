@@ -49,7 +49,10 @@ GPU renderer specs consumed by this target:
 - `24-clip-stencil-mask-pipeline.md`;
 - `29-color-management-pipeline.md` for text paint colors, glyph palette
   colors, bitmap glyph profile facts, SVG glyph color facts, SDF/glyph
-  coverage output value specs, and color glyph composite conversions.
+  coverage output value specs, and color glyph composite conversions;
+- `30-coordinate-transform-bounds-policy.md` for glyph, text-local, atlas,
+  mask, SDF, bitmap, SVG, layer, and target coordinate spaces; transform
+  classification; conservative subrun bounds; and pixel/texel rounding.
 
 ## Graphite Evidence
 

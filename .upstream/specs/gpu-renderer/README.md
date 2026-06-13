@@ -2,8 +2,8 @@
 
 Status: Draft
 Date: 2026-06-13
-Target: proposed GPU-first successor direction for the active WGSL/WebGPU
-renderer work.
+Target: proposed GPU-first successor direction for the active WGSL-on-`GPU`
+facade renderer work.
 
 This spec pack captures the agreed kernel for a new Kanvas GPU renderer module.
 It is intentionally narrower than a full implementation plan, but it should
@@ -163,8 +163,8 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
   `GPUTextAtlasPlan`, `GPUTextBinding`, and typed text artifacts registered by
   `21-text-glyph-pipeline.md`.
 - Forbid framebuffer-fetch assumptions and active-attachment sampling in the
-  WebGPU target. Destination reads require fixed-function blend, target copy,
-  existing intermediate, layer isolation, or stable refusal.
+  `GPU` facade target. Destination reads require fixed-function blend, target
+  copy, existing intermediate, layer isolation, or stable refusal.
 - Treat current surface/swapchain textures as `GPUSurfaceTextureLease` values
   scoped to a frame/target generation, not durable resource identities.
 - Define GPU execution, surface/target, command submission, readback, and
@@ -188,6 +188,15 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
   precision, interpolation space, HDR/gainmap policy, and final store
   conversion as explicit plans. Forbid silently reinterpreting raw, premul,
   unpremul, untagged, HDR, or profile-dependent values.
+- Resolve coordinate, transform, bounds, pixel-grid, and precision behavior
+  through `GPUCoordinateSpace`, `GPUTransformPlan`,
+  `GPUInverseTransformPlan`, `GPUPixelGridPlan`, `GPUBoundsPlan`,
+  `GPUBoundsProof`, `GPURoundingPlan`, `GPUClipReductionProof`,
+  `GPUCoordinatePayloadPlan`, and `GPUTransformDiagnostic`.
+- Treat bounds as proof artifacts. Forbid silently widening unknown bounds,
+  using layer hints as clips, dropping sample radius/filter expansion/stroke
+  inflation, or simplifying perspective/singular transforms without explicit
+  evidence and diagnostics.
 - Model high-level layer/saveLayer semantics with `GPULayerPlan` and filter
   graph execution with `GPUFilterPlan`; keep `GPUDrawLayer` as the lower-level
   pass/layer planning structure.
@@ -266,6 +275,7 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 | `27-registered-runtime-effects-registry.md` | Graphite-inspired registered runtime-effect registry: descriptor IDs/versions, compatibility lookup, uniforms, child slots, WGSL validation, CPU oracle, route contracts, live-edit metadata, budgets, diagnostics, and validation gates. |
 | `28-layer-savelayer-execution.md` | Graphite-inspired layer/saveLayer execution target: save records, bounds planning, offscreen targets, initialization/backdrop, filters, restore composite, elision, task ordering, budgets, diagnostics, and validation gates. |
 | `29-color-management-pipeline.md` | Graphite-inspired color-management target: value specs, color-space/profile descriptors, ICC/CICP, transfer/gamut transforms, working spaces, gradients, images, runtime color uniforms, HDR/gainmap, store plans, budgets, diagnostics, and validation gates. |
+| `30-coordinate-transform-bounds-policy.md` | Graphite-inspired coordinate/transform/bounds target: coordinate spaces, transform classification, inverses, pixel grid, conservative bounds proofs, rounding, precision, budgets, diagnostics, and validation gates. |
 
 ## Target Shape
 
@@ -292,9 +302,19 @@ flowchart TD
     rte --> dictionary
     command --> blend["GPUBlendPlan / GPUColorPlan"]
     command --> color["GPUColorManagementPlan / GPUColorValueSpec"]
+    command --> coords["GPUCoordinateSpace / GPUTransformPlan / GPUBoundsPlan"]
     command --> dstread["GPUDestinationReadPlan"]
     color --> blend
     color --> material
+    coords --> recorder
+    coords --> clipplan
+    coords --> layerplan
+    coords --> geometry
+    coords --> vertices
+    coords --> dstread
+    coords --> filterdetail
+    coords --> text
+    coords --> imageprep
     blend --> dstread
     layerexec --> dstread
     clipplan --> dstread
@@ -322,6 +342,7 @@ flowchart TD
     text --> payload
     rte --> payload
     color --> payload
+    coords --> payload
     dstread --> payload
     filterdetail --> payload
     step --> pipeline["GPURenderPipelineKey"]

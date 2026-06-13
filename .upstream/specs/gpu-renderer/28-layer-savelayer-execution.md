@@ -59,6 +59,9 @@ This spec depends on:
 - `29-color-management-pipeline.md` for layer target value specs, F16 color
   behavior, color-space restoration, source/filter/composite conversions, and
   store diagnostics;
+- `30-coordinate-transform-bounds-policy.md` for layer-local coordinate
+  spaces, creation/restore transform facts, offscreen origin mapping,
+  bounds-hint policy, conservative bounds proofs, and rounding;
 - `13-performance-telemetry-cache-gates.md` for layer counters and performance
   gates;
 - `15-draw-layer-planner-and-sort-policy.md` for low-level draw layer
