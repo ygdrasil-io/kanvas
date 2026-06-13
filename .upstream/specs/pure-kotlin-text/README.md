@@ -73,7 +73,8 @@ GPU support is claimed, and stable diagnostics.
   `org.graphiks.kanvas`, with Skia-like API compatibility adapted in
   `:kanvas-skia`.
 - Use uppercase acronyms in public concepts and specs: `CPU`, `GPU`, `WGSL`,
-  `SDF`, `SVG`, `PNG`, `CFF`, `CFF2`, `COLR`, `CPAL`, `GSUB`, `GPOS`.
+  `SDF`, `SVG`, `PNG`, `CFF`, `CFF2`, `COLR`, `CPAL`, `GSUB`, `GPOS`, `GDEF`,
+  and `A8`.
 - Support TrueType `glyf`, CFF, and CFF2 outlines in the final target.
 - Do not require a complete hinting VM. Outlines, masks, and SDFs are
   deterministic Kanvas output, not pixel-perfect FreeType output.

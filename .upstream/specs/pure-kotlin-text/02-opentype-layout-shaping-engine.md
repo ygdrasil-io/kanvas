@@ -66,21 +66,33 @@ Unicode version unless that version is captured in diagnostics.
 The complete target requires support for the scripts in this table. Scripts not
 listed may be added later through explicit matrix rows.
 
-| Script family | Required final behavior |
-|---|---|
-| Latin | GSUB ligatures/contextual features, GPOS kerning/marks where tables exist. |
-| Greek | Same simple shaping class as Latin with script-specific feature gating. |
-| Cyrillic | Same simple shaping class as Latin with script-specific feature gating. |
-| Hebrew | RTL shaping, marks, clusters, bidi integration. |
-| Arabic | Joining, contextual forms, required ligatures, mark positioning, cursive attachment, bidi integration. |
-| Devanagari | Reordering, consonant clusters, matras, halants, required substitutions, mark positioning. |
-| Thai | Script segmentation, mark positioning, fallback diagnostics for unsupported dictionary behavior. |
-| CJK simple | Direct glyph mapping, vertical metric support when requested, fallback and variation-selector handling. |
-| Emoji | Variation selectors, skin-tone modifiers, ZWJ sequence shaping, color glyph dispatch hooks. |
+| Script family | OpenType scripts | Required defaults | Minimum fixtures | Refusal boundary |
+|---|---|---|---|---|
+| Latin | `latn` | `ccmp`, `locl`, `liga`, `rlig`, `clig`, `calt`, `kern`, `mark`, `mkmk` when tables exist. | ASCII run, accented marks, `fi` ligature, contextual alternate, kerning pair. | Unsupported discretionary features diagnose without blocking required defaults. |
+| Greek | `grek` | Same simple-script feature class as Latin, with Greek script/language gating. | Monotonic run, polytonic marks, kerning pair. | Missing script-specific feature data falls back only when glyph mapping remains valid. |
+| Cyrillic | `cyrl` | Same simple-script feature class as Latin, with Cyrillic script/language gating. | Basic Cyrillic run, localized Serbian/Bulgarian form when fixture exists, kerning pair. | Localized form absence diagnoses; base glyph mapping remains valid. |
+| Hebrew | `hebr` | Bidi run direction, `ccmp`, `locl`, `mark`, `mkmk`, `kern` when present. | RTL word, niqqud marks, mixed LTR/RTL paragraph handoff. | Paragraph-level bidi required diagnostics when single-run shaping lacks paragraph context. |
+| Arabic | `arab` | Joining, `init`, `medi`, `fina`, `isol`, `rlig`, `liga`, `calt`, `mark`, `mkmk`, cursive attachment. | Isolated/initial/medial/final forms, lam-alef, marks, cursive attachment, mixed bidi. | Missing cursive or mark positioning refuses shaped support for that run; no presentation-form approximation can claim support. |
+| Devanagari | `deva`, `dev2` | Indic syllable formation, reordering, `nukt`, `akhn`, `rphf`, `blwf`, `half`, `pstf`, `vatu`, `pres`, `abvs`, `blws`, `psts`, `haln`, `dist`, `abvm`, `blwm`. | Consonant cluster, reph, pre-base matra, below-base form, mark placement. | Unsupported syllable state or required phase refuses the affected cluster. |
+| Thai | `thai` | Script itemization, `ccmp`, `locl`, `mark`, `mkmk`, kerning when present. | Base+above/below marks, tone marks, mixed Latin/Thai run. | Dictionary word breaking is paragraph-owned; missing dictionary refinement diagnoses layout, not glyph shaping. |
+| CJK simple | `hani`, `kana`, `hira`, `hang` | Direct mapping, `vert`/`vrt2` when vertical text is requested, `locl`, variation selectors through `cmap` format 14. | Han run, kana run, vertical alternate, variation selector. | Complex ruby or East Asian line breaking refinements are paragraph-owned diagnostics. |
+| Emoji | `Zsye`, `Zsym` plus Unicode emoji data | Variation selectors, emoji modifiers, ZWJ sequence shaping, color glyph dispatch hooks. | VS15/VS16, skin tone, family ZWJ sequence, fallback emoji font. | Unsupported sequence refuses the sequence as a unit, not individual code point approximations. |
 
 The target is architecture-complete for more scripts, but the support claim is
 limited to the matrix. Unsupported scripts must emit stable diagnostics instead
 of silently approximating complex behavior.
+
+Each matrix row must have:
+
+- script tag selection tests;
+- default feature list tests;
+- at least one positive fixture and one diagnostic/refusal fixture;
+- cluster mapping assertions;
+- fallback behavior assertions;
+- drift report hooks when an external comparison is useful.
+
+Adding a new required script means adding a new matrix row before
+implementation tickets are cut.
 
 ## GSUB Target
 

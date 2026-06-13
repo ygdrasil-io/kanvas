@@ -98,19 +98,37 @@ A8 masks are `CPUPreparedGPU` artifacts when consumed by the GPU renderer.
 
 The SDF route supports scalable text where eligible.
 
-The target must define:
+The normative SDF contract is:
 
-- source geometry: outline or accepted bitmap alpha source;
-- SDF resolution;
-- spread radius;
-- padding;
-- inside/outside distance convention;
-- quantization and normalization;
-- min/max text size policy;
-- transform eligibility;
-- CPU oracle generation;
-- GPU sampling requirements;
-- fallback to A8 or outline when SDF is unsafe.
+- source geometry is a closed outline path in glyph space; accepted bitmap alpha
+  sources require a separate promotion fixture before they can feed SDF;
+- distance is signed in glyph pixels with positive values inside filled
+  contours and negative values outside;
+- normalized value is `clamp(0.5 + signedDistance / (2 * spreadPx), 0, 1)`;
+- storage format is `R8Unorm` unless a later spec accepts a higher precision
+  SDF format;
+- the contour edge is represented by value `0.5`;
+- default spread is `8` source pixels, and every non-default spread is part of
+  `GlyphStrikeKey`;
+- atlas padding is at least `ceil(spreadPx) + 1` pixels;
+- default SDF source resolution is one texel per glyph pixel at the strike size
+  selected by `GlyphStrikeKey`;
+- quantization is round-to-nearest to `[0, 255]` after normalization;
+- CPU oracle generation records source bounds, spread, padding, normalization,
+  and output hash;
+- GPU sampling reconstructs coverage from the normalized distance and uses the
+  same spread value supplied in text material uniforms;
+- SDF eligibility is limited to finite identity, translate, scale, and affine
+  transforms without perspective unless a future fixture promotes perspective;
+- SDF is refused for hairline strokes, LCD requests, non-closed glyph geometry,
+  unsupported color glyphs, and transforms outside the accepted policy.
+
+Fallback order when SDF is unsafe:
+
+1. A8 atlas when the glyph can be rasterized at the requested transform bucket.
+2. Outline plan when vector rendering is supported and style permits it.
+3. Stable refusal with `text.glyph.SDF-transform-unsupported`,
+   `text.glyph.SDF-generation-failed`, or a narrower reason.
 
 SDF output must be deterministic for a fixed `GlyphStrikeKey`.
 

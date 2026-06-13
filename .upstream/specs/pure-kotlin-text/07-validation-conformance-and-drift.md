@@ -15,7 +15,8 @@ Normative validation uses:
 
 - generated fixtures;
 - bundled deterministic fonts;
-- pure Kotlin parser/scaler/shaper/layout output;
+- versioned expected parser/scaler/shaper/layout dumps produced from reviewed
+  fixture inputs;
 - Kanvas CPU oracle artifacts;
 - GPU artifacts only when GPU support is claimed;
 - serialized diagnostics and route dumps.
@@ -23,6 +24,17 @@ Normative validation uses:
 HarfBuzz, FreeType, Fontations, CoreText, DirectWrite, platform emoji engines,
 browser layout, and Skia native output are optional comparison sources only.
 Their output may reveal drift, but it does not define whether Kanvas passes.
+
+Kanvas-owned does not mean self-rebaselining. Expected outputs must be
+versioned artifacts or checked-in structured expectations. A generator may
+produce those expectations, but updates require:
+
+- deterministic generator source and input fixture provenance;
+- old/new expectation diff in review;
+- reason for the rebaseline;
+- statement of whether behavior changed intentionally or a previous expectation
+  was wrong;
+- no automatic overwrite of goldens in ordinary test runs.
 
 ## Validation Layers
 
@@ -59,6 +71,25 @@ Preferred fixture flow:
 4. Keep shaping fixtures script-specific.
 5. Keep color glyph fixtures split by COLR, bitmap, SVG, and emoji sequence.
 6. Record generation source and expected route diagnostics.
+
+## Target Fixture Manifest
+
+Before implementation tickets claim complete-target coverage, the fixture set
+must include at least these families:
+
+| Family | Minimum fixture coverage |
+|---|---|
+| Font source/SFNT | Single TTF, TTC face index, malformed required table, malformed optional table, system-scan skipped file diagnostic. |
+| TrueType scaler | Simple glyph, composite glyph, component transform, `gvar` simple delta, `gvar` composite delta, `avar` coordinate mapping. |
+| CFF/CFF2 scaler | CFF Type 2 line/curve/flex glyph, local/global subroutines, malformed stack, unsupported operator, CFF2 `blend`/`vsindex`. |
+| Shaping scripts | One positive and one refusal/diagnostic fixture for every row in the Kanvas required script matrix. |
+| Paragraph | Rich style runs, bidi paragraph, hard/soft line breaks, ellipsis, placeholders, selection boxes, hit testing. |
+| Color glyphs | COLRv0 layers, COLRv1 solid, gradients, transform, composite, clip, cycle refusal, budget refusal. |
+| PNG bitmap glyphs | CBDT/CBLC PNG, sbix PNG, unavailable strike, malformed PNG, non-PNG payload refusal. |
+| SVG glyphs | Static path glyph, gradient, transform, clip, `use` recursion, external resource refusal, unsupported feature refusal. |
+| Emoji | VS15/VS16, skin tone, ZWJ family sequence, emoji fallback unavailable, color glyph unavailable. |
+| A8/SDF artifacts | A8 atlas pack, SDF normalization, SDF transform refusal, atlas capacity refusal, stale generation refusal. |
+| GPU handoff | `DrawTextRun` with registered artifact, unregistered artifact refusal, upload plan dump, no CPU-rendered texture route. |
 
 ## Evidence Artifacts
 

@@ -77,12 +77,33 @@ Text routes must map to GPU renderer route kinds:
 | Outline glyph plan | `GPUNative` if renderer supports path/text geometry, otherwise typed prepared geometry or refusal. |
 | COLR/COLRv1 color plan | `GPUNative` or `CPUPreparedGPU` depending on renderer material and layer support. |
 | PNG bitmap glyph plan | `CPUPreparedGPU` upload or existing GPU texture resource. |
-| SVG glyph plan | `GPUNative` if converted to renderer-supported paths/materials, or typed prepared artifact when accepted. |
+| SVG glyph plan | `GPUNative` when converted to renderer-supported vector paths/materials; any prepared fallback must be a named glyph-scoped artifact, never a complete CPU-rendered text texture. |
 | A8 glyph atlas | `CPUPreparedGPU` `GlyphAtlasArtifact`. |
 | SDF glyph atlas | `CPUPreparedGPU` `SDFGlyphAtlasArtifact`. |
 
 The forbidden route remains forbidden: CPU-rendering a complete unsupported
 text draw into a texture and compositing it as GPU support.
+
+## GPU Renderer Compatibility Delta
+
+At the time this pack is introduced, `.upstream/specs/gpu-renderer/` lists
+`GlyphAtlasArtifact` as the accepted text-related `CPUPreparedGPU` artifact.
+The additional text artifacts in this pack are target requirements, not
+already-promoted GPU renderer contracts.
+
+Before any route using them can be promoted, the GPU renderer specs must be
+extended to register:
+
+- `SDFGlyphAtlasArtifact`;
+- `GlyphUploadPlan`;
+- `ColorGlyphPlan`;
+- `BitmapGlyphPlan`;
+- `SVGGlyphPlan`;
+- `OutlineGlyphPlan`.
+
+Until that GPU renderer extension is accepted, those routes remain
+`DependencyGated` and must refuse with `text.gpu.artifact-unregistered` or a
+narrower diagnostic.
 
 ## Artifact Registry
 

@@ -164,7 +164,7 @@ The CFF/CFF2 scaler must support:
 
 - CFF INDEX structures with bounds checks;
 - top dict, private dict, charstrings, subrs, and global subrs;
-- Type 2 charstring drawing operators needed for outlines;
+- Type 2 charstring drawing operators listed below;
 - width extraction and metrics integration;
 - CFF2 variation store application;
 - deterministic conversion to the Kanvas path representation;
@@ -172,6 +172,36 @@ The CFF/CFF2 scaler must support:
 
 CFF stem hints may be parsed or skipped as metadata, but the target does not
 require pixel-perfect hinted raster parity.
+
+### CFF Type 2 Operator Contract
+
+The required Type 2 interpreter supports these operator classes:
+
+| Class | Required operators |
+|---|---|
+| Path movement | `rmoveto`, `hmoveto`, `vmoveto`. |
+| Lines | `rlineto`, `hlineto`, `vlineto`. |
+| Curves | `rrcurveto`, `vhcurveto`, `hvcurveto`, `rcurveline`, `rlinecurve`, `vvcurveto`, `hhcurveto`. |
+| Flex curves | `flex`, `hflex`, `hflex1`, `flex1`. |
+| Subroutines | `callsubr`, `callgsubr`, `return`, with bounded local/global subr index resolution. |
+| End glyph | `endchar`, including width handling; deprecated accented endchar behavior may refuse unless fixture evidence promotes it. |
+| Hints parsed as metadata | `hstem`, `vstem`, `hstemhm`, `vstemhm`, `hintmask`, `cntrmask`. |
+| CFF2 variation | `vsindex`, `blend`, variation-store lookup, and tuple interpolation. |
+
+Interpreter limits are part of conformance:
+
+- maximum operand stack depth is fixed and diagnosed on overflow;
+- maximum subroutine recursion depth is fixed and diagnosed on overflow;
+- all INDEX, dict, and charstring offsets are bounds checked before reads;
+- unsupported escaped operators refuse the glyph with
+  `font.cff-operator-unsupported`;
+- malformed stack effects refuse the glyph with `font.cff-stack-malformed`;
+- hint operators do not affect normative raster output unless a later spec
+  accepts hinted CFF raster behavior.
+
+CFF2 support must not be marked complete until `blend`, `vsindex`, variation
+store lookup, metrics interaction, and at least one variable CFF2 fixture are
+covered by tests.
 
 ## Variation Support
 
