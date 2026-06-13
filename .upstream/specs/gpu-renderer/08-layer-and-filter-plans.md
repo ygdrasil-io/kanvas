@@ -88,6 +88,9 @@ An isolated layer declares:
 
 Offscreen targets are ordinary GPU resources unless CPU preparation creates a
 typed artifact under `CPUPreparedGPUArtifactRegistry`.
+They must be described with `GPUTargetTextureDescriptor` and follow
+`18-texture-image-ownership.md` for usage flags, sampling, copying, readback,
+generation, and lifetime.
 
 ## `GPUFilterPlan`
 
@@ -125,7 +128,10 @@ A filter node may route through:
 product fallback.
 
 Filter routes must name required intermediate resources, read/write usages,
-edge handling, and validation evidence before promotion.
+edge handling, texture ownership, and validation evidence before promotion.
+Ordinary GPU filter intermediates are `GPUResourceProvider` resources.
+`FilterIntermediateArtifact` is used only when CPU preparation creates a typed
+artifact accepted by the active filter spec.
 
 ## Layer And Filter Interaction
 

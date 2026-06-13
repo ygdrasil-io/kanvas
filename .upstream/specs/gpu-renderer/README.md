@@ -11,8 +11,8 @@ name the full technical scope before implementation slices are planned. It
 defines the module shape, naming policy, command boundary, WGSL material model,
 material dictionary, payload gathering, pipeline key split, execution
 context, WGSL layout ABI, blend/color state, route policy, telemetry gates,
-legacy cleanup policy, and validation expectations that future implementation
-tickets must follow.
+texture/image ownership, legacy cleanup policy, and validation expectations
+that future implementation tickets must follow.
 
 The current `.upstream/target/high-performance-wgsl-pipeline-target.md` and
 `.upstream/target/skia-like-realtime-renderer-target.md` remain active project
@@ -80,6 +80,13 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 - Gather per-draw and per-render-step payload values through
   `GPUPayloadGatherer` and pass-local payload slots; keep payload values
   out of durable keys.
+- Resolve image and texture sources through explicit `GPUTextureOwnershipPlan`,
+  `GPUTextureDescriptor`, `GPUTextureViewDescriptor`, `GPUSamplerDescriptor`,
+  `GPUImageSourceDescriptor`, and `GPUSampledTextureBinding` contracts.
+- Keep concrete texture handles, imported handles, surface leases, uploaded
+  artifact keys, and pixel contents out of `MaterialKey`.
+- Treat current surface/swapchain textures as `GPUSurfaceTextureLease` values
+  scoped to a frame/target generation, not durable resource identities.
 - Define GPU execution, surface/target, command submission, readback, and
   device-generation contracts before route activation.
 - Keep WGSL as the shader language. Graphite's SkSL paint machinery maps to
@@ -139,6 +146,7 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 | `15-draw-layer-planner-and-sort-policy.md` | Graphite-inspired draw invocation expansion, layer insertion, sort windows, stencil/destination-read ordering, merge policy, and planner diagnostics. |
 | `16-material-dictionary-and-snippet-registry.md` | Graphite-inspired `GPUMaterialDictionary`, `WGSLSnippet`, `WGSLSnippetNode`, `GPUMaterialProgramID`, requirement propagation, runtime-effect registration, and material WGSL assembly policy. |
 | `17-payload-gathering-and-slots.md` | Graphite-inspired `GPUPayloadGatherer`, payload gather/write/binding/upload plans, uniform/resource payload blocks, pass-local slots, gradient payload stores, fingerprints, and payload diagnostics. |
+| `18-texture-image-ownership.md` | Graphite-inspired texture/image ownership policy: descriptors, views, samplers, image sources, uploaded CPU pixels, imported textures, target/surface leases, sampled bindings, and texture diagnostics. |
 
 ## Target Shape
 
@@ -157,13 +165,16 @@ flowchart TD
     material --> dictionary["GPUMaterialDictionary / WGSLSnippet tree"]
     command --> blend["GPUBlendPlan / GPUColorPlan"]
     dictionary --> wgsl["WGSLFragment / WGSLModule"]
+    material --> textureplan["GPUImageSourceDescriptor / GPUTextureOwnershipPlan"]
     wgsl --> abi["WGSL layout / binding ABI"]
     abi --> payload["GPUPayloadGatherer / payload slots"]
+    textureplan --> payload
     step --> pipeline["GPURenderPipelineKey"]
     blend --> pipeline
     abi --> pipeline
     wgsl --> pipeline
     payload --> resources
+    textureplan --> resources
     pipeline --> resources["GPUResourceProvider"]
     resources --> execution["GPUExecutionContext / submission"]
     execution --> facade["GPU facade used with wgpu4k"]

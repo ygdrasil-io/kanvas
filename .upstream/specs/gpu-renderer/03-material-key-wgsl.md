@@ -29,6 +29,7 @@ It includes:
 
 - source kind: solid color, gradient, image, registered runtime effect, or
   future supported source;
+- image source descriptor class when the material samples an image;
 - color filter chain identity when supported;
 - blender identity when supported;
 - color-space requirements;
@@ -51,6 +52,10 @@ It does not include:
 - payload slot IDs;
 - bind group instances;
 - texture object handles;
+- texture resource refs;
+- surface texture leases;
+- uploaded texture artifact keys;
+- imported texture handles;
 - pixel contents;
 - transient resource handles;
 - command ID;
@@ -72,6 +77,12 @@ Derivation must be:
 
 If descriptor lowering fails, route selection returns `RefuseDiagnostic` with a
 stable reason. It must not silently substitute a CPU shader.
+
+For image materials, descriptor lowering may include `GPUImageSourceDescriptor`
+kind, sampling class, tile behavior, sample type, and binding layout facts when
+they affect WGSL code or layout. Texture ownership, concrete handles, upload
+artifact keys, imported handles, surface leases, and pixels are handled by
+`18-texture-image-ownership.md`, not by `MaterialKey`.
 
 ## Material Dictionary Boundary
 

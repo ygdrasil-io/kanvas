@@ -23,6 +23,9 @@ Examples:
 - analytic rect coverage;
 - gradient material WGSL;
 - image sampling through GPU texture bindings;
+- GPU-native, imported, surface-leased, offscreen, or atlas-backed texture
+  sampling when `GPUTextureOwnershipPlan` accepts ownership, usage, and
+  generation;
 - stencil/depth clip preparation on GPU;
 - GPU tessellation or generated geometry buffers when owned by GPU-side logic.
 
@@ -50,9 +53,11 @@ but it is not a full CPU fallback. The final draw still goes through GPU
 composition or GPU command submission.
 
 GPU-native textures, render targets, swapchain/surface textures, and imported
-GPU handles remain normal `GPUResourceProvider` resources. A texture is an
-`UploadedTextureArtifact` only when CPU work decodes, converts, repacks,
-color-converts, tiles, or mip-prepares pixels before upload.
+GPU handles remain normal `GPUResourceProvider` resources. Their ownership,
+view, sampler, usage, and generation policy is defined in
+`18-texture-image-ownership.md`. A texture is an `UploadedTextureArtifact` only
+when CPU work decodes, converts, repacks, color-converts, tiles, or
+mip-prepares pixels before upload.
 
 ### `CPUReferenceOnly`
 
@@ -176,6 +181,10 @@ Stable reason-code examples:
 - `unsupported.artifact.budget_exceeded`
 - `unsupported.artifact.stale_generation`
 - `unsupported.texture.cpu_preparation_missing`
+- `unsupported.texture.ownership_missing`
+- `unsupported.texture.import_unvalidated`
+- `unsupported.texture.active_attachment_sampled`
+- `unsupported.texture.device_generation_stale`
 - `unsupported.filter.intermediate_unvalidated`
 - `unsupported.geometry.perspective_path`
 - `unsupported.resource.device_lost`

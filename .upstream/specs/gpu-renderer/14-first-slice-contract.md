@@ -37,6 +37,7 @@ The first slice does not implement:
 - path fill or stroke;
 - glyphs or text;
 - image decoding or bitmap upload;
+- sampled image textures;
 - runtime effects;
 - image filters;
 - complex saveLayer behavior;
@@ -81,6 +82,7 @@ The slice must exercise these contracts:
 - `GPUDrawPayloadRef`;
 - `GPURenderPipelineKey`;
 - `GPUResourceProvider`;
+- `GPUTargetTextureDescriptor` for the render attachment descriptor;
 - `GPUExecutionContext` or a deterministic test double;
 - `GPUBlendPlan`, `GPUColorPlan`, and `GPUTargetState`;
 - route diagnostics;
@@ -203,6 +205,7 @@ Minimum isolated fixtures:
 - unsupported gradient tile mode refusal;
 - WGSL validation failure fixture using an intentionally invalid test module;
 - stale device-generation resource refusal using a test double.
+- illegal active-attachment sampling refusal using target texture descriptors.
 
 These fixtures are contract fixtures. They do not claim broad Skia GM coverage.
 
@@ -230,4 +233,6 @@ against legacy output. This slice alone does not switch production rendering.
   because the geometry is simple.
 - Do not activate the route by default inside `gpu-raster`.
 - Do not claim support for paths, text, images, filters, or runtime effects.
+- Do not create uploaded texture artifacts, import external textures, or sample
+  image textures in this slice.
 - Do not rely on CPU-rendered texture compatibility for unsupported variants.

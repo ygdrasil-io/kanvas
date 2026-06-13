@@ -243,16 +243,27 @@ with stable diagnostics.
 
 Texture and sampler payloads are layout-bound resource values.
 
+Texture/image ownership, view descriptors, sampler descriptors, uploaded CPU
+pixels, imported textures, and surface leases are defined in
+`18-texture-image-ownership.md`. `GPUPayloadGatherer` consumes accepted
+`GPUTextureOwnershipPlan` products and writes `GPUSampledTextureBinding`
+records into `GPUResourceBindingBlock`.
+
 Rules:
 
 - sampler descriptors are key/layout facts only when they affect shader or
   pipeline validity; otherwise they are resource binding payload facts;
+- sampled texture bindings record `GPUImageSourceDescriptor`,
+  `GPUTextureDescriptor`, `GPUTextureViewDescriptor`, `GPUSamplerDescriptor`,
+  ownership plan, usage flags, and generation facts;
 - sampled texture object identity is never part of `MaterialKey`;
 - image shader routes require accepted texture ownership and lifetime policy;
 - uploaded CPU pixels must use `UploadedTextureArtifact`;
 - atlas, mask, glyph, and coverage textures must use their accepted artifact or
   atlas specs;
 - raw resource handles are not sort or cache key facts.
+- import, upload, lease, allocation, eviction, and release are performed by
+  `GPUResourceProvider`, not by the gatherer.
 
 The first rect/rrect solid and linear-gradient slice does not require sampled
 texture payloads except when a later accepted gradient-store route explicitly

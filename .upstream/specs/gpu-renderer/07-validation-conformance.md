@@ -39,6 +39,7 @@ Tests must assert canonical preimages and hashes for:
 - WGSL module identity;
 - payload gather plan identity;
 - CPU-prepared artifact keys;
+- texture/image descriptors and ownership plans;
 - route diagnostics.
 
 Equivalent inputs must produce equivalent keys. Different behavior-affecting
@@ -93,6 +94,28 @@ Tests must assert:
 - resource binding order matches `WGSLResourceBindingPlan`;
 - stale, missing, or incompatible resources refuse with stable diagnostics.
 
+### Texture And Image Ownership Tests
+
+Tests must assert:
+
+- `GPUImageSourceDescriptor`, `GPUTextureDescriptor`,
+  `GPUTextureViewDescriptor`, `GPUSamplerDescriptor`, and
+  `GPUTextureOwnershipPlan` dumps are deterministic;
+- `MaterialKey` excludes raw handles, imported handles, surface leases,
+  `GPUTextureResourceRef`, `UploadedTextureArtifact` keys, and pixel contents;
+- sampled texture binding order matches `WGSLResourceBindingPlan`;
+- CPU pixel sources use `UploadedTextureArtifact` or refuse;
+- GPU-native, imported, surface, offscreen, render-target, and atlas textures
+  are not treated as `CPUPreparedGPU` unless a typed CPU-prepared artifact owns
+  the prepared contents;
+- imported textures refuse when owner, usage, lifetime, generation, or release
+  policy is not dumpable;
+- surface texture leases are frame/target-generation scoped;
+- sampling the active color attachment refuses unless a validated intermediate
+  route exists;
+- stale device, target, atlas, upload, or surface generations rebuild, discard,
+  or refuse deterministically.
+
 ### Blend And Color Tests
 
 Tests must assert:
@@ -138,6 +161,8 @@ Evidence must include:
 - material dictionary version and material program count;
 - material assembly plan count;
 - payload slot counts, payload fingerprints, and upload bytes;
+- texture provenance, ownership plan counts, sampled binding counts, and upload
+  artifact counts when textures/images are used;
 - WGSL module validation result;
 - output artifact, checksum, diff, or readback where applicable;
 - capability facts;
@@ -227,6 +252,7 @@ Failures must be classified as:
 - WGSL validation failure;
 - pipeline-key failure;
 - resource-preparation failure;
+- texture/image ownership failure;
 - command-encoding failure;
 - GPU execution/readback failure;
 - WGSL ABI mismatch;

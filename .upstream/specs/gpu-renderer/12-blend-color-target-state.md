@@ -114,6 +114,10 @@ Destination reads are legal only through explicit routes:
 The renderer must refuse when a draw requires sampling the active color
 attachment and no accepted intermediate route exists. It must not rely on
 undefined read/write attachment behavior.
+Target-copy and intermediate texture routes must follow
+`18-texture-image-ownership.md`: the sampled resource must have a
+`GPUTargetTextureDescriptor`, valid usage flags, compatible generation, and a
+separate texture/view from the active attachment being written.
 
 ## Layer And Filter Interaction
 

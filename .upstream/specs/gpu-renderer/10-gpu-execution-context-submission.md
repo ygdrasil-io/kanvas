@@ -96,6 +96,13 @@ Swapchain, browser canvas, imported texture, offscreen texture, and layer
 intermediate targets are represented by the same target descriptor shape. A
 target descriptor is not a resource handle and must be safe to dump.
 
+When command encoding needs the current surface or swapchain texture, the
+execution layer creates a `GPUSurfaceTextureLease`. The lease is scoped to the
+frame and target generation, records available usage flags, and cannot be
+stored in material keys, pipeline keys, reusable recordings, or shared caches.
+Sampling, copying, rendering to, or reading back from a leased surface texture
+requires the corresponding usage flag and a non-stale lease.
+
 ## Command Encoding Scopes
 
 `GPUTaskList.addCommands` encodes work through explicit scopes:
@@ -195,6 +202,7 @@ Execution diagnostics must include:
 - context implementation identity;
 - device and queue generation;
 - target generation and usage flags;
+- surface texture lease generation and usage flags when present;
 - command scope list;
 - task and pass IDs;
 - submitted route counts;
@@ -211,6 +219,7 @@ Stable reason-code examples:
 - `unsupported.execution.surface_unavailable`
 - `unsupported.execution.usage_missing`
 - `unsupported.execution.active_attachment_sampled`
+- `unsupported.texture.surface_lease_stale`
 - `unsupported.execution.device_generation_stale`
 - `unsupported.execution.queue_submission_failed`
 - `unsupported.execution.device_lost`

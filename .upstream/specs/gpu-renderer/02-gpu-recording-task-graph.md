@@ -19,7 +19,7 @@ accepted.
 `GPURecorder` owns command intake and recording construction.
 
 `GPUDrawAnalysis` owns explicit per-draw route, ordering, culling, layer,
-material, render-step, and resource facts.
+material, render-step, texture/image ownership, and resource facts.
 
 `GPUOcclusionTracker` owns conservative occlusion state and culling decisions.
 
@@ -85,6 +85,7 @@ Each analysis record contains:
 - opacity and blend classification;
 - destination-read requirements;
 - clip, stencil, upload, atlas, and target-load dependencies;
+- `GPUTextureOwnershipPlan` references for image or texture sources;
 - layer assignment request;
 - occlusion classification;
 - resource declarations known before allocation;
@@ -150,6 +151,7 @@ A `SortKey` includes behavior-affecting ordering axes such as:
 - clip/stencil preparation group;
 - destination-read and blend classification;
 - atlas or upload generation when it affects legality.
+- texture ownership or target generation when it affects legal ordering.
 
 It must not include:
 
@@ -241,7 +243,8 @@ encode commands, or represent a synchronization boundary.
 Task phases:
 
 1. `prepareResources`: allocate or resolve pipelines, buffers, textures,
-   samplers, atlases, bind groups, and gathered payload uploads.
+   texture views, samplers, imports, surface texture leases, atlases, bind
+   groups, and gathered payload uploads.
 2. `addCommands`: encode commands through the `GPU` facade.
 
 The split exists so route selection, resource failure, and command encoding

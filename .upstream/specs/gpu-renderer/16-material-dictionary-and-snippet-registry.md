@@ -100,6 +100,10 @@ It must not include:
 
 - per-draw uniform values;
 - texture object handles;
+- texture resource refs;
+- imported texture handles;
+- surface texture leases;
+- uploaded texture artifact keys;
 - pixel contents;
 - transient atlas coordinates;
 - cache residency;
@@ -109,7 +113,9 @@ It must not include:
 Uniform, texture, sampler, and buffer values are gathered later by the payload
 path. The dictionary declares their layout and binding requirements; it does
 not pack per-draw payload bytes. The dedicated payload-gathering policy is
-defined in `17-payload-gathering-and-slots.md`.
+defined in `17-payload-gathering-and-slots.md`. Texture and image ownership,
+imports, surface leases, uploaded CPU pixels, and sampled binding descriptors
+are defined in `18-texture-image-ownership.md`.
 
 ## `WGSLSnippet`
 
@@ -243,6 +249,8 @@ Rules:
 - material uniforms, material textures, material samplers, and material-owned
   read-only buffers use bind group `1` unless a later accepted spec changes the
   group policy;
+- material snippets declare texture/sampler ABI slots; they do not own
+  texture allocation, import, upload, lease, or release policy;
 - shared atlases, masks, and CPU-prepared artifacts remain outside material
   ownership and use their accepted artifact or atlas group;
 - gradient stop data is material-owned for the first accepted linear-gradient
@@ -270,6 +278,8 @@ descriptor provides:
 Runtime-effect snippet de-duplication is based on descriptor identity, WGSL
 fragment hash, uniform layout hash, child-slot ABI, and descriptor version. It
 must not depend on object identity.
+Runtime-effect texture child slots must use `GPUImageSourceDescriptor` and the
+ownership rules from `18-texture-image-ownership.md`.
 
 Arbitrary Skia/SkSL runtime shader input is refused with
 `unsupported.material.runtime_effect_unregistered`. SkSL remains compatibility

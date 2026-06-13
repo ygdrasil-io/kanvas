@@ -126,7 +126,8 @@ keys must include only the capability facts that affect validity or behavior.
 `GPUResourceProvider` owns creation, lookup, and lifetime of GPU resources.
 Execution context, command scopes, and submission behavior are defined in
 `10-gpu-execution-context-submission.md`; this resource contract supplies the
-objects those scopes consume.
+objects those scopes consume. Texture and image ownership descriptors are
+defined in `18-texture-image-ownership.md`.
 
 It is responsible for:
 
@@ -137,7 +138,10 @@ It is responsible for:
 - bind groups;
 - buffers;
 - textures;
+- texture views;
 - samplers;
+- imported texture materialization and refusal;
+- surface texture lease materialization;
 - materializing gathered uniform, storage, texture, sampler, and artifact
   payload bindings;
 - coverage/path/glyph atlases when owned by this renderer;
@@ -172,6 +176,9 @@ Expected cache layers:
 - payload cache keyed by pass-local uniform/resource payload blocks;
 - sampler cache keyed by sampler descriptor;
 - texture/resource cache keyed by explicit resource descriptors;
+- texture ownership/materialization cache keyed by `GPUTextureDescriptor`,
+  `GPUTextureViewDescriptor`, `GPUSamplerDescriptor`, and accepted ownership
+  plan facts;
 - atlas caches with explicit ownership and eviction rules;
 - `CPUPreparedGPUArtifactRegistry` keyed by typed artifact descriptors.
 
@@ -187,6 +194,7 @@ Resources must be tied to:
 - device generation;
 - execution context generation;
 - target generation when applicable;
+- surface texture lease generation when applicable;
 - recording lifetime when one-shot;
 - frame scope when frame-local;
 - cache lifetime when reusable;

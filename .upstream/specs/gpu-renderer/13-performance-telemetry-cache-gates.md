@@ -31,6 +31,8 @@ It records:
   counts;
 - cache hits, misses, evictions, and creations;
 - CPU-prepared artifact counts, bytes, uploads, and refusals;
+- texture descriptor, texture view, sampler, ownership plan, sampled binding,
+  imported texture, surface lease, and stale-generation counters when touched;
 - submitted bytes for uniforms, vertices, indices, storage, textures, and
   readbacks when available;
 - timing samples when enabled;
@@ -53,6 +55,7 @@ Cache reporting is grouped by domain:
 | Layout cache | bind group layouts, uniform layouts, packing plans, mismatches. |
 | Payload cache | uniform payload slots, resource binding slots, scoped fingerprints, hits, misses, bytes uploaded, materialization failures. |
 | Resource cache | textures, buffers, samplers, bind groups, live bytes, evictions. |
+| Texture ownership cache | texture descriptors, view descriptors, sampler descriptors, ownership plans, sampled bindings, imports, uploads, surface leases, stale generations, rebuilds, and refusals. |
 | Artifact registry | artifact lookups, hits, misses, uploads, evictions, budget refusals. |
 | Atlas cache | atlas generation, resident entries, eviction, upload bytes, stale entries. |
 
@@ -126,6 +129,9 @@ Initial gate families:
 - bind group churn;
 - vertex/index/storage upload bytes;
 - texture upload bytes;
+- surface lease churn;
+- imported texture refusal count;
+- stale texture generation rebuild or refusal count;
 - artifact cache hit rate;
 - pass count and draw count stability;
 - readback availability for evidence lanes;

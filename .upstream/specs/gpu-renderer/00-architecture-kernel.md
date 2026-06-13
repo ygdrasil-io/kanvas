@@ -44,6 +44,9 @@ The module owns:
 - WGSL module assembly requests;
 - WGSL layout and binding ABI contracts;
 - blend, color, and target-state planning;
+- texture descriptors, image-source descriptors, texture ownership plans,
+  sampled texture bindings, imported texture descriptors, and surface texture
+  leases;
 - resource-provider contracts;
 - GPU execution context and submission contracts;
 - telemetry, cache, and performance-gate contracts;
@@ -142,6 +145,18 @@ Public concept names in the new renderer use uppercase acronyms:
 - `GPUPayloadFingerprint`
 - `GPUGradientPayloadStore`
 - `GPUDrawPayloadRef`
+- `GPUImageSourceDescriptor`
+- `GPUTextureDescriptor`
+- `GPUTextureViewDescriptor`
+- `GPUSamplerDescriptor`
+- `GPUTextureOwnershipPlan`
+- `GPUTextureAllocationPlan`
+- `GPUTextureResourceRef`
+- `GPUImportedTextureDescriptor`
+- `GPUTargetTextureDescriptor`
+- `GPUSurfaceTextureLease`
+- `GPUSampledTextureBinding`
+- `GPUTextureDiagnostic`
 - `GPUBlendPlan`
 - `GPUColorPlan`
 - `GPUTargetState`
@@ -198,6 +213,11 @@ into a narrower GPU renderer value object.
 | `UniformDataBlock` / `UniformDataCache` | `GPUUniformPayloadBlock` / `GPUUniformPayloadSlot` | Pass-local payload bytes and de-duplicated slots; values are not durable key facts. |
 | `TextureDataBlock` / `TextureDataCache` | `GPUResourceBindingBlock` / `GPUResourceBindingSlot` | Ordered resource binding payloads and pass-local slots; no raw GPU handle identity. |
 | `FloatStorageManager` | `GPUGradientPayloadStore` | Pass-local gradient stop storage when an accepted route uses buffer-backed gradient data. |
+| `TextureProxy` | `GPUTextureDescriptor` / `GPUTextureOwnershipPlan` / `GPUTextureResourceRef` | Logical texture, ownership, and concrete resource ref are separated; no public lazy callback or raw pointer identity. |
+| `TextureProxyView` | `GPUTextureViewDescriptor` | Texture view facts such as origin, swizzle policy, sample type, and subset; concrete handles stay in resources. |
+| `Texture` | Provider-owned texture resource behind `GPUTextureResourceRef` | Concrete `GPU` facade object owned by `GPUResourceProvider`, not by material keys. |
+| `Image_Graphite` | `GPUImageSourceDescriptor` | Logical image source plus color/sampling facts without leaking `SkImage` or raw handles into the core. |
+| `TextureDataBlock` / `TextureDataCache` | `GPUSampledTextureBinding` inside `GPUResourceBindingBlock` / `GPUResourceBindingSlot` | Ordered sampled texture and sampler payloads; no raw handle or pointer identity in durable keys. |
 | `GraphicsPipelineDesc` | `GPURenderPipelineKey` | Render step, material, target state, fixed state, and capabilities. |
 | `ResourceProvider` | `GPUResourceProvider` | Pipelines, buffers, textures, samplers, atlases, and cache ownership. |
 | `SharedContext` / `Caps` | `GPUExecutionContext` / `GPUCapabilities` | Facade implementation, device generation, queue facts, and capability snapshot. |
@@ -225,6 +245,7 @@ legacy stateful API
   -> GPUDrawPass
   -> GPURenderStep + MaterialKey
   -> GPUMaterialDictionary + WGSLSnippetNode tree
+  -> GPUImageSourceDescriptor + GPUTextureOwnershipPlan when images/textures are used
   -> GPUBlendPlan + GPUColorPlan + GPUTargetState
   -> WGSLBindingLayout + WGSLPackingPlan
   -> GPUPayloadGatherer + payload slots

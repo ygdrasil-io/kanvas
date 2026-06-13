@@ -111,8 +111,15 @@ Evidence must include:
 Evidence must include:
 
 - texture provenance: GPU-native resource vs `UploadedTextureArtifact`;
+- `GPUImageSourceDescriptor`, `GPUTextureOwnershipPlan`,
+  `GPUTextureViewDescriptor`, and `GPUSamplerDescriptor` dumps;
 - sampler, tile mode, mip policy, and color conversion facts;
+- usage flags, resource owner scope, and device/target/surface/upload
+  generation facts;
 - upload format and row-stride diagnostics when CPU prepares pixels;
+- imported texture refusal evidence when owner, usage, lifetime, or release
+  policy is not accepted;
+- active attachment sampling refusal evidence;
 - CPU/GPU sample evidence or explicit refusal.
 
 Decoded or transformed CPU pixels must not be hidden as normal GPU resources.
@@ -161,6 +168,9 @@ Examples:
 - `unsupported.clip.stack_difference_path`
 - `unsupported.image.codec_missing`
 - `unsupported.image.tile_mode`
+- `unsupported.texture.ownership_missing`
+- `unsupported.texture.import_unvalidated`
+- `unsupported.texture.active_attachment_sampled`
 - `unsupported.text.shaping_dependency`
 - `unsupported.text.color_font_dependency`
 - `unsupported.layer.destination_read`

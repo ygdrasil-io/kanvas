@@ -84,6 +84,8 @@ Each invocation records:
 - binding-layout group;
 - uniform data slot identity;
 - texture/sampler/artifact binding slot identity;
+- texture ownership or target/surface generation when it affects legal
+  movement;
 - conservative bounds;
 - original paint order;
 - diagnostic provenance.
@@ -278,14 +280,19 @@ Forbidden axes:
 
 - Kotlin object addresses;
 - raw GPU handle addresses;
+- imported texture handles or surface lease IDs;
 - cache hit/miss state;
 - material dictionary residency state;
 - per-draw uniform values;
 - transient buffer offsets;
+- texture pixel contents;
 - any axis that hides crossing a barrier.
 
 Sort keys are valid only inside the planner or pass materialization product
 that created them.
+Texture/image resources participate through `GPUResourceBindingSlot`,
+`GPUSampledTextureBinding`, upload/atlas/target generation, and explicit
+barriers. Raw handles never participate directly.
 
 ## Merge And Batching
 

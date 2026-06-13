@@ -47,8 +47,8 @@ Every `NormalizedDrawCommand` must be:
 - serializable or dumpable for diagnostics and conformance evidence.
 
 Invalid transforms, empty clips, impossible bounds, unsupported paint
-normalization, and invalid resource references must be rejected at adapter
-time with stable diagnostics.
+normalization, invalid image source descriptors, and invalid resource
+references must be rejected at adapter time with stable diagnostics.
 
 ## Required Captured State
 
@@ -98,8 +98,12 @@ Geometry payloads are normalized value objects. They may represent:
 - glyph-run references;
 - vertices.
 
-The payload must not leak mutable legacy shape objects into the core. If a
-path or text payload is too expensive to copy, the adapter must use an explicit
+Image payloads use `GPUImageSourceDescriptor` and normalized source/destination
+rects. They must not leak `SkImage`, raw `GPU` handles, imported handles,
+mutable pixel storage, or object identity into the core.
+
+The payload must not leak mutable legacy shape objects into the core. If a path
+or text payload is too expensive to copy, the adapter must use an explicit
 immutable handle with lifetime rules and diagnostic identity.
 
 ## Transform Facts
@@ -155,6 +159,7 @@ The descriptor must be complete enough to derive:
 - `MaterialKey`;
 - material uniform layout;
 - texture/sampler binding requirements;
+- `GPUImageSourceDescriptor` facts when the material samples an image source;
 - registered runtime-effect identity when present;
 - WGSL fragment requirements;
 - stable unsupported reasons.

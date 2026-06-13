@@ -90,11 +90,19 @@ Each binding records:
 - shader visibility;
 - resource kind;
 - sample type or storage format when applicable;
+- texture view dimension, multisample state, and storage access when
+  applicable;
 - access mode;
 - required feature and capability facts;
 - minimum binding size when relevant;
 - dynamic-offset policy;
 - stable diagnostic label.
+
+Sampled texture bindings use `GPUSampledTextureBinding` records from
+`18-texture-image-ownership.md` during payload gathering. The ABI includes
+sample type, view dimension, multisample/storage facts, and binding layout. It
+does not include texture handles, imported handles, surface leases, pixel
+contents, or uploaded artifact cache keys.
 
 ## Uniform And Storage Packing
 
