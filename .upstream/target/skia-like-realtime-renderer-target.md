@@ -211,7 +211,8 @@ rules.
   and unpublished. Kanvas may include it as a git submodule for M65/M68 work;
   do not replace it with an unrelated shell just to make the demo easier.
 - `PipelineKey` axes must represent layout, shader code, resources, or
-  pipeline state, not arbitrary uniform values.
+  pipeline state. Resource axes mean topology or usage facts, not concrete
+  resource identity, residency, or arbitrary uniform values.
 - Missing support must produce stable diagnostics, not silent fallback.
 - New `pass` claims require reference, CPU/GPU evidence, route diagnostics,
   diff/stat artifacts, and performance impact assessment when relevant.

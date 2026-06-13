@@ -64,6 +64,13 @@ includeBuild("external/poc-koreos") {
 }
 
 include(":math")
+include(":font")
+include(":font:core")
+include(":font:sfnt")
+include(":font:scaler")
+include(":font:text")
+include(":font:glyph")
+include(":font:gpu-api")
 include(":kanvas-skia")
 include(":codec-api")
 include(":codec-core")
@@ -91,6 +98,7 @@ include(":cpu-raster")
 // PR #458 (G1.0) but the `include` line was dropped from that merge ;
 // restored here so :gpu-raster:test (ClearRedTest) actually runs.
 include(":gpu-raster")
+include(":gpu-renderer")
 include(":render-pipeline")
 include(":kadre-runtime")
 include(":skia-integration-tests")

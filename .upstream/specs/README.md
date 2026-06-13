@@ -16,6 +16,7 @@ not be treated as active backlog.
 | `font/` | Font and text work: pure Kotlin OpenType backend, SkFont/SkTypeface/SkFontMgr, shaping boundary, glyph rendering, glyph masks, color fonts, emoji, fixtures, and font conformance gates. |
 | `front/` | Front-facing evidence experience: dashboard UX, filters, artifact browsing, PM reporting workflow, accessibility, and export quality gates. Does not define rendering support. |
 | `skia-like-realtime/` | Active post-MEP target: missing rendering features, Skia-like fidelity, real-time runtime, performance tiering, PM demos, and release-candidate planning. |
+| `gpu-renderer/` | Proposed GPU-first renderer direction: Graphite-inspired inline `GPU` architecture, normalized draw commands, WGSL material keys, pipeline keys, route policy, legacy adapter cleanup, and validation gates. |
 | `release-readiness-mvp.md` | Historical MVP release candidate gate tying M32 image-rect, M33 Path AA, M34 image filters, required CI, inventory classification, and PM evidence together. |
 
 Use the pack README as the entry point before planning or reviewing work in

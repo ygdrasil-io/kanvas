@@ -806,7 +806,9 @@ PipelineIR
 ```
 
 Pipeline keys should encode only specialization axes that materially affect
-compiled WGSL or WebGPU pipeline state:
+compiled WGSL or WebGPU pipeline state. Resource axes mean resource topology,
+layout, usage, and capability facts, not concrete resource identity,
+residency, or pixel contents:
 
 - geometry path: rect, polygon, stencil-cover, image blit, layer composite;
 - shader family;
