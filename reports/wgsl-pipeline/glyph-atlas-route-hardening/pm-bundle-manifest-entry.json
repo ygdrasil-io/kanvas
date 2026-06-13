@@ -1,0 +1,19 @@
+{
+  "categories": [
+    "dependency-gated",
+    "expected-unsupported",
+    "reporting-only",
+    "supported"
+  ],
+  "claimLevel": "glyph-atlas-route-hardening-pm-gates",
+  "evidenceJson": "release/kan-056-glyph-atlas-route-hardening/kan-056-glyph-atlas-route-hardening.json",
+  "evidenceMarkdown": "release/kan-056-glyph-atlas-route-hardening/kan-056-glyph-atlas-route-hardening.md",
+  "generationCommand": "rtk ./gradlew --no-daemon validateKan056GlyphAtlasRouteHardening",
+  "key": "kan056GlyphAtlasRouteHardening",
+  "manifestEntryJson": "release/kan-056-glyph-atlas-route-hardening/pm-bundle-manifest-entry.json",
+  "nativeKadreCiRequired": false,
+  "notice": "KAN-056 hardens the selected glyph atlas WebGPU route with PM support/refusal gates and diagnostics. It does not broaden text, font, LCD/SDF, color-font, alpha-mask, performance, or Kadre CI claims.",
+  "pmPackageCommand": "rtk ./gradlew --no-daemon pipelinePmBundle",
+  "readinessDelta": 0.0,
+  "releaseBlocking": false
+}

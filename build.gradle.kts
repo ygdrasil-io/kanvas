@@ -840,6 +840,7 @@ tasks.register("pipelineConformance") {
         "validateKan053TextGlyphVisualDelta",
         "validateKan054WebGpuGlyphAtlasSamplingRoute",
         "validateKan055TextGlyphAtlasVisualDelta",
+        "validateKan056GlyphAtlasRouteHardening",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -880,6 +881,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED KAN-053 text glyph visual delta blocker guard: validateKan053TextGlyphVisualDelta
             |- REQUIRED KAN-054 WebGPU glyph atlas sampling route guard: validateKan054WebGpuGlyphAtlasSamplingRoute
             |- REQUIRED KAN-055 text glyph atlas visual delta and KAN-053 closure-decision guard: validateKan055TextGlyphAtlasVisualDelta
+            |- REQUIRED KAN-056 glyph atlas route hardening PM gates and non-claim guards: validateKan056GlyphAtlasRouteHardening
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
@@ -5678,6 +5680,27 @@ tasks.register<Exec>("validateKan055TextGlyphAtlasVisualDelta") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("validateKan056GlyphAtlasRouteHardening") {
+    group = "verification"
+    description = "Materializes and validates the KAN-056 glyph atlas route hardening PM gates."
+    dependsOn("validateKan055TextGlyphAtlasVisualDelta")
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/glyph-atlas-route-hardening")
+    commandLine(
+        "python3",
+        "scripts/validate_kan056_glyph_atlas_route_hardening.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan056_glyph_atlas_route_hardening.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/webgpu-glyph-atlas-sampling-route/kan-054-webgpu-glyph-atlas-sampling-route.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/text-glyph-atlas-visual-delta/kan-055-text-glyph-atlas-visual-delta.json"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line"))
+    outputs.file(outputDir.file("kan-056-glyph-atlas-route-hardening.json"))
+    outputs.file(outputDir.file("kan-056-glyph-atlas-route-hardening.md"))
+    outputs.file(outputDir.file("pm-bundle-manifest-entry.json"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateKan047CodecProvenanceMatrix") {
     group = "verification"
     description = "Materializes and validates the KAN-047 codec provenance matrix."
@@ -6018,6 +6041,7 @@ tasks.register("pipelinePmBundle") {
         "validateKan053TextGlyphVisualDelta",
         "validateKan054WebGpuGlyphAtlasSamplingRoute",
         "validateKan055TextGlyphAtlasVisualDelta",
+        "validateKan056GlyphAtlasRouteHardening",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",
@@ -8658,6 +8682,32 @@ tasks.register<Exec>("injectKan050PmBreadthSupportRefusalPackIntoPmBundle") {
 }
 
 tasks.named("pipelinePmBundle") {
+    dependsOn("validateKan056GlyphAtlasRouteHardening")
+    finalizedBy("injectKan056GlyphAtlasRouteHardeningIntoPmBundle")
     dependsOn("validateKan050PmBreadthSupportRefusalPack")
     finalizedBy("injectKan050PmBreadthSupportRefusalPackIntoPmBundle")
+}
+
+tasks.register<Exec>("injectKan056GlyphAtlasRouteHardeningIntoPmBundle") {
+    group = "verification"
+    description = "Injects the KAN-056 glyph atlas route hardening evidence into the generated pipelinePmBundle manifest."
+    dependsOn("validateKan056GlyphAtlasRouteHardening")
+    mustRunAfter("pipelinePmBundle")
+    mustRunAfter("injectKan050PmBreadthSupportRefusalPackIntoPmBundle")
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/glyph-atlas-route-hardening")
+    val bundleDir = layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle")
+    commandLine(
+        "python3",
+        "scripts/validate_kan056_glyph_atlas_route_hardening.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+        "--inject-pm-bundle",
+        bundleDir.get().asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan056_glyph_atlas_route_hardening.py"))
+    inputs.dir(outputDir)
+    inputs.file(bundleDir.map { it.file("manifest.json") })
+    outputs.file(bundleDir.map { it.file("manifest.json") })
+    outputs.dir(bundleDir.map { it.dir("release/kan-056-glyph-atlas-route-hardening") })
+    outputs.upToDateWhen { false }
 }
