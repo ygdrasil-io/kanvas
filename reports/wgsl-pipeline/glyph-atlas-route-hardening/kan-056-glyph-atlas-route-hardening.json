@@ -1,0 +1,305 @@
+{
+  "artifactAudit": [
+    {
+      "exists": true,
+      "key": "after.atlas",
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/atlas.json"
+    },
+    {
+      "exists": true,
+      "key": "after.cpu",
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/cpu.png"
+    },
+    {
+      "exists": true,
+      "key": "after.cpuDiff",
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/cpu-diff.png"
+    },
+    {
+      "exists": true,
+      "key": "after.reference",
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/reference.png"
+    },
+    {
+      "exists": true,
+      "key": "after.routeCpu",
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/route-cpu.json"
+    },
+    {
+      "exists": true,
+      "key": "after.routeWebGpu",
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/route-webgpu.json"
+    },
+    {
+      "exists": true,
+      "key": "after.stats",
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/stats.json"
+    },
+    {
+      "exists": true,
+      "key": "after.webGpu",
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/webgpu.png"
+    },
+    {
+      "exists": true,
+      "key": "after.webGpuDiff",
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/webgpu-diff.png"
+    },
+    {
+      "exists": true,
+      "key": "atlas",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json"
+    },
+    {
+      "exists": true,
+      "key": "kan054",
+      "path": "reports/wgsl-pipeline/webgpu-glyph-atlas-sampling-route/kan-054-webgpu-glyph-atlas-sampling-route.json"
+    },
+    {
+      "exists": true,
+      "key": "kan055",
+      "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/kan-055-text-glyph-atlas-visual-delta.json"
+    },
+    {
+      "exists": true,
+      "key": "routeCpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json"
+    },
+    {
+      "exists": true,
+      "key": "routeWebGpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-webgpu.json"
+    },
+    {
+      "exists": true,
+      "key": "stats",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json"
+    }
+  ],
+  "categoryRows": [
+    {
+      "category": "supported",
+      "count": 1
+    },
+    {
+      "category": "expected-unsupported",
+      "count": 1
+    },
+    {
+      "category": "dependency-gated",
+      "count": 1
+    },
+    {
+      "category": "reporting-only",
+      "count": 1
+    }
+  ],
+  "diagnostics": {
+    "atlasGeneration": 1,
+    "atlasUploadBytes": 12928,
+    "cacheIds": {
+      "routeIdentifier": "webgpu.text.glyph-atlas.simple-latin",
+      "scopeId": "text.simple-latin.liberation-sans-regular.v1",
+      "sourceCacheSha256": "f85ddf1dd6b62ecb46df77559ef78b9ad0e1f51cea70b90932fe2550b398d433",
+      "textureLabel": "kan-011.text.simple-latin.liberation-sans-regular.v1.glyph-atlas.generation-1",
+      "uploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5"
+    },
+    "glyphEntryCount": 26,
+    "maskFormat": "A8",
+    "nonEmptyGlyphCount": 25,
+    "pipelineKeyFacts": {
+      "atlasRouteAffectsLayout": true,
+      "maskTextureSamplerPresence": true,
+      "uniformOnlyAxesExcluded": [
+        "rect bounds",
+        "fill color",
+        "transform values"
+      ]
+    },
+    "resourceKind": "webgpu.texture-upload-plan",
+    "routeId": "webgpu.text.glyph-atlas.simple-latin",
+    "sampler": "nearest-clamp-to-edge",
+    "textureFormat": "R8Unorm"
+  },
+  "kan055Decision": "close-root-cause-resolved",
+  "kan055Delta": {
+    "mode": "before-after-route-delta",
+    "webGpuMinusCpuReferenceMismatchesAfter": -459,
+    "webGpuMinusCpuReferenceMismatchesBefore": 27,
+    "webGpuMismatchingPixelsAfter": 122,
+    "webGpuMismatchingPixelsBefore": 608,
+    "webGpuMismatchingPixelsImprovement": 486
+  },
+  "matrixRows": [
+    {
+      "category": "supported",
+      "claimScope": "selected-simple-latin-line-only",
+      "fallbackReason": "none",
+      "proofs": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "routeId": "webgpu.text.glyph-atlas.simple-latin",
+      "rowId": "text.simple-latin.line.v1.webgpu-glyph-atlas",
+      "sourceTickets": [
+        "KAN-054",
+        "KAN-055"
+      ]
+    },
+    {
+      "category": "expected-unsupported",
+      "claimScope": "coverage-alpha-mask-outside-text-glyph-route",
+      "fallbackAction": "refuse",
+      "reasonCode": "coverage.alpha-mask-unsupported",
+      "rowId": "webgpu.standalone-alpha-mask-refusal"
+    },
+    {
+      "category": "dependency-gated",
+      "claimScope": "real-font-shaping-dependencies-required",
+      "reasonCodes": [
+        "font.shaping-fallback-missing",
+        "font.shaping-feature-unsupported",
+        "font.color-font-unsupported"
+      ],
+      "rowId": "text.font-fallback-complex-shaping-color-fonts"
+    },
+    {
+      "category": "reporting-only",
+      "claimScope": "diagnostics-not-release-blocking-performance-gate",
+      "reasonCode": "glyph-atlas.diagnostics-reporting-only",
+      "rowId": "glyph-atlas-route-diagnostics"
+    }
+  ],
+  "nativeKadreCiRequired": false,
+  "negativeFixtures": [
+    {
+      "fixtureId": "reject-broad-text-support",
+      "reason": "Support requires row-specific reference/CPU/GPU/diff/stat/routes/fallback evidence.",
+      "wouldFailIf": "any supported row uses claimScope=broad-text"
+    },
+    {
+      "fixtureId": "reject-missing-supported-proof",
+      "reason": "Route diagnostics alone are not enough for support claims.",
+      "wouldFailIf": "a supported row lacks reference, CPU/GPU, diff/stat, route diagnostics, or stable fallback proof"
+    },
+    {
+      "fixtureId": "reject-threshold-change",
+      "reason": "KAN-056 is a hardening pack, not a threshold relaxation.",
+      "wouldFailIf": "globalThresholdChanged=true or WebGPU threshold differs from 95.0"
+    }
+  ],
+  "nonClaims": [
+    "no-broad-glyph-atlas-claim",
+    "no-broad-text-claim",
+    "no-dynamic-atlas-eviction-claim",
+    "no-emoji-or-color-font-claim",
+    "no-fallback-font-claim",
+    "no-sdf-or-lcd-claim",
+    "no-shaping-claim",
+    "no-threshold-change-claim"
+  ],
+  "packId": "kan-056-glyph-atlas-route-hardening",
+  "readinessDelta": 0.0,
+  "releaseBlocking": false,
+  "schemaVersion": 1,
+  "selectedRowId": "text.simple-latin.line.v1",
+  "sourceEvidence": {
+    "kan054": "reports/wgsl-pipeline/webgpu-glyph-atlas-sampling-route/kan-054-webgpu-glyph-atlas-sampling-route.json",
+    "kan055": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/kan-055-text-glyph-atlas-visual-delta.json"
+  },
+  "sourceGuards": {
+    "kan054NonClaims": [
+      "no-general-alpha-mask-webgpu-claim",
+      "no-broad-text-claim",
+      "no-shaping-claim",
+      "no-fallback-font-claim",
+      "no-emoji-or-color-font-claim",
+      "no-sdf-or-lcd-claim",
+      "no-dynamic-atlas-eviction-claim",
+      "no-ganesh-graphite-text-ops-claim"
+    ],
+    "kan054RouteWebGpu": {
+      "atlasRouteIdentifier": "webgpu.text.glyph-atlas.simple-latin",
+      "backend": "WebGPU",
+      "fallbackReason": "none",
+      "glyphSourceRoute": "font.glyph.outline-path",
+      "nonClaims": [
+        "no-shaping-claim",
+        "no-fallback-font-claim",
+        "no-emoji-or-color-font-claim",
+        "no-sdf-or-lcd-claim",
+        "no-rtl-or-bidi-claim",
+        "no-ligature-claim",
+        "no-broad-text-claim"
+      ],
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-webgpu.json",
+      "sceneId": "text.simple-latin.line.v1",
+      "selectedRoute": "webgpu.text.glyph-atlas.simple-latin",
+      "supportScope": "simple-latin-line-visible"
+    },
+    "routeWebGpu": {
+      "fallbackReason": "none",
+      "nonClaims": [
+        "no-shaping-claim",
+        "no-fallback-font-claim",
+        "no-emoji-or-color-font-claim",
+        "no-sdf-or-lcd-claim",
+        "no-rtl-or-bidi-claim",
+        "no-ligature-claim",
+        "no-broad-text-claim"
+      ],
+      "sceneId": "text.simple-latin.line.v1",
+      "selectedRoute": "webgpu.text.glyph-atlas.simple-latin",
+      "supportScope": "simple-latin-line-visible"
+    },
+    "standaloneAlphaMaskRefusal": {
+      "coverageOwnsAtlas": false,
+      "nonClaims": [
+        "no-broad-glyph-atlas-claim",
+        "no-lcd-or-sdf-claim",
+        "no-dynamic-atlas-eviction-claim",
+        "no-ganesh-graphite-text-ops-claim",
+        "no-coverage-owned-atlas-claim"
+      ],
+      "ownership": {
+        "atlasLifetimeOwner": "text-glyph-infrastructure",
+        "discoveryOwner": "text-glyph-infrastructure",
+        "invalidationOwner": "text-glyph-infrastructure",
+        "rasterizationOwner": "text-glyph-infrastructure"
+      },
+      "pmCategory": "webgpu-alpha-mask-refusal",
+      "proofs": {
+        "reasonCodeTest": true,
+        "webGpuRefusalTest": true
+      },
+      "reasonCode": "coverage.alpha-mask-unsupported",
+      "route": {
+        "coverage": "CoveragePlan.AlphaMask",
+        "cpu": "CoverageModel.AlphaMask",
+        "webGpu": "webgpu.refuse.standalone-alpha-mask"
+      },
+      "rowId": "webgpu.standalone-alpha-mask-refusal",
+      "sourceEvidence": "kanvas-skia/src/test/kotlin/org/skia/core/SkBitmapDescriptorCoverageOracleTest.kt",
+      "status": "expected-unsupported"
+    }
+  },
+  "status": "pass",
+  "supportedRoute": {
+    "fallbackReason": "none",
+    "routeId": "webgpu.text.glyph-atlas.simple-latin",
+    "sourceTickets": [
+      "KAN-054",
+      "KAN-055"
+    ],
+    "supportScope": "simple-latin-line-visible"
+  },
+  "thresholds": {
+    "cpuSimilarityThreshold": 95.0,
+    "globalThresholdChanged": false,
+    "webGpuSimilarityThreshold": 95.0
+  },
+  "ticket": "KAN-056"
+}
