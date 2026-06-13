@@ -106,6 +106,7 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 | `06-legacy-adapter-cleanup.md` | `gpu-raster`/`SkWebGpuDevice.kt` migration boundary and cleanup rules with no render change. |
 | `07-validation-conformance.md` | Unit, conformance, GPU evidence, PM artifacts, promotion gates, and retirement criteria. |
 | `08-layer-and-filter-plans.md` | `GPULayerPlan`, `GPUFilterPlan`, saveLayer semantics, offscreen targets, filter DAGs, and layer/filter diagnostics. |
+| `09-draw-family-support-matrix.md` | Target support/refusal matrix for draw families, route maturity, required plans, artifacts, diagnostics, and evidence gates. |
 
 ## Target Shape
 
@@ -177,7 +178,6 @@ policy, public command shape, key semantics, or cleanup gates must remain
 
 The kernel does not yet choose:
 
-- the complete list of supported draw families;
 - final package names inside `:gpu-renderer`, beyond the Kanvas-idiomatic style
   and Graphite equivalence policy above;
 - whether a future explicit CPU-rendered texture compatibility route is worth
