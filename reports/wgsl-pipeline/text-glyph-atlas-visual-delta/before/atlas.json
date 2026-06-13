@@ -1,0 +1,19 @@
+{
+  "emptyGlyphCount": 1,
+  "generation": 1,
+  "glyphEntryCount": 26,
+  "height": 101,
+  "maskFormat": "A8",
+  "nonEmptyGlyphCount": 25,
+  "resourceKind": "webgpu.texture-upload-plan",
+  "routeIdentifier": "webgpu.text.glyph-atlas.simple-latin",
+  "rowStrideBytes": 128,
+  "sampler": "nearest-clamp-to-edge",
+  "sourceCacheSha256": "f85ddf1dd6b62ecb46df77559ef78b9ad0e1f51cea70b90932fe2550b398d433",
+  "textureFormat": "R8Unorm",
+  "textureLabel": "kan-011.text.simple-latin.liberation-sans-regular.v1.glyph-atlas.generation-1",
+  "textureUsage": "TextureBinding|CopyDst",
+  "uploadByteCount": 12928,
+  "uploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
+  "width": 128
+}

@@ -839,6 +839,7 @@ tasks.register("pipelineConformance") {
         "validateKan052ImageFilterVisualDelta",
         "validateKan053TextGlyphVisualDelta",
         "validateKan054WebGpuGlyphAtlasSamplingRoute",
+        "validateKan055TextGlyphAtlasVisualDelta",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -878,6 +879,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED KAN-052 image-filter visual delta blocker guard: validateKan052ImageFilterVisualDelta
             |- REQUIRED KAN-053 text glyph visual delta blocker guard: validateKan053TextGlyphVisualDelta
             |- REQUIRED KAN-054 WebGPU glyph atlas sampling route guard: validateKan054WebGpuGlyphAtlasSamplingRoute
+            |- REQUIRED KAN-055 text glyph atlas visual delta and KAN-053 closure-decision guard: validateKan055TextGlyphAtlasVisualDelta
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
@@ -5656,6 +5658,26 @@ tasks.register<Exec>("validateKan054WebGpuGlyphAtlasSamplingRoute") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("validateKan055TextGlyphAtlasVisualDelta") {
+    group = "verification"
+    description = "Materializes and validates the KAN-055 text glyph atlas visual delta after KAN-054."
+    dependsOn("validateKan054WebGpuGlyphAtlasSamplingRoute")
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/text-glyph-atlas-visual-delta")
+    commandLine(
+        "python3",
+        "scripts/validate_kan055_text_glyph_atlas_visual_delta.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan055_text_glyph_atlas_visual_delta.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/text-glyph-visual-delta/kan-053-text-glyph-visual-delta.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/webgpu-glyph-atlas-sampling-route/kan-054-webgpu-glyph-atlas-sampling-route.json"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line"))
+    outputs.file(outputDir.file("kan-055-text-glyph-atlas-visual-delta.json"))
+    outputs.file(outputDir.file("kan-055-text-glyph-atlas-visual-delta.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateKan047CodecProvenanceMatrix") {
     group = "verification"
     description = "Materializes and validates the KAN-047 codec provenance matrix."
@@ -5995,6 +6017,7 @@ tasks.register("pipelinePmBundle") {
         "validateKan052ImageFilterVisualDelta",
         "validateKan053TextGlyphVisualDelta",
         "validateKan054WebGpuGlyphAtlasSamplingRoute",
+        "validateKan055TextGlyphAtlasVisualDelta",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",
@@ -6035,6 +6058,7 @@ tasks.register("pipelinePmBundle") {
     val m92KadreRuntimeRcDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m92-kadre-runtime-rc")
     val kan046TileModesMipmapDir = layout.projectDirectory.dir("reports/wgsl-pipeline/tile-modes-mipmap-boundary")
     val kan054WebGpuGlyphAtlasSamplingRouteDir = layout.projectDirectory.dir("reports/wgsl-pipeline/webgpu-glyph-atlas-sampling-route")
+    val kan055TextGlyphAtlasVisualDeltaDir = layout.projectDirectory.dir("reports/wgsl-pipeline/text-glyph-atlas-visual-delta")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -6072,6 +6096,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m92KadreRuntimeRcDir)
     inputs.dir(kan046TileModesMipmapDir)
     inputs.dir(kan054WebGpuGlyphAtlasSamplingRouteDir)
+    inputs.dir(kan055TextGlyphAtlasVisualDeltaDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -6148,6 +6173,7 @@ tasks.register("pipelinePmBundle") {
         val m92KadreRuntimeRcRoot = m92KadreRuntimeRcDir.asFile
         val kan046TileModesMipmapRoot = kan046TileModesMipmapDir.asFile
         val kan054WebGpuGlyphAtlasSamplingRouteRoot = kan054WebGpuGlyphAtlasSamplingRouteDir.asFile
+        val kan055TextGlyphAtlasVisualDeltaRoot = kan055TextGlyphAtlasVisualDeltaDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -6268,6 +6294,9 @@ tasks.register("pipelinePmBundle") {
         }
         if (kan054WebGpuGlyphAtlasSamplingRouteRoot.isDirectory) {
             kan054WebGpuGlyphAtlasSamplingRouteRoot.copyRecursively(targetRoot.resolve("release/kan-054-webgpu-glyph-atlas-sampling-route"), overwrite = true)
+        }
+        if (kan055TextGlyphAtlasVisualDeltaRoot.isDirectory) {
+            kan055TextGlyphAtlasVisualDeltaRoot.copyRecursively(targetRoot.resolve("release/kan-055-text-glyph-atlas-visual-delta"), overwrite = true)
         }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
