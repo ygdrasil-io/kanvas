@@ -42,7 +42,11 @@ def fixture_root() -> Path:
     }
     for path in artifact_paths.values():
         write_artifact(root, path)
-    for path in [*kan055.MATERIALIZED_BEFORE_ARTIFACTS.values(), *kan055.MATERIALIZED_AFTER_ARTIFACTS.values()]:
+    for key, path in kan055.MATERIALIZED_BEFORE_ARTIFACTS.items():
+        artifact = root / path
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        artifact.write_bytes(f"before-{key}".encode("utf-8"))
+    for path in kan055.MATERIALIZED_AFTER_ARTIFACTS.values():
         write_artifact(root, path)
 
     before_stats = {
@@ -208,13 +212,25 @@ class TextGlyphAtlasVisualDeltaValidatorTest(unittest.TestCase):
         with self.assertRaisesRegex(kan055.ValidationError, "global threshold changed"):
             kan055.validate_evidence(evidence, root)
 
-    def test_validation_rejects_materialized_artifact_drift(self) -> None:
+    def test_validation_rejects_materialized_json_artifact_drift(self) -> None:
         root = fixture_root()
-        (root / kan055.MATERIALIZED_AFTER_ARTIFACTS["webGpu"]).write_bytes(b"stale-after-webgpu")
+        (root / kan055.MATERIALIZED_AFTER_ARTIFACTS["routeWebGpu"]).write_bytes(b"stale-after-route")
 
         evidence = kan055.build_evidence(root)
         with self.assertRaisesRegex(kan055.ValidationError, "materialized artifact hash mismatch"):
             kan055.validate_evidence(evidence, root)
+
+    def test_validation_allows_platform_variant_current_png_hashes(self) -> None:
+        root = fixture_root()
+        (root / "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png").write_bytes(
+            b"platform-specific-current-webgpu"
+        )
+        (root / "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png").write_bytes(
+            b"platform-specific-current-webgpu-diff"
+        )
+
+        evidence = kan055.build_evidence(root)
+        kan055.validate_evidence(evidence, root)
 
     @classmethod
     def tearDownClass(cls) -> None:

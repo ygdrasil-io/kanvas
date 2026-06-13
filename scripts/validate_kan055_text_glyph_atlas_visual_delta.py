@@ -94,15 +94,17 @@ def artifact_audit(root: Path, before: dict[str, Any], after: dict[str, Any]) ->
             require(isinstance(materialized_path, str) and materialized_path, f"{prefix}.{key} materialized artifact path missing")
             source_hash = sha256_file(root / source_path)
             materialized_hash = sha256_file(root / materialized_path)
+            source_comparable = not materialized_path.endswith(".png")
             audit.append(
                 {
                     "key": f"{prefix}.{key}",
                     "sourcePath": source_path,
                     "path": materialized_path,
                     "exists": (root / materialized_path).is_file(),
+                    "sourceComparable": source_comparable,
                     "sourceSha256": source_hash,
                     "sha256": materialized_hash,
-                    "matchesSource": source_hash == materialized_hash,
+                    "matchesSource": source_hash == materialized_hash if source_comparable else None,
                 }
             )
     return audit
@@ -269,8 +271,21 @@ def validate_evidence(evidence: dict[str, Any], root: Path) -> None:
 
     missing = [item for item in evidence.get("artifactAudit", []) if not item.get("exists")]
     require(not missing, f"required artifacts missing: {missing}")
-    mismatched = [item for item in evidence.get("artifactAudit", []) if not item.get("matchesSource")]
+    mismatched = [
+        item
+        for item in evidence.get("artifactAudit", [])
+        if item.get("sourceComparable") and not item.get("matchesSource")
+    ]
     require(not mismatched, f"materialized artifact hash mismatch: {mismatched}")
+    audits = {item.get("key"): item for item in evidence.get("artifactAudit", [])}
+    require(
+        audits["before.webGpu"].get("sha256") != audits["after.webGpu"].get("sha256"),
+        "before/after WebGPU visual artifacts must be distinct",
+    )
+    require(
+        audits["before.webGpuDiff"].get("sha256") != audits["after.webGpuDiff"].get("sha256"),
+        "before/after WebGPU diff artifacts must be distinct",
+    )
 
 
 def markdown_report(evidence: dict[str, Any]) -> str:

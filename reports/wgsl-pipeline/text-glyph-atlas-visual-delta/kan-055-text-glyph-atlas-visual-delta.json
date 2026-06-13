@@ -60,33 +60,37 @@
       "matchesSource": true,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/atlas.json",
       "sha256": "be99b6cd75bc9f64e9b6305a22ba629165c18740f84dfd3ca615f25a3898a9d4",
+      "sourceComparable": true,
       "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/atlas.json",
       "sourceSha256": "be99b6cd75bc9f64e9b6305a22ba629165c18740f84dfd3ca615f25a3898a9d4"
     },
     {
       "exists": true,
       "key": "before.cpu",
-      "matchesSource": true,
+      "matchesSource": null,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/cpu.png",
       "sha256": "477c653c80ffc8163c0bd9a740121fb2878bc192f34aec755b17ee91abedd8cc",
+      "sourceComparable": false,
       "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/cpu.png",
       "sourceSha256": "477c653c80ffc8163c0bd9a740121fb2878bc192f34aec755b17ee91abedd8cc"
     },
     {
       "exists": true,
       "key": "before.cpuDiff",
-      "matchesSource": true,
+      "matchesSource": null,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/cpu-diff.png",
       "sha256": "4ad54e7a7ecf2b6bdfae687031538460293cd63962dc3cd43065db0ab5d4ee50",
+      "sourceComparable": false,
       "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/cpu-diff.png",
       "sourceSha256": "4ad54e7a7ecf2b6bdfae687031538460293cd63962dc3cd43065db0ab5d4ee50"
     },
     {
       "exists": true,
       "key": "before.reference",
-      "matchesSource": true,
+      "matchesSource": null,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/reference.png",
       "sha256": "1cb7110d407ee1bd964d3187899914fa7ba6504a36eceb5094443bd2262b1904",
+      "sourceComparable": false,
       "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/reference.png",
       "sourceSha256": "1cb7110d407ee1bd964d3187899914fa7ba6504a36eceb5094443bd2262b1904"
     },
@@ -96,6 +100,7 @@
       "matchesSource": true,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/route-cpu.json",
       "sha256": "ef5ae5a6b6fb1cb30a0d8c9ea3035dc6ee281bcb0280e9ffda7cf8feecc6141b",
+      "sourceComparable": true,
       "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/route-cpu.json",
       "sourceSha256": "ef5ae5a6b6fb1cb30a0d8c9ea3035dc6ee281bcb0280e9ffda7cf8feecc6141b"
     },
@@ -105,6 +110,7 @@
       "matchesSource": true,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/route-webgpu.json",
       "sha256": "4c0e5b4c910fee976cc0d834f725b6cd4aae460cd4c4c8ec851108aae9e5e94d",
+      "sourceComparable": true,
       "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/route-webgpu.json",
       "sourceSha256": "4c0e5b4c910fee976cc0d834f725b6cd4aae460cd4c4c8ec851108aae9e5e94d"
     },
@@ -114,24 +120,27 @@
       "matchesSource": true,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/stats.json",
       "sha256": "d6fe658edb465c36693176f4bc68a78b255e07e46549b8144705a940bda48a76",
+      "sourceComparable": true,
       "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/stats.json",
       "sourceSha256": "d6fe658edb465c36693176f4bc68a78b255e07e46549b8144705a940bda48a76"
     },
     {
       "exists": true,
       "key": "before.webGpu",
-      "matchesSource": true,
+      "matchesSource": null,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/webgpu.png",
       "sha256": "d780b62297e3529e4b71ae3ef8949700ae994e94c17936540acee3fc6ab3cdd8",
+      "sourceComparable": false,
       "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/webgpu.png",
       "sourceSha256": "d780b62297e3529e4b71ae3ef8949700ae994e94c17936540acee3fc6ab3cdd8"
     },
     {
       "exists": true,
       "key": "before.webGpuDiff",
-      "matchesSource": true,
+      "matchesSource": null,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/webgpu-diff.png",
       "sha256": "d877defbfc6f4f5b66840b9102b00b08e71a04c03a4c55905ee92499d5ba876b",
+      "sourceComparable": false,
       "sourcePath": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/before/webgpu-diff.png",
       "sourceSha256": "d877defbfc6f4f5b66840b9102b00b08e71a04c03a4c55905ee92499d5ba876b"
     },
@@ -141,33 +150,37 @@
       "matchesSource": true,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/atlas.json",
       "sha256": "5327174f2de31f0c752738c349f002406691082a6c9164a3f137e15ebfae9ed3",
+      "sourceComparable": true,
       "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json",
       "sourceSha256": "5327174f2de31f0c752738c349f002406691082a6c9164a3f137e15ebfae9ed3"
     },
     {
       "exists": true,
       "key": "after.cpu",
-      "matchesSource": true,
+      "matchesSource": null,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/cpu.png",
       "sha256": "c37300cbc1fbcc0d43aab8dcd123ce281ad04a9eefac78b8d264704b3e368645",
+      "sourceComparable": false,
       "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu.png",
       "sourceSha256": "c37300cbc1fbcc0d43aab8dcd123ce281ad04a9eefac78b8d264704b3e368645"
     },
     {
       "exists": true,
       "key": "after.cpuDiff",
-      "matchesSource": true,
+      "matchesSource": null,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/cpu-diff.png",
       "sha256": "a218a45be9eb0899b1da12d3f2446a4b52811724725a9b54a4967e55f59d23e3",
+      "sourceComparable": false,
       "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu-diff.png",
       "sourceSha256": "a218a45be9eb0899b1da12d3f2446a4b52811724725a9b54a4967e55f59d23e3"
     },
     {
       "exists": true,
       "key": "after.reference",
-      "matchesSource": true,
+      "matchesSource": null,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/reference.png",
       "sha256": "a0dc1fd98509f211ab3764731963465b2f3aa4088b4e7ded1d19be78719a3489",
+      "sourceComparable": false,
       "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
       "sourceSha256": "a0dc1fd98509f211ab3764731963465b2f3aa4088b4e7ded1d19be78719a3489"
     },
@@ -177,6 +190,7 @@
       "matchesSource": true,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/route-cpu.json",
       "sha256": "4922d07284039c306bd024fab5a932de4f18ebb1b83b3b7dee0ea0b28dfd4ce9",
+      "sourceComparable": true,
       "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json",
       "sourceSha256": "4922d07284039c306bd024fab5a932de4f18ebb1b83b3b7dee0ea0b28dfd4ce9"
     },
@@ -186,6 +200,7 @@
       "matchesSource": true,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/route-webgpu.json",
       "sha256": "3c303bd0ea9168efcef294ba662ef374973162dbecd8acfb2e7731fd3115d760",
+      "sourceComparable": true,
       "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-webgpu.json",
       "sourceSha256": "3c303bd0ea9168efcef294ba662ef374973162dbecd8acfb2e7731fd3115d760"
     },
@@ -195,24 +210,27 @@
       "matchesSource": true,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/stats.json",
       "sha256": "fd3d74d80504ed6a4215d690fc5ab05ecad6b244751e63f94a6e6212c5421e13",
+      "sourceComparable": true,
       "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json",
       "sourceSha256": "fd3d74d80504ed6a4215d690fc5ab05ecad6b244751e63f94a6e6212c5421e13"
     },
     {
       "exists": true,
       "key": "after.webGpu",
-      "matchesSource": true,
+      "matchesSource": null,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/webgpu.png",
       "sha256": "d5b6690c4ba1636ac9c2e1fa054b25ec272fc4e2ada0464870c56c7746da0a80",
+      "sourceComparable": false,
       "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png",
       "sourceSha256": "d5b6690c4ba1636ac9c2e1fa054b25ec272fc4e2ada0464870c56c7746da0a80"
     },
     {
       "exists": true,
       "key": "after.webGpuDiff",
-      "matchesSource": true,
+      "matchesSource": null,
       "path": "reports/wgsl-pipeline/text-glyph-atlas-visual-delta/after/webgpu-diff.png",
       "sha256": "bf85fe9ce3966e09a11156342869bb3ca84960e1ea5c39ddd24fb14f63b917bf",
+      "sourceComparable": false,
       "sourcePath": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png",
       "sourceSha256": "bf85fe9ce3966e09a11156342869bb3ca84960e1ea5c39ddd24fb14f63b917bf"
     }
