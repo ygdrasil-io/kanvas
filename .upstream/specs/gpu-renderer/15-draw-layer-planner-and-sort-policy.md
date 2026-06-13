@@ -264,6 +264,7 @@ Required axes:
 - `GPURenderStep` identity;
 - `GPURenderPipelineKey` or pre-resource pipeline group;
 - `MaterialKey` or invalid material for depth-only invocations;
+- `GPUMaterialAssemblyPlan` identity when material WGSL affects grouping;
 - `WGSLBindingLayout` group;
 - uniform slot identity;
 - texture/sampler/artifact binding slot identity;
@@ -276,6 +277,7 @@ Forbidden axes:
 - Kotlin object addresses;
 - raw GPU handle addresses;
 - cache hit/miss state;
+- material dictionary residency state;
 - per-draw uniform values;
 - transient buffer offsets;
 - any axis that hides crossing a barrier.

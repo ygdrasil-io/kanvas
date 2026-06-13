@@ -25,7 +25,8 @@ It records:
 - route counts by `GPUNative`, `CPUPreparedGPU`, `CPUReferenceOnly`, and
   `RefuseDiagnostic`;
 - draw-pass, compute-pass, copy, upload, and readback counts;
-- material, render pipeline, compute pipeline, and WGSL module counts;
+- material key, material program, material assembly plan, render pipeline,
+  compute pipeline, and WGSL module counts;
 - cache hits, misses, evictions, and creations;
 - CPU-prepared artifact counts, bytes, uploads, and refusals;
 - submitted bytes for uniforms, vertices, indices, storage, textures, and
@@ -42,6 +43,8 @@ Cache reporting is grouped by domain:
 
 | Domain | Required counters |
 |---|---|
+| Material dictionary cache | lookups, hits, misses, assigned program IDs, version mismatches, refusals. |
+| Material assembly plan cache | lookups, hits, misses, created plans, unsupported requirements. |
 | Material module cache | lookups, hits, misses, created modules, validation failures. |
 | Render pipeline cache | lookups, hits, misses, created pipelines, creation failures. |
 | Compute pipeline cache | lookups, hits, misses, created pipelines, creation failures. |
@@ -112,6 +115,8 @@ Initial gate families:
 
 - pipeline creation after warmup;
 - pipeline cache hit rate;
+- material dictionary hit rate;
+- material assembly plan creation after warmup;
 - WGSL module creation after warmup;
 - uniform upload bytes;
 - vertex/index/storage upload bytes;

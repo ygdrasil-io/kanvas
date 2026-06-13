@@ -9,9 +9,9 @@ This spec pack captures the agreed kernel for a new Kanvas GPU renderer module.
 It is intentionally narrower than a full implementation plan, but it should
 name the full technical scope before implementation slices are planned. It
 defines the module shape, naming policy, command boundary, WGSL material model,
-pipeline key split, execution context, WGSL layout ABI, blend/color state,
-route policy, telemetry gates, legacy cleanup policy, and validation
-expectations that future implementation tickets must follow.
+material dictionary, pipeline key split, execution context, WGSL layout ABI,
+blend/color state, route policy, telemetry gates, legacy cleanup policy, and
+validation expectations that future implementation tickets must follow.
 
 The current `.upstream/target/high-performance-wgsl-pipeline-target.md` and
 `.upstream/target/skia-like-realtime-renderer-target.md` remain active project
@@ -74,6 +74,8 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 - Capture draw state before it enters the core. The core does not replay a
   Canvas-style save/restore/matrix/clip stack.
 - Separate `MaterialKey` from executable pipeline keys.
+- Expand and intern `MaterialKey` through `GPUMaterialDictionary` and
+  `WGSLSnippet` metadata before WGSL module assembly.
 - Define GPU execution, surface/target, command submission, readback, and
   device-generation contracts before route activation.
 - Keep WGSL as the shader language. Graphite's SkSL paint machinery maps to
@@ -131,6 +133,7 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 | `13-performance-telemetry-cache-gates.md` | `GPUTelemetryLedger`, cache domains, budgets, warmup, performance gates, quarantine, and PM evidence. |
 | `14-first-slice-contract.md` | First isolated rect/rrect plus solid/linear slice contracts, fixtures, WGSL requirements, diagnostics, and promotion gates. |
 | `15-draw-layer-planner-and-sort-policy.md` | Graphite-inspired draw invocation expansion, layer insertion, sort windows, stencil/destination-read ordering, merge policy, and planner diagnostics. |
+| `16-material-dictionary-and-snippet-registry.md` | Graphite-inspired `GPUMaterialDictionary`, `WGSLSnippet`, `WGSLSnippetNode`, `GPUMaterialProgramID`, requirement propagation, runtime-effect registration, and material WGSL assembly policy. |
 
 ## Target Shape
 
@@ -146,8 +149,9 @@ flowchart TD
     tasks --> drawpass["GPUDrawPass"]
     drawpass --> step["GPURenderStep"]
     command --> material["MaterialKey"]
+    material --> dictionary["GPUMaterialDictionary / WGSLSnippet tree"]
     command --> blend["GPUBlendPlan / GPUColorPlan"]
-    material --> wgsl["WGSLFragment / WGSLModule"]
+    dictionary --> wgsl["WGSLFragment / WGSLModule"]
     wgsl --> abi["WGSL layout / binding ABI"]
     step --> pipeline["GPURenderPipelineKey"]
     blend --> pipeline
@@ -186,6 +190,7 @@ The accepted first implementation vertical slice is:
 - rect and rounded-rect geometry;
 - solid color and linear-gradient materials;
 - parser-validated complete WGSL modules;
+- `GPUMaterialDictionary` expansion for solid and linear material snippets;
 - validated WGSL binding ABI and Kotlin packing plans;
 - explicit blend/color/target-state plans;
 - execution-context test double or accepted GPU lane evidence;

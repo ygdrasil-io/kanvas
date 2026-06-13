@@ -9,9 +9,10 @@ Define the render paint/material identity and WGSL module rules for the new
 GPU renderer.
 
 Kanvas replaces Graphite's SkSL-centered paint machinery with
-`MaterialKey`, `WGSLFragment`, and render `WGSLModule` contracts. WGSL is the
-shader implementation target for both render and compute work, but compute
-programs do not flow through `MaterialKey`.
+`MaterialKey`, `GPUMaterialDictionary`, `WGSLSnippet`, `WGSLFragment`, and
+render `WGSLModule` contracts. WGSL is the shader implementation target for
+both render and compute work, but compute programs do not flow through
+`MaterialKey`.
 
 ## `MaterialKey`
 
@@ -36,6 +37,8 @@ It includes:
 - texture and sampler binding layout identity;
 - registered runtime-effect descriptor identity;
 - WGSL fragment identity and version;
+- material dictionary version;
+- `GPUMaterialAssemblyPlan` identity when the dictionary has accepted the key;
 - feature flags that affect generated WGSL behavior.
 
 It does not include:
@@ -66,6 +69,27 @@ Derivation must be:
 If descriptor lowering fails, route selection returns `RefuseDiagnostic` with a
 stable reason. It must not silently substitute a CPU shader.
 
+## Material Dictionary Boundary
+
+`MaterialKey` is consumed by `GPUMaterialDictionary` before WGSL module
+assembly.
+
+The dictionary:
+
+- interns equivalent material keys as `GPUMaterialProgramID` values;
+- expands material keys into `WGSLSnippetNode` trees;
+- validates snippet child slots and requirement propagation;
+- produces `GPUMaterialAssemblyPlan` records;
+- contributes material uniforms, textures, samplers, and material-owned buffers
+  to the WGSL ABI contract.
+
+`GPUMaterialProgramID` may be used as a compact cache handle only together with
+dictionary version and material preimage facts. It does not replace
+`MaterialKey` as the durable identity.
+
+The detailed dictionary and snippet registry policy is defined in
+`16-material-dictionary-and-snippet-registry.md`.
+
 ## WGSL Fragment Model
 
 `WGSLFragment` is a validated piece of shader logic with declared inputs,
@@ -82,7 +106,8 @@ Fragment categories:
 - runtime-effect descriptor contribution.
 
 Fragments are composed into a render `WGSLModule` only through deterministic
-module assembly rules.
+module assembly rules. Material fragments enter those rules through
+`GPUMaterialAssemblyPlan`, not through ad hoc string concatenation.
 
 ## `WGSLModule`
 
@@ -184,6 +209,10 @@ A supported descriptor must define:
 Arbitrary Skia/SkSL runtime shader input is refused with a stable diagnostic.
 SkSL is compatibility vocabulary, not the implementation language.
 
+Registered runtime effects contribute typed material root or child nodes through
+`GPUMaterialDictionary`. They are not accepted by matching arbitrary shader
+source hashes.
+
 ## Diagnostics
 
 Material diagnostics must include:
@@ -191,6 +220,8 @@ Material diagnostics must include:
 - material descriptor summary;
 - `MaterialKey` hash/preimage;
 - WGSL fragment list;
+- material dictionary version and snippet tree summary;
+- `GPUMaterialAssemblyPlan` hash/preimage label;
 - module hash;
 - parser/reflection result;
 - unsupported feature code when refused;
@@ -206,6 +237,7 @@ consuming the compute program.
 - Do not compile SkSL.
 - Do not implement Graphite's `PaintParamsKey` machinery.
 - Do not use WGSL string concatenation without structured fragment metadata.
+- Do not bypass `GPUMaterialDictionary` for material WGSL assembly.
 - Do not hide parser failures behind CPU fallback.
 - Do not include backend target state in `MaterialKey`.
 - Do not encode compute program identity in `MaterialKey`.

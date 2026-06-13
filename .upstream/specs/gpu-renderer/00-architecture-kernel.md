@@ -39,6 +39,7 @@ The module owns:
 - render-step selection;
 - sort-key generation;
 - material and pipeline keys;
+- material dictionary and WGSL snippet registry;
 - WGSL module assembly requests;
 - WGSL layout and binding ABI contracts;
 - blend, color, and target-state planning;
@@ -119,6 +120,12 @@ Public concept names in the new renderer use uppercase acronyms:
 - `WGSLBindingLayout`
 - `WGSLUniformLayout`
 - `WGSLPackingPlan`
+- `GPUMaterialDictionary`
+- `GPUMaterialProgramID`
+- `WGSLSnippet`
+- `WGSLSnippetID`
+- `WGSLSnippetNode`
+- `GPUMaterialAssemblyPlan`
 - `GPUBlendPlan`
 - `GPUColorPlan`
 - `GPUTargetState`
@@ -167,6 +174,10 @@ into a narrower GPU renderer value object.
 | `DrawPass` | `GPUDrawPass` | Immutable pass close to what the GPU facade will execute. |
 | `Renderer` / `RenderStep` | `GPURenderStep` | Geometry/coverage technique with fixed shader and state contribution. |
 | `PaintParamsKey` | `MaterialKey` | Paint/material identity; no SkSL. |
+| `ShaderCodeDictionary` | `GPUMaterialDictionary` | Interns material keys, owns WGSL snippet metadata, and produces material assembly plans; no SkSL codegen. |
+| `ShaderSnippet` | `WGSLSnippet` | Structured material WGSL function ABI with uniforms, resources, children, versions, and requirements. |
+| `ShaderNode` | `WGSLSnippetNode` | Decompressed material tree node with propagated requirements and diagnostic provenance. |
+| `UniquePaintParamsID` | `GPUMaterialProgramID` | Dictionary-local compact ID for an equivalent `MaterialKey`; not a portable identity by itself. |
 | `GraphicsPipelineDesc` | `GPURenderPipelineKey` | Render step, material, target state, fixed state, and capabilities. |
 | `ResourceProvider` | `GPUResourceProvider` | Pipelines, buffers, textures, samplers, atlases, and cache ownership. |
 | `SharedContext` / `Caps` | `GPUExecutionContext` / `GPUCapabilities` | Facade implementation, device generation, queue facts, and capability snapshot. |
@@ -193,6 +204,7 @@ legacy stateful API
   -> GPUTaskList
   -> GPUDrawPass
   -> GPURenderStep + MaterialKey
+  -> GPUMaterialDictionary + WGSLSnippetNode tree
   -> GPUBlendPlan + GPUColorPlan + GPUTargetState
   -> WGSLBindingLayout + WGSLPackingPlan
   -> GPURenderPipelineKey

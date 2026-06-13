@@ -32,6 +32,8 @@ Tests must assert:
 Tests must assert canonical preimages and hashes for:
 
 - `MaterialKey`;
+- `GPUMaterialProgramID`;
+- `GPUMaterialAssemblyPlan`;
 - `GPURenderPipelineKey`;
 - `GPUComputePipelineKey`;
 - WGSL module identity;
@@ -46,10 +48,25 @@ inputs must produce different keys.
 Promoted WGSL routes must prove:
 
 - assembled WGSL source is deterministic;
+- material WGSL routes pass through `GPUMaterialDictionary` and
+  `GPUMaterialAssemblyPlan`;
 - `wgsl4k` validation and reflection succeed;
 - binding layouts match Kotlin-side packing;
 - parser diagnostics are captured when validation fails;
 - generated modules do not depend on SkSL.
+
+### Material Dictionary Tests
+
+Tests must assert:
+
+- equivalent material descriptors produce equivalent `MaterialKey` and
+  `GPUMaterialProgramID` values within the same dictionary version;
+- unsupported snippets and child-slot shapes refuse with stable diagnostics;
+- snippet requirement propagation is deterministic and dumpable;
+- material root roles are explicit and forbidden roles refuse;
+- material assembly plans include dictionary version, snippet tree, ABI
+  contributions, and WGSL fragment versions;
+- material module assembly does not bypass registered `WGSLSnippet` metadata.
 
 ### WGSL ABI Tests
 
@@ -103,6 +120,8 @@ Evidence must include:
 - selected route count;
 - pipeline key count;
 - material key count;
+- material dictionary version and material program count;
+- material assembly plan count;
 - WGSL module validation result;
 - output artifact, checksum, diff, or readback where applicable;
 - capability facts;
@@ -187,6 +206,7 @@ Failures must be classified as:
 
 - normalization failure;
 - material-key failure;
+- material-dictionary failure;
 - WGSL validation failure;
 - pipeline-key failure;
 - resource-preparation failure;

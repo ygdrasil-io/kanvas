@@ -64,6 +64,10 @@ The slice must exercise these contracts:
 - `GPUDrawPass`;
 - `GPURenderStep`;
 - `MaterialKey`;
+- `GPUMaterialDictionary`;
+- `WGSLSnippet`;
+- `WGSLSnippetNode`;
+- `GPUMaterialProgramID`;
 - `WGSLFragment` and `WGSLModule`;
 - `WGSLBindingLayout` and `WGSLPackingPlan`;
 - `GPURenderPipelineKey`;
@@ -105,6 +109,7 @@ Solid color is accepted when:
 - color values are finite;
 - alpha and premul conventions are known;
 - color-space behavior is covered by `GPUColorPlan`;
+- `GPUMaterialDictionary` resolves the solid source snippet;
 - uniform packing is validated against WGSL reflection.
 
 Linear gradient is accepted when:
@@ -113,6 +118,8 @@ Linear gradient is accepted when:
 - stop order is normalized deterministically;
 - tile mode is supported or refused;
 - color interpolation behavior is explicit;
+- `GPUMaterialDictionary` resolves the linear-gradient source snippet and
+  local-coordinate requirements;
 - uniform layout and WGSL fragment composition validate.
 
 Unsupported color filters, blend helpers, runtime-effect children, gradient
@@ -131,6 +138,7 @@ The slice must generate or assemble complete WGSL modules for:
 Each promoted module requires:
 
 - deterministic source;
+- deterministic `GPUMaterialAssemblyPlan`;
 - complete module validation through `wgsl4k`;
 - reflection dump;
 - binding layout dump;
@@ -170,6 +178,8 @@ Minimum isolated fixtures:
 - linear-gradient rect;
 - rounded-rect solid;
 - rounded-rect linear gradient;
+- equivalent solid material descriptors producing the same
+  `GPUMaterialProgramID`;
 - empty clip producing discard or cull diagnostic;
 - opaque covering rect culling a previous covered rect;
 - unsupported perspective rect refusal;

@@ -17,6 +17,7 @@ bindings, and pipeline-layout keys that will be used at command encoding time.
 The `:gpu-renderer` core owns:
 
 - renderer WGSL fragment metadata;
+- material snippet ABI contributions from `GPUMaterialDictionary`;
 - complete `WGSLModule` and `WGSLComputeModule` assembly contracts;
 - binding layout descriptors;
 - uniform and storage layout descriptors;
@@ -153,6 +154,25 @@ Render `WGSLModule` ABI includes:
 `GPURenderPipelineKey` must include every ABI fact that affects pipeline
 validity. It must not include per-draw uniform values, buffer offsets, texture
 contents, or transient GPU handle identity.
+
+## Material Dictionary Integration
+
+`GPUMaterialDictionary` contributes material-side ABI facts through
+`WGSLSnippet` metadata and `GPUMaterialAssemblyPlan`.
+
+Rules:
+
+- snippet-declared uniforms, textures, samplers, and material-owned buffers must
+  become canonical `WGSLBindingLayout`, `WGSLUniformLayout`, and
+  `WGSLPackingPlan` entries;
+- complete module reflection must match both render-step declarations and
+  material snippet declarations;
+- material-owned resources use bind group `1` unless an accepted spec changes
+  bind group policy;
+- shared atlases, masks, and CPU-prepared artifacts stay outside the material
+  dictionary and use their accepted resource group;
+- a mismatch between snippet ABI and complete module reflection refuses the
+  route with a stable diagnostic.
 
 ## Compute Module ABI
 

@@ -24,6 +24,8 @@ render and compute keys.
 
 - `GPURenderStep` identity and version;
 - `MaterialKey` identity;
+- `GPUMaterialProgramID` plus dictionary version when a material has been
+  interned;
 - vertex layout;
 - primitive topology;
 - target color format;
@@ -91,6 +93,10 @@ Render and compute key preimages must name their key kind explicitly so a
 render and compute key with similar module/layout facts cannot collide in
 diagnostics or cache entries.
 
+Render preimages that use material WGSL must also name the
+`GPUMaterialAssemblyPlan` hash or preimage label. `GPUMaterialProgramID` alone
+is not enough because it is dictionary-local and version scoped.
+
 ## `GPUCapabilities`
 
 `GPUCapabilities` describes the selected `GPU` facade implementation and
@@ -150,7 +156,10 @@ mip-prepares pixels before upload for GPU consumption.
 
 Expected cache layers:
 
-- material module cache keyed by `MaterialKey` plus WGSL fragment versions;
+- material module cache keyed by `MaterialKey`, `GPUMaterialAssemblyPlan`,
+  dictionary version, and WGSL fragment versions;
+- material dictionary cache keyed by `MaterialKey`, dictionary version, and
+  `GPUMaterialProgramID`;
 - render pipeline cache keyed by `GPURenderPipelineKey`;
 - compute program/module cache keyed by `GPUComputeProgramKey` plus
   `WGSLComputeModule` identity;
