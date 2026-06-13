@@ -12,19 +12,51 @@ value class GPUDrawCommandID(val value: Int) {
 typealias GPUCommandId = GPUDrawCommandID
 
 /** Draw command family marker used by analysis and route diagnostics. */
-class GPUDrawCommandFamily
+enum class GPUDrawCommandFamily {
+    /** Rectangle draw family. */
+    Rect,
+    /** Rounded rectangle draw family. */
+    RRect,
+    /** Path draw family. */
+    Path,
+    /** Text draw family. */
+    Text,
+    /** Image draw family. */
+    Image,
+    /** Vertices draw family. */
+    Vertices,
+}
 
 /** Stable adapter/source provenance for a normalized draw command. */
-class GPUDrawCommandProvenance
+data class GPUDrawCommandProvenance(
+    val adapter: String,
+    val operation: String,
+    val sourceLabel: String,
+)
 
 /** Paint-order and dependency token for normalized command ordering. */
-class GPUDrawOrderingToken
+@JvmInline
+value class GPUDrawOrderingToken(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUDrawOrderingToken.value must not be blank" }
+    }
+}
 
 /** Captured conservative command bounds before route analysis. */
-class GPUCommandBounds
+data class GPUCommandBounds(
+    val bounds: GPUBounds,
+    val coordinateSpace: String,
+    val conservative: Boolean,
+)
 
 /** Immutable capture record for normalized command input state. */
-class GPUCommandCapture
+data class GPUCommandCapture(
+    val commandId: GPUDrawCommandID,
+    val family: GPUDrawCommandFamily,
+    val provenance: GPUDrawCommandProvenance,
+    val bounds: GPUCommandBounds,
+    val stateHash: String,
+)
 
 /** First-slice draw kinds accepted by the normalized command surface. */
 enum class GPUDrawKind {

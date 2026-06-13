@@ -1,61 +1,180 @@
 package org.graphiks.kanvas.gpu.renderer.geometry
 
-/** Shape descriptor consumed by geometry planning. */
-class GPUShapeDescriptor
+/** Shape descriptor captured before geometry lowering. */
+data class GPUShapeDescriptor(
+    val shapeKind: String,
+    val boundsLabel: String,
+    val antiAliasMode: String,
+    val provenance: String,
+)
 
-/** Path descriptor consumed by path and stroke planning. */
-class GPUPathDescriptor
+/** Path descriptor captured before route selection. */
+data class GPUPathDescriptor(
+    val pathKey: String,
+    val verbCount: Int,
+    val pointCount: Int,
+    val fillRule: String,
+    val inverseFill: Boolean,
+    val finiteProof: String,
+    val volatility: String,
+)
 
-/** Stroke style descriptor consumed by stroke expansion planning. */
-class GPUStrokeDescriptor
+/** Stroke descriptor captured before expansion. */
+data class GPUStrokeDescriptor(
+    val width: Float,
+    val cap: String,
+    val join: String,
+    val miter: Float,
+    val dashOrPathEffectRef: String? = null,
+)
 
-/** Accepted or refused geometry plan. */
-class GPUGeometryPlan
+/** Geometry route selected for a shape. */
+sealed interface GPUGeometryRoute {
+    /** Analytic geometry route. */
+    data class Analytic(val renderStepLabel: String) : GPUGeometryRoute
 
-/** Geometry route selected for a draw family. */
-class GPUGeometryRoute
+    /** Tessellation route. */
+    data class Tessellation(val tessellationPlanHash: String) : GPUGeometryRoute
 
-/** Bounds plan for a path route. */
-class GPUPathBoundsPlan
+    /** Stencil-cover route. */
+    data class StencilCover(val stencilPlan: GPUStencilCoverPlan) : GPUGeometryRoute
 
-/** Stroke expansion plan before render-step selection. */
-class GPUStrokeExpansionPlan
+    /** Path atlas route. */
+    data class PathAtlas(val atlasPlan: GPUPathAtlasPlan) : GPUGeometryRoute
 
-/** Stencil-cover execution plan for geometry routes. */
-class GPUStencilCoverPlan
+    /** Coverage mask route. */
+    data class CoverageMask(val atlasPlan: GPUCoverageAtlasPlan) : GPUGeometryRoute
 
-/** CPU-prepared geometry artifact plan consumed by GPU work. */
-class GPUPreparedGeometryPlan
+    /** Prepared geometry route. */
+    data class Prepared(val artifact: PrecomputedGeometryArtifact) : GPUGeometryRoute
 
-/** Geometry render-step plan for pass construction. */
-class GPUGeometryRenderStepPlan
+    /** Refused geometry route. */
+    data class Refused(val diagnostic: GPUGeometryDiagnostic) : GPUGeometryRoute
+}
 
-/** Path atlas strategy and entry plan. */
-class GPUPathAtlasPlan
+/** Geometry plan for one shape. */
+data class GPUGeometryPlan(
+    val descriptor: GPUShapeDescriptor,
+    val path: GPUPathDescriptor? = null,
+    val stroke: GPUStrokeDescriptor? = null,
+    val route: GPUGeometryRoute,
+    val diagnostics: List<GPUGeometryDiagnostic> = emptyList(),
+)
 
-/** Coverage atlas strategy and entry plan. */
-class GPUCoverageAtlasPlan
+/** Path bounds plan. */
+data class GPUPathBoundsPlan(
+    val pathKey: String,
+    val boundsLabel: String,
+    val conservative: Boolean,
+    val proofHash: String,
+)
 
-/** Atlas selection and eviction policy. */
-class GPUAtlasPolicy
+/** Stroke expansion plan. */
+data class GPUStrokeExpansionPlan(
+    val strokeDescriptorHash: String,
+    val expansionMode: String,
+    val joinsRequireFallback: Boolean,
+    val outputBoundsLabel: String,
+)
 
-/** Atlas budget policy for capacity and upload limits. */
-class GPUAtlasBudgetPolicy
+/** Stencil-cover execution plan. */
+data class GPUStencilCoverPlan(
+    val stencilStepLabel: String,
+    val coverStepLabel: String,
+    val fillRule: String,
+    val requiresMSAA: Boolean,
+)
 
-/** Reference to an atlas entry used as payload/resource fact. */
-class GPUAtlasEntryRef
+/** Prepared geometry artifact plan. */
+data class GPUPreparedGeometryPlan(
+    val artifact: PrecomputedGeometryArtifact,
+    val consumerKind: String,
+    val invalidationFacts: List<String>,
+)
 
-/** Atlas mutation plan for upload, reuse, or eviction. */
-class GPUAtlasMutationPlan
+/** Geometry render-step plan. */
+data class GPUGeometryRenderStepPlan(
+    val renderStepLabel: String,
+    val geometryClass: String,
+    val coverageClass: String,
+    val vertexLayoutHash: String,
+)
 
-/** Typed CPU-prepared path atlas artifact. */
-class PathAtlasArtifact
+/** Path atlas plan. */
+data class GPUPathAtlasPlan(
+    val atlasPolicy: GPUAtlasPolicy,
+    val entryRef: GPUAtlasEntryRef,
+    val mutationPlan: GPUAtlasMutationPlan,
+)
 
-/** Typed CPU-prepared coverage mask artifact. */
-class CoverageMaskArtifact
+/** Coverage atlas plan. */
+data class GPUCoverageAtlasPlan(
+    val atlasPolicy: GPUAtlasPolicy,
+    val entryRef: GPUAtlasEntryRef,
+    val maskArtifact: CoverageMaskArtifact,
+)
 
-/** Typed CPU-prepared geometry artifact. */
-class PrecomputedGeometryArtifact
+/** Atlas storage policy. */
+data class GPUAtlasPolicy(
+    val atlasKind: String,
+    val budget: GPUAtlasBudgetPolicy,
+    val evictionPolicy: String,
+)
 
-/** Diagnostic emitted by geometry route planning. */
-class GPUGeometryDiagnostic
+/** Atlas budget policy. */
+data class GPUAtlasBudgetPolicy(
+    val maxBytes: Long,
+    val maxEntries: Int,
+    val pressureClass: String,
+)
+
+/** Atlas entry reference. */
+@JvmInline
+value class GPUAtlasEntryRef(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUAtlasEntryRef.value must not be blank" }
+    }
+}
+
+/** Atlas mutation plan. */
+data class GPUAtlasMutationPlan(
+    val mutationId: String,
+    val entryRef: GPUAtlasEntryRef,
+    val operation: String,
+    val useTokenLabel: String,
+)
+
+/** Path atlas artifact descriptor. */
+data class PathAtlasArtifact(
+    val artifactKey: String,
+    val boundsLabel: String,
+    val generation: Long,
+    val lifetimeClass: String,
+    val budgetClass: String,
+)
+
+/** Coverage mask artifact descriptor. */
+data class CoverageMaskArtifact(
+    val artifactKey: String,
+    val boundsLabel: String,
+    val generation: Long,
+    val lifetimeClass: String,
+    val budgetClass: String,
+)
+
+/** Precomputed geometry artifact descriptor. */
+data class PrecomputedGeometryArtifact(
+    val artifactKey: String,
+    val boundsLabel: String,
+    val generation: Long,
+    val lifetimeClass: String,
+    val budgetClass: String,
+)
+
+/** Geometry diagnostic. */
+data class GPUGeometryDiagnostic(
+    val code: String,
+    val geometryLabel: String,
+    val message: String,
+    val terminal: Boolean,
+)

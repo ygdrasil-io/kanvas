@@ -1,64 +1,166 @@
 package org.graphiks.kanvas.gpu.renderer.layers
 
-/** High-level layer or saveLayer semantic plan. */
-class GPULayerPlan
+/** Layer scope identity. */
+@JvmInline
+value class GPULayerScopeID(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPULayerScopeID.value must not be blank" }
+    }
+}
 
-/** Executable lowering plan for a layer or saveLayer. */
-class GPULayerExecutionPlan
+/** Layer ordering token. */
+@JvmInline
+value class GPULayerOrderingToken(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPULayerOrderingToken.value must not be blank" }
+    }
+}
 
-/** Stable layer scope identifier. */
-class GPULayerScopeID
+/** Save-layer record captured from input state. */
+data class GPULayerSaveRecord(
+    val scopeId: GPULayerScopeID,
+    val boundsLabel: String,
+    val paintLabel: String? = null,
+    val backdropRequired: Boolean,
+)
 
-/** Captured saveLayer record. */
-class GPULayerSaveRecord
+/** Restore plan for a layer scope. */
+data class GPULayerRestorePlan(
+    val scopeId: GPULayerScopeID,
+    val compositePlanHash: String,
+    val orderingToken: GPULayerOrderingToken,
+)
 
-/** Captured restore plan for a layer. */
-class GPULayerRestorePlan
+/** Layer bounds plan. */
+data class GPULayerBoundsPlan(
+    val requestedBoundsLabel: String,
+    val deviceBoundsLabel: String,
+    val conservative: Boolean,
+)
 
-/** Conservative layer bounds plan. */
-class GPULayerBoundsPlan
+/** Layer target plan. */
+data class GPULayerTargetPlan(
+    val targetLabel: String,
+    val formatClass: String,
+    val sampleCount: Int,
+    val lifetimeClass: String,
+)
 
-/** Offscreen or parent target plan for a layer. */
-class GPULayerTargetPlan
+/** Layer initialization plan. */
+data class GPULayerInitializationPlan(
+    val clearPolicy: String,
+    val loadPolicy: String,
+    val requiresBackdropCopy: Boolean,
+)
 
-/** Layer initialization plan for clear, discard, or previous-content load. */
-class GPULayerInitializationPlan
+/** Layer backdrop plan. */
+data class GPULayerBackdropPlan(
+    val sourceLabel: String,
+    val readBoundsLabel: String,
+    val copyPolicy: String,
+)
 
-/** Backdrop capture and filtering plan. */
-class GPULayerBackdropPlan
+/** Layer source plan. */
+data class GPULayerSourcePlan(
+    val sourceLabel: String,
+    val colorTreatment: String,
+    val samplingPolicy: String,
+)
 
-/** Layer source input plan. */
-class GPULayerSourcePlan
+/** Layer filter chain plan. */
+data class GPULayerFilterChainPlan(
+    val filterGraphHash: String,
+    val intermediateCount: Int,
+    val cropPolicy: String,
+)
 
-/** Filter-chain plan attached to a layer. */
-class GPULayerFilterChainPlan
+/** Layer composite plan. */
+data class GPULayerCompositePlan(
+    val sourcePlan: GPULayerSourcePlan,
+    val blendModeLabel: String,
+    val destinationReadLabel: String? = null,
+)
 
-/** Composite plan used when restoring a layer to its parent. */
-class GPULayerCompositePlan
+/** Layer elision proof. */
+data class GPULayerElisionPlan(
+    val canElide: Boolean,
+    val proofFacts: List<String>,
+    val reasonCode: String,
+)
 
-/** Proof that a layer can be elided without changing output. */
-class GPULayerElisionPlan
+/** Layer task plan. */
+data class GPULayerTaskPlan(
+    val taskLabels: List<String>,
+    val dependencies: List<String>,
+)
 
-/** Task plan generated for layer execution. */
-class GPULayerTaskPlan
+/** Layer resource plan. */
+data class GPULayerResourcePlan(
+    val targetPlan: GPULayerTargetPlan,
+    val scratchLabels: List<String>,
+    val budgetPolicy: GPULayerBudgetPolicy,
+)
 
-/** Resource descriptor plan for layer targets and bindings. */
-class GPULayerResourcePlan
+/** Layer cache plan. */
+data class GPULayerCachePlan(
+    val cacheKey: String,
+    val invalidationFacts: List<String>,
+    val reusable: Boolean,
+)
 
-/** Ordering token for layer dependencies. */
-class GPULayerOrderingToken
+/** Layer budget policy. */
+data class GPULayerBudgetPolicy(
+    val maxBytes: Long,
+    val priorityClass: String,
+    val refusalCode: String? = null,
+)
 
-/** Cache plan for reusable layer intermediates. */
-class GPULayerCachePlan
+/** Executable layer plan. */
+sealed interface GPULayerExecutionPlan {
+    /** Layer can be elided. */
+    data class Elided(val elision: GPULayerElisionPlan) : GPULayerExecutionPlan
 
-/** Budget policy for layer allocation and nesting. */
-class GPULayerBudgetPolicy
+    /** Layer uses isolated target work. */
+    data class IsolatedTarget(val target: GPULayerTargetPlan, val tasks: GPULayerTaskPlan) : GPULayerExecutionPlan
 
-/** Low-level immutable draw layer used by pass planning. */
-class GPUDrawLayer
+    /** Layer initializes from a backdrop. */
+    data class Backdrop(val backdrop: GPULayerBackdropPlan, val initialization: GPULayerInitializationPlan) : GPULayerExecutionPlan
 
-/** Planner that maps analysis records into draw layers. */
-class GPUDrawLayerPlanner
+    /** Layer composites back into its parent. */
+    data class Composite(val composite: GPULayerCompositePlan) : GPULayerExecutionPlan
 
-/** Diagnostic emitted by layer planning. */
-class GPULayerDiagnostic
+    /** Layer planning was refused. */
+    data class Refused(val diagnostic: GPULayerDiagnostic) : GPULayerExecutionPlan
+}
+
+/** Semantic layer plan. */
+data class GPULayerPlan(
+    val saveRecord: GPULayerSaveRecord,
+    val bounds: GPULayerBoundsPlan,
+    val execution: GPULayerExecutionPlan,
+    val resources: GPULayerResourcePlan? = null,
+    val cache: GPULayerCachePlan? = null,
+    val diagnostics: List<GPULayerDiagnostic> = emptyList(),
+)
+
+/** Low-level draw-layer plan. */
+data class GPUDrawLayer(
+    val layerId: String,
+    val scopeId: GPULayerScopeID,
+    val orderBand: String,
+    val insertionLabels: List<String>,
+)
+
+/** Draw-layer planner contract. */
+interface GPUDrawLayerPlanner {
+    /** Plans low-level draw layers from semantic layer labels. */
+    fun plan(layerLabels: List<String>): List<GPUDrawLayer> = TODO("Wire GPUDrawLayerPlanner to layer ordering and pass construction")
+}
+
+/** Layer diagnostic. */
+data class GPULayerDiagnostic(
+    val code: String,
+    val scopeId: GPULayerScopeID? = null,
+    val message: String,
+    val terminal: Boolean,
+)

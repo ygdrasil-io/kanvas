@@ -1,58 +1,156 @@
 package org.graphiks.kanvas.gpu.renderer.images
 
-/** Descriptor for an image source used by material or filter routes. */
-class GPUImageSourceDescriptor
+/** Image upload artifact key. */
+@JvmInline
+value class GPUImageUploadArtifactKey(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUImageUploadArtifactKey.value must not be blank" }
+    }
+}
 
-/** Full image pipeline plan from source to GPU-consumed texture. */
-class GPUImagePipelinePlan
+/** Image source descriptor. */
+data class GPUImageSourceDescriptor(
+    val sourceId: String,
+    val sourceKind: String,
+    val sizeLabel: String,
+    val colorProfileLabel: String? = null,
+    val provenance: String,
+)
 
-/** Encoded image byte source descriptor. */
-class GPUEncodedImageSource
+/** Encoded image source descriptor. */
+data class GPUEncodedImageSource(
+    val sourceId: String,
+    val byteHash: String,
+    val containerFormat: String,
+    val frameCount: Int,
+)
 
-/** Registry of accepted Kanvas image codecs. */
-class GPUImageCodecRegistry
+/** Image codec descriptor. */
+data class GPUImageCodecDescriptor(
+    val codecName: String,
+    val supportedFormats: Set<String>,
+    val colorManagementPolicy: String,
+    val dependencyGate: String? = null,
+)
 
-/** Descriptor for one image codec implementation. */
-class GPUImageCodecDescriptor
+/** Image codec registry contract. */
+interface GPUImageCodecRegistry {
+    /** Finds a codec descriptor for an encoded source. */
+    fun findCodec(source: GPUEncodedImageSource): GPUImageCodecDescriptor? = TODO("Wire GPUImageCodecRegistry to real codec delivery")
+}
 
-/** Decode request including frame, color, and orientation facts. */
-class GPUImageDecodeRequest
+/** Image decode request. */
+data class GPUImageDecodeRequest(
+    val requestId: String,
+    val source: GPUEncodedImageSource,
+    val frameSelection: GPUImageFrameSelection,
+    val targetColorLabel: String,
+)
 
-/** Accepted or refused still-image decode plan. */
-class GPUImageDecodePlan
+/** Image decode plan. */
+data class GPUImageDecodePlan(
+    val request: GPUImageDecodeRequest,
+    val codec: GPUImageCodecDescriptor,
+    val outputPixelPlan: GPUImagePixelPlan,
+    val diagnostics: List<GPUImageDiagnostic> = emptyList(),
+)
 
-/** Decode result descriptor before upload planning. */
-class GPUImageDecodeResult
+/** Image decode result descriptor. */
+sealed interface GPUImageDecodeResult {
+    /** Decode produced a typed pixel artifact. */
+    data class Decoded(val pixelPlan: GPUImagePixelPlan, val artifactKey: GPUImageUploadArtifactKey) : GPUImageDecodeResult
 
-/** Animated image plan including frame dependency facts. */
-class GPUAnimatedImagePlan
+    /** Decode is dependency-gated. */
+    data class DependencyGated(val diagnostic: GPUImageDiagnostic) : GPUImageDecodeResult
 
-/** Metadata for one animated image frame. */
-class GPUImageFrameInfo
+    /** Decode was refused. */
+    data class Refused(val diagnostic: GPUImageDiagnostic) : GPUImageDecodeResult
+}
 
-/** Deterministic frame selection plan. */
-class GPUImageFrameSelection
+/** Animated image plan. */
+data class GPUAnimatedImagePlan(
+    val sourceId: String,
+    val frameCount: Int,
+    val timingPolicy: String,
+    val selectedFrame: GPUImageFrameSelection,
+)
 
-/** Color decode and conversion plan for image pixels. */
-class GPUImageColorDecodePlan
+/** Image frame info. */
+data class GPUImageFrameInfo(
+    val frameIndex: Int,
+    val durationMillis: Long,
+    val boundsLabel: String,
+    val disposalMode: String,
+)
 
-/** Orientation correction plan for image pixels. */
-class GPUImageOrientationPlan
+/** Image frame selection. */
+data class GPUImageFrameSelection(
+    val frameIndex: Int,
+    val timeMillis: Long? = null,
+)
 
-/** Pixel layout and alpha plan for decoded image data. */
-class GPUImagePixelPlan
+/** Image color decode plan. */
+data class GPUImageColorDecodePlan(
+    val sourceProfileLabel: String,
+    val targetProfileLabel: String,
+    val conversionPolicy: String,
+)
 
-/** Mipmap preparation and refusal plan. */
-class GPUImageMipmapPlan
+/** Image orientation plan. */
+data class GPUImageOrientationPlan(
+    val orientation: String,
+    val transformHash: String,
+    val swapsDimensions: Boolean,
+)
 
-/** Upload plan for CPU-prepared image pixels. */
-class GPUImageUploadPlan
+/** Image pixel layout plan. */
+data class GPUImagePixelPlan(
+    val width: Int,
+    val height: Int,
+    val format: String,
+    val rowBytes: Long,
+    val alphaType: String,
+)
 
-/** Stable artifact key for uploaded image pixels. */
-class GPUImageUploadArtifactKey
+/** Image mipmap plan. */
+data class GPUImageMipmapPlan(
+    val generateMipmaps: Boolean,
+    val levelCount: Int,
+    val filterPolicy: String,
+)
 
-/** Typed CPU-prepared uploaded texture artifact. */
-class UploadedTextureArtifact
+/** Image upload plan. */
+data class GPUImageUploadPlan(
+    val artifactKey: GPUImageUploadArtifactKey,
+    val pixelPlan: GPUImagePixelPlan,
+    val mipmapPlan: GPUImageMipmapPlan,
+    val uploadBudgetClass: String,
+)
 
-/** Diagnostic emitted by image pipeline planning. */
-class GPUImageDiagnostic
+/** Image pipeline plan. */
+data class GPUImagePipelinePlan(
+    val source: GPUImageSourceDescriptor,
+    val decodePlan: GPUImageDecodePlan? = null,
+    val orientationPlan: GPUImageOrientationPlan? = null,
+    val colorDecodePlan: GPUImageColorDecodePlan? = null,
+    val uploadPlan: GPUImageUploadPlan? = null,
+    val diagnostics: List<GPUImageDiagnostic> = emptyList(),
+)
+
+/** Uploaded texture artifact descriptor. */
+data class UploadedTextureArtifact(
+    val artifactKey: GPUImageUploadArtifactKey,
+    val pixelPlan: GPUImagePixelPlan,
+    val uploadPlan: GPUImageUploadPlan,
+    val generation: Long,
+    val lifetimeClass: String,
+    val diagnostics: List<GPUImageDiagnostic> = emptyList(),
+)
+
+/** Image diagnostic. */
+data class GPUImageDiagnostic(
+    val code: String,
+    val sourceId: String? = null,
+    val message: String,
+    val terminal: Boolean,
+)

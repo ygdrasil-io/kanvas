@@ -29,6 +29,30 @@ class GPURendererLayoutSurfaceTest {
         )
     }
 
+    /** Ensures the target scaffold exposes typed contracts instead of empty marker placeholders. */
+    @Test
+    fun `main scaffold declarations are typed contracts`() {
+        val placeholderDeclarations = sourceFiles()
+            .flatMap(::placeholderDeclarations)
+
+        assertTrue(
+            actual = placeholderDeclarations.isEmpty(),
+            message = "Empty placeholder declarations remain: ${placeholderDeclarations.joinToString()}",
+        )
+    }
+
+    /** Ensures public fake methods can later return normally when implemented. */
+    @Test
+    fun `main scaffold methods do not expose nothing return type`() {
+        val nothingReturns = sourceFiles()
+            .flatMap(::nothingReturnDeclarations)
+
+        assertTrue(
+            actual = nothingReturns.isEmpty(),
+            message = "Public contract methods must not return Nothing: ${nothingReturns.joinToString()}",
+        )
+    }
+
     /** Returns true when a class name resolves from the compiled test classpath. */
     private fun classExists(fqcn: String): Boolean =
         runCatching { Class.forName(fqcn) }.isSuccess
@@ -62,9 +86,38 @@ class GPURendererLayoutSurfaceTest {
         }
     }
 
+    /** Returns declarations that are still empty placeholder shells. */
+    private fun placeholderDeclarations(file: File): List<String> =
+        file.readLines().mapIndexedNotNull { index, line ->
+            val trimmed = line.trimStart()
+            if (trimmed.isPlaceholderDeclaration()) {
+                "${file.relativeTo(File(".")).path}:${index + 1}:$trimmed"
+            } else {
+                null
+            }
+        }
+
+    /** Returns public function declarations that expose Nothing as their declared return type. */
+    private fun nothingReturnDeclarations(file: File): List<String> =
+        file.readLines().mapIndexedNotNull { index, line ->
+            val trimmed = line.trimStart()
+            if (trimmed.startsWith("fun ") && ": Nothing" in trimmed) {
+                "${file.relativeTo(File(".")).path}:${index + 1}:$trimmed"
+            } else {
+                null
+            }
+        }
+
     /** Returns true when this line starts a declaration that should have KDoc. */
     private fun String.isDocumentedDeclaration(): Boolean =
         declarationPrefixes.any { startsWith(it) }
+
+    /** Returns true when this line declares a named type without a body or typed constructor. */
+    private fun String.isPlaceholderDeclaration(): Boolean =
+        placeholderDeclarationPrefixes.any { startsWith(it) } &&
+            !contains("(") &&
+            !contains("{") &&
+            !contains("=")
 
     /** Constants used by the layout surface tests. */
     private companion object {
@@ -78,6 +131,14 @@ class GPURendererLayoutSurfaceTest {
             "value class ",
             "fun ",
             "typealias ",
+        )
+
+        /** Declaration starts that cannot remain as empty placeholder shells. */
+        val placeholderDeclarationPrefixes = listOf(
+            "class ",
+            "data class ",
+            "sealed interface ",
+            "interface ",
         )
 
         /** Fully qualified class names required by the package layout target. */

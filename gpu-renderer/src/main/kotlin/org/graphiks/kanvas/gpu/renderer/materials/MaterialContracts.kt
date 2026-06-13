@@ -1,94 +1,281 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
-/** Captured paint descriptor after legacy API adaptation. */
-class GPUPaintDescriptor
+/** Stable material key. */
+@JvmInline
+value class MaterialKey(val value: String) {
+    init {
+        require(value.isNotBlank()) { "MaterialKey.value must not be blank" }
+    }
+}
 
-/** Ordered paint-pipeline plan before material key derivation. */
-class GPUPaintPipelinePlan
+/** Material program identifier. */
+@JvmInline
+value class GPUMaterialProgramID(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUMaterialProgramID.value must not be blank" }
+    }
+}
 
-/** One stage in the paint-pipeline evaluation order. */
-class GPUPaintStagePlan
+/** WGSL snippet identifier owned by the material dictionary. */
+@JvmInline
+value class WGSLSnippetID(val value: String) {
+    init {
+        require(value.isNotBlank()) { "WGSLSnippetID.value must not be blank" }
+    }
+}
 
-/** Stable paint-stage evaluation order. */
-class GPUPaintEvaluationOrder
+/** Paint evaluation order. */
+enum class GPUPaintEvaluationOrder {
+    /** Evaluate source before coverage. */
+    SourceThenCoverage,
+    /** Evaluate coverage before source. */
+    CoverageThenSource,
+}
 
-/** Descriptor for a material source such as solid, gradient, image, or runtime effect. */
-class GPUMaterialSourceDescriptor
+/** Material source kind. */
+enum class GPUMaterialSourceKind {
+    /** Solid color source. */
+    SolidColor,
+    /** Gradient source. */
+    Gradient,
+    /** Image shader source. */
+    ImageShader,
+    /** Registered runtime effect source. */
+    RuntimeEffect,
+    /** Unsupported source that must route to refusal. */
+    Unsupported,
+}
 
-/** Stable material-source family identity. */
-class GPUMaterialSourceKind
+/** Gradient kind. */
+enum class GPUGradientKind {
+    /** Linear gradient. */
+    Linear,
+    /** Radial gradient. */
+    Radial,
+    /** Sweep gradient. */
+    Sweep,
+    /** Two-point conical gradient. */
+    TwoPointConical,
+}
 
-/** Accepted or refused material-source plan. */
-class GPUMaterialSourcePlan
+/** Material tile mode. */
+enum class GPUMaterialTileMode {
+    /** Clamp to edge. */
+    Clamp,
+    /** Repeat periodically. */
+    Repeat,
+    /** Mirror periodically. */
+    Mirror,
+    /** Decal outside source bounds. */
+    Decal,
+}
+
+/** Paint descriptor captured before material lowering. */
+data class GPUPaintDescriptor(
+    val paintId: String,
+    val source: GPUMaterialSourceDescriptor,
+    val blendModeLabel: String,
+    val alpha: Float,
+    val colorSpaceLabel: String,
+)
 
 /** Solid color source plan. */
-class GPUSolidColorPlan
+data class GPUSolidColorPlan(
+    val r: Float,
+    val g: Float,
+    val b: Float,
+    val a: Float,
+    val colorSpecLabel: String,
+)
+
+/** Gradient geometry plan. */
+data class GPUGradientGeometryPlan(
+    val kind: GPUGradientKind,
+    val controlPoints: List<Float>,
+    val localMatrixHash: String? = null,
+)
+
+/** Gradient stop plan. */
+data class GPUGradientStopPlan(
+    val offset: Float,
+    val colorLabel: String,
+)
+
+/** Gradient stop storage plan. */
+data class GPUGradientStopStorePlan(
+    val stopCount: Int,
+    val storageKind: String,
+    val payloadHash: String,
+)
 
 /** Gradient source plan. */
-class GPUGradientPlan
+data class GPUGradientPlan(
+    val geometry: GPUGradientGeometryPlan,
+    val stops: List<GPUGradientStopPlan>,
+    val stopStore: GPUGradientStopStorePlan,
+    val tileMode: GPUMaterialTileMode,
+)
 
-/** Gradient family identity. */
-class GPUGradientKind
+/** Material sampling plan. */
+data class GPUMaterialSamplingPlan(
+    val tileModeX: GPUMaterialTileMode,
+    val tileModeY: GPUMaterialTileMode,
+    val filterMode: String,
+    val mipmapMode: String,
+)
 
-/** Gradient geometry descriptor and evaluation facts. */
-class GPUGradientGeometryPlan
-
-/** Gradient stop normalization and validation plan. */
-class GPUGradientStopPlan
-
-/** Gradient stop storage route and budget plan. */
-class GPUGradientStopStorePlan
-
-/** Material tile-mode identity. */
-class GPUMaterialTileMode
-
-/** Material sampling plan for image and filtered sources. */
-class GPUMaterialSamplingPlan
-
-/** Image shader material-source plan. */
-class GPUImageShaderPlan
+/** Image shader source plan. */
+data class GPUImageShaderPlan(
+    val imageSourceKey: String,
+    val sampling: GPUMaterialSamplingPlan,
+    val colorTreatment: String,
+)
 
 /** Local matrix shader wrapper plan. */
-class GPULocalMatrixShaderPlan
+data class GPULocalMatrixShaderPlan(
+    val childSourceKey: String,
+    val localMatrixHash: String,
+    val inverseAvailable: Boolean,
+)
 
-/** Shader-side blend source plan. */
-class GPUShaderBlendSourcePlan
+/** Shader blend source plan. */
+data class GPUShaderBlendSourcePlan(
+    val srcSourceKey: String,
+    val dstSourceKey: String,
+    val blendModeLabel: String,
+)
 
-/** Paint color value plan before color-management lowering. */
-class GPUPaintColorPlan
+/** Paint color plan after color management. */
+data class GPUPaintColorPlan(
+    val sourceColorLabel: String,
+    val colorUniformSlot: String,
+    val premulPolicy: String,
+)
 
-/** Durable material identity for render WGSL assembly. */
-class MaterialKey
+/** Material source descriptor union. */
+sealed interface GPUMaterialSourceDescriptor {
+    /** Source kind. */
+    val kind: GPUMaterialSourceKind
 
-/** Dictionary that interns material keys and expands snippet trees. */
-class GPUMaterialDictionary
+    /** Solid color descriptor. */
+    data class Solid(val plan: GPUSolidColorPlan) : GPUMaterialSourceDescriptor {
+        override val kind: GPUMaterialSourceKind = GPUMaterialSourceKind.SolidColor
+    }
 
-/** Dictionary-local program identifier for an interned material key. */
-class GPUMaterialProgramID
+    /** Gradient descriptor. */
+    data class Gradient(val plan: GPUGradientPlan) : GPUMaterialSourceDescriptor {
+        override val kind: GPUMaterialSourceKind = GPUMaterialSourceKind.Gradient
+    }
 
-/** Read-only material lowering context equivalent to Graphite key context. */
-class GPUMaterialLoweringContext
+    /** Image shader descriptor. */
+    data class Image(val plan: GPUImageShaderPlan) : GPUMaterialSourceDescriptor {
+        override val kind: GPUMaterialSourceKind = GPUMaterialSourceKind.ImageShader
+    }
 
-/** Explicit root set produced by material dictionary expansion. */
-class GPUMaterialRootSet
+    /** Unsupported descriptor. */
+    data class Unsupported(val reasonCode: String) : GPUMaterialSourceDescriptor {
+        override val kind: GPUMaterialSourceKind = GPUMaterialSourceKind.Unsupported
+    }
+}
 
-/** WGSL material snippet registered in the material dictionary. */
-class WGSLSnippet
+/** Material source lowering plan. */
+sealed interface GPUMaterialSourcePlan {
+    /** Accepted source lowering. */
+    data class Accepted(
+        val source: GPUMaterialSourceDescriptor,
+        val snippetId: WGSLSnippetID,
+        val payloadPlanHash: String,
+        val diagnostics: List<GPUMaterialSourceDiagnostic> = emptyList(),
+    ) : GPUMaterialSourcePlan
 
-/** Stable dictionary-local snippet identifier. */
-class WGSLSnippetID
+    /** Refused source lowering. */
+    data class Refused(val diagnostic: GPUMaterialSourceDiagnostic) : GPUMaterialSourcePlan
+}
 
-/** Node in the expanded material snippet tree. */
-class WGSLSnippetNode
+/** Paint pipeline stage plan. */
+sealed interface GPUPaintStagePlan {
+    /** Material stage. */
+    data class Material(val sourcePlan: GPUMaterialSourcePlan) : GPUPaintStagePlan
 
-/** Plan for assembling material snippet roots into a WGSL module input. */
-class GPUMaterialAssemblyPlan
+    /** Color stage. */
+    data class Color(val colorPlan: GPUPaintColorPlan) : GPUPaintStagePlan
 
-/** Payload handoff plan contributed by material-source planning. */
-class GPUMaterialSourcePayloadPlan
+    /** Refused stage. */
+    data class Refused(val diagnostic: GPUPaintPipelineDiagnostic) : GPUPaintStagePlan
+}
 
-/** Diagnostic emitted by material-source planning. */
-class GPUMaterialSourceDiagnostic
+/** Paint pipeline plan. */
+data class GPUPaintPipelinePlan(
+    val paint: GPUPaintDescriptor,
+    val evaluationOrder: GPUPaintEvaluationOrder,
+    val stages: List<GPUPaintStagePlan>,
+    val materialKey: MaterialKey,
+    val diagnostics: List<GPUPaintPipelineDiagnostic> = emptyList(),
+)
 
-/** Diagnostic emitted by paint-pipeline planning. */
-class GPUPaintPipelineDiagnostic
+/** Snapshot of material dictionary entries. */
+data class GPUMaterialDictionary(
+    val dictionaryVersion: String,
+    val snippets: List<WGSLSnippet>,
+    val rootSets: List<GPUMaterialRootSet>,
+)
+
+/** Material lowering context facts. */
+data class GPUMaterialLoweringContext(
+    val capabilityClass: String,
+    val targetFormatClass: String,
+    val dictionaryVersion: String,
+)
+
+/** Material root set used for assembly. */
+data class GPUMaterialRootSet(
+    val rootSetId: String,
+    val snippetIds: List<WGSLSnippetID>,
+    val payloadShapeHash: String,
+)
+
+/** WGSL snippet dictionary entry. */
+data class WGSLSnippet(
+    val snippetId: WGSLSnippetID,
+    val sourceHash: String,
+    val entryPoint: String,
+    val requiredBindings: List<String>,
+)
+
+/** WGSL snippet dependency node. */
+data class WGSLSnippetNode(
+    val snippetId: WGSLSnippetID,
+    val children: List<WGSLSnippetID>,
+    val evaluationOrder: Int,
+)
+
+/** Material assembly plan. */
+data class GPUMaterialAssemblyPlan(
+    val programId: GPUMaterialProgramID,
+    val rootSet: GPUMaterialRootSet,
+    val snippetGraph: List<WGSLSnippetNode>,
+    val moduleSalt: String,
+)
+
+/** Material source payload plan. */
+data class GPUMaterialSourcePayloadPlan(
+    val materialKey: MaterialKey,
+    val payloadFields: List<String>,
+    val resourceBindings: List<String>,
+)
+
+/** Material-source diagnostic. */
+data class GPUMaterialSourceDiagnostic(
+    val code: String,
+    val sourceKind: GPUMaterialSourceKind,
+    val message: String,
+    val terminal: Boolean,
+)
+
+/** Paint-pipeline diagnostic. */
+data class GPUPaintPipelineDiagnostic(
+    val code: String,
+    val paintId: String,
+    val message: String,
+    val terminal: Boolean,
+)

@@ -1,52 +1,154 @@
 package org.graphiks.kanvas.gpu.renderer.text
 
-/** GPU text run plan after pure Kotlin text shaping and layout. */
-class GPUTextRunPlan
+/** Text ordering token. */
+@JvmInline
+value class GPUTextOrderingToken(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUTextOrderingToken.value must not be blank" }
+    }
+}
 
-/** Subrun plan split by glyph representation, transform, and atlas facts. */
-class GPUTextSubRunPlan
+/** Text run plan after pure Kotlin shaping/layout. */
+data class GPUTextRunPlan(
+    val layoutId: String,
+    val glyphRunLabels: List<String>,
+    val transformLabel: String,
+    val clipLabel: String,
+    val layerLabel: String,
+    val colorLabel: String,
+    val blendLabel: String,
+    val subRuns: List<GPUTextSubRunPlan>,
+    val diagnostics: List<GPUTextDiagnostic> = emptyList(),
+)
 
-/** Route selected for a text or glyph subrun. */
-class GPUTextRoute
+/** Text sub-run plan. */
+data class GPUTextSubRunPlan(
+    val representation: String,
+    val glyphRange: IntRange,
+    val boundsLabel: String,
+    val atlasRefs: List<String>,
+    val instancePlan: GPUTextInstancePlan,
+    val ordering: GPUTextOrderingToken,
+)
 
-/** Render-step contract for text atlas or glyph rendering. */
-class GPUTextRenderStep
+/** Text route. */
+sealed interface GPUTextRoute {
+    /** A8 atlas route. */
+    data class AtlasA8(val atlas: GPUTextAtlasPlan) : GPUTextRoute
 
-/** Text atlas selection and upload plan. */
-class GPUTextAtlasPlan
+    /** SDF atlas route. */
+    data class AtlasSDF(val atlas: GPUTextAtlasPlan, val sdf: GPUTextSDFParams) : GPUTextRoute
 
-/** Binding contract for text atlas and instance data. */
-class GPUTextBinding
+    /** Outline glyph route. */
+    data class Outline(val plan: OutlineGlyphPlan) : GPUTextRoute
 
-/** Instance buffer layout plan for text rendering. */
-class GPUTextInstancePlan
+    /** Color glyph route. */
+    data class ColorGlyph(val plan: ColorGlyphPlan) : GPUTextRoute
 
-/** Signed distance field parameters for text rendering. */
-class GPUTextSDFParams
+    /** Bitmap glyph route. */
+    data class BitmapGlyph(val plan: BitmapGlyphPlan) : GPUTextRoute
 
-/** Ordering token for text upload and draw dependencies. */
-class GPUTextOrderingToken
+    /** SVG glyph route, dependency-gated until real support lands. */
+    data class SVGGlyph(val plan: SVGGlyphPlan) : GPUTextRoute
 
-/** Typed glyph atlas artifact for A8 coverage glyphs. */
-class GlyphAtlasArtifact
+    /** Text route blocked by a dependency. */
+    data class DependencyGated(val diagnostic: GPUTextDiagnostic) : GPUTextRoute
 
-/** Typed signed-distance-field glyph atlas artifact. */
-class SDFGlyphAtlasArtifact
+    /** Refused text route. */
+    data class Refused(val diagnostic: GPUTextDiagnostic) : GPUTextRoute
+}
 
-/** Glyph upload plan consumed by text atlas materialization. */
-class GlyphUploadPlan
+/** Text render step contract. */
+data class GPUTextRenderStep(
+    val stepLabel: String,
+    val routeLabel: String,
+    val pipelineKeyHash: String,
+)
 
-/** Outline glyph route plan. */
-class OutlineGlyphPlan
+/** Text atlas plan. */
+data class GPUTextAtlasPlan(
+    val atlasKind: String,
+    val atlasKey: String,
+    val pageCount: Int,
+    val budgetClass: String,
+)
 
-/** Color glyph route plan. */
-class ColorGlyphPlan
+/** Text binding plan. */
+data class GPUTextBinding(
+    val bindingLabel: String,
+    val atlasKey: String,
+    val samplerLabel: String,
+)
 
-/** Bitmap glyph route plan. */
-class BitmapGlyphPlan
+/** Text instance plan. */
+data class GPUTextInstancePlan(
+    val instanceCount: Int,
+    val instanceLayoutHash: String,
+    val payloadHash: String,
+)
 
-/** SVG glyph route plan. */
-class SVGGlyphPlan
+/** SDF text parameters. */
+data class GPUTextSDFParams(
+    val radius: Float,
+    val threshold: Float,
+    val smoothing: Float,
+)
 
-/** Diagnostic emitted by text route planning. */
-class GPUTextDiagnostic
+/** Glyph atlas artifact descriptor. */
+data class GlyphAtlasArtifact(
+    val artifactKey: String,
+    val atlasKind: String,
+    val generation: Long,
+    val lifetimeClass: String,
+)
+
+/** SDF glyph atlas artifact descriptor. */
+data class SDFGlyphAtlasArtifact(
+    val artifactKey: String,
+    val sdfParams: GPUTextSDFParams,
+    val generation: Long,
+    val lifetimeClass: String,
+)
+
+/** Glyph upload plan. */
+data class GlyphUploadPlan(
+    val artifactKey: String,
+    val glyphCount: Int,
+    val uploadBudgetClass: String,
+)
+
+/** Outline glyph plan. */
+data class OutlineGlyphPlan(
+    val glyphIds: List<Int>,
+    val pathArtifactKeys: List<String>,
+    val fillRule: String,
+)
+
+/** Color glyph plan. */
+data class ColorGlyphPlan(
+    val glyphIds: List<Int>,
+    val paletteLabel: String,
+    val layerCount: Int,
+)
+
+/** Bitmap glyph plan. */
+data class BitmapGlyphPlan(
+    val glyphIds: List<Int>,
+    val bitmapFormat: String,
+    val uploadPlan: GlyphUploadPlan,
+)
+
+/** SVG glyph plan, dependency-gated. */
+data class SVGGlyphPlan(
+    val glyphIds: List<Int>,
+    val svgDocumentKeys: List<String>,
+    val dependencyGate: String,
+)
+
+/** Text diagnostic. */
+data class GPUTextDiagnostic(
+    val code: String,
+    val layoutId: String? = null,
+    val message: String,
+    val terminal: Boolean,
+)

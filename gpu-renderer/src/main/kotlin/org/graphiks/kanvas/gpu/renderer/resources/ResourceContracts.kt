@@ -1,70 +1,198 @@
 package org.graphiks.kanvas.gpu.renderer.resources
 
-/** Provider responsible for creating and looking up GPU resources. */
-class GPUResourceProvider
-
-/** Late materialization decision for resources, pipelines, atlases, and uploads. */
-class GPUResourceMaterializationDecision
-
 /** Target-scoped coordinator for resource preparation before submission. */
-class GPUTargetPreparationContext
+data class GPUTargetPreparationContext(
+    val targetId: String,
+    val frameId: String,
+    val deviceGeneration: Long,
+    val budgetClass: String,
+)
 
 /** Texture descriptor containing topology, usage, and format facts. */
-class GPUTextureDescriptor
+data class GPUTextureDescriptor(
+    val width: Int,
+    val height: Int,
+    val format: String,
+    val usageLabels: Set<String>,
+    val sampleCount: Int = 1,
+) {
+    init {
+        require(width > 0) { "GPUTextureDescriptor.width must be positive" }
+        require(height > 0) { "GPUTextureDescriptor.height must be positive" }
+        require(format.isNotBlank()) { "GPUTextureDescriptor.format must not be blank" }
+    }
+}
 
 /** Texture view descriptor consumed by binding and resource plans. */
-class GPUTextureViewDescriptor
+data class GPUTextureViewDescriptor(
+    val textureDescriptorHash: String,
+    val viewDimension: String,
+    val mipRange: IntRange,
+    val arrayLayerRange: IntRange,
+)
 
 /** Sampler descriptor consumed by material and resource plans. */
-class GPUSamplerDescriptor
+data class GPUSamplerDescriptor(
+    val addressModeU: String,
+    val addressModeV: String,
+    val magFilter: String,
+    val minFilter: String,
+    val mipmapFilter: String,
+)
 
 /** Ownership plan for textures, imports, uploads, and surface leases. */
-class GPUTextureOwnershipPlan
-
-/** Allocation plan for a new renderer-owned texture. */
-class GPUTextureAllocationPlan
-
-/** Concrete texture reference scoped by owner and device generation. */
-class GPUTextureResourceRef
+data class GPUTextureOwnershipPlan(
+    val ownerLabel: String,
+    val lifetimeClass: String,
+    val releasePolicy: String,
+    val canAliasScratch: Boolean,
+)
 
 /** Descriptor for an imported texture handle. */
-class GPUImportedTextureDescriptor
+data class GPUImportedTextureDescriptor(
+    val externalId: String,
+    val descriptor: GPUTextureDescriptor,
+    val releasePolicy: String,
+)
 
-/** Frame-scoped surface texture lease. */
-class GPUSurfaceTextureLease
-
-/** Sampled texture binding contract. */
-class GPUSampledTextureBinding
-
-/** Deferred resource plan whose descriptor is known before allocation. */
-class GPULazyResourcePlan
-
-/** Externally promised resource plan. */
-class GPUPromiseResourcePlan
-
-/** Imported resource plan with ownership and release facts. */
-class GPUImportedResourcePlan
-
-/** Resource plan that must be revalidated on every replay. */
-class GPUVolatileResourcePlan
+/** Concrete texture reference scoped by owner and device generation. */
+@JvmInline
+value class GPUTextureResourceRef(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUTextureResourceRef.value must not be blank" }
+    }
+}
 
 /** Token ordering reads, writes, uploads, copies, and mutations. */
-class GPUUseToken
+@JvmInline
+value class GPUUseToken(val value: Long)
 
 /** Token preventing reuse while a resource has pending reads. */
-class GPUPendingReadToken
+@JvmInline
+value class GPUPendingReadToken(val value: Long)
 
 /** Token preventing reads before a pending write completes. */
-class GPUPendingWriteToken
+@JvmInline
+value class GPUPendingWriteToken(val value: Long)
 
 /** Scratch allocation token scoped to a limited lifetime. */
-class GPUScratchResourceToken
+@JvmInline
+value class GPUScratchResourceToken(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUScratchResourceToken.value must not be blank" }
+    }
+}
 
 /** Intermediate resource token for layer, filter, or destination work. */
-class GPUIntermediateResourceToken
+@JvmInline
+value class GPUIntermediateResourceToken(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUIntermediateResourceToken.value must not be blank" }
+    }
+}
+
+/** Allocation plan for a new renderer-owned texture. */
+sealed interface GPUTextureAllocationPlan {
+    /** Reuse an existing typed GPU texture reference. */
+    data class ExistingGPUResource(val ref: GPUTextureResourceRef) : GPUTextureAllocationPlan
+
+    /** Create a new texture from a descriptor. */
+    data class CreateTexture(val descriptor: GPUTextureDescriptor, val ownership: GPUTextureOwnershipPlan) : GPUTextureAllocationPlan
+
+    /** Upload pixels from a typed artifact into a texture. */
+    data class UploadFromArtifact(val artifactKey: String, val descriptor: GPUTextureDescriptor) : GPUTextureAllocationPlan
+
+    /** Import an external texture through the facade. */
+    data class ImportExternalTexture(val descriptor: GPUImportedTextureDescriptor) : GPUTextureAllocationPlan
+
+    /** Lease the current surface texture for this frame. */
+    data class LeaseSurfaceTexture(val targetId: String) : GPUTextureAllocationPlan
+
+    /** Refuse allocation before any backend work occurs. */
+    data class Refuse(val diagnostic: GPUResourceDiagnostic) : GPUTextureAllocationPlan
+}
+
+/** Late materialization decision for resources, pipelines, atlases, and uploads. */
+sealed interface GPUResourceMaterializationDecision {
+    /** Resource materialization produced concrete typed references. */
+    data class Materialized(
+        val resources: List<GPUTextureResourceRef>,
+        val diagnostics: List<GPUResourceDiagnostic> = emptyList(),
+    ) : GPUResourceMaterializationDecision
+
+    /** Resource materialization is deferred until later frame evidence exists. */
+    data class Deferred(
+        val reasonCode: String,
+        val diagnostics: List<GPUResourceDiagnostic> = emptyList(),
+    ) : GPUResourceMaterializationDecision
+
+    /** Resource materialization is refused and must be reported. */
+    data class Refused(val diagnostic: GPUResourceDiagnostic) : GPUResourceMaterializationDecision
+}
+
+/** Provider responsible for creating and looking up GPU resources. */
+interface GPUResourceProvider {
+    /** Materializes one allocation plan or refuses it explicitly. */
+    fun materialize(
+        plan: GPUTextureAllocationPlan,
+        context: GPUTargetPreparationContext,
+    ): GPUResourceMaterializationDecision = TODO("Wire GPUResourceProvider to the concrete GPU facade resource backend")
+}
+
+/** Frame-scoped surface texture lease. */
+data class GPUSurfaceTextureLease(
+    val targetId: String,
+    val resourceRef: GPUTextureResourceRef,
+    val useToken: GPUUseToken,
+)
+
+/** Sampled texture binding contract. */
+data class GPUSampledTextureBinding(
+    val bindingLabel: String,
+    val view: GPUTextureViewDescriptor,
+    val sampler: GPUSamplerDescriptor,
+    val useToken: GPUUseToken,
+)
+
+/** Deferred resource plan whose descriptor is known before allocation. */
+data class GPULazyResourcePlan(
+    val planId: String,
+    val allocation: GPUTextureAllocationPlan,
+    val invalidationFacts: List<String>,
+)
+
+/** Externally promised resource plan. */
+data class GPUPromiseResourcePlan(
+    val promiseId: String,
+    val expectedDescriptor: GPUTextureDescriptor,
+    val timeoutPolicy: String,
+)
+
+/** Imported resource plan with ownership and release facts. */
+data class GPUImportedResourcePlan(
+    val descriptor: GPUImportedTextureDescriptor,
+    val ownership: GPUTextureOwnershipPlan,
+)
+
+/** Resource plan that must be revalidated on every replay. */
+data class GPUVolatileResourcePlan(
+    val planId: String,
+    val reasonCode: String,
+    val revalidationFacts: List<String>,
+)
 
 /** Diagnostic emitted by texture ownership or binding planning. */
-class GPUTextureDiagnostic
+data class GPUTextureDiagnostic(
+    val code: String,
+    val textureLabel: String,
+    val message: String,
+    val terminal: Boolean,
+)
 
 /** Diagnostic emitted by generic resource materialization. */
-class GPUResourceDiagnostic
+data class GPUResourceDiagnostic(
+    val code: String,
+    val resourceLabel: String,
+    val message: String,
+    val terminal: Boolean,
+)

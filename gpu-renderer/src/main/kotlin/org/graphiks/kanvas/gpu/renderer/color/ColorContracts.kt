@@ -1,43 +1,113 @@
 package org.graphiks.kanvas.gpu.renderer.color
 
-/** Complete color-management route plan for a command or target. */
-class GPUColorManagementPlan
+/** Color-space descriptor used by color planning. */
+data class GPUColorSpaceDescriptor(
+    val name: String,
+    val primaries: String,
+    val transferFunction: String,
+    val whitePoint: String,
+)
 
-/** Typed color value metadata including color space and alpha domain. */
-class GPUColorValueSpec
+/** External or embedded color profile descriptor. */
+data class GPUColorProfileDescriptor(
+    val sourceKind: String,
+    val profileId: String,
+    val profileHash: String,
+)
 
-/** Stable descriptor for a color space. */
-class GPUColorSpaceDescriptor
+/** Color value representation. */
+data class GPUColorValueSpec(
+    val componentCount: Int,
+    val colorSpace: GPUColorSpaceDescriptor,
+    val alphaType: String,
+    val numericEncoding: String,
+)
 
-/** Stable descriptor for an ICC, CICP, or related profile source. */
-class GPUColorProfileDescriptor
+/** Color transform plan. */
+data class GPUColorTransformPlan(
+    val transformKey: String,
+    val matrixValues: List<Float>,
+    val precisionPolicy: String,
+)
 
-/** Plan for converting color values between spaces. */
-class GPUColorConversionPlan
+/** Color conversion plan between source and destination spaces. */
+data class GPUColorConversionPlan(
+    val source: GPUColorSpaceDescriptor,
+    val destination: GPUColorSpaceDescriptor,
+    val transform: GPUColorTransformPlan,
+    val policy: String,
+    val refusalCode: String? = null,
+)
 
-/** Concrete transform plan used by CPU oracle or WGSL helpers. */
-class GPUColorTransformPlan
+/** Working color-space plan. */
+data class GPUWorkingColorSpacePlan(
+    val space: GPUColorSpaceDescriptor,
+    val reason: String,
+    val highPrecision: Boolean,
+)
 
-/** Working color-space decision for material and filter evaluation. */
-class GPUWorkingColorSpacePlan
+/** Gradient interpolation color plan. */
+data class GPUGradientColorPlan(
+    val interpolationSpace: GPUColorSpaceDescriptor,
+    val hueMethod: String,
+    val premulInterpolation: Boolean,
+    val stopStorePolicy: String,
+)
 
-/** Gradient interpolation and stop color behavior plan. */
-class GPUGradientColorPlan
+/** Color uniform packing plan. */
+data class GPUColorUniformPlan(
+    val slotName: String,
+    val valueSpecs: List<GPUColorValueSpec>,
+    val packingPolicy: String,
+    val dynamicValueCount: Int,
+)
 
-/** Uniform layout and payload plan for runtime color values. */
-class GPUColorUniformPlan
+/** HDR color plan. */
+data class GPUHDRColorPlan(
+    val enabled: Boolean,
+    val transferFunction: String,
+    val maxNits: Float? = null,
+    val refusalCode: String? = null,
+)
 
-/** HDR handling and refusal plan. */
-class GPUHDRColorPlan
+/** Gainmap handling plan. */
+data class GPUGainmapPlan(
+    val kind: String,
+    val baseSpace: GPUColorSpaceDescriptor,
+    val alternateSpace: GPUColorSpaceDescriptor? = null,
+    val metadataHash: String? = null,
+    val supported: Boolean,
+)
 
-/** Gainmap handling and refusal plan. */
-class GPUGainmapPlan
+/** Target store conversion plan. */
+data class GPUColorStorePlan(
+    val targetSpace: GPUColorSpaceDescriptor,
+    val conversion: GPUColorConversionPlan? = null,
+    val quantization: String,
+    val dither: Boolean,
+)
 
-/** Final color store conversion plan. */
-class GPUColorStorePlan
+/** Color cache invalidation plan. */
+data class GPUColorCachePlan(
+    val cacheKey: String,
+    val dependentProfileIds: List<String>,
+    val invalidationFacts: List<String>,
+)
 
-/** Cache key and invalidation facts for color transforms. */
-class GPUColorCachePlan
+/** Color-management plan for one material or target. */
+data class GPUColorManagementPlan(
+    val inputSpec: GPUColorValueSpec,
+    val workingSpace: GPUWorkingColorSpacePlan,
+    val conversion: GPUColorConversionPlan? = null,
+    val store: GPUColorStorePlan,
+    val diagnostics: List<GPUColorDiagnostic> = emptyList(),
+)
 
-/** Diagnostic emitted by color-management planning. */
-class GPUColorDiagnostic
+/** Color planning diagnostic. */
+data class GPUColorDiagnostic(
+    val code: String,
+    val severity: String,
+    val message: String,
+    val facts: Map<String, String> = emptyMap(),
+    val isTerminal: Boolean,
+)

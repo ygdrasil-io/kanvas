@@ -1,19 +1,53 @@
 package org.graphiks.kanvas.gpu.renderer.telemetry
 
-/** Ledger of renderer counters and evidence observations. */
-class GPUTelemetryLedger
+/** Counter observed by GPU renderer telemetry. */
+data class GPUTelemetryCounter(
+    val name: String,
+    val value: Long,
+    val unit: String,
+    val scope: String,
+)
 
-/** Individual named telemetry counter. */
-class GPUTelemetryCounter
+/** Cache telemetry facts. */
+data class GPUCacheTelemetry(
+    val cacheName: String,
+    val hits: Long,
+    val misses: Long,
+    val evictions: Long,
+    val residentBytes: Long,
+    val pressureBytes: Long,
+)
 
-/** Cache telemetry grouped by renderer cache domain. */
-class GPUCacheTelemetry
+/** Budget telemetry facts. */
+data class GPUBudgetTelemetry(
+    val budgetName: String,
+    val requested: Long,
+    val limit: Long,
+    val unit: String,
+    val exceeded: Boolean,
+)
 
-/** Budget telemetry for route, resource, and artifact decisions. */
-class GPUBudgetTelemetry
+/** Evidence gathered for feature promotion. */
+data class GPUPromotionEvidence(
+    val evidenceId: String,
+    val routeKindLabel: String,
+    val artifactPaths: List<String>,
+    val diagnosticCodes: List<String>,
+)
 
-/** Evidence record used when promoting renderer support. */
-class GPUPromotionEvidence
+/** Performance gate observation, not a route decision. */
+data class GPUPerformanceGate(
+    val gateName: String,
+    val metricName: String,
+    val threshold: Double,
+    val comparator: String,
+    val status: String,
+)
 
-/** Performance gate definition for promoted GPU renderer routes. */
-class GPUPerformanceGate
+/** Telemetry ledger for one renderer scope. */
+data class GPUTelemetryLedger(
+    val counters: List<GPUTelemetryCounter>,
+    val cacheTelemetry: List<GPUCacheTelemetry>,
+    val budgetTelemetry: List<GPUBudgetTelemetry>,
+    val promotionEvidence: List<GPUPromotionEvidence>,
+)

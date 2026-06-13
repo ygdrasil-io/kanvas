@@ -1,34 +1,125 @@
 package org.graphiks.kanvas.gpu.renderer.wgsl
 
-/** WGSL fragment descriptor before complete module assembly. */
-class WGSLFragment
-
-/** Complete render WGSL module descriptor and source identity. */
-class WGSLModule
-
-/** Complete compute WGSL module descriptor and source identity. */
-class WGSLComputeModule
-
 /** Stable hash for a complete WGSL module. */
-class WGSLModuleHash
+@JvmInline
+value class WGSLModuleHash(val value: String) {
+    init {
+        require(value.isNotBlank()) { "WGSLModuleHash.value must not be blank" }
+    }
+}
 
-/** Reflection result produced by WGSL validation. */
-class WGSLReflectionResult
+/** WGSL binding layout descriptor. */
+data class WGSLBindingLayout(
+    val group: Int,
+    val binding: Int,
+    val visibility: Set<String>,
+    val resourceKind: String,
+    val access: String,
+    val minBindingSize: Long? = null,
+    val dynamicOffset: Boolean = false,
+    val layoutRole: String,
+    val diagnosticLabel: String,
+)
 
-/** Bind group and binding layout contract. */
-class WGSLBindingLayout
+/** WGSL uniform layout descriptor. */
+data class WGSLUniformLayout(
+    val layoutHash: String,
+    val fields: List<String>,
+    val sizeBytes: Long,
+    val alignment: Int,
+    val stride: Int? = null,
+    val numericRepresentation: String,
+)
 
-/** Uniform buffer layout and alignment contract. */
-class WGSLUniformLayout
+/** WGSL storage layout descriptor. */
+data class WGSLStorageLayout(
+    val layoutHash: String,
+    val fields: List<String>,
+    val sizeBytes: Long,
+    val alignment: Int,
+    val stride: Int,
+    val numericRepresentation: String,
+)
 
-/** Storage buffer or storage texture layout contract. */
-class WGSLStorageLayout
+/** WGSL resource binding plan. */
+data class WGSLResourceBindingPlan(
+    val planHash: String,
+    val bindGroupRole: String,
+    val bindings: List<WGSLBindingLayout>,
+    val dynamicOffsetPolicy: String,
+)
 
-/** Resource binding plan matched against WGSL reflection. */
-class WGSLResourceBindingPlan
+/** Kotlin-to-WGSL packing ABI plan. */
+data class WGSLPackingPlan(
+    val planHash: String,
+    val layoutHash: String,
+    val fieldOrder: List<String>,
+    val offsets: Map<String, Long>,
+    val paddingBytes: Long,
+    val dynamicOffsetAlignment: Int,
+)
 
-/** Kotlin-side payload packing plan for WGSL layouts. */
-class WGSLPackingPlan
+/** WGSL reflection result accepted or rejected by validation. */
+sealed interface WGSLReflectionResult {
+    /** Reflection accepted for a module. */
+    data class Accepted(
+        val moduleHash: WGSLModuleHash,
+        val bindings: List<WGSLBindingLayout>,
+        val uniforms: List<WGSLUniformLayout>,
+        val storage: List<WGSLStorageLayout>,
+        val diagnostics: List<WGSLValidationDiagnostic> = emptyList(),
+    ) : WGSLReflectionResult
 
-/** Diagnostic emitted by WGSL validation or reflection. */
-class WGSLValidationDiagnostic
+    /** Reflection rejected for a module. */
+    data class Rejected(
+        val moduleHash: WGSLModuleHash?,
+        val diagnostics: List<WGSLValidationDiagnostic>,
+    ) : WGSLReflectionResult
+}
+
+/** WGSL fragment assembled by a domain planner. */
+data class WGSLFragment(
+    val fragmentId: String,
+    val stage: String,
+    val sourceHash: String,
+    val entryPoints: List<String>,
+    val bindingLayouts: List<WGSLBindingLayout>,
+    val uniformLayouts: List<WGSLUniformLayout>,
+    val storageLayouts: List<WGSLStorageLayout>,
+    val requiredFeatures: List<String>,
+    val diagnosticLabel: String,
+)
+
+/** Complete WGSL render module contract. */
+data class WGSLModule(
+    val moduleHash: WGSLModuleHash,
+    val entryPoint: String,
+    val fragments: List<WGSLFragment>,
+    val bindings: List<WGSLBindingLayout>,
+    val uniformLayouts: List<WGSLUniformLayout>,
+    val storageLayouts: List<WGSLStorageLayout>,
+    val reflection: WGSLReflectionResult,
+    val rendererVersionSalt: String,
+)
+
+/** Complete WGSL compute module contract. */
+data class WGSLComputeModule(
+    val moduleHash: WGSLModuleHash,
+    val entryPoint: String,
+    val fragments: List<WGSLFragment>,
+    val bindings: List<WGSLBindingLayout>,
+    val uniformLayouts: List<WGSLUniformLayout>,
+    val storageLayouts: List<WGSLStorageLayout>,
+    val reflection: WGSLReflectionResult,
+    val workgroupPolicy: String,
+    val resourceAccessPolicy: String,
+)
+
+/** WGSL validation diagnostic. */
+data class WGSLValidationDiagnostic(
+    val code: String,
+    val moduleHash: WGSLModuleHash? = null,
+    val fieldOrBinding: String? = null,
+    val message: String,
+    val terminal: Boolean,
+)

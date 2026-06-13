@@ -42,7 +42,22 @@ class GPUValidationFixture {
 }
 
 /** Validation report emitted by tests or PM evidence tooling. */
-class GPUValidationReport
+data class GPUValidationReport(
+    val name: String,
+    val status: GPUValidationStatus,
+    val dumps: List<GPUContractDump>,
+    val diagnostics: List<String> = emptyList(),
+)
+
+/** Validation status for PM evidence and contract gates. */
+enum class GPUValidationStatus {
+    /** Evidence satisfies the target gate. */
+    Passed,
+    /** Evidence fails the target gate. */
+    Failed,
+    /** Evidence is incomplete for the target gate. */
+    Incomplete,
+}
 
 /** Deterministic dump of renderer concept ownership evidence. */
 data class GPUContractDump(
@@ -64,10 +79,16 @@ data class GPUContractDump(
 }
 
 /** Deterministic dump of a key preimage. */
-class GPUKeyPreimageDump
+data class GPUKeyPreimageDump(
+    val kind: String,
+    val entries: List<GPUContractDump.Entry>,
+)
 
 /** Deterministic dump of WGSL reflection facts. */
-class GPUWGSLReflectionDump
+data class GPUWGSLReflectionDump(
+    val moduleHash: String,
+    val bindings: List<GPUContractDump.Entry>,
+)
 
 /** Validation check for package ownership and dependency boundaries. */
 class GPUPackageBoundaryCheck {
@@ -106,8 +127,20 @@ class GPUForbiddenImportCheck {
             .sorted()
 }
 
+/** Promotion-gate result produced from validation evidence. */
+data class GPUValidationGateResult(
+    val gateName: String,
+    val passed: Boolean,
+    val missingEvidence: List<String> = emptyList(),
+    val diagnostics: List<String> = emptyList(),
+)
+
 /** Validation check for promotion-gate evidence. */
-class GPUPromotionGateCheck
+class GPUPromotionGateCheck {
+    /** Evaluates promotion evidence without inventing fake acceptance. */
+    fun evaluate(report: GPUValidationReport): GPUValidationGateResult =
+        TODO("Wire GPUPromotionGateCheck to concrete PM evidence gates for ${report.name}")
+}
 
 /** Parsed facts needed by lightweight package-boundary validation. */
 private data class GPUKotlinSource(

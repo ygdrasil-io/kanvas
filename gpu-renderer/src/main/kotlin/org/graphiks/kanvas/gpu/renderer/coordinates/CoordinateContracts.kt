@@ -1,31 +1,95 @@
 package org.graphiks.kanvas.gpu.renderer.coordinates
 
-/** Coordinate space label used by transform and bounds plans. */
-class GPUCoordinateSpace
+/** Coordinate spaces used by GPU renderer planning. */
+enum class GPUCoordinateSpace {
+    /** Local command coordinates before captured transforms. */
+    Local,
+    /** Layer-local coordinates after saveLayer transforms. */
+    Layer,
+    /** Device pixel coordinates. */
+    Device,
+    /** Texture coordinates in texel space. */
+    Texture,
+    /** Normalized device coordinates. */
+    NormalizedDevice,
+}
 
-/** Classified transform chain accepted or refused by a route. */
-class GPUTransformPlan
+/** Bounds rounding policy for conservative GPU planning. */
+enum class GPURoundingPlan {
+    /** Leave bounds unchanged. */
+    None,
+    /** Round lower edges down and upper edges up. */
+    Out,
+    /** Round to nearest pixel grid. */
+    Nearest,
+}
 
-/** Inverse-transform availability and precision plan. */
-class GPUInverseTransformPlan
+/** Proof that bounds remain conservative after transformations. */
+data class GPUBoundsProof(
+    val sourceLabel: String,
+    val operations: List<String>,
+    val conservative: Boolean,
+    val overflowChecked: Boolean,
+)
 
-/** Pixel-grid alignment and snapping policy. */
-class GPUPixelGridPlan
+/** Conservative bounds plan in one coordinate space. */
+data class GPUBoundsPlan(
+    val space: GPUCoordinateSpace,
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+    val rounding: GPURoundingPlan,
+    val proof: GPUBoundsProof,
+)
 
-/** Conservative bounds plan for a command, layer, or resource. */
-class GPUBoundsPlan
+/** Inverse transform facts used for shader-local evaluation. */
+data class GPUInverseTransformPlan(
+    val available: Boolean,
+    val matrixValues: List<Float>,
+    val precision: String,
+    val refusalCode: String? = null,
+)
 
-/** Proof record for conservative bounds correctness. */
-class GPUBoundsProof
+/** Transform plan between two renderer coordinate spaces. */
+data class GPUTransformPlan(
+    val from: GPUCoordinateSpace,
+    val to: GPUCoordinateSpace,
+    val classification: String,
+    val matrixValues: List<Float>,
+    val inverse: GPUInverseTransformPlan? = null,
+)
 
-/** Rounding policy used when moving between float and integer bounds. */
-class GPURoundingPlan
+/** Pixel-grid convention used by coverage and sampling. */
+data class GPUPixelGridPlan(
+    val space: GPUCoordinateSpace,
+    val originX: Float,
+    val originY: Float,
+    val pixelCenterConvention: String,
+    val snappingPolicy: String,
+)
 
-/** Proof that clip reduction preserves correctness. */
-class GPUClipReductionProof
+/** Proof that clip reduction preserves coverage. */
+data class GPUClipReductionProof(
+    val originalBoundsLabel: String,
+    val reducedBoundsLabel: String,
+    val preservesCoverage: Boolean,
+    val proofFacts: Map<String, String> = emptyMap(),
+)
 
-/** Payload contract for coordinate data consumed by WGSL. */
-class GPUCoordinatePayloadPlan
+/** Coordinate payload required by a shader or render step. */
+data class GPUCoordinatePayloadPlan(
+    val space: GPUCoordinateSpace,
+    val transformKey: String,
+    val uniformNames: List<String>,
+    val precisionPolicy: String,
+)
 
-/** Diagnostic emitted by transform or bounds planning. */
-class GPUTransformDiagnostic
+/** Diagnostic emitted by transform or coordinate planning. */
+data class GPUTransformDiagnostic(
+    val code: String,
+    val severity: String,
+    val message: String,
+    val space: GPUCoordinateSpace? = null,
+    val isTerminal: Boolean,
+)

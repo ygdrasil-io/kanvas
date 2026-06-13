@@ -1,46 +1,136 @@
 package org.graphiks.kanvas.gpu.renderer.payloads
 
-/** Gathers per-draw and per-pass payload values. */
-class GPUPayloadGatherer
+/** Opaque payload slot identifier. */
+@JvmInline
+value class GPUPayloadSlotID(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUPayloadSlotID.value must not be blank" }
+    }
+}
 
-/** Plan for gathering payload values for a route. */
-class GPUPayloadGatherPlan
+/** Stable payload fingerprint. */
+@JvmInline
+value class GPUPayloadFingerprint(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUPayloadFingerprint.value must not be blank" }
+    }
+}
 
-/** Write plan for one payload value or block. */
-class GPUPayloadWritePlan
+/** Material payload facts gathered before upload. */
+data class GPUMaterialPayload(
+    val materialKeyHash: String,
+    val payloadClass: String,
+    val valueFacts: Map<String, String>,
+    val resourceFacts: Map<String, String>,
+    val diagnosticLabel: String,
+)
 
-/** Material payload block consumed by render WGSL. */
-class GPUMaterialPayload
+/** Payload gather plan. */
+data class GPUPayloadGatherPlan(
+    val planHash: String,
+    val commandFamily: String,
+    val materialAssemblyHash: String,
+    val renderStepIdentity: String,
+    val writePlanHash: String,
+    val bindingPlanHash: String,
+    val uploadPlanHash: String,
+    val dedupScope: String,
+    val unsupportedReason: String? = null,
+)
 
-/** Pass-local payload slot identifier. */
-class GPUPayloadSlotID
+/** Payload write plan for one draw or pass. */
+data class GPUPayloadWritePlan(
+    val planHash: String,
+    val packingPlanHash: String,
+    val bindingLayoutHash: String,
+    val fieldWriteOrder: List<String>,
+    val sourceValuePaths: List<String>,
+    val resourceBindingOrder: List<String>,
+)
 
-/** Uniform payload block descriptor. */
-class GPUUniformPayloadBlock
+/** Uniform payload block prepared for upload. */
+data class GPUUniformPayloadBlock(
+    val fingerprint: GPUPayloadFingerprint,
+    val packingPlanHash: String,
+    val byteSize: Long,
+    val zeroedPadding: Boolean,
+    val scope: String,
+)
 
-/** Uniform payload slot descriptor. */
-class GPUUniformPayloadSlot
+/** Uniform payload slot binding. */
+data class GPUUniformPayloadSlot(
+    val slotId: GPUPayloadSlotID,
+    val fingerprint: GPUPayloadFingerprint,
+    val byteOffset: Long,
+)
 
-/** Resource binding block descriptor. */
-class GPUResourceBindingBlock
+/** Resource binding block prepared for a pass. */
+data class GPUResourceBindingBlock(
+    val fingerprint: GPUPayloadFingerprint,
+    val bindingPlanHash: String,
+    val bindingCount: Int,
+    val resourceDescriptorLabels: List<String>,
+    val dynamicOffsets: List<Long> = emptyList(),
+)
 
-/** Resource binding slot descriptor. */
-class GPUResourceBindingSlot
+/** Resource binding slot. */
+data class GPUResourceBindingSlot(
+    val slotId: GPUPayloadSlotID,
+    val fingerprint: GPUPayloadFingerprint,
+    val bindingIndex: Int,
+)
 
-/** Binding plan from payload slots to GPU bindings. */
-class GPUPayloadBindingPlan
+/** Payload binding plan. */
+data class GPUPayloadBindingPlan(
+    val planHash: String,
+    val bindGroupRole: String,
+    val bindingOrder: List<String>,
+    val resourceClasses: List<String>,
+    val dynamicOffsetPolicy: String,
+)
 
-/** Upload plan for payload buffers and bindings. */
-class GPUPayloadUploadPlan
+/** Payload upload plan. */
+data class GPUPayloadUploadPlan(
+    val planHash: String,
+    val byteRanges: List<LongRange>,
+    val stagingScope: String,
+    val budgetClass: String,
+    val beforeUseToken: String,
+)
 
-/** Fingerprint for pass-local payload deduplication. */
-class GPUPayloadFingerprint
+/** Gradient payload storage plan. */
+data class GPUGradientPayloadStore(
+    val fingerprint: GPUPayloadFingerprint,
+    val stopCount: Int,
+    val storageLayoutHash: String,
+    val byteSize: Long,
+    val passLocalOffset: Long,
+    val uploadPlanHash: String,
+)
 
-/** Storage route for gradient stop payloads. */
-class GPUGradientPayloadStore
+/** Reference from a draw invocation to pass-local payload. */
+data class GPUDrawPayloadRef(
+    val commandIdValue: Int,
+    val renderStepIdentity: String,
+    val uniformSlot: GPUUniformPayloadSlot? = null,
+    val resourceSlot: GPUResourceBindingSlot? = null,
+    val gradientStore: GPUGradientPayloadStore? = null,
+)
 
-/** Reference from a draw to a gathered payload slot. */
-class GPUDrawPayloadRef
+/** Payload gathering contract. */
+interface GPUPayloadGatherer {
+    /** Gathers one payload reference without uploading it. */
+    fun gather(plan: GPUPayloadGatherPlan, payload: GPUMaterialPayload): GPUDrawPayloadRef = TODO("Wire GPUPayloadGatherer to concrete payload packing")
 
-/** Diagnostic emitted by payload gathering or packing. */
-class GPUPayloadDiagnostic
+    /** Resets pass-local state for a payload scope. */
+    fun reset(scopeId: String): Unit = TODO("Wire GPUPayloadGatherer.reset to pass-local payload storage")
+}
+
+/** Payload diagnostic. */
+data class GPUPayloadDiagnostic(
+    val code: String,
+    val planHash: String? = null,
+    val slotId: GPUPayloadSlotID? = null,
+    val field: String? = null,
+    val terminal: Boolean,
+)
