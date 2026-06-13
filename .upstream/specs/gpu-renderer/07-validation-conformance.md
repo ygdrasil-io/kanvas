@@ -51,6 +51,36 @@ Promoted WGSL routes must prove:
 - parser diagnostics are captured when validation fails;
 - generated modules do not depend on SkSL.
 
+### WGSL ABI Tests
+
+Tests must assert:
+
+- bind group role and binding-number determinism;
+- uniform, storage, texture, and sampler layout preimages;
+- Kotlin packing offsets, sizes, alignment, and padding;
+- reflection mismatch refusals;
+- render and compute key preimages include ABI hashes.
+
+### Blend And Color Tests
+
+Tests must assert:
+
+- `GPUBlendPlan` dumps for promoted blend modes;
+- `GPUColorPlan` dumps for promoted color and alpha behavior;
+- `GPUTargetState` key contribution;
+- refusal for unsupported destination-read or color-conversion paths;
+- layer elision only when blend and color plans prove equivalence.
+
+### Execution And Submission Tests
+
+Tests must assert:
+
+- execution context and target dumps;
+- device-generation validation;
+- render, compute, copy, upload, and readback scope legality when used;
+- stale resource refusal or rebuild behavior;
+- skipped readback or timing lanes are reported explicitly.
+
 ### Route Policy Tests
 
 Tests must cover:
@@ -111,7 +141,11 @@ PM/report artifacts must show:
 - stable unsupported reasons;
 - representative support artifacts;
 - GPU capability facts;
+- execution context and device-generation facts;
+- WGSL ABI validation status;
+- blend/color/target-state plan counts;
 - cache and pipeline counters when performance is claimed;
+- telemetry and performance-gate state when realtime readiness is claimed;
 - known limitations.
 
 Reports must distinguish:
@@ -132,6 +166,8 @@ A route can be promoted only when:
 - GPU evidence exists for GPU support claims;
 - CPU reference or explicit refusal evidence exists;
 - route diagnostics are stable;
+- WGSL ABI, blend/color, target-state, and execution assumptions are validated
+  for the route;
 - PM/report artifacts expose support and refusal state;
 - rollback to the legacy path is documented for migrated slices.
 
@@ -156,6 +192,10 @@ Failures must be classified as:
 - resource-preparation failure;
 - command-encoding failure;
 - GPU execution/readback failure;
+- WGSL ABI mismatch;
+- blend/color plan refusal;
+- execution context or device-generation failure;
+- performance gate failure;
 - CPU oracle mismatch;
 - explicit unsupported feature.
 

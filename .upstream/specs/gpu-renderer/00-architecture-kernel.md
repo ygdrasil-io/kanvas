@@ -39,7 +39,11 @@ The module owns:
 - sort-key generation;
 - material and pipeline keys;
 - WGSL module assembly requests;
+- WGSL layout and binding ABI contracts;
+- blend, color, and target-state planning;
 - resource-provider contracts;
+- GPU execution context and submission contracts;
+- telemetry, cache, and performance-gate contracts;
 - route selection and diagnostics.
 
 The module must not own:
@@ -69,8 +73,11 @@ responsibilities:
 - `materials`
 - `pipelines`
 - `resources`
+- `execution`
+- `state`
 - `routing`
 - `diagnostics`
+- `telemetry`
 - `wgsl`
 
 Specs should document Graphite equivalents in an equivalence table for
@@ -98,6 +105,22 @@ Public concept names in the new renderer use uppercase acronyms:
 - `GPURenderStep`
 - `GPUResourceProvider`
 - `GPUCapabilities`
+- `GPUExecutionContext`
+- `GPUSharedScope`
+- `GPURecorderScope`
+- `GPUFrameScope`
+- `GPUAtlasScope`
+- `GPUCommandSubmission`
+- `GPUSurfaceTarget`
+- `GPUReadbackRequest`
+- `WGSLBindingLayout`
+- `WGSLUniformLayout`
+- `WGSLPackingPlan`
+- `GPUBlendPlan`
+- `GPUColorPlan`
+- `GPUTargetState`
+- `GPUTelemetryLedger`
+- `GPUPerformanceGate`
 - `GPUNative`
 - `CPUPreparedGPU`
 - `CPUReferenceOnly`
@@ -142,6 +165,11 @@ into a narrower GPU renderer value object.
 | `PaintParamsKey` | `MaterialKey` | Paint/material identity; no SkSL. |
 | `GraphicsPipelineDesc` | `GPURenderPipelineKey` | Render step, material, target state, fixed state, and capabilities. |
 | `ResourceProvider` | `GPUResourceProvider` | Pipelines, buffers, textures, samplers, atlases, and cache ownership. |
+| `SharedContext` / `Caps` | `GPUExecutionContext` / `GPUCapabilities` | Facade implementation, device generation, queue facts, and capability snapshot. |
+| `CommandBuffer` / `QueueManager` | `GPUCommandSubmission` | Encoded command scopes, submission result, readback, and device-loss diagnostics. |
+| `RenderPassDesc` | `GPUTargetState` | Attachment format, load/store, sample count, write state, and target assumptions. |
+| `Uniform` / pipeline data gathering | `WGSLUniformLayout` / `WGSLPackingPlan` | WGSL reflection-backed ABI and Kotlin packing; no SkSL type ownership. |
+| `GlobalCache` / recorder-local resources | `GPUSharedScope` / `GPURecorderScope` | Conceptual scope split for cache and transient resource lifetimes. |
 
 The mapping is conceptual. Kanvas is not required to preserve Graphite class
 names, inheritance, virtual dispatch shape, backend plugin model, or task
@@ -161,8 +189,11 @@ legacy stateful API
   -> GPUTaskList
   -> GPUDrawPass
   -> GPURenderStep + MaterialKey
+  -> GPUBlendPlan + GPUColorPlan + GPUTargetState
+  -> WGSLBindingLayout + WGSLPackingPlan
   -> GPURenderPipelineKey
   -> GPUResourceProvider
+  -> GPUExecutionContext + GPUCommandSubmission
   -> GPU facade command submission
 ```
 
@@ -182,8 +213,8 @@ diffs, diagnostics, and conformance evidence.
 
 `CPUPreparedGPU` is allowed only when CPU work prepares an artifact that the
 GPU consumes, such as a coverage mask, path atlas entry, uploaded texture,
-geometry buffer, or uniform payload. It must not become silent full CPU
-rendering.
+geometry buffer, or another registered typed artifact. It must not become
+silent full CPU rendering.
 
 ## WGSL-Only Shader Implementation
 
@@ -242,6 +273,10 @@ The architecture kernel can be treated as accepted only when:
 - cleanup tickets prove no render changes;
 - isolated `:gpu-renderer` tests pass before `gpu-raster` integration;
 - complete GPU-submitted WGSL modules validate through `wgsl4k`;
+- WGSL binding layouts, reflection, and Kotlin packing plans match;
+- blend/color/target-state plans are explicit for promoted routes;
+- execution-context and device-generation assumptions are tested;
+- telemetry distinguishes correctness support from performance readiness;
 - the first promoted route reports `GPUNative`, `CPUPreparedGPU`, or
   `RefuseDiagnostic` deterministically;
 - the old `KanvasPipelineIR` center is not silently reintroduced through

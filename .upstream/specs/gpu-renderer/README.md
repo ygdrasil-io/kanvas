@@ -9,7 +9,8 @@ This spec pack captures the agreed kernel for a new Kanvas GPU renderer module.
 It is intentionally narrower than a full implementation plan, but it should
 name the full technical scope before implementation slices are planned. It
 defines the module shape, naming policy, command boundary, WGSL material model,
-pipeline key split, route policy, legacy cleanup policy, and validation
+pipeline key split, execution context, WGSL layout ABI, blend/color state,
+route policy, telemetry gates, legacy cleanup policy, and validation
 expectations that future implementation tickets must follow.
 
 The current `.upstream/target/high-performance-wgsl-pipeline-target.md` and
@@ -54,6 +55,8 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
   issue instead of hiding a workaround.
 - Do not mark rendering support complete without CPU/GPU evidence or an
   explicit refusal, stable route diagnostics, and promotion gates.
+- Do not claim realtime or performance readiness from correctness evidence
+  alone.
 
 ## Accepted Kernel Decisions
 
@@ -71,9 +74,16 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 - Capture draw state before it enters the core. The core does not replay a
   Canvas-style save/restore/matrix/clip stack.
 - Separate `MaterialKey` from executable pipeline keys.
+- Define GPU execution, surface/target, command submission, readback, and
+  device-generation contracts before route activation.
 - Keep WGSL as the shader language. Graphite's SkSL paint machinery maps to
   Kanvas `MaterialKey`, `GPURenderPipelineKey`, and parser-validated WGSL
   fragments. Compute work uses separate compute program and pipeline keys.
+- Treat WGSL layout, binding, reflection, and Kotlin packing as an explicit
+  ABI contract. Complete WGSL validation without matching ABI evidence is not a
+  support claim.
+- Use explicit `GPUBlendPlan`, `GPUColorPlan`, and `GPUTargetState` contracts
+  for blend, color, alpha, premul, and target behavior.
 - Model high-level layer/saveLayer semantics with `GPULayerPlan` and filter
   graph execution with `GPUFilterPlan`; keep `GPUDrawLayer` as the lower-level
   pass/layer planning structure.
@@ -91,6 +101,8 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
   supported.
 - Treat `KanvasPipelineIR` as legacy/migration context for the new renderer,
   not as the durable semantic center of the new GPU module.
+- Keep telemetry, cache counters, budget policy, warmup policy, and
+  performance gates separate from correctness support claims.
 - Finish the technical scope specs before narrowing work into implementation
   slices.
 - After the specs are complete, use rect/rrect geometry with solid and linear
@@ -113,6 +125,11 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 | `07-validation-conformance.md` | Unit, conformance, GPU evidence, PM artifacts, promotion gates, and retirement criteria. |
 | `08-layer-and-filter-plans.md` | `GPULayerPlan`, `GPUFilterPlan`, saveLayer semantics, offscreen targets, filter DAGs, and layer/filter diagnostics. |
 | `09-draw-family-support-matrix.md` | Target support/refusal matrix for draw families, route maturity, required plans, artifacts, diagnostics, and evidence gates. |
+| `10-gpu-execution-context-submission.md` | `GPUExecutionContext`, target/surface facts, command scopes, submission, readback, and device-generation policy. |
+| `11-wgsl-layout-binding-abi.md` | WGSL bind group policy, binding layouts, uniform/storage layouts, Kotlin packing, and reflection ABI validation. |
+| `12-blend-color-target-state.md` | `GPUBlendPlan`, `GPUColorPlan`, `GPUTargetState`, destination reads, layer/filter interaction, and blend/color diagnostics. |
+| `13-performance-telemetry-cache-gates.md` | `GPUTelemetryLedger`, cache domains, budgets, warmup, performance gates, quarantine, and PM evidence. |
+| `14-first-slice-contract.md` | First isolated rect/rrect plus solid/linear slice contracts, fixtures, WGSL requirements, diagnostics, and promotion gates. |
 
 ## Target Shape
 
@@ -128,12 +145,19 @@ flowchart TD
     tasks --> drawpass["GPUDrawPass"]
     drawpass --> step["GPURenderStep"]
     command --> material["MaterialKey"]
+    command --> blend["GPUBlendPlan / GPUColorPlan"]
     material --> wgsl["WGSLFragment / WGSLModule"]
+    wgsl --> abi["WGSL layout / binding ABI"]
     step --> pipeline["GPURenderPipelineKey"]
+    blend --> pipeline
+    abi --> pipeline
     wgsl --> pipeline
     pipeline --> resources["GPUResourceProvider"]
-    resources --> facade["GPU facade used with wgpu4k"]
+    resources --> execution["GPUExecutionContext / submission"]
+    execution --> facade["GPU facade used with wgpu4k"]
+    execution --> telemetry["GPUTelemetryLedger / PM gates"]
     facade --> evidence["CPU/GPU evidence or RefuseDiagnostic"]
+    telemetry --> evidence
 ```
 
 ## Relationship To Existing Packs
@@ -161,6 +185,10 @@ The accepted first implementation vertical slice is:
 - rect and rounded-rect geometry;
 - solid color and linear-gradient materials;
 - parser-validated complete WGSL modules;
+- validated WGSL binding ABI and Kotlin packing plans;
+- explicit blend/color/target-state plans;
+- execution-context test double or accepted GPU lane evidence;
+- telemetry counters for route, key, pipeline, module, cache, and refusal state;
 - isolated `:gpu-renderer` tests for command contracts, keys, route decisions,
   diagnostics, and resource planning;
 - `gpu-raster` integration only after the isolated tests prove the contract.
@@ -168,6 +196,9 @@ The accepted first implementation vertical slice is:
 The slice must not remove or narrow command families, route taxonomy, material
 descriptors, render/compute pipeline-key rules, or validation gates needed for later renderer
 coverage.
+
+The concrete fixture and promotion contract for this first slice is defined in
+`14-first-slice-contract.md`.
 
 ## Status Policy
 

@@ -116,6 +116,9 @@ keys must include only the capability facts that affect validity or behavior.
 ## `GPUResourceProvider`
 
 `GPUResourceProvider` owns creation, lookup, and lifetime of GPU resources.
+Execution context, command scopes, and submission behavior are defined in
+`10-gpu-execution-context-submission.md`; this resource contract supplies the
+objects those scopes consume.
 
 It is responsible for:
 
@@ -160,14 +163,18 @@ Expected cache layers:
 
 Cache hits and misses must be observable in conformance or PM evidence before
 performance claims are made.
+The telemetry, budget, warmup, and performance-gate reporting contract is
+defined in `13-performance-telemetry-cache-gates.md`.
 
 ## Resource Lifetimes
 
 Resources must be tied to:
 
 - device generation;
+- execution context generation;
 - target generation when applicable;
 - recording lifetime when one-shot;
+- frame scope when frame-local;
 - cache lifetime when reusable;
 - atlas generation for CPU-prepared GPU artifacts.
 

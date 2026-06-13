@@ -1,0 +1,197 @@
+# Performance, Telemetry, And Cache Gates
+
+Status: Draft
+Date: 2026-06-13
+
+## Purpose
+
+Define the performance, telemetry, cache, and promotion-gate evidence required
+for the new GPU renderer.
+
+Correct rendering support and performance readiness are separate claims. A GPU
+route can be functionally promoted with correctness evidence while remaining
+unpromoted for performance-sensitive realtime use until measured gates exist.
+
+## Telemetry Ledger
+
+`GPUTelemetryLedger` is the deterministic reporting product for one recording,
+frame, test scene, or PM run.
+
+It records:
+
+- scene or test identity;
+- context and capability facts;
+- command counts by family;
+- route counts by `GPUNative`, `CPUPreparedGPU`, `CPUReferenceOnly`, and
+  `RefuseDiagnostic`;
+- draw-pass, compute-pass, copy, upload, and readback counts;
+- material, render pipeline, compute pipeline, and WGSL module counts;
+- cache hits, misses, evictions, and creations;
+- CPU-prepared artifact counts, bytes, uploads, and refusals;
+- submitted bytes for uniforms, vertices, indices, storage, textures, and
+  readbacks when available;
+- timing samples when enabled;
+- stable skip and risk states.
+
+Telemetry must be deterministic for the same inputs unless the field is
+explicitly marked as measured runtime data.
+
+## Cache Domains
+
+Cache reporting is grouped by domain:
+
+| Domain | Required counters |
+|---|---|
+| Material module cache | lookups, hits, misses, created modules, validation failures. |
+| Render pipeline cache | lookups, hits, misses, created pipelines, creation failures. |
+| Compute pipeline cache | lookups, hits, misses, created pipelines, creation failures. |
+| Layout cache | bind group layouts, uniform layouts, packing plans, mismatches. |
+| Resource cache | textures, buffers, samplers, bind groups, live bytes, evictions. |
+| Artifact registry | artifact lookups, hits, misses, uploads, evictions, budget refusals. |
+| Atlas cache | atlas generation, resident entries, eviction, upload bytes, stale entries. |
+
+A cache hit is performance evidence, not correctness evidence. A cache miss
+must never change rendering output.
+
+## Budget Policy
+
+Each bounded cache or artifact family must declare:
+
+- key-space expectation;
+- memory budget;
+- upload budget when relevant;
+- eviction policy;
+- stale-entry policy;
+- frame-local, recording-local, cache-resident, or atlas-resident lifetime;
+- refusal behavior when rebuilding would exceed budget;
+- diagnostic counters.
+
+Unbounded caches are allowed only when a spec proves the key space is finite and
+small. Otherwise, the route remains unpromoted for realtime use.
+
+## Warmup And Measurement
+
+Performance measurements must distinguish:
+
+- cold start;
+- warmup;
+- stable frame;
+- cache pressure run;
+- resized or device-generation-changed run;
+- skipped or unavailable measurement.
+
+Warmup policy must name:
+
+- number of warmup frames or iterations;
+- what resources may be created during warmup;
+- expected cache creation count after warmup;
+- whether timestamp queries, wall-clock time, or deterministic counters are
+  used.
+
+When timestamp queries are unavailable, the report may use wall-clock or
+counter-only evidence, but it must label the measurement lane honestly.
+
+## Performance Gates
+
+`GPUPerformanceGate` defines a measurable readiness gate.
+
+Gate fields:
+
+- gate ID and version;
+- scene or fixture set;
+- route families covered;
+- required capability lane;
+- warmup policy;
+- metric source;
+- threshold;
+- quarantine and rebaseline rule;
+- failure classification;
+- PM artifact path.
+
+Initial gate families:
+
+- pipeline creation after warmup;
+- pipeline cache hit rate;
+- WGSL module creation after warmup;
+- uniform upload bytes;
+- vertex/index/storage upload bytes;
+- texture upload bytes;
+- artifact cache hit rate;
+- pass count and draw count stability;
+- readback availability for evidence lanes;
+- frame time or GPU time when accepted by a target milestone.
+
+## Rebaseline And Quarantine
+
+Gate thresholds must be versioned outside ad hoc test code. A regression cannot
+be hidden by changing a threshold without a rebaseline artifact.
+
+Quarantine is allowed only when:
+
+- the gate is marked non-release-blocking or candidate;
+- the failure is linked to a known environment or adapter issue;
+- the PM report marks the lane as quarantined;
+- follow-up ownership is recorded.
+
+Skipped, quarantined, and missing measurements do not count as passing
+performance evidence.
+
+## PM Evidence
+
+PM evidence must include:
+
+- route counts;
+- refusal counts;
+- capability facts;
+- cache counters;
+- artifact memory and upload counters;
+- timing metrics when claimed;
+- warmup policy;
+- skipped and quarantined lanes;
+- known limitations.
+
+Reports must distinguish:
+
+- correctness support;
+- GPU execution evidence;
+- realtime performance readiness;
+- candidate gates;
+- reporting-only telemetry.
+
+## Diagnostics
+
+Stable reason-code examples:
+
+- `perf.gate.pipeline_creation_after_warmup`
+- `perf.gate.pipeline_cache_hit_rate`
+- `perf.gate.uniform_upload_bytes`
+- `perf.gate.texture_upload_bytes`
+- `perf.gate.artifact_budget_pressure`
+- `perf.gate.frame_time_candidate`
+- `perf.skip.timestamp_query_unavailable`
+- `perf.skip.adapter_unavailable`
+- `perf.quarantine.environment_variance`
+- `perf.rebaseline.required`
+
+Performance reason codes are report classifications. They must not replace
+route refusal codes.
+
+## Validation Requirements
+
+Promoted telemetry/cache behavior requires:
+
+- deterministic ledger dumps for fixed scenes;
+- cache counter tests for hit, miss, eviction, and stale generation;
+- artifact budget pressure tests when artifacts are used;
+- warmup policy tests for promoted performance gates;
+- skipped-lane tests for unavailable GPU timing or readback;
+- PM report fixtures that expose correctness, performance, skipped, and
+  quarantined states separately.
+
+## Non-Goals
+
+- Do not claim realtime readiness from correctness tests alone.
+- Do not count missing metrics as measured evidence.
+- Do not make cache residency a correctness dependency.
+- Do not hide cache misses or evictions from reports.
+- Do not silently rebaseline performance thresholds.
