@@ -125,6 +125,9 @@ are defined in `18-texture-image-ownership.md`.
 Encoded image decode, codec selection, animated frame selection, color/profile
 conversion, orientation, mip preparation, and uploaded image artifact keys are
 defined in `22-image-bitmap-codec-pipeline.md`.
+Filter DAG node placement, filter intermediates, runtime filter effects,
+filter bounds/crop/tile behavior, and material-fold equivalence for DAG color
+filters are defined in `23-filter-effect-pipeline.md`.
 Text/glyph artifact routes, text atlas bindings, SDF params, instance layouts,
 and text render-step ABI requirements are defined in
 `21-text-glyph-pipeline.md`.
@@ -296,6 +299,8 @@ fragment hash, uniform layout hash, child-slot ABI, and descriptor version. It
 must not depend on object identity.
 Runtime-effect texture child slots must use `GPUImageSourceDescriptor` and the
 ownership rules from `18-texture-image-ownership.md`.
+Runtime effects used inside filter DAGs must also satisfy
+`GPUFilterRuntimeEffectPlan` from `23-filter-effect-pipeline.md`.
 
 Arbitrary Skia/SkSL runtime shader input is refused with
 `unsupported.material.runtime_effect_unregistered`. SkSL remains compatibility

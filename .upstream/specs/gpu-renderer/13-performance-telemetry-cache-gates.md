@@ -43,6 +43,9 @@ It records:
 - destination-read requirement, strategy, copied byte, pass-split, binding,
   target-generation, stale-generation, active-attachment refusal, and
   budget-pressure counters when touched;
+- filter graph, node, render-node, compute-node, intermediate, bounds, crop,
+  tile, runtime-effect, folded color-filter, copied/intermediate byte, pass
+  count, and refusal counters when touched;
 - submitted bytes for uniforms, vertices, indices, storage, textures, and
   readbacks when available;
 - timing samples when enabled;
@@ -70,6 +73,7 @@ Cache reporting is grouped by domain:
 | Artifact registry | artifact lookups, hits, misses, uploads, evictions, budget refusals. |
 | Atlas cache | atlas descriptor count, policy version, page count, resident entries, resident bytes, lookup hits/misses, entry creations, page activations, evictions, compactions/resets, upload bytes, compute write bytes, stale entries, retry/split counts, hard capability refusals, and budget refusals. |
 | Destination-read resources | requirements, strategies, target-copy descriptors, existing-intermediate bindings, copied bytes, pass splits, generation checks, active-attachment refusals, and budget refusals. |
+| Filter/effect pipeline | graph count, node count, render/compute/copy route counts, intermediate count and bytes, bounds/crop/tile refusals, runtime-effect descriptor counts, folded color-filter counts, destination/backdrop read counts, pass splits, artifact use, and budget refusals. |
 | Text/glyph pipeline | `DrawTextRun` count, text run/subrun count, representation counts, route counts, glyph instances, atlas page count, atlas bytes, upload bytes, instance buffer bytes, stale generation refusals, SDF/color/bitmap/SVG route refusals, text-induced pass splits, and budget refusals. |
 
 A cache hit is performance evidence, not correctness evidence. A cache miss
@@ -157,6 +161,10 @@ Initial gate families:
 - destination-read copy bytes;
 - destination-read pass split count;
 - destination-read target snapshot live bytes;
+- filter intermediate live bytes;
+- filter render/compute pass count;
+- filter artifact cache hit rate;
+- filter runtime-effect refusal count;
 - pass count and draw count stability;
 - readback availability for evidence lanes;
 - frame time or GPU time when accepted by a target milestone.

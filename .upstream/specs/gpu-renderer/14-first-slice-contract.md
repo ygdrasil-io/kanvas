@@ -41,7 +41,8 @@ The first slice does not implement:
   textures, which remain governed by the target contract in
   `22-image-bitmap-codec-pipeline.md`;
 - runtime effects;
-- image filters;
+- image filters and filter/effect routes from
+  `23-filter-effect-pipeline.md`;
 - complex saveLayer behavior;
 - arbitrary blend modes;
 - destination-read shader blending;

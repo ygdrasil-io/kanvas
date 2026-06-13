@@ -263,9 +263,10 @@ Task phases:
 
 1. `prepareResources`: allocate or resolve pipelines, buffers, textures,
    texture views, samplers, imports, surface texture leases, atlases, atlas
-   entry mutations, image upload artifacts, animated image frame uploads, text
-   atlas pages, text instance buffers, destination copy/intermediate resources,
-   bind groups, and gathered payload uploads.
+   entry mutations, image upload artifacts, animated image frame uploads,
+   filter intermediates, filter render/compute node resources, text atlas
+   pages, text instance buffers, destination copy/intermediate resources, bind
+   groups, and gathered payload uploads.
 2. `addCommands`: encode commands through the `GPU` facade.
 
 The split exists so route selection, resource failure, and command encoding
@@ -279,6 +280,12 @@ Destination-read target copies and isolated intermediates from
 `20-destination-read-strategy.md` are resource preparation and ordering work. A
 task that samples a copied destination or existing intermediate must depend on
 the corresponding copy/intermediate validation plan.
+Filter graph intermediates, render/compute node resources, runtime-effect
+bindings, and ordering tokens from `23-filter-effect-pipeline.md` are resource
+preparation and ordering work. A task that consumes a filter node output must
+depend on its accepted `GPUFilterNodePlan`, `GPUFilterIntermediatePlan`,
+`GPUFilterOrderingToken`, and any destination-read or image-source plan it
+references.
 
 Text atlas uploads, atlas generation validation, text instance buffer uploads,
 and text artifact resource bindings from `21-text-glyph-pipeline.md` are

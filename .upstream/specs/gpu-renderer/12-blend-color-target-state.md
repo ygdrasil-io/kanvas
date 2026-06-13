@@ -86,6 +86,9 @@ It records:
 The plan must preserve existing Kanvas reference behavior unless an accepted
 target update changes the color contract. Any lossy conversion must be
 diagnosed before promotion.
+Filter DAG color behavior, including whether a color filter folds into
+`MaterialKey` or executes as a `GPUFilterNodePlan`, is governed by
+`23-filter-effect-pipeline.md`.
 For image and bitmap sources, encoded/source profile handling, ICC/CICP
 metadata, bit depth, HDR metadata, orientation-adjacent color facts, and
 premul/unpremul conversion before upload are planned by
@@ -156,6 +159,8 @@ Material descriptors may contribute:
 - gradient color stops;
 - image sampling color facts, with decode/profile/orientation facts governed
   by `22-image-bitmap-codec-pipeline.md`;
+- filter DAG color facts, with node placement and material-fold equivalence
+  governed by `23-filter-effect-pipeline.md`;
 - text/glyph fill, coverage, SDF, bitmap, color glyph, and SVG glyph material
   facts when routed through `21-text-glyph-pipeline.md`;
 - color-filter chain identity;

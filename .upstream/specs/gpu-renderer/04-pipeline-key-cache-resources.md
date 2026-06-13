@@ -130,7 +130,9 @@ objects those scopes consume. Texture and image ownership descriptors are
 defined in `18-texture-image-ownership.md`. Encoded image decode, bitmap
 preparation, codec registry, animation frame selection, color/orientation
 handling, and uploaded image artifact keys are defined in
-`22-image-bitmap-codec-pipeline.md`.
+`22-image-bitmap-codec-pipeline.md`. Filter graph descriptors, node plans,
+runtime-effect filter descriptors, and filter intermediate plans are defined
+in `23-filter-effect-pipeline.md`.
 
 It is responsible for:
 
@@ -196,6 +198,10 @@ Expected cache layers:
 - destination-read target snapshot and intermediate resources with explicit
   ownership, generation, pass-split, and budget rules from
   `20-destination-read-strategy.md`;
+- filter graph, node, intermediate, runtime-effect, and bounds cache entries
+  keyed by `GPUFilterGraphDescriptor`, `GPUFilterNodeDescriptor`,
+  `GPUFilterBoundsPlan`, `GPUFilterIntermediatePlan`, and
+  `GPUFilterRuntimeEffectPlan` facts from `23-filter-effect-pipeline.md`;
 - `CPUPreparedGPUArtifactRegistry` keyed by typed artifact descriptors.
 
 Cache hits and misses must be observable in conformance or PM evidence before
@@ -268,7 +274,7 @@ Accepted artifact families for this kernel are:
 | `SVGGlyphPlan` | Prepare bounded pure Kotlin SVG-in-OpenType glyph vector facts. | Route through accepted vector/material primitives or refuse. |
 | `UploadedTextureArtifact` | Decode, convert, repack, color-convert, tile, compose animated frames, or mip-prepare CPU pixels before upload as defined in `22-image-bitmap-codec-pipeline.md`. | Bind uploaded texture and sampler for GPU image sampling through spec 18 ownership. |
 | `PrecomputedGeometryArtifact` | Flatten, stroke, tessellate, or pack vertex/index/edge data on CPU. | Bind GPU buffers for a render step such as fan, stencil-cover, or edge coverage. |
-| `FilterIntermediateArtifact` | Materialize a validated bounded filter intermediate according to the active filter spec. | Bind intermediate texture/view for a later GPU filter or layer-composite pass. |
+| `FilterIntermediateArtifact` | Materialize a validated bounded filter intermediate according to `23-filter-effect-pipeline.md`. | Bind intermediate texture/view for a later GPU filter or layer-composite pass. |
 
 `FilterIntermediateArtifact` is allowed only for filter shapes whose spec has
 validated the intermediate ownership, coordinate space, usage flags, clear
@@ -313,7 +319,8 @@ Additional key facts are required when they affect contents or validity:
   tile mode, mip policy, and upload format for uploaded textures as defined in
   `22-image-bitmap-codec-pipeline.md`;
 - filter graph node identity, input bounds, crop, sample mode, intermediate
-  format, and validated filter-spec version for filter intermediates;
+  format, runtime-effect descriptor, bounds plan, and validated filter-spec
+  version from `23-filter-effect-pipeline.md` for filter intermediates;
 - device capability facts when they change prepared format, layout, usage, or
   limits.
 

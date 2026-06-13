@@ -53,6 +53,8 @@ The module owns:
   upload, and atlas diagnostic contracts;
 - destination-read requirement, strategy, bounds, target snapshot, binding,
   budget, token, and diagnostic contracts;
+- filter/effect graph, node, bounds, crop, tile, sampling, intermediate,
+  runtime-effect, cache, budget, ordering, and diagnostic contracts;
 - text run, text subrun, glyph artifact route, text atlas, text upload, text
   instance, text binding, and text diagnostic contracts;
 - resource-provider contracts;
@@ -116,6 +118,28 @@ Public concept names in the new renderer use uppercase acronyms:
 - `GPUOcclusionTracker`
 - `GPULayerPlan`
 - `GPUFilterPlan`
+- `GPUFilterGraphDescriptor`
+- `GPUFilterNodeID`
+- `GPUFilterNodeDescriptor`
+- `GPUFilterNodePlan`
+- `GPUFilterNodeRoute`
+- `GPUFilterInputPlan`
+- `GPUFilterSourcePlan`
+- `GPUFilterBackdropPlan`
+- `GPUFilterBoundsPlan`
+- `GPUFilterCropPlan`
+- `GPUFilterTilePlan`
+- `GPUFilterSamplingPlan`
+- `GPUFilterIntermediatePlan`
+- `GPUFilterRenderNodePlan`
+- `GPUFilterComputeNodePlan`
+- `GPUFilterKernelPlan`
+- `GPUFilterRuntimeEffectPlan`
+- `GPUFilterColorPlan`
+- `GPUFilterOrderingToken`
+- `GPUFilterCachePlan`
+- `GPUFilterBudgetPolicy`
+- `GPUFilterDiagnostic`
 - `GPUDrawLayer`
 - `GPUDrawLayerPlanner`
 - `GPUDrawInvocation`
@@ -283,6 +307,12 @@ into a narrower GPU renderer value object.
 | Occlusion culling | `GPUOcclusionTracker` | Dedicated conservative culling capability; not an incidental pass-builder side effect. |
 | SaveLayer and layer semantics | `GPULayerPlan` | Captured layer/saveLayer semantics, offscreen target needs, restore/composite behavior, and attached filters. |
 | Image filter graph planning | `GPUFilterPlan` | Filter DAG, intermediate resources, render/compute routes, and filter refusals outside `MaterialKey`. |
+| `SkImageFilter` DAG | `GPUFilterGraphDescriptor` / `GPUFilterNodePlan` | Inputs, node kinds, bounds, crops, local matrices, and source semantics are dumpable graph facts; no Skia flattenable ownership. |
+| `SkImageFilters` factory surface | `GPUFilterNodeDescriptor` / `GPUFilterNodeRoute` | Blur, crop, image, color filter, merge, matrix, morphology, lighting, and runtime shader families are target node descriptors with explicit route/refusal policy. |
+| `SkImageFilter::filterBounds()` | `GPUFilterBoundsPlan` | Forward/reverse bounds, kernel expansion, finite-bounds proof, and crop/tile behavior are explicit validation inputs. |
+| Graphite image filtering backend | `GPUFilterRenderNodePlan` / `GPUFilterComputeNodePlan` / `GPUFilterIntermediatePlan` | Filter execution uses planned render/compute nodes and provider-owned intermediates; no backend provider callbacks in core. |
+| `SkSpecialImage` filter input/output | `GPUFilterSourcePlan` / `GPUFilterIntermediatePlan` | Source and intermediate images are typed resource plans with texture ownership and generation facts. |
+| `SkImageFilters::RuntimeShader` | `GPUFilterRuntimeEffectPlan` | Runtime filter effects require registered Kanvas descriptors and WGSL validation; no arbitrary SkSL. |
 | Layer/draw-context planning | `GPUDrawLayer` / `GPUDrawLayerPlanner` | Logical layer and composite scopes from captured state; not Graphite context classes. |
 | `DrawListLayer` insertion | `GPUDrawInvocation` / `GPUDrawInsertion` | Graphite-inspired backward/forward insertion, sort windows, and merge policy; no C++ arena or bit-layout inheritance. |
 | `DrawPass` | `GPUDrawPass` | Immutable pass close to what the GPU facade will execute. |
@@ -342,6 +372,7 @@ legacy stateful API
   -> adapter captures transform/clip/layer/material/bounds
   -> NormalizedDrawCommand
   -> GPULayerPlan / GPUFilterPlan
+  -> GPUFilterNodePlan + GPUFilterIntermediatePlan when filters are used
   -> GPURecorder
   -> GPUDrawAnalysis
   -> GPUOcclusionTracker + GPUDrawLayerPlanner

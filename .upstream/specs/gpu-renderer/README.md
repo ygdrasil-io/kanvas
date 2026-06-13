@@ -13,8 +13,8 @@ material dictionary, payload gathering, pipeline key split, execution
 context, WGSL layout ABI, blend/color state, route policy, telemetry gates,
 texture/image ownership, path/coverage atlas strategy, destination-read
 strategy, text/glyph pipeline target, image/bitmap/codec pipeline target,
-legacy cleanup policy, and validation expectations that future implementation
-tickets must follow.
+filter/effect pipeline target, legacy cleanup policy, and validation
+expectations that future implementation tickets must follow.
 
 The current `.upstream/target/high-performance-wgsl-pipeline-target.md` and
 `.upstream/target/skia-like-realtime-renderer-target.md` remain active project
@@ -137,6 +137,14 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 - Model high-level layer/saveLayer semantics with `GPULayerPlan` and filter
   graph execution with `GPUFilterPlan`; keep `GPUDrawLayer` as the lower-level
   pass/layer planning structure.
+- Resolve detailed filter/effect execution through `GPUFilterGraphDescriptor`,
+  `GPUFilterNodePlan`, `GPUFilterBoundsPlan`, `GPUFilterIntermediatePlan`,
+  `GPUFilterRuntimeEffectPlan`, `GPUFilterCachePlan`, and
+  `GPUFilterDiagnostic`.
+- Treat image-filter DAGs, backdrop filters, filter intermediates, runtime
+  filter effects, and color-filter DAG placement as explicit graph/resource
+  plans. Forbid silently dropping unsupported filters or CPU-rendering a full
+  filtered layer/scene into a texture.
 - Use Kanvas-idiomatic package and class organization under
   `org.graphiks.kanvas.gpu.renderer`. Graphite vocabulary is kept as an
   equivalence table and source-evidence reference, not mirrored as a package
@@ -188,6 +196,7 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 | `20-destination-read-strategy.md` | Graphite-inspired destination-read strategy: requirements, bounds, target copy snapshots, existing intermediates, layer isolation, bindings, budgets, barriers, diagnostics, and validation gates. |
 | `21-text-glyph-pipeline.md` | Graphite-inspired text/glyph pipeline target: text run plans, subruns, A8/SDF atlas routes, outline/color/bitmap/SVG glyph routes, text bindings, atlas uploads, budgets, diagnostics, and validation gates. |
 | `22-image-bitmap-codec-pipeline.md` | Graphite-inspired image/bitmap/codec pipeline target: codec registry, still/animated decode, color/profile/orientation/HDR handling, pixel preparation, uploaded image artifacts, upload scheduling, caches, diagnostics, and validation gates. |
+| `23-filter-effect-pipeline.md` | Graphite-inspired filter/effect pipeline target: image-filter DAGs, filter node routes, bounds/crop/tile/sample plans, render/compute intermediates, backdrop/destination reads, registered runtime effects, budgets, diagnostics, and validation gates. |
 
 ## Target Shape
 
@@ -198,6 +207,7 @@ flowchart TD
     command --> layerplan["GPULayerPlan / GPUFilterPlan"]
     command --> recorder["GPURecorder"]
     layerplan --> recorder
+    layerplan --> filterdetail["GPUFilterNodePlan / GPUFilterIntermediatePlan"]
     recorder --> recording["GPURecording"]
     recording --> tasks["GPUTaskList"]
     tasks --> drawpass["GPUDrawPass"]
@@ -207,7 +217,9 @@ flowchart TD
     command --> blend["GPUBlendPlan / GPUColorPlan"]
     command --> dstread["GPUDestinationReadPlan"]
     blend --> dstread
+    filterdetail --> dstread
     dictionary --> wgsl["WGSLFragment / WGSLModule"]
+    filterdetail --> wgsl
     material --> textureplan["GPUImageSourceDescriptor / GPUTextureOwnershipPlan"]
     command --> atlas["GPUPathAtlasPlan / GPUCoverageAtlasPlan"]
     command --> text["GPUTextRunPlan / GPUTextSubRunPlan"]
@@ -220,9 +232,11 @@ flowchart TD
     atlas --> payload
     text --> payload
     dstread --> payload
+    filterdetail --> payload
     step --> pipeline["GPURenderPipelineKey"]
     blend --> pipeline
     dstread --> pipeline
+    filterdetail --> pipeline
     text --> pipeline
     abi --> pipeline
     wgsl --> pipeline
@@ -231,6 +245,7 @@ flowchart TD
     atlas --> resources
     text --> resources
     dstread --> resources
+    filterdetail --> resources
     pipeline --> resources["GPUResourceProvider"]
     resources --> execution["GPUExecutionContext / submission"]
     execution --> facade["GPU facade used with wgpu4k"]

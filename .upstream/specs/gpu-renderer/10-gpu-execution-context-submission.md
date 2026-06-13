@@ -263,6 +263,10 @@ Promoted execution behavior requires:
   before path/coverage atlas routes are promoted;
 - text atlas upload-before-sample, text instance-buffer upload-before-draw, and
   atlas generation ordering tests before text/glyph routes are promoted;
+- filter render/compute/copy ordering tests for `GPUFilterNodePlan`,
+  `GPUFilterIntermediatePlan`, `GPUFilterOrderingToken`,
+  destination/backdrop reads, read/write aliasing, and runtime-effect bindings
+  before filter routes from `23-filter-effect-pipeline.md` are promoted;
 - readback success or skipped-lane diagnostics;
 - device-loss refusal or rebuild tests for touched resources;
 - PM evidence that distinguishes encoded, submitted, completed, skipped, and

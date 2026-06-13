@@ -185,11 +185,16 @@ per-dispatch uniform values, output resource handles, or cache residency.
 render pipelines, compute pipelines, intermediate textures, buffers, samplers,
 and typed `CPUPreparedGPU` artifacts when routing policy allows them. Filter
 graph identity, intermediate ownership, and pass scheduling must not be encoded
-as material identity.
+as material identity. Detailed filter graph, node route, bounds, crop/tile,
+runtime-effect, and intermediate rules are defined in
+`23-filter-effect-pipeline.md`.
 
 `GPULayerPlan`, `saveLayer` lowering, and broad layer semantics are defined in
 `08-layer-and-filter-plans.md`. `GPUDrawLayer` remains the low-level pass/layer
 planning structure; it does not replace the higher-level layer semantic plan.
+Color-filter chains may fold into `MaterialKey` only when
+`23-filter-effect-pipeline.md` proves that material placement is equivalent to
+the filter DAG behavior.
 
 ## `wgsl4k` Validation
 
@@ -222,6 +227,11 @@ A supported descriptor must define:
 - WGSL fragment implementation;
 - parser/reflection evidence;
 - stable unsupported reasons for missing features.
+
+Runtime effects that execute inside filter DAGs must also satisfy
+`GPUFilterRuntimeEffectPlan` from `23-filter-effect-pipeline.md`; arbitrary
+Skia `SkRuntimeEffect`, SkSL source, or runtime shader builder input is still
+refused.
 
 Arbitrary Skia/SkSL runtime shader input is refused with a stable diagnostic.
 SkSL is compatibility vocabulary, not the implementation language.

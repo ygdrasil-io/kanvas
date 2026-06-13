@@ -43,6 +43,8 @@ Tests must assert canonical preimages and hashes for:
 - image pipeline, codec descriptor, decode request, animation plan, color
   decode plan, orientation plan, upload plan, and upload artifact key
   preimages;
+- filter graph, node descriptor, bounds, crop, tile, sampling, intermediate,
+  runtime-effect, cache, budget, ordering token, and diagnostic preimages;
 - path/coverage atlas plans, content keys, entry refs, and mutation plans;
 - destination-read plans, strategies, bounds, copy plans, bindings, and tokens;
 - route diagnostics.
@@ -207,6 +209,39 @@ Tests must assert:
 - planner sort/merge cannot cross destination-read barriers;
 - layer elision and culling refuse when destination contents are observed;
 - destination-read bindings stay out of `MaterialKey`.
+
+### Filter Effect Pipeline Tests
+
+Tests must assert:
+
+- `GPUFilterPlan`, `GPUFilterGraphDescriptor`, `GPUFilterNodeID`,
+  `GPUFilterNodeDescriptor`, `GPUFilterNodePlan`, `GPUFilterNodeRoute`,
+  `GPUFilterInputPlan`, `GPUFilterSourcePlan`, `GPUFilterBackdropPlan`,
+  `GPUFilterBoundsPlan`, `GPUFilterCropPlan`, `GPUFilterTilePlan`,
+  `GPUFilterSamplingPlan`, `GPUFilterIntermediatePlan`,
+  `GPUFilterRenderNodePlan`, `GPUFilterComputeNodePlan`,
+  `GPUFilterKernelPlan`, `GPUFilterRuntimeEffectPlan`,
+  `GPUFilterColorPlan`, `GPUFilterOrderingToken`, `GPUFilterCachePlan`,
+  `GPUFilterBudgetPolicy`, and `GPUFilterDiagnostic` dumps are deterministic;
+- graph normalization rejects cycles, ambiguous implicit sources, unknown node
+  kinds, object-address identity, and unsupported deserialized filter objects;
+- forward and reverse bounds, crop, tile, sample-radius, local-matrix, kernel
+  expansion, and finite-bounds facts are covered before support claims;
+- render and compute filter nodes validate complete WGSL modules through
+  `wgsl4k` and match binding reflection;
+- filter intermediates use accepted texture ownership, usage flags, lifetimes,
+  generations, and upload/copy/compute ordering;
+- backdrop/destination filter inputs use accepted `GPUDestinationReadPlan`
+  routes and refuse active-attachment sampling;
+- runtime filter effects use registered descriptors with CPU oracle behavior,
+  WGSL implementation, child bindings, uniform packing, and sample-radius
+  evidence;
+- material-folded color filters prove equivalence with DAG behavior before the
+  fold is claimed as support;
+- `FilterIntermediateArtifact` is registered and keyed before any
+  `CPUPreparedGPU` filter route is promoted;
+- no route CPU-renders a complete unsupported draw, layer, filter graph, text
+  run, or scene into a texture.
 
 ### Path And Coverage Atlas Tests
 

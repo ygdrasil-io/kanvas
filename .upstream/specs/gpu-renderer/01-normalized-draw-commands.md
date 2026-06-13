@@ -162,7 +162,9 @@ At minimum, layer facts must include:
 - whether the command depends on prior target contents.
 
 Complex image-filter layer behavior is outside this kernel. It must enter the
-core only through a later accepted command contract.
+core through `GPULayerPlan` and `GPUFilterPlan`, with detailed graph nodes,
+bounds, crops, intermediates, registered runtime effects, and diagnostics
+governed by `23-filter-effect-pipeline.md`.
 
 ## Material Descriptor
 

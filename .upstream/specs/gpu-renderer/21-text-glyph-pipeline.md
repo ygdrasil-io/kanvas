@@ -591,7 +591,8 @@ Rules:
 - transform eligibility comes from the text stack and renderer capability
   facts;
 - perspective, hairline stroke, non-closed glyphs, unsupported color glyphs,
-  and unsupported filter interactions refuse unless a future spec accepts them;
+  and unsupported filter interactions refuse unless
+  `23-filter-effect-pipeline.md` accepts the interaction;
 - SDF params are uniform per compatible subrun or indexed per instance;
 - cache reuse is not correctness evidence without generation and key checks.
 
@@ -672,7 +673,8 @@ Rules:
 - GPU renderer lowers the plan into accepted vector/path/material routes;
 - general SVG document rendering remains out of scope;
 - unsupported vector primitives, gradients, clips, composites, or filters
-  refuse with glyph-scoped diagnostics;
+  refuse with glyph-scoped diagnostics unless `23-filter-effect-pipeline.md`
+  accepts the filter interaction;
 - prepared fallback artifacts must be glyph-scoped and typed, never a complete
   CPU-rendered text texture.
 

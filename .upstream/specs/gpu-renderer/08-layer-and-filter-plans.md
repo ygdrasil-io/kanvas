@@ -12,6 +12,9 @@ the new GPU renderer.
 normalized. `GPUFilterPlan` captures filter graph execution. `GPUDrawLayer` and
 `GPUDrawLayerPlanner` in `02-gpu-recording-task-graph.md` are lower-level
 planning structures that consume these semantic plans to build pass partitions.
+Detailed filter graph nodes, bounds propagation, crops, tile modes, render and
+compute routes, filter intermediates, registered runtime filter effects,
+budgets, and diagnostics are defined in `23-filter-effect-pipeline.md`.
 
 ## Ownership Boundary
 
@@ -120,6 +123,8 @@ It includes:
 
 `GPUFilterPlan` may be attached to a `GPULayerPlan`, a draw command, or a future
 filter-specific task. It must not be encoded in `MaterialKey`.
+The detailed executable node model is defined in
+`23-filter-effect-pipeline.md`.
 
 ## Filter Execution Routes
 
@@ -137,14 +142,14 @@ Filter routes must name required intermediate resources, read/write usages,
 edge handling, texture ownership, and validation evidence before promotion.
 Ordinary GPU filter intermediates are `GPUResourceProvider` resources.
 `FilterIntermediateArtifact` is used only when CPU preparation creates a typed
-artifact accepted by the active filter spec.
+artifact accepted by `23-filter-effect-pipeline.md`.
 
 ## Layer And Filter Interaction
 
 When a layer has an attached filter:
 
-- the layer source must be isolated unless the filter spec proves direct
-  evaluation is equivalent;
+- the layer source must be isolated unless `23-filter-effect-pipeline.md`
+  proves direct evaluation is equivalent;
 - the filter plan owns intermediate graph execution;
 - the layer plan owns final composite into the parent;
 - destination reads and source reads must be explicit;

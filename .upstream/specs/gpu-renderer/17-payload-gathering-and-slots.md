@@ -274,6 +274,9 @@ Rules:
 - destination-copy snapshots and existing destination intermediates must use
   accepted `GPUDestinationReadBinding` records from
   `20-destination-read-strategy.md`;
+- filter intermediates, runtime-effect child bindings, filter node uniforms,
+  sampled inputs, storage resources, and ordering tokens must use accepted
+  plans from `23-filter-effect-pipeline.md`;
 - raw resource handles are not sort or cache key facts.
 - import, upload, lease, allocation, eviction, and release are performed by
   `GPUResourceProvider`, not by the gatherer.
@@ -296,6 +299,12 @@ When an image/bitmap route is accepted, the gatherer consumes only the sampled
 texture binding facts produced after `GPUImageUploadPlan` and
 `GPUTextureOwnershipPlan` acceptance. It does not decode images, compose
 animation frames, generate mips, or upload image pixels.
+When a filter/effect route is accepted, the gatherer consumes only the
+resource and uniform binding facts produced by `GPUFilterNodePlan`,
+`GPUFilterIntermediatePlan`, `GPUFilterRuntimeEffectPlan`, and
+`GPUFilterOrderingToken`. It does not normalize filter graphs, allocate
+intermediates, execute copies, choose render/compute routes, or fold color
+filters into material keys.
 
 The first rect/rrect solid and linear-gradient slice does not require sampled
 texture payloads except when a later accepted gradient-store route explicitly

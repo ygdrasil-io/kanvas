@@ -344,8 +344,8 @@ An intermediate target descriptor records:
 - whether the target may later be sampled, copied, read back, or presented.
 
 `FilterIntermediateArtifact` is used only when CPU preparation creates a typed
-artifact accepted by the filter spec. Ordinary GPU filter intermediates are not
-`CPUPreparedGPU` artifacts.
+artifact accepted by `23-filter-effect-pipeline.md`. Ordinary GPU filter
+intermediates are not `CPUPreparedGPU` artifacts.
 
 ## Atlas Textures
 

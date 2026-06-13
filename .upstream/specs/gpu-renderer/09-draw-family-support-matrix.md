@@ -59,9 +59,9 @@ target contracts.
 | Text/glyph run | `DependencyGated` until pure Kotlin text artifacts and GPU evidence are promoted | `GPUNative` or `CPUPreparedGPU` by representation | Text render steps, atlas sampling, path/coverage route, texture sampling, or glyph composite route | `GPUTextRunPlan`, `GPUTextSubRunPlan`, `GPUTextBinding`, `MaterialKey` text/glyph material when needed | `GlyphAtlasArtifact`, `SDFGlyphAtlasArtifact`, `GlyphUploadPlan`, `OutlineGlyphPlan`, `ColorGlyphPlan`, `BitmapGlyphPlan`, `SVGGlyphPlan`; routes governed by `21-text-glyph-pipeline.md`. |
 | Vertices | `FutureResearch` | `GPUNative` expected | Render pass with vertex/index buffers | `MaterialKey` or per-vertex color material | GPU buffers; possible `PrecomputedGeometryArtifact` for CPU-packed vertices. |
 | Layer/saveLayer | `TargetNative` with refusals | `GPUNative` render/composite, sometimes `RefuseDiagnostic` | `GPULayerPlan`, offscreen target, parent composite, `GPUDestinationReadPlan` when parent destination is observed | `GPULayerPlan` with optional `GPUFilterPlan` | Offscreen GPU resources; no untyped CPU fallback. |
-| Image filter DAG | `DependencyGated` | `GPUNative`, `CPUPreparedGPU`, or refusal by node | `GPUFilterPlan`, render/compute passes, intermediates, `GPUDestinationReadPlan` for backdrop/destination reads | `GPUFilterPlan` | Intermediate GPU textures; `FilterIntermediateArtifact` only when validated. |
-| Runtime effect | `DependencyGated` | `GPUNative` only for registered descriptors | Render pass or compute where descriptor permits | Registered descriptor contributes to `MaterialKey` or compute program | No arbitrary SkSL; refusal for unregistered effects. |
-| Color filter | `TargetNative` | `GPUNative` | WGSL material fragment | `MaterialKey` | No CPU artifact; refusal for unsupported chains. |
+| Image filter DAG | `TargetNative` plus dependency-gated nodes | `GPUNative`, `CPUPreparedGPU`, or refusal by node | `GPUFilterPlan`, `GPUFilterNodePlan`, render/compute/copy nodes, intermediates, `GPUDestinationReadPlan` for backdrop/destination reads | `GPUFilterGraphDescriptor`, `GPUFilterBoundsPlan`, `GPUFilterIntermediatePlan`, `GPUFilterRuntimeEffectPlan` when needed | Intermediate GPU textures; `FilterIntermediateArtifact` only when validated by `23-filter-effect-pipeline.md`. |
+| Runtime effect | `DependencyGated` | `GPUNative` only for registered descriptors | Render pass or compute where descriptor permits | Registered descriptor contributes to `MaterialKey`, `GPUFilterRuntimeEffectPlan`, or compute program | No arbitrary SkSL; refusal for unregistered effects. |
+| Color filter | `TargetNative` | `GPUNative` | WGSL material fragment or filter render node | `MaterialKey` when folded, `GPUFilterColorPlan` inside filter DAGs | No CPU artifact; refusal for unsupported chains. |
 | Blend mode | `TargetNative` for selected modes | `GPUNative` or refusal | Fixed blend state or shader blend path with `GPUDestinationReadPlan` when needed | `MaterialKey`, `GPUBlendPlan`, `GPUColorPlan`, and `GPURenderPipelineKey` | Destination-read strategy from `20-destination-read-strategy.md`; refusal for unsupported dst-dependent modes. |
 | Clear/discard | `TargetNative` | `GPUNative` | Pass load/clear/discard ops | none | Target-state operation, not material rendering. |
 
@@ -169,11 +169,23 @@ Evidence must include:
 
 - `GPULayerPlan` dumps;
 - `GPUFilterPlan` dumps;
+- `GPUFilterGraphDescriptor`, `GPUFilterNodeDescriptor`,
+  `GPUFilterNodePlan`, `GPUFilterBoundsPlan`, `GPUFilterCropPlan`,
+  `GPUFilterTilePlan`, `GPUFilterSamplingPlan`,
+  `GPUFilterIntermediatePlan`, `GPUFilterRuntimeEffectPlan`,
+  `GPUFilterCachePlan`, `GPUFilterBudgetPolicy`, and
+  `GPUFilterDiagnostic` dumps when filter graphs are used;
 - intermediate resource keys;
 - render/compute pipeline keys for filter nodes;
+- forward/reverse bounds, crop, tile, local matrix, sample radius, and kernel
+  expansion evidence;
 - direct-to-parent and offscreen decisions;
 - destination-read plan, strategy, bounds, and target/intermediate resource
   diagnostics when parent destination or backdrop is observed;
+- registered runtime-effect descriptor, WGSL validation, uniform packing,
+  child binding, and CPU oracle evidence when runtime filter effects are used;
+- material-folded color-filter equivalence evidence when a DAG color filter is
+  folded into `MaterialKey`;
 - culling and layer-elision negative tests;
 - refusal for unsupported filter DAG nodes or layer composite semantics.
 
@@ -223,6 +235,11 @@ Examples:
 - `unsupported.destination_read.active_attachment_sampled`
 - `unsupported.destination_read.copy_budget_exceeded`
 - `unsupported.filter.node_unimplemented`
+- `unsupported.filter.bounds_unbounded`
+- `unsupported.filter.tile_mode`
+- `unsupported.filter.runtime_effect_unregistered`
+- `unsupported.filter.intermediate_budget_exceeded`
+- `unsupported.filter.CPU_rendered_texture_forbidden`
 - `unsupported.runtime_effect.unregistered_descriptor`
 - `unsupported.blend.dst_dependent_mode`
 

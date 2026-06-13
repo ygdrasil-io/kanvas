@@ -61,6 +61,13 @@ The initial renderer target uses stable bind group roles:
 | `2` | CPU-prepared or GPU-native artifacts such as atlases, masks, and image textures when not material-owned. |
 | `3` | Compute or filter node resources when a compute or filter plan requires a separate resource topology. |
 
+Filter/effect routes from `23-filter-effect-pipeline.md` may use group `3`
+for node-local sampled textures, storage textures, storage buffers, uniforms,
+runtime-effect child bindings, and intermediate resources. The ABI includes
+layout, access, sample/storage type, and reflection facts. It does not include
+filter intermediate cache residency, node execution timing, destination-copy
+generation, or concrete resource handles.
+
 A route may use fewer groups. A route may add a new group role only through an
 accepted spec update because group roles affect pipeline-layout compatibility,
 cache keys, and diagnostics.

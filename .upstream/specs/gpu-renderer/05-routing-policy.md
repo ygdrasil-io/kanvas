@@ -55,8 +55,8 @@ Examples:
 - `SVGGlyphPlan`;
 - `UploadedTextureArtifact`;
 - `PrecomputedGeometryArtifact`;
-- `FilterIntermediateArtifact` only when the active filter spec validates the
-  intermediate lifecycle and route.
+- `FilterIntermediateArtifact` only when `23-filter-effect-pipeline.md`
+  validates the intermediate lifecycle and route.
 
 This route is Graphite-like in spirit for small-path or raster-atlas behavior,
 but it is not a full CPU fallback. The final draw still goes through GPU
@@ -81,6 +81,13 @@ Image and bitmap routes are governed by
 frames, or already-decoded CPU image pixels only when codec selection, decode
 request, frame selection, color/profile conversion, orientation, pixel layout,
 mip policy, upload artifact key, budget, and GPU consumer are all accepted.
+
+Filter and effect routes are governed by `23-filter-effect-pipeline.md`. A
+filter node may select `GPUNative` render, compute, or copy routes, or
+`CPUPreparedGPU(FilterIntermediateArtifact)` only when graph identity, node
+descriptor, bounds, crop, tile, sample policy, intermediate descriptor,
+runtime-effect descriptor when present, budget, and GPU consumer are all
+accepted.
 
 GPU-native textures, render targets, swapchain/surface textures, and imported
 GPU handles remain normal `GPUResourceProvider` resources. Their ownership,
@@ -136,7 +143,8 @@ The route must refuse when:
 - the artifact would exceed its stable budget policy;
 - the artifact would be stale for the current device, atlas, target, or
   recording generation;
-- the filter intermediate has not been validated by the active filter spec;
+- the filter intermediate has not been validated by
+  `23-filter-effect-pipeline.md`;
 - CPU preparation would produce a complete rendered draw result instead of a
   typed GPU-consumed artifact.
 
@@ -238,6 +246,9 @@ Stable reason-code examples:
 - `unsupported.text.instance_buffer_budget_exceeded`
 - `unsupported.texture.device_generation_stale`
 - `unsupported.filter.intermediate_unvalidated`
+- `unsupported.filter.bounds_unbounded`
+- `unsupported.filter.runtime_effect_unregistered`
+- `unsupported.filter.CPU_rendered_texture_forbidden`
 - `unsupported.geometry.perspective_path`
 - `unsupported.resource.device_lost`
 

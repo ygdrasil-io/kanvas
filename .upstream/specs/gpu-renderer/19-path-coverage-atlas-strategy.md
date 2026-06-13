@@ -150,8 +150,9 @@ shading, blend, target writes, and submission remain GPU work.
 ### `GPUCoverageAtlasPlan`
 
 `GPUCoverageAtlasPlan` describes bounded coverage masks for clip stacks,
-operation-specific masks, path coverage with clip baked in, filter masks when a
-future filter spec accepts them, and other non-glyph alpha coverage.
+operation-specific masks, path coverage with clip baked in, filter masks when
+`23-filter-effect-pipeline.md` accepts them, and other non-glyph alpha
+coverage.
 
 Allowed route kinds:
 
@@ -326,8 +327,8 @@ budget decision.
 `GPUCoverageMaskDescriptor` describes a bounded coverage mask whether it is
 atlas-resident or standalone:
 
-- source kind: clip stack, path, operation-specific mask, or future filter
-  mask;
+- source kind: clip stack, path, operation-specific mask, or filter mask
+  accepted by `23-filter-effect-pipeline.md`;
 - content key hash;
 - mask bounds, mask origin, and mask size;
 - coverage format and AA quality;

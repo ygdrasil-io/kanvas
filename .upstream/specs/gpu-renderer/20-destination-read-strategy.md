@@ -76,10 +76,12 @@ Owned by this spec:
 
 `GPUBlendPlan` declares whether a blend route needs a destination read.
 `GPULayerPlan` and `GPUFilterPlan` declare destination/backdrop/source-read
-semantics for layers and filters. `GPUDrawAnalysis` resolves those facts into
-`GPUDestinationReadPlan` values. `GPUDrawLayerPlanner` preserves ordering and
-split barriers. `GPUTaskList` and `GPUResourceProvider` materialize copies,
-intermediates, texture ownership, and payload bindings.
+semantics for layers and filters. Detailed filter node, bounds, sample-radius,
+and intermediate behavior is defined in `23-filter-effect-pipeline.md`.
+`GPUDrawAnalysis` resolves those facts into `GPUDestinationReadPlan` values.
+`GPUDrawLayerPlanner` preserves ordering and split barriers. `GPUTaskList` and
+`GPUResourceProvider` materialize copies, intermediates, texture ownership, and
+payload bindings.
 
 `GPUPayloadGatherer` may consume an accepted `GPUDestinationReadBinding`; it
 must not allocate the copy texture, copy the target, split passes, or invent a
@@ -381,7 +383,8 @@ Examples:
 Rules:
 
 - `GPULayerPlan` owns semantic isolation requirements;
-- `GPUFilterPlan` owns filter DAG reads and writes;
+- `GPUFilterPlan` and `23-filter-effect-pipeline.md` own filter DAG reads and
+  writes;
 - target texture descriptors follow `18-texture-image-ownership.md`;
 - direct-to-parent elision is illegal unless the destination-read plan proves
   equivalence;
@@ -450,10 +453,10 @@ Rules:
 
 Destination copy textures are not `UploadedTextureArtifact`,
 `CoverageMaskArtifact`, or `FilterIntermediateArtifact` by default. They are
-ordinary GPU resources created from previous target contents. A filter spec may
-use a `FilterIntermediateArtifact` only when CPU preparation creates a typed
-artifact accepted by that filter spec; it must not be used for product CPU
-fallback.
+ordinary GPU resources created from previous target contents.
+`23-filter-effect-pipeline.md` may use a `FilterIntermediateArtifact` only when
+CPU preparation creates a typed artifact accepted by that spec; it must not be
+used for product CPU fallback.
 
 ## Color And Blend Interaction
 
