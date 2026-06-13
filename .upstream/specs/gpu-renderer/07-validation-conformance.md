@@ -59,6 +59,7 @@ Tests must cover:
 - `CPUPreparedGPU` success where allowed;
 - `RefuseDiagnostic` for unsupported features;
 - absence of silent CPU fallback;
+- absence of CPU-rendered texture compatibility routes;
 - stable route reason codes;
 - capability-gated differences.
 
@@ -167,4 +168,5 @@ reports.
 - Do not hide skipped adapter evidence.
 - Do not replace explicit refusals with dashboard omissions.
 - Do not treat CPU reference success as GPU product support.
+- Do not accept CPU-rendered texture composition as product support.
 - Do not retire legacy paths without route-level evidence.

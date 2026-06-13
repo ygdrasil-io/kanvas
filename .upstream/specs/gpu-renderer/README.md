@@ -79,6 +79,8 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
   a package tree, inheritance hierarchy, or API surface.
 - Prefer `GPUNative` routes. Allow `CPUPreparedGPU` only when CPU work produces
   an explicit artifact consumed by the GPU. Forbid silent full CPU fallback.
+- Forbid CPU-rendered texture compatibility in this target: the CPU must not
+  render a complete unsupported draw or layer into a texture for GPU composite.
 - Treat `CPUReferenceOnly` as evidence/oracle behavior, not as a product GPU
   route.
 - Treat `RefuseDiagnostic` as a valid, stable outcome when no route is
@@ -180,8 +182,6 @@ The kernel does not yet choose:
 
 - final package names inside `:gpu-renderer`, beyond the Kanvas-idiomatic style
   and Graphite equivalence policy above;
-- whether a future explicit CPU-rendered texture compatibility route is worth
-  supporting.
 
 These are blocked intentionally. Implementation tickets must not infer answers
 from examples in this pack.

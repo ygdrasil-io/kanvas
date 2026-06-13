@@ -105,7 +105,7 @@ The route must refuse when:
 - CPU preparation would produce a complete rendered draw result instead of a
   typed GPU-consumed artifact.
 
-## No Silent CPU Fallback
+## No CPU-Rendered Texture Compatibility
 
 The renderer must not silently render an unsupported command fully on CPU and
 composite it as though it were GPU support.
@@ -114,9 +114,14 @@ composite it as though it were GPU support.
 unsupported features. It is allowed only when the CPU output is one of the
 registered artifacts and the final rendering operation remains a GPU route.
 
-A future explicit CPU-rendered texture compatibility route is outside this
-kernel. If it is introduced later, it must be a separate route kind with
-separate diagnostics, performance policy, and user-visible support semantics.
+The current target forbids a product route that CPU-renders a complete
+unsupported draw, layer, filter result, or fallback scene into a texture for
+GPU composition. This remains forbidden even if the route is explicit,
+diagnosed, or gated.
+
+If a future target reopens this decision, it must do so by replacing this
+policy in a new accepted target/spec. Implementation tickets under this pack
+must not introduce such a route.
 
 ## Route Inputs
 
