@@ -71,8 +71,8 @@ contracts.
 
 | Contract | Owner | Meaning |
 |---|---|---|
-| `FontSourceID` | Font core | Stable identity for bundled, user, stream, file, generated, or system-scanned font data. |
-| `TypefaceID` | Font core | Stable identity for one face, collection index, variation position, palette, and source hash. |
+| `FontSourceID` | Font core | Stable `kotlin.uuid.Uuid` identity for bundled, user, stream, file, generated, or system-scanned font data. |
+| `TypefaceID` | Font core | Stable `kotlin.uuid.Uuid` identity for one face, collection index, variation position, palette, and source hash. |
 | `ResolvedFontRun` | Font resolver | A text range mapped to a typeface, style, locale, script hint, and fallback reason. |
 | `ShapedGlyphRun` | Shaping | Glyph IDs, clusters, positions, direction, script, language, features, and shaping diagnostics. |
 | `TextLayoutResult` | Paragraph | Paragraph-level lines, runs, visual boxes, metrics, hit-test data, and glyph-run references. |
@@ -86,6 +86,10 @@ contracts.
 Every contract that can affect rendering must be serializable for tests and PM
 evidence. Dumps must avoid nondeterministic object identity, unordered maps, and
 host-specific paths unless paths are explicitly normalized.
+
+Opaque subsystem identities use Kotlin 2.4 `kotlin.uuid.Uuid` values wrapped in
+domain-specific value classes. Human-readable labels, fingerprints, table tags,
+and diagnostic codes remain strings; they are not identity handles.
 
 ## Naming Rules
 

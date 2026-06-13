@@ -6,6 +6,7 @@ import org.graphiks.kanvas.font.FontSource
 import org.graphiks.kanvas.font.TypefaceID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.uuid.Uuid
 
 class SFNTSurfaceTest {
     @Test
@@ -22,13 +23,13 @@ class SFNTSurfaceTest {
             tables = listOf(record),
         )
         val diagnostic = OpenTypeParseDiagnostic(
-            sourceId = FontSourceID("memory:font"),
+            sourceId = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440100")),
             message = "table deferred",
         )
         val faceData = OpenTypeFaceData(
-            id = TypefaceID("memory-face"),
+            id = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440101")),
             source = FontSource(
-                id = FontSourceID("memory:font"),
+                id = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440100")),
                 kind = FontSourceKind.MEMORY,
                 displayName = "Memory Font",
                 bytes = ByteArray(0),

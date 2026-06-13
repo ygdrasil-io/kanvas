@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.glyph.gpu
 
 import org.graphiks.kanvas.font.TypefaceID
+import kotlin.uuid.Uuid
 
 /**
  * Stable identifier for a laid-out text result that can produce GPU text
@@ -8,28 +9,30 @@ import org.graphiks.kanvas.font.TypefaceID
  *
  * The identifier names a layout result without carrying paragraph, shaping,
  * glyph cache, or renderer state. It lets diagnostics and bundles reference
- * text layout provenance while keeping the handoff surface dumpable.
+ * text layout provenance while keeping the handoff surface dumpable. The value
+ * is a Kotlin 2.4 `Uuid`, not a renderer handle.
  *
- * @property value Opaque layout result identifier suitable for logs,
- * snapshots, and cross-module handoff records.
+ * @property value Opaque layout result UUID suitable for logs, snapshots, and
+ * cross-module handoff records.
  */
 @JvmInline
 value class GPUTextLayoutResultID(
-    val value: String,
+    val value: Uuid,
 )
 
 /**
  * Stable identifier for one glyph run within a laid-out text result.
  *
  * The identifier is owned by the text/font stack. It is not a renderer batch
- * key, material key, upload slot, or GPU command identifier.
+ * key, material key, upload slot, or GPU command identifier. The value is a
+ * Kotlin 2.4 `Uuid` so it can be serialized consistently across targets.
  *
- * @property value Opaque glyph run identifier suitable for diagnostics and
- * serialized planning evidence.
+ * @property value Opaque glyph run UUID suitable for diagnostics and serialized
+ * planning evidence.
  */
 @JvmInline
 value class GPUGlyphRunID(
-    val value: String,
+    val value: Uuid,
 )
 
 /**
@@ -90,14 +93,15 @@ data class GPUGlyphRunDescriptor(
  * The identifier is an opaque value owned by the pure Kotlin font/text stack.
  * It names a logical artifact such as an atlas, upload payload, or glyph plan,
  * but it does not represent a GPU handle, font parser handle, shaped run, or
- * renderer batch key.
+ * renderer batch key. The UUID is separate from the content fingerprint so
+ * callers can keep stable identity and content change detection distinct.
  *
- * @property value Dumpable identifier text suitable for logs, test fixtures,
+ * @property value Dumpable identifier UUID suitable for logs, test fixtures,
  * and serialized planning snapshots.
  */
 @JvmInline
 value class GPUTextArtifactID(
-    val value: String,
+    val value: Uuid,
 )
 
 /**

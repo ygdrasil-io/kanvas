@@ -31,7 +31,8 @@ tables, or silently replace text artifacts with CPU-rendered textures.
 The normalized text command payload includes:
 
 - command ID;
-- text layout result ID or glyph run ID;
+- text layout result ID or glyph run ID, wrapped as domain-specific
+  `kotlin.uuid.Uuid` value objects;
 - immutable list of glyph run descriptors or artifact references;
 - transform facts;
 - clip facts;
@@ -45,6 +46,11 @@ The normalized text command payload includes:
 - source provenance for evidence.
 
 The payload must be free of direct `Sk*` API types.
+
+GPU text artifact IDs are also domain-specific `kotlin.uuid.Uuid` wrappers.
+The UUID gives stable identity; content fingerprints and artifact key hashes
+remain separate string/hash facts so cache invalidation does not depend on
+human-readable labels.
 
 ## Glyph Artifact Planner
 

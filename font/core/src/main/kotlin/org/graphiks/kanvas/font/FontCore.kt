@@ -1,23 +1,35 @@
 package org.graphiks.kanvas.font
 
+import kotlin.uuid.Uuid
+
 /**
  * Stable identifier for a physical or virtual font source known to the pure Kotlin font stack.
  *
- * @property value Opaque, caller-provided identifier that remains stable across parse and cache layers.
+ * The identifier uses the Kotlin 2.4 standard `Uuid` type so it has value
+ * semantics, deterministic text formatting, and no dependency on JVM-only
+ * `java.util.UUID`.
+ *
+ * @property value Opaque UUID that remains stable across parse and cache layers.
  */
 @JvmInline
 value class FontSourceID(
-    val value: String,
+    val value: Uuid,
 )
 
 /**
  * Stable identifier for one parsed typeface within a font source.
  *
- * @property value Opaque identifier for a single face, including collection index or variation identity when needed.
+ * The identifier uses the Kotlin 2.4 standard `Uuid` type. The UUID must be
+ * derived from all facts that influence the resolved face, including source
+ * identity, collection index, variation coordinates, palette, and parser
+ * generation.
+ *
+ * @property value Opaque UUID for a single face, including collection index or
+ * variation identity when needed.
  */
 @JvmInline
 value class TypefaceID(
-    val value: String,
+    val value: Uuid,
 )
 
 /**

@@ -27,7 +27,7 @@ Supported final sources:
 
 Every source must expose:
 
-- `FontSourceID`;
+- `FontSourceID` backed by `kotlin.uuid.Uuid`;
 - provenance classification;
 - content hash when bytes are available;
 - host-dependent marker when the source comes from system scanning;
@@ -103,7 +103,9 @@ required script matrix. Refusal must be precise, not generic.
 
 ## Typeface Identity
 
-`TypefaceID` must include every fact that can alter glyph output:
+`TypefaceID` is an opaque domain-specific value class backed by
+`kotlin.uuid.Uuid`. The UUID generation policy must include every fact that can
+alter glyph output:
 
 - `FontSourceID`;
 - collection index;

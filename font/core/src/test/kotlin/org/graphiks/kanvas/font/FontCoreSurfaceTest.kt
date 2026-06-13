@@ -3,12 +3,15 @@ package org.graphiks.kanvas.font
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.uuid.Uuid
 
 class FontCoreSurfaceTest {
     @Test
     fun exposesCoreFontValueObjectsAndContracts() {
-        val sourceId = FontSourceID("system:inter-regular")
-        val typefaceId = TypefaceID("inter-regular")
+        val sourceUuid = Uuid.parse("550e8400-e29b-41d4-a716-446655440000")
+        val typefaceUuid = Uuid.parse("550e8400-e29b-41d4-a716-446655440001")
+        val sourceId = FontSourceID(sourceUuid)
+        val typefaceId = TypefaceID(typefaceUuid)
         val source = FontSource(
             id = sourceId,
             kind = FontSourceKind.SYSTEM,
@@ -40,8 +43,10 @@ class FontCoreSurfaceTest {
         )
         val catalog = FallbackCatalog(families = mapOf("Inter" to collection))
 
-        assertEquals("system:inter-regular", sourceId.value)
-        assertEquals("inter-regular", typefaceId.value)
+        assertEquals(sourceUuid, sourceId.value)
+        assertEquals(typefaceUuid, typefaceId.value)
+        assertEquals("550e8400-e29b-41d4-a716-446655440000", sourceId.value.toHexDashString())
+        assertEquals("550e8400-e29b-41d4-a716-446655440001", typefaceId.value.toHexDashString())
         assertEquals(FontSourceKind.SYSTEM, source.kind)
         assertEquals(sourceId, diagnostic.sourceId)
         assertEquals(typefaceId, data.id)

@@ -63,7 +63,7 @@ The exact policy can vary by style, but the route dump must explain it.
 
 `GlyphStrikeKey` includes:
 
-- `TypefaceID`;
+- `TypefaceID` backed by `kotlin.uuid.Uuid`;
 - glyph ID;
 - text size;
 - variation coordinates;

@@ -5,12 +5,13 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.uuid.Uuid
 
 class GPUTextArtifactsSurfaceTest {
     @Test
     fun `gpu text artifact surface is composed from dumpable value objects`() {
-        val layoutID = GPUTextLayoutResultID("paragraph-1/layout-0")
-        val runID = GPUGlyphRunID("paragraph-1/run-0")
+        val layoutID = GPUTextLayoutResultID(Uuid.parse("550e8400-e29b-41d4-a716-446655440200"))
+        val runID = GPUGlyphRunID(Uuid.parse("550e8400-e29b-41d4-a716-446655440201"))
         val runReference = GPUTextLayoutRunReference(
             layoutResultID = layoutID,
             glyphRunID = runID,
@@ -19,7 +20,7 @@ class GPUTextArtifactsSurfaceTest {
         val runDescriptor = GPUGlyphRunDescriptor(
             runID = runID,
             layoutResultID = layoutID,
-            typefaceID = TypefaceID("face-a"),
+            typefaceID = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440202")),
             glyphIDs = listOf(42),
             advances = listOf(11.5f),
             textRangeStart = 0,
@@ -27,7 +28,7 @@ class GPUTextArtifactsSurfaceTest {
             script = "Latn",
             bidiLevel = 0,
         )
-        val artifactID = GPUTextArtifactID("face-a/size-18/subpixel-0")
+        val artifactID = GPUTextArtifactID(Uuid.parse("550e8400-e29b-41d4-a716-446655440203"))
         val generation = GPUTextArtifactGeneration(7)
         val key = GPUTextArtifactKey(
             artifactID = artifactID,
@@ -102,8 +103,8 @@ class GPUTextArtifactsSurfaceTest {
         )
 
         assertEquals(artifactID, key.artifactID)
-        assertEquals("paragraph-1/layout-0", runReference.layoutResultID.value)
-        assertEquals("face-a", runDescriptor.typefaceID?.value)
+        assertEquals("550e8400-e29b-41d4-a716-446655440200", runReference.layoutResultID.value.toHexDashString())
+        assertEquals("550e8400-e29b-41d4-a716-446655440202", runDescriptor.typefaceID?.value?.toHexDashString())
         assertEquals(192, bundle.uploadPlans.single().byteSize)
         assertEquals(42U, bundle.glyphUploadPlans.single().glyphIDs.single())
         assertEquals("r8", bundle.atlases.single().format)
