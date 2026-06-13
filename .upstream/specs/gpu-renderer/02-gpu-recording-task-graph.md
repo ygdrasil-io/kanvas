@@ -69,6 +69,12 @@ subrun splitting, text atlas resource needs, upload dependencies, instance
 buffer facts, and text diagnostics as defined in
 `21-text-glyph-pipeline.md`.
 
+Analysis and resource materialization are separate stages. Immutable
+`GPUDrawAnalysis` records capture pre-allocation decisions; resource, pipeline,
+atlas, upload, lazy/promise resource, and destination-copy outcomes are
+confirmed or refused later by the materialization policy in
+`34-analysis-materialization-recording.md`.
+
 ## `GPURecorder`
 
 `GPURecorder` accepts normalized draw commands and a target configuration. It
@@ -99,6 +105,11 @@ It must not:
 `GPUDrawAnalysis` is an immutable analysis product for one recorder snap. It is
 explicit: route selection, culling, layer assignment, and ordering facts must
 not be hidden inside `GPUDrawPass` construction.
+
+It is a pre-materialization product. It may name candidate routes, resource
+declarations, render-step candidates, and refusal reasons, but it must not
+claim that concrete resources, pipelines, atlases, uploads, destination copies,
+or lazy resources have been materialized.
 
 It contains one analysis record per normalized command that reaches the core,
 including commands that are later culled, discarded, or refused.

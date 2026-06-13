@@ -13,6 +13,11 @@ and refuse unsupported routes with stable diagnostics.
 
 ## Route Kinds
 
+The route-kind taxonomy, strategy/plan distinction, capability vocabulary, and
+diagnostic code policy are centralized in
+`32-target-authority-taxonomy-diagnostics.md`. This file defines how those
+route kinds are selected for normalized draw commands.
+
 ### `GPUNative`
 
 The draw is executed by GPU render or compute work without CPU rasterization of
@@ -251,7 +256,7 @@ Stable reason-code examples:
 - `unsupported.image.decode.invalid_input`
 - `unsupported.image.animation.required_frame_missing`
 - `unsupported.color.image_profile_conversion`
-- `unsupported.color.YUV_conversion`
+- `unsupported.color.yuv_conversion`
 - `unsupported.transform.perspective`
 - `unsupported.transform.inverse_required`
 - `unsupported.transform.non_finite`
@@ -270,7 +275,7 @@ Stable reason-code examples:
 - `unsupported.filter.intermediate_unvalidated`
 - `unsupported.filter.bounds_unbounded`
 - `unsupported.filter.runtime_effect_unregistered`
-- `unsupported.filter.CPU_rendered_texture_forbidden`
+- `unsupported.filter.cpu_rendered_texture_forbidden`
 - `unsupported.geometry.perspective_path`
 - `unsupported.resource.device_lost`
 

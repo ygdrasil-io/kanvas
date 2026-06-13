@@ -648,8 +648,8 @@ Stable reason-code examples:
 - `unsupported.layer.target_too_large`
 - `unsupported.layer.target_format`
 - `unsupported.layer.target_usage_missing`
-- `unsupported.layer.F16_unavailable`
-- `unsupported.layer.preserve_LCD_text`
+- `unsupported.layer.f16_unavailable`
+- `unsupported.layer.preserve_lcd_text`
 - `unsupported.layer.init_previous_unaccepted`
 - `unsupported.layer.backdrop_filter`
 - `unsupported.layer.backdrop_tile_mode`
@@ -668,7 +668,7 @@ Stable reason-code examples:
 - `unsupported.layer.pass_split_illegal`
 - `unsupported.layer.budget_exceeded`
 - `unsupported.layer.nesting_depth`
-- `unsupported.layer.CPU_fallback_forbidden`
+- `unsupported.layer.cpu_fallback_forbidden`
 
 Planner/reporting reason-code examples:
 

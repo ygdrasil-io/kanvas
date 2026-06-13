@@ -381,8 +381,8 @@ If conversion is not validated for the selected codec, profile, bit depth,
 alpha type, and target format, the route refuses with a color-owned diagnostic
 from `29-color-management-pipeline.md`, typically
 `unsupported.color.image_profile_conversion`,
-`unsupported.color.precision_conversion`, `unsupported.color.YUV_conversion`,
-or `unsupported.color.HDR_transfer`.
+`unsupported.color.precision_conversion`, `unsupported.color.yuv_conversion`,
+or `unsupported.color.hdr_transfer`.
 
 `GPUImageOrientationPlan` records:
 
@@ -630,8 +630,8 @@ Required refusal codes include:
 - `unsupported.image.animation.blend`
 - `unsupported.color.profile_parse`
 - `unsupported.color.image_profile_conversion`
-- `unsupported.color.YUV_conversion`
-- `unsupported.color.HDR_transfer`
+- `unsupported.color.yuv_conversion`
+- `unsupported.color.hdr_transfer`
 - `unsupported.color.gainmap`
 - `unsupported.image.orientation`
 - `unsupported.image.pixel.format`
@@ -642,7 +642,7 @@ Required refusal codes include:
 - `unsupported.image.upload.row_stride`
 - `unsupported.image.upload.texture_format`
 - `unsupported.image.upload.budget_exceeded`
-- `unsupported.image.CPU_rendered_texture_forbidden`
+- `unsupported.image.cpu_rendered_texture_forbidden`
 
 Accepted routes also produce diagnostics. A successful image route must be
 dumpable enough to explain which codec, color plan, frame, artifact, upload

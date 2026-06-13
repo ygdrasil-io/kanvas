@@ -755,7 +755,7 @@ Stable reason-code examples:
 - `unsupported.clip.destination_read_split_illegal`
 - `unsupported.clip.layer_interaction_unproven`
 - `unsupported.clip.filter_bounds_unproven`
-- `unsupported.clip.CPU_rendered_texture_forbidden`
+- `unsupported.clip.cpu_rendered_texture_forbidden`
 
 ## Telemetry
 

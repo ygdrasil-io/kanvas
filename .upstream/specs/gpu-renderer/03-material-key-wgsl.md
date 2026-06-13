@@ -20,6 +20,10 @@ both render and compute work, but compute programs do not flow through
 command. It is independent from target attachment state and render-step fixed
 state.
 
+Canonical key, payload, resource, material-lowering, and snippet ABI boundaries
+are defined in `33-key-boundaries-material-lowering.md`. This file defines the
+material-specific key and WGSL module rules under that broader boundary.
+
 Material-facing paint/source planning is defined in
 `31-material-source-paint-pipeline.md`. `MaterialKey` consumes accepted
 `GPUPaintPipelinePlan` and `GPUMaterialSourcePlan` facts; it does not own
@@ -48,6 +52,11 @@ It includes:
 - material dictionary version;
 - `GPUMaterialAssemblyPlan` identity when the dictionary has accepted the key;
 - feature flags that affect generated WGSL behavior.
+
+Resource facts included in `MaterialKey` are limited to topology, layout,
+usage, and behavior-affecting source facts. Concrete resource identity,
+resource residency, handles, leases, cache entries, and pixel contents are
+never material identity.
 
 It does not include:
 

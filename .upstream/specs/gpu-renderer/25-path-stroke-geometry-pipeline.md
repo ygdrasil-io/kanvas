@@ -716,7 +716,7 @@ Stable reason-code examples:
 - `unsupported.stroke.dash_complex`
 - `unsupported.stroke.path_effect_unregistered`
 - `unsupported.stroke.expansion_budget_exceeded`
-- `unsupported.geometry.CPU_rendered_texture_forbidden`
+- `unsupported.geometry.cpu_rendered_texture_forbidden`
 
 Migration diagnostics from `.upstream/specs/geometry-coverage/` may remain in
 older lanes, but new GPU renderer diagnostics should prefer these

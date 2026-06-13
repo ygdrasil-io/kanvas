@@ -18,6 +18,13 @@ resource-layout state, and capabilities.
 The generic name `PipelineKey` may appear only when a rule applies to both
 render and compute keys.
 
+Canonical key, payload, resource descriptor, resource identity, residency, and
+use-token boundaries are defined in
+`33-key-boundaries-material-lowering.md`. In this file, "resource" inside a
+pipeline key means resource topology, layout, usage, and capability facts that
+affect validity. It does not mean concrete resource handles, current residency,
+or pixel contents.
+
 ## `GPURenderPipelineKey`
 
 `GPURenderPipelineKey` includes:

@@ -209,7 +209,7 @@ Representation consumed by the renderer:
 | `RefusedText` | Stable refusal from text stack or GPU route selection. |
 
 LCD subpixel masks are not a target representation. Requests for LCD text
-diagnose through `text.gpu.LCD-future-research` or a narrower text-stack
+diagnose through `unsupported.text.lcd_future_research` or a narrower text-stack
 reason.
 
 ### `GPUTextRoute`
@@ -559,12 +559,12 @@ Route mapping:
 
 | Text artifact | Preferred GPU route | Refusal if unavailable |
 |---|---|---|
-| `GlyphAtlasArtifact` A8 | `AtlasMaskSample` | `text.gpu.A8-atlas-route-unavailable` |
-| `SDFGlyphAtlasArtifact` | `AtlasSDFSample` | `text.gpu.SDF-route-unavailable` |
-| `OutlineGlyphPlan` | `OutlinePathRoute` through path/coverage specs | `text.gpu.outline-route-unavailable` |
-| `ColorGlyphPlan` | `ColorGlyphCompositeRoute` | `text.gpu.color-plan-unsupported` |
-| `BitmapGlyphPlan` | `BitmapGlyphTextureRoute` | `text.gpu.bitmap-route-unsupported` |
-| `SVGGlyphPlan` | `SVGGlyphVectorRoute` | `text.gpu.SVG-plan-unsupported` |
+| `GlyphAtlasArtifact` A8 | `AtlasMaskSample` | `unsupported.text.a8_atlas_route_unavailable` |
+| `SDFGlyphAtlasArtifact` | `AtlasSDFSample` | `unsupported.text.sdf_route_unavailable` |
+| `OutlineGlyphPlan` | `OutlinePathRoute` through path/coverage specs | `unsupported.text.outline_route_unavailable` |
+| `ColorGlyphPlan` | `ColorGlyphCompositeRoute` | `unsupported.text.color_plan_unsupported` |
+| `BitmapGlyphPlan` | `BitmapGlyphTextureRoute` | `unsupported.text.bitmap_route_unsupported` |
+| `SVGGlyphPlan` | `SVGGlyphVectorRoute` | `unsupported.text.svg_plan_unsupported` |
 
 When multiple artifacts are provided for the same glyph, the text stack's
 selection policy and diagnostics decide semantic priority. The GPU renderer
@@ -827,7 +827,7 @@ For each artifact type, registry metadata includes:
 - upload plan builder when relevant;
 - diagnostics for missing, stale, unsupported, or budget-exceeded artifacts.
 
-Unregistered artifacts refuse with `text.gpu.artifact-unregistered`.
+Unregistered artifacts refuse with `unsupported.text.artifact_unregistered`.
 
 ## Budgets And Telemetry
 
@@ -878,34 +878,34 @@ Fields:
 
 Stable reason-code examples:
 
-- `text.gpu.payload-nondumpable`
-- `text.gpu.Sk-type-leaked`
-- `text.gpu.artifact-unregistered`
-- `text.gpu.artifact-key-nondeterministic`
-- `text.gpu.artifact-generation-stale`
-- `text.gpu.artifact-budget-exceeded`
-- `text.gpu.upload-plan-missing`
-- `text.gpu.upload-budget-exceeded`
-- `text.gpu.upload-failed`
-- `text.gpu.atlas-descriptor-unaccepted`
-- `text.gpu.atlas-page-unavailable`
-- `text.gpu.atlas-entry-missing`
-- `text.gpu.atlas-generation-stale`
-- `text.gpu.A8-atlas-route-unavailable`
-- `text.gpu.SDF-route-unavailable`
-- `text.gpu.SDF-params-missing`
-- `text.gpu.SDF-transform-unsupported`
-- `text.gpu.outline-route-unavailable`
-- `text.gpu.color-plan-unsupported`
-- `text.gpu.color-composite-unsupported`
-- `text.gpu.bitmap-route-unsupported`
-- `text.gpu.SVG-plan-unsupported`
-- `text.gpu.LCD-future-research`
-- `text.gpu.instance-buffer-budget-exceeded`
-- `text.gpu.binding-layout-unavailable`
-- `text.gpu.destination-read-unaccepted`
-- `text.gpu.clip-route-unaccepted`
-- `text.gpu.CPU-rendered-texture-forbidden`
+- `unsupported.text.payload_nondumpable`
+- `unsupported.text.sk_type_leaked`
+- `unsupported.text.artifact_unregistered`
+- `unsupported.text.artifact_key_nondeterministic`
+- `unsupported.text.artifact_generation_stale`
+- `unsupported.text.artifact_budget_exceeded`
+- `unsupported.text.upload_plan_missing`
+- `unsupported.text.upload_budget_exceeded`
+- `unsupported.text.upload_failed`
+- `unsupported.text.atlas_descriptor_unaccepted`
+- `unsupported.text.atlas_page_unavailable`
+- `unsupported.text.atlas_entry_missing`
+- `unsupported.text.atlas_generation_stale`
+- `unsupported.text.a8_atlas_route_unavailable`
+- `unsupported.text.sdf_route_unavailable`
+- `unsupported.text.sdf_params_missing`
+- `unsupported.text.sdf_transform_unsupported`
+- `unsupported.text.outline_route_unavailable`
+- `unsupported.text.color_plan_unsupported`
+- `unsupported.text.color_composite_unsupported`
+- `unsupported.text.bitmap_route_unsupported`
+- `unsupported.text.svg_plan_unsupported`
+- `unsupported.text.lcd_future_research`
+- `unsupported.text.instance_buffer_budget_exceeded`
+- `unsupported.text.binding_layout_unavailable`
+- `unsupported.text.destination_read_unaccepted`
+- `unsupported.text.clip_route_unaccepted`
+- `unsupported.text.cpu_rendered_texture_forbidden`
 
 Diagnostics from the text stack remain attached. GPU diagnostics do not replace
 font/shaping/glyph diagnostics; they explain renderer route decisions.

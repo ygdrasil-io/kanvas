@@ -16,6 +16,11 @@ Kanvas-owned `GPU` renderer concepts.
 This spec closes the material assembly gap between `MaterialKey` and
 `WGSLModule`.
 
+Canonical key, payload, resource, material-lowering context, material root set,
+and WGSL snippet input/output ABI boundaries are consolidated in
+`33-key-boundaries-material-lowering.md`. This file remains the detailed
+dictionary and snippet registry contract.
+
 ## Graphite Evidence
 
 Relevant Graphite concepts:
@@ -214,6 +219,10 @@ reflection, and module hashes include the lifted shape.
 
 `MaterialKey` remains the durable material identity. `GPUMaterialDictionary`
 turns it into an explicit material root set.
+
+The normative root-role policy and forbidden clip/coverage roots are
+centralized in `33-key-boundaries-material-lowering.md`; the rules below give
+the dictionary-local representation expected by this spec.
 
 Root roles are:
 

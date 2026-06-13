@@ -740,13 +740,13 @@ Stable reason code examples:
 - `unsupported.material_source.tree_depth`
 - `unsupported.material_source.child_count`
 - `unsupported.material_source.payload_budget`
-- `unsupported.material_source.WGSL_validation`
+- `unsupported.material_source.wgsl_validation`
 - `unsupported.material_source.snippet_missing`
 - `unsupported.paint_pipeline.stage_order`
 - `unsupported.paint_pipeline.color_filter_chain`
 - `unsupported.paint_pipeline.filter_fold_unproven`
 - `unsupported.paint_pipeline.requirement_unaccepted`
-- `unsupported.paint_pipeline.CPU_rendered_texture_forbidden`
+- `unsupported.paint_pipeline.cpu_rendered_texture_forbidden`
 - `unsupported.solid.non_finite`
 - `unsupported.solid.color_value_spec`
 - `unsupported.gradient.kind`
@@ -775,7 +775,7 @@ Stable reason code examples:
 - `unsupported.runtime_effect.unregistered`
 - `unsupported.runtime_effect.kind`
 - `unsupported.runtime_effect.child_slot`
-- `unsupported.runtime_effect.CPU_oracle_missing`
+- `unsupported.runtime_effect.cpu_oracle_missing`
 
 Refusal codes must be specific enough for conformance fixtures and PM reports.
 Generic `unsupported.material_source.unknown` is allowed only when the adapter

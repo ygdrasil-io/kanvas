@@ -16,7 +16,10 @@ strategy, destination-read
 strategy, text/glyph pipeline target, image/bitmap/codec pipeline target,
 filter/effect pipeline target, clip/stencil/mask pipeline target, legacy
 cleanup policy, path/stroke/geometry pipeline target, layer/saveLayer
-execution, color-management pipeline, and validation expectations that future
+execution, color-management pipeline, target authority, canonical taxonomy,
+diagnostic registry policy, key/material/resource boundaries, analysis versus
+materialization boundaries, recording lifetime policy, and validation
+expectations that future
 implementation tickets must follow. It also defines the `DrawVertices` and
 mesh-like target so
 user-provided vertex geometry has a clear GPU route/refusal contract before
@@ -29,6 +32,13 @@ The current `.upstream/target/high-performance-wgsl-pipeline-target.md` and
 context until a target update is explicitly accepted. This pack records the new
 direction being designed: GPU-first, Graphite-inspired, inline on the `GPU`
 facade used with `wgpu4k`, and WGSL-only for shader implementation.
+
+Authority, status, route taxonomy, and diagnostic-code rules are centralized
+in `32-target-authority-taxonomy-diagnostics.md`. Key, payload, resource, and
+material-lowering boundaries are centralized in
+`33-key-boundaries-material-lowering.md`. Analysis, materialization, recording
+lifetime, and late-diagnostic rules are centralized in
+`34-analysis-materialization-recording.md`.
 
 ## Source Of Truth
 
@@ -283,6 +293,9 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 | `29-color-management-pipeline.md` | Graphite-inspired color-management target: value specs, color-space/profile descriptors, ICC/CICP, transfer/gamut transforms, working spaces, gradients, images, runtime color uniforms, HDR/gainmap, store plans, budgets, diagnostics, and validation gates. |
 | `30-coordinate-transform-bounds-policy.md` | Graphite-inspired coordinate/transform/bounds target: coordinate spaces, transform classification, inverses, pixel grid, conservative bounds proofs, rounding, precision, budgets, diagnostics, and validation gates. |
 | `31-material-source-paint-pipeline.md` | Graphite-inspired material source and paint pipeline target: paint descriptor order, source planning, solid/gradient/image/local-matrix/blend/runtime-effect sources, tile/sampling policy, payload handoff, budgets, diagnostics, and validation gates. |
+| `32-target-authority-taxonomy-diagnostics.md` | Consolidated target authority, status vocabulary, route taxonomy, capability taxonomy, diagnostic registry policy, aliases, and refusal semantics. |
+| `33-key-boundaries-material-lowering.md` | Canonical key/payload/resource boundary table, resource topology versus identity rule, `GPUMaterialLoweringContext`, material root set, WGSL snippet I/O ABI, and runtime-effect usage set. |
+| `34-analysis-materialization-recording.md` | Analysis versus materialization boundary, late failure classes, recording replay compatibility, ordered recordings, lazy/promise/imported resources, scratch/intermediate lifetimes, and negative CPU-fallback tests. |
 
 ## Target Shape
 
@@ -399,6 +412,9 @@ GPU renderer work:
   by stronger GPU renderer gates.
 - Any implementation ticket that changes active routing must point to both this
   pack and the older evidence it supersedes.
+- Authority conflicts, status terminology, route taxonomy, diagnostic-code
+  normalization, and target maturity vocabulary are resolved by
+  `32-target-authority-taxonomy-diagnostics.md`.
 
 ## Implementation Sequencing
 

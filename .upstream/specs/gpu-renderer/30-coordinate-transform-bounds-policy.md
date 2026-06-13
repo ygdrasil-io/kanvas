@@ -656,7 +656,7 @@ Stable reason-code examples:
 - `unsupported.transform.class_downgrade`
 - `unsupported.transform.precision`
 - `unsupported.transform.chain_too_long`
-- `unsupported.transform.WGSL_validation`
+- `unsupported.transform.wgsl_validation`
 - `unsupported.bounds.unknown`
 - `unsupported.bounds.non_finite`
 - `unsupported.bounds.nan`

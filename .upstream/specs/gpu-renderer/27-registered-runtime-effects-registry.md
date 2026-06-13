@@ -651,16 +651,16 @@ Stable reason-code examples:
 - `unsupported.runtime_effect.child_missing`
 - `unsupported.runtime_effect.child_sample_radius`
 - `unsupported.runtime_effect.resource_binding`
-- `unsupported.runtime_effect.WGSL_missing`
-- `unsupported.runtime_effect.WGSL_validation`
-- `unsupported.runtime_effect.WGSL_reflection`
-- `unsupported.runtime_effect.CPU_oracle_missing`
+- `unsupported.runtime_effect.wgsl_missing`
+- `unsupported.runtime_effect.wgsl_validation`
+- `unsupported.runtime_effect.wgsl_reflection`
+- `unsupported.runtime_effect.cpu_oracle_missing`
 - `unsupported.runtime_effect.route_unaccepted`
 - `unsupported.runtime_effect.destination_read`
 - `unsupported.runtime_effect.live_parameter`
 - `unsupported.runtime_effect.live_update_out_of_range`
 - `unsupported.runtime_effect.budget_exceeded`
-- `unsupported.runtime_effect.dynamic_SkSL_forbidden`
+- `unsupported.runtime_effect.dynamic_sksl_forbidden`
 
 Existing migration/evidence reason codes such as
 `runtime-effect.arbitrary-sksl-unsupported` and

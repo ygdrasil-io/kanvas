@@ -822,10 +822,10 @@ Stable reason-code examples:
 - `unsupported.color.untagged_policy`
 - `unsupported.color.profile_parse`
 - `unsupported.color.profile_class`
-- `unsupported.color.ICC_v4`
-- `unsupported.color.CICP`
+- `unsupported.color.icc_v4`
+- `unsupported.color.cicp`
 - `unsupported.color.rendering_intent`
-- `unsupported.color.LUT_profile`
+- `unsupported.color.lut_profile`
 - `unsupported.color.transfer_function`
 - `unsupported.color.gamut_transform`
 - `unsupported.color.white_point`
@@ -838,17 +838,17 @@ Stable reason-code examples:
 - `unsupported.color.gradient_interpolation_space`
 - `unsupported.color.runtime_layout_color`
 - `unsupported.color.image_profile_conversion`
-- `unsupported.color.YUV_conversion`
-- `unsupported.color.YUV_multiplane_route`
-- `unsupported.color.HDR_transfer`
+- `unsupported.color.yuv_conversion`
+- `unsupported.color.yuv_multiplane_route`
+- `unsupported.color.hdr_transfer`
 - `unsupported.color.gainmap`
 - `unsupported.color.tone_map`
-- `unsupported.color.F16_target`
+- `unsupported.color.f16_target`
 - `unsupported.color.present_color_space`
 - `unsupported.color.surface_alpha`
 - `unsupported.color.target_capability`
-- `unsupported.color.WGSL_validation`
-- `unsupported.color.CPU_oracle_missing`
+- `unsupported.color.wgsl_validation`
+- `unsupported.color.cpu_oracle_missing`
 - `unsupported.color.budget_exceeded`
 - `unsupported.color.platform_conversion_nonnormative`
 

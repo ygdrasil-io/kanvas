@@ -52,6 +52,12 @@ These objects are part of key preimages when they affect pipeline validity or
 module behavior. They must be dumpable and independent of Kotlin object
 identity.
 
+Material snippet input/output ABI, child invocation rules, and material
+lowering context boundaries are defined in
+`33-key-boundaries-material-lowering.md`. This file validates those declared
+ABI contributions against complete WGSL module reflection and Kotlin packing
+plans.
+
 ## Bind Group Policy
 
 The initial renderer target uses stable bind group roles:

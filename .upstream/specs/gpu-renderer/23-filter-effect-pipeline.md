@@ -591,13 +591,13 @@ Required refusal codes include:
 - `unsupported.filter.lighting_unvalidated`
 - `unsupported.filter.picture_unbounded`
 - `unsupported.filter.runtime_effect_unregistered`
-- `unsupported.filter.runtime_effect_WGSL_validation`
+- `unsupported.filter.runtime_effect_wgsl_validation`
 - `unsupported.filter.intermediate_unvalidated`
 - `unsupported.filter.intermediate_budget_exceeded`
 - `unsupported.filter.storage_texture_capability_missing`
 - `unsupported.filter.read_write_aliasing`
 - `unsupported.filter.destination_read_unaccepted`
-- `unsupported.filter.CPU_rendered_texture_forbidden`
+- `unsupported.filter.cpu_rendered_texture_forbidden`
 
 Accepted routes also produce diagnostics. A successful graph must be dumpable
 enough to explain which nodes executed, which routes were selected, which

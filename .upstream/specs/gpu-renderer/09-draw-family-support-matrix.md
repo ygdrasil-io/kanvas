@@ -12,6 +12,8 @@ implementation order, release promise, or shortcut around the evidence gates in
 
 Every family below must resolve to one of:
 
+- `TargetRequired`: required target concept for accepted GPU routes, even when
+  the first slice promotes only a subset.
 - `TargetNative`: intended to become a `GPUNative` route.
 - `TargetPrepared`: intended to use typed `CPUPreparedGPU` artifacts consumed
   by the GPU.
@@ -19,10 +21,15 @@ Every family below must resolve to one of:
 - `RefuseRequired`: explicit stable refusal required.
 - `DependencyGated`: support depends on another accepted spec or external
   delivery such as font, codec, or filter infrastructure.
+- `PolicyGated`: support depends on an explicit product or architecture policy
+  decision, not only missing implementation.
 - `FutureResearch`: target direction is recognized but not yet accepted.
 
 `TargetNative` and `TargetPrepared` still require validation before support can
 be claimed.
+
+The canonical maturity vocabulary is defined in
+`32-target-authority-taxonomy-diagnostics.md`.
 
 ## Matrix Columns
 
@@ -338,7 +345,7 @@ Examples:
 - `unsupported.paint_pipeline.stage_order`
 - `unsupported.paint_pipeline.filter_fold_unproven`
 - `unsupported.paint_pipeline.shader_blender_unaccepted`
-- `unsupported.paint_pipeline.CPU_rendered_texture_forbidden`
+- `unsupported.paint_pipeline.cpu_rendered_texture_forbidden`
 - `unsupported.material_source.unknown`
 - `unsupported.material_source.child_count`
 - `unsupported.material_source.payload_budget`
@@ -376,11 +383,11 @@ Examples:
 - `unsupported.image.decode.invalid_input`
 - `unsupported.image.animation.required_frame_missing`
 - `unsupported.color.image_profile_conversion`
-- `unsupported.color.YUV_conversion`
+- `unsupported.color.yuv_conversion`
 - `unsupported.color.profile_parse`
 - `unsupported.color.transfer_function`
 - `unsupported.color.gainmap`
-- `unsupported.color.WGSL_validation`
+- `unsupported.color.wgsl_validation`
 - `unsupported.image.orientation`
 - `unsupported.image.upload.budget_exceeded`
 - `unsupported.image.tile_mode`
@@ -392,13 +399,13 @@ Examples:
 - `unsupported.text.artifact_unregistered`
 - `unsupported.text.atlas_generation_stale`
 - `unsupported.text.upload_plan_missing`
-- `unsupported.text.SDF_route_unavailable`
+- `unsupported.text.sdf_route_unavailable`
 - `unsupported.layer.destination_read`
 - `unsupported.layer.init_previous_unaccepted`
 - `unsupported.layer.backdrop_filter`
 - `unsupported.layer.restore_blend`
 - `unsupported.layer.elision_proof_missing`
-- `unsupported.layer.CPU_fallback_forbidden`
+- `unsupported.layer.cpu_fallback_forbidden`
 - `unsupported.destination_read.strategy_unaccepted`
 - `unsupported.destination_read.active_attachment_sampled`
 - `unsupported.destination_read.copy_budget_exceeded`
@@ -407,13 +414,13 @@ Examples:
 - `unsupported.filter.tile_mode`
 - `unsupported.filter.runtime_effect_unregistered`
 - `unsupported.filter.intermediate_budget_exceeded`
-- `unsupported.filter.CPU_rendered_texture_forbidden`
+- `unsupported.filter.cpu_rendered_texture_forbidden`
 - `unsupported.runtime_effect.compatibility_key_unknown`
 - `unsupported.runtime_effect.kind_mismatch`
-- `unsupported.runtime_effect.WGSL_missing`
-- `unsupported.runtime_effect.WGSL_validation`
-- `unsupported.runtime_effect.CPU_oracle_missing`
-- `unsupported.runtime_effect.dynamic_SkSL_forbidden`
+- `unsupported.runtime_effect.wgsl_missing`
+- `unsupported.runtime_effect.wgsl_validation`
+- `unsupported.runtime_effect.cpu_oracle_missing`
+- `unsupported.runtime_effect.dynamic_sksl_forbidden`
 - `unsupported.runtime_effect.unregistered_descriptor`
 - `unsupported.blend.dst_dependent_mode`
 

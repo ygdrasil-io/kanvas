@@ -731,8 +731,8 @@ Stable reason-code examples:
 - `unsupported.vertices.primitive_blend_destination_read`
 - `unsupported.vertices.buffer_budget_exceeded`
 - `unsupported.vertices.upload_unavailable`
-- `unsupported.vertices.WGSL_ABI_unvalidated`
-- `unsupported.vertices.CPU_rendered_texture_forbidden`
+- `unsupported.vertices.wgsl_abi_unvalidated`
+- `unsupported.vertices.cpu_rendered_texture_forbidden`
 
 ## Telemetry
 
