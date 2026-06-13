@@ -173,6 +173,43 @@ data class GPUTextUploadPlan(
 )
 
 /**
+ * Validates upload ranges against this plan's declared payload size.
+ *
+ * The method returns diagnostics instead of throwing so artifact planners can
+ * include invalid payload evidence in PM bundles or route refusals without
+ * needing renderer state.
+ */
+fun GPUTextUploadPlan.validateRanges(): List<GPUTextArtifactDiagnostic> {
+    val diagnostics = mutableListOf<GPUTextArtifactDiagnostic>()
+    if (byteSize < 0) {
+        diagnostics += GPUTextArtifactDiagnostic(
+            code = GPUTextArtifactDiagnosticCode.INVALID_UPLOAD_RANGE,
+            message = "Upload payload byteSize $byteSize is negative.",
+            artifactKey = artifactKey,
+        )
+        return diagnostics
+    }
+
+    ranges.forEach { range ->
+        val start = range.offset.toLong()
+        val end = start + range.size.toLong()
+        when {
+            range.offset < 0 || range.size < 0 -> diagnostics += GPUTextArtifactDiagnostic(
+                code = GPUTextArtifactDiagnosticCode.INVALID_UPLOAD_RANGE,
+                message = "Upload range ${range.label} has negative offset ${range.offset} or size ${range.size}.",
+                artifactKey = artifactKey,
+            )
+            end > byteSize.toLong() -> diagnostics += GPUTextArtifactDiagnostic(
+                code = GPUTextArtifactDiagnosticCode.INVALID_UPLOAD_RANGE,
+                message = "Upload range ${range.label} [$start, $end) exceeds payload byteSize $byteSize.",
+                artifactKey = artifactKey,
+            )
+        }
+    }
+    return diagnostics
+}
+
+/**
  * Diagnostic emitted while building GPU text artifacts.
  *
  * Diagnostics are plain data so they can be stored in PM evidence, test
