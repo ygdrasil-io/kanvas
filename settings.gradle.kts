@@ -64,6 +64,13 @@ includeBuild("external/poc-koreos") {
 }
 
 include(":math")
+include(":font")
+include(":font:core")
+include(":font:sfnt")
+include(":font:scaler")
+include(":font:text")
+include(":font:glyph")
+include(":font:gpu-api")
 include(":kanvas-skia")
 include(":codec-api")
 include(":codec-core")
