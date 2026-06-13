@@ -153,6 +153,14 @@ _FIXTURE_ROOTS: list[Path] = []
 
 
 class WebGpuGlyphAtlasSamplingRouteValidatorTest(unittest.TestCase):
+    def test_pm_validator_stays_headless_and_does_not_require_adapter_test(self) -> None:
+        build_gradle = (PROJECT_ROOT / "build.gradle.kts").read_text(encoding="utf-8")
+        task_start = build_gradle.index('tasks.register<Exec>("validateKan054WebGpuGlyphAtlasSamplingRoute")')
+        task_end = build_gradle.index('\ntasks.', task_start + 1)
+        task_body = build_gradle[task_start:task_end]
+
+        self.assertNotIn(":gpu-raster:kan054WebGpuGlyphAtlasSamplingRouteTest", task_body)
+
     def test_build_evidence_accepts_current_glyph_atlas_route(self) -> None:
         evidence = kan054.build_evidence(PROJECT_ROOT)
 

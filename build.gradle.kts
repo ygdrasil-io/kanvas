@@ -5637,7 +5637,6 @@ tasks.register<Exec>("validateKan054WebGpuGlyphAtlasSamplingRoute") {
     group = "verification"
     description = "Materializes and validates the KAN-054 WebGPU glyph atlas sampling route evidence."
     mustRunAfter("validateKan053TextGlyphVisualDelta")
-    dependsOn(":gpu-raster:kan054WebGpuGlyphAtlasSamplingRouteTest")
     val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/webgpu-glyph-atlas-sampling-route")
     commandLine(
         "python3",
