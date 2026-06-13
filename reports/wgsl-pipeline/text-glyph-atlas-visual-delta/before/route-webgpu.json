@@ -1,0 +1,57 @@
+{
+  "adapter": "Apple M2 Max",
+  "atlasRouteIdentifier": "webgpu.text.glyph-atlas.simple-latin",
+  "atlasUploadByteCount": 12928,
+  "atlasUploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
+  "backend": "WebGPU",
+  "comparison": {
+    "matchingPixels": 60832,
+    "maxChannelDiff": {
+      "a": 0,
+      "b": 255,
+      "g": 255,
+      "r": 255
+    },
+    "meanMismatchDiff": {
+      "a": 0,
+      "b": 41,
+      "g": 41,
+      "r": 41
+    },
+    "mismatchingPixels": 608,
+    "similarity": 99.010417,
+    "tolerance": 8,
+    "totalPixels": 61440
+  },
+  "dedupedGlyphCount": 26,
+  "diffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png",
+  "drawKind": "SkTextBlob.simple-positioned-run",
+  "fallbackReason": "none",
+  "fontFamily": "Liberation Sans",
+  "fontSize": 32.0,
+  "fontSourceId": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+  "globalThresholdChanged": false,
+  "glyphInventoryCount": 32,
+  "glyphRoute": "font.glyph.outline-path",
+  "nonClaims": [
+    "no-shaping-claim",
+    "no-fallback-font-claim",
+    "no-emoji-or-color-font-claim",
+    "no-sdf-or-lcd-claim",
+    "no-rtl-or-bidi-claim",
+    "no-ligature-claim",
+    "no-broad-text-claim"
+  ],
+  "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
+  "referenceKind": "cpu-atlas-alpha-mask-oracle",
+  "renderArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png",
+  "sceneId": "text.simple-latin.line.v1",
+  "scopeId": "text.simple-latin.liberation-sans-regular.v1",
+  "selectedRoute": "webgpu.text.outline-path.simple-latin",
+  "shapingMode": "simple-codepoint-order",
+  "similarityThreshold": 95.0,
+  "status": "pass",
+  "supportClaim": true,
+  "supportScope": "simple-latin-line-visible",
+  "text": "Kanvas Latin 0123456789 ABC xyz."
+}

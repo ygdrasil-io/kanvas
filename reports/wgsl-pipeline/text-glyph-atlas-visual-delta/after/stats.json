@@ -1,0 +1,72 @@
+        {
+          "sceneId": "text.simple-latin.line.v1",
+          "scopeId": "text.simple-latin.liberation-sans-regular.v1",
+          "text": "Kanvas Latin 0123456789 ABC xyz.",
+          "fontFamily": "Liberation Sans",
+          "fontSourceId": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+          "fontSize": 32.0,
+          "shapingMode": "simple-codepoint-order",
+          "glyphSourceRoute": "font.glyph.outline-path",
+          "webGpuRouteIdentifier": "webgpu.text.glyph-atlas.simple-latin",
+          "atlasRouteIdentifier": "webgpu.text.glyph-atlas.simple-latin",
+          "atlasUploadByteCount": 12928,
+          "atlasUploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
+          "sourceCacheSha256": "f85ddf1dd6b62ecb46df77559ef78b9ad0e1f51cea70b90932fe2550b398d433",
+          "glyphInventoryCount": 32,
+          "dedupedGlyphCount": 26,
+          "cpuNonWhitePixels": 4392,
+          "webGpuNonWhitePixels": 4400,
+          "tolerance": 8,
+          "cpuSimilarityThreshold": 95.00,
+          "webGpuSimilarityThreshold": 95.00,
+          "cpuComparison": {
+  "similarity": 99.054362,
+  "totalPixels": 61440,
+  "matchingPixels": 60859,
+  "mismatchingPixels": 581,
+  "tolerance": 8,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 255,
+    "g": 255,
+    "b": 255
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 40,
+    "g": 40,
+    "b": 40
+  }
+},
+          "webGpuComparison": {
+  "similarity": 99.801432,
+  "totalPixels": 61440,
+  "matchingPixels": 61318,
+  "mismatchingPixels": 122,
+  "tolerance": 8,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 255,
+    "g": 255,
+    "b": 255
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 107,
+    "g": 107,
+    "b": 107
+  }
+},
+          "globalThresholdChanged": false,
+          "fallbackPolicy": "none",
+          "webGpuAdapter": "Apple M2 Max",
+          "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
+          "cpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu.png",
+          "webGpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png",
+          "cpuDiffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu-diff.png",
+          "webGpuDiffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png",
+          "routeCpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json",
+          "routeWebGpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-webgpu.json",
+          "atlasArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json",
+          "nonClaims": ["no-shaping-claim", "no-fallback-font-claim", "no-emoji-or-color-font-claim", "no-sdf-or-lcd-claim", "no-rtl-or-bidi-claim", "no-ligature-claim", "no-broad-text-claim"]
+        }
