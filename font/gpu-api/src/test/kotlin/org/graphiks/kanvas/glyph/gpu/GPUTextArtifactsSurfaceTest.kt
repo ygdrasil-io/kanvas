@@ -111,4 +111,46 @@ class GPUTextArtifactsSurfaceTest {
         assertTrue(bundle.diagnostics.refusalRequired)
         assertFalse(bundle.diagnostics.isEmpty)
     }
+
+    @Test
+    fun `upload plan validation reports malformed ranges without renderer state`() {
+        val key = GPUTextArtifactKey(
+            artifactID = GPUTextArtifactID(Uuid.parse("550e8400-e29b-41d4-a716-446655440204")),
+            generation = GPUTextArtifactGeneration(1),
+            contentFingerprint = "a8-atlas",
+        )
+        val validPlan = GPUTextUploadPlan(
+            artifactKey = key,
+            ranges = listOf(
+                GPUTextUploadRange(offset = 0, size = 4, label = "header"),
+                GPUTextUploadRange(offset = 4, size = 12, label = "pixels"),
+            ),
+            byteSize = 16,
+        )
+        val invalidPlan = GPUTextUploadPlan(
+            artifactKey = key,
+            ranges = listOf(
+                GPUTextUploadRange(offset = 8, size = 12, label = "overflow"),
+                GPUTextUploadRange(offset = -1, size = 1, label = "negative"),
+            ),
+            byteSize = 16,
+        )
+
+        assertEquals(emptyList(), validPlan.validateRanges())
+        assertEquals(
+            listOf(
+                GPUTextArtifactDiagnostic(
+                    code = GPUTextArtifactDiagnosticCode.INVALID_UPLOAD_RANGE,
+                    message = "Upload range overflow [8, 20) exceeds payload byteSize 16.",
+                    artifactKey = key,
+                ),
+                GPUTextArtifactDiagnostic(
+                    code = GPUTextArtifactDiagnosticCode.INVALID_UPLOAD_RANGE,
+                    message = "Upload range negative has negative offset -1 or size 1.",
+                    artifactKey = key,
+                ),
+            ),
+            invalidPlan.validateRanges(),
+        )
+    }
 }

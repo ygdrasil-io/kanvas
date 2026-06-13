@@ -3,12 +3,78 @@ package org.graphiks.kanvas.font.sfnt
 import org.graphiks.kanvas.font.FontSourceID
 import org.graphiks.kanvas.font.FontSourceKind
 import org.graphiks.kanvas.font.FontSource
+import org.graphiks.kanvas.font.FontSlant
 import org.graphiks.kanvas.font.TypefaceID
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 
 class SFNTSurfaceTest {
+    @Test
+    fun defaultReaderReadsDirectoryAndBoundedTableBytes() {
+        val payload = byteArrayOf(0x21, 0x22, 0x23, 0x24)
+        val source = memoryFontSource(
+            byteArrayOf(
+                0x00, 0x01, 0x00, 0x00,
+                0x00, 0x01,
+                0x00, 0x10,
+                0x00, 0x00,
+                0x00, 0x00,
+                'n'.code.toByte(), 'a'.code.toByte(), 'm'.code.toByte(), 'e'.code.toByte(),
+                0x12, 0x34, 0x56, 0x78,
+                0x00, 0x00, 0x00, 0x1c,
+                0x00, 0x00, 0x00, 0x04,
+                *payload,
+            ),
+        )
+
+        val reader = DefaultSFNTReader()
+        val directory = reader.readDirectory(source)
+        val record = directory.tables.single()
+
+        assertEquals(0x00010000u, directory.scalerType)
+        assertEquals(SFNTTableTag("name"), record.tag)
+        assertEquals(0x12345678u, record.checksum)
+        assertEquals(28u, record.offset)
+        assertEquals(4u, record.length)
+        assertContentEquals(payload, reader.readTable(source, record))
+    }
+
+    @Test
+    fun defaultReaderRejectsTableRangesOutsideSourceBounds() {
+        val reader = DefaultSFNTReader()
+        val source = memoryFontSource(byteArrayOf(0x01, 0x02, 0x03, 0x04))
+        val record = SFNTTableRecord(
+            tag = SFNTTableTag("name"),
+            checksum = 0u,
+            offset = 2u,
+            length = 4u,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            reader.readTable(source, record)
+        }
+    }
+
+    @Test
+    fun defaultReaderRejectsTableOffsetsThatCannotAddressSourceBytes() {
+        val reader = DefaultSFNTReader()
+        val source = memoryFontSource(byteArrayOf(0x01, 0x02, 0x03, 0x04))
+        val record = SFNTTableRecord(
+            tag = SFNTTableTag("name"),
+            checksum = 0u,
+            offset = UInt.MAX_VALUE,
+            length = 1u,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            reader.readTable(source, record)
+        }
+    }
+
     @Test
     fun exposesSfntDirectoryAndParsedTableContainers() {
         val tag = SFNTTableTag("name")
@@ -41,12 +107,2802 @@ class SFNTSurfaceTest {
             variations = VariationTables(),
             layout = OpenTypeLayoutTables(),
             color = ColorFontTables(),
+            rawTables = mapOf(tag to listOf(0x01, 0x02)),
             diagnostics = listOf(diagnostic),
         )
 
         assertEquals("name", tag.value)
         assertEquals(record, directory.tables.single())
         assertEquals(directory, faceData.directory)
+        assertEquals(listOf(0x01, 0x02), faceData.rawTables[tag])
+        assertContentEquals(byteArrayOf(0x01, 0x02), faceData.rawTableBytes(tag))
+        assertContentEquals(byteArrayOf(0x01, 0x02), faceData.rawTableBytes("name"))
         assertEquals(diagnostic, faceData.diagnostics.single())
     }
+
+    @Test
+    fun defaultOpenTypeFaceParserParsesSimpleSfntFaceAndKeepsRawTables() {
+        val family = "Kanvas Sans"
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(
+                    testNameRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        languageId = 0x0409,
+                        nameId = 1,
+                        bytes = family.toByteArray(Charsets.UTF_16BE),
+                    ),
+                ),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0041,
+                                endCode = 0x0041,
+                                startGlyphId = 7,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = -40, yMin = -200, xMax = 980, yMax = 840),
+                    indexToLocFormat = 1,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 820,
+                    descender = -180,
+                    lineGap = 40,
+                    numberOfHMetrics = 2,
+                ),
+                "maxp" to maxpTable(numGlyphs = 2),
+                "hmtx" to hmtxTable(
+                    metric(advanceWidth = 500, leftSideBearing = -20),
+                    metric(advanceWidth = 450, leftSideBearing = 7),
+                ),
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+        val reparsed = DefaultOpenTypeFaceParser().parse(source)
+
+        assertEquals(parsed.id, reparsed.id)
+        assertEquals(6, parsed.directory.tables.size)
+        assertEquals(family, parsed.names.lookupName(nameId = 1))
+        assertEquals(7, parsed.cmap.lookupGlyphId(0x0041))
+        assertEquals(1000, parsed.metrics.unitsPerEm)
+        assertEquals(2, parsed.metrics.numGlyphs)
+        assertEquals(820, parsed.metrics.ascender)
+        assertEquals(450, parsed.metrics.horizontalMetrics[1].advanceWidth)
+        assertEquals(emptyList(), parsed.diagnostics)
+        assertEquals(6, parsed.rawTables.size)
+        assertEquals(54, parsed.rawTables.getValue(SFNTTableTag("head")).size)
+        assertEquals(0, parsed.rawTables.getValue(SFNTTableTag("head"))[0])
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserParsesSvgTableAndLooksUpDocumentsByGlyphId() {
+        val svgBytes = "<svg><path id=\"glyph-eight\"/></svg>".toByteArray(Charsets.UTF_8)
+        val svg = svgTable(
+            startGlyphId = 7,
+            endGlyphId = 9,
+            bytes = svgBytes,
+        )
+        val source = memoryFontSource(
+            sfntFaceWithColorTables(
+                numGlyphs = 10,
+                "SVG " to svg,
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+        val svgTable = parsed.color.svg ?: error("Expected parsed SVG table.")
+        val document = svgTable.documentForGlyph(8) ?: error("Expected SVG document for glyph 8.")
+
+        assertEquals(emptyList(), parsed.diagnostics)
+        assertEquals(svg.toUnsignedByteList(), parsed.color.tables.getValue(SFNTTableTag("SVG ")))
+        assertEquals(0, svgTable.version)
+        assertEquals(10, svgTable.documentListOffset)
+        assertEquals(OpenTypeSvgDocumentRecord(startGlyphId = 7, endGlyphId = 9, offset = 24, length = svgBytes.size), svgTable.records.single())
+        assertEquals(7, document.startGlyphId)
+        assertEquals(9, document.endGlyphId)
+        assertEquals(svgBytes.toUnsignedByteList(), document.bytes)
+        assertEquals("<svg><path id=\"glyph-eight\"/></svg>", document.text)
+        assertEquals(null, svgTable.documentForGlyph(6))
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserParsesSbixPngGlyphMetadataAndPayload() {
+        val png = pngPayload(0x10, 0x20, 0x30)
+        val sbix = sbixTable(
+            numGlyphs = 5,
+            glyphId = 3,
+            ppem = 19,
+            originOffsetX = -2,
+            originOffsetY = 5,
+            png = png,
+        )
+        val source = memoryFontSource(
+            sfntFaceWithColorTables(
+                numGlyphs = 5,
+                "sbix" to sbix,
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+        val bitmap = parsed.color.bitmap ?: error("Expected parsed bitmap font.")
+        val glyph = bitmap.glyph(3) ?: error("Expected sbix glyph 3.")
+
+        assertEquals(emptyList(), parsed.diagnostics)
+        assertEquals(sbix.toUnsignedByteList(), parsed.color.tables.getValue(SFNTTableTag("sbix")))
+        assertEquals(OpenTypeBitmapGlyphSource.SBIX, glyph.source)
+        assertEquals(3, glyph.glyphId)
+        assertEquals(19, glyph.ppemX)
+        assertEquals(19, glyph.ppemY)
+        assertEquals(32, glyph.bitDepth)
+        assertEquals(-2, glyph.originOffsetX)
+        assertEquals(5, glyph.originOffsetY)
+        assertEquals("png ", glyph.imageFormat)
+        assertEquals(png.toUnsignedByteList(), glyph.bytes)
+        assertEquals(null, bitmap.glyph(2))
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserParsesCbdtCblcIndexFormat1PngGlyph() {
+        val png = pngPayload(0x44, 0x55)
+        val cbdtPayload = cbdtFormat17Payload(png)
+        val cbdt = cbdtTable(cbdtPayload)
+        val cblc = cblcTableIndexFormat1(
+            glyphId = 4,
+            payloadLength = cbdtPayload.size,
+            ppemX = 18,
+            ppemY = 20,
+            bitDepth = 8,
+        )
+        val source = memoryFontSource(
+            sfntFaceWithColorTables(
+                numGlyphs = 6,
+                "CBDT" to cbdt,
+                "CBLC" to cblc,
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+        val bitmap = parsed.color.bitmap ?: error("Expected parsed bitmap font.")
+        val glyph = bitmap.glyph(4) ?: error("Expected CBDT/CBLC glyph 4.")
+
+        assertEquals(emptyList(), parsed.diagnostics)
+        assertEquals(cbdt.toUnsignedByteList(), parsed.color.tables.getValue(SFNTTableTag("CBDT")))
+        assertEquals(cblc.toUnsignedByteList(), parsed.color.tables.getValue(SFNTTableTag("CBLC")))
+        assertEquals(OpenTypeBitmapGlyphSource.CBDT_CBLC, glyph.source)
+        assertEquals(4, glyph.glyphId)
+        assertEquals(18, glyph.ppemX)
+        assertEquals(20, glyph.ppemY)
+        assertEquals(8, glyph.bitDepth)
+        assertEquals(0, glyph.originOffsetX)
+        assertEquals(0, glyph.originOffsetY)
+        assertEquals("png ", glyph.imageFormat)
+        assertEquals(png.toUnsignedByteList(), glyph.bytes)
+        assertEquals(null, bitmap.glyph(3))
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserParsesFvarVariationAxes() {
+        val fvar = fvarTable(
+            testFvarAxis(
+                tag = "wght",
+                minimum = 0.5,
+                defaultValue = 1.0,
+                maximum = 2.0,
+                flags = 1,
+                nameId = 256,
+            ),
+            testFvarAxis(
+                tag = "slnt",
+                minimum = -12.5,
+                defaultValue = 0.0,
+                maximum = 10.0,
+                flags = 0,
+                nameId = 257,
+            ),
+        )
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0041,
+                                endCode = 0x0041,
+                                startGlyphId = 7,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 1,
+                ),
+                "maxp" to maxpTable(numGlyphs = 1),
+                "hmtx" to hmtxTable(metric(advanceWidth = 500, leftSideBearing = 0)),
+                "fvar" to fvar,
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+        val weight = parsed.variations.axes[0]
+        val slant = parsed.variations.axes[1]
+
+        assertEquals(emptyList(), parsed.diagnostics)
+        assertEquals(2, parsed.variations.axes.size)
+        assertEquals(OpenTypeVariationAxisTag(text = "wght", rawValue = 0x77676874), weight.tag)
+        assertEquals(0x00008000, weight.minimum.rawValue)
+        assertEquals(0.5, weight.minimum.value)
+        assertEquals(0x00010000, weight.defaultValue.rawValue)
+        assertEquals(1.0, weight.defaultValue.value)
+        assertEquals(0x00020000, weight.maximum.rawValue)
+        assertEquals(2.0, weight.maximum.value)
+        assertEquals(1, weight.flags)
+        assertEquals(256, weight.nameId)
+        assertEquals(OpenTypeVariationAxisTag(text = "slnt", rawValue = 0x736c6e74), slant.tag)
+        assertEquals(fixed16Dot16Raw(-12.5), slant.minimum.rawValue)
+        assertEquals(-12.5, slant.minimum.value)
+        assertEquals(fixed16Dot16Raw(0.0), slant.defaultValue.rawValue)
+        assertEquals(0.0, slant.defaultValue.value)
+        assertEquals(fixed16Dot16Raw(10.0), slant.maximum.rawValue)
+        assertEquals(10.0, slant.maximum.value)
+        assertEquals(0, slant.flags)
+        assertEquals(257, slant.nameId)
+        assertEquals(fvar.toUnsignedByteList(), parsed.rawTables.getValue(SFNTTableTag("fvar")))
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserParsesAvarSegmentMapsInFvarAxisOrder() {
+        val fvar = fvarTable(
+            testFvarAxis(
+                tag = "wght",
+                minimum = 0.5,
+                defaultValue = 1.0,
+                maximum = 2.0,
+                flags = 0,
+                nameId = 256,
+            ),
+        )
+        val avar = avarTable(
+            listOf(
+                -1.0 to -1.0,
+                0.0 to 0.0,
+                0.5 to 0.25,
+                1.0 to 1.0,
+            ),
+        )
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0041,
+                                endCode = 0x0041,
+                                startGlyphId = 7,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 1,
+                ),
+                "maxp" to maxpTable(numGlyphs = 1),
+                "hmtx" to hmtxTable(metric(advanceWidth = 500, leftSideBearing = 0)),
+                "fvar" to fvar,
+                "avar" to avar,
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+
+        assertEquals(emptyList(), parsed.diagnostics)
+        assertEquals(
+            listOf(
+                OpenTypeAvarSegment(fromCoordinate = -1.0, toCoordinate = -1.0),
+                OpenTypeAvarSegment(fromCoordinate = 0.0, toCoordinate = 0.0),
+                OpenTypeAvarSegment(fromCoordinate = 0.5, toCoordinate = 0.25),
+                OpenTypeAvarSegment(fromCoordinate = 1.0, toCoordinate = 1.0),
+            ),
+            parsed.variations.axisSegmentMaps.single().segments,
+        )
+        assertEquals(avar.toUnsignedByteList(), parsed.rawTables.getValue(SFNTTableTag("avar")))
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserReportsMalformedFvarTablesAsDiagnostics() {
+        val malformedFvar = ByteArray(12)
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0041,
+                                endCode = 0x0041,
+                                startGlyphId = 7,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 1,
+                ),
+                "maxp" to maxpTable(numGlyphs = 1),
+                "hmtx" to hmtxTable(metric(advanceWidth = 500, leftSideBearing = 0)),
+                "fvar" to malformedFvar,
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+        val diagnostic = parsed.diagnostics.single()
+
+        assertEquals(SFNTTableTag("fvar"), diagnostic.table)
+        assertEquals("INVALID_TABLE", diagnostic.causeCode)
+        assertTrue(
+            diagnostic.causeMessage.orEmpty().contains("OpenType fvar table must contain at least 16 bytes"),
+            "Unexpected diagnostic: $diagnostic",
+        )
+        assertEquals(emptyList(), parsed.variations.axes)
+        assertEquals(malformedFvar.toUnsignedByteList(), parsed.rawTables.getValue(SFNTTableTag("fvar")))
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserReportsFvarAxisArrayOffsetsInsideHeaderAsDiagnostics() {
+        val malformedFvar = fvarTable(
+            testFvarAxis(
+                tag = "wght",
+                minimum = 0.5,
+                defaultValue = 1.0,
+                maximum = 2.0,
+                flags = 0,
+                nameId = 256,
+            ),
+        )
+        malformedFvar.writeUInt16(4, 0)
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0041,
+                                endCode = 0x0041,
+                                startGlyphId = 7,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 1,
+                ),
+                "maxp" to maxpTable(numGlyphs = 1),
+                "hmtx" to hmtxTable(metric(advanceWidth = 500, leftSideBearing = 0)),
+                "fvar" to malformedFvar,
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+        val diagnostic = parsed.diagnostics.single()
+
+        assertEquals(SFNTTableTag("fvar"), diagnostic.table)
+        assertEquals("INVALID_TABLE", diagnostic.causeCode)
+        assertTrue(
+            diagnostic.causeMessage.orEmpty().contains("axesArrayOffset"),
+            "Unexpected diagnostic: $diagnostic",
+        )
+        assertEquals(emptyList(), parsed.variations.axes)
+        assertEquals(malformedFvar.toUnsignedByteList(), parsed.rawTables.getValue(SFNTTableTag("fvar")))
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserReportsMalformedOptionalTablesAsDiagnostics() {
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to ByteArray(5),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0041,
+                                endCode = 0x0041,
+                                startGlyphId = 7,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 1,
+                ),
+                "maxp" to maxpTable(numGlyphs = 1),
+                "hmtx" to hmtxTable(metric(advanceWidth = 500, leftSideBearing = 0)),
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+
+        val diagnostic = parsed.diagnostics.single()
+        assertEquals(SFNTTableTag("name"), diagnostic.table)
+        assertEquals("INVALID_TABLE", diagnostic.causeCode)
+        assertTrue(
+            diagnostic.causeMessage.orEmpty().contains("OpenType name table must contain at least 6 bytes"),
+            "Unexpected diagnostic: $diagnostic",
+        )
+        assertEquals(emptyList(), parsed.names.nameRecords)
+        assertEquals(7, parsed.cmap.lookupGlyphId(0x0041))
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserSelectsIndexedFacesFromTtcCollection() {
+        val firstFamily = "Kanvas TTC One"
+        val secondFamily = "Kanvas TTC Two"
+        val firstHead = headTable(
+            unitsPerEm = 1000,
+            bounds = OpenTypeFontBounds(xMin = 0, yMin = -200, xMax = 1000, yMax = 820),
+            indexToLocFormat = 0,
+        )
+        val secondHead = headTable(
+            unitsPerEm = 1200,
+            bounds = OpenTypeFontBounds(xMin = -20, yMin = -240, xMax = 1080, yMax = 900),
+            indexToLocFormat = 1,
+        )
+        val firstFace = sfntFont(
+            "name" to nameTable(
+                testNameRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    languageId = 0x0409,
+                    nameId = 1,
+                    bytes = firstFamily.toByteArray(Charsets.UTF_16BE),
+                ),
+            ),
+            "cmap" to cmapTable(
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    subtable = format4Subtable(
+                        testFormat4Segment(
+                            startCode = 0x0041,
+                            endCode = 0x0041,
+                            startGlyphId = 7,
+                        ),
+                    ),
+                ),
+            ),
+            "head" to firstHead,
+            "hhea" to hheaTable(
+                ascender = 820,
+                descender = -180,
+                lineGap = 40,
+                numberOfHMetrics = 1,
+            ),
+            "maxp" to maxpTable(numGlyphs = 1),
+            "hmtx" to hmtxTable(metric(advanceWidth = 500, leftSideBearing = -20)),
+        )
+        val secondFace = sfntFont(
+            "name" to nameTable(
+                testNameRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    languageId = 0x0409,
+                    nameId = 1,
+                    bytes = secondFamily.toByteArray(Charsets.UTF_16BE),
+                ),
+            ),
+            "cmap" to cmapTable(
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    subtable = format4Subtable(
+                        testFormat4Segment(
+                            startCode = 0x0042,
+                            endCode = 0x0042,
+                            startGlyphId = 11,
+                        ),
+                    ),
+                ),
+            ),
+            "head" to secondHead,
+            "hhea" to hheaTable(
+                ascender = 900,
+                descender = -220,
+                lineGap = 20,
+                numberOfHMetrics = 1,
+            ),
+            "maxp" to maxpTable(numGlyphs = 1),
+            "hmtx" to hmtxTable(metric(advanceWidth = 610, leftSideBearing = 14)),
+        )
+        val source = memoryFontSource(ttcFont(firstFace, secondFace))
+        val parser = DefaultOpenTypeFaceParser()
+
+        val firstParsed = parser.parse(source, faceIndex = 0)
+        val secondParsed = parser.parse(source, faceIndex = 1)
+        val secondReparsed = parser.parse(source, faceIndex = 1)
+
+        assertEquals(firstFamily, firstParsed.names.lookupName(nameId = 1))
+        assertEquals(secondFamily, secondParsed.names.lookupName(nameId = 1))
+        assertEquals(7, firstParsed.cmap.lookupGlyphId(0x0041))
+        assertEquals(null, firstParsed.cmap.lookupGlyphId(0x0042))
+        assertEquals(null, secondParsed.cmap.lookupGlyphId(0x0041))
+        assertEquals(11, secondParsed.cmap.lookupGlyphId(0x0042))
+        assertEquals(1000, firstParsed.metrics.unitsPerEm)
+        assertEquals(1200, secondParsed.metrics.unitsPerEm)
+        assertEquals(500, firstParsed.metrics.horizontalMetrics.single().advanceWidth)
+        assertEquals(610, secondParsed.metrics.horizontalMetrics.single().advanceWidth)
+        assertEquals(firstHead.toUnsignedByteList(), firstParsed.rawTables.getValue(SFNTTableTag("head")))
+        assertEquals(secondHead.toUnsignedByteList(), secondParsed.rawTables.getValue(SFNTTableTag("head")))
+        assertTrue(firstParsed.id != secondParsed.id, "TTC face IDs must include faceIndex.")
+        assertEquals(secondParsed.id, secondReparsed.id)
+        assertEquals(emptyList(), firstParsed.diagnostics)
+        assertEquals(emptyList(), secondParsed.diagnostics)
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserRejectsRawSfntNonZeroFaceIndex() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            DefaultOpenTypeFaceParser().parse(memoryFontSource(sfntFont()), faceIndex = 1)
+        }
+
+        assertEquals("Single-face SFNT sources support only faceIndex 0; received 1.", error.message)
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserRejectsTtcFaceIndexOutsideCollectionRange() {
+        val source = memoryFontSource(ttcFont(sfntFont(), sfntFont()))
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            DefaultOpenTypeFaceParser().parse(source, faceIndex = 2)
+        }
+
+        assertTrue(
+            error.message.orEmpty().contains("TTC/ttcf faceIndex 2 is outside collection range 0..1"),
+            "Unexpected error message: ${error.message}",
+        )
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserRejectsMalformedTtcOffsetTable() {
+        val malformed = byteArrayOf(
+            't'.code.toByte(), 't'.code.toByte(), 'c'.code.toByte(), 'f'.code.toByte(),
+            0x00, 0x01, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x02,
+            0x00, 0x00, 0x00, 0x10,
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            DefaultOpenTypeFaceParser().parse(memoryFontSource(malformed), faceIndex = 0)
+        }
+
+        assertTrue(
+            error.message.orEmpty().contains("TTC/ttcf offset table range [12, 20) exceeds source length 16"),
+            "Unexpected error message: ${error.message}",
+        )
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserPreservesMetricDiagnosticTableForInvalidHead() {
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0041,
+                                endCode = 0x0041,
+                                startGlyphId = 7,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 0,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 1,
+                ),
+                "maxp" to maxpTable(numGlyphs = 1),
+                "hmtx" to hmtxTable(metric(advanceWidth = 500, leftSideBearing = 0)),
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+
+        val diagnostic = parsed.diagnostics.single()
+        assertEquals(SFNTTableTag("head"), diagnostic.table)
+        assertEquals("INVALID_METRICS", diagnostic.causeCode)
+        assertTrue(
+            diagnostic.causeMessage.orEmpty().contains("OpenType head unitsPerEm 0"),
+            "Unexpected diagnostic: $diagnostic",
+        )
+    }
+
+    @Test
+    fun defaultReaderRejectsUnknownSingleFaceScalerTypes() {
+        val source = sfntFont().also { font ->
+            font.writeUInt32(0, 0x12345678)
+        }
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            DefaultSFNTReader().readDirectory(memoryFontSource(source))
+        }
+
+        assertTrue(
+            error.message.orEmpty().contains("Unsupported SFNT scaler type 0x12345678"),
+            "Unexpected error message: ${error.message}",
+        )
+    }
+
+    @Test
+    fun nameTableParserDecodesTypedRecordsAndKeepsLegacyRecordMap() {
+        val family = "Kanvas Sans"
+        val subfamily = "Regular"
+
+        val names = OpenTypeNameTableParser.parse(
+            nameTable(
+                testNameRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    languageId = 0x0409,
+                    nameId = 1,
+                    bytes = family.toByteArray(Charsets.UTF_16BE),
+                ),
+                testNameRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    languageId = 0x0409,
+                    nameId = 2,
+                    bytes = subfamily.toByteArray(Charsets.UTF_16BE),
+                ),
+                testNameRecord(
+                    platformId = 1,
+                    encodingId = 0,
+                    languageId = 0,
+                    nameId = 0,
+                    bytes = byteArrayOf('C'.code.toByte(), 'a'.code.toByte(), 'f'.code.toByte(), 0xe9.toByte()),
+                ),
+            ),
+        )
+
+        assertEquals(0, names.format)
+        assertEquals(42, names.stringOffset)
+        assertEquals(3, names.nameRecords.size)
+
+        val familyRecord = names.nameRecords[0]
+        assertEquals(3, familyRecord.platformId)
+        assertEquals(1, familyRecord.encodingId)
+        assertEquals(0x0409, familyRecord.languageId)
+        assertEquals(1, familyRecord.nameId)
+        assertEquals(family, familyRecord.value)
+
+        assertEquals("Caf\u00e9", names.nameRecords[2].value)
+        assertEquals(family, names.lookupName(nameId = 1))
+        assertEquals(subfamily, names.lookupName(nameId = 2, languageId = 0x0409))
+        assertEquals(family, names.records["3:1:1033:1"])
+    }
+
+    @Test
+    fun nameTableParserRejectsShortTablesWithIllegalArgumentException() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            OpenTypeNameTableParser.parse(ByteArray(5))
+        }
+
+        assertEquals("OpenType name table must contain at least 6 bytes for the header.", error.message)
+    }
+
+    @Test
+    fun nameTableParserRejectsInvalidStringOffsetsWithIllegalArgumentException() {
+        val table = ByteArray(18)
+        table.writeUInt16(0, 0)
+        table.writeUInt16(2, 1)
+        table.writeUInt16(4, 18)
+        table.writeUInt16(6, 3)
+        table.writeUInt16(8, 1)
+        table.writeUInt16(10, 0x0409)
+        table.writeUInt16(12, 1)
+        table.writeUInt16(14, 2)
+        table.writeUInt16(16, 0)
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            OpenTypeNameTableParser.parse(table)
+        }
+
+        assertTrue(
+            error.message.orEmpty().contains("OpenType name record 0 string range"),
+            "Unexpected error message: ${error.message}",
+        )
+    }
+
+    @Test
+    fun nameTableParserRejectsOddWindowsUtf16LengthsWithIllegalArgumentException() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            OpenTypeNameTableParser.parse(
+                nameTable(
+                    testNameRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        languageId = 0x0409,
+                        nameId = 1,
+                        bytes = byteArrayOf(0x00),
+                    ),
+                ),
+            )
+        }
+
+        assertTrue(
+            error.message.orEmpty().contains("UTF-16BE string length must be even"),
+            "Unexpected error message: ${error.message}",
+        )
+    }
+
+    @Test
+    fun nameTableParserDecodesUnicodePlatformAsUtf16Be() {
+        val family = "Kanvas Sans"
+
+        val names = OpenTypeNameTableParser.parse(
+            nameTable(
+                testNameRecord(
+                    platformId = 0,
+                    encodingId = 3,
+                    languageId = 0,
+                    nameId = 1,
+                    bytes = family.toByteArray(Charsets.UTF_16BE),
+                ),
+            ),
+        )
+
+        assertEquals(family, names.nameRecords.single().value)
+        assertEquals(family, names.lookupName(nameId = 1))
+    }
+
+    @Test
+    fun nameTableExposesPreferredAndLocalizedNamesWithLanguageTags() {
+        val names = OpenTypeNameTableParser.parse(
+            nameTable(
+                testNameRecord(
+                    platformId = 1,
+                    encodingId = 0,
+                    languageId = 1,
+                    nameId = 1,
+                    bytes = "Famille Mac".toByteArray(Charsets.ISO_8859_1),
+                ),
+                testNameRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    languageId = 0x0409,
+                    nameId = 1,
+                    bytes = "Kanvas Sans".toByteArray(Charsets.UTF_16BE),
+                ),
+                testNameRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    languageId = 0x040C,
+                    nameId = 4,
+                    bytes = "Kanvas Sans Regular".toByteArray(Charsets.UTF_16BE),
+                ),
+                testNameRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    languageId = 0x0409,
+                    nameId = 2,
+                    bytes = "Bold Italic".toByteArray(Charsets.UTF_16BE),
+                ),
+                testNameRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    languageId = 0x0409,
+                    nameId = 6,
+                    bytes = "KanvasSans-BoldItalic".toByteArray(Charsets.UTF_16BE),
+                ),
+            ),
+        )
+
+        assertEquals("Kanvas Sans", names.preferredFamilyName())
+        assertEquals("Bold Italic", names.preferredStyleName())
+        assertEquals("KanvasSans-BoldItalic", names.preferredPostScriptName())
+        assertEquals(
+            listOf(
+                OpenTypeLocalizedName("Famille Mac", "fr", 1),
+                OpenTypeLocalizedName("Kanvas Sans", "en-US", 1),
+                OpenTypeLocalizedName("Kanvas Sans Regular", "fr-FR", 4),
+            ),
+            names.localizedFamilyNames(),
+        )
+    }
+
+    @Test
+    fun nameTableParserRejectsOddUnicodePlatformUtf16LengthsWithIllegalArgumentException() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            OpenTypeNameTableParser.parse(
+                nameTable(
+                    testNameRecord(
+                        platformId = 0,
+                        encodingId = 3,
+                        languageId = 0,
+                        nameId = 1,
+                        bytes = byteArrayOf(0x00),
+                    ),
+                ),
+            )
+        }
+
+        assertTrue(
+            error.message.orEmpty().contains("UTF-16BE string length must be even"),
+            "Unexpected error message: ${error.message}",
+        )
+    }
+
+    @Test
+    fun cmapTableParserParsesFormat4BmpMappingAndKeepsLegacySubtableBytes() {
+        val table = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    subtable = format4Subtable(
+                        testFormat4Segment(
+                            startCode = 0x0041,
+                            endCode = 0x0041,
+                            startGlyphId = 7,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(0, table.version)
+        assertEquals(1, table.encodingRecords.size)
+        assertEquals(CMapEncodingRecord(platformId = 3, encodingId = 1, offset = 12, format = 4), table.encodingRecords.single())
+        assertEquals(4, table.preferredSubtable?.format)
+        assertEquals(7, table.lookupGlyphId(0x0041))
+        assertEquals(null, table.lookupGlyphId(0x0042))
+        assertEquals(32, table.subtables["3:1:4"]?.size)
+    }
+
+    @Test
+    fun cmapTableParserTreatsFormat4DeltaResolvedGlyphZeroAsMissing() {
+        val table = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    subtable = format4Subtable(
+                        testFormat4Segment(
+                            startCode = 0x0041,
+                            endCode = 0x0041,
+                            startGlyphId = 0,
+                        ),
+                        testFormat4Segment(
+                            startCode = 0x0042,
+                            endCode = 0x0042,
+                            startGlyphId = 7,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(null, table.lookupGlyphId(0x0041))
+        assertEquals(7, table.lookupGlyphId(0x0042))
+    }
+
+    @Test
+    fun cmapTableParserTreatsFormat4RangeOffsetRawGlyphZeroAsMissing() {
+        val table = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    subtable = format4RangeOffsetSubtable(
+                        startCode = 0x0041,
+                        endCode = 0x0042,
+                        rawGlyphIds = listOf(0, 11),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(null, table.lookupGlyphId(0x0041))
+        assertEquals(11, table.lookupGlyphId(0x0042))
+    }
+
+    @Test
+    fun cmapTableParserPrefersWindowsFormat12ForUnicodeLookup() {
+        val table = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    subtable = format4Subtable(
+                        testFormat4Segment(
+                            startCode = 0x0041,
+                            endCode = 0x0041,
+                            startGlyphId = 7,
+                        ),
+                    ),
+                ),
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 10,
+                    subtable = format12Subtable(
+                        testFormat12Group(startCharCode = 0x0041, endCharCode = 0x0041, startGlyphId = 9),
+                        testFormat12Group(startCharCode = 0x1f600, endCharCode = 0x1f600, startGlyphId = 300),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(12, table.preferredSubtable?.format)
+        assertEquals(3, table.preferredSubtable?.platformId)
+        assertEquals(10, table.preferredSubtable?.encodingId)
+        assertEquals(9, table.lookupGlyphId(0x0041))
+        assertEquals(300, table.lookupGlyphId(0x1f600))
+    }
+
+    @Test
+    fun cmapTableParserTreatsFormat12ResolvedGlyphZeroAsMissing() {
+        val table = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 10,
+                    subtable = format12Subtable(
+                        testFormat12Group(startCharCode = 0x0041, endCharCode = 0x0041, startGlyphId = 0),
+                        testFormat12Group(startCharCode = 0x0042, endCharCode = 0x0042, startGlyphId = 7),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(null, table.lookupGlyphId(0x0041))
+        assertEquals(7, table.lookupGlyphId(0x0042))
+    }
+
+    @Test
+    fun cmapTableParserParsesFormat0ByteEncodingMapping() {
+        val glyphIds = MutableList(256) { 0 }
+        glyphIds[0x41] = 7
+        glyphIds[0x42] = 0
+        val table = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 1,
+                    encodingId = 0,
+                    subtable = format0Subtable(glyphIds),
+                ),
+            ),
+        )
+
+        assertEquals(CMapEncodingRecord(platformId = 1, encodingId = 0, offset = 12, format = 0), table.encodingRecords.single())
+        assertEquals(0, table.preferredSubtable?.format)
+        assertEquals(7, table.lookupGlyphId(0x41))
+        assertEquals(null, table.lookupGlyphId(0x42))
+        assertEquals(null, table.lookupGlyphId(0x100))
+        assertEquals(262, table.subtables["1:0:0"]?.size)
+    }
+
+    @Test
+    fun cmapTableParserParsesFormat0MacRomanMappingAsUnicodeLookup() {
+        val glyphIds = MutableList(256) { 0 }
+        glyphIds[0x41] = 7
+        glyphIds[0x80] = 11
+        val table = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 1,
+                    encodingId = 0,
+                    subtable = format0Subtable(glyphIds),
+                ),
+            ),
+        )
+
+        assertEquals(7, table.lookupGlyphId(0x0041))
+        assertEquals(11, table.lookupGlyphId(0x00C4))
+        assertEquals(null, table.lookupGlyphId(0x0080))
+    }
+
+    @Test
+    fun cmapTableParserParsesFormat6TrimmedMapping() {
+        val table = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 0,
+                    encodingId = 0,
+                    subtable = format6Subtable(firstCode = 0x41, glyphIds = listOf(7, 0, 9)),
+                ),
+            ),
+        )
+
+        assertEquals(6, table.preferredSubtable?.format)
+        assertEquals(7, table.lookupGlyphId(0x41))
+        assertEquals(null, table.lookupGlyphId(0x42))
+        assertEquals(9, table.lookupGlyphId(0x43))
+        assertEquals(null, table.lookupGlyphId(0x44))
+        assertEquals(16, table.subtables["0:0:6"]?.size)
+    }
+
+    @Test
+    fun cmapTableParserParsesFormat6MacRomanMappingAsUnicodeLookup() {
+        val table = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 1,
+                    encodingId = 0,
+                    subtable = format6Subtable(firstCode = 0x80, glyphIds = listOf(11, 12)),
+                ),
+            ),
+        )
+
+        assertEquals(11, table.lookupGlyphId(0x00C4))
+        assertEquals(12, table.lookupGlyphId(0x00C5))
+        assertEquals(null, table.lookupGlyphId(0x0080))
+    }
+
+    @Test
+    fun cmapTableParserRejectsEncodingRecordOffsetsWithIllegalArgumentException() {
+        val table = ByteArray(12)
+        table.writeUInt16(0, 0)
+        table.writeUInt16(2, 1)
+        table.writeUInt16(4, 3)
+        table.writeUInt16(6, 1)
+        table.writeUInt32(8, 40)
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            OpenTypeCMapTableParser.parse(table)
+        }
+
+        assertTrue(
+            error.message.orEmpty().contains("OpenType cmap encoding record 0 subtable offset 40"),
+            "Unexpected error message: ${error.message}",
+        )
+    }
+
+    @Test
+    fun cmapTableParserRejectsFormat12GroupsOutsideDeclaredLengthWithIllegalArgumentException() {
+        val subtable = format12Subtable(
+            testFormat12Group(startCharCode = 0x1f600, endCharCode = 0x1f600, startGlyphId = 300),
+        )
+        subtable.writeUInt32(4, 16)
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            OpenTypeCMapTableParser.parse(
+                cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 10,
+                        subtable = subtable,
+                    ),
+                ),
+            )
+        }
+
+        assertTrue(
+            error.message.orEmpty().contains("OpenType cmap format 12 group array"),
+            "Unexpected error message: ${error.message}",
+        )
+    }
+
+    @Test
+    fun metricsTableParserParsesHeadHheaMaxpAndHmtx() {
+        val metrics = OpenTypeMetricsTableParser.parse(
+            head = headTable(
+                unitsPerEm = 1000,
+                bounds = OpenTypeFontBounds(xMin = -40, yMin = -200, xMax = 980, yMax = 840),
+                indexToLocFormat = 1,
+            ),
+            hhea = hheaTable(
+                ascender = 820,
+                descender = -180,
+                lineGap = 40,
+                numberOfHMetrics = 2,
+            ),
+            maxp = maxpTable(numGlyphs = 4),
+            hmtx = hmtxTable(
+                metric(advanceWidth = 500, leftSideBearing = -20),
+                metric(advanceWidth = 450, leftSideBearing = 7),
+                extraLeftSideBearing(-9),
+                extraLeftSideBearing(11),
+            ),
+        )
+
+        assertEquals(1000, metrics.unitsPerEm)
+        assertEquals(1, metrics.indexToLocFormat)
+        assertEquals(OpenTypeFontBounds(xMin = -40, yMin = -200, xMax = 980, yMax = 840), metrics.bounds)
+        assertEquals(4, metrics.numGlyphs)
+        assertEquals(820, metrics.ascender)
+        assertEquals(-180, metrics.descender)
+        assertEquals(40, metrics.lineGap)
+        assertEquals(2, metrics.numberOfHMetrics)
+        assertEquals(
+            listOf(
+                HorizontalGlyphMetric(glyphId = 0, advanceWidth = 500, leftSideBearing = -20),
+                HorizontalGlyphMetric(glyphId = 1, advanceWidth = 450, leftSideBearing = 7),
+                HorizontalGlyphMetric(glyphId = 2, advanceWidth = 450, leftSideBearing = -9),
+                HorizontalGlyphMetric(glyphId = 3, advanceWidth = 450, leftSideBearing = 11),
+            ),
+            metrics.horizontalMetrics,
+        )
+    }
+
+    @Test
+    fun metricsTableParserParsesOptionalTypographicMetricsFromOs2AndPost() {
+        val metrics = OpenTypeMetricsTableParser.parse(
+            head = headTable(
+                unitsPerEm = 1000,
+                bounds = OpenTypeFontBounds(xMin = -40, yMin = -200, xMax = 980, yMax = 840),
+                indexToLocFormat = 1,
+            ),
+            hhea = hheaTable(
+                ascender = 820,
+                descender = -180,
+                lineGap = 40,
+                maxCharWidth = 500,
+                numberOfHMetrics = 1,
+            ),
+            maxp = maxpTable(numGlyphs = 1),
+            hmtx = hmtxTable(metric(advanceWidth = 500, leftSideBearing = -20)),
+            os2 = os2Table(
+                averageCharWidth = 477,
+                xHeight = 512,
+                capHeight = 702,
+                strikeoutThickness = 51,
+                strikeoutPosition = 262,
+            ),
+            post = postTable(
+                underlinePosition = -96,
+                underlineThickness = 44,
+            ),
+        )
+
+        assertEquals(512, metrics.xHeight)
+        assertEquals(702, metrics.capHeight)
+        assertEquals(477, metrics.averageCharWidth)
+        assertEquals(500, metrics.maxCharWidth)
+        assertEquals(44, metrics.underlineThickness)
+        assertEquals(-96, metrics.underlinePosition)
+        assertEquals(51, metrics.strikeoutThickness)
+        assertEquals(262, metrics.strikeoutPosition)
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserExposesOptionalTypographicMetricsWhenTablesExist() {
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = -40, yMin = -200, xMax = 980, yMax = 840),
+                    indexToLocFormat = 1,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 820,
+                    descender = -180,
+                    lineGap = 40,
+                    maxCharWidth = 500,
+                    numberOfHMetrics = 1,
+                ),
+                "maxp" to maxpTable(numGlyphs = 1),
+                "hmtx" to hmtxTable(metric(advanceWidth = 500, leftSideBearing = -20)),
+                "OS/2" to os2Table(
+                    averageCharWidth = 477,
+                    xHeight = 512,
+                    capHeight = 702,
+                    strikeoutThickness = 51,
+                    strikeoutPosition = 262,
+                ),
+                "post" to postTable(
+                    underlinePosition = -96,
+                    underlineThickness = 44,
+                ),
+            ),
+        )
+
+        val metrics = DefaultOpenTypeFaceParser().parse(source).metrics
+
+        assertEquals(512, metrics.xHeight)
+        assertEquals(702, metrics.capHeight)
+        assertEquals(477, metrics.averageCharWidth)
+        assertEquals(500, metrics.maxCharWidth)
+        assertEquals(44, metrics.underlineThickness)
+        assertEquals(-96, metrics.underlinePosition)
+        assertEquals(51, metrics.strikeoutThickness)
+        assertEquals(262, metrics.strikeoutPosition)
+    }
+
+    @Test
+    fun metricsTableParserUsesOs2TypographicLineMetricsWhenSelectionBitIsSet() {
+        val metrics = OpenTypeMetricsTableParser.parse(
+            head = headTable(
+                unitsPerEm = 1000,
+                bounds = OpenTypeFontBounds(xMin = -40, yMin = -200, xMax = 980, yMax = 840),
+                indexToLocFormat = 1,
+            ),
+            hhea = hheaTable(
+                ascender = 820,
+                descender = -180,
+                lineGap = 40,
+                numberOfHMetrics = 1,
+            ),
+            maxp = maxpTable(numGlyphs = 1),
+            hmtx = hmtxTable(metric(advanceWidth = 500, leftSideBearing = -20)),
+            os2 = os2Table(
+                averageCharWidth = 477,
+                xHeight = 512,
+                capHeight = 702,
+                strikeoutThickness = 51,
+                strikeoutPosition = 262,
+                fsSelection = 0x0080,
+                typoAscender = 760,
+                typoDescender = -240,
+                typoLineGap = 55,
+            ),
+        )
+
+        assertEquals(760, metrics.ascender)
+        assertEquals(-240, metrics.descender)
+        assertEquals(55, metrics.lineGap)
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserExposesOpenTypeStyleMetadata() {
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(
+                    testNameRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        languageId = 0x0409,
+                        nameId = 2,
+                        bytes = "Oblique".toByteArray(Charsets.UTF_16BE),
+                    ),
+                ),
+                "cmap" to cmapTable(),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = -40, yMin = -200, xMax = 980, yMax = 840),
+                    indexToLocFormat = 1,
+                    macStyle = 0x0001,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 820,
+                    descender = -180,
+                    lineGap = 40,
+                    numberOfHMetrics = 1,
+                ),
+                "maxp" to maxpTable(numGlyphs = 1),
+                "hmtx" to hmtxTable(metric(advanceWidth = 500, leftSideBearing = -20)),
+                "OS/2" to os2Table(
+                    averageCharWidth = 477,
+                    xHeight = 512,
+                    capHeight = 702,
+                    strikeoutThickness = 51,
+                    strikeoutPosition = 262,
+                    weightClass = 350,
+                    widthClass = 3,
+                    fsSelection = 0x0200,
+                ),
+                "post" to postTable(
+                    underlinePosition = -96,
+                    underlineThickness = 44,
+                    italicAngleHigh = -12,
+                ),
+            ),
+        )
+
+        val style = DefaultOpenTypeFaceParser().parse(source).style
+
+        assertEquals(700, style.weight)
+        assertEquals(3, style.width)
+        assertEquals(OpenTypeStyleSlant.OBLIQUE, style.slant)
+        assertEquals(true, style.hasMetadata)
+    }
+
+    @Test
+    fun openTypeFaceDataConvertsParsedStyleToCoreTypefaceData() {
+        val diagnostic = OpenTypeParseDiagnostic(
+            sourceId = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440100")),
+            message = "Unable to parse OpenType table.",
+            table = SFNTTableTag("GPOS"),
+            causeCode = "INVALID_TABLE",
+            causeMessage = "broken",
+        )
+        val face = OpenTypeFaceData(
+            id = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440101")),
+            source = FontSource(
+                id = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440100")),
+                kind = FontSourceKind.MEMORY,
+                displayName = "Fallback Name",
+                bytes = ByteArray(0),
+            ),
+            directory = SFNTTableDirectory(scalerType = 0x00010000u),
+            names = NameTable(
+                listOf(
+                    OpenTypeNameRecord(3, 1, 0x0409, 1, 8, 0, "Legacy Family"),
+                    OpenTypeNameRecord(3, 1, 0x0409, 2, 6, 0, "Regular"),
+                    OpenTypeNameRecord(3, 1, 0x0409, 16, 8, 0, "Typographic Family"),
+                    OpenTypeNameRecord(3, 1, 0x0409, 17, 7, 0, "Display"),
+                ),
+            ),
+            style = OpenTypeStyle(
+                weight = 725,
+                width = 4,
+                slant = OpenTypeStyleSlant.ITALIC,
+                hasMetadata = true,
+            ),
+            diagnostics = listOf(diagnostic),
+        )
+
+        val typeface = face.toTypefaceData()
+
+        assertEquals("Typographic Family", typeface.familyName)
+        assertEquals("Display", typeface.styleName)
+        assertEquals(725, typeface.style.weight)
+        assertEquals(4, typeface.style.width)
+        assertEquals(FontSlant.ITALIC, typeface.style.slant)
+        assertEquals("INVALID_TABLE", typeface.diagnostics.single().causeCode)
+        assertTrue(typeface.diagnostics.single().message.contains("GPOS"))
+    }
+
+    @Test
+    fun openTypeTypefaceDataFactoryParsesMemoryBytesToCoreTypefaceData() {
+        val sourceId = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440100"))
+        val typeface = OpenTypeTypefaceDataFactory.fromBytes(
+            sourceId = sourceId,
+            displayName = "Factory Font",
+            bytes = sfntFont(
+                "name" to nameTable(
+                    testNameRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        languageId = 0x0409,
+                        nameId = 1,
+                        bytes = "Factory Sans".toByteArray(Charsets.UTF_16BE),
+                    ),
+                    testNameRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        languageId = 0x0409,
+                        nameId = 2,
+                        bytes = "Bold".toByteArray(Charsets.UTF_16BE),
+                    ),
+                ),
+                "cmap" to cmapTable(),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = -40, yMin = -200, xMax = 980, yMax = 840),
+                    indexToLocFormat = 1,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 820,
+                    descender = -180,
+                    lineGap = 40,
+                    numberOfHMetrics = 1,
+                ),
+                "maxp" to maxpTable(numGlyphs = 1),
+                "hmtx" to hmtxTable(metric(advanceWidth = 500, leftSideBearing = -20)),
+                "OS/2" to os2Table(
+                    averageCharWidth = 477,
+                    xHeight = 512,
+                    capHeight = 702,
+                    strikeoutThickness = 51,
+                    strikeoutPosition = 262,
+                    weightClass = 500,
+                    fsSelection = 0x0020,
+                ),
+            ),
+        )
+
+        assertEquals(sourceId, typeface.source.id)
+        assertEquals("Factory Sans", typeface.familyName)
+        assertEquals("Bold", typeface.styleName)
+        assertEquals(700, typeface.style.weight)
+    }
+
+    @Test
+    fun metricsTableParserLeavesOptionalTypographicMetricsNullWhenTablesAreAbsent() {
+        val metrics = OpenTypeMetricsTableParser.parse(
+            head = headTable(
+                unitsPerEm = 1000,
+                bounds = OpenTypeFontBounds(xMin = -40, yMin = -200, xMax = 980, yMax = 840),
+                indexToLocFormat = 1,
+            ),
+            hhea = hheaTable(
+                ascender = 820,
+                descender = -180,
+                lineGap = 40,
+                maxCharWidth = 500,
+                numberOfHMetrics = 1,
+            ),
+            maxp = maxpTable(numGlyphs = 1),
+            hmtx = hmtxTable(metric(advanceWidth = 500, leftSideBearing = -20)),
+        )
+
+        assertEquals(null, metrics.xHeight)
+        assertEquals(null, metrics.capHeight)
+        assertEquals(null, metrics.averageCharWidth)
+        assertEquals(500, metrics.maxCharWidth)
+        assertEquals(null, metrics.underlineThickness)
+        assertEquals(null, metrics.underlinePosition)
+        assertEquals(null, metrics.strikeoutThickness)
+        assertEquals(null, metrics.strikeoutPosition)
+    }
+
+    @Test
+    fun metricsTableParserRejectsInvalidHeadUnitsPerEmWithIllegalArgumentException() {
+        val invalidUnitsPerEm = listOf(0, 15, 16385)
+
+        invalidUnitsPerEm.forEach { unitsPerEm ->
+            val error = assertFailsWith<IllegalArgumentException> {
+                OpenTypeMetricsTableParser.parse(
+                    head = headTable(
+                        unitsPerEm = unitsPerEm,
+                        bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                        indexToLocFormat = 0,
+                    ),
+                    hhea = hheaTable(
+                        ascender = 800,
+                        descender = -200,
+                        lineGap = 0,
+                        numberOfHMetrics = 1,
+                    ),
+                    maxp = maxpTable(numGlyphs = 1),
+                    hmtx = hmtxTable(metric(advanceWidth = 500, leftSideBearing = 0)),
+                )
+            }
+
+            assertTrue(
+                error.message.orEmpty().contains("OpenType head unitsPerEm $unitsPerEm must be between 16 and 16384"),
+                "Unexpected error message: ${error.message}",
+            )
+        }
+    }
+
+    @Test
+    fun metricsTableParserRejectsInvalidHeadIndexToLocFormatWithIllegalArgumentException() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            OpenTypeMetricsTableParser.parse(
+                head = headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 2,
+                ),
+                hhea = hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 1,
+                ),
+                maxp = maxpTable(numGlyphs = 1),
+                hmtx = hmtxTable(metric(advanceWidth = 500, leftSideBearing = 0)),
+            )
+        }
+
+        assertTrue(
+            error.message.orEmpty().contains("OpenType head indexToLocFormat 2 must be 0 or 1"),
+            "Unexpected error message: ${error.message}",
+        )
+    }
+
+    @Test
+    fun metricsTableParserRejectsShortHmtxTablesWithIllegalArgumentException() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            OpenTypeMetricsTableParser.parse(
+                head = headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                hhea = hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 2,
+                ),
+                maxp = maxpTable(numGlyphs = 3),
+                hmtx = hmtxTable(
+                    metric(advanceWidth = 500, leftSideBearing = 0),
+                    metric(advanceWidth = 400, leftSideBearing = 0),
+                ),
+            )
+        }
+
+        assertTrue(
+            error.message.orEmpty().contains("OpenType hmtx table length 8 is shorter than required 10 bytes"),
+            "Unexpected error message: ${error.message}",
+        )
+    }
+
+    @Test
+    fun metricsTableParserRejectsShortRequiredTablesWithIllegalArgumentException() {
+        val validHead = headTable(
+            unitsPerEm = 1000,
+            bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+            indexToLocFormat = 0,
+        )
+        val validHhea = hheaTable(
+            ascender = 800,
+            descender = -200,
+            lineGap = 0,
+            numberOfHMetrics = 1,
+        )
+        val validMaxp = maxpTable(numGlyphs = 1)
+        val validHmtx = hmtxTable(metric(advanceWidth = 500, leftSideBearing = 0))
+
+        val cases = listOf(
+            "OpenType head table must contain at least 54 bytes" to {
+                OpenTypeMetricsTableParser.parse(
+                    head = ByteArray(53),
+                    hhea = validHhea,
+                    maxp = validMaxp,
+                    hmtx = validHmtx,
+                )
+            },
+            "OpenType hhea table must contain at least 36 bytes" to {
+                OpenTypeMetricsTableParser.parse(
+                    head = validHead,
+                    hhea = ByteArray(35),
+                    maxp = validMaxp,
+                    hmtx = validHmtx,
+                )
+            },
+            "OpenType maxp table must contain at least 6 bytes" to {
+                OpenTypeMetricsTableParser.parse(
+                    head = validHead,
+                    hhea = validHhea,
+                    maxp = ByteArray(5),
+                    hmtx = validHmtx,
+                )
+            },
+        )
+
+        cases.forEach { (expectedMessage, parse) ->
+            val error = assertFailsWith<IllegalArgumentException> {
+                parse()
+            }
+
+            assertTrue(
+                error.message.orEmpty().contains(expectedMessage),
+                "Unexpected error message: ${error.message}",
+            )
+        }
+    }
+
+    @Test
+    fun kernTableParserParsesVersion0HorizontalFormat0Pairs() {
+        val table = OpenTypeKernTableParser.parse(
+            kernTable(
+                kernFormat0Subtable(
+                    testKernPair(leftGlyphId = 7, rightGlyphId = 11, value = -80),
+                    testKernPair(leftGlyphId = 11, rightGlyphId = 19, value = 24),
+                ),
+            ),
+        )
+
+        val subtable = table.subtables.single()
+
+        assertEquals(0, table.version)
+        assertEquals(0, subtable.version)
+        assertEquals(0, subtable.coverage.format)
+        assertEquals(true, subtable.coverage.horizontal)
+        assertEquals(false, subtable.coverage.minimum)
+        assertEquals(false, subtable.coverage.crossStream)
+        assertEquals(2, subtable.pairs.size)
+        assertEquals(OpenTypeKernPair(leftGlyphId = 7, rightGlyphId = 11, value = -80), subtable.pairs[0])
+        assertEquals(OpenTypeKernPair(leftGlyphId = 11, rightGlyphId = 19, value = 24), subtable.pairs[1])
+        assertEquals(-80, table.lookupKerningAdjustment(leftGlyphId = 7, rightGlyphId = 11))
+        assertEquals(24, table.lookupKerningAdjustment(leftGlyphId = 11, rightGlyphId = 19))
+        assertEquals(0, table.lookupKerningAdjustment(leftGlyphId = 7, rightGlyphId = 19))
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserExposesParsedKernTableInLayout() {
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0041,
+                                endCode = 0x0041,
+                                startGlyphId = 7,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 2,
+                ),
+                "maxp" to maxpTable(numGlyphs = 2),
+                "hmtx" to hmtxTable(
+                    metric(advanceWidth = 500, leftSideBearing = 0),
+                    metric(advanceWidth = 450, leftSideBearing = 0),
+                ),
+                "kern" to kernTable(
+                    kernFormat0Subtable(
+                        testKernPair(leftGlyphId = 7, rightGlyphId = 11, value = -40),
+                    ),
+                ),
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+
+        assertEquals(emptyList(), parsed.diagnostics)
+        assertEquals(7, parsed.directory.tables.size)
+        assertEquals(24, parsed.layout.tables.getValue(SFNTTableTag("kern")).size)
+        assertEquals(-40, parsed.layout.kern?.lookupKerningAdjustment(leftGlyphId = 7, rightGlyphId = 11))
+        assertEquals(0, parsed.layout.kern?.lookupKerningAdjustment(leftGlyphId = 11, rightGlyphId = 7))
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserExposesParsedGposPairKerningInLayout() {
+        val gpos = gposPairAdjustmentFormat1Table(
+            leftGlyphId = 7,
+            rightGlyphId = 11,
+            xAdvance = -55,
+        )
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0041,
+                                endCode = 0x0041,
+                                startGlyphId = 7,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 2,
+                ),
+                "maxp" to maxpTable(numGlyphs = 12),
+                "hmtx" to hmtxTable(
+                    metric(advanceWidth = 500, leftSideBearing = 0),
+                    metric(advanceWidth = 450, leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                ),
+                "GPOS" to gpos,
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+
+        assertEquals(emptyList(), parsed.diagnostics)
+        assertEquals(gpos.size, parsed.layout.tables.getValue(SFNTTableTag("GPOS")).size)
+        assertEquals(-55, parsed.layout.gposPairs?.lookupXAdvanceAdjustment(leftGlyphId = 7, rightGlyphId = 11))
+        assertEquals(0, parsed.layout.gposPairs?.lookupXAdvanceAdjustment(leftGlyphId = 11, rightGlyphId = 7))
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserReportsGposFormat2ExcessiveFinalExpansionAsDiagnostic() {
+        val gpos = gposPairAdjustmentFormat2Class0Table(
+            coverageGlyphCount = 257,
+            xAdvance = -1,
+        )
+        val source = memoryFontSource(
+            sfntFaceWithColorTables(
+                numGlyphs = 257,
+                "GPOS" to gpos,
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+        val diagnostic = parsed.diagnostics.single()
+
+        assertEquals(SFNTTableTag("GPOS"), diagnostic.table)
+        assertEquals("INVALID_TABLE", diagnostic.causeCode)
+        assertTrue(
+            diagnostic.causeMessage.orEmpty().contains("format 2 expanded glyph pair count"),
+            "Unexpected diagnostic: $diagnostic",
+        )
+        assertEquals(gpos.toUnsignedByteList(), parsed.layout.tables.getValue(SFNTTableTag("GPOS")))
+        assertEquals(null, parsed.layout.gposPairs)
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserReportsMalformedGposTablesAsDiagnostics() {
+        val malformedGpos = gposPairAdjustmentFormat1Table(
+            leftGlyphId = 7,
+            rightGlyphId = 11,
+            xAdvance = -55,
+            declaredPairSetCount = 2,
+        )
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0041,
+                                endCode = 0x0041,
+                                startGlyphId = 7,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 1,
+                ),
+                "maxp" to maxpTable(numGlyphs = 12),
+                "hmtx" to hmtxTable(
+                    metric(advanceWidth = 500, leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                ),
+                "GPOS" to malformedGpos,
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+        val diagnostic = parsed.diagnostics.single()
+
+        assertEquals(SFNTTableTag("GPOS"), diagnostic.table)
+        assertEquals("INVALID_TABLE", diagnostic.causeCode)
+        assertTrue(
+            diagnostic.causeMessage.orEmpty().contains("OpenType GPOS pair adjustment format 1 pairSetCount"),
+            "Unexpected diagnostic: $diagnostic",
+        )
+        assertEquals(malformedGpos.size, parsed.layout.tables.getValue(SFNTTableTag("GPOS")).size)
+        assertEquals(malformedGpos.toUnsignedByteList(), parsed.rawTables.getValue(SFNTTableTag("GPOS")))
+        assertEquals(null, parsed.layout.gposPairs)
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserReportsMalformedKernTablesAsDiagnostics() {
+        val malformedKern = kernTable(
+            kernFormat0Subtable(
+                testKernPair(leftGlyphId = 7, rightGlyphId = 11, value = -40),
+            ).also { subtable ->
+                subtable.writeUInt16(2, 14)
+            },
+        )
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0041,
+                                endCode = 0x0041,
+                                startGlyphId = 7,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 1,
+                ),
+                "maxp" to maxpTable(numGlyphs = 1),
+                "hmtx" to hmtxTable(metric(advanceWidth = 500, leftSideBearing = 0)),
+                "kern" to malformedKern,
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+        val diagnostic = parsed.diagnostics.single()
+
+        assertEquals(SFNTTableTag("kern"), diagnostic.table)
+        assertEquals("INVALID_TABLE", diagnostic.causeCode)
+        assertTrue(
+            diagnostic.causeMessage.orEmpty().contains("OpenType kern format 0 pair array for subtable 0"),
+            "Unexpected diagnostic: $diagnostic",
+        )
+        assertEquals(malformedKern.size, parsed.layout.tables.getValue(SFNTTableTag("kern")).size)
+        assertEquals(null, parsed.layout.kern)
+    }
+
+    @Test
+    fun kernTableParserRejectsFormat0PairsOutsideSubtableLength() {
+        val malformedKern = kernTable(
+            kernFormat0Subtable(
+                testKernPair(leftGlyphId = 7, rightGlyphId = 11, value = -40),
+            ).also { subtable ->
+                subtable.writeUInt16(2, 14)
+            },
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            OpenTypeKernTableParser.parse(malformedKern)
+        }
+
+        assertTrue(
+            error.message.orEmpty().contains("OpenType kern format 0 pair array for subtable 0"),
+            "Unexpected error message: ${error.message}",
+        )
+    }
+
+    private fun memoryFontSource(bytes: ByteArray): FontSource =
+        FontSource(
+            id = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440100")),
+            kind = FontSourceKind.MEMORY,
+            displayName = "Memory Font",
+            bytes = bytes,
+        )
+
+    private data class TestNameRecord(
+        val platformId: Int,
+        val encodingId: Int,
+        val languageId: Int,
+        val nameId: Int,
+        val bytes: ByteArray,
+    )
+
+    private fun testNameRecord(
+        platformId: Int,
+        encodingId: Int,
+        languageId: Int,
+        nameId: Int,
+        bytes: ByteArray,
+    ): TestNameRecord = TestNameRecord(
+        platformId = platformId,
+        encodingId = encodingId,
+        languageId = languageId,
+        nameId = nameId,
+        bytes = bytes,
+    )
+
+    private data class TestCMapRecord(
+        val platformId: Int,
+        val encodingId: Int,
+        val subtable: ByteArray,
+    )
+
+    private data class TestFormat4Segment(
+        val startCode: Int,
+        val endCode: Int,
+        val idDelta: Int,
+    )
+
+    private data class TestFormat12Group(
+        val startCharCode: Int,
+        val endCharCode: Int,
+        val startGlyphId: Int,
+    )
+
+    private data class TestHorizontalMetric(
+        val advanceWidth: Int?,
+        val leftSideBearing: Int,
+    )
+
+    private data class TestKernPair(
+        val leftGlyphId: Int,
+        val rightGlyphId: Int,
+        val value: Int,
+    )
+
+    private data class TestFvarAxis(
+        val tag: String,
+        val minimum: Double,
+        val defaultValue: Double,
+        val maximum: Double,
+        val flags: Int,
+        val nameId: Int,
+    )
+
+    private fun testFvarAxis(
+        tag: String,
+        minimum: Double,
+        defaultValue: Double,
+        maximum: Double,
+        flags: Int,
+        nameId: Int,
+    ): TestFvarAxis = TestFvarAxis(
+        tag = tag,
+        minimum = minimum,
+        defaultValue = defaultValue,
+        maximum = maximum,
+        flags = flags,
+        nameId = nameId,
+    )
+
+    private fun nameTable(vararg records: TestNameRecord): ByteArray {
+        val stringOffset = 6 + records.size * 12
+        val table = ByteArray(stringOffset + records.sumOf { it.bytes.size })
+        table.writeUInt16(0, 0)
+        table.writeUInt16(2, records.size)
+        table.writeUInt16(4, stringOffset)
+
+        var stringCursor = 0
+        records.forEachIndexed { index, record ->
+            val recordOffset = 6 + index * 12
+            table.writeUInt16(recordOffset, record.platformId)
+            table.writeUInt16(recordOffset + 2, record.encodingId)
+            table.writeUInt16(recordOffset + 4, record.languageId)
+            table.writeUInt16(recordOffset + 6, record.nameId)
+            table.writeUInt16(recordOffset + 8, record.bytes.size)
+            table.writeUInt16(recordOffset + 10, stringCursor)
+            record.bytes.copyInto(table, stringOffset + stringCursor)
+            stringCursor += record.bytes.size
+        }
+
+        return table
+    }
+
+    private fun testCMapRecord(
+        platformId: Int,
+        encodingId: Int,
+        subtable: ByteArray,
+    ): TestCMapRecord = TestCMapRecord(
+        platformId = platformId,
+        encodingId = encodingId,
+        subtable = subtable,
+    )
+
+    private fun testFormat4Segment(
+        startCode: Int,
+        endCode: Int,
+        startGlyphId: Int,
+    ): TestFormat4Segment = TestFormat4Segment(
+        startCode = startCode,
+        endCode = endCode,
+        idDelta = (startGlyphId - startCode) and 0xffff,
+    )
+
+    private fun testFormat12Group(
+        startCharCode: Int,
+        endCharCode: Int,
+        startGlyphId: Int,
+    ): TestFormat12Group = TestFormat12Group(
+        startCharCode = startCharCode,
+        endCharCode = endCharCode,
+        startGlyphId = startGlyphId,
+    )
+
+    private fun cmapTable(vararg records: TestCMapRecord): ByteArray {
+        val recordsEnd = 4 + records.size * 8
+        val table = ByteArray(recordsEnd + records.sumOf { it.subtable.size })
+        table.writeUInt16(0, 0)
+        table.writeUInt16(2, records.size)
+
+        var subtableOffset = recordsEnd
+        records.forEachIndexed { index, record ->
+            val recordOffset = 4 + index * 8
+            table.writeUInt16(recordOffset, record.platformId)
+            table.writeUInt16(recordOffset + 2, record.encodingId)
+            table.writeUInt32(recordOffset + 4, subtableOffset)
+            record.subtable.copyInto(table, subtableOffset)
+            subtableOffset += record.subtable.size
+        }
+
+        return table
+    }
+
+    private fun format4Subtable(vararg segments: TestFormat4Segment): ByteArray {
+        val allSegments = segments.toList() + TestFormat4Segment(
+            startCode = 0xffff,
+            endCode = 0xffff,
+            idDelta = 1,
+        )
+        val segCount = allSegments.size
+        val length = 16 + segCount * 8
+        val table = ByteArray(length)
+        table.writeUInt16(0, 4)
+        table.writeUInt16(2, length)
+        table.writeUInt16(4, 0)
+        table.writeUInt16(6, segCount * 2)
+        table.writeUInt16(8, 4)
+        table.writeUInt16(10, 1)
+        table.writeUInt16(12, 0)
+
+        val endCodeOffset = 14
+        val reservedPadOffset = endCodeOffset + segCount * 2
+        val startCodeOffset = reservedPadOffset + 2
+        val idDeltaOffset = startCodeOffset + segCount * 2
+        val idRangeOffsetOffset = idDeltaOffset + segCount * 2
+
+        allSegments.forEachIndexed { index, segment ->
+            table.writeUInt16(endCodeOffset + index * 2, segment.endCode)
+            table.writeUInt16(startCodeOffset + index * 2, segment.startCode)
+            table.writeUInt16(idDeltaOffset + index * 2, segment.idDelta)
+            table.writeUInt16(idRangeOffsetOffset + index * 2, 0)
+        }
+
+        return table
+    }
+
+    private fun format4RangeOffsetSubtable(
+        startCode: Int,
+        endCode: Int,
+        rawGlyphIds: List<Int>,
+    ): ByteArray {
+        require(rawGlyphIds.size == endCode - startCode + 1)
+
+        val segCount = 2
+        val glyphIdArrayOffset = 16 + segCount * 8
+        val length = glyphIdArrayOffset + rawGlyphIds.size * 2
+        val table = ByteArray(length)
+        table.writeUInt16(0, 4)
+        table.writeUInt16(2, length)
+        table.writeUInt16(4, 0)
+        table.writeUInt16(6, segCount * 2)
+        table.writeUInt16(8, 4)
+        table.writeUInt16(10, 1)
+        table.writeUInt16(12, 0)
+
+        val endCodeOffset = 14
+        val reservedPadOffset = endCodeOffset + segCount * 2
+        val startCodeOffset = reservedPadOffset + 2
+        val idDeltaOffset = startCodeOffset + segCount * 2
+        val idRangeOffsetOffset = idDeltaOffset + segCount * 2
+
+        table.writeUInt16(endCodeOffset, endCode)
+        table.writeUInt16(endCodeOffset + 2, 0xffff)
+        table.writeUInt16(startCodeOffset, startCode)
+        table.writeUInt16(startCodeOffset + 2, 0xffff)
+        table.writeUInt16(idDeltaOffset, 0)
+        table.writeUInt16(idDeltaOffset + 2, 1)
+        table.writeUInt16(idRangeOffsetOffset, glyphIdArrayOffset - idRangeOffsetOffset)
+        table.writeUInt16(idRangeOffsetOffset + 2, 0)
+        rawGlyphIds.forEachIndexed { index, glyphId ->
+            table.writeUInt16(glyphIdArrayOffset + index * 2, glyphId)
+        }
+
+        return table
+    }
+
+    private fun format12Subtable(vararg groups: TestFormat12Group): ByteArray {
+        val length = 16 + groups.size * 12
+        val table = ByteArray(length)
+        table.writeUInt16(0, 12)
+        table.writeUInt16(2, 0)
+        table.writeUInt32(4, length)
+        table.writeUInt32(8, 0)
+        table.writeUInt32(12, groups.size)
+
+        groups.forEachIndexed { index, group ->
+            val groupOffset = 16 + index * 12
+            table.writeUInt32(groupOffset, group.startCharCode)
+            table.writeUInt32(groupOffset + 4, group.endCharCode)
+            table.writeUInt32(groupOffset + 8, group.startGlyphId)
+        }
+
+        return table
+    }
+
+    private fun format0Subtable(glyphIds: List<Int>): ByteArray {
+        require(glyphIds.size == 256)
+        val table = ByteArray(262)
+        table.writeUInt16(0, 0)
+        table.writeUInt16(2, table.size)
+        table.writeUInt16(4, 0)
+        glyphIds.forEachIndexed { index, glyphId ->
+            table[6 + index] = glyphId.toByte()
+        }
+        return table
+    }
+
+    private fun format6Subtable(firstCode: Int, glyphIds: List<Int>): ByteArray {
+        val table = ByteArray(10 + glyphIds.size * 2)
+        table.writeUInt16(0, 6)
+        table.writeUInt16(2, table.size)
+        table.writeUInt16(4, 0)
+        table.writeUInt16(6, firstCode)
+        table.writeUInt16(8, glyphIds.size)
+        glyphIds.forEachIndexed { index, glyphId ->
+            table.writeUInt16(10 + index * 2, glyphId)
+        }
+        return table
+    }
+
+    private fun headTable(
+        unitsPerEm: Int,
+        bounds: OpenTypeFontBounds,
+        indexToLocFormat: Int,
+        macStyle: Int = 0,
+    ): ByteArray {
+        val table = ByteArray(54)
+        table.writeUInt16(18, unitsPerEm)
+        table.writeInt16(36, bounds.xMin)
+        table.writeInt16(38, bounds.yMin)
+        table.writeInt16(40, bounds.xMax)
+        table.writeInt16(42, bounds.yMax)
+        table.writeUInt16(44, macStyle)
+        table.writeInt16(50, indexToLocFormat)
+        return table
+    }
+
+    private fun hheaTable(
+        ascender: Int,
+        descender: Int,
+        lineGap: Int,
+        maxCharWidth: Int = 0,
+        numberOfHMetrics: Int,
+    ): ByteArray {
+        val table = ByteArray(36)
+        table.writeInt16(4, ascender)
+        table.writeInt16(6, descender)
+        table.writeInt16(8, lineGap)
+        table.writeUInt16(10, maxCharWidth)
+        table.writeUInt16(34, numberOfHMetrics)
+        return table
+    }
+
+    private fun maxpTable(numGlyphs: Int): ByteArray {
+        val table = ByteArray(6)
+        table.writeUInt16(4, numGlyphs)
+        return table
+    }
+
+    private fun hmtxTable(vararg metrics: TestHorizontalMetric): ByteArray {
+        val length = metrics.sumOf { if (it.advanceWidth == null) 2 else 4 }
+        val table = ByteArray(length)
+        var offset = 0
+        metrics.forEach { metric ->
+            if (metric.advanceWidth != null) {
+                table.writeUInt16(offset, metric.advanceWidth)
+                offset += 2
+            }
+            table.writeInt16(offset, metric.leftSideBearing)
+            offset += 2
+        }
+        return table
+    }
+
+    private fun os2Table(
+        averageCharWidth: Int,
+        xHeight: Int,
+        capHeight: Int,
+        strikeoutThickness: Int,
+        strikeoutPosition: Int,
+        weightClass: Int = 400,
+        widthClass: Int = 5,
+        fsSelection: Int = 0,
+        typoAscender: Int = 0,
+        typoDescender: Int = 0,
+        typoLineGap: Int = 0,
+    ): ByteArray {
+        val table = ByteArray(96)
+        table.writeUInt16(0, 2)
+        table.writeInt16(2, averageCharWidth)
+        table.writeUInt16(4, weightClass)
+        table.writeUInt16(6, widthClass)
+        table.writeInt16(26, strikeoutThickness)
+        table.writeInt16(28, strikeoutPosition)
+        table.writeUInt16(62, fsSelection)
+        table.writeInt16(68, typoAscender)
+        table.writeInt16(70, typoDescender)
+        table.writeInt16(72, typoLineGap)
+        table.writeInt16(86, xHeight)
+        table.writeInt16(88, capHeight)
+        return table
+    }
+
+    private fun postTable(
+        underlinePosition: Int,
+        underlineThickness: Int,
+        italicAngleHigh: Int = 0,
+    ): ByteArray {
+        val table = ByteArray(12)
+        table.writeInt16(4, italicAngleHigh)
+        table.writeInt16(8, underlinePosition)
+        table.writeInt16(10, underlineThickness)
+        return table
+    }
+
+    private fun kernTable(vararg subtables: ByteArray): ByteArray {
+        val table = ByteArray(4 + subtables.sumOf { it.size })
+        table.writeUInt16(0, 0)
+        table.writeUInt16(2, subtables.size)
+
+        var offset = 4
+        subtables.forEach { subtable ->
+            subtable.copyInto(table, offset)
+            offset += subtable.size
+        }
+
+        return table
+    }
+
+    private fun kernFormat0Subtable(
+        vararg pairs: TestKernPair,
+        coverage: Int = 0x0001,
+    ): ByteArray {
+        val length = 14 + pairs.size * 6
+        val table = ByteArray(length)
+        table.writeUInt16(0, 0)
+        table.writeUInt16(2, length)
+        table.writeUInt16(4, coverage)
+        table.writeUInt16(6, pairs.size)
+        table.writeUInt16(8, 0)
+        table.writeUInt16(10, 0)
+        table.writeUInt16(12, 0)
+
+        pairs.forEachIndexed { index, pair ->
+            val pairOffset = 14 + index * 6
+            table.writeUInt16(pairOffset, pair.leftGlyphId)
+            table.writeUInt16(pairOffset + 2, pair.rightGlyphId)
+            table.writeInt16(pairOffset + 4, pair.value)
+        }
+
+        return table
+    }
+
+    private fun gposPairAdjustmentFormat1Table(
+        leftGlyphId: Int,
+        rightGlyphId: Int,
+        xAdvance: Int,
+        scriptTag: String = "latn",
+        declaredPairSetCount: Int = 1,
+    ): ByteArray {
+        require(scriptTag.length == 4)
+
+        val table = ByteArray(80)
+        val scriptListOffset = 10
+        val featureListOffset = 30
+        val lookupListOffset = 44
+        val scriptStart = scriptListOffset + 8
+        val langSysStart = scriptStart + 4
+        val featureStart = featureListOffset + 8
+        val lookupStart = lookupListOffset + 4
+        val subtableStart = lookupStart + 8
+        val coverageOffset = 12
+        val pairSetOffset = 18
+
+        table.writeUInt16(0, 1)
+        table.writeUInt16(2, 0)
+        table.writeUInt16(4, scriptListOffset)
+        table.writeUInt16(6, featureListOffset)
+        table.writeUInt16(8, lookupListOffset)
+
+        table.writeUInt16(scriptListOffset, 1)
+        scriptTag.toByteArray(Charsets.ISO_8859_1).copyInto(table, scriptListOffset + 2)
+        table.writeUInt16(scriptListOffset + 6, 8)
+        table.writeUInt16(scriptStart, 4)
+        table.writeUInt16(scriptStart + 2, 0)
+        table.writeUInt16(langSysStart, 0)
+        table.writeUInt16(langSysStart + 2, 0xffff)
+        table.writeUInt16(langSysStart + 4, 1)
+        table.writeUInt16(langSysStart + 6, 0)
+
+        table.writeUInt16(featureListOffset, 1)
+        "kern".toByteArray(Charsets.ISO_8859_1).copyInto(table, featureListOffset + 2)
+        table.writeUInt16(featureListOffset + 6, 8)
+        table.writeUInt16(featureStart, 0)
+        table.writeUInt16(featureStart + 2, 1)
+        table.writeUInt16(featureStart + 4, 0)
+
+        table.writeUInt16(lookupListOffset, 1)
+        table.writeUInt16(lookupListOffset + 2, 4)
+        table.writeUInt16(lookupStart, 2)
+        table.writeUInt16(lookupStart + 2, 0)
+        table.writeUInt16(lookupStart + 4, 1)
+        table.writeUInt16(lookupStart + 6, 8)
+
+        table.writeUInt16(subtableStart, 1)
+        table.writeUInt16(subtableStart + 2, coverageOffset)
+        table.writeUInt16(subtableStart + 4, 0x0004)
+        table.writeUInt16(subtableStart + 6, 0)
+        table.writeUInt16(subtableStart + 8, declaredPairSetCount)
+        table.writeUInt16(subtableStart + 10, pairSetOffset)
+        table.writeUInt16(subtableStart + coverageOffset, 1)
+        table.writeUInt16(subtableStart + coverageOffset + 2, 1)
+        table.writeUInt16(subtableStart + coverageOffset + 4, leftGlyphId)
+        table.writeUInt16(subtableStart + pairSetOffset, 1)
+        table.writeUInt16(subtableStart + pairSetOffset + 2, rightGlyphId)
+        table.writeInt16(subtableStart + pairSetOffset + 4, xAdvance)
+
+        return table
+    }
+
+    private fun gposPairAdjustmentFormat2Class0Table(
+        coverageGlyphCount: Int,
+        xAdvance: Int,
+    ): ByteArray {
+        val table = ByteArray(92)
+        val scriptListOffset = 10
+        val featureListOffset = 30
+        val lookupListOffset = 44
+        val scriptStart = scriptListOffset + 8
+        val langSysStart = scriptStart + 4
+        val featureStart = featureListOffset + 8
+        val lookupStart = lookupListOffset + 4
+        val subtableStart = lookupStart + 8
+        val coverageOffset = 18
+        val classDef1Offset = 28
+        val classDef2Offset = 32
+
+        table.writeUInt16(0, 1)
+        table.writeUInt16(2, 0)
+        table.writeUInt16(4, scriptListOffset)
+        table.writeUInt16(6, featureListOffset)
+        table.writeUInt16(8, lookupListOffset)
+
+        table.writeUInt16(scriptListOffset, 1)
+        "latn".toByteArray(Charsets.ISO_8859_1).copyInto(table, scriptListOffset + 2)
+        table.writeUInt16(scriptListOffset + 6, 8)
+        table.writeUInt16(scriptStart, 4)
+        table.writeUInt16(scriptStart + 2, 0)
+        table.writeUInt16(langSysStart, 0)
+        table.writeUInt16(langSysStart + 2, 0xffff)
+        table.writeUInt16(langSysStart + 4, 1)
+        table.writeUInt16(langSysStart + 6, 0)
+
+        table.writeUInt16(featureListOffset, 1)
+        "kern".toByteArray(Charsets.ISO_8859_1).copyInto(table, featureListOffset + 2)
+        table.writeUInt16(featureListOffset + 6, 8)
+        table.writeUInt16(featureStart, 0)
+        table.writeUInt16(featureStart + 2, 1)
+        table.writeUInt16(featureStart + 4, 0)
+
+        table.writeUInt16(lookupListOffset, 1)
+        table.writeUInt16(lookupListOffset + 2, 4)
+        table.writeUInt16(lookupStart, 2)
+        table.writeUInt16(lookupStart + 2, 0)
+        table.writeUInt16(lookupStart + 4, 1)
+        table.writeUInt16(lookupStart + 6, 8)
+
+        table.writeUInt16(subtableStart, 2)
+        table.writeUInt16(subtableStart + 2, coverageOffset)
+        table.writeUInt16(subtableStart + 4, 0x0004)
+        table.writeUInt16(subtableStart + 6, 0)
+        table.writeUInt16(subtableStart + 8, classDef1Offset)
+        table.writeUInt16(subtableStart + 10, classDef2Offset)
+        table.writeUInt16(subtableStart + 12, 1)
+        table.writeUInt16(subtableStart + 14, 1)
+        table.writeInt16(subtableStart + 16, xAdvance)
+
+        table.writeUInt16(subtableStart + coverageOffset, 2)
+        table.writeUInt16(subtableStart + coverageOffset + 2, 1)
+        table.writeUInt16(subtableStart + coverageOffset + 4, 0)
+        table.writeUInt16(subtableStart + coverageOffset + 6, coverageGlyphCount - 1)
+        table.writeUInt16(subtableStart + coverageOffset + 8, 0)
+
+        table.writeUInt16(subtableStart + classDef1Offset, 2)
+        table.writeUInt16(subtableStart + classDef1Offset + 2, 0)
+        table.writeUInt16(subtableStart + classDef2Offset, 2)
+        table.writeUInt16(subtableStart + classDef2Offset + 2, 0)
+        return table
+    }
+
+    private fun fvarTable(vararg axes: TestFvarAxis): ByteArray {
+        val table = ByteArray(16 + axes.size * 20)
+        table.writeUInt16(0, 1)
+        table.writeUInt16(2, 0)
+        table.writeUInt16(4, 16)
+        table.writeUInt16(6, 2)
+        table.writeUInt16(8, axes.size)
+        table.writeUInt16(10, 20)
+        table.writeUInt16(12, 0)
+        table.writeUInt16(14, 0)
+
+        axes.forEachIndexed { index, axis ->
+            val axisOffset = 16 + index * 20
+            require(axis.tag.length == 4)
+            axis.tag.toByteArray(Charsets.ISO_8859_1).copyInto(table, axisOffset)
+            table.writeInt32(axisOffset + 4, fixed16Dot16Raw(axis.minimum))
+            table.writeInt32(axisOffset + 8, fixed16Dot16Raw(axis.defaultValue))
+            table.writeInt32(axisOffset + 12, fixed16Dot16Raw(axis.maximum))
+            table.writeUInt16(axisOffset + 16, axis.flags)
+            table.writeUInt16(axisOffset + 18, axis.nameId)
+        }
+
+        return table
+    }
+
+    private fun avarTable(vararg axisSegmentMaps: List<Pair<Double, Double>>): ByteArray {
+        val table = ByteArray(8 + axisSegmentMaps.sumOf { 2 + it.size * 4 })
+        table.writeUInt16(0, 1)
+        table.writeUInt16(2, 0)
+        table.writeUInt16(4, 0)
+        table.writeUInt16(6, axisSegmentMaps.size)
+
+        var offset = 8
+        for (segments in axisSegmentMaps) {
+            table.writeUInt16(offset, segments.size)
+            offset += 2
+            for ((from, to) in segments) {
+                table.writeInt16(offset, f2Dot14Raw(from))
+                table.writeInt16(offset + 2, f2Dot14Raw(to))
+                offset += 4
+            }
+        }
+        return table
+    }
+
+    private fun f2Dot14Raw(value: Double): Int =
+        (value * 16384.0).toInt()
+
+    private fun sfntFaceWithColorTables(
+        numGlyphs: Int,
+        vararg colorTables: Pair<String, ByteArray>,
+    ): ByteArray {
+        val hmtxMetrics = arrayOf(metric(advanceWidth = 500, leftSideBearing = 0)) +
+            Array(numGlyphs - 1) { extraLeftSideBearing(leftSideBearing = 0) }
+        val requiredTables = arrayOf(
+            "name" to nameTable(),
+            "cmap" to cmapTable(
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    subtable = format4Subtable(
+                        testFormat4Segment(
+                            startCode = 0x0041,
+                            endCode = 0x0041,
+                            startGlyphId = 1,
+                        ),
+                    ),
+                ),
+            ),
+            "head" to headTable(
+                unitsPerEm = 1000,
+                bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                indexToLocFormat = 0,
+            ),
+            "hhea" to hheaTable(
+                ascender = 800,
+                descender = -200,
+                lineGap = 0,
+                numberOfHMetrics = 1,
+            ),
+            "maxp" to maxpTable(numGlyphs = numGlyphs),
+            "hmtx" to hmtxTable(*hmtxMetrics),
+        )
+        return sfntFont(*(requiredTables + colorTables))
+    }
+
+    private fun svgTable(
+        startGlyphId: Int,
+        endGlyphId: Int,
+        bytes: ByteArray,
+    ): ByteArray {
+        val documentListOffset = 10
+        val documentRecordOffset = documentListOffset + 2
+        val svgDocumentOffset = 14
+        val table = ByteArray(documentListOffset + svgDocumentOffset + bytes.size)
+        table.writeUInt16(0, 0)
+        table.writeUInt32(2, documentListOffset)
+        table.writeUInt32(6, 0)
+        table.writeUInt16(documentListOffset, 1)
+        table.writeUInt16(documentRecordOffset, startGlyphId)
+        table.writeUInt16(documentRecordOffset + 2, endGlyphId)
+        table.writeUInt32(documentRecordOffset + 4, svgDocumentOffset)
+        table.writeUInt32(documentRecordOffset + 8, bytes.size)
+        bytes.copyInto(table, documentListOffset + svgDocumentOffset)
+        return table
+    }
+
+    private fun sbixTable(
+        numGlyphs: Int,
+        glyphId: Int,
+        ppem: Int,
+        originOffsetX: Int,
+        originOffsetY: Int,
+        png: ByteArray,
+    ): ByteArray {
+        val strikeOffset = 12
+        val offsetsStart = strikeOffset + 4
+        val glyphDataOffset = 4 + (numGlyphs + 1) * 4
+        val glyphPayload = ByteArray(8 + png.size)
+        glyphPayload.writeInt16(0, originOffsetX)
+        glyphPayload.writeInt16(2, originOffsetY)
+        "png ".toByteArray(Charsets.ISO_8859_1).copyInto(glyphPayload, 4)
+        png.copyInto(glyphPayload, 8)
+
+        val table = ByteArray(strikeOffset + glyphDataOffset + glyphPayload.size)
+        table.writeUInt16(0, 1)
+        table.writeUInt16(2, 0)
+        table.writeUInt32(4, 1)
+        table.writeUInt32(8, strikeOffset)
+        table.writeUInt16(strikeOffset, ppem)
+        table.writeUInt16(strikeOffset + 2, 72)
+        repeat(numGlyphs + 1) { index ->
+            val offset = when {
+                index <= glyphId -> glyphDataOffset
+                else -> glyphDataOffset + glyphPayload.size
+            }
+            table.writeUInt32(offsetsStart + index * 4, offset)
+        }
+        glyphPayload.copyInto(table, strikeOffset + glyphDataOffset)
+        return table
+    }
+
+    private fun cbdtTable(payload: ByteArray): ByteArray {
+        val table = ByteArray(4 + payload.size)
+        table.writeUInt16(0, 3)
+        table.writeUInt16(2, 0)
+        payload.copyInto(table, 4)
+        return table
+    }
+
+    private fun cbdtFormat17Payload(png: ByteArray): ByteArray {
+        val payload = ByteArray(5 + png.size)
+        payload[0] = 1
+        payload[1] = 1
+        payload[2] = 0
+        payload[3] = 0
+        payload[4] = 1
+        png.copyInto(payload, 5)
+        return payload
+    }
+
+    private fun cblcTableIndexFormat1(
+        glyphId: Int,
+        payloadLength: Int,
+        ppemX: Int,
+        ppemY: Int,
+        bitDepth: Int,
+    ): ByteArray {
+        val sizeTableOffset = 8
+        val indexArrayOffset = 56
+        val subtableOffsetFromArray = 8
+        val subtableOffset = indexArrayOffset + subtableOffsetFromArray
+        val table = ByteArray(subtableOffset + 16)
+        table.writeUInt16(0, 3)
+        table.writeUInt16(2, 0)
+        table.writeUInt32(4, 1)
+
+        table.writeUInt32(sizeTableOffset, indexArrayOffset)
+        table.writeUInt32(sizeTableOffset + 4, 24)
+        table.writeUInt32(sizeTableOffset + 8, 1)
+        table.writeUInt32(sizeTableOffset + 12, 0)
+        table.writeUInt16(sizeTableOffset + 40, glyphId)
+        table.writeUInt16(sizeTableOffset + 42, glyphId)
+        table[sizeTableOffset + 44] = ppemX.toByte()
+        table[sizeTableOffset + 45] = ppemY.toByte()
+        table[sizeTableOffset + 46] = bitDepth.toByte()
+        table[sizeTableOffset + 47] = 1
+
+        table.writeUInt16(indexArrayOffset, glyphId)
+        table.writeUInt16(indexArrayOffset + 2, glyphId)
+        table.writeUInt32(indexArrayOffset + 4, subtableOffsetFromArray)
+
+        table.writeUInt16(subtableOffset, 1)
+        table.writeUInt16(subtableOffset + 2, 17)
+        table.writeUInt32(subtableOffset + 4, 4)
+        table.writeUInt32(subtableOffset + 8, 0)
+        table.writeUInt32(subtableOffset + 12, payloadLength)
+        return table
+    }
+
+    private fun pngPayload(vararg trailingBytes: Int): ByteArray =
+        byteArrayOf(
+            0x89.toByte(),
+            0x50,
+            0x4e,
+            0x47,
+            0x0d,
+            0x0a,
+            0x1a,
+            0x0a,
+            *trailingBytes.map { it.toByte() }.toByteArray(),
+        )
+
+    private fun sfntFont(vararg tables: Pair<String, ByteArray>): ByteArray {
+        val directoryLength = 12 + tables.size * 16
+        val totalLength = directoryLength + tables.sumOf { (_, payload) -> payload.size }
+        val font = ByteArray(totalLength)
+        font.writeUInt32(0, 0x00010000)
+        font.writeUInt16(4, tables.size)
+
+        var payloadOffset = directoryLength
+        tables.forEachIndexed { index, (tag, payload) ->
+            require(tag.length == 4)
+            val recordOffset = 12 + index * 16
+            tag.toByteArray(Charsets.ISO_8859_1).copyInto(font, recordOffset)
+            font.writeUInt32(recordOffset + 4, 0)
+            font.writeUInt32(recordOffset + 8, payloadOffset)
+            font.writeUInt32(recordOffset + 12, payload.size)
+            payload.copyInto(font, payloadOffset)
+            payloadOffset += payload.size
+        }
+
+        return font
+    }
+
+    private fun ttcFont(vararg faces: ByteArray): ByteArray {
+        val headerLength = 12 + faces.size * 4
+        val totalLength = headerLength + faces.sumOf(ByteArray::size)
+        val collection = ByteArray(totalLength)
+        collection.writeUInt32(0, 0x74746366)
+        collection.writeUInt32(4, 0x00010000)
+        collection.writeUInt32(8, faces.size)
+
+        var cursor = headerLength
+        faces.forEachIndexed { index, face ->
+            collection.writeUInt32(12 + index * 4, cursor)
+            val routedFace = face.copyOf()
+            val tableCount = routedFace.readUInt16(4)
+            repeat(tableCount) { tableIndex ->
+                val recordOffset = 12 + tableIndex * 16
+                routedFace.writeUInt32(recordOffset + 8, cursor + routedFace.readUInt32(recordOffset + 8))
+            }
+            routedFace.copyInto(collection, cursor)
+            cursor += routedFace.size
+        }
+
+        return collection
+    }
+
+    private fun metric(
+        advanceWidth: Int,
+        leftSideBearing: Int,
+    ): TestHorizontalMetric = TestHorizontalMetric(
+        advanceWidth = advanceWidth,
+        leftSideBearing = leftSideBearing,
+    )
+
+    private fun extraLeftSideBearing(leftSideBearing: Int): TestHorizontalMetric =
+        TestHorizontalMetric(
+            advanceWidth = null,
+            leftSideBearing = leftSideBearing,
+        )
+
+    private fun testKernPair(
+        leftGlyphId: Int,
+        rightGlyphId: Int,
+        value: Int,
+    ): TestKernPair = TestKernPair(
+        leftGlyphId = leftGlyphId,
+        rightGlyphId = rightGlyphId,
+        value = value,
+    )
+
+    private fun ByteArray.writeUInt16(offset: Int, value: Int) {
+        this[offset] = ((value ushr 8) and 0xff).toByte()
+        this[offset + 1] = (value and 0xff).toByte()
+    }
+
+    private fun ByteArray.readUInt16(offset: Int): Int =
+        ((this[offset].toInt() and 0xff) shl 8) or
+            (this[offset + 1].toInt() and 0xff)
+
+    private fun ByteArray.writeInt16(offset: Int, value: Int) {
+        writeUInt16(offset, value and 0xffff)
+    }
+
+    private fun ByteArray.writeUInt32(offset: Int, value: Int) {
+        this[offset] = ((value ushr 24) and 0xff).toByte()
+        this[offset + 1] = ((value ushr 16) and 0xff).toByte()
+        this[offset + 2] = ((value ushr 8) and 0xff).toByte()
+        this[offset + 3] = (value and 0xff).toByte()
+    }
+
+    private fun ByteArray.writeInt32(offset: Int, value: Int) {
+        writeUInt32(offset, value)
+    }
+
+    private fun ByteArray.readUInt32(offset: Int): Int =
+        ((this[offset].toInt() and 0xff) shl 24) or
+            ((this[offset + 1].toInt() and 0xff) shl 16) or
+            ((this[offset + 2].toInt() and 0xff) shl 8) or
+            (this[offset + 3].toInt() and 0xff)
+
+    private fun fixed16Dot16Raw(value: Double): Int =
+        (value * 65536.0).toInt()
+
+    private fun ByteArray.toUnsignedByteList(): List<Int> =
+        map { it.toInt() and 0xff }
 }
