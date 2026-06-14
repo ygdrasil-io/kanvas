@@ -1,7 +1,7 @@
 ---
 id: KGPU-M0-003
 title: "Review R2 WGSL module and ABI evidence"
-status: review
+status: done
 milestone: M0
 priority: P0
 owner_area: wgsl-materials
@@ -59,9 +59,9 @@ data class WGSLAbiReview(val moduleHash: String, val reflectionDump: String, val
 
 ## Acceptance Criteria
 
-- [ ] Module hash and reflection dump are linked.
-- [ ] Packing layout and byte-size evidence are linked.
-- [ ] Rejected module fixtures are linked.
+- [x] Module hash and reflection dump are linked.
+- [x] Packing layout and byte-size evidence are linked.
+- [x] Rejected module fixtures are linked.
 
 ## Required Evidence
 
@@ -89,7 +89,11 @@ rtk git diff --check
 
 ## Status Notes
 
-- `review`: R2 evidence exists and requires independent acceptance.
+- `done`: Independent review found the R2 ABI dump needed explicit module-hash
+  evidence. The dump now links `moduleHash`, reflection source, bindings,
+  uniform byte sizes, packing plans, and rejected fixture coverage. This remains
+  `ImplementationCandidate` evidence only and does not claim arbitrary
+  parser-backed WGSL support.
 
 ## Linear Labels
 

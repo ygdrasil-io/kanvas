@@ -91,6 +91,7 @@ fun WGSLModule.abiDump(): String {
 
     return buildList {
         add("module=$moduleLabel")
+        add("moduleHash=${moduleHash.value}")
         add("entryPoints=vertex:$vertexEntryPoint,fragment:$fragmentEntryPoint")
         add("parser=${parserState.status}:${parserState.toolName}")
         bindings.sortedWith(compareBy<WGSLBindingLayout> { it.group }.thenBy { it.binding }.thenBy { it.layoutRole })

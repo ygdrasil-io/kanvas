@@ -1,7 +1,7 @@
 ---
 id: KGPU-M0-004
 title: "Review R3 material payload and pipeline key evidence"
-status: review
+status: done
 milestone: M0
 priority: P0
 owner_area: payloads-pipelines
@@ -60,9 +60,9 @@ data class KeyBoundaryReview(val materialKeyDump: String, val pipelineKeyDump: S
 
 ## Acceptance Criteria
 
-- [ ] Material and pipeline key preimages are deterministic.
-- [ ] Payload mutation tests prove values do not change durable keys.
-- [ ] Cache ledger facts are linked and scoped.
+- [x] Material and pipeline key preimages are deterministic.
+- [x] Payload mutation tests prove values do not change durable keys.
+- [x] Cache ledger facts are linked and scoped.
 
 ## Required Evidence
 
@@ -90,7 +90,9 @@ rtk git diff --check
 
 ## Status Notes
 
-- `review`: R3 evidence exists and requires independent acceptance.
+- `done`: Independent review accepted the R3 key/payload evidence as
+  `ImplementationCandidate` only. Durable keys remain scoped away from payload
+  values, resource handles, and surface leases.
 
 ## Linear Labels
 

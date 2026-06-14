@@ -1,7 +1,7 @@
 ---
 id: KGPU-M0-006
 title: "Review R5 recording task graph evidence"
-status: review
+status: done
 milestone: M0
 priority: P0
 owner_area: recording
@@ -60,9 +60,9 @@ data class RecordingReview(val recordingDump: String, val taskListDump: String)
 
 ## Acceptance Criteria
 
-- [ ] Recording and task-list dumps are linked.
-- [ ] One-shot replay refusal fixture is linked.
-- [ ] Upload-before-use or render ordering evidence is linked.
+- [x] Recording and task-list dumps are linked.
+- [x] One-shot replay refusal fixture is linked.
+- [x] Upload-before-use or render ordering evidence is linked.
 
 ## Required Evidence
 
@@ -90,7 +90,9 @@ rtk git diff --check
 
 ## Status Notes
 
-- `review`: R5 evidence exists and requires independent acceptance.
+- `done`: Independent review accepted the R5 recording/task graph evidence as
+  first-route-scoped `ImplementationCandidate` only. This does not claim broad
+  display-list replay or multi-family recording support.
 
 ## Linear Labels
 
