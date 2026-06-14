@@ -1,7 +1,7 @@
 ---
 id: KGPU-M4-002
 title: "Add uploaded texture artifact ownership gates"
-status: proposed
+status: done
 milestone: M4
 priority: P0
 owner_area: resources-images
@@ -83,7 +83,25 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Required for image and future text/atlas routes.
+- `done`: Added `GPUUploadedTextureArtifactOwnershipGate` resource contract
+  evidence for typed `UploadedTextureArtifact` ownership before sampling. The
+  gate validates artifact type, artifact generation, required usage labels,
+  device generation, active-attachment sampling, and texture descriptor
+  compatibility before returning an `UploadFromArtifact` allocation plan. Dumps
+  include ownership scope, lifetime, release policy, usage/device facts,
+  sampler/view facts, and upload-before-sample materialization intent while
+  excluding live resource debug labels and handles. Stable refusals cover stale
+  artifact generation, missing usage, stale device generation, active
+  attachment sampling, descriptor mismatch, and missing uploaded-artifact
+  provenance. Independent review
+  `019ec815-a637-7e92-baa9-24bd28b69904` found that missing provenance had code
+  coverage but no refusal fixture; remediation added RED/GREEN evidence for
+  `artifactType != UploadedTextureArtifact`. Evidence is contract-only and does
+  not allocate WebGPU textures, upload bytes, claim cache residency, activate
+  product routing, or imply codec support. Post-remediation independent review
+  `019ec81d-b49e-7eb2-8a66-6f2d81e0ce95` accepted the evidence for `done` and
+  confirmed no hidden activation, support-claim widening, package-cycle risk,
+  material-key/resource-handle leak, or M4-004 promotion.
 
 ## Linear Labels
 

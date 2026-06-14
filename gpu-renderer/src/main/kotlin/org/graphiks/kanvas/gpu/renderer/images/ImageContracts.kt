@@ -1,5 +1,17 @@
 package org.graphiks.kanvas.gpu.renderer.images
 
+import org.graphiks.kanvas.gpu.renderer.materials.GPUImageShaderPlan
+import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSamplingPlan
+import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceDescriptor
+import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialTileMode
+import org.graphiks.kanvas.gpu.renderer.materials.MaterialKey
+import org.graphiks.kanvas.gpu.renderer.resources.GPUSampledTextureBinding
+import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureDescriptor
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureViewDescriptor
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUseToken
+import java.security.MessageDigest
+
 /** Image upload artifact key. */
 @JvmInline
 value class GPUImageUploadArtifactKey(val value: String) {
@@ -17,6 +29,29 @@ data class GPUImageSourceDescriptor(
     val provenance: String,
 )
 
+/** Already decoded CPU pixel source accepted by the first M4 image slice. */
+data class GPUDecodedImagePixelsDescriptor(
+    val sourceId: String,
+    val width: Int,
+    val height: Int,
+    val pixelFormat: String,
+    val rowBytes: Long,
+    val alphaType: String,
+    val colorProfileLabel: String,
+    val orientationState: String,
+    val generation: Long,
+    val contentHash: String,
+    val provenance: String,
+)
+
+/** Bounded image sampling request for already decoded pixels. */
+data class GPUDecodedImageSamplingPlan(
+    val tileModeX: String,
+    val tileModeY: String,
+    val filterMode: String,
+    val mipmapMode: String,
+)
+
 /** Encoded image source descriptor. */
 data class GPUEncodedImageSource(
     val sourceId: String,
@@ -28,10 +63,98 @@ data class GPUEncodedImageSource(
 /** Image codec descriptor. */
 data class GPUImageCodecDescriptor(
     val codecName: String,
+    val codecVersion: String = "descriptor:unspecified",
     val supportedFormats: Set<String>,
     val colorManagementPolicy: String,
+    val implementationKind: String = "unspecified",
+    val deterministic: Boolean = false,
     val dependencyGate: String? = null,
 )
+
+/** Codec provenance request for encoded image planning. */
+data class GPUImageCodecProvenanceRequest(
+    val source: GPUEncodedImageSource,
+    val requestedFormat: String,
+    val conformanceTier: String,
+)
+
+/** Codec provenance planning result. */
+data class GPUImageCodecProvenancePlan(
+    val registry: GPUImageCodecRegistrySnapshot,
+    val request: GPUImageCodecProvenanceRequest,
+    val codec: GPUImageCodecDescriptor?,
+    val classification: String,
+    val diagnostic: GPUImageDiagnostic,
+)
+
+/** Dumpable codec registry snapshot used for dependency-gated evidence. */
+data class GPUImageCodecRegistrySnapshot(
+    val registryId: String,
+    val generation: Long,
+    val codecs: List<GPUImageCodecDescriptor>,
+) {
+    /** Plans codec provenance without decoding or promoting uploaded texture support. */
+    fun planDecodeProvenance(request: GPUImageCodecProvenanceRequest): GPUImageCodecProvenancePlan {
+        val format = request.requestedFormat.lowercase()
+        val codec = codecs
+            .sortedBy { descriptor -> descriptor.codecName }
+            .firstOrNull { descriptor -> format in descriptor.supportedFormats.map { it.lowercase() } }
+        val diagnostic = when {
+            codec == null -> GPUImageDiagnostic(
+                code = "dependency.image.codec.unregistered",
+                sourceId = request.source.sourceId,
+                message = "No dumpable codec descriptor is registered for $format.",
+                terminal = true,
+            )
+            codec.implementationKind.startsWith("external") -> GPUImageDiagnostic(
+                code = "dependency.image.codec.external_not_allowed",
+                sourceId = request.source.sourceId,
+                message = "Codec ${codec.codecName} is external/platform-backed and cannot satisfy this conformance tier.",
+                terminal = true,
+            )
+            codec.codecVersion.isBlank() || !codec.deterministic -> GPUImageDiagnostic(
+                code = "dependency.image.codec.version_nondeterministic",
+                sourceId = request.source.sourceId,
+                message = "Codec ${codec.codecName} lacks deterministic version or output policy.",
+                terminal = true,
+            )
+            codec.dependencyGate != null -> GPUImageDiagnostic(
+                code = codec.dependencyGate,
+                sourceId = request.source.sourceId,
+                message = "Codec ${codec.codecName} remains dependency-gated for $format.",
+                terminal = true,
+            )
+            else -> GPUImageDiagnostic(
+                code = "dependency.image.codec.decode_not_promoted",
+                sourceId = request.source.sourceId,
+                message = "Codec ${codec.codecName} has provenance only; decode output is not promoted.",
+                terminal = true,
+            )
+        }
+
+        return GPUImageCodecProvenancePlan(
+            registry = this,
+            request = request,
+            codec = codec,
+            classification = "DependencyGated",
+            diagnostic = diagnostic,
+        )
+    }
+
+    companion object {
+        /** Refuses decoded output that lacks registry-backed codec provenance. */
+        fun refuseDecodeOutputWithoutProvenance(
+            sourceId: String,
+            outputLabel: String,
+        ): GPUImageDiagnostic =
+            GPUImageDiagnostic(
+                code = "dependency.image.decode.provenance_missing",
+                sourceId = sourceId,
+                message = "Decode output $outputLabel is refused because codec provenance is missing.",
+                terminal = true,
+            )
+    }
+}
 
 /** Image codec registry contract. */
 interface GPUImageCodecRegistry {
@@ -144,6 +267,7 @@ data class UploadedTextureArtifact(
     val uploadPlan: GPUImageUploadPlan,
     val generation: Long,
     val lifetimeClass: String,
+    val artifactType: String = "UploadedTextureArtifact",
     val diagnostics: List<GPUImageDiagnostic> = emptyList(),
 )
 
@@ -154,3 +278,392 @@ data class GPUImageDiagnostic(
     val message: String,
     val terminal: Boolean,
 )
+
+/** Emits stable M4 codec provenance evidence lines. */
+fun GPUImageCodecProvenancePlan.dumpLines(): List<String> =
+    buildList {
+        add(
+            "codec:registry id=${registry.registryId} generation=${registry.generation} " +
+                "descriptors=${registry.codecs.size}",
+        )
+        registry.codecs.sortedBy { descriptor -> descriptor.codecName }.forEach { descriptor ->
+            add(descriptor.dumpLine())
+        }
+        add(
+            "codec:provenance source=${request.source.sourceId} format=${request.requestedFormat.lowercase()} " +
+                "tier=${request.conformanceTier} classification=$classification reason=${diagnostic.code}",
+        )
+        add(codecNonClaimLine)
+    }
+
+/** Contract plan for the first decoded-pixel image shader route. */
+data class GPUDecodedImageShaderRoutePlan(
+    val source: GPUDecodedImagePixelsDescriptor,
+    val imageSource: GPUImageSourceDescriptor,
+    val pipelinePlan: GPUImagePipelinePlan?,
+    val materialSource: GPUMaterialSourceDescriptor,
+    val materialKey: MaterialKey,
+    val textureDescriptor: GPUTextureDescriptor,
+    val viewDescriptor: GPUTextureViewDescriptor,
+    val samplerDescriptor: GPUSamplerDescriptor,
+    val binding: GPUSampledTextureBinding,
+    val artifact: UploadedTextureArtifact,
+    val routeKind: String,
+    val diagnostics: List<GPUImageDiagnostic> = emptyList(),
+)
+
+/** Builds bounded decoded-pixel image shader evidence without product activation. */
+class GPUDecodedImageShaderPreparedPlanner(
+    private val maxUploadBytes: Long = 1_048_576L,
+) {
+    /**
+     * Plans one already decoded CPU pixel source as an uploaded texture artifact.
+     *
+     * This is contract evidence only. It names an upload-before-sample artifact,
+     * sampled binding, sampler facts, and material-key boundary; it does not
+     * decode codecs, create WebGPU resources, submit adapter work, generate
+     * mipmaps, or activate image drawing in product routing.
+     */
+    fun plan(
+        source: GPUDecodedImagePixelsDescriptor,
+        sampling: GPUDecodedImageSamplingPlan,
+    ): GPUDecodedImageShaderRoutePlan {
+        val imageSource = source.toImageSourceDescriptor()
+        val textureDescriptor = source.toTextureDescriptor()
+        val viewDescriptor = GPUTextureViewDescriptor(
+            textureDescriptorHash = textureDescriptor.stableDescriptorHash(),
+            viewDimension = "2d",
+            mipRange = 0..0,
+            arrayLayerRange = 0..0,
+        )
+        val samplerDescriptor = sampling.toSamplerDescriptor()
+        val materialKey = sampling.materialKey()
+        val materialSource = sampling.toMaterialSource()
+        val binding = GPUSampledTextureBinding(
+            bindingLabel = bindingLabel,
+            view = viewDescriptor,
+            sampler = samplerDescriptor,
+            useToken = GPUUseToken(1),
+        )
+
+        val refusalCode = source.refusalCode(maxUploadBytes) ?: sampling.refusalCode()
+        if (refusalCode != null) {
+            val diagnostic = GPUImageDiagnostic(
+                code = refusalCode,
+                sourceId = source.sourceId.ifBlank { null },
+                message = "Decoded image shader route refused: $refusalCode",
+                terminal = true,
+            )
+            return GPUDecodedImageShaderRoutePlan(
+                source = source,
+                imageSource = imageSource,
+                pipelinePlan = null,
+                materialSource = materialSource,
+                materialKey = MaterialKey("refused:$refusalCode"),
+                textureDescriptor = textureDescriptor,
+                viewDescriptor = viewDescriptor,
+                samplerDescriptor = samplerDescriptor,
+                binding = binding,
+                artifact = source.placeholderArtifact(textureDescriptor),
+                routeKind = "RefuseDiagnostic",
+                diagnostics = listOf(diagnostic),
+            )
+        }
+
+        val pixelPlan = source.toPixelPlan()
+        val mipmapPlan = GPUImageMipmapPlan(
+            generateMipmaps = false,
+            levelCount = 1,
+            filterPolicy = "none",
+        )
+        val uploadPlan = GPUImageUploadPlan(
+            artifactKey = source.artifactKey(),
+            pixelPlan = pixelPlan,
+            mipmapPlan = mipmapPlan,
+            uploadBudgetClass = decodedImageUploadBudgetClass,
+        )
+        val diagnostic = GPUImageDiagnostic(
+            code = "image:decoded.prepared",
+            sourceId = source.sourceId,
+            message = "Decoded pixels are available as an UploadedTextureArtifact for $bindingLabel",
+            terminal = false,
+        )
+        val artifact = UploadedTextureArtifact(
+            artifactKey = uploadPlan.artifactKey,
+            pixelPlan = pixelPlan,
+            uploadPlan = uploadPlan,
+            generation = source.generation,
+            lifetimeClass = "recording-local",
+            diagnostics = listOf(diagnostic),
+        )
+        val pipelinePlan = GPUImagePipelinePlan(
+            source = imageSource,
+            uploadPlan = uploadPlan,
+            diagnostics = listOf(diagnostic),
+        )
+
+        return GPUDecodedImageShaderRoutePlan(
+            source = source,
+            imageSource = imageSource,
+            pipelinePlan = pipelinePlan,
+            materialSource = materialSource,
+            materialKey = materialKey,
+            textureDescriptor = textureDescriptor,
+            viewDescriptor = viewDescriptor,
+            samplerDescriptor = samplerDescriptor,
+            binding = binding,
+            artifact = artifact,
+            routeKind = "CPUPreparedGPU",
+            diagnostics = listOf(diagnostic),
+        )
+    }
+}
+
+/** Emits stable M4 decoded-image route evidence lines for reports and tests. */
+fun GPUDecodedImageShaderRoutePlan.dumpLines(): List<String> {
+    if (routeKind == "RefuseDiagnostic") {
+        val diagnostic = diagnostics.firstOrNull()
+        return listOf(
+            "image:decoded.refused reason=${diagnostic?.code ?: "unknown"} " +
+                "source=${source.sourceId} routeKind=RefuseDiagnostic",
+            imageNonClaimLine,
+        )
+    }
+
+    return listOf(
+        "image:decoded.prepared routeKind=CPUPreparedGPU consumer=${binding.bindingLabel} " +
+            "material=${materialKey.value.substringBeforeLast(':')}",
+        "image:source id=${source.sourceId} kind=${imageSource.sourceKind} " +
+            "size=${source.width}x${source.height} format=${source.pixelFormat} " +
+            "alpha=${source.alphaType} color=${source.colorProfileLabel} " +
+            "orientation=${source.orientationState} generation=${source.generation} " +
+            "provenance=${source.provenance}",
+        "image:upload artifact=${artifact.artifactKey.value} type=${artifact.artifactType} " +
+            "lifetime=${artifact.lifetimeClass} budget=${artifact.uploadPlan.uploadBudgetClass} " +
+            "uploadBeforeSample=true",
+        "texture:descriptor size=${textureDescriptor.width}x${textureDescriptor.height} " +
+            "format=${textureDescriptor.format} usage=${textureDescriptor.usageLabels.sorted().joinToString(",")} " +
+            "sampleCount=${textureDescriptor.sampleCount} view=${viewDescriptor.viewDimension} " +
+            "mipRange=${viewDescriptor.mipRange}",
+        "sampler:descriptor address=${samplerDescriptor.addressModeU}/${samplerDescriptor.addressModeV} " +
+            "filter=${samplerDescriptor.magFilter}/${samplerDescriptor.minFilter} " +
+            "mipmap=${samplerDescriptor.mipmapFilter}",
+        "binding:sampledTexture label=${binding.bindingLabel} " +
+            "layout=group1.binding1.texture_2d_rgba8_unorm sampler=group1.binding2.sampler",
+        "material:key=${materialKey.value} " +
+            "excludes=upload-artifact-key,pixel-content,row-bytes,resource-handle",
+        imageNonClaimLine,
+    )
+}
+
+private const val bindingLabel = "sampled-texture.image-shader"
+private const val materialKeyPrefix = "image.shader.decoded-pixels.v1"
+private const val materialSourceKey = "image-source:decoded-pixels"
+private const val uploadArtifactDescriptorVersion = "descriptorv1"
+private const val uploadArtifactGeneratorVersion = "m4-decoded-image-v1"
+private const val uploadArtifactConformanceTier = "contract-only"
+private const val decodedImageUploadBudgetClass = "image-small"
+private const val imageNonClaimLine =
+    "nonclaim:no-product-activation no-adapter-backed-execution no-codec-support no-mipmap-support " +
+        "no-broad-image-support no-cpu-rendered-compat-texture"
+private const val codecNonClaimLine =
+    "nonclaim:no-codec-implementation no-decode-output no-uploaded-texture-route-from-provenance " +
+        "no-platform-decoder-substitute no-product-activation"
+
+private fun GPUDecodedImagePixelsDescriptor.toImageSourceDescriptor(): GPUImageSourceDescriptor =
+    GPUImageSourceDescriptor(
+        sourceId = sourceId,
+        sourceKind = "AlreadyDecodedPixels",
+        sizeLabel = "${width}x$height",
+        colorProfileLabel = colorProfileLabel,
+        provenance = provenance,
+    )
+
+private fun GPUDecodedImagePixelsDescriptor.toPixelPlan(): GPUImagePixelPlan =
+    GPUImagePixelPlan(
+        width = width,
+        height = height,
+        format = pixelFormat,
+        rowBytes = rowBytes,
+        alphaType = alphaType,
+    )
+
+private fun GPUDecodedImagePixelsDescriptor.toTextureDescriptor(): GPUTextureDescriptor =
+    GPUTextureDescriptor(
+        width = width.coerceAtLeast(1),
+        height = height.coerceAtLeast(1),
+        format = pixelFormat.ifBlank { "unknown" },
+        usageLabels = setOf("copy_dst", "texture_binding"),
+        sampleCount = 1,
+    )
+
+private fun GPUDecodedImagePixelsDescriptor.placeholderArtifact(
+    textureDescriptor: GPUTextureDescriptor,
+): UploadedTextureArtifact {
+    val safePixelPlan = GPUImagePixelPlan(
+        width = textureDescriptor.width,
+        height = textureDescriptor.height,
+        format = textureDescriptor.format,
+        rowBytes = rowBytes.coerceAtLeast(1L),
+        alphaType = alphaType.ifBlank { "unknown" },
+    )
+    val safeMipmapPlan = GPUImageMipmapPlan(
+        generateMipmaps = false,
+        levelCount = 1,
+        filterPolicy = "none",
+    )
+    val safeKey = GPUImageUploadArtifactKey("refused.image.${sourceId.encodeForImageKey()}")
+    val safeUploadPlan = GPUImageUploadPlan(
+        artifactKey = safeKey,
+        pixelPlan = safePixelPlan,
+        mipmapPlan = safeMipmapPlan,
+        uploadBudgetClass = "refused",
+    )
+    return UploadedTextureArtifact(
+        artifactKey = safeKey,
+        pixelPlan = safePixelPlan,
+        uploadPlan = safeUploadPlan,
+        generation = generation.coerceAtLeast(0L),
+        lifetimeClass = "refused",
+    )
+}
+
+private fun GPUDecodedImagePixelsDescriptor.artifactKey(): GPUImageUploadArtifactKey =
+    GPUImageUploadArtifactKey(
+        "uploaded.image.decoded." +
+            "$uploadArtifactDescriptorVersion." +
+            "src${sourceId.encodeForImageKey()}." +
+            "hash${contentHash.encodeForImageKey()}." +
+            "gen$generation." +
+            "${width}x$height." +
+            "${pixelFormat.lowercase()}." +
+            "row$rowBytes." +
+            "alpha.${alphaType.lowercase()}." +
+            "color.${colorProfileLabel.stableImageKeyLabel()}." +
+            "orientation.${orientationState.lowercase()}." +
+            "conformance.$uploadArtifactConformanceTier." +
+            "budget.$decodedImageUploadBudgetClass." +
+            "generator.$uploadArtifactGeneratorVersion." +
+            "mips1",
+    )
+
+private fun GPUDecodedImagePixelsDescriptor.refusalCode(maxUploadBytes: Long): String? =
+    when {
+        sourceId.isBlank() || width <= 0 || height <= 0 || generation < 0 -> "unsupported.image.source_descriptor_invalid"
+        pixelFormat != "RGBA8Unorm" -> "unsupported.image.pixel.format"
+        alphaType !in setOf("Premul", "Unpremul", "Opaque") -> "unsupported.image.pixel.format"
+        !colorProfileLabel.isDeterministicImageKeyFact() -> "unsupported.image.upload.artifact_key_nondeterministic"
+        rowBytes < width * 4L || rowBytes % 4L != 0L -> "unsupported.image.pixel.row_stride"
+        orientationState != "Applied" -> "unsupported.image.orientation"
+        !contentHash.isDeterministicImageKeyFact() -> "unsupported.image.upload.artifact_key_nondeterministic"
+        rowBytes * height > maxUploadBytes -> "unsupported.image.upload.budget_exceeded"
+        else -> null
+    }
+
+private fun GPUDecodedImageSamplingPlan.refusalCode(): String? =
+    when {
+        tileModeX != "clamp" || tileModeY != "clamp" -> "unsupported.image.tile_mode"
+        mipmapMode != "none" -> "unsupported.image.mip_required"
+        filterMode !in setOf("nearest", "linear") -> "unsupported.image.sampling_filter"
+        else -> null
+    }
+
+private fun GPUDecodedImageSamplingPlan.toSamplerDescriptor(): GPUSamplerDescriptor =
+    GPUSamplerDescriptor(
+        addressModeU = tileModeX.toAddressMode(),
+        addressModeV = tileModeY.toAddressMode(),
+        magFilter = filterMode,
+        minFilter = filterMode,
+        mipmapFilter = mipmapMode,
+    )
+
+private fun GPUDecodedImageSamplingPlan.toMaterialSource(): GPUMaterialSourceDescriptor =
+    GPUMaterialSourceDescriptor.Image(
+        GPUImageShaderPlan(
+            imageSourceKey = materialSourceKey,
+            sampling = GPUMaterialSamplingPlan(
+                tileModeX = tileModeX.toMaterialTileMode(),
+                tileModeY = tileModeY.toMaterialTileMode(),
+                filterMode = filterMode,
+                mipmapMode = mipmapMode,
+            ),
+            colorTreatment = "sampled-unpremul-srgb-to-target",
+        ),
+    )
+
+private fun GPUDecodedImageSamplingPlan.materialKey(): MaterialKey {
+    val preimage = listOf(
+        "sourceKind=ImageShader",
+        "imageSourceKind=AlreadyDecodedPixels",
+        "snippet=material.image_shader.decoded_pixels.v1",
+        "bindingLayout=group1.binding1.texture_2d_rgba8_unorm+group1.binding2.sampler",
+        "tileModeX=$tileModeX",
+        "tileModeY=$tileModeY",
+        "filterMode=$filterMode",
+        "mipmapMode=$mipmapMode",
+        "colorTreatment=sampled-unpremul-srgb-to-target",
+    ).joinToString("\n")
+
+    return MaterialKey("$materialKeyPrefix:${preimage.stableImageHash()}")
+}
+
+private fun String.toAddressMode(): String =
+    when (this) {
+        "clamp" -> "clamp-to-edge"
+        "repeat" -> "repeat"
+        "mirror" -> "mirror-repeat"
+        else -> this
+    }
+
+private fun String.toMaterialTileMode(): GPUMaterialTileMode =
+    when (this) {
+        "clamp" -> GPUMaterialTileMode.Clamp
+        "repeat" -> GPUMaterialTileMode.Repeat
+        "mirror" -> GPUMaterialTileMode.Mirror
+        "decal" -> GPUMaterialTileMode.Decal
+        else -> GPUMaterialTileMode.Clamp
+    }
+
+private fun GPUTextureDescriptor.stableDescriptorHash(): String =
+    listOf(
+        width.toString(),
+        height.toString(),
+        format,
+        usageLabels.sorted().joinToString(","),
+        sampleCount.toString(),
+    ).joinToString("|").stableImageHash()
+
+private fun String.isDeterministicImageKeyFact(): Boolean =
+    isNotBlank() &&
+        !contains("handle", ignoreCase = true) &&
+        !contains("pointer", ignoreCase = true) &&
+        !contains("0x", ignoreCase = true)
+
+private fun String.encodeForImageKey(): String =
+    encodeToByteArray()
+        .joinToString("") { byte -> (byte.toInt() and 0xff).toString(16).padStart(2, '0') }
+
+private fun String.stableImageKeyLabel(): String =
+    lowercase()
+        .map { char ->
+            when {
+                char.isLetterOrDigit() -> char
+                char == '-' -> char
+                else -> '_'
+            }
+        }
+        .joinToString("")
+        .replace(Regex("_+"), "_")
+        .trim('_')
+
+private fun String.stableImageHash(): String {
+    val bytes = MessageDigest.getInstance("SHA-256").digest(toByteArray(Charsets.UTF_8))
+    return bytes.joinToString("") { byte -> (byte.toInt() and 0xff).toString(16).padStart(2, '0') }
+        .take(16)
+}
+
+private fun GPUImageCodecDescriptor.dumpLine(): String =
+    "codec:descriptor id=$codecName version=$codecVersion " +
+        "formats=${supportedFormats.map { format -> format.lowercase() }.sorted().joinToString(",")} " +
+        "kind=$implementationKind deterministic=$deterministic color=$colorManagementPolicy " +
+        "gate=${dependencyGate ?: "none"}"
