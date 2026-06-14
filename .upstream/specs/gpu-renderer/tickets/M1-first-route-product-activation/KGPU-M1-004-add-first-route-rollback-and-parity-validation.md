@@ -1,0 +1,89 @@
+---
+id: KGPU-M1-004
+title: "Add first-route rollback and parity validation"
+status: proposed
+milestone: M1
+priority: P0
+owner_area: validation-adapter
+claim_impact: TargetNative
+route_kind: GPUNative
+product_activation: false
+release_blocking: false
+adapter_required: true
+depends_on: [KGPU-M1-003]
+legacy_gate: "legacy drawRect"
+---
+
+# KGPU-M1-004 - Add first-route rollback and parity validation
+
+## PM Note
+
+Ce ticket prouve qu’une activation candidate peut être annulée proprement.
+
+## Problem
+
+Product activation requires a rollback and parity gate so a first-route issue
+does not strand users on a broken default route.
+
+## Scope
+
+- Add first-route parity evidence against legacy output.
+- Add rollback diagnostics and validation.
+- Confirm activation does not affect unsupported variants.
+
+## Non-Goals
+
+- Do not define performance readiness.
+- Do not expand beyond one route.
+
+## Spec Sources
+
+- `.upstream/specs/gpu-renderer/06-legacy-adapter-cleanup.md`
+- `.upstream/specs/gpu-renderer/07-validation-conformance.md`
+
+## Design Sketch
+
+```kotlin
+data class RollbackEvidence(val legacyChecksum: String, val gpuRendererChecksum: String)
+```
+
+## Acceptance Criteria
+
+- [ ] Legacy and `:gpu-renderer` outputs are compared for the accepted scene.
+- [ ] Rollback path restores legacy routing.
+- [ ] PM output records scope and non-claims.
+
+## Required Evidence
+
+- Before/after route dumps.
+- Readback or checksum comparison.
+- Rollback validation transcript.
+
+## Fallback / Refusal Behavior
+
+Any parity failure keeps product activation disabled and emits visible
+diagnostics.
+
+## Dashboard Impact
+
+- Expected row: `gpu-renderer.first-route-rollback-parity`
+- Expected classification: `TargetNative`
+- Claim promotion allowed: only after accepted activation decision.
+
+## Validation
+
+```bash
+rtk ./gradlew --no-daemon :gpu-raster:test --tests '*GpuRenderer*'
+rtk ./gradlew --no-daemon validateGpuRendererR6AdapterBackedPromotionReadinessBoundary
+rtk git diff --check
+```
+
+## Status Notes
+
+- `proposed`: Requires product flag ticket first.
+
+## Linear Labels
+
+- `gpu-renderer`
+- `milestone:M1`
+- `area:validation`

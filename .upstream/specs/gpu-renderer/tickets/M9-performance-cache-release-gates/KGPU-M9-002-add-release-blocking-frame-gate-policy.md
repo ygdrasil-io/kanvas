@@ -1,0 +1,83 @@
+---
+id: KGPU-M9-002
+title: "Add release-blocking frame gate policy"
+status: proposed
+milestone: M9
+priority: P0
+owner_area: performance
+claim_impact: PolicyGated
+route_kind: mixed
+product_activation: false
+release_blocking: false
+adapter_required: true
+depends_on: [KGPU-M9-001]
+legacy_gate: "frame reporting-only"
+---
+
+# KGPU-M9-002 - Add release-blocking frame gate policy
+
+## PM Note
+
+Ce ticket définit quand les timings deviennent bloquants pour la release.
+
+## Problem
+
+Frame timing needs warmup, variance, owned hardware, quarantine, and rebaseline
+policy before release-blocking status.
+
+## Scope
+
+- Define candidate and release-blocking frame gate states.
+- Add negative fixture and quarantine policy.
+
+## Non-Goals
+
+- Do not make current timing release-blocking.
+- Do not conflate correctness with performance.
+
+## Spec Sources
+
+- `.upstream/specs/gpu-renderer/13-performance-telemetry-cache-gates.md`
+
+## Design Sketch
+
+```kotlin
+data class FrameGatePolicy(val releaseBlocking: Boolean, val quarantineReasons: List<String>)
+```
+
+## Acceptance Criteria
+
+- [ ] Gate state and variance policy are explicit.
+- [ ] Reporting-only lanes remain non-blocking.
+- [ ] Negative threshold fixture exists.
+
+## Required Evidence
+
+- Gate policy report, raw sample provenance, and quarantine fixture.
+
+## Fallback / Refusal Behavior
+
+Unstable or unowned measurements stay reporting-only.
+
+## Dashboard Impact
+
+- Expected row: `gpu-renderer.frame-gate-policy`
+- Expected classification: `PolicyGated`
+- Claim promotion allowed: no without accepted gate policy.
+
+## Validation
+
+```bash
+rtk ./gradlew --no-daemon :gpu-renderer:check
+rtk git diff --check
+```
+
+## Status Notes
+
+- `proposed`: Policy only.
+
+## Linear Labels
+
+- `gpu-renderer`
+- `milestone:M9`
+- `area:performance`
