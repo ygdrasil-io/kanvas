@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
@@ -98,6 +99,43 @@ class GpuRendererShadowAdapterTest {
     }
 
     @Test
+    fun `legacy device product flag property records candidate and preserves product WebGPU pixels`() =
+        withGpuRendererFillRectProperties(shadow = null, product = null) {
+            val context = WebGpuContext.createOrNull()
+            Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+            context!!.use { ctx ->
+                val rect = SkRect.MakeLTRB(1f, 2f, 11f, 12f)
+                val clip = SkIRect.MakeLTRB(0, 0, 32, 32)
+                val disabled = renderDeviceFillRect(ctx, rect, clip, shadowProperty = null, productProperty = null)
+                val productFlagged = renderDeviceFillRect(ctx, rect, clip, shadowProperty = null, productProperty = "true")
+
+                assertArrayEquals(disabled.pixels, productFlagged.pixels)
+
+                val disabledResult = disabled.shadowResult
+                assertNotNull(disabledResult)
+                assertEquals(GpuRendererShadowHandoffStatus.Skipped, disabledResult!!.status)
+                assertFalse(disabledResult.productFlag.enabled)
+
+                val productResult = productFlagged.shadowResult
+                assertNotNull(productResult)
+                val command = assertInstanceOf(
+                    NormalizedDrawCommand.FillRect::class.java,
+                    productResult!!.normalizedCommand,
+                )
+
+                assertEquals(GpuRendererShadowHandoffStatus.ProductFlagged, productResult.status)
+                assertEquals("product_flag.native.fill_rect.solid", productResult.routeLabel)
+                assertEquals("legacy.fillRect.product_flag", command.source.operation)
+                assertTrue(productResult.productFlag.enabled)
+                assertTrue(productResult.legacyRouteAvailable)
+                assertTrue(productResult.dump().contains("cpuFallback=false"))
+                assertFalse(productResult.dump().contains("GPUCommandSubmission.Submitted"))
+                assertFalse(productResult.dump().contains("GPUReadbackResult.Completed"))
+            }
+        }
+
+    @Test
     fun `legacy fill rect hook is disabled by default and treats stroke and fill as fill evidence`() {
         val disabled = shadowFillRectForLegacyPath(
             config = GpuRendererShadowConfig(),
@@ -127,6 +165,108 @@ class GpuRendererShadowAdapterTest {
         assertEquals("native.fill_rect.solid", shadow.routeLabel)
         assertEquals(SkPaint.Style.kStrokeAndFill_Style, strokeAndFillPaint.style)
         assertTrue(shadow.dump().contains("cpuFallback=false"))
+    }
+
+    @Test
+    fun `first route product flag is explicit and disabled by default`() {
+        fun configFor(vararg pairs: Pair<String, String?>): GpuRendererShadowConfig {
+            val values = pairs.toMap()
+            return GpuRendererShadowConfig.fromSystemProperties { key -> values[key] }
+        }
+
+        val disabled = configFor()
+        val shadow = configFor(GpuRendererShadowConfig.ShadowFillRectProperty to "true")
+        val productFlag = configFor(GpuRendererShadowConfig.ProductFillRectProperty to "true")
+        val productFlagWins = configFor(
+            GpuRendererShadowConfig.ShadowFillRectProperty to "true",
+            GpuRendererShadowConfig.ProductFillRectProperty to "true",
+        )
+
+        assertEquals(GpuRendererShadowMode.Disabled, disabled.mode)
+        assertEquals(GpuRendererShadowMode.Shadow, shadow.mode)
+        assertEquals(GpuRendererShadowMode.ProductFlag, productFlag.mode)
+        assertEquals(GpuRendererShadowMode.ProductFlag, productFlagWins.mode)
+        assertFalse(disabled.productFlag.enabled)
+        assertFalse(shadow.productFlag.enabled)
+        assertTrue(productFlag.productFlag.enabled)
+        assertEquals("solid-fill-rect", productFlag.productFlag.routeScope)
+    }
+
+    @Test
+    fun `first route product flag state must match explicit mode`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            GpuRendererShadowConfig(
+                mode = GpuRendererShadowMode.ProductFlag,
+                productFlag = GpuRendererFirstRouteFlagState.Disabled,
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            GpuRendererShadowConfig(
+                mode = GpuRendererShadowMode.Shadow,
+                productFlag = GpuRendererFirstRouteFlagState.SolidFillRect,
+            )
+        }
+    }
+
+    @Test
+    fun `product flag mode records controlled route candidate while keeping legacy route visible`() {
+        val result = shadowFillRectForLegacyPath(
+            config = GpuRendererShadowConfig(mode = GpuRendererShadowMode.ProductFlag),
+            commandId = 11,
+            rect = SkRect.MakeLTRB(1f, 2f, 11f, 12f),
+            clip = SkIRect.MakeLTRB(0, 0, 32, 32),
+            paint = SkPaint(SK_ColorMAGENTA),
+            targetWidth = 32,
+            targetHeight = 32,
+        )
+
+        val command = assertInstanceOf(NormalizedDrawCommand.FillRect::class.java, result.normalizedCommand)
+        val dump = result.dump()
+
+        assertEquals(GpuRendererShadowHandoffStatus.ProductFlagged, result.status)
+        assertEquals("product_flag.native.fill_rect.solid", result.routeLabel)
+        assertEquals("legacy.fillRect.product_flag", command.source.operation)
+        assertEquals(GpuRendererShadowMode.ProductFlag, result.mode)
+        assertTrue(result.productFlag.enabled)
+        assertTrue(result.legacyRouteAvailable)
+        assertTrue(dump.contains("mode=product-flag"))
+        assertTrue(dump.contains("productFlag=true:solid-fill-rect"))
+        assertTrue(dump.contains("legacyRouteAvailable=true"))
+        assertTrue(dump.contains("cpuFallback=false"))
+        assertFalse(dump.contains("GPUCommandSubmission.Submitted"))
+        assertFalse(dump.contains("execution.submission:submitted"))
+        assertFalse(dump.contains("GPUReadbackResult.Completed"))
+        assertFalse(dump.contains("diagnostic-webgpu-first-route-pm-evidence"))
+    }
+
+    @Test
+    fun `product flag mode does not expand stroke and fill into product flagged route`() {
+        val strokeAndFillPaint = SkPaint(SK_ColorMAGENTA).apply {
+            style = SkPaint.Style.kStrokeAndFill_Style
+        }
+
+        val result = shadowFillRectForLegacyPath(
+            config = GpuRendererShadowConfig(mode = GpuRendererShadowMode.ProductFlag),
+            commandId = 12,
+            rect = SkRect.MakeLTRB(1f, 2f, 11f, 12f),
+            clip = SkIRect.MakeLTRB(0, 0, 32, 32),
+            paint = strokeAndFillPaint,
+            targetWidth = 32,
+            targetHeight = 32,
+        )
+
+        val dump = result.dump()
+
+        assertEquals(GpuRendererShadowHandoffStatus.Refused, result.status)
+        assertEquals("unsupported.adapter.paint_style", result.diagnosticCode)
+        assertNull(result.normalizedCommand)
+        assertTrue(result.productFlag.enabled)
+        assertTrue(result.legacyRouteAvailable)
+        assertTrue(dump.contains("mode=product-flag"))
+        assertTrue(dump.contains("productFlag=true:solid-fill-rect"))
+        assertTrue(dump.contains("legacyRouteAvailable=true"))
+        assertTrue(dump.contains("cpuFallback=false"))
+        assertFalse(dump.contains("status=product-flagged"))
     }
 
     @Test
@@ -291,8 +431,9 @@ class GpuRendererShadowAdapterTest {
         rect: SkRect,
         clip: SkIRect,
         shadowProperty: String?,
+        productProperty: String? = null,
     ): DeviceFillRectPixels =
-        withShadowFillRectProperty(shadowProperty) {
+        withGpuRendererFillRectProperties(shadow = shadowProperty, product = productProperty) {
             SkWebGpuDevice(context, 32, 32).use { device ->
                 device.drawRect(rect, clip, SkPaint(SK_ColorMAGENTA))
                 val shadowResult = device.gpuRendererShadowResultForTests()
@@ -309,21 +450,31 @@ class GpuRendererShadowAdapterTest {
     )
 
     private fun <T> withShadowFillRectProperty(value: String?, block: () -> T): T {
-        val key = GpuRendererShadowConfig.ShadowFillRectProperty
-        val previous = System.getProperty(key)
+        return withGpuRendererFillRectProperties(shadow = value, product = null, block = block)
+    }
+
+    private fun <T> withGpuRendererFillRectProperties(
+        shadow: String?,
+        product: String?,
+        block: () -> T,
+    ): T {
+        val previousShadow = System.getProperty(GpuRendererShadowConfig.ShadowFillRectProperty)
+        val previousProduct = System.getProperty(GpuRendererShadowConfig.ProductFillRectProperty)
+        setOrClearProperty(GpuRendererShadowConfig.ShadowFillRectProperty, shadow)
+        setOrClearProperty(GpuRendererShadowConfig.ProductFillRectProperty, product)
+        return try {
+            block()
+        } finally {
+            setOrClearProperty(GpuRendererShadowConfig.ShadowFillRectProperty, previousShadow)
+            setOrClearProperty(GpuRendererShadowConfig.ProductFillRectProperty, previousProduct)
+        }
+    }
+
+    private fun setOrClearProperty(key: String, value: String?) {
         if (value == null) {
             System.clearProperty(key)
         } else {
             System.setProperty(key, value)
-        }
-        return try {
-            block()
-        } finally {
-            if (previous == null) {
-                System.clearProperty(key)
-            } else {
-                System.setProperty(key, previous)
-            }
         }
     }
 }
