@@ -408,6 +408,110 @@ does not claim complete CFF/CFF2 support, full IUP interpolation, phantom-point
 metrics, `avar` application, HVAR/VVAR/MVAR support, complete variable-font
 support, native engine parity, or pixel-perfect hinting.
 
+
+### PKT-04C: TrueType Variation Fixture Goldens
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/fonts/scaler/RobotoFlex-Variable.ttf`
+- `reports/font/fixtures/licenses/roboto-flex-OFL-1.1.txt`
+- `reports/font/fixtures/expected/scaler/truetype-variation-readiness.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+
+Evidence:
+
+- Vendored official Roboto Flex variable TrueType bytes from
+  `googlefonts/roboto-flex` main with SIL-OFL-1.1 license evidence and recorded
+  GitHub blob provenance `0abe2ee29292f1b39f59103d069feda87cde585e`.
+- `truetype-variation-readiness.json` records PKT-04C readiness requirements for
+  IUP, phantom-point/advance delta, `avar`, HVAR/VVAR/MVAR metric-refusal,
+  normalized-coordinate, path-hash, bounds, and variation-diagnostic evidence.
+- The provenance index records fixture ID `scaler-roboto-flex-variable`,
+  SHA-256, size, license path, expected dump, and non-claims.
+- The fixture manifest and dump index attach the golden as coordination evidence
+  without promoting full variable-font support.
+- Focused scaler coverage opens the vendored font bytes, asserts the readiness
+  dump and non-claims, and existing variation diagnostics/refusals remain
+  explicit.
+- Local `Stroking.ttf`, `Stroking.otf`, and `Variable.ttf` stand-ins were
+  rejected because `skia-integration-tests/src/test/resources/fonts/Stroking_VARIABLE_PROVENANCE.md`
+  does not name an accepted license.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:scaler:test
+rtk git diff --check
+```
+
+Remaining gate: this is fixture readiness and refusal/golden evidence only. It
+claims no full variable-font support, no complete target support, no native
+scaler oracle, no hinting VM, no HVAR/VVAR/MVAR implementation support, and no
+GPU text route support.
+
+### PKT-05B: CFF INDEX/DICT Fixture Pack And Refusal Goldens
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/fonts/scaler/SourceSerif4-Regular.otf`
+- `reports/font/fixtures/licenses/source-serif-OFL-1.1.txt`
+- `reports/font/fixtures/expected/scaler/cff-cff2-readiness.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+
+Evidence:
+
+- Vendored official Source Serif 4.005R desktop CFF OTF bytes from the Adobe
+  release zip with SIL-OFL-1.1 license evidence, extracting only
+  `source-serif-4.005_Desktop/OTF/SourceSerif4-Regular.otf`.
+- `cff-cff2-readiness.json` records PKT-05B readiness requirements for CFF
+  INDEX/dict rows, Type 2 line/curve/flex/endchar/width expectations,
+  local/global subroutines, malformed INDEX/dict/bounds/stack/operator
+  refusals, and CFF2 blend/vsindex/variation-store rows.
+- The provenance index records fixture ID `scaler-source-serif-cff`, SHA-256,
+  size, license path, expected dump, and CFF/CFF2 non-claims.
+- The fixture manifest and dump index attach the golden as coordination evidence
+  without promoting CFF rendering or CFF2 variation support.
+- Focused scaler coverage opens the vendored OTF bytes, asserts the readiness
+  dump and non-claims, and existing CFF/CFF2 Type 2 charstring refusals remain
+  explicit.
+- Local `Stroking.ttf`, `Stroking.otf`, and `Variable.ttf` stand-ins were
+  rejected because `skia-integration-tests/src/test/resources/fonts/Stroking_VARIABLE_PROVENANCE.md`
+  does not name an accepted license.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:scaler:test
+rtk git diff --check
+```
+
+Remaining gate: this is fixture readiness and refusal/golden evidence only. It
+claims no CFF rendering support, no CFF2 variation support, no Type 2
+interpreter support, no complete target support, no native scaler oracle, and no
+GPU text route support.
+
 ### PKT-06A: Stable Shaping Diagnostic Families
 
 Status: implemented and independently reviewed.

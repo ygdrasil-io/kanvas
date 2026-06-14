@@ -95,6 +95,81 @@
         "no-complete-system-font-discovery-claim",
         "no-host-platform-fallback-claim"
       ]
+    },
+    {
+      "fixtureId": "scaler-roboto-flex-variable",
+      "familyId": "truetype-scaler",
+      "ownerTickets": [
+        "PKT-04C",
+        "KFONT-M3-002",
+        "KFONT-M3-003",
+        "KFONT-M3-004"
+      ],
+      "source": {
+        "kind": "vendored-external",
+        "project": "Roboto Flex",
+        "url": "https://raw.githubusercontent.com/googlefonts/roboto-flex/main/fonts/RobotoFlex%5BGRAD%2CXOPQ%2CXTRA%2CYOPQ%2CYTAS%2CYTDE%2CYTFI%2CYTLC%2CYTUC%2Copsz%2Cslnt%2Cwdth%2Cwght%5D.ttf",
+        "version": "googlefonts/roboto-flex main blob 0abe2ee29292f1b39f59103d069feda87cde585e"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/roboto-flex-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/scaler/RobotoFlex-Variable.ttf",
+          "sha256": "94a7ea95ccee28c54885a507e3cc0a534ce41ec61d413935df0e07261a7ffe63",
+          "sizeBytes": 1775480,
+          "role": "truetype-variable-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/scaler/truetype-variation-readiness.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-full-variable-font-support-claim",
+        "no-native-scaler-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "scaler-source-serif-cff",
+      "familyId": "cff-cff2-scaler",
+      "ownerTickets": [
+        "PKT-05B",
+        "KFONT-M4-001",
+        "KFONT-M4-002",
+        "KFONT-M4-003",
+        "KFONT-M4-004",
+        "KFONT-M4-005"
+      ],
+      "source": {
+        "kind": "vendored-external",
+        "project": "Source Serif",
+        "url": "https://github.com/adobe-fonts/source-serif/releases/download/4.005R/source-serif-4.005_Desktop.zip",
+        "version": "4.005R"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/source-serif-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/scaler/SourceSerif4-Regular.otf",
+          "sha256": "edf160d0d584deee8a3bb2c3371b2a7624ca63580fbe02c57c1f4c91e84d8787",
+          "sizeBytes": 241392,
+          "role": "cff-otf-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/scaler/cff-cff2-readiness.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-cff-rendering-support-claim",
+        "no-cff2-variation-support-claim",
+        "no-native-scaler-oracle-claim"
+      ]
     }
   ]
 }

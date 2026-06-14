@@ -50,6 +50,7 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
         self.assertEqual(
             {
                 "a8-atlas-build-result",
+                "cff-cff2-readiness",
                 "cmap-contract",
                 "fallback-catalog-build",
                 "font-source-liberation-scan-root",
@@ -59,6 +60,7 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
                 "sdf-atlas-build-result",
                 "sfnt-cmap-format14-readiness",
                 "svg-glyph-document",
+                "truetype-variation-readiness",
                 "unicode-data-seed",
             },
             set(dump_ids),

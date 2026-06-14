@@ -17,6 +17,7 @@ KNOWN_CLASSIFICATIONS = [
 
 REQUIRED_DUMPS = {
     "a8-atlas-build-result",
+    "cff-cff2-readiness",
     "cmap-contract",
     "fallback-catalog-build",
     "font-source-liberation-scan-root",
@@ -26,6 +27,7 @@ REQUIRED_DUMPS = {
     "sdf-atlas-build-result",
     "sfnt-cmap-format14-readiness",
     "svg-glyph-document",
+    "truetype-variation-readiness",
     "unicode-data-seed",
 }
 
