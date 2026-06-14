@@ -25,9 +25,9 @@ will be measured. Cache and telemetry contracts must cite
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M9-001 - Add observed cache telemetry source map](KGPU-M9-001-add-observed-cache-telemetry-source-map.md) | `proposed` | `P0` | `PolicyGated` | `mixed` | `false` | `true` | `telemetry-cache` | `KGPU-M1-001` | `cache reporting-only` |
-| [KGPU-M9-002 - Add release-blocking frame gate policy](KGPU-M9-002-add-release-blocking-frame-gate-policy.md) | `proposed` | `P0` | `PolicyGated` | `mixed` | `false` | `true` | `performance` | `KGPU-M9-001` | `frame reporting-only` |
-| [KGPU-M9-003 - Add PM readiness dashboard integration for GPU renderer](KGPU-M9-003-add-pm-readiness-dashboard-integration-for-gpu-renderer.md) | `proposed` | `P1` | `PolicyGated` | `mixed` | `false` | `false` | `pm-evidence` | `KGPU-M9-001`, `KGPU-M9-002` | `pipelinePmBundle` |
+| [KGPU-M9-001 - Add observed cache telemetry source map](KGPU-M9-001-add-observed-cache-telemetry-source-map.md) | `proposed` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `telemetry-cache` | `KGPU-M1-001` | `cache reporting-only` |
+| [KGPU-M9-002 - Add release-blocking frame gate policy](KGPU-M9-002-add-release-blocking-frame-gate-policy.md) | `proposed` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `performance` | `KGPU-M9-001` | `frame reporting-only` |
+| [KGPU-M9-003 - Add PM readiness dashboard integration for GPU renderer](KGPU-M9-003-add-pm-readiness-dashboard-integration-for-gpu-renderer.md) | `proposed` | `P1` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `pm-evidence` | `KGPU-M9-001`, `KGPU-M9-002` | `pipelinePmBundle` |
 
 ## Validation Bundle
 

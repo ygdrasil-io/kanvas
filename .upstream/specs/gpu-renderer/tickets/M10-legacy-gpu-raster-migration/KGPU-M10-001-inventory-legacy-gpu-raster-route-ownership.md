@@ -6,7 +6,7 @@ milestone: M10
 priority: P0
 owner_area: legacy-adapter
 claim_impact: ImplementationCandidate
-route_kind: mixed
+route_kind: CPUReferenceOnly
 product_activation: false
 release_blocking: false
 adapter_required: false

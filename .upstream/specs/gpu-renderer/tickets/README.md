@@ -62,6 +62,21 @@ Tickets use this body order:
 | `RefuseRequired` | Stable refusal is the target behavior unless a future accepted spec changes the route. |
 | `FutureResearch` | Recognized future area without accepted target semantics. |
 
+## Route Kind Model
+
+`route_kind` must use the route taxonomy from
+`../32-target-authority-taxonomy-diagnostics.md`:
+
+| Route Kind | Meaning |
+|---|---|
+| `GPUNative` | GPU render, compute, copy, clear, or fixed-function work executes the route without CPU-rasterizing the final draw/layer/filter/scene result. |
+| `CPUPreparedGPU` | CPU creates a typed artifact consumed by an accepted GPU route. |
+| `CPUReferenceOnly` | CPU oracle or report evidence only; not a product fallback. |
+| `RefuseDiagnostic` | Deterministic refusal with stable diagnostics because no accepted product route exists. |
+
+Do not use aggregate placeholders such as `mixed`; split the ticket or choose
+the primary route-kind outcome.
+
 ## Milestones
 
 | Milestone | Directory | Tickets | Purpose |

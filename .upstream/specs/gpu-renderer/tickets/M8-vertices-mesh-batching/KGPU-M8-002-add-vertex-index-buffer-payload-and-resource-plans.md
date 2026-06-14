@@ -6,7 +6,7 @@ milestone: M8
 priority: P1
 owner_area: vertices-resources
 claim_impact: TargetPrepared
-route_kind: mixed
+route_kind: CPUPreparedGPU
 product_activation: false
 release_blocking: false
 adapter_required: true

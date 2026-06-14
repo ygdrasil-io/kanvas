@@ -10,7 +10,7 @@ route_kind: CPUPreparedGPU
 product_activation: false
 release_blocking: false
 adapter_required: true
-depends_on: [KGPU-M6-001, KFONT-M11-004]
+depends_on: [KGPU-M6-003, KFONT-M11-004, KFONT-M11-008, KFONT-M11-009]
 legacy_gate: dftext
 ---
 
@@ -75,7 +75,7 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: First bounded text route.
+- `proposed`: First bounded text route after text resource/upload/binding plans.
 
 ## Linear Labels
 

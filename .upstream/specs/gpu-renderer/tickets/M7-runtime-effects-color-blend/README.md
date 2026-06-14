@@ -28,8 +28,8 @@ blend modes that require destination access. Runtime effects must follow
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M7-001 - Add registered runtime-effect descriptor route](KGPU-M7-001-add-registered-runtime-effect-descriptor-route.md) | `proposed` | `P0` | `DependencyGated` | `GPUNative` | `false` | `true` | `runtime-effects` | `KGPU-M2-002` | `runtime-effect legacy` |
 | [KGPU-M7-002 - Add runtime-effect child and source refusal gates](KGPU-M7-002-add-runtime-effect-child-and-source-refusal-gates.md) | `proposed` | `P0` | `RefuseRequired` | `RefuseDiagnostic` | `false` | `false` | `runtime-effects-validation` | `KGPU-M7-001` | - |
-| [KGPU-M7-003 - Add blend mode allowlist and destination-read refusals](KGPU-M7-003-add-blend-mode-allowlist-and-destination-read-refusals.md) | `proposed` | `P0` | `TargetNative` | `mixed` | `false` | `true` | `blend-destination-read` | `KGPU-M5-002` | `blend legacy` |
-| [KGPU-M7-004 - Add SDR color plan and HDR profile refusal gates](KGPU-M7-004-add-sdr-color-plan-and-hdr-profile-refusal-gates.md) | `proposed` | `P1` | `DependencyGated` | `mixed` | `false` | `false` | `color` | `KGPU-M2-002` | `color legacy` |
+| [KGPU-M7-003 - Add blend mode allowlist and destination-read refusals](KGPU-M7-003-add-blend-mode-allowlist-and-destination-read-refusals.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `blend-destination-read` | `KGPU-M5-002` | `blend legacy` |
+| [KGPU-M7-004 - Add SDR color plan and HDR profile refusal gates](KGPU-M7-004-add-sdr-color-plan-and-hdr-profile-refusal-gates.md) | `proposed` | `P1` | `DependencyGated` | `GPUNative` | `false` | `false` | `color` | `KGPU-M2-002` | `color legacy` |
 
 ## Validation Bundle
 

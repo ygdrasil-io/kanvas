@@ -6,7 +6,7 @@ milestone: M3
 priority: P0
 owner_area: clips-atlas
 claim_impact: TargetPrepared
-route_kind: mixed
+route_kind: CPUPreparedGPU
 product_activation: false
 release_blocking: false
 adapter_required: true

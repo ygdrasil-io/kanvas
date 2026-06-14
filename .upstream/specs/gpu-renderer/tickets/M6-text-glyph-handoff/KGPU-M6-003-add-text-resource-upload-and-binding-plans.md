@@ -10,7 +10,7 @@ route_kind: CPUPreparedGPU
 product_activation: false
 release_blocking: false
 adapter_required: true
-depends_on: [KGPU-M6-002, KFONT-M11-007]
+depends_on: [KGPU-M6-001, KFONT-M11-007]
 legacy_gate: dftext
 ---
 

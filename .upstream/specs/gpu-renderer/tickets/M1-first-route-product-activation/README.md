@@ -25,8 +25,8 @@ become a release-blocking dependency.
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M1-001 - Decide first-route product activation policy](KGPU-M1-001-decide-first-route-product-activation-policy.md) | `proposed` | `P0` | `PolicyGated` | `GPUNative` | `false` | `true` | `product-validation` | `KGPU-M0-007` | `pipelinePmBundle` |
-| [KGPU-M1-002 - Promote root PM bundle to activation candidate](KGPU-M1-002-promote-root-pm-bundle-to-activation-candidate.md) | `proposed` | `P0` | `PolicyGated` | `mixed` | `false` | `true` | `validation-pm` | `KGPU-M1-001` | `pipelinePmBundle` |
-| [KGPU-M1-003 - Add controlled first-route product flag](KGPU-M1-003-add-controlled-first-route-product-flag.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `false` | `gpu-raster-adapter` | `KGPU-M1-001`, `KGPU-M1-002` | `legacy drawRect` |
+| [KGPU-M1-002 - Promote root PM bundle to activation candidate](KGPU-M1-002-promote-root-pm-bundle-to-activation-candidate.md) | `proposed` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `validation-pm` | `KGPU-M1-001` | `pipelinePmBundle` |
+| [KGPU-M1-003 - Add controlled first-route product flag](KGPU-M1-003-add-controlled-first-route-product-flag.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `gpu-raster-adapter` | `KGPU-M1-001`, `KGPU-M1-002` | `legacy drawRect` |
 | [KGPU-M1-004 - Add first-route rollback and parity validation](KGPU-M1-004-add-first-route-rollback-and-parity-validation.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `validation-adapter` | `KGPU-M1-003` | `legacy drawRect` |
 
 ## Validation Bundle

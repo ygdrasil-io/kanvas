@@ -6,7 +6,7 @@ milestone: M7
 priority: P0
 owner_area: blend-destination-read
 claim_impact: TargetNative
-route_kind: mixed
+route_kind: GPUNative
 product_activation: false
 release_blocking: false
 adapter_required: true

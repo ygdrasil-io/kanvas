@@ -27,8 +27,8 @@ or coverage artifact routes must cite `19-path-coverage-atlas-strategy.md`,
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M3-001 - Add basic path fill prepared route](KGPU-M3-001-add-basic-path-fill-prepared-route.md) | `proposed` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `geometry-artifacts` | `KGPU-M2-003` | `path fill legacy` |
 | [KGPU-M3-002 - Add stencil-cover path route candidate](KGPU-M3-002-add-stencil-cover-path-route-candidate.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry-passes` | `KGPU-M3-001` | `path fill legacy` |
-| [KGPU-M3-003 - Add simple stroke route candidate](KGPU-M3-003-add-simple-stroke-route-candidate.md) | `proposed` | `P0` | `TargetPrepared` | `mixed` | `false` | `true` | `geometry-stroke` | `KGPU-M3-001` | `stroke legacy` |
-| [KGPU-M3-004 - Add bounded clip rrect and path route candidate](KGPU-M3-004-add-bounded-clip-rrect-and-path-route-candidate.md) | `proposed` | `P0` | `TargetPrepared` | `mixed` | `false` | `true` | `clips-atlas` | `KGPU-M3-001` | `clip legacy` |
+| [KGPU-M3-003 - Add simple stroke route candidate](KGPU-M3-003-add-simple-stroke-route-candidate.md) | `proposed` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `geometry-stroke` | `KGPU-M3-001` | `stroke legacy` |
+| [KGPU-M3-004 - Add bounded clip rrect and path route candidate](KGPU-M3-004-add-bounded-clip-rrect-and-path-route-candidate.md) | `proposed` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `clips-atlas` | `KGPU-M3-001` | `clip legacy` |
 | [KGPU-M3-005 - Add path and coverage atlas refusal policy gates](KGPU-M3-005-add-path-and-coverage-atlas-refusal-policy-gates.md) | `proposed` | `P1` | `RefuseRequired` | `RefuseDiagnostic` | `false` | `false` | `atlas-policy` | `KGPU-M3-001` | - |
 
 ## Validation Bundle

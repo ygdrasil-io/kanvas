@@ -6,7 +6,7 @@ milestone: M0
 priority: P0
 owner_area: validation
 claim_impact: ImplementationCandidate
-route_kind: mixed
+route_kind: CPUReferenceOnly
 product_activation: false
 release_blocking: false
 adapter_required: false

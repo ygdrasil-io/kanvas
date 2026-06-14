@@ -6,7 +6,7 @@ milestone: M9
 priority: P1
 owner_area: pm-evidence
 claim_impact: PolicyGated
-route_kind: mixed
+route_kind: CPUReferenceOnly
 product_activation: false
 release_blocking: false
 adapter_required: false

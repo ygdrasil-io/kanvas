@@ -9,7 +9,7 @@ claim_impact: TargetNative
 route_kind: GPUNative
 product_activation: false
 release_blocking: false
-adapter_required: false
+adapter_required: true
 depends_on: [KGPU-M1-001, KGPU-M1-002]
 legacy_gate: "legacy drawRect"
 ---

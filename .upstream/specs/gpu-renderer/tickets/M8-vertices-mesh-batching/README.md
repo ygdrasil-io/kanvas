@@ -24,7 +24,7 @@ primitive color interactions.
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M8-001 - Add `DrawVertices` descriptor and route decisions](KGPU-M8-001-add-drawvertices-descriptor-and-route-decisions.md) | `proposed` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `vertices` | `KGPU-M2-002`, `KGPU-M7-003` | `vertices legacy` |
-| [KGPU-M8-002 - Add vertex index buffer payload and resource plans](KGPU-M8-002-add-vertex-index-buffer-payload-and-resource-plans.md) | `proposed` | `P1` | `TargetPrepared` | `mixed` | `false` | `true` | `vertices-resources` | `KGPU-M8-001` | - |
+| [KGPU-M8-002 - Add vertex index buffer payload and resource plans](KGPU-M8-002-add-vertex-index-buffer-payload-and-resource-plans.md) | `proposed` | `P1` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `vertices-resources` | `KGPU-M8-001` | - |
 | [KGPU-M8-003 - Add vertices batching sort and refusal evidence](KGPU-M8-003-add-vertices-batching-sort-and-refusal-evidence.md) | `proposed` | `P2` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `batching` | `KGPU-M8-001`, `KGPU-M8-002` | - |
 
 ## Validation Bundle

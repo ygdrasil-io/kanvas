@@ -25,7 +25,7 @@ exist.
 | [KGPU-M4-001 - Add image shader route for already-decoded pixels](KGPU-M4-001-add-image-shader-route-for-already-decoded-pixels.md) | `proposed` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `images-textures` | `KGPU-M2-002` | `bitmap legacy` |
 | [KGPU-M4-002 - Add uploaded texture artifact ownership gates](KGPU-M4-002-add-uploaded-texture-artifact-ownership-gates.md) | `proposed` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `resources-images` | `KGPU-M4-001` | - |
 | [KGPU-M4-003 - Add codec provenance and dependency-gated refusals](KGPU-M4-003-add-codec-provenance-and-dependency-gated-refusals.md) | `proposed` | `P1` | `DependencyGated` | `CPUPreparedGPU` | `false` | `false` | `images-codecs` | `KGPU-M4-002` | `codec legacy` |
-| [KGPU-M4-004 - Add sampler tile and mipmap boundary evidence](KGPU-M4-004-add-sampler-tile-and-mipmap-boundary-evidence.md) | `proposed` | `P1` | `TargetNative` | `mixed` | `false` | `true` | `textures-samplers` | `KGPU-M4-001` | - |
+| [KGPU-M4-004 - Add sampler tile and mipmap boundary evidence](KGPU-M4-004-add-sampler-tile-and-mipmap-boundary-evidence.md) | `proposed` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `textures-samplers` | `KGPU-M4-001` | - |
 
 ## Validation Bundle
 

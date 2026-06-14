@@ -6,7 +6,7 @@ milestone: M4
 priority: P1
 owner_area: textures-samplers
 claim_impact: TargetNative
-route_kind: mixed
+route_kind: GPUNative
 product_activation: false
 release_blocking: false
 adapter_required: true

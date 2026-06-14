@@ -6,7 +6,7 @@ milestone: M10
 priority: P1
 owner_area: docs-evidence
 claim_impact: RefuseRequired
-route_kind: mixed
+route_kind: CPUReferenceOnly
 product_activation: false
 release_blocking: false
 adapter_required: false

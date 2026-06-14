@@ -6,7 +6,7 @@ milestone: MX
 priority: P1
 owner_area: owner-area
 claim_impact: ImplementationCandidate
-route_kind: mixed
+route_kind: CPUReferenceOnly
 product_activation: false
 release_blocking: false
 adapter_required: false
