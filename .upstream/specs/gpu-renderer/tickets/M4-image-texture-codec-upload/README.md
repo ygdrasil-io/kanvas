@@ -25,7 +25,7 @@ exist.
 | [KGPU-M4-001 - Add image shader route for already-decoded pixels](KGPU-M4-001-add-image-shader-route-for-already-decoded-pixels.md) | `done` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `images-textures` | `KGPU-M2-002` | `bitmap legacy` |
 | [KGPU-M4-002 - Add uploaded texture artifact ownership gates](KGPU-M4-002-add-uploaded-texture-artifact-ownership-gates.md) | `done` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `resources-images` | `KGPU-M4-001` | - |
 | [KGPU-M4-003 - Add codec provenance and dependency-gated refusals](KGPU-M4-003-add-codec-provenance-and-dependency-gated-refusals.md) | `done` | `P1` | `DependencyGated` | `RefuseDiagnostic` | `false` | `false` | `images-codecs` | `KGPU-M4-002` | `codec legacy` |
-| [KGPU-M4-004 - Add sampler tile and mipmap boundary evidence](KGPU-M4-004-add-sampler-tile-and-mipmap-boundary-evidence.md) | `proposed` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `textures-samplers` | `KGPU-M4-001` | - |
+| [KGPU-M4-004 - Add sampler tile and mipmap boundary evidence](KGPU-M4-004-add-sampler-tile-and-mipmap-boundary-evidence.md) | `blocked` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `textures-samplers` | `KGPU-M4-001` | - |
 
 ## Validation Bundle
 
@@ -45,7 +45,7 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Image*' --tests '*Bitmap*'
   compatibility textures.
 - M4-003 evidence is provenance/refusal-only. It does not implement codecs,
   accept decoded output, or promote uploaded-texture support from metadata.
-- M4-004 remains `proposed` because native sampler/tile/mipmap promotion needs
+- M4-004 is `blocked` because native sampler/tile/mipmap promotion needs
   WebGPU/adapter evidence; prepared image/upload evidence is not a native
   sampler claim.
 
@@ -79,7 +79,7 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Image*' --tests '*Bitmap*'
   and KGPU-M4-003 for `done` and confirmed no hidden activation, support-claim
   widening, package-cycle risk, material-key/resource-handle leak, or M4-004
   promotion.
-- KGPU-M4-004 remains `proposed`. Remaining gate: native WebGPU/adapter sampler
+- KGPU-M4-004 is `blocked`. Remaining gate: native WebGPU/adapter sampler
   evidence for tile/filter/mipmap mapping, behavior-affecting key boundaries,
   unsupported cubic/aniso/perspective diagnostics, and reference or readback
   artifacts.

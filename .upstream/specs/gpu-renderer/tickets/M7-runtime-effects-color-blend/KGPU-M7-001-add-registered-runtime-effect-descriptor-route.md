@@ -1,7 +1,7 @@
 ---
 id: KGPU-M7-001
 title: "Add registered runtime-effect descriptor route"
-status: proposed
+status: blocked
 milestone: M7
 priority: P0
 owner_area: runtime-effects
@@ -82,7 +82,7 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Descriptor-backed only. Remaining gate is a registered descriptor
+- `blocked`: Descriptor-backed only. Remaining gate is a registered descriptor
   with Kotlin/CPU oracle, complete parser-validated WGSL/reflection through
   `wgsl4k`, route integration, adapter-backed execution/readback evidence, and
   explicit unregistered-descriptor refusals.
