@@ -19,10 +19,12 @@ REQUIRED_DUMPS = {
     "a8-atlas-build-result",
     "cmap-contract",
     "fallback-catalog-build",
+    "font-source-liberation-scan-root",
     "glyph-atlas-lifecycle",
     "paragraph-layout-result",
     "png-glyph-image",
     "sdf-atlas-build-result",
+    "sfnt-cmap-format14-readiness",
     "svg-glyph-document",
     "unicode-data-seed",
 }

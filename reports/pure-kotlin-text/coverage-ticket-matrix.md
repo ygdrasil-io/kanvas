@@ -278,6 +278,92 @@ Remaining gate: this is fixture planning only. It does not claim complete SFNT
 conformance, complete required-table validation, `cmap` format 14 support,
 CFF/CFF2 support, scaler support, shaping support, or platform font behavior.
 
+### PKT-02D: Deterministic System Scan Fixture Goldens
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/expected/font-source/liberation-scan-root.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+
+Evidence:
+
+- `liberation-scan-root.json` materializes an explicit in-repo scan-root golden
+  for `reports/font/fixtures/fonts/liberation` with `hostDependent=false`.
+- The golden records deterministic accepted-family order for Liberation Mono,
+  Liberation Sans, and Liberation Serif with empty scan diagnostics.
+- Provenance and manifest rows attach the expected dump without adding implicit
+  filesystem scanning or host font registry behavior.
+- The dump index records `font-source-liberation-scan-root` as
+  `golden-gated`, and the validator now requires that row.
+- Focused `font/core` coverage loads only the three explicit Liberation fixture
+  paths and verifies deterministic fallback catalog ordering.
+
+Validation:
+
+```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:core:test :font:sfnt:test
+rtk git diff --check
+```
+
+Remaining gate: this is deterministic fixture and golden evidence only. It does
+not claim complete system font discovery, host fallback parity, implicit root
+scanning, SFNT parsing coverage, scaler support, shaping fallback support, or
+platform/native font API behavior.
+
+### PKT-03D: Malformed SFNT And CMap Format 14 Fixture Pack
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/expected/sfnt/sfnt-cmap-format14-readiness.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+
+Evidence:
+
+- `sfnt-cmap-format14-readiness.json` records the Liberation core SFNT
+  required-table set and keeps format 14 status `fixture-gated`.
+- The readiness golden records `font.cmap.format14-fixture-missing` as the
+  explicit diagnostic for the current non-claim.
+- Provenance and manifest rows attach the expected dump without promoting
+  complete SFNT or `cmap` format 14 support.
+- The dump index records `sfnt-cmap-format14-readiness` as `golden-gated`, and
+  the validator now requires that row.
+- Focused `font/sfnt` coverage opens `LiberationSans-Regular.ttf`, verifies the
+  required SFNT directory tags through Kanvas SFNT APIs, and asserts the
+  format 14 gate remains explicit.
+
+Validation:
+
+```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:core:test :font:sfnt:test
+rtk git diff --check
+```
+
+Remaining gate: this is required-table and format 14 readiness evidence only.
+It does not claim complete SFNT conformance, complete required-table
+validation, complete `cmap` format 14 support, CFF/CFF2, scaler support,
+shaping support, platform font behavior, native oracle behavior, or GPU route
+support.
+
 ### PKT-04A: TrueType Scaler Evidence Dumps
 
 Status: implemented and independently reviewed.

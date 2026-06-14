@@ -86,7 +86,10 @@
           "role": "serif-ttf"
         }
       ],
-      "expectedDumps": [],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/font-source/liberation-scan-root.json",
+        "reports/font/fixtures/expected/sfnt/sfnt-cmap-format14-readiness.json"
+      ],
       "nonClaims": [
         "no-complete-target-support-claim",
         "no-complete-system-font-discovery-claim",

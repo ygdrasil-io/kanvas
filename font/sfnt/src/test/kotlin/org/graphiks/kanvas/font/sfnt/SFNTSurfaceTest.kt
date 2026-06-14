@@ -5,11 +5,14 @@ import org.graphiks.kanvas.font.FontSourceKind
 import org.graphiks.kanvas.font.FontSource
 import org.graphiks.kanvas.font.FontSlant
 import org.graphiks.kanvas.font.TypefaceID
+import java.nio.file.Files
+import java.nio.file.Path
 import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 
@@ -182,6 +185,32 @@ class SFNTSurfaceTest {
         assertEquals(6, parsed.rawTables.size)
         assertEquals(54, parsed.rawTables.getValue(SFNTTableTag("head")).size)
         assertEquals(0, parsed.rawTables.getValue(SFNTTableTag("head"))[0])
+    }
+
+    @Test
+    fun liberationSansFixtureAdvertisesRequiredTablesAndKeepsFormat14GateExplicit() {
+        val fontPath = fixturePath("reports/font/fixtures/fonts/liberation/LiberationSans-Regular.ttf")
+        val expectedDump = fixturePath("reports/font/fixtures/expected/sfnt/sfnt-cmap-format14-readiness.json")
+        val source = FontSource(
+            id = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655442000")),
+            kind = FontSourceKind.FILE,
+            displayName = fontPath.fileName.toString(),
+            bytes = Files.readAllBytes(fontPath),
+        )
+        val directory = DefaultSFNTReader().readDirectory(source)
+        val tableTags = directory.tables.map { it.tag.value }.toSet()
+
+        assertEquals(
+            setOf("cmap", "head", "hhea", "hmtx", "maxp", "name", "OS/2", "post"),
+            tableTags.intersect(setOf("cmap", "head", "hhea", "hmtx", "maxp", "name", "OS/2", "post")),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+        val hasFormat14 = parsed.cmap.encodingRecords.any { it.format == 14 }
+        val diagnostic = "font.cmap.format14-fixture-missing"
+
+        assertFalse(hasFormat14)
+        assertTrue(Files.readString(expectedDump).contains(diagnostic))
     }
 
     @Test
@@ -2310,6 +2339,17 @@ class SFNTSurfaceTest {
             displayName = "Memory Font",
             bytes = bytes,
         )
+
+    private fun fixturePath(relativePath: String): Path =
+        projectRoot().resolve(relativePath).normalize()
+
+    private fun projectRoot(): Path {
+        var current = Path.of("").toAbsolutePath().normalize()
+        while (current.parent != null && !Files.isDirectory(current.resolve("reports/font/fixtures"))) {
+            current = current.parent
+        }
+        return current
+    }
 
     private data class TestNameRecord(
         val platformId: Int,

@@ -168,7 +168,9 @@
         "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
         "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt",
         "font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt",
-        "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt"
+        "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+        "reports/font/fixtures/expected/font-source/liberation-scan-root.json",
+        "reports/font/fixtures/expected/sfnt/sfnt-cmap-format14-readiness.json"
       ],
       "requiredEvidenceGates": [
         "Add single TTF fixture provenance.",
@@ -201,7 +203,8 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
-        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt"
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt",
+        "reports/font/fixtures/expected/font-source/liberation-scan-root.json"
       ],
       "requiredEvidenceGates": [
         "Add a deterministic scan-root input fixture that lists explicit in-repo paths instead of implicit host roots.",
@@ -337,7 +340,8 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt",
-        "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt"
+        "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+        "reports/font/fixtures/expected/sfnt/sfnt-cmap-format14-readiness.json"
       ],
       "requiredEvidenceGates": [
         "Add missing required table fixture rows with stable refusal diagnostics.",
