@@ -1,7 +1,7 @@
 ---
 id: KGPU-M10-003
 title: "Retire legacy routes after promoted replacements"
-status: proposed
+status: blocked
 milestone: M10
 priority: P1
 owner_area: legacy-cleanup
@@ -87,7 +87,10 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: No deletion by catalog creation.
+- `blocked`: Legacy retirement depends on KGPU-M10-002 plus accepted,
+  route-specific promoted replacement tickets, activation decision, rollback
+  evidence, old-path usage evidence, and PM evidence. No route can be retired
+  from the M10 inventory or generic migration gates alone.
 
 ## Linear Labels
 

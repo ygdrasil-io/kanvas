@@ -1,7 +1,7 @@
 ---
 id: KGPU-M10-004
 title: "Add archived evidence hygiene for migrated routes"
-status: proposed
+status: done
 milestone: M10
 priority: P1
 owner_area: docs-evidence
@@ -82,7 +82,13 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Documentation hygiene ticket.
+- `done`: `reports/gpu-renderer/2026-06-15-m10-legacy-inventory-hygiene.md`
+  records an archive/reference hygiene checklist. It keeps archived migration
+  plans and root upstream snapshots historical only, requires active tickets to
+  cite active specs for acceptance criteria, and refuses any migration claim
+  that relies on archived checkbox state. Independent review
+  `019ec878-7c64-7e42-ab70-bb80043e53d1` accepted the checklist and confirmed
+  archived evidence is not used as active backlog.
 
 ## Linear Labels
 
