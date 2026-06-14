@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.text
 
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -410,6 +413,15 @@ class TextStackSurfaceTest {
         assertTrue(data.isDefaultIgnorable(0x200D))
         assertTrue(data.isDefaultIgnorable(0xFE0F))
         assertFalse(data.isDefaultIgnorable('A'.code))
+    }
+
+    @Test
+    fun unicode16SourceManifestPinsOfflineMetadataAndNonClaims() {
+        val manifest = readProjectFile("reports/font/fixtures/expected/unicode/unicode-16-source-manifest.json")
+
+        assertTrue(manifest.contains("\"unicodeVersion\": \"16.0.0\""))
+        assertTrue(manifest.contains("\"ordinaryValidationPolicy\": \"offline\""))
+        assertTrue(manifest.contains("\"no-complete-ucd-claim\""))
     }
 
     @Test
@@ -1286,6 +1298,13 @@ class TextStackSurfaceTest {
                 ),
             ),
         )
+
+    private fun readProjectFile(relativePath: String): String =
+        Files.readString(projectRoot().resolve(relativePath))
+
+    private fun projectRoot(): Path =
+        generateSequence(Paths.get("").toAbsolutePath()) { it.parent }
+            .first { Files.exists(it.resolve("settings.gradle.kts")) }
 
     private fun testFace(uuid: String, familyName: String, styleName: String = "Regular"): FontFace {
         val sourceId = FontSourceID(Uuid.parse(uuid.replaceRange(uuid.length - 1, uuid.length, "0")))

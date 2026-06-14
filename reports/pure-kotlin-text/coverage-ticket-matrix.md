@@ -582,6 +582,52 @@ complete Unicode Character Database, UAX #9 bidi conformance, UAX #14 line
 breaking, UAX #29 segmentation, emoji property coverage, or full script matrix
 support.
 
+### PKT-06D: Unicode 16.0 Metadata
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/expected/unicode/unicode-16-source-manifest.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `unicode-16-source-manifest.json` pins Unicode version `16.0.0`, the
+  official UCD source URL, the bounded source file list needed for future
+  generation, fixture-creation-only download policy, and offline ordinary
+  validation policy.
+- `fixture-evidence-manifest.json` attaches the expected manifest to the
+  `unicode-data-generation` family as current coordination evidence.
+- `dump-evidence-index.json` points the existing `unicode-data-seed` producer
+  row at the new expected manifest without adding a new required dump ID.
+- Focused `font/text` coverage loads the manifest from the project root and
+  asserts the pinned Unicode version, offline validation policy, and
+  `no-complete-ucd-claim` non-claim.
+- The font fixture provenance index was not changed because its current schema
+  requires font assets and an accepted font license; applying `SIL-OFL-1.1` or
+  inventing a font asset row for Unicode data would be unsafe provenance.
+
+Validation:
+
+```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:text:test --tests '*TextStackSurfaceTest*'
+rtk git diff --cached --check
+```
+
+Remaining gate: this is Unicode metadata and coordination evidence only. It
+does not replace `BasicUnicodeData`, add generator checksum coverage, add
+runtime mismatch diagnostics, claim a complete Unicode Character Database,
+claim UAX #9 bidi conformance, claim UAX #14 line breaking, claim UAX #29
+segmentation, claim emoji property coverage, or claim full script matrix
+support.
+
 ### PKT-09A: Paragraph Semantic Layout Dumps And Refusals
 
 Status: implemented and independently reviewed.

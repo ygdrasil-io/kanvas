@@ -418,7 +418,8 @@
       },
       "producerPaths": [
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
-        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt"
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/unicode/unicode-16-source-manifest.json"
       ],
       "expectedFields": [
         "bidiClasses",
