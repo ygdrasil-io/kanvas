@@ -15,9 +15,9 @@ product activation, and updates the owning milestone table in the same change.
 | M6 | 0 | 0 | 0 | 4 | 0 | 0 |
 | M7 | 1 | 0 | 0 | 2 | 0 | 1 |
 | M8 | 0 | 0 | 0 | 3 | 0 | 0 |
-| M9 | 3 | 0 | 0 | 0 | 0 | 0 |
+| M9 | 2 | 0 | 0 | 0 | 0 | 1 |
 | M10 | 4 | 0 | 0 | 0 | 0 | 0 |
-| **Total** | **11** | **0** | **0** | **11** | **0** | **24** |
+| **Total** | **10** | **0** | **0** | **11** | **0** | **25** |
 
 ## Status Update Rule
 

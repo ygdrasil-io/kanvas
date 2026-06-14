@@ -1,7 +1,7 @@
 ---
 id: KGPU-M9-001
 title: "Add observed cache telemetry source map"
-status: proposed
+status: done
 milestone: M9
 priority: P0
 owner_area: telemetry-cache
@@ -81,7 +81,14 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Telemetry classification first.
+- `done`: `GPUCacheTelemetrySourceMapTest` records source-map
+  classification for observed, observed-partial, derived, unavailable, and
+  reporting-only counters. `GPUCacheTelemetrySourceMapper` ties each counter to
+  a named source artifact and leaves `readinessDelta=0.0`,
+  `releaseBlocking=false`, and `productRouteActivated=false`. Independent
+  review `019ec866-9980-7fe1-bc04-a9806b1d30c3` accepted the evidence as
+  source-map/reporting only and confirmed it does not promote cache,
+  performance, release-gate, or product-route support.
 
 ## Linear Labels
 
