@@ -45,6 +45,14 @@ boundary must be reviewed before any activation or readiness claim.
 - `.upstream/specs/gpu-renderer/13-performance-telemetry-cache-gates.md`
 - `reports/gpu-renderer/2026-06-14-r6-promotion-readiness-boundary.md`
 
+## Graphite Algorithm References
+
+- [`GFX-RECORDER-SNAP`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-recorder-snap) - source [Recorder.cpp:198](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Recorder.cpp:198); Use snapshot success/failure cleanup as PM evidence for readiness boundaries.
+- [`GFX-DRAWPASS-PREPARE`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-drawpass-prepare) - source [DrawPass.cpp:40](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawPass.cpp:40); Reference pipeline/texture validation as the line before claiming promoted support.
+- [`GFX-RESOURCE-CACHE-MRU`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-resource-cache-mru) - source [ResourceCache.cpp:163](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/ResourceCache.cpp:163); Use cache reuse/purge telemetry as release-readiness vocabulary.
+- [`GFX-DRAWLIST-SORT`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-drawlist-sort) - source [DrawList.cpp:90](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawList.cpp:90); Reference batch/state-change evidence without treating review status as done.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
+
 ## Design Sketch
 
 ```kotlin

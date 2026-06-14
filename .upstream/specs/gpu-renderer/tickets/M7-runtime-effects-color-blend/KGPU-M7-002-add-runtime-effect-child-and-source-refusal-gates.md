@@ -40,6 +40,13 @@ with descriptor support unless refusal gates are explicit.
 - `.upstream/specs/gpu-renderer/27-registered-runtime-effects-registry.md`
 - `.upstream/specs/gpu-renderer/32-target-authority-taxonomy-diagnostics.md`
 
+## Graphite Algorithm References
+
+- [`GFX-RUNTIME-EFFECT-KEY`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-runtime-effect-key) - source [KeyHelpers.cpp:1387](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/KeyHelpers.cpp:1387); Use failed registration and no-op fallback behavior as refusal vocabulary.
+- [`GFX-RUNTIME-EFFECT-PREAMBLE`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-runtime-effect-preamble) - source [ShaderCodeDictionary.cpp:638](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/ShaderCodeDictionary.cpp:638); Reference child sampling and color-transform callback requirements.
+- [`GFX-PAINT-KEY-TREE`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-paint-key-tree) - source [PaintParamsKey.cpp:88](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/PaintParamsKey.cpp:88); Validate that arbitrary source or unsupported children cannot enter serializable keys.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
+
 ## Design Sketch
 
 ```kotlin

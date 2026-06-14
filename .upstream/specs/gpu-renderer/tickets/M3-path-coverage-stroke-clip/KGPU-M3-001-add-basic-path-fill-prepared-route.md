@@ -42,6 +42,14 @@ diagnostics before it can be consumed by GPU work.
 - `.upstream/specs/gpu-renderer/19-path-coverage-atlas-strategy.md`
 - `.upstream/specs/gpu-renderer/25-path-stroke-geometry-pipeline.md`
 
+## Graphite Algorithm References
+
+- [`GFX-PATH-ATLAS-CONTRACT`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-path-atlas-contract) - source [PathAtlas.h:29](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/PathAtlas.h:29); Use the transient coverage-mask atlas contract for a CPU-prepared path-fill artifact.
+- [`GFX-RASTER-MASK-HELPER`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-raster-mask-helper) - source [RasterPathUtils.h:24](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/RasterPathUtils.h:24); Study the CPU mask preparation boundary and key generation.
+- [`GFX-COVERAGE-MASK-STEP`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-coverage-mask-step) - source [CoverageMaskRenderStep.cpp:39](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/render/CoverageMaskRenderStep.cpp:39); Reference atlas mask sampling, inverse handling, and filtering choices.
+- [`GFX-PATH-ATLAS-PACK`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-path-atlas-pack) - source [PathAtlas.cpp:38](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/PathAtlas.cpp:38); Use path-mask packing/cache behavior for overflow and reuse diagnostics.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
+
 ## Design Sketch
 
 ```kotlin

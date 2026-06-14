@@ -6,9 +6,10 @@ tickets. It follows `../36-implementation-roadmap.md`, the route taxonomy in
 matrix in `../09-draw-family-support-matrix.md`.
 
 Tickets are grouped by milestone for human navigation. Each ticket includes a
-French PM note, target spec sources, a Kotlin-like design sketch when useful,
-acceptance criteria, required evidence, validation commands, fallback/refusal
-behavior, status metadata, dashboard impact, and optional Linear labels.
+French PM note, target spec sources, Graphite algorithm references for agent
+implementation context, a Kotlin-like design sketch when useful, acceptance
+criteria, required evidence, validation commands, fallback/refusal behavior,
+status metadata, dashboard impact, and optional Linear labels.
 
 Existing R0-R6 implementation evidence is intentionally represented as
 `review`, not `done`. The catalog must not assert product support or route
@@ -24,14 +25,21 @@ Tickets use this body order:
 3. `Scope`
 4. `Non-Goals`
 5. `Spec Sources`
-6. `Design Sketch`
-7. `Acceptance Criteria`
-8. `Required Evidence`
-9. `Fallback / Refusal Behavior`
-10. `Dashboard Impact`
-11. `Validation`
-12. `Status Notes`
-13. `Linear Labels`
+6. `Graphite Algorithm References`
+7. `Design Sketch`
+8. `Acceptance Criteria`
+9. `Required Evidence`
+10. `Fallback / Refusal Behavior`
+11. `Dashboard Impact`
+12. `Validation`
+13. `Status Notes`
+14. `Linear Labels`
+
+Graphite references are pinned in
+[GRAPHITE-ALGORITHM-REFERENCES.md](GRAPHITE-ALGORITHM-REFERENCES.md). They are
+algorithm references only; they do not authorize porting Graphite or Ganesh,
+changing the WebGPU backend, or replacing Kanvas WGSL/Kotlin acceptance
+criteria.
 
 ## Status Model
 
@@ -97,8 +105,9 @@ the primary route-kind outcome.
 
 Markdown remains the source of truth before optional Linear import. Linear
 tickets must preserve ticket ID, milestone, status, PM note, spec sources,
-acceptance criteria, required evidence, validation command, fallback/refusal
-behavior, route kind, activation flags, legacy gate, and claim impact.
+Graphite algorithm references, acceptance criteria, required evidence,
+validation command, fallback/refusal behavior, route kind, activation flags,
+legacy gate, and claim impact.
 
 Ticket IDs use milestone-scoped numbering: `KGPU-M<milestone>-<sequence>`, for
 example `KGPU-M3-002`.

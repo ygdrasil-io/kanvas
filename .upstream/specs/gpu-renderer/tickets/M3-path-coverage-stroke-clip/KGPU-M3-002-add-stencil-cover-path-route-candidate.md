@@ -40,6 +40,14 @@ failure diagnostics before promotion.
 - `.upstream/specs/gpu-renderer/25-path-stroke-geometry-pipeline.md`
 - `.upstream/specs/gpu-renderer/10-gpu-execution-context-submission.md`
 
+## Graphite Algorithm References
+
+- [`GFX-MSAA-PATH-HEURISTICS`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-msaa-path-heuristics) - source [Device.cpp:2040](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Device.cpp:2040); Study convex/wedge/curve path routing for a stencil-cover candidate.
+- [`GFX-TESSELLATE-WEDGES`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-tessellate-wedges) - source [TessellateWedgesRenderStep.cpp:82](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/render/TessellateWedgesRenderStep.cpp:82); Reference wedge patch emission for small or convex path fills.
+- [`GFX-TESSELLATE-CURVES`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-tessellate-curves) - source [TessellateCurvesRenderStep.cpp:80](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/render/TessellateCurvesRenderStep.cpp:80); Reference curve patch stencil tessellation for bounded complex paths.
+- [`GFX-DRAW-ORDER`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-draw-order) - source [DrawOrder.h:52](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawOrder.h:52); Use disjoint stencil and painter-order constraints as acceptance evidence.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
+
 ## Design Sketch
 
 ```kotlin

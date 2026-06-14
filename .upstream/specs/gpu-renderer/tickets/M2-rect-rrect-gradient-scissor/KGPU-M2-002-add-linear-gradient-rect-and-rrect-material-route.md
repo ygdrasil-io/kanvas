@@ -43,6 +43,14 @@ lowering, stop normalization, payload packing, WGSL ABI, and tile-mode refusals.
 - `.upstream/specs/gpu-renderer/11-wgsl-layout-binding-abi.md`
 - `.upstream/specs/gpu-renderer/14-first-slice-contract.md`
 
+## Graphite Algorithm References
+
+- [`GFX-GRADIENT-STOPS`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-gradient-stops) - source [KeyHelpers.cpp:166](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/KeyHelpers.cpp:166); Study bounded gradient stop packing and large-stop storage fallback decisions.
+- [`GFX-PAINT-KEY-TREE`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-paint-key-tree) - source [PaintParamsKey.cpp:88](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/PaintParamsKey.cpp:88); Use paint-key introspection for deterministic material payload evidence.
+- [`GFX-ANALYTIC-RRECT-STEP`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-analytic-rrect-step) - source [AnalyticRRectRenderStep.cpp:40](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/render/AnalyticRRectRenderStep.cpp:40); Reference rrect coverage interaction with gradient material routes.
+- [`GFX-PIPELINE-MANAGER`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-pipeline-manager) - source [PipelineManager.cpp:38](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/PipelineManager.cpp:38); Use pipeline-key/cache behavior for gradient shader variant promotion.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
+
 ## Design Sketch
 
 ```kotlin

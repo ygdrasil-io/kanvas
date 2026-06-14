@@ -41,6 +41,14 @@ refusals for unsupported stack interactions.
 - `.upstream/specs/gpu-renderer/24-clip-stencil-mask-pipeline.md`
 - `.upstream/specs/gpu-renderer/19-path-coverage-atlas-strategy.md`
 
+## Graphite Algorithm References
+
+- [`GFX-CLIP-SIMPLIFY`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-clip-simplify) - source [ClipStack.cpp:348](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/ClipStack.cpp:348); Study rect/rrect/path containment and complex clip preservation.
+- [`GFX-RENDERSTEP-SCISSOR`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-renderstep-scissor) - source [Renderer.cpp:49](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Renderer.cpp:49); Reference scissor minimization and inverse-fill handling for bounded clips.
+- [`GFX-TESSELLATE-WEDGES`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-tessellate-wedges) - source [TessellateWedgesRenderStep.cpp:82](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/render/TessellateWedgesRenderStep.cpp:82); Use wedge tessellation as a path clip draw reference when GPU-native support is considered.
+- [`GFX-COVERAGE-MASK-STEP`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-coverage-mask-step) - source [CoverageMaskRenderStep.cpp:39](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/render/CoverageMaskRenderStep.cpp:39); Reference coverage-mask sampling for prepared clip artifacts.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
+
 ## Design Sketch
 
 ```kotlin

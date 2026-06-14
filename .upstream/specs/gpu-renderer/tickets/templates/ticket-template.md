@@ -45,6 +45,13 @@ activation, or gate retirement cannot be promoted yet.
 - `.upstream/specs/gpu-renderer/README.md`
 - `.upstream/specs/gpu-renderer/36-implementation-roadmap.md`
 
+## Graphite Algorithm References
+
+- `GFX-RENDERSTEP-MODEL` from `../GRAPHITE-ALGORITHM-REFERENCES.md` - replace
+  with ticket-specific algorithm references before import.
+- Boundary: references are for algorithm study only; do not port Graphite or
+  Ganesh and do not treat them as Kanvas acceptance criteria.
+
 ## Design Sketch
 
 ```kotlin

@@ -42,6 +42,14 @@ upload artifacts, and concrete texture handles.
 - `.upstream/specs/gpu-renderer/18-texture-image-ownership.md`
 - `.upstream/specs/gpu-renderer/22-image-bitmap-codec-pipeline.md`
 
+## Graphite Algorithm References
+
+- [`GFX-IMAGE-SAMPLER-KEY`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-image-sampler-key) - source [KeyHelpers.cpp:530](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/KeyHelpers.cpp:530); Study image shader variant selection, tiling support, and sampler key data.
+- [`GFX-TEXTURE-UPLOAD-ROOT`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-texture-upload-root) - source [TextureUtils.cpp:251](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/TextureUtils.cpp:251); Reference decoded-pixel texture proxy creation and upload scheduling.
+- [`GFX-IMAGE-COPY`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-image-copy) - source [Image_Graphite.cpp:90](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Image_Graphite.cpp:90); Use copy/copy-as-draw decision points for explicit image-route refusals.
+- [`GFX-PER-EDGE-AA-QUAD`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-per-edge-aa-quad) - source [PerEdgeAAQuadRenderStep.cpp:34](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/render/PerEdgeAAQuadRenderStep.cpp:34); Reference image-quad coverage and seam handling for image shader draws.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
+
 ## Design Sketch
 
 ```kotlin

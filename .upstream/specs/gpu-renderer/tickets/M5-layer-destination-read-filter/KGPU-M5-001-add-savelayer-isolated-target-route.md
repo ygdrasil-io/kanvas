@@ -40,6 +40,14 @@ rendering, and restore composite evidence.
 - `.upstream/specs/gpu-renderer/28-layer-savelayer-execution.md`
 - `.upstream/specs/gpu-renderer/18-texture-image-ownership.md`
 
+## Graphite Algorithm References
+
+- [`GFX-SPECIAL-IMAGE-LAYER`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-special-image-layer) - source [SpecialImage_Graphite.cpp:20](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/SpecialImage_Graphite.cpp:20); Study subset-backed special image wrapping for isolated intermediates.
+- [`GFX-SPECIAL-DRAW`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-special-draw) - source [Device.cpp:2180](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Device.cpp:2180); Reference snap/draw special image behavior for saveLayer ownership.
+- [`GFX-DRAWCONTEXT-FLUSH`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-drawcontext-flush) - source [DrawContext.cpp:213](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawContext.cpp:213); Use pass extraction and task insertion as the isolated target lifecycle model.
+- [`GFX-RENDERPASS-TASK`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-renderpass-task) - source [RenderPassTask.cpp:128](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/task/RenderPassTask.cpp:128); Reference target preparation and pass replay for saveLayer route evidence.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
+
 ## Design Sketch
 
 ```kotlin

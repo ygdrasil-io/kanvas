@@ -39,6 +39,14 @@ readback evidence before support can be claimed.
 - `.upstream/specs/gpu-renderer/21-text-glyph-pipeline.md`
 - `.upstream/specs/gpu-renderer/18-texture-image-ownership.md`
 
+## Graphite Algorithm References
+
+- [`GFX-BITMAP-TEXT-STEP`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-bitmap-text-step) - source [BitmapTextRenderStep.cpp:59](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/render/BitmapTextRenderStep.cpp:59); Reference A8/LCD/color variants and indexed atlas sampling.
+- [`GFX-TEXT-ATLAS-GLYPH-UPLOAD`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-text-atlas-glyph-upload) - source [TextAtlasManager.cpp:237](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/text/TextAtlasManager.cpp:237); Study glyph mask normalization, padding, and atlas upload.
+- [`GFX-DRAW-ATLAS-PLOTS`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-draw-atlas-plots) - source [DrawAtlas.cpp:149](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawAtlas.cpp:149); Use plot allocation/retry behavior for atlas overflow diagnostics.
+- [`GFX-SUBRUN-DATA`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-subrun-data) - source [SubRunData.h:24](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/geom/SubRunData.h:24); Keep glyph range, mask bounds, and recorder ownership typed.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
+
 ## Design Sketch
 
 ```kotlin

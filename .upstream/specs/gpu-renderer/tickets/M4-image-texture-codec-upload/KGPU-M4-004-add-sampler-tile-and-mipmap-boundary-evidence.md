@@ -40,6 +40,14 @@ keys, dumps, or refusals.
 - `.upstream/specs/gpu-renderer/18-texture-image-ownership.md`
 - `.upstream/specs/gpu-renderer/22-image-bitmap-codec-pipeline.md`
 
+## Graphite Algorithm References
+
+- [`GFX-IMAGE-SAMPLER-KEY`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-image-sampler-key) - source [KeyHelpers.cpp:530](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/KeyHelpers.cpp:530); Study hardware tiling substitution and image shader variant selection.
+- [`GFX-SAMPLER-DESC`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-sampler-desc) - source [ResourceTypes.h:238](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/ResourceTypes.h:238); Reference compact sampler/tile/mipmap descriptor keying.
+- [`GFX-DAWN-SAMPLER`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-dawn-sampler) - source [DawnSampler.cpp:52](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/dawn/DawnSampler.cpp:52); Use WebGPU/Dawn sampler translation for Kanvas sampler mapping and refusals.
+- [`GFX-MIPMAP-GENERATION`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-mipmap-generation) - source [TextureUtils.cpp:553](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/TextureUtils.cpp:553); Reference mipmap generation and degrade/refusal policy when mipmaps are absent.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
+
 ## Design Sketch
 
 ```kotlin

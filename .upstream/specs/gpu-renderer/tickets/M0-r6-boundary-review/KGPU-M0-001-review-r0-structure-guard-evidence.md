@@ -44,6 +44,13 @@ into `done` without independent review.
 - `.upstream/specs/gpu-renderer/36-implementation-roadmap.md`
 - `reports/gpu-renderer/2026-06-14-implementation-roadmap-progress.md`
 
+## Graphite Algorithm References
+
+- [`GFX-RENDERSTEP-MODEL`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-renderstep-model) - source [Renderer.h:83](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Renderer.h:83); Compare package boundaries against a working renderer decomposition without importing Graphite APIs.
+- [`GFX-RECORDER-SNAP`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-recorder-snap) - source [Recorder.cpp:198](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Recorder.cpp:198); Review where recording state is finalized and reset so structure guards protect the same lifecycle seams.
+- [`GFX-DRAWCONTEXT-FLUSH`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-drawcontext-flush) - source [DrawContext.cpp:213](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawContext.cpp:213); Use the flush/extract boundary as a reference for validating package ownership around tasks and passes.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
+
 ## Design Sketch
 
 ```kotlin

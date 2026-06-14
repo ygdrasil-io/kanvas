@@ -39,6 +39,14 @@ before any support claim.
 
 - `.upstream/specs/gpu-renderer/23-filter-effect-pipeline.md`
 
+## Graphite Algorithm References
+
+- [`GFX-FILTER-BACKEND`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-filter-backend) - source [TextureUtils.cpp:720](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/TextureUtils.cpp:720); Study scratch-device and special-image hooks used by filter execution.
+- [`GFX-FILTER-RESOLVE`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-filter-resolve) - source [SkImageFilterTypes.cpp:1334](/Users/chaos/workspace/kanvas-forge/skia-main/src/core/SkImageFilterTypes.cpp:1334); Reference resolve-versus-deferred shader decisions for simple filter nodes.
+- [`GFX-SPECIAL-IMAGE-LAYER`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-special-image-layer) - source [SpecialImage_Graphite.cpp:20](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/SpecialImage_Graphite.cpp:20); Use special image subset ownership as intermediate evidence vocabulary.
+- [`GFX-SPECIAL-DRAW`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-special-draw) - source [Device.cpp:2180](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Device.cpp:2180); Reference how snapped filter/layer results are drawn back into a device.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
+
 ## Design Sketch
 
 ```kotlin
