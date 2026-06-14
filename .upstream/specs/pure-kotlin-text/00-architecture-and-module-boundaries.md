@@ -163,7 +163,8 @@ The current codebase already provides reusable prototypes:
 - `SkShaper` as a deterministic explicit shaping boundary;
 - `SkCpuGlyphCache` as an initial A8 glyph mask inventory and dump format;
 - `SkWebGpuGlyphAtlas` as an initial upload-plan prototype;
-- `.upstream/specs/font/` as current-state and refusal evidence.
+- legacy gate, blocker, and baseline records carried forward by
+  `09-migration-from-current-font-pack.md`.
 
 These are not final APIs by themselves. The new target may reuse implementation
 ideas, tests, fixtures, or diagnostics after their contracts are promoted.

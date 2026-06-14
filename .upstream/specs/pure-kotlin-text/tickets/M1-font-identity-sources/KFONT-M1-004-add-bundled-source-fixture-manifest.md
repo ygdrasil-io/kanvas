@@ -1,0 +1,111 @@
+---
+id: "KFONT-M1-004"
+title: "Add bundled source fixture manifest"
+status: "proposed"
+milestone: "M1"
+priority: "P1"
+owner_area: "fixtures"
+claim_impact: "fixture-gated"
+depends_on: ["KFONT-M1-001", "KFONT-M1-003"]
+legacy_gate: null
+---
+
+# KFONT-M1-004 - Add bundled source fixture manifest
+
+## PM Note
+
+Ce ticket liste les fontes de test autorisées afin que les preuves ne dépendent pas de la machine du développeur.
+
+## Problem
+
+Later parser and scaler tickets need fixtures with known provenance, license, source bytes, and intended coverage. Without a bundled source manifest, evidence can accidentally rely on host system fonts or unreviewed binary blobs, which makes support claims non-reproducible and keeps M1 fixture-gated.
+
+## Scope
+
+- Define a fixture manifest schema for bundled and generated font sources.
+- Include fixture ID, source kind, file path or generator ID, license/provenance, content hash, byte length, face count, intended table coverage, and normative/non-normative status.
+- Seed manifest entries for minimum M1/M2 coverage: single TTF, TTC face index, OTF/CFF candidate, variable font candidate, malformed directory, and missing required table.
+- Mark host-scanned fonts as non-normative unless their bytes are captured into the manifest.
+- Connect manifest entries to `font-source.json` and `typeface-id.json` dump generation.
+
+## Non-Goals
+
+- Do not implement SFNT table parsing or scaler behavior.
+- Do not claim CFF, variable font, or malformed parser support just because a fixture is listed.
+- Do not add proprietary or license-unclear font binaries.
+- Do not use system font lookup as normative fixture discovery.
+
+## Spec Sources
+
+- `.upstream/specs/pure-kotlin-text/ROADMAP.md`
+- `.upstream/specs/pure-kotlin-text/00-architecture-and-module-boundaries.md`
+- `.upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md`
+- `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
+- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
+
+## Design Sketch
+
+```kotlin
+data class BundledFontFixtureManifestEntry(
+    val fixtureId: String,
+    val sourceKind: FontSourceKind,
+    val relativePath: String?,
+    val generatorId: String?,
+    val license: String,
+    val sha256: String,
+    val byteLength: Long,
+    val faceCount: Int,
+    val coverageTags: SortedSet<String>,
+    val normative: Boolean,
+)
+
+data class FontFixtureManifest(
+    val schemaVersion: Int,
+    val entries: List<BundledFontFixtureManifestEntry>,
+)
+```
+
+## Acceptance Criteria
+
+- [ ] Every normative fixture entry has license/provenance, SHA-256, byte length, face count, and coverage tags.
+- [ ] Generated fixtures record generator ID and source parameters.
+- [ ] Host-dependent sources are either excluded from normative entries or explicitly marked non-normative.
+- [ ] The manifest includes fixtures or planned generated fixtures for single TTF, TTC face index, malformed directory, and missing required table.
+- [ ] The dashboard keeps the row `fixture-gated` until manifest entries and dump evidence are linked.
+
+## Required Evidence
+
+- `font-fixtures-manifest.json` or equivalent manifest with the minimum fixture families.
+- Hash verification output for all bundled binary fixtures.
+- Generated fixture provenance for any fixture not stored as raw bytes.
+- `font-source.json` sample showing a manifest-backed fixture ID.
+
+## Fallback / Refusal Behavior
+
+- A fixture without clear license, provenance, or hash must be refused as normative evidence with `font.fixture.provenance-missing` or equivalent.
+- Classification remains `fixture-gated` until all required manifest evidence is attached.
+
+## Dashboard Impact
+
+- Expected row: `bundled font fixture manifest`.
+- Expected classification: `fixture-gated`.
+- Claim promotion allowed: no. Listing a fixture only unlocks later parser/scaler evidence.
+
+## Validation
+
+```bash
+rtk git diff --check
+rtk ./gradlew --no-daemon :font:core:test --tests '*FixtureManifest*'
+```
+
+## Status Notes
+
+- `proposed`: Manifest schema and minimum coverage are specified, but no manifest artifact is attached yet.
+- Move to `ready` after source identity dumps can reference manifest-backed fixture IDs.
+
+## Linear Labels
+
+- `pure-kotlin-font`
+- `milestone:M1`
+- `area:fixtures`
+- `claim:fixture-gated`

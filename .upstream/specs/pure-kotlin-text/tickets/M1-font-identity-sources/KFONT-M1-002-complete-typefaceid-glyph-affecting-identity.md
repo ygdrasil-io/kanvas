@@ -1,0 +1,112 @@
+---
+id: "KFONT-M1-002"
+title: "Complete `TypefaceID` glyph-affecting identity"
+status: "proposed"
+milestone: "M1"
+priority: "P0"
+owner_area: "font-core"
+claim_impact: "tracked-gap"
+depends_on: ["KFONT-M1-001"]
+legacy_gate: ["typeface"]
+---
+
+# KFONT-M1-002 - Complete `TypefaceID` glyph-affecting identity
+
+## PM Note
+
+Ce ticket évite de confondre deux faces qui se ressemblent mais produisent des glyphes différents.
+
+## Problem
+
+The target requires `TypefaceID` to change whenever a fact that can affect glyph output changes. Current identity cannot be considered complete until it includes source identity, collection index, family/style facts, PostScript name, outline format, variation coordinates, palette, selected `cmap`, scaler mode, fallback catalog generation, and content hash or fixture identity.
+
+## Scope
+
+- Define the `TypefaceID` preimage for one face inside a font or collection.
+- Include `FontSourceID`, collection index, PostScript name, family/style metadata, outline format, selected `cmap`, scaler mode, variation coordinates, palette index/overrides, fallback catalog generation, and table availability facts.
+- Ensure variable coordinates and palette differences create distinct IDs even when family names match.
+- Add diagnostics for incomplete identity facts, invalid collection index, or missing usable `cmap`.
+- Keep legacy gate `typeface` open until target-shaped evidence replaces the current contract.
+
+## Non-Goals
+
+- Do not implement OpenType shaping, fallback selection, paragraph layout, or glyph artifact caching.
+- Do not make family/style names alone identity handles.
+- Do not retire the `typeface` legacy gate without evidence and dashboard update.
+- Do not depend on platform-native typeface handles.
+
+## Spec Sources
+
+- `.upstream/specs/pure-kotlin-text/ROADMAP.md`
+- `.upstream/specs/pure-kotlin-text/00-architecture-and-module-boundaries.md`
+- `.upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md`
+- `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
+- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
+
+## Design Sketch
+
+```kotlin
+data class TypefaceIdentityPreimage(
+    val sourceId: FontSourceID,
+    val collectionIndex: Int,
+    val postScriptName: String?,
+    val familyName: String,
+    val styleName: String,
+    val outlineFormat: OutlineFormat,
+    val variationCoordinates: SortedMap<String, Double>,
+    val palette: PaletteSelection?,
+    val selectedCMap: CMapSelection,
+    val scalerMode: ScalerMode,
+    val fallbackCatalogGeneration: Int?,
+    val tableFactsHash: String,
+)
+
+@JvmInline
+value class TypefaceID(val uuid: kotlin.uuid.Uuid)
+```
+
+## Acceptance Criteria
+
+- [ ] Different collection indices produce different `TypefaceID` values.
+- [ ] Different variation coordinates or palette selections produce different `TypefaceID` values.
+- [ ] The same face selected twice from the same fixture source produces identical IDs and sorted preimage output.
+- [ ] Missing or invalid collection index emits `font.collection-index-invalid`.
+- [ ] The `typeface` legacy gate remains visible until evidence links this identity contract to the facade migration.
+
+## Required Evidence
+
+- `typeface-id.json` dump for single-face TTF, TTC face index, variable-font axis change, and palette change when a palette fixture exists.
+- Determinism diff showing stable preimage ordering and UUID output.
+- Diagnostic snapshot for invalid collection index or no usable Unicode `cmap`.
+- Dashboard row showing `typeface` still open as a legacy gate.
+
+## Fallback / Refusal Behavior
+
+- If a face lacks required identity facts, refuse identity promotion with a precise `font.source.*` or `font.sfnt.*` diagnostic instead of generating an anonymous ID.
+- Legacy gate(s) `typeface` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
+
+## Dashboard Impact
+
+- Expected row: `TypefaceID glyph-affecting identity`.
+- Expected classification: `tracked-gap`.
+- Claim promotion allowed: no. Identity evidence does not claim glyph rendering.
+
+## Validation
+
+```bash
+rtk git diff --check
+rtk ./gradlew --no-daemon :font:core:test --tests '*Typeface*'
+```
+
+## Status Notes
+
+- `proposed`: Typeface identity fields are specified, but no `typeface-id.json` evidence is attached yet.
+- Move to `ready` after KFONT-M1-001 lands the source identity model.
+
+## Linear Labels
+
+- `pure-kotlin-font`
+- `milestone:M1`
+- `area:font-core`
+- `claim:tracked-gap`
+- `legacy:typeface`
