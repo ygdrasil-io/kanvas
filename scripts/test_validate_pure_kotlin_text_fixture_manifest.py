@@ -56,9 +56,11 @@ class PureKotlinTextFixtureManifestTest(unittest.TestCase):
                 "color-glyphs",
                 "emoji",
                 "font-source-sfnt",
+                "font-source-system-scan",
                 "gpu-handoff",
                 "paragraph",
                 "png-bitmap-glyphs",
+                "sfnt-malformed-tables",
                 "shaping-scripts",
                 "svg-glyphs",
                 "truetype-scaler",
@@ -66,6 +68,16 @@ class PureKotlinTextFixtureManifestTest(unittest.TestCase):
             set(family_ids),
         )
         self.assertNotIn("target-supported", {row["classification"] for row in rows})
+
+        rows_by_id = {row["familyId"]: row for row in rows}
+        self.assertIn(
+            "no-platform-font-api-claim",
+            rows_by_id["font-source-system-scan"]["nonClaims"],
+        )
+        self.assertIn(
+            "Add cmap format 14 positive variation-selector fixture rows.",
+            rows_by_id["sfnt-malformed-tables"]["requiredEvidenceGates"],
+        )
 
     def test_validator_rejects_hidden_support_claims_and_missing_gates(self) -> None:
         validator = load_validator()

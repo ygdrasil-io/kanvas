@@ -171,6 +171,42 @@ Remaining gate: this is source evidence and fallback-catalog hardening only. It
 does not claim complete SFNT parsing, TTC/OTC support, scaler coverage, or
 complete source-discovery behavior.
 
+### PKT-02C: System-Scan Refusal And Provenance Fixture Plan
+
+Status: implemented with local diff review.
+
+Files:
+
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_pure_kotlin_text_fixture_manifest.py`
+- `scripts/test_validate_pure_kotlin_text_fixture_manifest.py`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `fixture-evidence-manifest.json` now records the required
+  `font-source-system-scan` fixture family as `fixture-gated`.
+- The row requires deterministic scan-root fixtures from explicit in-repo
+  paths, skipped-file diagnostics for unreadable/malformed/unsupported and
+  duplicate source candidates, host-dependent markers, fallback order dump
+  fields, and no hidden platform font registry or native font API.
+- The fixture manifest validator now treats the system-scan row as required,
+  so the actionable plan cannot disappear without validation failure.
+- Tests assert the row remains present and preserves the
+  `no-platform-font-api-claim` non-claim.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+```
+
+Remaining gate: this is fixture/provenance planning only. It does not claim
+complete system font discovery, host fallback parity, implicit root scanning,
+SFNT parsing, scaler support, shaping fallback support, or platform/native
+font API behavior.
+
 ### PKT-03A: SFNT/OpenType Face Evidence Dumps
 
 Status: implemented and independently reviewed.
@@ -207,6 +243,40 @@ rtk ./gradlew --no-daemon :font:sfnt:test
 Remaining gate: this is parser evidence hardening only. It does not claim
 complete SFNT conformance, TrueType scaler support, CFF/CFF2 support, or
 complete font-source coverage.
+
+### PKT-03C: Malformed Table And Format-14 Fixture Plan
+
+Status: implemented with local diff review.
+
+Files:
+
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_pure_kotlin_text_fixture_manifest.py`
+- `scripts/test_validate_pure_kotlin_text_fixture_manifest.py`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `fixture-evidence-manifest.json` now records the required
+  `sfnt-malformed-tables` fixture family as `fixture-gated`.
+- The row makes missing required table diagnostics, malformed optional table
+  diagnostics, TTC face-index positive/refusal rows, and `cmap` format 14
+  positive/refusal expectations explicit before parser promotion.
+- The fixture manifest validator now treats the malformed SFNT row as
+  required, preserving the actionable fixture plan.
+- Tests assert the row remains present and keeps the format 14
+  variation-selector gate visible.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+```
+
+Remaining gate: this is fixture planning only. It does not claim complete SFNT
+conformance, complete required-table validation, `cmap` format 14 support,
+CFF/CFF2 support, scaler support, shaping support, or platform font behavior.
 
 ### PKT-04A: TrueType Scaler Evidence Dumps
 

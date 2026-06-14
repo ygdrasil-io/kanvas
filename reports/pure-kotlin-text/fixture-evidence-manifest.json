@@ -191,6 +191,40 @@
       ]
     },
     {
+      "familyId": "font-source-system-scan",
+      "familyName": "Font source system scan",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "Font sources, SFNT/OpenType parsing, and collections"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt"
+      ],
+      "requiredEvidenceGates": [
+        "Add a deterministic scan-root input fixture that lists explicit in-repo paths instead of implicit host roots.",
+        "Add skipped-file diagnostics for unreadable, malformed, unsupported, and duplicate source candidates.",
+        "Mark every system-scan source and fallback catalog dump as host-dependent when it depends on scan input.",
+        "Record fallback order dump fields for source identity, display name, content hash, and scan diagnostic codes.",
+        "Keep all discovery pure Kotlin with no hidden platform font registry or native font API."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "fixtureCommands": [
+        "Generate only deterministic scan-root fixtures from explicit repo paths before promoting system-scan evidence."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-system-font-discovery-claim",
+        "no-host-fallback-parity-claim",
+        "no-platform-font-api-claim"
+      ]
+    },
+    {
       "familyId": "gpu-handoff",
       "familyName": "GPU handoff",
       "classification": "GPU-gated",
@@ -290,6 +324,40 @@
         "no-complete-png-bitmap-glyph-routing-claim",
         "no-non-png-bitmap-payload-support-claim",
         "no-gpu-bitmap-glyph-route-claim"
+      ]
+    },
+    {
+      "familyId": "sfnt-malformed-tables",
+      "familyName": "SFNT malformed table fixtures",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "`cmap` Contract"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt",
+        "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt"
+      ],
+      "requiredEvidenceGates": [
+        "Add missing required table fixture rows with stable refusal diagnostics.",
+        "Add malformed optional table fixture rows that preserve bounded face parsing diagnostics.",
+        "Add TTC face-index positive and out-of-range refusal fixture rows.",
+        "Add cmap format 14 positive variation-selector fixture rows.",
+        "Add cmap format 14 unsupported or malformed refusal rows without claiming complete cmap coverage."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:sfnt:test",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "fixtureCommands": [
+        "Generate or bundle deterministic malformed SFNT fixtures with expected diagnostics before parser support promotion."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-sfnt-conformance-claim",
+        "no-complete-cmap-format-14-claim",
+        "no-cff-cff2-scaler-claim"
       ]
     },
     {
