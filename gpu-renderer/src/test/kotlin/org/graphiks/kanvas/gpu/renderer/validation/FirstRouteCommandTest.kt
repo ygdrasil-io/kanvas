@@ -17,6 +17,7 @@ class FirstRouteCommandTest {
             expected = listOf(
                 "commands:GPUDrawCommandID:canonical command identifier",
                 "commands:NormalizedDrawCommand.FillRect:first-slice draw command",
+                "commands:NormalizedDrawCommand.FillRRect:first-expansion rounded-rect command",
                 "commands:GPUMaterialDescriptor.SolidColor:first-slice material descriptor",
                 "analysis:GPUDrawAnalysisRecord:first-route analysis dump schema",
                 "routing:GPURouteDecision.Refused:first-route route dump schema without product promotion",

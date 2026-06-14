@@ -7,8 +7,8 @@ product activation, and updates the owning milestone table in the same change.
 | Milestone | Proposed | Ready | In Progress | Blocked | Review | Done |
 |---|---:|---:|---:|---:|---:|---:|
 | M0 | 0 | 0 | 0 | 0 | 0 | 7 |
-| M1 | 4 | 0 | 0 | 0 | 0 | 0 |
-| M2 | 4 | 0 | 0 | 0 | 0 | 0 |
+| M1 | 0 | 0 | 0 | 4 | 0 | 0 |
+| M2 | 3 | 0 | 0 | 0 | 1 | 0 |
 | M3 | 5 | 0 | 0 | 0 | 0 | 0 |
 | M4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | M5 | 4 | 0 | 0 | 0 | 0 | 0 |
@@ -17,7 +17,7 @@ product activation, and updates the owning milestone table in the same change.
 | M8 | 3 | 0 | 0 | 0 | 0 | 0 |
 | M9 | 3 | 0 | 0 | 0 | 0 | 0 |
 | M10 | 4 | 0 | 0 | 0 | 0 | 0 |
-| **Total** | **39** | **0** | **0** | **0** | **0** | **7** |
+| **Total** | **34** | **0** | **0** | **4** | **1** | **7** |
 
 ## Status Update Rule
 

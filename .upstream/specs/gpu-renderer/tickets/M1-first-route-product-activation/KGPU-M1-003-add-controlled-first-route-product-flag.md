@@ -1,7 +1,7 @@
 ---
 id: KGPU-M1-003
 title: "Add controlled first-route product flag"
-status: proposed
+status: blocked
 milestone: M1
 priority: P0
 owner_area: gpu-raster-adapter
@@ -88,7 +88,9 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Product flag must wait on policy and PM bundle decisions.
+- `blocked`: Product flag must wait on KGPU-M1-001 and KGPU-M1-002. Remaining
+  gate: accepted activation policy and activation-candidate PM packaging;
+  no default or opt-in product flag should be added before those decisions.
 
 ## Linear Labels
 

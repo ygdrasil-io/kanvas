@@ -34,6 +34,11 @@ class GPUValidationFixture {
                 ),
                 GPUContractDump.Entry(
                     ownerPackage = "commands",
+                    concept = "NormalizedDrawCommand.FillRRect",
+                    detail = "first-expansion rounded-rect command",
+                ),
+                GPUContractDump.Entry(
+                    ownerPackage = "commands",
                     concept = "GPUMaterialDescriptor.SolidColor",
                     detail = "first-slice material descriptor",
                 ),

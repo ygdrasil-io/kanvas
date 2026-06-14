@@ -199,4 +199,40 @@ object GPUFirstRoutePassBuilder {
             ),
         )
     }
+
+    /** Builds an accepted FillRRect pass with rrect render-step identity but no concrete resources. */
+    fun acceptedFillRRect(
+        commandIdValue: Int,
+        analysisRecordId: String,
+        renderStepIdentity: String,
+        sortKey: Long,
+        pipelineKeyHash: String,
+        boundsHash: String,
+        scissorBoundsHash: String?,
+        originalPaintOrder: Int,
+        targetStateHash: String,
+    ): GPUDrawPass =
+        acceptedFillRect(
+            commandIdValue = commandIdValue,
+            analysisRecordId = analysisRecordId,
+            renderStepIdentity = renderStepIdentity,
+            sortKey = sortKey,
+            pipelineKeyHash = pipelineKeyHash,
+            boundsHash = boundsHash,
+            scissorBoundsHash = scissorBoundsHash,
+            originalPaintOrder = originalPaintOrder,
+            targetStateHash = targetStateHash,
+        )
+
+    /** Builds an empty refused FillRRect pass so unsupported rrects cannot produce draw work. */
+    fun refusedFillRRect(
+        commandIdValue: Int,
+        targetStateHash: String,
+        code: String,
+    ): GPUDrawPass =
+        refusedFillRect(
+            commandIdValue = commandIdValue,
+            targetStateHash = targetStateHash,
+            code = code,
+        )
 }

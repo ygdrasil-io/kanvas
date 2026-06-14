@@ -1,7 +1,7 @@
 ---
 id: KGPU-M1-002
 title: "Promote root PM bundle to activation candidate"
-status: proposed
+status: blocked
 milestone: M1
 priority: P0
 owner_area: validation-pm
@@ -87,7 +87,9 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Depends on KGPU-M1-001.
+- `blocked`: Depends on KGPU-M1-001. Remaining gate: accepted activation policy
+  decision before the root PM bundle can describe an activation candidate
+  instead of the current refusal-first, non-promotional bundle.
 
 ## Linear Labels
 

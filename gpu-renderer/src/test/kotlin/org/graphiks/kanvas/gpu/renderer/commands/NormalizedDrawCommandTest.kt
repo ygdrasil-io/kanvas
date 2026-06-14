@@ -80,4 +80,27 @@ class NormalizedDrawCommandTest {
         assertFalse(command.ordering.dependsOnDestination)
         assertEquals("unit-test:fillRect#7", command.diagnosticName)
     }
+
+    /** Ensures a filled rounded rectangle command captures first-expansion geometry facts. */
+    @Test
+    fun `fill rrect command captures rounded rectangle facts for GPU renderer core`() {
+        val command = GPUFillRRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(17),
+            rrect = GPURRect(
+                rect = GPURect(left = 1f, top = 2f, right = 21f, bottom = 32f),
+                radiusX = 4f,
+                radiusY = 6f,
+            ),
+            target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 0.2f, g = 0.4f, b = 0.8f, a = 1f),
+            source = GPUCommandSource(adapter = "unit-test", operation = "fillRRect"),
+        )
+
+        assertEquals(GPUDrawKind.FillRRect, command.drawKind)
+        assertEquals(GPUTransformType.Identity, command.transform.type)
+        assertEquals(GPUClipKind.WideOpen, command.clip.kind)
+        assertEquals(GPUMaterialKind.SolidColor, command.material.kind)
+        assertEquals(GPUBounds(left = 1f, top = 2f, right = 21f, bottom = 32f), command.bounds)
+        assertEquals("unit-test:fillRRect#17", command.diagnosticName)
+    }
 }

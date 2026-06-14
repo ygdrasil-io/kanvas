@@ -14,10 +14,12 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRectCommandBuilder
+import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRRectCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
@@ -97,6 +99,38 @@ class GPURecorderTest {
             "decision:refuse:analysis.fill_rect.8:unsupported.clip.complex_stack",
         )
         assertContains(recording.routeDiagnostics, "refused:unsupported.clip.complex_stack")
+    }
+
+    /** Accepted FillRRect capture closes into immutable pre-materialization recording evidence only. */
+    @Test
+    fun `accepted fill rrect records analysis dump compatibility key and prematerialization render task`() {
+        val recorder = GPURecorder(
+            recordingId = GPURecordingID("recording.rrect-accepted"),
+            capabilities = firstSliceRRectCapabilities(),
+        )
+
+        recorder.record(acceptedFillRRect(commandIdValue = 14))
+        val recording = recorder.close()
+
+        assertEquals("analysis.fill_rrect.14", recording.analysis.records.single().recordId)
+        assertContains(
+            recording.analysisDecisionDump.lines,
+            "decision:candidate:analysis.fill_rrect.14:native.fill_rrect.solid",
+        )
+        assertContains(recording.routeDiagnostics, "route:native.fill_rrect.solid")
+        assertContains(recording.featureAssumptions, "capability:first_slice.fill_rrect.native=supported")
+
+        val task = assertIs<GPUTask.Render>(recording.taskList.tasks.single())
+        assertEquals("task.render.14", task.taskId)
+        assertEquals("pass.root.14", task.passId)
+        assertEquals("analysis.fill_rrect.14", task.analysisRecordId)
+        assertEquals(listOf("rrect.fill.coverage"), task.renderStepIds)
+        assertEquals(listOf("pending.pipeline.fill_rrect.solid.rgba8unorm.src_over"), task.pipelineKeyHashes)
+        assertTrue(task.preMaterialization)
+        assertEquals(emptyList(), task.materializedResourceLabels)
+
+        assertContains(recording.compatibilityKey.dump().lines, "commandShapeVersion=2")
+        assertContains(recording.compatibilityKey.dump().lines, "targetFormatClass=rgba8unorm")
     }
 
     /** Text handoff commands stay visible as terminal refusals until a text GPU route is promoted. */
@@ -211,6 +245,26 @@ class GPURecorderTest {
             source = GPUCommandSource(adapter = "unit-test", operation = "fillRect"),
         )
 
+    /** Accepted first-expansion rrect command with optional paint order. */
+    private fun acceptedFillRRect(
+        commandIdValue: Int,
+        paintOrder: Int = 0,
+    ): NormalizedDrawCommand.FillRRect =
+        GPUFillRRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(commandIdValue),
+            rrect = GPURRect(
+                rect = GPURect(left = 2f, top = 3f, right = 22f, bottom = 25f),
+                radiusX = 4f,
+                radiusY = 5f,
+            ),
+            target = firstRouteTarget,
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0.25f, b = 0.5f, a = 1f),
+            transform = GPUTransformFacts.identity(),
+            layer = GPULayerFacts.root(target = firstRouteTarget),
+            paintOrder = paintOrder,
+            source = GPUCommandSource(adapter = "unit-test", operation = "fillRRect"),
+        )
+
     /** Text command fixture with dumpable command-owned facts and no backend route activation. */
     private fun drawTextRun(commandIdValue: Int): NormalizedDrawCommand.DrawTextRun {
         val bounds = GPUBounds(0f, 0f, 128f, 64f)
@@ -258,6 +312,21 @@ class GPURecorderTest {
                 ),
             ),
             snapshotId = "first-route-test",
+        )
+
+    /** Capability snapshot that enables only the native FillRRect expansion route. */
+    private fun firstSliceRRectCapabilities(): GPUCapabilities =
+        firstSliceCapabilities().copy(
+            facts = listOf(
+                GPUCapabilityFact(
+                    name = "first_slice.fill_rrect.native",
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "rrect-route-fixture",
+                ),
+            ),
+            snapshotId = "rrect-route-test",
         )
 
     private companion object {

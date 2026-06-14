@@ -21,7 +21,7 @@ decision. Implementation may remain evidence-only if M1 is still policy-gated.
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M2-001 - Add native `FillRRect` first expansion route](KGPU-M2-001-add-native-fillrrect-first-expansion-route.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry-passes` | `KGPU-M0-007` | - |
+| [KGPU-M2-001 - Add native `FillRRect` first expansion route](KGPU-M2-001-add-native-fillrrect-first-expansion-route.md) | `review` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry-passes` | `KGPU-M0-007` | - |
 | [KGPU-M2-002 - Add linear-gradient rect and rrect material route](KGPU-M2-002-add-linear-gradient-rect-and-rrect-material-route.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `materials-wgsl` | `KGPU-M2-001` | - |
 | [KGPU-M2-003 - Add simple scissor clip route](KGPU-M2-003-add-simple-scissor-clip-route.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `clips-passes` | `KGPU-M2-001` | - |
 | [KGPU-M2-004 - Add conservative batching and sort evidence](KGPU-M2-004-add-conservative-batching-and-sort-evidence.md) | `proposed` | `P1` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `analysis-recording` | `KGPU-M2-001`, `KGPU-M2-002`, `KGPU-M2-003` | - |

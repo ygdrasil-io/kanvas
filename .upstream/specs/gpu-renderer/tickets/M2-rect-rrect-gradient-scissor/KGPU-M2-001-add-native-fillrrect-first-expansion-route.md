@@ -1,7 +1,7 @@
 ---
 id: KGPU-M2-001
 title: "Add native `FillRRect` first expansion route"
-status: proposed
+status: review
 milestone: M2
 priority: P0
 owner_area: geometry-passes
@@ -90,7 +90,12 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Requires reviewed first-route boundary first.
+- `review`: Isolated `:gpu-renderer` command, analysis, native route, pass,
+  recording, and ownership-fixture evidence exists for solid `FillRRect`.
+  Product activation remains false. Independent review found no blocking
+  claim/status issue. Remaining gate: adapter-backed or explicitly skipped GPU
+  evidence before this can move to `done`; no `gpu-raster` product route was
+  enabled.
 
 ## Linear Labels
 

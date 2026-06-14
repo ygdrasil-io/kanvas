@@ -1,7 +1,7 @@
 ---
 id: KGPU-M1-001
 title: "Decide first-route product activation policy"
-status: proposed
+status: blocked
 milestone: M1
 priority: P0
 owner_area: product-validation
@@ -90,7 +90,10 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Awaiting review of M0 evidence and activation criteria.
+- `blocked`: R6 boundary evidence is reviewed as non-activating and the repo
+  has no explicit release/product activation decision. Remaining gate:
+  human product/release decision plus reviewed non-skipped adapter-backed R6
+  executed evidence before any activation policy can be accepted.
 
 ## Linear Labels
 

@@ -8,6 +8,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerScopeKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
@@ -169,6 +170,67 @@ class GPUFirstRoutePlanner(
         )
     }
 
+    /**
+     * Plans FillRRect as native only when first-expansion facts are supported.
+     *
+     * This mirrors the FillRect planning boundary while keeping rrect-specific
+     * geometry facts in command/analysis/pass evidence. It does not allocate
+     * resources, submit backend work, or activate product routing.
+     */
+    fun plan(command: NormalizedDrawCommand.FillRRect): GPUFirstRoutePlan {
+        require(command.drawKind == GPUDrawKind.FillRRect) { "GPUFirstRoutePlanner accepts only FillRRect commands" }
+
+        command.refusalCode()?.let { code ->
+            return refusedPlan(command = command, code = code)
+        }
+
+        val recordId = "analysis.fill_rrect.${command.commandId.value}"
+        val pipelineKey = "pending.pipeline.fill_rrect.solid.rgba8unorm.src_over"
+        val renderStep = "rrect.fill.coverage"
+        val analysisRecord = GPUDrawAnalysisRecord(
+            recordId = recordId,
+            commandIdValue = command.commandId.value,
+            commandFamily = "FillRRect",
+            boundsHash = command.bounds.stableHash(),
+            routeDecisionLabel = "native.fill_rrect.solid",
+            materialKeyHash = "pending.material.solid",
+            renderStepCandidates = listOf(renderStep),
+            sortKey = SortKey(command.ordering.paintOrder.toLong()),
+            diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
+                command.rrect.analysisDiagnostics(recordId = recordId),
+        )
+        val routeDecision = GPUFirstRouteDecisionBuilder.nativeFillRRect(
+            commandIdValue = command.commandId.value,
+            pipelinePreimageHash = pipelineKey,
+            renderStepIdentity = renderStep,
+            requirements = listOf(firstRRectRouteCapabilityName),
+        )
+        val analysisDecision = GPUDrawAnalysisDecision.Candidate(
+            recordId = recordId,
+            routeDecisionLabel = "native.fill_rrect.solid",
+            resourceDeclarations = emptyList(),
+            renderStepCandidates = listOf(renderStep),
+        )
+        val pass = GPUFirstRoutePassBuilder.acceptedFillRRect(
+            commandIdValue = command.commandId.value,
+            analysisRecordId = recordId,
+            sortKey = command.ordering.paintOrder.toLong(),
+            renderStepIdentity = renderStep,
+            pipelineKeyHash = pipelineKey,
+            boundsHash = command.bounds.stableHash(),
+            scissorBoundsHash = command.scissorBoundsHash(),
+            originalPaintOrder = command.ordering.paintOrder,
+            targetStateHash = command.targetStateHash(),
+        )
+
+        return GPUFirstRoutePlan(
+            analysisRecord = analysisRecord,
+            analysisDecision = analysisDecision,
+            routeDecision = routeDecision,
+            pass = pass,
+        )
+    }
+
     /** Builds refused analysis, route, and pass descriptors without inventing executable fallback work. */
     private fun refusedPlan(command: NormalizedDrawCommand.FillRect, code: String): GPUFirstRoutePlan {
         val recordId = "analysis.fill_rect.${command.commandId.value}"
@@ -201,6 +263,42 @@ class GPUFirstRoutePlanner(
         )
     }
 
+    /** Builds refused rrect analysis, route, and pass descriptors without inventing executable fallback work. */
+    private fun refusedPlan(command: NormalizedDrawCommand.FillRRect, code: String): GPUFirstRoutePlan {
+        val recordId = "analysis.fill_rrect.${command.commandId.value}"
+        val diagnostic = GPUAnalysisDiagnostic(
+            code = code,
+            recordId = recordId,
+            decisionId = "refused.fill_rrect.${command.commandId.value}",
+            terminal = true,
+        )
+        val analysisRecord = GPUDrawAnalysisRecord(
+            recordId = recordId,
+            commandIdValue = command.commandId.value,
+            commandFamily = "FillRRect",
+            boundsHash = command.bounds.stableHash(),
+            routeDecisionLabel = "refused.$code",
+            materialKeyHash = "none",
+            renderStepCandidates = emptyList(),
+            sortKey = SortKey(command.ordering.paintOrder.toLong()),
+            diagnostics = listOf(diagnostic),
+        )
+        return GPUFirstRoutePlan(
+            analysisRecord = analysisRecord,
+            analysisDecision = GPUDrawAnalysisDecision.Refuse(recordId = recordId, diagnostic = diagnostic),
+            routeDecision = GPUFirstRouteDecisionBuilder.refused(
+                code = code,
+                stage = "analysis",
+                subject = "FillRRect first expansion route",
+            ),
+            pass = GPUFirstRoutePassBuilder.refusedFillRRect(
+                commandIdValue = command.commandId.value,
+                targetStateHash = command.targetStateHash(),
+                code = code,
+            ),
+        )
+    }
+
     /** Returns the canonical first-route refusal code, or null when analysis may keep a native candidate. */
     private fun NormalizedDrawCommand.FillRect.refusalCode(): String? =
         coordinateRefusalCode() ?: when {
@@ -220,6 +318,26 @@ class GPUFirstRoutePlanner(
             else -> null
         }
 
+    /** Returns the canonical first-expansion rrect refusal code, or null when analysis may keep a native candidate. */
+    private fun NormalizedDrawCommand.FillRRect.refusalCode(): String? =
+        coordinateRefusalCode() ?: when {
+            !rrect.hasAcceptedRadii() -> "unsupported.geometry.rrect_radii"
+            transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
+            transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
+            transform.type !in acceptedTransformTypes -> "unsupported.transform.class_downgrade"
+            clip.kind == GPUClipKind.ComplexStack -> "unsupported.clip.complex_stack"
+            clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
+            material.kind != GPUMaterialKind.SolidColor -> "unsupported.material.source_unimplemented"
+            blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
+            layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
+            layer.requiresFilter -> "unsupported.layer.filter_chain"
+            layer.requiresDestinationRead || ordering.dependsOnDestination || blend.requiresDestinationRead ->
+                "unsupported.destination_read.required"
+            layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
+            !capabilities.hasFact(firstRRectRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
+            else -> null
+        }
+
     /** Returns true only for explicit validity-affecting capability facts in the immutable snapshot. */
     private fun GPUCapabilities.hasFact(name: String): Boolean =
         facts.any { fact ->
@@ -232,6 +350,9 @@ class GPUFirstRoutePlanner(
 
         /** Required capability fact for the first native FillRect route. */
         const val firstRouteCapabilityName = "first_slice.fill_rect.native"
+
+        /** Required capability fact for the first native FillRRect expansion route. */
+        const val firstRRectRouteCapabilityName = "first_slice.fill_rrect.native"
 
         /** Transform classes supported by the first native FillRect route. */
         val acceptedTransformTypes = setOf(GPUTransformType.Identity, GPUTransformType.Translate)
@@ -247,6 +368,15 @@ private fun NormalizedDrawCommand.FillRect.coordinateRefusalCode(): String? =
         transform.hasNonFiniteFacts() -> "unsupported.transform.non_finite"
         rect.hasNaN() || bounds.hasNaN() || clip.bounds.hasNaN() -> "unsupported.bounds.nan"
         rect.hasNonFinite() || bounds.hasNonFinite() || clip.bounds.hasNonFinite() -> "unsupported.bounds.non_finite"
+        else -> null
+    }
+
+/** Returns a terminal coordinate, radii, or bounds refusal code before rrect route acceptance. */
+private fun NormalizedDrawCommand.FillRRect.coordinateRefusalCode(): String? =
+    when {
+        transform.hasNonFiniteFacts() -> "unsupported.transform.non_finite"
+        rrect.hasNaN() || bounds.hasNaN() || clip.bounds.hasNaN() -> "unsupported.bounds.nan"
+        rrect.hasNonFinite() || bounds.hasNonFinite() || clip.bounds.hasNonFinite() -> "unsupported.bounds.non_finite"
         else -> null
     }
 
@@ -285,8 +415,21 @@ private fun NormalizedDrawCommand.FillRect.scissorBoundsHash(): String? =
         -> null
     }
 
+/** Returns the accepted simple scissor bounds hash, or null for wide-open rrect clips. */
+private fun NormalizedDrawCommand.FillRRect.scissorBoundsHash(): String? =
+    when (clip.kind) {
+        GPUClipKind.DeviceRect -> clip.bounds.stableHash()
+        GPUClipKind.WideOpen,
+        GPUClipKind.ComplexStack,
+        -> null
+    }
+
 /** Returns a stable target-state placeholder before pipeline-key implementation lands. */
 private fun NormalizedDrawCommand.FillRect.targetStateHash(): String =
+    "target.${layer.target.colorFormat}.${layer.target.width}x${layer.target.height}"
+
+/** Returns a stable target-state placeholder before pipeline-key implementation lands. */
+private fun NormalizedDrawCommand.FillRRect.targetStateHash(): String =
     "target.${layer.target.colorFormat}.${layer.target.width}x${layer.target.height}"
 
 /** Returns true when any rectangle coordinate is NaN. */
@@ -296,6 +439,33 @@ private fun GPURect.hasNaN(): Boolean =
 /** Returns true when any rectangle coordinate is infinite or NaN. */
 private fun GPURect.hasNonFinite(): Boolean =
     !left.isFinite() || !top.isFinite() || !right.isFinite() || !bottom.isFinite()
+
+/** Returns true when any rounded rectangle coordinate or radius is NaN. */
+private fun GPURRect.hasNaN(): Boolean =
+    rect.hasNaN() || radiusX.isNaN() || radiusY.isNaN()
+
+/** Returns true when any rounded rectangle coordinate or radius is infinite or NaN. */
+private fun GPURRect.hasNonFinite(): Boolean =
+    rect.hasNonFinite() || !radiusX.isFinite() || !radiusY.isFinite()
+
+/** Returns true when rrect radii are finite, positive, and already normalized for the rect extent. */
+private fun GPURRect.hasAcceptedRadii(): Boolean {
+    if (radiusX <= 0f || radiusY <= 0f) return false
+    val width = rect.right - rect.left
+    val height = rect.bottom - rect.top
+    if (width <= 0f || height <= 0f) return false
+    return radiusX <= width / 2f && radiusY <= height / 2f
+}
+
+/** Emits stable accepted rrect geometry facts for analysis dumps. */
+private fun GPURRect.analysisDiagnostics(recordId: String): List<GPUAnalysisDiagnostic> =
+    listOf(
+        GPUAnalysisDiagnostic(
+            code = "geometry:rrect.radii=$radiusX,$radiusY",
+            recordId = recordId,
+            terminal = false,
+        ),
+    )
 
 /** Returns true when any bounds coordinate is NaN. */
 private fun GPUBounds.hasNaN(): Boolean =

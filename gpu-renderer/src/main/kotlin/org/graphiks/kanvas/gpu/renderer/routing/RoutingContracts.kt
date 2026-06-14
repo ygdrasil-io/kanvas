@@ -126,12 +126,29 @@ object GPUFirstRouteDecisionBuilder {
             ),
         )
 
+    /** Builds a native FillRRect decision only after analysis has validated first-expansion command facts. */
+    fun nativeFillRRect(
+        commandIdValue: Int,
+        pipelinePreimageHash: String,
+        renderStepIdentity: String,
+        requirements: List<String>,
+    ): GPURouteDecision.Native =
+        GPURouteDecision.Native(
+            route = GPUNativeRoute(
+                routeId = "route.fill_rrect.$commandIdValue",
+                consumerKind = "native.fill_rrect.solid",
+                renderStepIdentity = renderStepIdentity,
+                pipelinePreimageHash = pipelinePreimageHash,
+                requirements = requirements,
+            ),
+        )
+
     /** Builds a terminal route refusal with the canonical reason code preserved for dumps and gates. */
-    fun refused(code: String, stage: String): GPURouteDecision.Refused =
+    fun refused(code: String, stage: String, subject: String = "FillRect first native route"): GPURouteDecision.Refused =
         GPURouteDecision.Refused(
             diagnostic = RefuseDiagnostic(
                 code = code,
-                message = "FillRect first native route refused: $code",
+                message = "$subject refused: $code",
                 stage = stage,
                 terminal = true,
             ),

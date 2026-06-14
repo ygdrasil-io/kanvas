@@ -1,7 +1,7 @@
 ---
 id: KGPU-M1-004
 title: "Add first-route rollback and parity validation"
-status: proposed
+status: blocked
 milestone: M1
 priority: P0
 owner_area: validation-adapter
@@ -87,7 +87,9 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Requires product flag ticket first.
+- `blocked`: Requires KGPU-M1-003 first. Remaining gate: controlled product flag
+  and activation policy before rollback/parity validation can exercise a
+  candidate product route.
 
 ## Linear Labels
 
