@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "indexId": "font-fixture-assets",
+  "fixtureRoot": "reports/font/fixtures",
+  "licensePolicy": [
+    "Apache-2.0",
+    "SIL-OFL-1.1"
+  ],
+  "sizeBudgetBytes": 20971520,
+  "offlinePolicy": "tests-must-not-download",
+  "fixtures": []
+}
