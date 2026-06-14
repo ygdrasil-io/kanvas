@@ -1,7 +1,7 @@
 ---
 id: KGPU-M6-001
 title: "Accept typed pure Kotlin `DrawTextRun` payloads"
-status: proposed
+status: blocked
 milestone: M6
 priority: P0
 owner_area: text-handoff
@@ -83,7 +83,10 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Depends on pure Kotlin text M11 payloads.
+- `blocked`: Depends on accepted pure Kotlin text `KFONT-M11-003`
+  `DrawTextRun` payload contracts. The GPU renderer must not invent that
+  payload shape, reshape text, parse fonts, read font bytes, or accept
+  CPU-rendered full text textures to clear this gate.
 
 ## Linear Labels
 

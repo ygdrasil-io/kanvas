@@ -1,7 +1,7 @@
 ---
 id: KGPU-M6-003
 title: "Add text resource upload and binding plans"
-status: proposed
+status: blocked
 milestone: M6
 priority: P0
 owner_area: text-resources
@@ -83,7 +83,10 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Required by A8 text route.
+- `blocked`: Depends on KGPU-M6-001 and accepted KFONT-M11-007 resource/upload
+  contracts. Adapter-backed resource, upload, instance, binding, stale
+  generation, budget, and no-`MaterialKey`-leak evidence is required before the
+  text resource plan can support KGPU-M6-002.
 
 ## Linear Labels
 

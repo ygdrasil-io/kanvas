@@ -1,7 +1,7 @@
 ---
 id: KGPU-M6-002
 title: "Add A8 glyph atlas sampling route"
-status: proposed
+status: blocked
 milestone: M6
 priority: P0
 owner_area: text-atlas
@@ -83,7 +83,11 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: First bounded text route after text resource/upload/binding plans.
+- `blocked`: Depends on KGPU-M6-003 plus accepted KFONT-M11-004,
+  KFONT-M11-008, and KFONT-M11-009 glyph/artifact evidence, then requires
+  adapter-backed upload, WGSL binding/reflection, atlas generation,
+  upload-before-sample ordering, readback evidence, and refusal coverage before
+  any A8 text `CPUPreparedGPU` route claim.
 
 ## Linear Labels
 
