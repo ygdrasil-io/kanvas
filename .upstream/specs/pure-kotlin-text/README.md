@@ -99,6 +99,7 @@ carried in `09-migration-from-current-font-pack.md`.
 | Spec | Purpose |
 |---|---|
 | `ROADMAP.md` | Milestone roadmap, claim model, Linear slicing rules, validation gates, and release checkpoints for the complete pure Kotlin font system. |
+| `tickets/README.md` | Markdown ticket catalog grouped by milestone, with status metadata, PM notes, evidence requirements, and validation commands. |
 | `00-architecture-and-module-boundaries.md` | Module shape, ownership, package roots, data contracts, and relationship to `:gpu-renderer` and `:kanvas-skia`. |
 | `01-font-source-sfnt-and-scalers.md` | Font sources, SFNT/OpenType parsing, collections, fallback catalogs, `glyf`, CFF, CFF2, metrics, variations, and no-pixel-perfect-hinting policy. |
 | `02-opentype-layout-shaping-engine.md` | Unicode segmentation, script matrix, bidi runs, GSUB/GPOS/GDEF, shaping features, clusters, fallback runs, and diagnostics. |
