@@ -930,6 +930,55 @@ Remaining gate: this is key/dump hardening only. It does not claim complete
 A8/SDF artifact generation, atlas lifecycle support, color glyph support, or
 GPU text-route promotion.
 
+### PKT-10D: A8/SDF Atlas Lifecycle Fixture Contract
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/expected/glyph/a8-sdf-atlas-lifecycle.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `a8-sdf-atlas-lifecycle.json` records the PKT-10D dump contract for the
+  `font-source-liberation-core` fixture, including A8 atlas pack, SDF
+  normalization, SDF transform refusal, capacity, stale generation, key
+  preimage, mask/SDF hash, generation token, invalidation token, and budget
+  evidence requirements.
+- The expected dump names stable glyph diagnostics for SDF transform/generation
+  refusal, atlas capacity, stale generation, nondeterministic key, and artifact
+  budget gates without adding GPU upload evidence.
+- The provenance index attaches the expected dump to
+  `font-source-liberation-core`, and the fixture manifest attaches it to the
+  `a8-sdf-artifacts` current evidence paths.
+- The dump evidence index records `a8-sdf-atlas-lifecycle` as `golden-gated`
+  producer evidence with explicit non-claims.
+- `GlyphSurfaceTest` loads the expected dump and asserts exact structured
+  values for dump ID, owner ticket, fixture ID, required diagnostics, and
+  non-claims.
+
+Validation:
+
+```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk git diff --check
+```
+
+Remaining gate: this is fixture-contract evidence only. It does not claim
+complete A8 atlas support, complete SDF production, complete atlas lifecycle
+support, GPU upload execution, renderer resource ownership, or GPU text-route
+promotion.
+
 ### PKT-11A: Color Glyph Planning Evidence Dumps
 
 Status: implemented and independently reviewed.
@@ -975,6 +1024,53 @@ Remaining gate: this is planning and diagnostic evidence only. It does not
 claim complete COLRv1 rendering, complete PNG bitmap glyph routing, complete
 SVG-in-OpenType rendering, complete emoji sequence shaping, GPU color glyph
 support, or native/platform fallback behavior.
+
+### PKT-11D: Color Glyph Fixture Family Split
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/expected/color/color-svg-emoji-goldens.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `color-svg-emoji-goldens.json` records the PKT-11D dump contract for the
+  `color-colrv1-test-glyphs` fixture across the `color-glyphs`,
+  `png-bitmap-glyphs`, `svg-glyphs`, and `emoji` fixture families.
+- The expected dump names required refusal diagnostics for COLRv1 cycle/budget,
+  PNG decode/strike/payload, SVG external-resource/feature/budget, and emoji
+  sequence/fallback/color-glyph unavailable gates.
+- The provenance index attaches the expected dump to
+  `color-colrv1-test-glyphs`, and the fixture manifest attaches it to the
+  color, PNG, SVG, and emoji current evidence paths.
+- The dump evidence index records `color-svg-emoji-goldens` as `golden-gated`
+  producer evidence with explicit non-claims.
+- `ColorGlyphSurfaceTest` loads the expected dump and asserts exact structured
+  values for dump ID, fixture ID, color families, required refusals, and
+  non-claims.
+
+Validation:
+
+```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk git diff --check
+```
+
+Remaining gate: this is fixture-family split and refusal-contract evidence
+only. It does not claim complete COLRv1 rendering, PNG bitmap glyph routing,
+SVG-in-OpenType rendering, emoji sequence shaping, GPU color glyph support,
+platform fallback behavior, or CPU oracle hash coverage.
 
 ### PKT-12A: GPU Renderer `DrawTextRun` Handoff Surface
 

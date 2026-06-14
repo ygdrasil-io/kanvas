@@ -17,9 +17,11 @@ KNOWN_CLASSIFICATIONS = [
 
 REQUIRED_DUMPS = {
     "a8-atlas-build-result",
+    "a8-sdf-atlas-lifecycle",
     "arabic-seed-readiness",
     "cff-cff2-readiness",
     "cmap-contract",
+    "color-svg-emoji-goldens",
     "fallback-catalog-build",
     "font-source-liberation-scan-root",
     "glyph-atlas-lifecycle",
