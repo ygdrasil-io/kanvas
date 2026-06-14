@@ -14,26 +14,26 @@ legacy_gate: ["scaledemoji"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Add cluster safety regression suite" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M5: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket verrouille les cas qui cassent le texte visible, notamment emoji, marques et scripts complexes, avant les tickets de shaping et fallback.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Unicode Segmentation and Bidi` slice until "Add cluster safety regression suite" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Even when segmentation, bidi, and script itemization pass individually, later shaping can regress if clusters are split between runs, fallback boundaries, or bidi/script transitions. The `scaledemoji` legacy gate also needs explicit cluster-safe evidence before emoji shaping and fallback work can claim progress.
 
 ## Scope
 
-- Deliver the capability described by "Add cluster safety regression suite" within `unicode` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.unicode.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M5 boundaries and update status metadata when execution starts.
+- Add regression fixtures that combine grapheme clusters, bidi runs, script itemization, variation selectors, emoji ZWJ sequences, combining marks, and fallback-sensitive missing glyph cases.
+- Assert invariants that no grapheme cluster is split by bidi run boundaries, script run boundaries, fallback candidate ranges, or shaping input slices.
+- Produce a `cluster-safety-report.json` that references `unicode-segments.json`, `bidi-runs.json`, and `script-runs.json` by hash.
+- Include positive and refusal fixtures for emoji ZWJ, VS15/VS16, skin tone modifiers, Arabic marks, Devanagari clusters, Thai marks, CJK variation selectors, and mixed LTR/RTL text.
+- Preserve the `scaledemoji` legacy gate as fixture-gated until emoji sequence and fallback behavior have reviewed evidence.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement color emoji rendering or emoji glyph artifact planning.
+- Do not implement GSUB/GPOS substitutions, fallback catalog selection, or paragraph layout.
+- Do not retire the `scaledemoji` gate; this ticket only supplies cluster-safety evidence needed by later work.
+- Do not use platform emoji segmentation as a normative oracle.
 
 ## Spec Sources
 
@@ -45,38 +45,48 @@ The pure Kotlin text target cannot promote the `Unicode Segmentation and Bidi` s
 ## Design Sketch
 
 ```kotlin
-data class KFontM5005Plan(
-    val input: UnicodeTextInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class ClusterSafetyFixture(
+    val name: String,
+    val input: TextInput,
+    val expectedClusters: List<IntRange>,
+    val requiredInvariants: Set<ClusterInvariantKind>,
+    val legacyGate: String?,
 )
 
-interface KFontM5005Executor {
-    fun execute(plan: KFontM5005Plan): UnicodeRunDump
-    fun refusal(code: String = "text.unicode.unsupported"): RouteDiagnostic
+data class ClusterInvariantResult(
+    val invariant: ClusterInvariantKind,
+    val clusterRange: IntRange,
+    val segmentRanges: List<IntRange>,
+    val passed: Boolean,
+    val diagnostic: RouteDiagnostic?,
+)
+
+class ClusterSafetySuite {
+    fun evaluate(fixture: ClusterSafetyFixture, facts: TextSegmentationFacts): ClusterSafetyReport
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.unicode.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `fixture-gated` until all evidence and validation criteria are satisfied.
+- [ ] Combined segmentation/bidi/script fixtures prove that cluster ranges are not split by downstream run boundaries.
+- [ ] Emoji ZWJ, emoji modifier, VS15/VS16, Arabic mark, Devanagari conjunct, Thai tone mark, CJK variation selector, and mixed RTL/LTR fixtures are present.
+- [ ] At least one negative fixture intentionally splits a cluster and emits `text.shaping.cluster-invariant-failed`.
+- [ ] `cluster-safety-report.json` records source dump hashes, invariant names, pass/fail status, affected ranges, and legacy gate references.
+- [ ] `scaledemoji` remains fixture-gated until later emoji shaping/fallback tickets add route evidence beyond cluster safety.
 
 ## Required Evidence
 
-- Unicode-versioned segmentation, bidi, or script dump.
-- Cluster safety fixture expectations.
-- Unsupported boundary diagnostic snapshot.
-- Classification remains `fixture-gated` until all evidence is attached.
+- `cluster-safety-report.json` linked to `unicode-segments.json`, `bidi-runs.json`, and `script-runs.json` by content hash.
+- Fixtures: `cluster-emoji-family-zwj.txt`, `cluster-emoji-skin-tone.txt`, `cluster-vs15-vs16.txt`, `cluster-arabic-mark.txt`, `cluster-devanagari-conjunct.txt`, `cluster-thai-tone.txt`, `cluster-cjk-variation-selector.txt`, `cluster-mixed-bidi.txt`, `cluster-negative-split.txt`.
+- Diagnostics asserted in tests: `text.shaping.cluster-invariant-failed`, `text.shaping.emoji-sequence-unsupported`, `text.shaping.unicode-data-version-mismatch`.
+- Dashboard note showing `scaledemoji` is still blocked on emoji shaping/fallback/rendering evidence, not merely segmentation.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.unicode.*` diagnostic and keep the ticket classified as `fixture-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
-- Legacy gate(s) `scaledemoji` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
+- Unsupported or malformed paths must emit one of: `text.shaping.cluster-split-forbidden`, `text.shaping.emoji-sequence-unsupported`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `fixture-gated` until the listed evidence and validation pass.
+- Legacy gate mapping remains visible in dashboard output until the ticket evidence retires it explicitly.
 
 ## Dashboard Impact
 
@@ -88,13 +98,13 @@ interface KFontM5005Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*ClusterSafety*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Regression suite depends on the concrete M5 segmentation, bidi, and itemization outputs.
+- Move to `ready` only after fixture list and legacy gate wording are reviewed.
 
 ## Linear Labels
 
@@ -102,4 +112,3 @@ rtk ./gradlew --no-daemon :font:text:test
 - `milestone:M5`
 - `area:unicode`
 - `claim:fixture-gated`
-- `legacy:scaledemoji`

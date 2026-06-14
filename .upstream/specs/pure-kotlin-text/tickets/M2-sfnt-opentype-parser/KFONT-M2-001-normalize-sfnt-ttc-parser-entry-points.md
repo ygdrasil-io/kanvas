@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Normalize SFNT/TTC parser entry points" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M2: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket donne une porte d'entrée unique au parser font, pour que TTF et collections soient validés de la même façon.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `SFNT/OpenType Parser` slice until "Normalize SFNT/TTC parser entry points" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The target needs one bounded contract for single-face SFNT fonts, TTC collections, and OTC collections before table-specific work can be audited. If parser entry points stay split or ad hoc, dumps and diagnostics cannot reliably identify which source, collection index, and face produced a table fact.
 
 ## Scope
 
-- Deliver the capability described by "Normalize SFNT/TTC parser entry points" within `font-sfnt` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.sfnt.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M2 boundaries and update status metadata when execution starts.
+- Define pure Kotlin entry points for single-face SFNT, TTC, and OTC containers.
+- Require every parse request to carry `FontSourceID`, source byte bounds, requested collection index, and parser generation.
+- Return a container-level result that separates directory facts, face facts, table slices, and diagnostics.
+- Reject invalid collection indices with stable diagnostics instead of falling through to face `0`.
+- Produce `sfnt-directory.json` for a single TTF and a TTC face index without invoking scaler or shaping code.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not parse glyph outlines, CFF charstrings, GSUB/GPOS lookups, or color glyph payloads.
+- Do not claim support for every table whose directory record is discovered.
+- Do not use platform font APIs or external parsers as normative behavior.
+- Do not implement fallback font selection.
 
 ## Spec Sources
 
@@ -45,54 +45,60 @@ The pure Kotlin text target cannot promote the `SFNT/OpenType Parser` slice unti
 ## Design Sketch
 
 ```kotlin
-data class KFontM2001Plan(
-    val input: SFNTBytes,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class SFNTParseRequest(
+    val sourceId: FontSourceID,
+    val bytes: BoundedFontBytes,
+    val collectionIndex: Int?,
+    val parserGeneration: Int,
 )
 
-interface KFontM2001Executor {
-    fun execute(plan: KFontM2001Plan): SFNTFactDump
-    fun refusal(code: String = "font.sfnt.unsupported"): RouteDiagnostic
+sealed interface SFNTContainer {
+    data class SingleFace(val face: SFNTFaceFacts) : SFNTContainer
+    data class Collection(val version: String, val faces: List<SFNTFaceFacts>) : SFNTContainer
+}
+
+interface SFNTParser {
+    fun parse(request: SFNTParseRequest): SFNTParseResult
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.sfnt.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Single-face SFNT and TTC inputs use the same `SFNTParseRequest` and result type.
+- [ ] TTC face selection by index is deterministic and rejects out-of-range indices with `font.collection-index-invalid`.
+- [ ] Parser results expose table directory slices without copying arbitrary out-of-bounds data.
+- [ ] `sfnt-directory.json` includes source ID, container kind, collection index, table records, and diagnostics.
+- [ ] The parser contract does not instantiate scaler, shaper, fallback, or GPU types.
 
 ## Required Evidence
 
-- `sfnt-directory.json` or `sfnt-tables.json` dump.
-- Fixture bytes or manifest entry with provenance.
-- Malformed-input diagnostic snapshot.
+- `sfnt-directory.json` for one single TTF fixture and one TTC fixture face.
+- Diagnostic snapshot for invalid TTC collection index.
+- Parser API review note showing the entry point accepts bounded bytes and `FontSourceID`.
+- Determinism diff for repeated parse of the same fixture.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.sfnt.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unknown container wrappers must emit a stable `font.outline-format-unsupported` or wrapper-specific SFNT diagnostic and stay `tracked-gap`.
+- Invalid collection index must refuse the requested face; it must not silently parse another face.
 
 ## Dashboard Impact
 
-- Expected row: `Normalize SFNT/TTC parser entry points`.
+- Expected row: `SFNT/TTC parser entry points`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no. Entry-point parsing does not claim table semantics, glyph outlines, shaping, or rendering.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:sfnt:test
+rtk ./gradlew --no-daemon :font:sfnt:test --tests '*SFNTParser*' --tests '*TTC*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Entry-point contract is specified, but no parser dump evidence is attached yet.
+- Move to `ready` after M1 source identity and fixture manifest can provide stable inputs.
 
 ## Linear Labels
 

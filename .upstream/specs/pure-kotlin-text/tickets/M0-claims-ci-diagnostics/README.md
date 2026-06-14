@@ -10,9 +10,10 @@ None.
 
 ## Exit Criteria
 
-- [ ] Font modules and specs participate in required validation.
-- [ ] Diagnostic taxonomy is stable enough for later tickets.
-- [ ] Dashboard rows cannot promote support without required evidence.
+- [ ] The pure Kotlin font CI lane names all candidate `:font:*` validation tasks.
+- [ ] Pure Kotlin text spec and ticket edits trigger claim/dashboard validation.
+- [ ] Package boundaries prevent `Sk*` facade leakage and GPU renderer back edges.
+- [ ] Diagnostic taxonomy and dashboard rows reject generic text/font claims.
 
 ## Tickets
 
@@ -28,12 +29,14 @@ None.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:core:test
+rtk ./gradlew --no-daemon :font:core:test :font:sfnt:test :font:scaler:test :font:text:test :font:glyph:test :font:gpu-api:test
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePerformanceTrendWarnings pipelinePmBundle
 ```
 
 ## Non-Claims
 
-- No new font rendering or shaping support is claimed.
+- No new font rendering, shaping, fallback, SDF, color, emoji, LCD, or GPU text support is claimed.
+- CI and dashboard evidence only prove that future support claims will be checked.
 
 ## Status Update Rule
 

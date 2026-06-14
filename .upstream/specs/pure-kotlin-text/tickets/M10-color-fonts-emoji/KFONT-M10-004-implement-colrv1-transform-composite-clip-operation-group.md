@@ -14,88 +14,100 @@ legacy_gate: ["coloremoji_blendmodes"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement COLRv1 transform/composite/clip operation group" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M10: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket garde le gate `coloremoji_blendmodes` ouvert tant que les composites couleur ne sont pas prouvés.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Color Fonts, Bitmap Glyphs, SVG, and Emoji` slice until "Implement COLRv1 transform/composite/clip operation group" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+COLRv1 transforms, clips, and composites decide whether color emoji and blend-mode GMs can be promoted. The missing gap is a renderer-neutral plan for `PaintTransform`, translate/scale/rotate/skew variants, `PaintComposite`, and `PaintClipBox`, including bounds, blend/composite facts, destination-read needs, and diagnostics. Without this, Kanvas could claim color emoji support without proving the operations that make blend-heavy glyphs correct.
 
 ## Scope
 
-- Deliver the capability described by "Implement COLRv1 transform/composite/clip operation group" within `color` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `glyph.color.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M10 boundaries and update status metadata when execution starts.
+- Implement COLRv1 transform nodes: transform, translate, scale, rotate, and skew with deterministic matrix facts.
+- Implement `PaintComposite` and `PaintClipBox` plan nodes with blend/composite mode, source/destination child refs, clip bounds, and layer/destination-read hints.
+- Compute conservative bounds through nested transform, clip, gradient, solid, glyph, and colr-glyph nodes.
+- Emit `colrv1-paint-graph.json` and `color-glyph-composite-plan.json` with ordered operations and renderer handoff facts.
+- Add diagnostics for unsupported composite modes, clip budget overflow, singular transforms, and malformed transform payloads.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement GPU blend, layer, or destination-read execution; M11/gpu-renderer own route proof.
+- Do not retire `coloremoji_blendmodes` without CPU color plan evidence and GPU composite evidence.
+- Do not implement general image or SVG compositing.
+- Do not silently flatten composites into a CPU-rendered full text texture.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md`
-- `.upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md`
 - `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
-- `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
+- `.upstream/specs/gpu-renderer/21-text-glyph-pipeline.md`
 - `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM10004Plan(
-    val input: ColorGlyphRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
-)
+sealed interface COLRv1CompositeOp : COLRv1PaintOp {
+    data class Transform(
+        override val nodeId: PaintNodeId,
+        val matrix: Matrix3x3,
+        val child: PaintNodeId,
+        val transformedBounds: RectF,
+    ) : COLRv1CompositeOp
 
-interface KFontM10004Executor {
-    fun execute(plan: KFontM10004Plan): ColorGlyphPlan
-    fun refusal(code: String = "glyph.color.unsupported"): RouteDiagnostic
+    data class Composite(
+        override val nodeId: PaintNodeId,
+        val mode: ColorCompositeMode,
+        val source: PaintNodeId,
+        val destination: PaintNodeId,
+        val destinationRead: DestinationReadRequirement,
+    ) : COLRv1CompositeOp
+
+    data class ClipBox(
+        override val nodeId: PaintNodeId,
+        val clipBounds: RectF,
+        val child: PaintNodeId,
+    ) : COLRv1CompositeOp
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `glyph.color.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Fixtures cover transform, translate, scale, rotate, skew, composite, and clip nodes as separate operation cases.
+- [ ] Composite nodes record blend/composite mode and whether a future renderer route needs destination-read or layer isolation.
+- [ ] Singular transforms, unsupported composite modes, and clip budget overflow emit specific `text.color.*` diagnostics.
+- [ ] Bounds are deterministic after nested transform and clip operations.
+- [ ] `coloremoji_blendmodes` remains open until GPU route evidence proves the promoted composite modes.
 
 ## Required Evidence
 
-- Color, bitmap, SVG, or emoji route plan dump.
-- Fixture manifest entry with provenance and expected route.
-- Refusal diagnostics for unsupported payloads or paint graph states.
+- `colrv1-paint-graph.json` fixtures for transform, composite, and clip graphs.
+- `color-glyph-composite-plan.json` fixture showing destination-read/layer hints for a composite glyph.
+- Refusal fixtures for singular transform, unsupported composite mode, and clip budget overflow.
+- Dashboard note preserving `coloremoji_blendmodes` until renderer evidence exists.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `glyph.color.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
-- Legacy gate(s) `coloremoji_blendmodes` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
+- Unsupported composite behavior refuses the color glyph route or falls back to monochrome only when the fallback policy explicitly permits it.
+- The renderer must later refuse unsupported composite lowering rather than CPU-rendering full text to a texture.
+- Legacy gate `coloremoji_blendmodes` remains open until implementation evidence, diagnostics, and GPU dashboard updates are linked.
 
 ## Dashboard Impact
 
-- Expected row: `Implement COLRv1 transform/composite/clip operation group`.
+- Expected row: `COLRv1 transform/composite/clip operations`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless operation fixtures and downstream GPU evidence are linked.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*COLRv1*Composite*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Owns color glyph composite plan facts that feed M11 renderer route validation.
+- Move to `ready` only after composite/layer/destination-read plan fields are reviewed.
 
 ## Linear Labels
 

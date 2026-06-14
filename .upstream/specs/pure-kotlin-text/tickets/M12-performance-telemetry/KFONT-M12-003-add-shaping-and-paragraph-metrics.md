@@ -14,19 +14,19 @@ legacy_gate: ["scaledemoji"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Add shaping and paragraph metrics" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M12: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket montre où se situe le coût du texte complexe: segmentation, shaping, fallback, layout, hit testing et refus emoji.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Performance and Telemetry` slice until "Add shaping and paragraph metrics" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The shaping and paragraph specs require deterministic clusters, bidi facts, fallback runs, line breaking, ellipsis, selection boxes, and hit testing. M12 lacks telemetry that separates those costs. Without shaping and paragraph metrics, `scaledemoji` regressions, unsupported script refusals, or expensive line-break behavior can be hidden inside a single high-level text draw result.
 
 ## Scope
 
-- Deliver the capability described by "Add shaping and paragraph metrics" within `telemetry` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.telemetry.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M12 boundaries and update status metadata when execution starts.
+- Emit shaping metrics for Unicode segmentation, bidi analysis, script itemization, fallback lookup, GSUB lookup count/time, GPOS lookup count/time, glyph count, cluster count, fallback run count, and shaping diagnostic count.
+- Emit paragraph metrics for style run count, line break opportunity count, shaped run count, line count, layout time, hit-test index build time, selection box query time, ellipsis attempts, and placeholder count.
+- Cover fixtures for Latin kerning/ligature, Arabic joining, Devanagari reordering, mixed bidi, Thai marks, CJK variation selector, emoji VS/ZWJ or explicit `scaledemoji` refusal, rich text wrapping, and placeholder layout.
+- Preserve range-level diagnostics so unsupported scripts, missing fallback, emoji sequence refusals, and paragraph-only bidi requirements remain visible in telemetry.
+- Use KFONT-M12-001 aggregation and keep shaping metrics separate from paragraph metrics even when one validation command exercises both.
 
 ## Non-Goals
 
@@ -50,43 +50,59 @@ The pure Kotlin text target cannot promote the `Performance and Telemetry` slice
 ## Design Sketch
 
 ```kotlin
-data class KFontM12003Plan(
-    val input: TelemetrySampleInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class ShapingMetricSample(
+    val runId: ShapedRunID,
+    val script: OpenTypeScriptTag,
+    val glyphCount: Int,
+    val clusterCount: Int,
+    val fallbackRunCount: Int,
+    val gsubLookupCount: Int,
+    val gposLookupCount: Int,
+    val segmentationMicros: MetricDistribution,
+    val shapingMicros: MetricDistribution,
+    val diagnostics: List<RouteDiagnostic>,
 )
 
-interface KFontM12003Executor {
-    fun execute(plan: KFontM12003Plan): FontTelemetrySample
-    fun refusal(code: String = "font.telemetry.unsupported"): RouteDiagnostic
-}
+data class ParagraphMetricSample(
+    val paragraphId: ParagraphLayoutID,
+    val styleRunCount: Int,
+    val lineBreakOpportunityCount: Int,
+    val shapedRunCount: Int,
+    val lineCount: Int,
+    val layoutMicros: MetricDistribution,
+    val hitTestIndexBuildMicros: MetricDistribution,
+    val selectionQueryMicros: MetricDistribution,
+    val diagnostics: List<RouteDiagnostic>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.telemetry.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Shaping samples expose segmentation, bidi, script itemization, fallback lookup, GSUB, and GPOS costs as separate series.
+- [ ] Paragraph samples expose line breaking, line fitting, visual ordering, hit-test index, and selection query costs as separate series.
+- [ ] Glyph count and cluster count are serialized together so cluster inflation or collapse is visible.
+- [ ] Unsupported emoji, fallback, or script cases emit the original shaping/paragraph diagnostic plus a telemetry sample; they are not counted as successful shaped support.
+- [ ] The `scaledemoji` legacy gate remains open unless the required shaping, emoji fallback, color glyph, dashboard, and validation evidence are linked by the owning tickets.
 
 ## Required Evidence
 
-- Telemetry schema or metric dump.
-- Repeated-run sample showing deterministic dimensions.
-- Dashboard or trend report sample.
+- `shaping-metrics.json` covering Latin, Arabic, Devanagari, mixed bidi, Thai, CJK variation selector, and emoji VS/ZWJ or explicit refusal fixtures.
+- `paragraph-metrics.json` covering rich text wrapping, max-lines ellipsis, mixed bidi lines, placeholders, hit testing, and selection boxes.
+- Diagnostic snapshots for `text.shaping.emoji-sequence-unsupported`, `text.shaping.fallback-missing`, and paragraph layout refusals exercised by telemetry runs.
+- Repeated cold/warm run samples showing stable run IDs, text range dimensions, and metric aggregation.
+- Dashboard trend excerpt with separate shaping and paragraph rows and `scaledemoji` still visible when not retired.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.telemetry.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported shaping ranges still produce telemetry with refusal diagnostics; they do not synthesize glyph positions through platform shaping.
+- Paragraph-only bidi or line-break requirements must diagnose the missing paragraph context instead of falling back to single-run shaping.
 - Legacy gate(s) `scaledemoji` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
 
 ## Dashboard Impact
 
-- Expected row: `Add shaping and paragraph metrics`.
+- Expected rows: `Text shaping metrics`, `Paragraph layout metrics`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no; telemetry only makes shaping and paragraph risk visible.
 
 ## Validation
 

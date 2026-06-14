@@ -14,89 +14,88 @@ legacy_gate: ["scaledemoji", "scaledemoji_rendering", "coloremoji_blendmodes"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Add color/emoji fixture manifest" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M10: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket rassemble les preuves couleur/emoji pour que les gates historiques restent auditables.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Color Fonts, Bitmap Glyphs, SVG, and Emoji` slice until "Add color/emoji fixture manifest" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+M10 spans COLRv0, COLRv1, PNG bitmap glyphs, SVG glyphs, and emoji routes. Support cannot be promoted if fixtures are scattered, unlicensed, or missing expected diagnostics. The gap is a single color/emoji manifest that records fixture provenance, route expectations, dump names, source hashes, diagnostic expectations, legacy gate coverage, and whether GPU evidence is still required.
 
 ## Scope
 
-- Deliver the capability described by "Add color/emoji fixture manifest" within `color` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `glyph.color.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M10 boundaries and update status metadata when execution starts.
+- Create a manifest covering COLRv0 layers, COLRv1 solid/glyph/gradient/transform/composite/clip/cycle/budget cases, CBDT/CBLC PNG, sbix PNG, SVG supported/refused cases, and emoji sequence routes.
+- Record fixture ID, font source ID, glyph IDs or text sequence, provenance, license note, generated source recipe when applicable, expected route, expected diagnostics, expected dumps, and linked legacy gates.
+- Mark CPU/text evidence separately from future GPU evidence so metadata-only or CPU-only support cannot retire GPU rows.
+- Emit `color-emoji-fixture-manifest.json` with deterministic ordering and stable hashes.
+- Define rebaseline rules requiring old/new expected dump diffs and a reason for behavior changes.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement missing color, bitmap, SVG, or emoji behavior in this manifest ticket.
+- Do not add large external font corpora without minimized fixture extraction and license review.
+- Do not update top-level statuses outside this milestone scope.
+- Do not retire `scaledemoji`, `scaledemoji_rendering`, or `coloremoji_blendmodes` without implementation and GPU evidence.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md`
-- `.upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md`
-- `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
 - `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM10010Plan(
-    val input: ColorGlyphRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class ColorEmojiFixtureManifestEntry(
+    val fixtureId: String,
+    val family: ColorEmojiFixtureFamily,
+    val fontSourceId: FontSourceID,
+    val textOrGlyphTarget: FixtureTarget,
+    val provenance: FixtureProvenance,
+    val expectedRoute: GlyphRepresentationRoute,
+    val expectedDiagnostics: List<String>,
+    val expectedDumpFiles: List<String>,
+    val legacyGates: List<String>,
+    val gpuEvidenceRequired: Boolean,
 )
-
-interface KFontM10010Executor {
-    fun execute(plan: KFontM10010Plan): ColorGlyphPlan
-    fun refusal(code: String = "glyph.color.unsupported"): RouteDiagnostic
-}
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `glyph.color.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `fixture-gated` until all evidence and validation criteria are satisfied.
+- [ ] The manifest covers every M10 ticket family and links each fixture to expected dump files.
+- [ ] Fixture provenance, license notes, source hashes, and generated recipes are present for every entry.
+- [ ] Legacy gates `scaledemoji`, `scaledemoji_rendering`, and `coloremoji_blendmodes` are mapped to specific fixtures and remaining evidence.
+- [ ] GPU-required rows remain blocked until M11 evidence is linked.
+- [ ] Rebaseline updates require reviewed old/new expectation diffs and cannot auto-overwrite goldens.
 
 ## Required Evidence
 
-- Color, bitmap, SVG, or emoji route plan dump.
-- Fixture manifest entry with provenance and expected route.
-- Refusal diagnostics for unsupported payloads or paint graph states.
-- Classification remains `fixture-gated` until all evidence is attached.
+- `color-emoji-fixture-manifest.json` with COLRv0, COLRv1, bitmap PNG, SVG, and emoji entries.
+- Cross-reference dump listing expected `color-glyph-plan.json`, `colrv1-paint-graph.json`, `bitmap-glyph-plan.json`, `svg-glyph-plan.json`, and `emoji-route-trace.json` files.
+- Dashboard snapshot keeping fixture-gated rows classified as `fixture-gated` until all required evidence is attached.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `glyph.color.*` diagnostic and keep the ticket classified as `fixture-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
-- Legacy gate(s) `scaledemoji`, `scaledemoji_rendering`, `coloremoji_blendmodes` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
+- Missing fixture provenance keeps the affected route `fixture-gated`.
+- Missing GPU evidence keeps GPU-dependent legacy gates open even when CPU/text fixtures exist.
+- External drift reports may be linked as non-normative only and cannot replace manifest expectations.
 
 ## Dashboard Impact
 
-- Expected row: `Add color/emoji fixture manifest`.
+- Expected row: `Color and emoji fixture manifest`.
 - Expected classification: `fixture-gated`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless manifest provenance, expected diagnostics, and required evidence links are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*ColorEmoji*Fixture*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Manifest gate for all M10 evidence and legacy color/emoji gate traceability.
+- Move to `ready` only after fixture families, provenance fields, and legacy gate mappings are reviewed.
 
 ## Linear Labels
 

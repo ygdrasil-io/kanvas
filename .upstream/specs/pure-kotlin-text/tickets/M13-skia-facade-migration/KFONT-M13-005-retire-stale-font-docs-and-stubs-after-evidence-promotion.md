@@ -14,19 +14,19 @@ legacy_gate: ["coloremoji_blendmodes", "scaledemoji", "scaledemoji_rendering", "
 
 ## PM Note
 
-Ce ticket sert à livrer "Retire stale font docs and stubs after evidence promotion" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M13: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket empêche de fermer des anciens blockers par simple nettoyage de docs: chaque retrait doit pointer vers une preuve complète.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Skia-like Facade Migration` slice until "Retire stale font docs and stubs after evidence promotion" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+After M13 route work lands, stale docs, stub constants, and old blocker labels can contradict the pure Kotlin target. Removing them too early is worse than leaving them: it can erase durable gates such as `scaledemoji`, `dftext`, or `fontations` before the new route has fixtures, dumps, diagnostics, CPU/GPU evidence, and dashboard updates. This ticket defines the retirement decision record for docs and stubs.
 
 ## Scope
 
-- Deliver the capability described by "Retire stale font docs and stubs after evidence promotion" within `docs-validation` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.docs.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M13 boundaries and update status metadata when execution starts.
+- Inventory stale font docs, legacy stub names, dashboard rows, and blocker labels that are candidates for retirement after M13 adapter evidence.
+- For each candidate, record owning target spec, replacement ticket/evidence, legacy gate, required retirement evidence, decision (`retire`, `keep-current-gate`, `expected-unsupported`, or `drift-only`), and dashboard action.
+- Retire only rows whose new route has implementation tests, fixture provenance, semantic dump, CPU oracle evidence, GPU evidence when GPU support is claimed, stable diagnostics for remaining subcases, and PM/dashboard updates.
+- Preserve expected-unsupported and drift-only documentation for native engine parity, Fontations/FreeType comparison, SkSL compiler work, LCD, and PDF subset workstreams.
+- Produce a deterministic retirement report that can be reviewed before stale docs or stubs are removed.
 
 ## Non-Goals
 
@@ -48,43 +48,52 @@ The pure Kotlin text target cannot promote the `Skia-like Facade Migration` slic
 ## Design Sketch
 
 ```kotlin
-data class KFontM13005Plan(
-    val input: LegacyRetirementInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+enum class LegacyRetirementAction {
+    Retire,
+    KeepCurrentGate,
+    ExpectedUnsupported,
+    DriftOnly,
 )
 
-interface KFontM13005Executor {
-    fun execute(plan: KFontM13005Plan): LegacyRetirementDecision
-    fun refusal(code: String = "font.docs.unsupported"): RouteDiagnostic
-}
+data class LegacyRetirementDecision(
+    val legacyGate: String,
+    val currentArtifact: String,
+    val targetSpec: String,
+    val replacementEvidenceRefs: List<String>,
+    val requiredEvidenceSatisfied: Boolean,
+    val action: LegacyRetirementAction,
+    val dashboardRow: String,
+    val diagnostics: List<RouteDiagnostic>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.docs.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Every candidate legacy doc/stub/blocker row has a `LegacyRetirementDecision` with target spec, evidence refs, dashboard row, and action.
+- [ ] No legacy gate is retired unless all retirement evidence from `09-migration-from-current-font-pack.md` is present.
+- [ ] `fontations` and `fontations_ft_compare` remain `drift-only` or `expected-unsupported`; they are never converted into normative dependencies.
+- [ ] `pdf_never_embed` remains adjacent PDF/subset work unless a future runtime font target explicitly adopts it.
+- [ ] Dashboard and PM bundle diffs show retired rows, kept gates, expected-unsupported rows, and drift-only rows separately.
 
 ## Required Evidence
 
-- Facade/core parity dump or migration inventory row.
-- Diagnostic mapping and remaining legacy gate evidence.
-- PM bundle or dashboard diff.
+- `legacy-retirement-decisions.json` covering `coloremoji_blendmodes`, `scaledemoji`, `scaledemoji_rendering`, `dftext`, `fontations`, `fontations_ft_compare`, and `pdf_never_embed`.
+- `stale-font-docs-inventory.md` listing each stale doc/stub/blocker candidate and its replacement target spec section.
+- Evidence links for each retired row: implementation tests, fixture provenance, semantic dump, CPU oracle, GPU evidence when claimed, stable diagnostics, and dashboard update.
+- PM bundle/dashboard diff showing retired versus retained gates.
+- Diagnostic snapshot for any attempted retirement refused by missing evidence.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.docs.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Missing evidence produces a `font.docs.retirement-evidence-missing` diagnostic and keeps the current gate visible.
+- Stale wording can be corrected to point at the target spec, but blocker removal waits for the retirement decision evidence.
 - Legacy gate(s) `coloremoji_blendmodes`, `scaledemoji`, `scaledemoji_rendering`, `dftext`, `fontations`, `fontations_ft_compare`, `pdf_never_embed` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
 
 ## Dashboard Impact
 
-- Expected row: `Retire stale font docs and stubs after evidence promotion`.
+- Expected rows: `Legacy font gate retirement`, `Expected unsupported font rows`, `Drift-only font rows`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless each retired row has a complete retirement decision record.
 
 ## Validation
 

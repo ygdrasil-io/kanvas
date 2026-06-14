@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add bundled deterministic font catalog" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M7: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket donne une base de fallback reproductible, pour que les tests texte ne dependent pas des fontes installees sur la machine.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Fallback and System Fonts` slice until "Add bundled deterministic font catalog" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Fallback cannot be a support claim if the catalog is implicit, host-dependent, or based only on family names. Kanvas needs a deterministic bundled catalog with font provenance, typeface identities, family/style/generic/script/locale/emoji facts, coverage facts, and license metadata before fallback decisions can be audited.
 
 ## Scope
 
-- Deliver the capability described by "Add bundled deterministic font catalog" within `fallback` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.fallback.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M7 boundaries and update status metadata when execution starts.
+- Define the bundled fallback catalog schema and loader for deterministic repo-owned font fixtures.
+- Record `FontSourceID`, `TypefaceID`, source hash, collection index, family/style names, generic family, supported scripts, language/locale hints, emoji/color capability facts, variation axes, palette facts, and license/provenance fields.
+- Produce `font-catalog.json` with stable ordering and content hashes.
+- Add diagnostics for duplicate family/style entries, missing required table facts, unsupported outline format, incomplete license/provenance, and missing glyph coverage metadata.
+- Keep host system fonts out of the bundled catalog unless their bytes are captured as deterministic fixtures.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement fallback ranking or run splitting; KFONT-M7-002 owns decisions.
+- Do not scan host system font directories; KFONT-M7-005 owns host-dependent scans.
+- Do not implement color emoji rendering or glyph artifacts.
+- Do not make bundled catalog presence imply full script shaping support.
 
 ## Spec Sources
 
@@ -41,41 +41,49 @@ The pure Kotlin text target cannot promote the `Fallback and System Fonts` slice
 - `.upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md`
 - `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM7001Plan(
-    val input: FallbackRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class BundledFontCatalog(
+    val generation: Int,
+    val entries: List<FontCatalogEntry>,
+    val diagnostics: List<RouteDiagnostic>,
 )
 
-interface KFontM7001Executor {
-    fun execute(plan: KFontM7001Plan): FallbackDecisionTrace
-    fun refusal(code: String = "text.fallback.unsupported"): RouteDiagnostic
-}
+data class FontCatalogEntry(
+    val sourceId: FontSourceID,
+    val typefaceId: TypefaceID,
+    val provenance: FontProvenance,
+    val family: FontFamilyName,
+    val style: FontStyleFacts,
+    val genericFamilies: Set<GenericFontFamily>,
+    val coverage: FontCoverageFacts,
+    val variationAxes: List<VariationAxisFacts>,
+    val license: FontLicenseFacts,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.fallback.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Two catalog loads from the same bundled font bytes produce byte-identical `font-catalog.json`.
+- [ ] Each catalog entry records source/typeface IDs, hashes, family/style/generic facts, script coverage, locale hints, emoji/color capability facts, variation axes, and provenance/license metadata.
+- [ ] Duplicate or conflicting face facts emit deterministic diagnostics and do not silently override earlier entries.
+- [ ] Catalog ordering is deterministic and independent of filesystem enumeration order.
+- [ ] Host-installed fonts are absent from the bundled deterministic catalog unless committed as fixture bytes.
 
 ## Required Evidence
 
-- `font-catalog.json` or `resolved-font-runs.json` dump.
-- `fallback-decision-trace.json` with selected/refused faces.
-- Host-dependent or missing-glyph diagnostic snapshot.
+- `font-catalog.json` with catalog generation, entry ordering, font source/typeface IDs, coverage facts, variation facts, license/provenance, and diagnostics.
+- Fixtures: bundled Latin/Greek/Cyrillic face, bundled Hebrew/Arabic face, bundled Devanagari/Thai face, bundled CJK face, optional bundled emoji-capable face metadata fixture, duplicate-family conflict fixture.
+- Diagnostics asserted in tests: `font.required-table-missing`, `font.outline-format-unsupported`, `font.fallback-family-unavailable`, `font.catalog.duplicate-face`, `font.catalog.provenance-missing`.
+- Review evidence that bundled font bytes and licenses are deterministic and repo-owned or license-compatible.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.fallback.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `text.fallback.catalog-entry-malformed`, `font.source.host-dependent`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -87,13 +95,13 @@ interface KFontM7001Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*FontCatalog*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Bundled catalog is the deterministic fallback foundation.
+- Move to `ready` only after catalog fields, fixture families, and provenance requirements are reviewed.
 
 ## Linear Labels
 

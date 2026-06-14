@@ -14,19 +14,19 @@ legacy_gate: ["typeface"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Route `SkTypeface` OpenType facts through pure Kotlin core" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M13: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket fait de `SkTypeface` une vue de compatibilité sur les faits OpenType pure Kotlin, au lieu d'un chemin font séparé.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Skia-like Facade Migration` slice until "Route `SkTypeface` OpenType facts through pure Kotlin core" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+`SkTypeface` exposes family/style facts, collection index, table access, glyph-affecting identity, variation and palette data, and metrics used by compatibility APIs. If those facts are produced by facade-specific parsing, M13 keeps two sources of truth. The facade must instead adapt pure Kotlin `FontSourceID`, `TypefaceID`, SFNT/OpenType table facts, and scaler metrics, while preserving deterministic refusals for unsupported or malformed font data.
 
 ## Scope
 
-- Deliver the capability described by "Route `SkTypeface` OpenType facts through pure Kotlin core" within `skia-facade` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `kanvas.facade.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M13 boundaries and update status metadata when execution starts.
+- Route `SkTypeface` construction and inspection through pure Kotlin font core contracts: `FontSourceID`, `TypefaceID`, table directory facts, family/style metadata, collection index, variation coordinates, palette facts, and scaler kind.
+- Map supported OpenType table queries to bounded pure Kotlin SFNT table access; unsupported or malformed tables must return stable facade/core diagnostics.
+- Preserve deterministic behavior for bundled/generated fixtures and mark host-dependent system scans as non-normative unless bytes are captured.
+- Emit facade parity dumps that compare public `SkTypeface` facts with core `typeface-id.json`, `sfnt-directory.json`, and `sfnt-tables.json` facts.
+- Keep legacy `typeface` gate visible until the facade and core dumps prove the same scoped behavior.
 
 ## Non-Goals
 
@@ -48,43 +48,53 @@ The pure Kotlin text target cannot promote the `Skia-like Facade Migration` slic
 ## Design Sketch
 
 ```kotlin
-data class KFontM13002Plan(
-    val input: SkiaFacadeCall,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class SkTypefaceAdapter(
+    val skTypefaceHandle: SkTypefaceHandle,
+    val fontSourceId: FontSourceID,
+    val typefaceId: TypefaceID,
+    val tableFacts: OpenTypeTableFacts,
+    val scalerKind: ScalerKind,
+    val diagnostics: List<RouteDiagnostic>,
 )
 
-interface KFontM13002Executor {
-    fun execute(plan: KFontM13002Plan): FacadeMigrationEvidence
-    fun refusal(code: String = "kanvas.facade.unsupported"): RouteDiagnostic
-}
+data class SkTypefaceOpenTypeFactsDump(
+    val postScriptName: String?,
+    val familyName: String?,
+    val styleFacts: TypefaceStyleFacts,
+    val collectionIndex: Int,
+    val variationCoordinates: Map<String, Double>,
+    val paletteId: String?,
+    val tableTags: List<String>,
+    val coreDumpRefs: List<String>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `kanvas.facade.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] `SkTypeface` fixture construction records the same `FontSourceID` and `TypefaceID` as the pure Kotlin core for the same captured bytes.
+- [ ] Public facade facts for family/style, collection index, variation coordinates, palette, table tags, and scaler kind are derived from core table/scaler facts.
+- [ ] Malformed or missing tables propagate core diagnostics instead of being hidden by facade defaults.
+- [ ] Host-dependent system typefaces are marked non-normative unless the source bytes are captured as fixtures.
+- [ ] The `typeface` legacy gate remains open until facade/core dumps, diagnostics, tests, and dashboard evidence are linked.
 
 ## Required Evidence
 
-- Facade/core parity dump or migration inventory row.
-- Diagnostic mapping and remaining legacy gate evidence.
-- PM bundle or dashboard diff.
+- `sktypeface-opentype-facts.json` for bundled TTF, TTC, OTF/CFF, variable font, malformed directory, and missing required table fixtures.
+- Parity dump linking each facade fact to `typeface-id.json`, `sfnt-directory.json`, and `sfnt-tables.json` core dumps.
+- Diagnostic snapshots for malformed directory, missing required table, unsupported table request, and host-dependent system scan.
+- `typeface` legacy gate dashboard row showing current status and required retirement evidence.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `kanvas.facade.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported OpenType facts return facade diagnostics that preserve the core refusal reason; no native parser fills missing facts.
+- Missing captured bytes for system fonts mark the route host-dependent rather than deterministic support.
 - Legacy gate(s) `typeface` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
 
 ## Dashboard Impact
 
-- Expected row: `Route SkTypeface OpenType facts through pure Kotlin core`.
+- Expected row: `SkTypeface core facts route`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless facade/core parity evidence and legacy gate retirement evidence are attached.
 
 ## Validation
 

@@ -2,17 +2,18 @@
 
 ## Goal
 
-Build the paragraph style, segmentation, line breaking, ellipsis, hit testing, and placeholder contracts over the shaping stack.
+Build the pure Kotlin paragraph layer that turns immutable rich text input into shaped requests, UAX #14 line breaks, fitted lines, ellipsis state, placeholder boxes, selection geometry, hit-test maps, and deterministic diagnostics.
 
 ## Dependencies
 
-M5 Unicode, M6 shaping, and M7 fallback contracts.
+M5 supplies Unicode grapheme, bidi, script, and line-break data. M6 supplies shaping contracts and shaped glyph runs. M7 supplies deterministic fallback runs. M8 does not parse fonts and does not produce GPU artifacts.
 
 ## Exit Criteria
 
-- [ ] Paragraph inputs, shaped runs, lines, boxes, and diagnostics are dumpable.
-- [ ] Line breaks and truncation preserve cluster invariants.
-- [ ] Selection, hit testing, and placeholders have deterministic layout evidence.
+- [ ] `ParagraphInput`, `ParagraphShapingRequest`, `LineBreakMap`, `ParagraphLayoutResult`, `PlaceholderBox`, and `HitTestMap` are dumpable value-object contracts.
+- [ ] Rich style spans, fallback splits, bidi lines, UAX #14 breaks, ellipsis, placeholders, selection, and hit testing have deterministic fixtures.
+- [ ] Invalid style, line-break, ellipsis, placeholder, selection, and hit-test cases emit stable `text.paragraph.*` diagnostics.
+- [ ] Paragraph output can be consumed by M9 glyph artifact planning without re-shaping or re-parsing fonts.
 
 ## Tickets
 
@@ -29,12 +30,15 @@ M5 Unicode, M6 shaping, and M7 fallback contracts.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*Paragraph*'
 ```
+
+Required evidence for this milestone includes `paragraph-input.json`, `paragraph-shaping-requests.json`, `line-breaks.json`, `paragraph-layout.json`, `placeholder-layout.json`, and `hit-test-map.json` fixtures.
 
 ## Non-Claims
 
-- Paragraph layout does not claim GPU text rendering by itself.
+- M8 does not claim glyph artifact generation, atlas creation, or GPU text rendering.
+- Skia Paragraph, browser layout, platform shaping, and native accessibility APIs may appear only in non-normative drift reports.
 
 ## Status Update Rule
 

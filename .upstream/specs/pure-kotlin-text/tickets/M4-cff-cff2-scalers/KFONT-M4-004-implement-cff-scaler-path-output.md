@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement CFF scaler path output" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M4: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket est le point ou une fonte OTF/CFF devient un glyph outline Kanvas verifiable, avec metrics et refus visibles.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `CFF and CFF2 Scalers` slice until "Implement CFF scaler path output" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Parsing and executing CFF charstrings is not enough to claim scaler support. Kanvas needs CFF glyph IDs from `cmap`, `.notdef` handling, widths, font metrics, path conversion, bounds, and path hashes that match the pure Kotlin glyph representation contracts.
 
 ## Scope
 
-- Deliver the capability described by "Implement CFF scaler path output" within `font-scaler` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.scaler.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M4 boundaries and update status metadata when execution starts.
+- Connect CFF parser facts, Type 2 execution, `cmap` mapping, and scaler input into a `CffScaler`.
+- Convert Type 2 commands into the immutable Kanvas path representation with deterministic contour order and fill rule.
+- Compute glyph bounds, advance width, vertical metrics when available, and `.notdef` fallback facts.
+- Emit `glyph-outline.json`, `glyph-metrics.json`, and the linked `cff-charstring-trace.json` for every fixture glyph under test.
+- Preserve hint metadata as drift-only context; it must not alter normative outline output.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement CFF2 variation output; KFONT-M4-005 owns that route.
+- Do not generate A8, SDF, atlas, or GPU artifacts.
+- Do not claim pixel-perfect parity with FreeType, Skia native, or platform rasterizers.
+- Do not add fallback font selection; this ticket only owns glyph output inside one selected CFF face.
 
 ## Spec Sources
 
@@ -45,36 +45,52 @@ The pure Kotlin text target cannot promote the `CFF and CFF2 Scalers` slice unti
 ## Design Sketch
 
 ```kotlin
-data class KFontM4004Plan(
-    val input: ScalerGlyphInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+class CffScaler(
+    private val fontSet: CffFontSet,
+    private val machine: Type2CharStringMachine,
+    private val cmap: UnicodeCmap,
+) {
+    fun scale(request: GlyphScaleRequest): CffScaledGlyph
+}
+
+data class CffScaledGlyph(
+    val glyphId: GlyphId,
+    val sourceCodePoint: Int?,
+    val path: KanvasGlyphPath?,
+    val metrics: CffGlyphMetrics,
+    val bounds: FontBounds?,
+    val notdefUsed: Boolean,
+    val diagnostics: List<RouteDiagnostic>,
 )
 
-interface KFontM4004Executor {
-    fun execute(plan: KFontM4004Plan): ScaledGlyphEvidence
-    fun refusal(code: String = "font.scaler.unsupported"): RouteDiagnostic
-}
+data class CffGlyphMetrics(
+    val advanceX: FontUnit,
+    val advanceY: FontUnit?,
+    val defaultWidthX: FontUnit?,
+    val nominalWidthX: FontUnit?,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.scaler.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] OTF/CFF fixture with line, curve, flex, and subroutine glyphs produces stable path command hashes.
+- [ ] Metrics dump records width source, advance, bounds, and font/source identity for each tested glyph.
+- [ ] Missing code point and malformed glyph fixtures produce `.notdef` or a glyph-local refusal with the original diagnostic retained.
+- [ ] Path output is deterministic across repeated runs and independent of host-installed fonts.
+- [ ] External FreeType or Skia comparisons, if present, are labeled drift-only and cannot update pass/fail expectations.
 
 ## Required Evidence
 
-- `glyph-outline.json`, metrics, bounds, or charstring trace dump.
-- CPU path/hash expectation for supported fixtures.
-- Malformed glyph refusal diagnostic.
+- `glyph-outline.json` with glyph ID, source cluster/code point, path commands, fill rule, bounds, path hash, and linked charstring trace ID.
+- `glyph-metrics.json` with advance, width source, vertical facts when present, `.notdef` decision, and typeface identity.
+- Fixtures: `cff-scaler-basic.otf`, `cff-scaler-subroutines.otf`, `cff-scaler-flex.otf`, `cff-scaler-missing-glyph.otf`, `cff-scaler-malformed-glyph.otf`.
+- Diagnostics asserted in tests: `font.cff-stack-malformed`, `font.cff-operator-unsupported`, `font.fallback-glyph-unavailable`, `text.glyph.outline-unavailable`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.scaler.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `font.scaler.cff.path-output-unavailable`, `font.scaler.cff.glyph-malformed`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -86,13 +102,13 @@ interface KFontM4004Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:scaler:test
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*CffScaler*' --tests '*CffPath*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: This is the M4 CFF single-master support promotion ticket.
+- Move to `ready` only after path dump schema and fixture glyph set are accepted.
 
 ## Linear Labels
 

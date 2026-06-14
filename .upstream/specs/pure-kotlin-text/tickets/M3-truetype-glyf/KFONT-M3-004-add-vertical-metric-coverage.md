@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add vertical metric coverage" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M3: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket rend les métriques verticales visibles avant de promettre un rendu de texte vertical.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `TrueType glyf Scaler` slice until "Add vertical metric coverage" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The font target owns vertical metrics from `vhea`, `vmtx`, `VVAR`, and related metric facts when present. M3 needs coverage for extracting and dumping those metrics, but must not imply full vertical shaping or paragraph layout. Without explicit diagnostics, missing or malformed vertical tables can be confused with supported vertical text behavior.
 
 ## Scope
 
-- Deliver the capability described by "Add vertical metric coverage" within `font-scaler` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.scaler.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M3 boundaries and update status metadata when execution starts.
+- Parse and expose vertical advances, top side bearings, vertical origin facts, and vertical font metrics from `vhea` and `vmtx`.
+- Apply `VVAR` deltas for variable fonts when available.
+- Emit diagnostics for absent vertical metric tables, malformed vertical metrics, and unavailable variation metrics.
+- Include vertical fields in `glyph-metrics.json` with clear `present`, `fallback`, and `diagnostic` states.
+- Document when horizontal metrics are used only as a fallback fact, not as a vertical text support claim.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement vertical shaping, vertical glyph substitution, line layout, or paragraph behavior.
+- Do not claim GPU text support or vertical atlas behavior.
+- Do not invent vertical metrics when tables are absent.
+- Do not make platform engine metrics normative.
 
 ## Spec Sources
 
@@ -46,54 +46,57 @@ The pure Kotlin text target cannot promote the `TrueType glyf Scaler` slice unti
 ## Design Sketch
 
 ```kotlin
-data class KFontM3004Plan(
-    val input: ScalerGlyphInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class VerticalMetricFacts(
+    val glyphId: GlyphID,
+    val verticalAdvance: Int?,
+    val topSideBearing: Int?,
+    val verticalOriginY: Int?,
+    val source: MetricSource,
+    val diagnostics: List<SerializedFontDiagnostic>,
 )
 
-interface KFontM3004Executor {
-    fun execute(plan: KFontM3004Plan): ScaledGlyphEvidence
-    fun refusal(code: String = "font.scaler.unsupported"): RouteDiagnostic
+class VerticalMetricResolver {
+    fun resolve(typeface: TypefaceID, glyphId: GlyphID, position: VariationPosition): VerticalMetricFacts
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.scaler.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Fixtures with `vhea` and `vmtx` produce vertical advances and bearings in `glyph-metrics.json`.
+- [ ] Fixtures without vertical tables show an explicit absent/fallback diagnostic and do not claim vertical layout support.
+- [ ] `VVAR` deltas apply at varied coordinates when fixture data exists.
+- [ ] Malformed vertical metrics emit precise diagnostics without crashing horizontal outline scaling.
+- [ ] Dashboard classification remains `tracked-gap` until vertical metric dumps and diagnostics are attached.
 
 ## Required Evidence
 
-- `glyph-outline.json`, metrics, bounds, or charstring trace dump.
-- CPU path/hash expectation for supported fixtures.
-- Malformed glyph refusal diagnostic.
+- `glyph-metrics.json` for a fixture with `vhea`/`vmtx`.
+- `glyph-metrics.json` for a fixture without vertical tables showing explicit diagnostic/fallback state.
+- Variation metric evidence for `VVAR` when available.
+- Diagnostic snapshot for malformed `vhea`, `vmtx`, or `VVAR`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.scaler.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Missing vertical tables may expose horizontal metrics as a fallback fact only with a diagnostic; it is not a vertical text support claim.
+- Malformed vertical metrics must fail closed for vertical metric coverage while preserving safe horizontal scaler behavior.
 
 ## Dashboard Impact
 
-- Expected row: `Add vertical metric coverage`.
+- Expected row: `TrueType vertical metric facts`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: only for metric extraction, not vertical shaping or layout.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:scaler:test
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*VerticalMetric*' --tests '*VVAR*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Vertical metric coverage is specified, but no metrics dump evidence is attached yet.
+- Move to `ready` after OpenType table fact dumps expose `vhea`, `vmtx`, and variation metric tables.
 
 ## Linear Labels
 

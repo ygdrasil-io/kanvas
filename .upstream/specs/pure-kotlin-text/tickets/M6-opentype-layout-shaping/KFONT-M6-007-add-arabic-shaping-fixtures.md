@@ -14,68 +14,73 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add Arabic shaping fixtures" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M6: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket prouve les formes arabes attendues, les marques et l'attache cursive avant toute promesse de support Arabic.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `OpenType Layout Shaping` slice until "Add Arabic shaping fixtures" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Arabic support cannot be inferred from generic GSUB/GPOS lookup coverage. The required script matrix needs fixtures for joining forms, lam-alef, required ligatures, marks, cursive attachment, and mixed bidi behavior, with explicit refusals when required features or positioning data are missing.
 
 ## Scope
 
-- Deliver the capability described by "Add Arabic shaping fixtures" within `shaping` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.shaping.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M6 boundaries and update status metadata when execution starts.
+- Add Arabic fixture fonts and text inputs for isolated, initial, medial, and final forms; lam-alef; required ligatures; mark attachment; cursive attachment; and mixed LTR/RTL runs.
+- Record shaping plans, GSUB traces, GPOS traces, shaped glyph runs, bidi run links, feature policy choices, and refusal diagnostics.
+- Assert cluster preservation through Arabic joining substitutions and mark positioning.
+- Include negative fixtures for missing cursive attachment, missing mark data, unsupported lookup, malformed GDEF, and single-run request that needs paragraph bidi context.
+- Label external HarfBuzz comparisons as drift-only if they are generated for review.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement color emoji, fallback catalog, paragraph visual ordering, or renderer output.
+- Do not claim every Arabic language system; the fixture set covers the target matrix minimum.
+- Do not approximate joining with Unicode presentation forms when OpenType shaping data is missing.
+- Do not retire any unrelated legacy font gates.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM6007Plan(
-    val input: ShapingInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class ArabicShapingFixture(
+    val name: String,
+    val text: TextInput,
+    val expectedFeatures: Set<OpenTypeFeatureTag>,
+    val expectedGlyphClasses: List<ArabicJoiningForm>,
+    val requiredDiagnostics: Set<String> = emptySet(),
 )
 
-interface KFontM6007Executor {
-    fun execute(plan: KFontM6007Plan): ShapedGlyphRun
-    fun refusal(code: String = "text.shaping.unsupported"): RouteDiagnostic
-}
+data class ArabicFixtureEvidence(
+    val fixture: ArabicShapingFixture,
+    val shapingPlanHash: Sha256,
+    val gsubTraceHash: Sha256,
+    val gposTraceHash: Sha256,
+    val shapedRunHash: Sha256,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.shaping.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `fixture-gated` until all evidence and validation criteria are satisfied.
+- [ ] Fixtures cover isolated, initial, medial, final, lam-alef, mark attachment, cursive attachment, and mixed bidi Arabic cases.
+- [ ] `shaping-plan.json` enables required Arabic defaults: `init`, `medi`, `fina`, `isol`, `rlig`, `liga`, `calt`, `mark`, `mkmk`, and cursive attachment where tables exist.
+- [ ] `gsub-trace.json` and `gpos-trace.json` show the specific lookups that changed forms, ligatures, marks, and cursive attachment.
+- [ ] Missing cursive or required mark positioning refuses the affected run instead of claiming approximate support.
+- [ ] Bidi run references from M5 are preserved in the shaped output.
 
 ## Required Evidence
 
-- `shaping-plan.json` and `shaped-glyph-run.json` dump.
-- GSUB/GPOS trace when lookups are involved.
-- Cluster invariant or script refusal fixture.
-- Classification remains `fixture-gated` until all evidence is attached.
+- `arabic-shaping-report.json` summarizing fixture provenance, expected feature set, dump hashes, positive/refusal status, and drift-only comparison links if present.
+- `shaping-plan.json`, `gsub-trace.json`, `gpos-trace.json`, `shaped-glyph-run.json`, and `bidi-runs.json` for each Arabic fixture.
+- Fixtures: `arabic-joining-forms.otf`, `arabic-lam-alef.otf`, `arabic-marks-cursive.otf`, `arabic-mixed-bidi.txt`, `arabic-missing-cursive.otf`, `arabic-missing-mark.otf`.
+- Diagnostics asserted in tests: `text.shaping.cursive-attachment-unavailable`, `text.shaping.mark-positioning-unavailable`, `text.shaping.gdef-required`, `text.shaping.paragraph-bidi-required`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.shaping.*` diagnostic and keep the ticket classified as `fixture-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `text.shaping.arabic-cursive-unsupported`, `text.shaping.arabic-mark-unsupported`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `fixture-gated` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -87,13 +92,13 @@ interface KFontM6007Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Arabic fixture ticket depends on contextual GSUB, mark/cursive GPOS, feature policy, and bidi runs.
+- Move to `ready` only after fixture fonts and expected dump names are reviewed.
 
 ## Linear Labels
 

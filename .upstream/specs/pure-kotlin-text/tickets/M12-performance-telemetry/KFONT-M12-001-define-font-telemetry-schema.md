@@ -14,19 +14,20 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Define font telemetry schema" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M12: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket fixe le vocabulaire commun des mesures font/text, pour que les tendances PM comparent les mêmes signaux d'un subsystem à l'autre.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Performance and Telemetry` slice until "Define font telemetry schema" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+M12 needs parser, scaler, shaping, paragraph, glyph, and GPU handoff telemetry, but the catalog does not yet define one shared sample envelope, dimension set, or aggregation policy. Without that schema, each subsystem can emit incompatible timing names or single-run numbers, and dashboard trend warnings cannot distinguish a real regression from a missing metric or host-specific run.
 
 ## Scope
 
-- Deliver the capability described by "Define font telemetry schema" within `telemetry` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.telemetry.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M12 boundaries and update status metadata when execution starts.
+- Define the canonical `FontTelemetrySample` envelope for all font/text metrics.
+- Define required dimensions: environment, runtime, device or adapter when GPU is involved, font source set, Unicode data version, cache state, fixture ID, sample count, and measurement phase.
+- Define typed metric families for parser, scaler, shaping, paragraph, glyph artifact/cache, and GPU handoff samples.
+- Define deterministic aggregation fields for repeated samples: median, p90, max, count, warm/cold split, byte counters, memory counters, and diagnostic counters.
+- Define stable schema/refusal diagnostics such as `font.telemetry.schema-domain-missing`, `font.telemetry.dimension-missing`, and `font.telemetry.single-run-budget-refused`.
+- Provide the dashboard row mapping that keeps indicative budgets advisory until an explicit budget-promotion spec update exists.
 
 ## Non-Goals
 
@@ -50,42 +51,67 @@ The pure Kotlin text target cannot promote the `Performance and Telemetry` slice
 ## Design Sketch
 
 ```kotlin
-data class KFontM12001Plan(
-    val input: TelemetrySampleInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+enum class FontTelemetryDomain {
+    Parser,
+    Scaler,
+    Shaping,
+    Paragraph,
+    GlyphArtifact,
+    GPUTextHandoff,
 )
 
-interface KFontM12001Executor {
-    fun execute(plan: KFontM12001Plan): FontTelemetrySample
-    fun refusal(code: String = "font.telemetry.unsupported"): RouteDiagnostic
-}
+enum class CacheState { Cold, Warm, Mixed }
+
+data class FontTelemetrySample(
+    val schemaVersion: Int,
+    val domain: FontTelemetryDomain,
+    val fixtureId: String,
+    val fontSourceSetHash: String,
+    val unicodeDataVersion: String,
+    val environment: MeasurementEnvironment,
+    val cacheState: CacheState,
+    val sampleCount: Int,
+    val metrics: List<FontMetricSeries>,
+    val diagnostics: List<RouteDiagnostic>,
+)
+
+data class FontMetricSeries(
+    val name: String,
+    val unit: MetricUnit,
+    val median: Double,
+    val p90: Double,
+    val max: Double,
+    val counters: Map<String, Long>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.telemetry.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] The schema records every measurement dimension required by `08-performance-budgets-and-telemetry.md`, including GPU adapter facts only when GPU metrics are present.
+- [ ] Metric names are namespaced by domain and cannot mix CPU generation time with GPU upload time in one field.
+- [ ] A repeated-run fixture serializes median, p90, max, sample count, and cache state; single-run timing cannot be interpreted as a release budget.
+- [ ] Missing mandatory dimensions produce `font.telemetry.dimension-missing` with the domain, fixture ID, and missing field name.
+- [ ] Dashboard trend warnings can ingest one sample from every telemetry domain without changing claim impact from `tracked-gap`.
 
 ## Required Evidence
 
-- Telemetry schema or metric dump.
-- Repeated-run sample showing deterministic dimensions.
-- Dashboard or trend report sample.
+- `font-telemetry-schema.json` with all required domains, metric units, dimension names, and diagnostic codes.
+- `font-telemetry-schema-fixture.json` showing one parser, scaler, shaping, paragraph, glyph artifact, and GPU handoff sample.
+- Repeated-run dump proving stable key order and stable dimensions for the same fixture inputs.
+- Diagnostic snapshot for `font.telemetry.dimension-missing` and `font.telemetry.single-run-budget-refused`.
+- `pipelinePerformanceTrendWarnings` or PM bundle excerpt showing the M12 telemetry rows as advisory `tracked-gap` rows.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.telemetry.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Samples that omit required dimensions are refused instead of being normalized with placeholder values.
+- Host-specific paths, device names, and timestamps must be normalized or excluded from deterministic dumps.
+- Unsupported domains emit `font.telemetry.schema-domain-missing` and keep M12 classified as `tracked-gap`.
 
 ## Dashboard Impact
 
-- Expected row: `Define font telemetry schema`.
+- Expected row: `Font telemetry schema`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no; this ticket enables advisory trend visibility only.
 
 ## Validation
 

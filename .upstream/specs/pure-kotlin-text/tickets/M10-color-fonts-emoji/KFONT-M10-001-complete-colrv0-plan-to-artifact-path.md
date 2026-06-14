@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Complete COLRv0 plan to artifact path" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M10: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket transforme les glyphes COLRv0 en plans de couches vérifiables, sans promettre encore leur rendu GPU.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Color Fonts, Bitmap Glyphs, SVG, and Emoji` slice until "Complete COLRv0 plan to artifact path" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+COLRv0 support is not just table discovery. Kanvas needs a deterministic `ColorGlyphPlan` that resolves CPAL palette selection, base glyph records, ordered layer glyphs, colors, bounds, and monochrome fallback decisions. Without this path, dashboard rows can mistake color metadata parsing for real color glyph support.
 
 ## Scope
 
-- Deliver the capability described by "Complete COLRv0 plan to artifact path" within `color` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `glyph.color.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M10 boundaries and update status metadata when execution starts.
+- Consume M2 COLR/CPAL table facts for COLRv0 base glyph and layer records.
+- Resolve palette identity, palette overrides, layer order, layer glyph IDs, resolved colors, variation-insensitive facts, and color glyph bounds.
+- Create `ColorGlyphPlan` entries that reference M9 `GlyphArtifactPlan` keys and can be registered later by M11.
+- Emit `color-glyph-plan.json` with COLRv0 layer list, CPAL palette facts, source typeface ID, glyph ID, route diagnostics, and fallback policy.
+- Add malformed COLR/CPAL diagnostics while preserving outline fallback only when a valid outline exists and style permits monochrome fallback.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement COLRv1 paint graphs in this ticket.
+- Do not rasterize, composite, or GPU-render the color glyph plan.
+- Do not decode bitmap emoji or SVG glyph payloads.
+- Do not count COLRv0 metadata parsing as rendering support.
 
 ## Spec Sources
 
@@ -47,54 +47,63 @@ The pure Kotlin text target cannot promote the `Color Fonts, Bitmap Glyphs, SVG,
 ## Design Sketch
 
 ```kotlin
-data class KFontM10001Plan(
-    val input: ColorGlyphRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class COLRv0LayerPlan(
+    val layerIndex: Int,
+    val glyphId: GlyphId,
+    val paletteEntry: PaletteEntryRef,
+    val resolvedColor: ResolvedGlyphColor,
+    val outlinePlanRef: OutlineGlyphPlanRef,
 )
 
-interface KFontM10001Executor {
-    fun execute(plan: KFontM10001Plan): ColorGlyphPlan
-    fun refusal(code: String = "glyph.color.unsupported"): RouteDiagnostic
-}
+data class ColorGlyphPlan(
+    val glyphId: GlyphId,
+    val typefaceId: TypefaceID,
+    val palette: FontPaletteID,
+    val route: ColorGlyphRoute = ColorGlyphRoute.COLRv0,
+    val layers: List<COLRv0LayerPlan>,
+    val bounds: RectF,
+    val fallbackPolicy: ColorGlyphFallbackPolicy,
+    val diagnostics: List<TextDiagnostic>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `glyph.color.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] COLRv0 fixtures produce ordered layer plans with palette identity, resolved colors, layer glyph IDs, and bounds.
+- [ ] Malformed CPAL or COLR data emits `text.color.CPAL-malformed` or `text.color.COLR-malformed` with glyph and table offsets where available.
+- [ ] Monochrome outline fallback is recorded only when the route policy accepts it and the dump states that COLRv0 was not used.
+- [ ] `color-glyph-plan.json` is deterministic for repeated runs with the same font bytes and palette selection.
+- [ ] M11 can consume the plan as a typed `ColorGlyphPlan` without reading COLR/CPAL tables.
 
 ## Required Evidence
 
-- Color, bitmap, SVG, or emoji route plan dump.
-- Fixture manifest entry with provenance and expected route.
-- Refusal diagnostics for unsupported payloads or paint graph states.
+- `color-glyph-plan.json` fixture for a base glyph with multiple COLRv0 layers and a non-default palette.
+- Malformed COLR/CPAL refusal fixtures with route diagnostics.
+- Fallback fixture showing a color glyph route refusal and accepted monochrome outline fallback.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `glyph.color.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Missing or malformed optional color tables refuse the color route and preserve outline glyph support only when valid and explicitly allowed.
+- Unsupported palette selection emits a stable color diagnostic instead of substituting a host palette.
+- The ticket remains `tracked-gap` until layer plan fixtures and diagnostics are attached.
 
 ## Dashboard Impact
 
-- Expected row: `Complete COLRv0 plan to artifact path`.
+- Expected row: `COLRv0 color glyph plan`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless `ColorGlyphPlan` evidence and refusal diagnostics are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*COLRv0*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Establishes the first color glyph plan shape consumed by later COLRv1 and GPU handoff work.
+- Move to `ready` only after COLRv0 dump fields and palette diagnostic names are reviewed.
 
 ## Linear Labels
 

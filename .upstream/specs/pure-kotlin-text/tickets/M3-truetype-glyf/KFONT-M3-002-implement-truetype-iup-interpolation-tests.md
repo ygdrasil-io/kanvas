@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement TrueType IUP interpolation tests" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M3: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket rend les fontes variables TrueType vérifiables quand certains points n'ont pas de delta explicite.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `TrueType glyf Scaler` slice until "Implement TrueType IUP interpolation tests" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+TrueType `gvar` deltas may omit point deltas that must be inferred with IUP interpolation. Without focused tests, variable font outlines can pass default-coordinate cases but drift at min/max axis positions, especially for contours with sparse deltas or composite glyph dependencies.
 
 ## Scope
 
-- Deliver the capability described by "Implement TrueType IUP interpolation tests" within `font-scaler` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.scaler.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M3 boundaries and update status metadata when execution starts.
+- Add IUP interpolation coverage for x and y deltas on simple glyph contours.
+- Cover contour endpoints, all-points-missing cases, one explicit delta, two explicit deltas, and wraparound interpolation.
+- Connect `fvar` axis coordinates and `avar` normalization to `gvar` tuple selection.
+- Include composite glyph variation cases where component outlines depend on interpolated child deltas.
+- Emit `variation-deltas.json` and updated `glyph-outline.json` for min/default/max axis positions.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement CFF2 variation blending.
+- Do not add complete shaping or layout for variable fonts.
+- Do not implement a TrueType instruction VM.
+- Do not claim GPU artifacts for varied outlines.
 
 ## Spec Sources
 
@@ -46,54 +46,58 @@ The pure Kotlin text target cannot promote the `TrueType glyf Scaler` slice unti
 ## Design Sketch
 
 ```kotlin
-data class KFontM3002Plan(
-    val input: ScalerGlyphInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class VariationPosition(
+    val coordinates: SortedMap<String, Double>,
+    val normalizedCoordinates: SortedMap<String, Double>,
 )
 
-interface KFontM3002Executor {
-    fun execute(plan: KFontM3002Plan): ScaledGlyphEvidence
-    fun refusal(code: String = "font.scaler.unsupported"): RouteDiagnostic
+data class GvarContourDeltas(
+    val explicitDeltas: Map<PointIndex, DeltaXY>,
+    val inferredDeltas: Map<PointIndex, DeltaXY>,
+)
+
+class IUPInterpolator {
+    fun interpolate(contour: GlyfContour, explicit: Map<PointIndex, DeltaXY>): GvarContourDeltas
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.scaler.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] IUP tests cover x-only, y-only, both-axis, endpoint, wraparound, and sparse-delta contours.
+- [ ] `variation-deltas.json` separates explicit and inferred deltas for each tested point.
+- [ ] Min/default/max variation positions produce stable `glyph-outline.json` path hashes.
+- [ ] Malformed `gvar` tuple data emits `font.variation-data-malformed`.
+- [ ] Default-coordinate output remains identical to the non-varied outline when no deltas apply.
 
 ## Required Evidence
 
-- `glyph-outline.json`, metrics, bounds, or charstring trace dump.
-- CPU path/hash expectation for supported fixtures.
-- Malformed glyph refusal diagnostic.
+- `variation-deltas.json` for simple glyph IUP cases at min/default/max axis positions.
+- `glyph-outline.json` and path hash comparison for varied simple and composite glyph fixtures.
+- Diagnostic snapshot for malformed tuple, missing point count, or invalid delta run.
+- Fixture manifest entry naming axes, coordinates, and expected interpolation cases.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.scaler.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Malformed or unsupported variation data must diagnose and either fall back to default coordinates only when semantically valid, or refuse the glyph route when that would misrepresent the requested instance.
+- The scaler must not hide IUP drift with broad numeric tolerances.
 
 ## Dashboard Impact
 
-- Expected row: `Implement TrueType IUP interpolation tests`.
+- Expected row: `TrueType gvar IUP interpolation`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: only for the covered IUP fixture matrix with dumps and diagnostics attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:scaler:test
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*IUP*' --tests '*Gvar*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: IUP cases are specified, but no variation dump evidence is attached yet.
+- Move to `ready` after composite glyph coverage is available for varied composite cases.
 
 ## Linear Labels
 

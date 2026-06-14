@@ -14,25 +14,25 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add pure-kotlin-text specs to CI trigger paths" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M0: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket garantit qu'un changement de spec font déclenche les validations qui protègent les claims publics.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Claims, CI, and Diagnostics` slice until "Add pure-kotlin-text specs to CI trigger paths" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The pure Kotlin font specs are the source of truth for tickets, claims, diagnostics, and validation gates. If changes under `.upstream/specs/pure-kotlin-text/**` do not trigger the font CI lane, roadmap or ticket edits can weaken evidence requirements without running the checks that detect claim drift.
 
 ## Scope
 
-- Deliver the capability described by "Add pure-kotlin-text specs to CI trigger paths" within `ci` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.ci.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M0 boundaries and update status metadata when execution starts.
+- Add `.upstream/specs/pure-kotlin-text/**` to CI path filters for the pure Kotlin font lane.
+- Include the ticket catalog under `.upstream/specs/pure-kotlin-text/tickets/**` in the same trigger set.
+- Ensure spec-only changes run `rtk git diff --check` and the dashboard or bundle checks that classify claims.
+- Keep generated evidence, archived migrations, and unrelated upstream specs out of this trigger unless they are explicitly referenced by the pure Kotlin text pack.
+- Document the trigger behavior in the CI evidence for this ticket.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
+- Do not introduce new ticket content or roadmap scope.
+- Do not require full GPU or native demo execution for spec-only changes.
+- Do not make archived migration checkboxes active backlog.
 
 ## Spec Sources
 
@@ -45,54 +45,65 @@ The pure Kotlin text target cannot promote the `Claims, CI, and Diagnostics` sli
 ## Design Sketch
 
 ```kotlin
-data class KFontM0002Plan(
-    val input: FontCiInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class FontSpecTriggerPath(
+    val glob: String,
+    val requiredLanes: Set<String>,
+    val reason: String,
 )
 
-interface KFontM0002Executor {
-    fun execute(plan: KFontM0002Plan): FontCiEvidence
-    fun refusal(code: String = "font.ci.unsupported"): RouteDiagnostic
-}
+val pureKotlinTextSpecTriggers = listOf(
+    FontSpecTriggerPath(
+        glob = ".upstream/specs/pure-kotlin-text/**",
+        requiredLanes = setOf("pure-kotlin-font-foundation", "font-claim-dashboard"),
+        reason = "font target specs and tickets define support gates",
+    ),
+)
+
+fun classifySpecChange(path: String): TriggerDecision =
+    if (pureKotlinTextSpecTriggers.any { path.matchesGlob(it.glob) }) {
+        TriggerDecision.RunFontValidation
+    } else {
+        TriggerDecision.NoFontSpecImpact
+    }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.ci.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] A diff touching `.upstream/specs/pure-kotlin-text/README.md` schedules the font validation lane.
+- [ ] A diff touching any M0-M13 ticket schedules the same claim/dashboard validation used for spec changes.
+- [ ] A diff touching unrelated archived specs does not accidentally become active pure Kotlin font backlog.
+- [ ] CI logs include the matched glob and lane names for auditability.
+- [ ] The path filter behavior is covered by a config test, dry-run output, or equivalent CI evidence.
 
 ## Required Evidence
 
-- CI workflow diff or local equivalent command output.
-- Module coverage note listing the affected `:font:*` tasks.
-- Spec-only validation output when only markdown changed.
+- CI path-filter diff showing `.upstream/specs/pure-kotlin-text/**`.
+- Trigger dry-run for one target spec file and one ticket file.
+- Negative trigger sample for an archived-only font migration file.
+- Output from `rtk git diff --check`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.ci.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- If the CI provider cannot express the recursive path filter, keep the ticket `tracked-gap` and attach a manual gate requiring the same checks on every pure Kotlin text spec change.
+- Do not treat a manually run Gradle command as a permanent replacement for automated path triggers.
 
 ## Dashboard Impact
 
-- Expected row: `Add pure-kotlin-text specs to CI trigger paths`.
+- Expected row: `pure-kotlin-text spec trigger coverage`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no. This only ensures claim-affecting spec changes are validated.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:test :font:core:test :font:sfnt:test :font:scaler:test :font:text:test :font:glyph:test :font:gpu-api:test
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePerformanceTrendWarnings pipelinePmBundle
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Trigger paths are specified, but no CI path-filter evidence is attached yet.
+- Move to `ready` after KFONT-M0-001 defines the font CI lane name and required tasks.
 
 ## Linear Labels
 

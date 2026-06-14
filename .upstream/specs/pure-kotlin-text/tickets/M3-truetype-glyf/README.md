@@ -2,17 +2,18 @@
 
 ## Goal
 
-Complete deterministic TrueType outline scaling, composite glyph behavior, variation interpolation, and metrics evidence.
+Complete deterministic TrueType outline scaling, composite glyph behavior, variation interpolation, metrics evidence, and malformed-glyph isolation.
 
 ## Dependencies
 
-M2 parser facts and cmap coverage.
+M2 parser facts, `cmap` coverage, OpenType table fact dumps, and malformed SFNT diagnostics.
 
 ## Exit Criteria
 
-- [ ] Simple and composite glyf outlines produce stable path, bounds, and metrics dumps.
-- [ ] Variation and phantom point behavior is covered by fixtures.
-- [ ] Malformed glyphs are isolated with precise diagnostics.
+- [ ] Simple and composite `glyf` outlines produce stable path, bounds, component trace, and metrics dumps.
+- [ ] `gvar` IUP interpolation, phantom points, and advance deltas are covered by min/default/max variation fixtures.
+- [ ] Vertical metric facts from `vhea`, `vmtx`, and `VVAR` are dumpable without claiming vertical shaping.
+- [ ] Malformed glyphs are isolated or refused with precise diagnostics and fixture-backed policy.
 
 ## Tickets
 
@@ -28,13 +29,14 @@ M2 parser facts and cmap coverage.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:scaler:test
-rtk ./gradlew --no-daemon :font:core:test
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*Glyf*' --tests '*CompositeGlyph*' --tests '*IUP*' --tests '*Gvar*' --tests '*PhantomPoint*' --tests '*AdvanceDelta*' --tests '*VerticalMetric*' --tests '*MalformedGlyf*'
+rtk ./gradlew --no-daemon :font:sfnt:test --tests '*TableFactDump*'
 ```
 
 ## Non-Claims
 
-- Pixel-perfect FreeType hinting and GPU glyph routes remain out of scope.
+- Pixel-perfect FreeType hinting, CFF/CFF2 outlines, shaping, paragraph layout, A8/SDF artifacts, and GPU glyph routes remain out of scope.
+- Vertical metric extraction does not claim vertical text layout.
 
 ## Status Update Rule
 

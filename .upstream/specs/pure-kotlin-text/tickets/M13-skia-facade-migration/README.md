@@ -28,8 +28,8 @@ Evidence-backed contracts from M1 through M12.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :kanvas-skia:test
-rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*' --tests 'org.skia.foundation.SkFont*' --tests 'org.skia.foundation.SkTypeface*' --tests 'org.skia.foundation.SkTextBlob*' --tests 'org.skia.foundation.SkShaper*'
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePmBundle
 ```
 
 ## Non-Claims

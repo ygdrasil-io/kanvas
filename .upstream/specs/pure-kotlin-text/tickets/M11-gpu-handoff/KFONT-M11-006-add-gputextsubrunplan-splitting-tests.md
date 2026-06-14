@@ -14,88 +14,90 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add `GPUTextSubRunPlan` splitting tests" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M11: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket prouve que le texte est découpé en subruns GPU sans perdre l'ordre visuel ni les glyphes.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Typed GPU Handoff` slice until "Add `GPUTextSubRunPlan` splitting tests" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The renderer cannot draw a full text command as one opaque blob. It must split text by representation, route, atlas page, atlas generation, transform class, material, clip, layer, destination-read requirement, instance-buffer budget, and pipeline compatibility. Without tested `GPUTextSubRunPlan` splitting, atlas residency or batching optimizations can change output order or drop glyphs under resource pressure.
 
 ## Scope
 
-- Deliver the capability described by "Add `GPUTextSubRunPlan` splitting tests" within `gpu-api` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.gpu.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M11 boundaries and update status metadata when execution starts.
+- Define dumpable `GPUTextSubRunPlan` values derived from one `DrawTextRunPayload`.
+- Split by representation, route, atlas descriptor/page, generation token, transform class, material/color plan, clip/stencil state, layer/destination-read requirements, instance buffer budget, and binding compatibility.
+- Preserve visual order where overlapping glyph coverage or blending makes order observable.
+- Emit `gpu-text-subrun-plan.json` with split reasons, source glyph ranges, bounds, route outcome, ordering token refs, and diagnostics.
+- Add tests for multi-page atlas split, mixed A8/SDF refusal split, color/bitmap/SVG dependency-gated split, clip/layer split, and instance-budget split.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement every render step; unsupported routes can produce refused subruns.
+- Do not sort subruns across unsafe blend, clip, layer, upload, or generation barriers.
+- Do not put glyph IDs or atlas coordinates into `MaterialKey`.
+- Do not allocate GPU buffers in the planning contract test.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
 - `.upstream/specs/gpu-renderer/21-text-glyph-pipeline.md`
-- `.upstream/specs/gpu-renderer/09-draw-family-support-matrix.md`
 - `.upstream/target/high-performance-wgsl-pipeline-target.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM11006Plan(
-    val input: DrawTextRunPayload,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class GPUTextSubRunPlan(
+    val parentCommandId: DrawCommandId,
+    val subRunId: GPUTextSubRunId,
+    val sourceGlyphRange: GlyphRange,
+    val representation: GPUTextRepresentation,
+    val route: GPUTextRoute,
+    val bounds: TextSubRunBounds,
+    val atlasEntryRefs: List<GPUTextAtlasEntryRef>,
+    val instanceLayout: GPUTextInstanceLayout,
+    val materialPlanRef: MaterialPlanRef,
+    val orderingToken: GPUTextOrderingToken,
+    val splitReasons: List<GPUTextSplitReason>,
+    val diagnostics: List<GPUTextDiagnostic>,
 )
-
-interface KFontM11006Executor {
-    fun execute(plan: KFontM11006Plan): GPUTextRoutePlan
-    fun refusal(code: String = "text.gpu.unsupported"): RouteDiagnostic
-}
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.gpu.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `GPU-gated` until all evidence and validation criteria are satisfied.
+- [ ] Splits are deterministic for the same payload, artifact registry, and budget policy.
+- [ ] Multi-page or multi-generation atlas entries split into compatible subruns.
+- [ ] Unsupported SDF/color/bitmap/SVG artifacts produce refused subruns with route-specific diagnostics.
+- [ ] Instance-budget and binding-budget splits preserve glyph coverage order.
+- [ ] `gpu-text-subrun-plan.json` records source glyph ranges, split reasons, bounds, route, ordering token, and diagnostic outcome.
 
 ## Required Evidence
 
-- Typed `DrawTextRun` or GPU route dump.
-- No-`Sk*` leakage or unsupported route refusal test.
-- GPU/WGSL evidence when a GPU route is promoted.
-- Classification remains `GPU-gated` until all evidence is attached.
+- `gpu-text-subrun-plan.json` fixtures for atlas page split, atlas generation split, representation split, clip/layer split, and instance-budget split.
+- Refusal fixture mixing accepted A8 subrun with dependency-gated SDF/color subruns.
+- Ordering evidence showing unsafe sort barriers are preserved.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.gpu.*` diagnostic and keep the ticket classified as `GPU-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Split failures refuse the affected command with `unsupported.text.instance_buffer_budget_exceeded`, `unsupported.text.binding_layout_unavailable`, or a narrower reason.
+- Planner must not drop glyphs to satisfy resource budgets.
+- Refused subruns remain associated with source text/glyph ranges for PM evidence.
 
 ## Dashboard Impact
 
-- Expected row: `Add GPUTextSubRunPlan splitting tests`.
+- Expected row: `GPUTextSubRunPlan splitting`.
 - Expected classification: `GPU-gated`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless split fixtures and refusal diagnostics are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:gpu-api:test
-rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextSubRunPlan*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Builds on normalized `DrawTextRun`, accepted A8 route, and dependency-gated refusal mapping.
+- Move to `ready` only after split reason taxonomy and visual-order policy are reviewed.
 
 ## Linear Labels
 

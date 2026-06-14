@@ -14,19 +14,19 @@ legacy_gate: ["coloremoji_blendmodes", "scaledemoji", "scaledemoji_rendering", "
 
 ## PM Note
 
-Ce ticket sert à livrer "Add facade adapter inventory" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M13: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket donne au PM la carte des APIs Skia-like: ce qui passe déjà par le cœur pure Kotlin, ce qui reste gated, et pourquoi.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Skia-like Facade Migration` slice until "Add facade adapter inventory" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+M13 must turn `:kanvas-skia` into a facade over the pure Kotlin text stack instead of a second font system. The current migration target lists reusable prototypes and durable legacy gates, but there is no adapter inventory that maps each facade route to its target owner, support status, legacy gate, diagnostic namespace, and required evidence. Without that inventory, stale stubs can hide refusals and facade tests can pass through divergent code paths.
 
 ## Scope
 
-- Deliver the capability described by "Add facade adapter inventory" within `skia-facade` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `kanvas.facade.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M13 boundaries and update status metadata when execution starts.
+- Inventory facade routes for `SkFontMgr`, `SkTypeface`, `SkFont`, `SkCanvas.drawString`, explicit `SkShaper`, `SkTextBlob`, and paragraph-compatible APIs.
+- For each route, record the target pure Kotlin contract, target owner package/module, migration category (`reuse-as-is`, `promote-with-contract`, `replace`, `keep-current-gate`, or `expected-unsupported`), diagnostics, claim impact, and required evidence.
+- Map durable legacy gates from `09-migration-from-current-font-pack.md`: `coloremoji_blendmodes`, `scaledemoji`, `scaledemoji_rendering`, `dftext`, `fontations`, `fontations_ft_compare`, and `pdf_never_embed`.
+- Identify facade routes that must stay simple, especially `SkCanvas.drawString`, versus explicit shaping/paragraph routes.
+- Define the inventory dump consumed by PM bundle and dashboard rows before any adapter route is marked ready.
 
 ## Non-Goals
 
@@ -48,43 +48,53 @@ The pure Kotlin text target cannot promote the `Skia-like Facade Migration` slic
 ## Design Sketch
 
 ```kotlin
-data class KFontM13001Plan(
-    val input: SkiaFacadeCall,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+enum class FacadeMigrationCategory {
+    ReuseAsIs,
+    PromoteWithContract,
+    Replace,
+    KeepCurrentGate,
+    ExpectedUnsupported,
 )
 
-interface KFontM13001Executor {
-    fun execute(plan: KFontM13001Plan): FacadeMigrationEvidence
-    fun refusal(code: String = "kanvas.facade.unsupported"): RouteDiagnostic
-}
+data class FacadeAdapterInventoryRow(
+    val facadeApi: String,
+    val facadeRoute: String,
+    val targetContract: String,
+    val targetOwner: String,
+    val category: FacadeMigrationCategory,
+    val claimImpact: ClaimImpact,
+    val legacyGates: List<String>,
+    val requiredEvidence: List<String>,
+    val diagnostics: List<String>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `kanvas.facade.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Every public font/text facade route listed in scope has an inventory row with owner, target contract, migration category, claim impact, diagnostics, and required evidence.
+- [ ] Every durable legacy gate from `09-migration-from-current-font-pack.md` appears in at least one row or is explicitly marked adjacent/out-of-scope with rationale.
+- [ ] `SkCanvas.drawString` is inventoried as the simple deterministic path and not as broad complex shaping support.
+- [ ] Inventory rows distinguish optional drift-only native comparison from normative pure Kotlin behavior.
+- [ ] PM bundle/dashboard output can show which facade routes are blocked by dependencies, fixtures, GPU evidence, or expected unsupported policy.
 
 ## Required Evidence
 
-- Facade/core parity dump or migration inventory row.
-- Diagnostic mapping and remaining legacy gate evidence.
-- PM bundle or dashboard diff.
+- `facade-adapter-inventory.md` or `facade-adapter-inventory.json` with rows for all scoped APIs.
+- Legacy gate mapping table covering `coloremoji_blendmodes`, `scaledemoji`, `scaledemoji_rendering`, `dftext`, `fontations`, `fontations_ft_compare`, and `pdf_never_embed`.
+- Diagnostic mapping from facade refusal codes to target `font.*`, `text.*`, `glyph.*`, `text.gpu.*`, or `expected-unsupported` categories.
+- PM bundle/dashboard diff showing facade rows and remaining gates.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `kanvas.facade.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Inventory rows that lack target evidence must classify the route as `tracked-gap`, `DependencyGated`, `fixture-gated`, `GPU-gated`, `expected-unsupported`, or `drift-only`; no blank status is allowed.
+- Unsupported facade paths must emit a route-specific facade diagnostic and link to the target diagnostic family.
 - Legacy gate(s) `coloremoji_blendmodes`, `scaledemoji`, `scaledemoji_rendering`, `dftext`, `fontations`, `fontations_ft_compare`, `pdf_never_embed` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
 
 ## Dashboard Impact
 
-- Expected row: `Add facade adapter inventory`.
+- Expected row: `Skia facade adapter inventory`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no; inventory is a prerequisite for later route promotions.
 
 ## Validation
 

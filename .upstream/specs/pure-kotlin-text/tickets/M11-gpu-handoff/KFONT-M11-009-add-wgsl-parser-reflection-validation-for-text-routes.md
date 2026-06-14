@@ -14,89 +14,87 @@ legacy_gate: ["dftext", "coloremoji_blendmodes"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Add WGSL parser/reflection validation for text routes" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M11: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket vérifie que les shaders texte et leurs bindings restent alignés avec les plans GPU.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Typed GPU Handoff` slice until "Add WGSL parser/reflection validation for text routes" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Text render steps need WGSL modules and reflected binding layouts that match Kotlin resource, uniform, sampler, texture, and instance plans. The target architecture requires parser-validated WGSL through `wgsl4k`; handwritten or generated text shaders must not drift from the binding ABI. Without this ticket, A8/SDF/color route evidence could rely on unreflected layouts or SkSL-era assumptions.
 
 ## Scope
 
-- Deliver the capability described by "Add WGSL parser/reflection validation for text routes" within `gpu-api` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.gpu.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M11 boundaries and update status metadata when execution starts.
+- Add parser/reflection validation for text WGSL modules or snippets used by `A8TextMaskStep` and any promoted text route snippets.
+- Reflect bind groups, bindings, uniform structs, texture/sampler slots, instance input layout expectations, and SDF parameter uniforms where present.
+- Emit `text-wgsl-reflection.json` and `text-wgsl-validation-report.json` with module hash, entry points, reflected bindings, Kotlin plan comparisons, and diagnostics.
+- Ensure text shader paths use WGSL, not SkSL, and remain compatible with the high-performance WGSL pipeline target.
+- Add refusal diagnostics for missing SDF params, binding layout mismatch, parser failure, and unregistered text WGSL modules.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not rebuild Skia's SkSL compiler or accept arbitrary SkSL.
+- Do not implement new color composite, SVG, bitmap, or SDF GPU routes solely through this validation ticket.
+- Do not use parser validation as visual correctness proof.
+- Do not generate a unique shader per glyph or uniform value.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
 - `.upstream/specs/gpu-renderer/21-text-glyph-pipeline.md`
-- `.upstream/specs/gpu-renderer/09-draw-family-support-matrix.md`
 - `.upstream/target/high-performance-wgsl-pipeline-target.md`
 - `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM11009Plan(
-    val input: DrawTextRunPayload,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class TextWgslReflectionReport(
+    val moduleId: TextWgslModuleId,
+    val sourceHash: StableHash,
+    val entryPoints: List<WgslEntryPoint>,
+    val reflectedBindings: List<WgslBindingReflection>,
+    val instanceLayoutHash: StableHash,
+    val kotlinPlanComparison: WgslPlanComparison,
+    val diagnostics: List<GPUTextDiagnostic>,
 )
-
-interface KFontM11009Executor {
-    fun execute(plan: KFontM11009Plan): GPUTextRoutePlan
-    fun refusal(code: String = "text.gpu.unsupported"): RouteDiagnostic
-}
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.gpu.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `GPU-gated` until all evidence and validation criteria are satisfied.
+- [ ] Text WGSL modules parse successfully through `wgsl4k` before support is promoted.
+- [ ] Reflected bindings match `GPUTextBinding`, resource plans, uniform packs, texture/sampler slots, and instance layout expectations.
+- [ ] A8 text mask WGSL evidence is present before A8 route promotion.
+- [ ] SDF validation refuses missing `GPUTextSDFParams` with `unsupported.text.sdf_params_missing` until SDF route support exists.
+- [ ] No text shader validation path references SkSL or native Skia shader compilation.
 
 ## Required Evidence
 
-- Typed `DrawTextRun` or GPU route dump.
-- No-`Sk*` leakage or unsupported route refusal test.
-- GPU/WGSL evidence when a GPU route is promoted.
-- Classification remains `GPU-gated` until all evidence is attached.
+- `text-wgsl-reflection.json` fixture for the A8 text mask module or snippet.
+- `text-wgsl-validation-report.json` fixture comparing reflected layout to Kotlin text binding plans.
+- Negative fixtures for parser failure, binding layout mismatch, missing SDF params, and unregistered text WGSL module.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.gpu.*` diagnostic and keep the ticket classified as `GPU-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
-- Legacy gate(s) `dftext`, `coloremoji_blendmodes` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
+- Parser or reflection failure refuses the text route; it does not fall back to unvalidated shader code.
+- SDF/color composite WGSL validation remains `GPU-gated` until the corresponding route evidence exists.
+- Legacy gates `dftext` and `coloremoji_blendmodes` remain open until route-specific WGSL and GPU evidence are linked.
 
 ## Dashboard Impact
 
-- Expected row: `Add WGSL parser/reflection validation for text routes`.
+- Expected row: `Text WGSL parser/reflection validation`.
 - Expected classification: `GPU-gated`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless parser/reflection evidence is attached for each promoted route.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:gpu-api:test
-rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*TextWgsl*'
+rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*TextWgsl*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Ties M11 text routes to the WGSL parser/reflection architecture target.
+- Move to `ready` only after reflection report fields and WGSL module registration rules are reviewed.
 
 ## Linear Labels
 

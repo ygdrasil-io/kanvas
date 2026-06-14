@@ -2,17 +2,19 @@
 
 ## Goal
 
-Expose text artifacts to the GPU renderer through typed contracts, route diagnostics, WGSL validation, and no Skia-like leakage.
+Expose pure Kotlin text artifacts to the GPU renderer through typed `DrawTextRun` payloads, artifact registry descriptors, route/refusal diagnostics, subrun/resource/upload/binding plans, upload-before-sample ordering, WGSL parser/reflection checks, and material-key leakage tests.
 
 ## Dependencies
 
-M8 paragraph outputs, M9 glyph artifacts, and M10 color/emoji plans.
+M8 supplies paragraph and glyph run outputs. M9 supplies strike keys, A8/SDF artifacts, atlas generation, and cache facts. M10 supplies color, bitmap, SVG, and emoji plans. GPU renderer specs supply normalized draw commands, routing, task graph, binding ABI, material keys, texture ownership, and WGSL validation rules.
 
 ## Exit Criteria
 
-- [ ] DrawTextRun and text artifact registry are immutable value-object contracts.
-- [ ] Unsupported GPU routes refuse with dependency-gated diagnostics.
-- [ ] A8 route and WGSL validation produce focused GPU evidence before any support promotion.
+- [ ] `DrawTextRunPayload` and text artifact registry dumps contain only immutable value objects and no `Sk*`, font bytes, native handles, raw GPU handles, or CPU-rendered full text texture routes.
+- [ ] A8 atlas route evidence includes route plan, resource plan, instance layout, bindings, WGSL reflection, upload-before-sample ordering, and focused GPU proof.
+- [ ] Unsupported SDF, outline, color, bitmap, SVG, stale atlas, missing upload, and unregistered artifact cases refuse with precise `text.gpu.*` and `unsupported.text.*` diagnostics.
+- [ ] `GPUTextSubRunPlan` splitting preserves visual order and records split reasons by representation, atlas page/generation, transform, material, clip, layer, destination-read, and budget.
+- [ ] `MaterialKey` tests prove glyph IDs, atlas coordinates, generations, live handles, and upload tokens stay out of material identity.
 
 ## Tickets
 
@@ -33,12 +35,18 @@ M8 paragraph outputs, M9 glyph artifacts, and M10 color/emoji plans.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:gpu-api:test
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*Text*'
+rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*Text*'
 ```
+
+Required evidence for this milestone includes `text-gpu-artifact-registry.json`, `text-gpu-no-sk-leakage-report.json`, `draw-text-run-payload.json`, `gpu-text-a8-route-plan.json`, `gpu-text-route-refusals.json`, `gpu-text-subrun-plan.json`, `gpu-text-resource-plan.json`, `gpu-text-upload-plan.json`, `gpu-text-instance-layout.json`, `gpu-text-binding-plan.json`, `gpu-text-ordering-trace.json`, `text-wgsl-reflection.json`, `text-wgsl-validation-report.json`, and `text-material-key-leakage-report.json`.
 
 ## Non-Claims
 
-- Registration or refusal rows do not claim GPU support without adapter-backed evidence.
+- Artifact registration is not GPU support.
+- A8 atlas proof does not imply broad shaping, SDF, outline, color glyph, bitmap glyph, SVG glyph, emoji, or LCD support.
+- CPU-rendered full text texture compatibility is forbidden.
+- `dftext`, `scaledemoji_rendering`, and `coloremoji_blendmodes` remain open until route-specific GPU evidence, diagnostics, and dashboard updates are linked.
 
 ## Status Update Rule
 

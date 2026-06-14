@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Complete composite glyph transform coverage" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M3: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket prouve que les glyphes TrueType composés sortent avec les bons contours au lieu de dégrader tout le texte.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `TrueType glyf Scaler` slice until "Complete composite glyph transform coverage" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The TrueType `glyf` scaler must support composite glyphs with component transforms, nested components, depth limits, cycle detection, bounds, and deterministic path output. Without this coverage, many real TTF fixtures can parse successfully but fail at outline generation or silently produce wrong glyph geometry.
 
 ## Scope
 
-- Deliver the capability described by "Complete composite glyph transform coverage" within `font-scaler` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.scaler.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M3 boundaries and update status metadata when execution starts.
+- Implement or validate composite glyph handling for translate, uniform scale, non-uniform scale, two-by-two transform, and component point alignment.
+- Support nested composites with explicit recursion and component-count limits.
+- Detect composite cycles and invalid component glyph IDs with stable diagnostics.
+- Preserve contour winding and produce deterministic bounds for composed outlines.
+- Emit `glyph-outline.json` and `glyph-metrics.json` for composite fixtures.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement CFF/CFF2 charstring scaling.
+- Do not implement full TrueType hinting VM or pixel-perfect FreeType parity.
+- Do not claim A8/SDF glyph artifact or GPU atlas support.
+- Do not add shaping or fallback behavior.
 
 ## Spec Sources
 
@@ -46,54 +46,61 @@ The pure Kotlin text target cannot promote the `TrueType glyf Scaler` slice unti
 ## Design Sketch
 
 ```kotlin
-data class KFontM3001Plan(
-    val input: ScalerGlyphInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class CompositeGlyphComponent(
+    val glyphId: GlyphID,
+    val transform: Affine2x2,
+    val offset: Point26Dot6,
+    val useMyMetrics: Boolean,
 )
 
-interface KFontM3001Executor {
-    fun execute(plan: KFontM3001Plan): ScaledGlyphEvidence
-    fun refusal(code: String = "font.scaler.unsupported"): RouteDiagnostic
+data class CompositeGlyphPlan(
+    val rootGlyphId: GlyphID,
+    val components: List<CompositeGlyphComponent>,
+    val maxDepth: Int,
+)
+
+class TrueTypeGlyfScaler {
+    fun outlineComposite(plan: CompositeGlyphPlan): GlyphOutlineResult
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.scaler.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Composite fixtures cover translation, uniform scale, non-uniform scale, two-by-two transform, and nested components.
+- [ ] Cycle detection emits a stable `font.scaler.composite-cycle` or equivalent diagnostic.
+- [ ] Invalid component glyph ID emits a precise scaler diagnostic and does not crash the face parser.
+- [ ] `glyph-outline.json` contains deterministic path commands, contour winding facts, component trace, and bounds.
+- [ ] Path hashes for supported composite fixtures are stable across repeated runs.
 
 ## Required Evidence
 
-- `glyph-outline.json`, metrics, bounds, or charstring trace dump.
-- CPU path/hash expectation for supported fixtures.
-- Malformed glyph refusal diagnostic.
+- `glyph-outline.json` for composite transform fixtures.
+- `glyph-metrics.json` showing component metrics source and `useMyMetrics` behavior when present.
+- CPU path hash or stat artifact for each supported composite transform case.
+- Diagnostic snapshot for composite cycle and invalid component glyph ID.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.scaler.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported composite flags or unsafe recursion must refuse that glyph with `font.scaler.*` diagnostics and preserve the rest of the face when safe.
+- The scaler must not replace composite glyphs with empty paths without a route diagnostic.
 
 ## Dashboard Impact
 
-- Expected row: `Complete composite glyph transform coverage`.
+- Expected row: `TrueType composite glyf outlines`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: only for the composite slice with required outline, metrics, CPU hash, and diagnostics evidence.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:scaler:test
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*CompositeGlyph*' --tests '*Glyf*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Composite coverage is specified, but no outline or metrics evidence is attached yet.
+- Move to `ready` after M2 table fact dumps provide `loca`, `glyf`, `maxp`, and metrics table facts.
 
 ## Linear Labels
 

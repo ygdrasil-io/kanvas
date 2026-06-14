@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement CFF2 variation path output" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M4: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket couvre les fontes CFF2 variables, afin que les variations changent vraiment les contours et metrics au lieu d'etre ignorees.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `CFF and CFF2 Scalers` slice until "Implement CFF2 variation path output" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+CFF2 fonts encode variable outlines through `vsindex`, `blend`, variation stores, and normalized axis coordinates. Kanvas cannot claim variable OTF/CFF2 support until glyph paths and metrics respond deterministically to axis positions and malformed variation data refuses precisely.
 
 ## Scope
 
-- Deliver the capability described by "Implement CFF2 variation path output" within `font-scaler` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.scaler.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M4 boundaries and update status metadata when execution starts.
+- Parse and apply CFF2 variation store data needed by charstring `blend` operations.
+- Add `vsindex` and `blend` execution to the charstring machine with stack-effect validation.
+- Use pinned variation coordinates from `fvar`/`avar` and metrics deltas from HVAR/VVAR/MVAR when required by the face.
+- Produce CFF2 glyph paths, bounds, advances, and trace dumps for default, min, max, and named instance coordinates.
+- Include variation coordinates and CFF2 variation store generation in scaler cache key preimages and evidence dumps.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement TrueType `gvar`; this ticket only consumes variation foundations already owned by M3.
+- Do not claim color glyph, paragraph, GPU, A8, SDF, or fallback support.
+- Do not approximate malformed `blend` behavior by using default outlines unless the diagnostic explicitly records default-coordinate fallback as safe.
+- Do not depend on Fontations, FreeType, CoreText, DirectWrite, or platform font APIs for normative variation output.
 
 ## Spec Sources
 
@@ -45,36 +45,50 @@ The pure Kotlin text target cannot promote the `CFF and CFF2 Scalers` slice unti
 ## Design Sketch
 
 ```kotlin
-data class KFontM4005Plan(
-    val input: ScalerGlyphInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class Cff2FontSet(
+    val source: TypefaceID,
+    val topDict: Cff2TopDict,
+    val privateDicts: List<CffPrivateDict>,
+    val variationStore: Cff2VariationStore,
+    val charStrings: CffIndex<CharStringBytes>,
 )
 
-interface KFontM4005Executor {
-    fun execute(plan: KFontM4005Plan): ScaledGlyphEvidence
-    fun refusal(code: String = "font.scaler.unsupported"): RouteDiagnostic
+class Cff2CharStringMachine(
+    private val variationStore: Cff2VariationStore,
+    private val coordinates: NormalizedVariationPosition,
+    private val trace: MutableList<Cff2VariationTraceEvent>,
+) {
+    fun run(program: CharStringBytes, privateDict: CffPrivateDict): Cff2GlyphProgram
 }
+
+data class Cff2BlendVector(
+    val vsIndex: Int,
+    val baseValues: List<Int>,
+    val deltas: List<List<Int>>,
+    val blendedValues: List<Int>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.scaler.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Variable CFF2 fixture produces distinct path hashes for at least default, min, max, and one named instance.
+- [ ] `cff2-variation-trace.json` records `vsindex`, `blend` operands, selected variation region, normalized coordinates, and blended values.
+- [ ] Bounds and advances change when variation data affects them, and remain stable when a coordinate change has no applicable region.
+- [ ] Malformed `blend` stack count, invalid `vsindex`, missing variation store, and unsupported axis fixtures refuse with stable diagnostics.
+- [ ] CFF2 evidence does not promote CFF single-master behavior without KFONT-M4-004 evidence.
 
 ## Required Evidence
 
-- `glyph-outline.json`, metrics, bounds, or charstring trace dump.
-- CPU path/hash expectation for supported fixtures.
-- Malformed glyph refusal diagnostic.
+- `cff2-variation-trace.json` with coordinates, variation store references, blend vectors, path command deltas, metric deltas, and diagnostics.
+- `glyph-outline.json` and `glyph-metrics.json` for the same glyphs at default, min, max, and named instance positions.
+- Fixtures: `cff2-variable-basic.otf`, `cff2-variable-metrics.otf`, `cff2-blend-bad-stack.otf`, `cff2-vsindex-invalid.otf`, `cff2-missing-varstore.otf`.
+- Diagnostics asserted in tests: `font.variation-data-malformed`, `font.variation-axis-unsupported`, `font.metrics-variation-unavailable`, `font.scaler.cff2.blend-stack-malformed`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.scaler.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `font.scaler.cff2.blend-malformed`, `font.variation-data-malformed`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -86,13 +100,13 @@ interface KFontM4005Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:scaler:test
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*Cff2*' --tests '*Variation*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Depends on CFF path output plus shared variation foundations.
+- Move to `ready` only after CFF2 variation fixture provenance and dump fields are reviewed.
 
 ## Linear Labels
 

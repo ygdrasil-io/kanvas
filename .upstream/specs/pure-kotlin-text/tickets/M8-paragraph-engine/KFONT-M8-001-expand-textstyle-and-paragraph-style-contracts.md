@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Expand `TextStyle` and paragraph style contracts" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M8: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket clarifie les options de texte riche que Kanvas pourra promettre sans dépendre d'un moteur natif.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Paragraph Engine` slice until "Expand `TextStyle` and paragraph style contracts" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The paragraph target needs immutable, dumpable style contracts before rich layout can be validated. Current placeholder style language is too small to carry font families, fallback preference, OpenType features, variation coordinates, palette choices, decoration facts, height behavior, and placeholder interactions into shaping and layout. Without this contract, later paragraph tickets cannot prove which style facts affected shaping, line metrics, glyph artifact planning, or refusal diagnostics.
 
 ## Scope
 
-- Deliver the capability described by "Expand `TextStyle` and paragraph style contracts" within `paragraph` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.paragraph.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M8 boundaries and update status metadata when execution starts.
+- Define the value-object contract for `TextStyle`, `ParagraphStyle`, `PlaceholderStyle`, `TextHeightBehavior`, `TextAlign`, `TextDirection`, and `EllipsisPolicy`.
+- Record stable UTF-16 text ranges for style spans and placeholders in the immutable `ParagraphInput` snapshot emitted by `ParagraphBuilder`.
+- Include font families, fallback preference, size, weight, width, slant, synthetic style policy, locale/script hints, OpenType features, variation coordinates, palette and color-font options, color or material reference, decorations, spacing, height, and baseline facts.
+- Add validation diagnostics for non-finite width/height, negative font size, invalid variation coordinates, invalid placeholder ranges, and unsupported baseline or strut policy.
+- Emit a deterministic `paragraph-input.json` dump with input hash, Unicode data version, style span list, placeholder span list, and validation diagnostics.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
+- Do not implement line breaking, shaping segmentation, hit testing, placeholders, or GPU handoff in this ticket.
 - Do not migrate or rewrite Skia-like facade APIs in this ticket.
 - Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not promote paragraph support until downstream layout and evidence tickets consume this contract.
 
 ## Spec Sources
 
@@ -45,54 +45,72 @@ The pure Kotlin text target cannot promote the `Paragraph Engine` slice until "E
 ## Design Sketch
 
 ```kotlin
-data class KFontM8001Plan(
-    val input: ParagraphInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class TextStyle(
+    val fontFamilies: List<FontFamilyRef>,
+    val fallbackPreference: FallbackPreference,
+    val fontSizePx: Float,
+    val weight: FontWeight,
+    val width: FontWidth,
+    val slant: FontSlant,
+    val locale: LocaleTag?,
+    val scriptHint: UnicodeScript?,
+    val features: List<OpenTypeFeatureSetting>,
+    val variations: VariationCoordinates,
+    val palette: FontPaletteSelection?,
+    val foreground: TextForeground,
+    val decoration: TextDecorationSpec?,
+    val letterSpacingPx: Float,
+    val wordSpacingPx: Float,
+    val height: TextHeightBehavior,
 )
 
-interface KFontM8001Executor {
-    fun execute(plan: KFontM8001Plan): ParagraphLayoutResult
-    fun refusal(code: String = "text.paragraph.unsupported"): RouteDiagnostic
-}
+data class ParagraphInput(
+    val text: String,
+    val paragraphStyle: ParagraphStyle,
+    val styleRuns: List<StyleRange<TextStyle>>,
+    val placeholders: List<StyleRange<PlaceholderStyle>>,
+    val unicodeVersion: UnicodeVersion,
+    val inputHash: StableHash,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.paragraph.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] `ParagraphBuilder` produces an immutable `ParagraphInput` snapshot; mutating the builder after snapshot creation cannot change the dump.
+- [ ] `TextStyle` carries all shaping-affecting and layout-affecting fields listed in scope, and each field appears in the dump preimage.
+- [ ] Style and placeholder ranges are stable, ordered, non-overlapping where required, and validated against UTF-16 text bounds.
+- [ ] Invalid numeric constraints return `text.paragraph.invalid-constraint` or a narrower diagnostic with the field name and offending range.
+- [ ] `paragraph-input.json` is deterministic for repeated runs with the same text, style values, and Unicode data version.
 
 ## Required Evidence
 
-- `paragraph-input.json` or `paragraph-layout.json` dump.
-- Line, box, selection, hit-test, or placeholder fixture.
-- Paragraph diagnostic snapshot for invalid constraints.
+- `paragraph-input.json` fixture covering multiple style spans, OpenType features, variation coordinates, palette selection, decoration, and placeholder ranges.
+- Negative fixture for non-finite layout width, negative font size, invalid range, and unsupported baseline/strut policy.
+- Diagnostic snapshot using `text.paragraph.invalid-constraint`, `text.paragraph.invalid-style-range`, or a narrower accepted reason code.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.paragraph.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Invalid style contracts refuse before shaping with a stable `text.paragraph.*` diagnostic.
+- Unsupported style fields remain explicit in `ParagraphInput` and cannot be silently dropped to host/platform defaults.
+- The ticket remains `tracked-gap` until the contract and dump evidence are reviewed.
 
 ## Dashboard Impact
 
-- Expected row: `Expand TextStyle and paragraph style contracts`.
+- Expected row: `Paragraph style contracts`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, because this ticket only establishes paragraph input contracts and evidence shape.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*ParagraphStyle*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Contract ticket is ready for review against the paragraph API target before implementation starts.
+- Move to `ready` only after the field list, diagnostic names, and dump schema are accepted.
 
 ## Linear Labels
 

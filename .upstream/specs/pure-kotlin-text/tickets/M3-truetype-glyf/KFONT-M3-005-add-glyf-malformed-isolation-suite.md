@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add glyf malformed isolation suite" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M3: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket prouve qu'un glyph TrueType cassé ne fait pas tomber toute la fonte quand l'isolation est possible.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `TrueType glyf Scaler` slice until "Add glyf malformed isolation suite" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The target requires malformed glyph isolation so one bad optional glyph does not poison the face when safe to skip. M3 needs fixture-backed evidence for invalid `loca`/`glyf` offsets, contour decoding failures, composite cycles, invalid components, transform abuse, and malformed variation data. Without this suite, scaler support can be marked complete while important refusal paths remain untested.
 
 ## Scope
 
-- Deliver the capability described by "Add glyf malformed isolation suite" within `fixtures` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.fixture.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M3 boundaries and update status metadata when execution starts.
+- Add malformed `glyf` fixtures for invalid `loca` offset, truncated glyph header, bad contour end points, flag-repeat overflow, coordinate run truncation, composite cycle, missing component glyph, transform overflow, and malformed `gvar` tuple/point data.
+- Define `GlyphFailurePolicy` for `.notdef` substitution, per-glyph refusal, and face-level refusal.
+- Record fixture provenance, expected diagnostic, expected isolation behavior, and affected glyph ID in the manifest.
+- Emit `glyph-outline.json`, `glyph-metrics.json`, or `variation-deltas.json` refusal snapshots for each case.
+- Prove safe glyphs in the same face remain parseable when the policy allows isolation.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not add broad fuzzing or random mutation tests.
+- Do not handle CFF/CFF2 malformed charstrings.
+- Do not claim that every malformed font can continue safely.
+- Do not mask scaler bugs with `.notdef` substitution when a face-level refusal is required.
 
 ## Spec Sources
 
@@ -46,55 +46,61 @@ The pure Kotlin text target cannot promote the `TrueType glyf Scaler` slice unti
 ## Design Sketch
 
 ```kotlin
-data class KFontM3005Plan(
-    val input: FixtureManifestInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+enum class GlyphFailureAction { SubstituteNotDef, RefuseGlyph, RefuseFace }
+
+data class GlyphFailurePolicy(
+    val glyphId: GlyphID,
+    val diagnostic: String,
+    val action: GlyphFailureAction,
+    val safeGlyphsStillAvailable: Boolean,
 )
 
-interface KFontM3005Executor {
-    fun execute(plan: KFontM3005Plan): FixtureManifestEntry
-    fun refusal(code: String = "font.fixture.unsupported"): RouteDiagnostic
-}
+data class MalformedGlyfFixture(
+    val fixtureId: String,
+    val malformedGlyphId: GlyphID,
+    val expectedPolicy: GlyphFailurePolicy,
+    val expectedDump: String,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.fixture.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `fixture-gated` until all evidence and validation criteria are satisfied.
+- [ ] Each malformed `glyf` fixture has one primary diagnostic and expected isolation action.
+- [ ] Safe glyphs in the same face remain dumpable when `GlyphFailureAction.RefuseGlyph` or `.notdef` substitution is expected.
+- [ ] Composite cycle and missing component cases are diagnosed separately.
+- [ ] Malformed variation data uses `font.variation-data-malformed` or a more precise scaler diagnostic.
+- [ ] The suite stays `fixture-gated` until all listed malformed cases have manifest and dump evidence.
 
 ## Required Evidence
 
-- Target dump.
-- Fixture evidence.
-- Stable diagnostic snapshot.
-- Classification remains `fixture-gated` until all evidence is attached.
+- Malformed `glyf` fixture manifest entries with hash, glyph ID, failure case, expected diagnostic, and expected isolation action.
+- Refusal snapshots in `glyph-outline.json`, `glyph-metrics.json`, or `variation-deltas.json` for every listed case.
+- Positive control dump proving an unaffected glyph in the same face remains available for isolation-eligible cases.
+- Dashboard row showing `fixture-gated` until the full suite is attached.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.fixture.*` diagnostic and keep the ticket classified as `fixture-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsafe malformed glyph data must refuse the glyph or face with stable `font.scaler.*` diagnostics.
+- `.notdef` substitution is allowed only when the policy and evidence show the rest of the face remains valid.
+- Classification remains `fixture-gated` until all required malformed evidence is attached.
 
 ## Dashboard Impact
 
-- Expected row: `Add glyf malformed isolation suite`.
+- Expected row: `malformed glyf isolation suite`.
 - Expected classification: `fixture-gated`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no until fixture manifest, dumps, diagnostics, and isolation policy evidence are complete.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:core:test
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*MalformedGlyf*' --tests '*GlyphFailurePolicy*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Malformed `glyf` cases are specified, but no suite evidence is attached yet.
+- Move to `ready` after composite coverage and phantom/advance delta behavior define scaler refusal boundaries.
 
 ## Linear Labels
 

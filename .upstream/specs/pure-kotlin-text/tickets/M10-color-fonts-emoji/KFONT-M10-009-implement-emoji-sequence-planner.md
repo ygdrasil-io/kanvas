@@ -14,88 +14,95 @@ legacy_gate: ["scaledemoji"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement emoji sequence planner" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M10: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket rend les séquences emoji traçables avant de promettre leur rendu couleur.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Color Fonts, Bitmap Glyphs, SVG, and Emoji` slice until "Implement emoji sequence planner" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Emoji support crosses Unicode data, shaping, fallback, and glyph representation selection. The gap is an `EmojiRouteTrace` that records variation selectors, ZWJ sequences, keycaps, flags, skin-tone modifiers, emoji-capable fallback faces, and the selected color/bitmap/SVG/outline route. Without it, `scaledemoji` can fail as a vague emoji blocker instead of a precise sequence, fallback, or color-glyph diagnostic.
 
 ## Scope
 
-- Deliver the capability described by "Implement emoji sequence planner" within `color` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `glyph.color.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M10 boundaries and update status metadata when execution starts.
+- Consume pinned Unicode emoji property data from M5 and shaped sequence facts from M6.
+- Plan emoji routes for VS15/VS16, ZWJ sequences, keycaps, regional-indicator flags, skin-tone modifiers, and gender/role ZWJ sequences where represented.
+- Resolve emoji-capable fallback family preference through M7 fallback facts.
+- Dispatch each accepted sequence to COLR, PNG bitmap, SVG, or monochrome outline routes according to the color glyph policy.
+- Emit `emoji-route-trace.json` with source cluster range, sequence kind, selected typeface, representation route, fallback attempts, and diagnostics.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement Unicode segmentation, bidi, or GSUB/GPOS shaping in this ticket.
+- Do not render emoji glyphs or create GPU resources.
+- Do not use platform emoji engines as normative fallback.
+- Do not claim unsupported emoji sequences as monochrome fallback without diagnostics.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md`
-- `.upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md`
-- `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
+- `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
 - `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM10009Plan(
-    val input: ColorGlyphRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class EmojiRouteTrace(
+    val clusterRange: TextRange,
+    val sequence: EmojiSequence,
+    val unicodeVersion: UnicodeVersion,
+    val fallbackAttempts: List<EmojiFallbackAttempt>,
+    val selectedTypeface: TypefaceID?,
+    val selectedRoute: GlyphRepresentationRoute,
+    val colorGlyphPlanRef: ColorGlyphPlanRef?,
+    val diagnostics: List<TextDiagnostic>,
 )
 
-interface KFontM10009Executor {
-    fun execute(plan: KFontM10009Plan): ColorGlyphPlan
-    fun refusal(code: String = "glyph.color.unsupported"): RouteDiagnostic
+sealed interface EmojiSequence {
+    data class VariationSelector(val base: CodePoint, val selector: CodePoint) : EmojiSequence
+    data class ZWJ(val codepoints: List<CodePoint>) : EmojiSequence
+    data class Keycap(val base: CodePoint) : EmojiSequence
+    data class Flag(val regionalIndicators: Pair<CodePoint, CodePoint>) : EmojiSequence
+    data class SkinTone(val base: CodePoint, val modifier: CodePoint) : EmojiSequence
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `glyph.color.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Fixtures cover VS15/VS16, skin tone, ZWJ family sequence, keycap, flag, missing emoji-capable fallback, and color glyph unavailable.
+- [ ] Each trace records Unicode version, source cluster range, fallback attempts, selected typeface, selected representation, and diagnostics.
+- [ ] Unsupported sequences emit `text.emoji.sequence-unsupported` with the cluster range and codepoint list.
+- [ ] Missing emoji fallback emits `text.emoji.fallback-unavailable`; unavailable color glyph emits `text.emoji.color-glyph-unavailable`.
+- [ ] Monochrome fallback is cluster-safe and visible in the route trace.
 
 ## Required Evidence
 
-- Color, bitmap, SVG, or emoji route plan dump.
-- Fixture manifest entry with provenance and expected route.
-- Refusal diagnostics for unsupported payloads or paint graph states.
+- `emoji-route-trace.json` fixtures for variation selector, skin tone, ZWJ family, keycap, flag, and fallback-unavailable cases.
+- `color-glyph-plan.json` or `bitmap-glyph-plan.json` refs for accepted color/bitmap routes.
+- Diagnostic snapshots for sequence unsupported, fallback unavailable, and color glyph unavailable.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `glyph.color.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
-- Legacy gate(s) `scaledemoji` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
+- Unsupported emoji sequences refuse the sequence route rather than splitting the cluster into unrelated glyphs.
+- Monochrome fallback is allowed only when valid for the entire cluster and recorded in `EmojiRouteTrace`.
+- Legacy gate `scaledemoji` remains open until sequence planning, fallback, glyph representation, and dashboard evidence are linked.
 
 ## Dashboard Impact
 
-- Expected row: `Implement emoji sequence planner`.
+- Expected row: `Emoji sequence planner / scaledemoji`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless route traces and fallback diagnostics are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*Emoji*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Bridges Unicode emoji data, fallback, shaping output, and color glyph dispatch.
+- Move to `ready` only after sequence kinds, fallback trace fields, and diagnostics are reviewed.
 
 ## Linear Labels
 

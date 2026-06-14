@@ -14,67 +14,79 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add Script_Extensions itemizer" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M5: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket donne au shaping le bon script par cluster, ce qui evite d'appliquer des features OpenType au mauvais alphabet.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Unicode Segmentation and Bidi` slice until "Add Script_Extensions itemizer" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+OpenType feature selection depends on script runs, but many code points are `Common`, `Inherited`, emoji, or have Script_Extensions rather than a single Script value. Without a deterministic itemizer, M6 cannot choose script tags, language systems, default features, or fallback boundaries reliably.
 
 ## Scope
 
-- Deliver the capability described by "Add Script_Extensions itemizer" within `unicode` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.unicode.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M5 boundaries and update status metadata when execution starts.
+- Build script runs from grapheme clusters using pinned Script and Script_Extensions data.
+- Resolve `Common` and `Inherited` code points from neighboring strong script context while preserving diagnostics for ambiguous clusters.
+- Map target script matrix rows to OpenType script tags: `latn`, `grek`, `cyrl`, `hebr`, `arab`, `deva`, `dev2`, `thai`, `hani`, `kana`, `hira`, `hang`, `Zsye`, and `Zsym`.
+- Record cluster range, code point range, selected script, candidate extension set, language hint, and reason in `script-runs.json`.
+- Provide refusal diagnostics for unsupported scripts and ambiguous extension sets when shaping would otherwise silently approximate.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement default feature policy; KFONT-M6-006 owns feature enablement.
+- Do not perform font fallback, glyph mapping, GSUB, or GPOS.
+- Do not implement dictionary segmentation or paragraph line breaking.
+- Do not depend on platform locale APIs as normative script classification.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM5004Plan(
-    val input: UnicodeTextInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+class ScriptItemizer(
+    private val unicode: UnicodeDataSet,
+    private val targetMatrix: RequiredScriptMatrix,
+) {
+    fun itemize(input: TextInput, clusters: List<GraphemeCluster>): ScriptItemization
+}
+
+data class ScriptRun(
+    val clusterRange: IntRange,
+    val utf16Range: IntRange,
+    val selectedScript: ScriptCode,
+    val openTypeScriptTags: List<OpenTypeScriptTag>,
+    val extensionCandidates: Set<ScriptCode>,
+    val reason: ScriptResolutionReason,
 )
 
-interface KFontM5004Executor {
-    fun execute(plan: KFontM5004Plan): UnicodeRunDump
-    fun refusal(code: String = "text.unicode.unsupported"): RouteDiagnostic
-}
+data class ScriptExtensionsLookup(
+    val codePoint: Int,
+    val script: ScriptCode,
+    val extensions: Set<ScriptCode>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.unicode.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Latin with combining marks, Greek polytonic marks, Hebrew niqqud, Arabic marks, Devanagari matras, Thai tone marks, CJK variation selectors, and emoji sequences itemize into stable script runs.
+- [ ] `script-runs.json` records selected script, OpenType script tag candidates, extension candidates, cluster ranges, and Unicode data version.
+- [ ] `Common` and `Inherited` clusters inherit script only when neighboring context makes the result deterministic.
+- [ ] Unsupported scripts emit `text.shaping.script-unsupported` with the affected range and candidate script facts.
+- [ ] Script run boundaries do not split grapheme clusters.
 
 ## Required Evidence
 
-- Unicode-versioned segmentation, bidi, or script dump.
-- Cluster safety fixture expectations.
-- Unsupported boundary diagnostic snapshot.
+- `script-runs.json` with input hash, Unicode version, cluster references, selected script, OpenType tags, extension candidates, language hints, and diagnostics.
+- Fixtures: `script-latin-combining.txt`, `script-greek-polytonic.txt`, `script-hebrew-niqqud.txt`, `script-arabic-marks.txt`, `script-devanagari-matra.txt`, `script-thai-tone.txt`, `script-cjk-vs.txt`, `script-emoji-zwj.txt`, `script-unsupported.txt`.
+- Diagnostics asserted in tests: `text.shaping.script-unsupported`, `text.shaping.cluster-invariant-failed`, `text.shaping.unicode-data-version-mismatch`.
+- Matrix coverage table tying each required script family to at least one itemization fixture.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.unicode.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `text.shaping.script-unsupported`, `text.shaping.script-run-ambiguous`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -86,13 +98,13 @@ interface KFontM5004Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*ScriptItem*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Script itemization is a prerequisite for M6 script-specific feature selection.
+- Move to `ready` only after the required script matrix mapping is reviewed.
 
 ## Linear Labels
 

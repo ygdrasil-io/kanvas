@@ -14,87 +14,94 @@ legacy_gate: ["dftext"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Add glyph cache telemetry" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M9: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket rend les coûts cache glyph visibles avant de transformer les budgets en gates produit.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Glyph Artifacts, A8, SDF, Outline, and Cache` slice until "Add glyph cache telemetry" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Glyph artifact work introduces mask generation, SDF generation, atlas packing, eviction, invalidation, and upload-preparation costs. Without telemetry, performance regressions and cache churn remain hidden, and `dftext` evidence cannot separate CPU generation cost from future GPU upload cost. The gap is a deterministic cache inventory and counter schema tied to artifact keys.
 
 ## Scope
 
-- Deliver the capability described by "Add glyph cache telemetry" within `glyph` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `glyph.artifact.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M9 boundaries and update status metadata when execution starts.
+- Define glyph cache telemetry counters for route counts, A8 generation time, SDF generation time, atlas pack time, cache hit/miss, eviction count, resident bytes, invalidation count, upload byte count, and artifact budget refusals.
+- Record environment, font source set, Unicode data version, cold/warm cache state, sample count, median, p90, and max where repeated.
+- Emit `glyph-cache-inventory.json` and `glyph-cache-telemetry.json` with key preimages and memory accounting.
+- Add deterministic dump mode that replaces timings with stable fixture counters for unit tests.
+- Surface telemetry in PM/dashboard evidence without turning advisory budgets into blocking gates.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not establish release-blocking performance thresholds in this ticket.
+- Do not measure GPU time or WebGPU upload execution; M11 and M12 own those promoted gates.
+- Do not mask unsupported routes by prewarming them.
+- Do not retire `dftext` based on telemetry alone.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md`
-- `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
 - `.upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md`
 - `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM9006Plan(
-    val input: GlyphArtifactRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class GlyphCacheTelemetry(
+    val environment: MeasurementEnvironment,
+    val fontSourceSet: FontSourceSetID,
+    val unicodeVersion: UnicodeVersion,
+    val cacheState: CacheState,
+    val routeCounts: Map<GlyphRepresentationRoute, Int>,
+    val artifactCounters: GlyphArtifactCounters,
+    val atlasCounters: GlyphAtlasCounters,
+    val budgetRefusals: List<TextDiagnostic>,
 )
 
-interface KFontM9006Executor {
-    fun execute(plan: KFontM9006Plan): GlyphArtifactPlan
-    fun refusal(code: String = "glyph.artifact.unsupported"): RouteDiagnostic
-}
+data class GlyphCacheInventoryEntry(
+    val keyPreimageHash: StableHash,
+    val artifactType: GlyphArtifactType,
+    val residentBytes: Long,
+    val generation: AtlasGeneration?,
+    val invalidationToken: AtlasInvalidationToken?,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `glyph.artifact.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Telemetry separates A8 generation, SDF generation, atlas packing, cache lookup, eviction, invalidation, and upload-preparation bytes.
+- [ ] Cache inventories include key preimage hashes, resident byte counts, generation tokens, and artifact type.
+- [ ] Warm-cache and cold-cache fixtures are labeled and deterministic in test mode.
+- [ ] Budget refusals emit `text.glyph.artifact-budget-exceeded` or a narrower reason with cache domain and key hash.
+- [ ] Dashboard evidence states that budgets are advisory until a future acceptance update promotes them.
 
 ## Required Evidence
 
-- `glyph-artifact-plan.json` or `glyph-atlas.json` dump.
-- CPU artifact hash, bounds, and cache key preimage.
-- Route refusal or stale-generation diagnostic.
+- `glyph-cache-inventory.json` fixture with A8, SDF, and evicted entries.
+- `glyph-cache-telemetry.json` fixture showing route counts, hit/miss/eviction/invalidation counters, resident bytes, and upload-preparation bytes.
+- Budget-refusal diagnostic snapshot for cache memory and atlas upload-preparation limits.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `glyph.artifact.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
-- Legacy gate(s) `dftext` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
+- Telemetry collection failure must not fabricate support; it emits `text.glyph.telemetry-unavailable` and keeps the claim blocked.
+- Warmup may prepare metadata but must not hide unsupported glyph routes.
+- Legacy gate `dftext` remains open until SDF artifacts have correctness and GPU evidence, not just cache metrics.
 
 ## Dashboard Impact
 
-- Expected row: `Add glyph cache telemetry`.
+- Expected row: `Glyph cache telemetry`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless cache inventory and telemetry dumps are attached and labeled advisory.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*GlyphCache*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Adds observability for artifact planning and atlas residency before M12 performance gates.
+- Move to `ready` only after telemetry schema, deterministic dump mode, and advisory-budget wording are reviewed.
 
 ## Linear Labels
 

@@ -28,7 +28,8 @@ M1 identities, M5 cluster boundaries, and M6 shaping contract.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*FontCatalog*' --tests '*FallbackDecision*' --tests '*VariableFallback*'
+rtk ./gradlew --no-daemon :font:text:test --tests '*FallbackSegmentation*' --tests '*SystemFont*' --tests '*HostDependent*'
 ```
 
 ## Non-Claims

@@ -2,17 +2,19 @@
 
 ## Goal
 
-Create deterministic glyph artifact planning, strike keys, A8/SDF masks, atlas invalidation, and cache telemetry.
+Turn shaped glyph runs into deterministic renderer-neutral artifacts: complete strike keys, route plans, A8 masks, SDF masks, atlas artifacts, invalidation evidence, and cache telemetry.
 
 ## Dependencies
 
-M3 scalers and M6 shaped run contract.
+M3 supplies stable TrueType outlines and metrics. M6 supplies shaped glyph runs. M8 paragraph output may feed this milestone later, but M9 must also work from explicit `ShapedGlyphRun` fixtures.
 
 ## Exit Criteria
 
-- [ ] Glyph artifact route decisions are typed and dumpable.
-- [ ] A8 and SDF CPU artifacts have hashes, bounds, and refusal evidence.
-- [ ] Atlas cache invalidation and telemetry are deterministic.
+- [ ] `GlyphStrikeKey` includes every rendering-affecting fact and excludes live handles, atlas coordinates, GPU resources, and object identity.
+- [ ] `GlyphArtifactPlan` records selected route, rejected alternatives, fallback policy, and diagnostics for outline, A8, SDF, color, bitmap, SVG, and unsupported routes.
+- [ ] A8 and SDF CPU artifacts have deterministic bounds, hashes, key preimages, and refusal evidence.
+- [ ] Atlas artifacts expose entry refs, generation, invalidation tokens, eviction traces, source hashes, and budget diagnostics.
+- [ ] Cache inventory and telemetry dumps separate generation, packing, eviction, invalidation, and upload-preparation costs.
 
 ## Tickets
 
@@ -29,12 +31,16 @@ M3 scalers and M6 shaped run contract.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*Glyph*'
 ```
+
+Required evidence for this milestone includes `glyph-strike-key.json`, `glyph-artifact-plan.json`, `a8-glyph-mask.json`, `sdf-glyph-artifact.json`, `glyph-atlas.json`, `glyph-atlas-eviction-trace.json`, `glyph-cache-inventory.json`, and `glyph-cache-telemetry.json`.
 
 ## Non-Claims
 
-- GPU sampling routes remain gated by M11 evidence.
+- M9 artifacts do not claim GPU sampling, WGSL validation, upload ordering, or `DrawTextRun` integration; M11 owns those claims.
+- LCD subpixel text remains future research and must refuse with a stable diagnostic.
+- `dftext` remains open until CPU SDF artifacts, atlas/cache evidence, GPU route evidence, and dashboard updates are all linked.
 
 ## Status Update Rule
 

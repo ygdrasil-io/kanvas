@@ -14,86 +14,89 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement quadratic/cubic outline rasterization for A8" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M9: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket transforme les outlines en masques grayscale reproductibles pour le texte courant.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Glyph Artifacts, A8, SDF, Outline, and Cache` slice until "Implement quadratic/cubic outline rasterization for A8" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The A8 route needs deterministic CPU coverage masks from quadratic and cubic glyph outlines before atlas artifacts or GPU sampling can be trusted. Current ticket wording does not specify fill rules, curve flattening/rasterization policy, bounds, origin, row stride, coverage hash, or malformed-outline diagnostics. Without these details, A8 evidence could be visual-only and impossible to compare across runs.
 
 ## Scope
 
-- Deliver the capability described by "Implement quadratic/cubic outline rasterization for A8" within `glyph` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `glyph.artifact.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M9 boundaries and update status metadata when execution starts.
+- Implement pure Kotlin A8 mask generation from `OutlineGlyphPlan` for quadratic and cubic contours.
+- Support glyph-space to strike-space transform, fill rule, tight/conservative bounds, origin, padding policy, row stride, and 8-bit coverage output.
+- Emit per-glyph `a8-glyph-mask.json` facts and include source mask hashes in `glyph-artifact-plan.json`.
+- Add malformed outline, empty outline, unsupported fill rule, and coverage overflow diagnostics.
+- Keep the route CPU-prepared; no GPU texture, sampler, or atlas resource allocation happens here.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement SDF generation; KFONT-M9-004 owns that route.
+- Do not implement LCD subpixel masks.
+- Do not implement atlas eviction or GPU upload.
+- Do not use FreeType or native rasterizers as normative output.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md`
-- `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
+- `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
 - `.upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM9003Plan(
-    val input: GlyphArtifactRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class A8GlyphMaskArtifact(
+    val strikeKey: GlyphStrikeKey,
+    val glyphBounds: RectI,
+    val origin: Vec2I,
+    val rowStrideBytes: Int,
+    val coverageBytes: ByteArray,
+    val coverageHash: StableHash,
+    val rasterDiagnostics: List<TextDiagnostic>,
 )
 
-interface KFontM9003Executor {
-    fun execute(plan: KFontM9003Plan): GlyphArtifactPlan
-    fun refusal(code: String = "glyph.artifact.unsupported"): RouteDiagnostic
+interface A8OutlineRasterizer {
+    fun rasterize(plan: OutlineGlyphPlan, key: GlyphStrikeKey): A8GlyphMaskArtifact
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `glyph.artifact.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Quadratic and cubic outline fixtures produce stable bounds, origin, row stride, coverage bytes hash, and dump output.
+- [ ] The rasterizer handles empty glyphs and `.notdef` without crashing and records the selected fallback/refusal path.
+- [ ] Malformed contours emit `text.glyph.A8-generation-failed` or a narrower reason with glyph ID and strike key hash.
+- [ ] A8 artifacts contain no GPU resource handles and can be embedded in `GlyphAtlasArtifact` input.
+- [ ] External rasterizer comparisons, if present, are labeled `drift-only`.
 
 ## Required Evidence
 
-- `glyph-artifact-plan.json` or `glyph-atlas.json` dump.
-- CPU artifact hash, bounds, and cache key preimage.
-- Route refusal or stale-generation diagnostic.
+- `a8-glyph-mask.json` fixtures for simple quadratic glyph, cubic glyph, composite-derived outline, empty glyph, and malformed contour.
+- CPU oracle hash for coverage bytes and source outline path hash.
+- Diagnostic snapshot for malformed outline and unsupported fill-rule refusal.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `glyph.artifact.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- If A8 generation fails, the planner may try outline fallback only when style and route policy allow it and the decision trace records the failure.
+- Unsupported LCD or color-specific requests must not be coerced into A8 without explicit monochrome fallback policy.
+- Malformed glyphs route to `.notdef` or refusal with stable diagnostics, never to host rasterization.
 
 ## Dashboard Impact
 
-- Expected row: `Implement quadratic/cubic outline rasterization for A8`.
+- Expected row: `A8 outline rasterization`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless A8 mask fixtures and CPU oracle hashes are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*A8*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Depends on TrueType outline stability and the M9 route taxonomy.
+- Move to `ready` only after raster dump fields and malformed-outline diagnostics are reviewed.
 
 ## Linear Labels
 

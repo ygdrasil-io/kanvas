@@ -14,67 +14,80 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add CFF subroutine limits and diagnostics" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M4: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket protege le scaler CFF contre les fontes abusives tout en gardant des diagnostics precis pour les glyphes refuses.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `CFF and CFF2 Scalers` slice until "Add CFF subroutine limits and diagnostics" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Type 2 charstrings rely on local and global subroutines. Without biased subroutine index resolution, recursion limits, return validation, and bytecode budgets, a malformed CFF font can crash, loop, or hide the real reason a glyph cannot be scaled.
 
 ## Scope
 
-- Deliver the capability described by "Add CFF subroutine limits and diagnostics" within `font-scaler` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.scaler.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M4 boundaries and update status metadata when execution starts.
+- Resolve local and global subroutine indexes using the CFF bias rules for each INDEX size.
+- Add `callsubr`, `callgsubr`, and `return` support to the Type 2 machine.
+- Enforce maximum call depth, instruction count, byte count, and operand stack depth with deterministic refusal diagnostics.
+- Track call frames in `cff-subroutine-trace.json`, including caller offset, resolved subr index, local/global scope, and return offset.
+- Isolate subroutine failures to the current glyph unless the shared subr INDEX itself is malformed.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not add new drawing operators beyond the KFONT-M4-002 operator set.
+- Do not implement CFF2 `blend` or variation-store lookup.
+- Do not tune execution limits from host memory, CPU speed, or platform font behavior.
+- Do not promote full CFF scaler support without KFONT-M4-004 path, metrics, and bounds evidence.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md`
-- `.upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM4003Plan(
-    val input: ScalerGlyphInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class CffSubroutineResolver(
+    val globalSubrs: CffIndex<CharStringBytes>,
+    val localSubrsByFd: Map<CffDictId, CffIndex<CharStringBytes>>,
+    val limits: Type2ExecutionLimits,
+) {
+    fun resolve(scope: SubrScope, rawOperand: Int, fd: CffDictId?): SubrTarget
+}
+
+data class SubrCallFrame(
+    val scope: SubrScope,
+    val rawOperand: Int,
+    val resolvedIndex: Int,
+    val callerByteOffset: Int,
+    val depth: Int,
 )
 
-interface KFontM4003Executor {
-    fun execute(plan: KFontM4003Plan): ScaledGlyphEvidence
-    fun refusal(code: String = "font.scaler.unsupported"): RouteDiagnostic
-}
+data class Type2ExecutionLimits(
+    val maxOperandStack: Int,
+    val maxCallDepth: Int,
+    val maxInstructionCount: Int,
+    val maxExpandedBytes: Int,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.scaler.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Local and global subroutines execute with the correct bias for small, medium, and large INDEX counts.
+- [ ] Nested subroutine fixture records every call and return in a stable trace.
+- [ ] Recursive and over-budget subroutine fixtures refuse with the configured limit name and current call frame.
+- [ ] Out-of-range subroutine indexes and missing `return` opcodes refuse the glyph without crashing the face parser.
+- [ ] Diagnostics include enough source data to reproduce the failing subroutine path from the trace dump.
 
 ## Required Evidence
 
-- `glyph-outline.json`, metrics, bounds, or charstring trace dump.
-- CPU path/hash expectation for supported fixtures.
-- Malformed glyph refusal diagnostic.
+- `cff-subroutine-trace.json` with call frames, bias, resolved subroutine index, depth, byte budget, instruction budget, return events, and refusal diagnostics.
+- Fixtures: `cff-subr-local.otf`, `cff-subr-global.otf`, `cff-subr-nested.otf`, `cff-subr-recursive.otf`, `cff-subr-out-of-range.otf`, `cff-subr-missing-return.otf`.
+- Diagnostics asserted in tests: `font.scaler.cff.subr-out-of-range`, `font.scaler.cff.subr-depth-limit`, `font.scaler.cff.instruction-limit`, `font.cff-stack-malformed`.
+- Review evidence that execution limits are constants or config values serialized in the dump, not host-derived heuristics.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.scaler.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `font.scaler.cff.subr-index-invalid`, `font.scaler.cff.subr-recursion-limit`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -86,13 +99,13 @@ interface KFontM4003Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:scaler:test
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*CffSubr*' --tests '*CffDiagnostics*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: This ticket hardens execution safety before path output is promoted.
+- Move to `ready` only after budget constants and diagnostic names are reviewed.
 
 ## Linear Labels
 

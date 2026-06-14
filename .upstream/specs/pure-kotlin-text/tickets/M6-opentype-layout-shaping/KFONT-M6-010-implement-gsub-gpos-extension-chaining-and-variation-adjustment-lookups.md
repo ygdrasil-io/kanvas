@@ -14,67 +14,80 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement GSUB/GPOS extension, chaining and variation-adjustment lookups" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M6: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket ferme les lookups OpenType avances qui bloquent les scripts complexes et les ajustements variables.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `OpenType Layout Shaping` slice until "Implement GSUB/GPOS extension, chaining and variation-adjustment lookups" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The required shaping matrix includes chaining contexts, extension lookups, reverse chaining where required, contextual positioning, and variation/device adjustments. Without these lookup classes, complex features may be silently skipped or applied without the correct variable-coordinate deltas.
 
 ## Scope
 
-- Deliver the capability described by "Implement GSUB/GPOS extension, chaining and variation-adjustment lookups" within `shaping` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.shaping.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M6 boundaries and update status metadata when execution starts.
+- Implement GSUB chaining contextual substitution, extension substitution, and reverse chaining substitution needed by target fixtures.
+- Implement GPOS contextual positioning, chaining contextual positioning, extension positioning, and device/variation adjustment records for supported value formats.
+- Resolve extension lookup targets with loop guards and lookup-type validation.
+- Apply variation adjustments using normalized coordinates and variation data from the font/scaler stack, including CFF2 variation-dependent metrics where applicable.
+- Emit `gsub-trace.json`, `gpos-trace.json`, and `variation-adjustment-trace.json` entries with lookup target, backtrack/input/lookahead match, extension resolution, device/variation deltas, and diagnostics.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not add new scripts to the target matrix.
+- Do not implement unsupported OpenType lookup types outside the target contract.
+- Do not implement paragraph layout or GPU glyph artifacts.
+- Do not mask missing variation data by applying static positioning without a diagnostic.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
+- `.upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM6010Plan(
-    val input: ShapingInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+class OpenTypeExtensionResolver(
+    private val layoutTables: OpenTypeLayoutFacts,
+    private val limits: LookupExecutionLimits,
+) {
+    fun resolveExtension(sourceLookup: LookupRef): ResolvedLookup
+}
+
+data class ChainingContextMatch(
+    val backtrack: List<GlyphId>,
+    val input: List<GlyphId>,
+    val lookahead: List<GlyphId>,
+    val nestedLookups: List<NestedLookupApplication>,
 )
 
-interface KFontM6010Executor {
-    fun execute(plan: KFontM6010Plan): ShapedGlyphRun
-    fun refusal(code: String = "text.shaping.unsupported"): RouteDiagnostic
-}
+data class VariationAdjustment(
+    val glyphId: GlyphId,
+    val valueField: GposValueField,
+    val deviceTableRef: DeviceTableRef,
+    val normalizedPosition: NormalizedVariationPosition,
+    val delta: FontUnit,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.shaping.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] GSUB chaining contextual fixture matches backtrack/input/lookahead and applies nested substitutions in deterministic order.
+- [ ] GSUB extension fixture resolves an extension lookup target and rejects extension cycles or wrong target lookup types.
+- [ ] GPOS contextual and chaining contextual fixtures apply position adjustments with traceable match facts.
+- [ ] Device/variation adjustment fixture changes placement or advance at different variation coordinates and records the delta source.
+- [ ] Missing or malformed variation/device data emits stable diagnostics rather than applying static fallback silently.
 
 ## Required Evidence
 
-- `shaping-plan.json` and `shaped-glyph-run.json` dump.
-- GSUB/GPOS trace when lookups are involved.
-- Cluster invariant or script refusal fixture.
+- `gsub-trace.json` and `gpos-trace.json` with chaining match facts, extension target resolution, nested lookup order, before/after glyph buffer, and diagnostics.
+- `variation-adjustment-trace.json` with normalized coordinates, device/variation references, applied deltas, and metric/position fields affected.
+- Fixtures: `gsub-chaining-context.otf`, `gsub-extension-substitution.otf`, `gsub-reverse-chaining.otf`, `gpos-contextual-positioning.otf`, `gpos-chaining-positioning.otf`, `gpos-extension-positioning.otf`, `gpos-variation-device.otf`, `layout-extension-cycle.otf`.
+- Diagnostics asserted in tests: `text.shaping.lookup-malformed`, `text.shaping.lookup-type-unsupported`, `text.shaping.lookup-cycle-detected`, `font.variation-data-malformed`, `font.metrics-variation-unavailable`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.shaping.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `text.shaping.lookup-type-unsupported`, `text.shaping.variation-adjustment-unsupported`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -86,13 +99,13 @@ interface KFontM6010Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*ExtensionLookup*' --tests '*ChainingLookup*' --tests '*VariationAdjustment*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Advanced lookup work depends on basic GSUB/GPOS, mark/cursive positioning, and variation path foundations.
+- Move to `ready` only after lookup-type coverage and variation diagnostics are reviewed.
 
 ## Linear Labels
 

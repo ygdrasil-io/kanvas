@@ -14,25 +14,25 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Wire pure Kotlin font modules into CI" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M0: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket rend le futur chantier font visible dans la CI avant que des claims produit puissent passer inaperçus.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Claims, CI, and Diagnostics` slice until "Wire pure Kotlin font modules into CI" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The pure Kotlin text roadmap names candidate font modules, but CI does not yet provide one auditable lane that fails when the font core, SFNT parser, scaler, text, glyph, or GPU API contracts regress. Without that lane, later tickets can add evidence dumps or support claims while the foundation is still unvalidated.
 
 ## Scope
 
-- Deliver the capability described by "Wire pure Kotlin font modules into CI" within `ci` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.ci.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M0 boundaries and update status metadata when execution starts.
+- Add or reserve CI coverage for `:font:core:test`, `:font:sfnt:test`, `:font:scaler:test`, `:font:text:test`, `:font:glyph:test`, and `:font:gpu-api:test`.
+- Keep the lane pure Kotlin; no HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig dependency may be required for pass/fail behavior.
+- Define how missing candidate modules are reported until their Gradle projects exist.
+- Ensure CI output names the exact font task, module path, and failure category.
+- Document which later milestones are blocked while this lane is absent.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
+- Do not implement font parsing, shaping, scaling, or GPU text handoff.
+- Do not claim support for any text rendering route.
+- Do not migrate Skia-like facade APIs in this ticket.
 
 ## Spec Sources
 
@@ -45,54 +45,65 @@ The pure Kotlin text target cannot promote the `Claims, CI, and Diagnostics` sli
 ## Design Sketch
 
 ```kotlin
-data class KFontM0001Plan(
-    val input: FontCiInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+enum class FontCiModule(val gradlePath: String) {
+    Core(":font:core:test"),
+    SFNT(":font:sfnt:test"),
+    Scaler(":font:scaler:test"),
+    Text(":font:text:test"),
+    Glyph(":font:glyph:test"),
+    GPUApi(":font:gpu-api:test"),
+}
+
+data class FontCiLane(
+    val name: String = "pure-kotlin-font-foundation",
+    val tasks: List<FontCiModule>,
+    val missingModulePolicy: MissingModulePolicy,
 )
 
-interface KFontM0001Executor {
-    fun execute(plan: KFontM0001Plan): FontCiEvidence
-    fun refusal(code: String = "font.ci.unsupported"): RouteDiagnostic
-}
+data class FontCiDiagnostic(
+    val code: String,
+    val gradlePath: String,
+    val blockingMilestones: Set<String>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.ci.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] The CI configuration invokes every listed `FontCiModule` task when the module exists.
+- [ ] A missing candidate module is surfaced as a reviewed `tracked-gap` diagnostic, not silently skipped.
+- [ ] A failing font task fails the CI lane and identifies the exact Gradle path.
+- [ ] The lane remains independent from platform-native or external font engines.
+- [ ] The milestone dashboard cannot use this ticket as support evidence for parsing, shaping, scaling, fallback, or GPU rendering.
 
 ## Required Evidence
 
-- CI workflow diff or local equivalent command output.
-- Module coverage note listing the affected `:font:*` tasks.
-- Spec-only validation output when only markdown changed.
+- CI workflow diff or generated CI plan showing the six `:font:*` test tasks.
+- A dry-run or local CI transcript that includes the font lane name and task list.
+- Diagnostic sample for an absent candidate module, using a stable `font.ci.module-missing` or equivalent code.
+- Confirmation that no native font engine task is required by the lane.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.ci.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- If a candidate module does not exist yet, the lane must emit a stable module-missing diagnostic and keep dependent milestones blocked as `tracked-gap`.
+- CI must not fall back to `:kanvas-skia:test` alone as proof that pure Kotlin font modules are validated.
 
 ## Dashboard Impact
 
-- Expected row: `Wire pure Kotlin font modules into CI`.
+- Expected row: `pure-kotlin-font-foundation CI`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no. This ticket only creates the validation lane that later evidence depends on.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:test :font:core:test :font:sfnt:test :font:scaler:test :font:text:test :font:glyph:test :font:gpu-api:test
+rtk ./gradlew --no-daemon :font:core:test :font:sfnt:test :font:scaler:test :font:text:test :font:glyph:test :font:gpu-api:test
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: CI lane scope is defined, but no module validation evidence is attached yet.
+- Move to `ready` only after the candidate module list and missing-module policy are reviewed.
 
 ## Linear Labels
 

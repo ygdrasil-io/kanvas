@@ -14,26 +14,25 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add deterministic source/typeface dumps" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M1: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket fournit les fichiers que le PM et la review pourront comparer pour vérifier que l'identité font ne dérive pas.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Font Identity and Sources` slice until "Add deterministic source/typeface dumps" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+`FontSourceID` and `TypefaceID` are only useful as support gates if their inputs are serialized in stable, reviewable evidence. The target needs `font-source.json` and `typeface-id.json` dumps that avoid nondeterministic ordering and explain host-dependent sources before parser or scaler support is promoted.
 
 ## Scope
 
-- Deliver the capability described by "Add deterministic source/typeface dumps" within `validation` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.validation.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M1 boundaries and update status metadata when execution starts.
+- Add canonical serializers for source identity preimages and typeface identity preimages.
+- Use stable field names, sorted collections, normalized paths or fixture IDs, and explicit schema versioning.
+- Emit diagnostics alongside dumps without relying on object identity or host-specific temp paths.
+- Provide a determinism check that runs the same fixtures twice and compares byte-for-byte dump output.
+- Include dump examples for source kind, face count, table tags, selected `cmap`, variation coordinates, and palette identity.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not add new font fixture bytes except where KFONT-M1-004 requires manifest entries.
+- Do not serialize full table payloads, glyph outlines, shaping results, or GPU artifacts.
+- Do not use external engine output as a normative dump oracle.
 
 ## Spec Sources
 
@@ -46,54 +45,58 @@ The pure Kotlin text target cannot promote the `Font Identity and Sources` slice
 ## Design Sketch
 
 ```kotlin
-data class KFontM1003Plan(
-    val input: ValidationInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class FontIdentityDumpBundle(
+    val schemaVersion: Int,
+    val fontSource: FontSourceIdentityPreimage,
+    val typefaces: List<TypefaceIdentityPreimage>,
+    val diagnostics: List<SerializedFontDiagnostic>,
 )
 
-interface KFontM1003Executor {
-    fun execute(plan: KFontM1003Plan): EvidenceDump
-    fun refusal(code: String = "font.validation.unsupported"): RouteDiagnostic
+interface FontIdentityDumpWriter {
+    fun writeFontSourceJson(source: FontSourceIdentityPreimage): CanonicalJson
+    fun writeTypefaceIdJson(typefaces: List<TypefaceIdentityPreimage>): CanonicalJson
 }
+
+fun assertDeterministicDump(fixture: FontFixtureRef): DumpDiffResult
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.validation.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] `font-source.json` uses sorted table tags and stable provenance fields.
+- [ ] `typeface-id.json` uses sorted variation coordinates and deterministic typeface ordering.
+- [ ] Re-running the dump command on the same fixture produces byte-identical output.
+- [ ] Host-dependent sources are visible in dumps and cannot be used as normative fixture evidence.
+- [ ] Dump schema version changes are explicit and reviewable.
 
 ## Required Evidence
 
-- Target dump.
-- Fixture evidence.
-- Stable diagnostic snapshot.
+- Golden `font-source.json` and `typeface-id.json` for at least one bundled TTF fixture.
+- Determinism report comparing two dump runs over the same input.
+- Snapshot with a host-dependent source diagnostic.
+- Schema description listing required fields and ordering rules.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.validation.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- If a field cannot be serialized deterministically, the related claim must stay `tracked-gap` until the field is normalized or removed from the identity preimage.
+- Dumps must not hide host-dependent source state behind a stable-looking ID.
 
 ## Dashboard Impact
 
-- Expected row: `Add deterministic source/typeface dumps`.
+- Expected row: `source/typeface identity dumps`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no. Dumps are evidence plumbing for later parser and scaler support.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:core:test
+rtk ./gradlew --no-daemon :font:core:test --tests '*IdentityDump*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Dump formats are specified, but no golden dump evidence is attached yet.
+- Move to `ready` after KFONT-M1-001 and KFONT-M1-002 define their preimages.
 
 ## Linear Labels
 

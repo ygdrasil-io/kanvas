@@ -14,68 +14,81 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add host-dependent system scan diagnostics" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M7: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket permet d'utiliser des fontes systeme localement tout en indiquant clairement qu'elles ne sont pas une preuve normative.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Fallback and System Fonts` slice until "Add host-dependent system scan diagnostics" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+System font scanning is useful for local demos, but host-installed fonts vary by OS, user, package set, and permissions. The target allows pure Kotlin directory scans only when every source is marked host-dependent, skipped files are diagnosed, ordering is deterministic, and normative evidence never depends on unavailable host bytes.
 
 ## Scope
 
-- Deliver the capability described by "Add host-dependent system scan diagnostics" within `fallback` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.fallback.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M7 boundaries and update status metadata when execution starts.
+- Implement or specify pure Kotlin directory scanning for configured font roots without platform font APIs, fontconfig, AWT, CoreText, or DirectWrite.
+- Record path, length, mtime policy, content hash policy, supported table facts, face count, parser diagnostics, duplicate detection, and host-dependent marker for each scanned source.
+- Emit `system-font-scan.json` and link host-scanned entries into `font-catalog.json` and `fallback-decision-trace.json` only as non-normative sources.
+- Add diagnostics for unreadable files, skipped directories, malformed fonts, unsupported wrappers, duplicate faces, and host-dependent evidence.
+- Keep deterministic sorting and stable IDs for the same captured bytes and scan configuration.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not make host system fonts part of normative support evidence unless their bytes are captured as fixtures.
+- Do not use OS font APIs, fontconfig, native libraries, or platform fallback.
+- Do not guarantee identical fallback results across machines for host-dependent scans.
+- Do not implement UI font picker behavior.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md`
-- `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
 - `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM7005Plan(
-    val input: FallbackRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class SystemFontScanConfig(
+    val roots: List<FileSystemPath>,
+    val includeHidden: Boolean,
+    val maxBytesPerFile: Long,
+    val hashPolicy: FontHashPolicy,
 )
 
-interface KFontM7005Executor {
-    fun execute(plan: KFontM7005Plan): FallbackDecisionTrace
-    fun refusal(code: String = "text.fallback.unsupported"): RouteDiagnostic
-}
+data class SystemFontScanEntry(
+    val sourceId: FontSourceID,
+    val pathFingerprint: String,
+    val contentHash: Sha256?,
+    val hostDependent: Boolean = true,
+    val faceCount: Int?,
+    val tableFacts: Set<TableTag>,
+    val diagnostics: List<RouteDiagnostic>,
+)
+
+data class SystemFontScanReport(
+    val hostFingerprint: HostFontScanFingerprint,
+    val entries: List<SystemFontScanEntry>,
+    val skipped: List<SystemFontSkipDiagnostic>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.fallback.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Scanning the same fixture directory twice with the same config produces deterministic entry ordering and stable diagnostics.
+- [ ] Unreadable, malformed, unsupported-wrapper, duplicate, and oversized file fixtures emit precise diagnostics.
+- [ ] Every system-scanned entry is marked host-dependent in `system-font-scan.json`, `font-catalog.json`, and fallback traces.
+- [ ] Host-dependent entries are excluded from normative support evidence unless source bytes are captured as fixtures.
+- [ ] The scanner does not call platform font APIs or native libraries.
 
 ## Required Evidence
 
-- `font-catalog.json` or `resolved-font-runs.json` dump.
-- `fallback-decision-trace.json` with selected/refused faces.
-- Host-dependent or missing-glyph diagnostic snapshot.
+- `system-font-scan.json` with scan config hash, host marker, deterministic ordering, entries, skipped paths, content hash policy, parser table facts, and diagnostics.
+- `font-catalog.json` and `fallback-decision-trace.json` examples showing host-dependent markers propagated.
+- Fixtures: `system-scan-fixture-dir/valid.ttf`, `system-scan-fixture-dir/duplicate.ttf`, `system-scan-fixture-dir/malformed.otf`, `system-scan-fixture-dir/unsupported-wrapper.pfb`, `system-scan-fixture-dir/oversized.ttf`, `system-scan-fixture-dir/unreadable.ttf`.
+- Diagnostics asserted in tests: `font.source.host-dependent`, `font.source.unreadable`, `font.outline-format.unsupported-wrapper`, `font.required-table-missing`, `font.catalog.duplicate-face`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.fallback.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `font.source.host-dependent`, `font.source.unreadable`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -87,13 +100,13 @@ interface KFontM7005Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*SystemFont*' --tests '*HostDependent*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: System scanning is allowed only as pure Kotlin, host-dependent evidence.
+- Move to `ready` only after scan config fields and host-dependent dashboard wording are reviewed.
 
 ## Linear Labels
 

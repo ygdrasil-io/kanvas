@@ -14,85 +14,93 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement UAX #14 line breaker" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M8: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket rend le wrapping prévisible pour les textes UI, y compris les scripts mixtes et les clusters complexes.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Paragraph Engine` slice until "Implement UAX #14 line breaker" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Paragraph wrapping needs Unicode line break opportunities, not width-only heuristics. The gap is a UAX #14 based line-break map that respects the pinned Unicode data version, explicit newlines, grapheme cluster boundaries, soft-wrap settings, and locale gaps. Without this, paragraph fixtures cannot prove where a line may break before line fitting, ellipsis, selection boxes, or hit testing.
 
 ## Scope
 
-- Deliver the capability described by "Implement UAX #14 line breaker" within `paragraph` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.paragraph.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M8 boundaries and update status metadata when execution starts.
+- Build a `LineBreakMap` from Unicode line break classes and grapheme cluster facts supplied by M5.
+- Mark mandatory breaks, allowed soft breaks, prohibited breaks, and break reasons for each source offset.
+- Honor explicit newline handling, soft-wrap enabled/disabled mode, and paragraph width-constrained fitting inputs.
+- Emit diagnostics for unsupported dictionary/language-specific refinement instead of claiming full locale-sensitive line breaking.
+- Dump `line-breaks.json` with Unicode data version, input hash, break opportunities, cluster references, and diagnostics.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement dictionary-based Thai/Lao/Khmer refinement unless a separate accepted ticket supplies the data.
+- Do not shape glyphs, choose fallback fonts, or compute final line metrics in this ticket.
+- Do not use browser, ICU native, CoreText, or Skia Paragraph output as normative line-break evidence.
+- Do not apply ellipsis or max-line truncation here.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/03-paragraph-engine.md`
-- `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM8003Plan(
-    val input: ParagraphInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class LineBreakOpportunity(
+    val offset: TextOffset,
+    val kind: LineBreakKind,
+    val reason: Uax14RuleId,
+    val clusterId: GraphemeClusterId,
+    val localeRefinement: LocaleBreakStatus,
 )
 
-interface KFontM8003Executor {
-    fun execute(plan: KFontM8003Plan): ParagraphLayoutResult
-    fun refusal(code: String = "text.paragraph.unsupported"): RouteDiagnostic
+data class LineBreakMap(
+    val inputHash: StableHash,
+    val unicodeVersion: UnicodeVersion,
+    val opportunities: List<LineBreakOpportunity>,
+    val diagnostics: List<TextDiagnostic>,
+)
+
+interface Uax14LineBreaker {
+    fun analyze(input: ParagraphInput, clusters: GraphemeClusterMap): LineBreakMap
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.paragraph.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] `line-breaks.json` records mandatory, allowed, and prohibited break positions for hard newlines, spaces, punctuation, CJK text, combining marks, and emoji clusters.
+- [ ] No line break is emitted inside a grapheme cluster.
+- [ ] Soft-wrap disabled mode still records hard breaks but suppresses optional wrapping opportunities for line fitting.
+- [ ] Unsupported locale-specific refinement emits `text.paragraph.locale-break-refinement-unavailable` with locale and range.
+- [ ] Repeated runs with the same Unicode data version and input produce identical break maps.
 
 ## Required Evidence
 
-- `paragraph-input.json` or `paragraph-layout.json` dump.
-- Line, box, selection, hit-test, or placeholder fixture.
-- Paragraph diagnostic snapshot for invalid constraints.
+- `line-breaks.json` fixtures for Latin UI text, CJK text without spaces, mixed LTR/RTL text, explicit newlines, combining marks, and emoji ZWJ sequences.
+- Negative diagnostic fixture for a locale requiring dictionary refinement that is not yet implemented.
+- Review diff showing the Unicode data version in each line-break dump.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.paragraph.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- When dictionary refinement is missing, the engine may use base UAX #14 classes only if the dump marks the range as refinement-limited.
+- Invalid or missing Unicode data refuses with `text.paragraph.line-break-data-unavailable`.
+- Silent host line-breaking fallback is not allowed.
 
 ## Dashboard Impact
 
-- Expected row: `Implement UAX #14 line breaker`.
+- Expected row: `UAX #14 paragraph line breaker`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless UAX #14 fixtures and locale-refinement diagnostics are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*LineBreak*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Blocks reliable wrapping, ellipsis, selection, and placeholder line placement.
+- Move to `ready` only after the dump schema and locale-refinement diagnostic names are accepted.
 
 ## Linear Labels
 

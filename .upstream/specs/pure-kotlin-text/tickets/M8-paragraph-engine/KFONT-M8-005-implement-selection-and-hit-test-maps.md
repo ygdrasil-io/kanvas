@@ -14,85 +14,94 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement selection and hit-test maps" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M8: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket rend les interactions texte sélection/caret testables, notamment aux frontières bidi et multi-lignes.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Paragraph Engine` slice until "Implement selection and hit-test maps" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Paragraph layout is not useful for editors or selectable UI text unless it can map text ranges to boxes and points back to text positions. The gap is a deterministic `HitTestMap` and selection-box model derived from shaped glyph clusters, visual line order, placeholders, and bidi levels. A generic layout dump cannot prove caret positions, affinity, or selection geometry.
 
 ## Scope
 
-- Deliver the capability described by "Implement selection and hit-test maps" within `paragraph` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.paragraph.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M8 boundaries and update status metadata when execution starts.
+- Build selection boxes for arbitrary text ranges from `ParagraphLayoutResult`, including multi-line and bidi ranges.
+- Build point hit testing with caret affinity, grapheme boundary snapping, placeholder boxes, and visual line order.
+- Expose word and grapheme boundary query facts sourced from M5 segmentation data.
+- Dump `hit-test-map.json` with line IDs, glyph cluster boxes, caret stops, text positions, affinities, and diagnostics.
+- Add diagnostics for coordinates outside finite layout bounds, invalid text ranges, and cluster invariant failures.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement rendering of selection highlights or carets.
+- Do not invent platform-specific caret movement behavior not represented in the dump.
+- Do not implement paragraph shaping, line breaking, or placeholder metrics in this ticket.
+- Do not use native accessibility/text APIs as normative evidence.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/03-paragraph-engine.md`
-- `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM8005Plan(
-    val input: ParagraphInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class TextPosition(
+    val offset: TextOffset,
+    val affinity: TextAffinity,
 )
 
-interface KFontM8005Executor {
-    fun execute(plan: KFontM8005Plan): ParagraphLayoutResult
-    fun refusal(code: String = "text.paragraph.unsupported"): RouteDiagnostic
-}
+data class HitTestEntry(
+    val point: Vec2,
+    val lineIndex: Int,
+    val position: TextPosition,
+    val clusterId: GlyphClusterId?,
+    val placeholderId: PlaceholderId?,
+)
+
+data class HitTestMap(
+    val caretStops: List<CaretStop>,
+    val selectionBoxes: List<TextBox>,
+    val hitEntries: List<HitTestEntry>,
+    val diagnostics: List<TextDiagnostic>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.paragraph.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Selection boxes are stable for single-line, multi-line, bidi, and mixed-style ranges.
+- [ ] Hit testing at glyph cluster boundaries records upstream/downstream affinity and never returns an offset inside a grapheme cluster.
+- [ ] Placeholder boxes participate in selection and hit testing with explicit placeholder IDs.
+- [ ] Out-of-bounds points clamp or refuse according to a documented policy and emit diagnostics for non-finite coordinates.
+- [ ] `hit-test-map.json` is deterministic and references line IDs from `paragraph-layout.json`.
 
 ## Required Evidence
 
-- `paragraph-input.json` or `paragraph-layout.json` dump.
-- Line, box, selection, hit-test, or placeholder fixture.
-- Paragraph diagnostic snapshot for invalid constraints.
+- `hit-test-map.json` fixture for mixed LTR/RTL text, multi-line selection, combining marks, emoji cluster boundaries, and placeholder ranges.
+- `selection-boxes.json` or equivalent section in `hit-test-map.json` showing per-line boxes for a cross-line range.
+- Negative fixture for invalid range and non-finite point diagnostics.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.paragraph.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Invalid ranges refuse with `text.paragraph.invalid-selection-range`.
+- Cluster invariant failures refuse with `text.paragraph.cluster-invariant-failed`; the engine must not guess a host caret offset.
+- Missing placeholder metrics keep placeholder hit testing refused until KFONT-M8-006 supplies the box facts.
 
 ## Dashboard Impact
 
-- Expected row: `Implement selection and hit-test maps`.
+- Expected row: `Paragraph selection and hit-test maps`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless hit-test and selection fixtures cover bidi, cluster, and placeholder cases.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*HitTest*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Depends on shaped run segmentation and line-break facts; placeholder cases depend on M8-006 for full geometry.
+- Move to `ready` only after caret affinity and out-of-bounds policies are accepted.
 
 ## Linear Labels
 

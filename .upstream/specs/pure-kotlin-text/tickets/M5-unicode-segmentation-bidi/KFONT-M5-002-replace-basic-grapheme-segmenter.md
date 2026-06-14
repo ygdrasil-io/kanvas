@@ -14,67 +14,78 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Replace basic grapheme segmenter" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M5: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket empeche Kanvas de couper les accents, emoji ZWJ ou marques indic en morceaux invisibles pour l'utilisateur.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Unicode Segmentation and Bidi` slice until "Replace basic grapheme segmenter" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The current basic segmentation boundary is too narrow for the target script matrix. Combining marks, emoji modifiers, ZWJ sequences, regional indicators, Indic virama sequences, and variation selectors must remain in stable grapheme clusters before shaping, fallback, paragraph layout, and hit testing consume text ranges.
 
 ## Scope
 
-- Deliver the capability described by "Replace basic grapheme segmenter" within `unicode` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.unicode.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M5 boundaries and update status metadata when execution starts.
+- Implement UAX #29 extended grapheme cluster segmentation from the pinned `UnicodeDataSet`.
+- Cover CR/LF/control boundaries, Hangul syllable rules, Extend/SpacingMark/Prepend, ZWJ and Extended_Pictographic, regional indicator pairs, emoji modifiers, variation selectors, and Indic virama-related cluster behavior required by the script matrix.
+- Produce cluster records with UTF-16 range, code point range, cluster level, source text hash, and Unicode data version.
+- Emit `unicode-segments.json` for positive and refusal fixtures.
+- Provide deterministic diagnostics when segmentation cannot run because required Unicode data is absent or version-mismatched.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement word, sentence, or line breaking policy here.
+- Do not perform GSUB/GPOS shaping or glyph fallback.
+- Do not render emoji or color glyphs.
+- Do not call ICU, platform segmenters, browser APIs, or regex engines as the normative cluster oracle.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM5002Plan(
-    val input: UnicodeTextInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class GraphemeCluster(
+    val clusterIndex: Int,
+    val utf16Range: IntRange,
+    val codePointRange: IntRange,
+    val breakBefore: GraphemeBreakDecision,
+    val properties: List<GraphemeBreakClass>,
 )
 
-interface KFontM5002Executor {
-    fun execute(plan: KFontM5002Plan): UnicodeRunDump
-    fun refusal(code: String = "text.unicode.unsupported"): RouteDiagnostic
+class GraphemeClusterer(
+    private val unicode: UnicodeDataSet,
+    private val rules: GraphemeRuleTable,
+) {
+    fun segment(input: TextInput): GraphemeSegmentationResult
 }
+
+data class GraphemeSegmentationResult(
+    val unicodeVersion: UnicodeVersion,
+    val clusters: List<GraphemeCluster>,
+    val diagnostics: List<RouteDiagnostic>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.unicode.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] UAX #29 fixture strings produce stable cluster boundaries for ASCII, accented Latin, Hangul, combining marks, emoji modifier, emoji ZWJ, regional indicator, and Indic virama cases.
+- [ ] Cluster dumps record Unicode version, original UTF-16 ranges, code point ranges, and per-boundary rule decisions.
+- [ ] Variation selector sequences stay inside one cluster when the pinned data marks the selector appropriately.
+- [ ] Malformed input with isolated surrogate code units refuses or records a precise diagnostic without corrupting following cluster ranges.
+- [ ] Repeated runs on the same input produce byte-identical `unicode-segments.json`.
 
 ## Required Evidence
 
-- Unicode-versioned segmentation, bidi, or script dump.
-- Cluster safety fixture expectations.
-- Unsupported boundary diagnostic snapshot.
+- `unicode-segments.json` containing input text hash, Unicode version, clusters, per-boundary rule IDs, and diagnostics.
+- Fixtures: `grapheme-latin-combining.txt`, `grapheme-emoji-zwj.txt`, `grapheme-regional-indicators.txt`, `grapheme-devanagari-virama.txt`, `grapheme-variation-selector.txt`, `grapheme-isolated-surrogate.txt`.
+- Diagnostics asserted in tests: `text.shaping.unicode-data-version-mismatch`, `text.shaping.cluster-invariant-failed`, `text.unicode.invalid-scalar`.
+- Diff evidence that cluster boundaries are not derived from the JDK Unicode version.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.unicode.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `text.unicode.grapheme-rule-unsupported`, `text.unicode.cluster-boundary-invalid`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -86,13 +97,13 @@ interface KFontM5002Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*Grapheme*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Grapheme cluster behavior depends on the pinned Unicode data ticket.
+- Move to `ready` only after target fixture strings and dump fields are reviewed.
 
 ## Linear Labels
 

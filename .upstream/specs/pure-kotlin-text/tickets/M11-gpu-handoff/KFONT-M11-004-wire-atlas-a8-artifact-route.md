@@ -14,88 +14,87 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Wire atlas A8 artifact route" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M11: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket prouve le premier chemin GPU texte borné: échantillonner un atlas A8 préparé par le stack texte.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Typed GPU Handoff` slice until "Wire atlas A8 artifact route" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+A8 artifacts from M9 are CPU-prepared, but the GPU renderer still needs a typed route from `GlyphAtlasArtifact` to `AtlasMaskSample`. The route must validate atlas descriptor, page generation, entry refs, instance layout, A8 WGSL coverage sampling, material/color modulation, clip compatibility, and upload dependency facts. Without this ticket, simple atlas text evidence remains unconnected to the target GPU pipeline.
 
 ## Scope
 
-- Deliver the capability described by "Wire atlas A8 artifact route" within `gpu-api` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.gpu.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M11 boundaries and update status metadata when execution starts.
+- Map `GlyphAtlasArtifact` with A8 masks to `GPUTextRepresentation.A8MaskAtlas` and `GPUTextRoute.AtlasMaskSample`.
+- Define `A8TextMaskStep` route facts: atlas texture format, sampler policy, per-glyph instance fields, material/color uniform refs, clip facts, and coverage output value spec.
+- Build `GPUTextAtlasPlan`, `GPUTextAtlasEntryRef`, `GPUTextInstanceLayout`, and binding refs needed for A8 sampling.
+- Emit `gpu-text-a8-route-plan.json` with route selection, atlas refs, instance layout hash, upload dependency refs, and diagnostics.
+- Add focused GPU/WGSL evidence before any A8 route support claim is promoted.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement SDF, color glyph, bitmap, SVG, or outline routes in this ticket.
+- Do not generate glyph masks or pack atlases; M9 owns those artifacts.
+- Do not support LCD subpixel text.
+- Do not allow a CPU-rendered full text texture as fallback.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
 - `.upstream/specs/gpu-renderer/21-text-glyph-pipeline.md`
-- `.upstream/specs/gpu-renderer/09-draw-family-support-matrix.md`
 - `.upstream/target/high-performance-wgsl-pipeline-target.md`
 - `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM11004Plan(
-    val input: DrawTextRunPayload,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class A8TextMaskRoutePlan(
+    val commandId: DrawCommandId,
+    val atlasPlan: GPUTextAtlasPlan,
+    val subRuns: List<GPUTextSubRunPlan>,
+    val instanceLayout: GPUTextInstanceLayout,
+    val renderStep: GPUTextRenderStep = GPUTextRenderStep.A8TextMaskStep,
+    val wgslModule: TextWgslModuleRef,
+    val diagnostics: List<GPUTextDiagnostic>,
 )
-
-interface KFontM11004Executor {
-    fun execute(plan: KFontM11004Plan): GPUTextRoutePlan
-    fun refusal(code: String = "text.gpu.unsupported"): RouteDiagnostic
-}
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.gpu.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `GPU-gated` until all evidence and validation criteria are satisfied.
+- [ ] An A8 `GlyphAtlasArtifact` fixture routes to `AtlasMaskSample` without font parsing or shaping in the renderer.
+- [ ] Atlas entry refs validate generation, page, UV rect, source bounds, and source mask hash.
+- [ ] `A8TextMaskStep` WGSL samples R8/A8 coverage and modulates text material/color without putting atlas refs in `MaterialKey`.
+- [ ] Missing atlas entry, stale generation, unsupported texture format, or missing upload plan refuses with stable `unsupported.text.*` diagnostics.
+- [ ] GPU evidence is focused on A8 atlas sampling and does not imply broad shaping or color glyph support.
 
 ## Required Evidence
 
-- Typed `DrawTextRun` or GPU route dump.
-- No-`Sk*` leakage or unsupported route refusal test.
-- GPU/WGSL evidence when a GPU route is promoted.
-- Classification remains `GPU-gated` until all evidence is attached.
+- `gpu-text-a8-route-plan.json` fixture with accepted `GlyphAtlasArtifact`, atlas entry refs, instance layout, and binding facts.
+- WGSL parser/reflection dump for the A8 text mask module or snippet.
+- GPU evidence artifact for a bounded A8 text fixture, plus refusal snapshots for missing entry and stale generation.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.gpu.*` diagnostic and keep the ticket classified as `GPU-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Stale or missing atlas entries refuse or request an explicit rebuild within budget; glyphs must not be dropped.
+- Unsupported A8 route emits `unsupported.text.a8_atlas_route_unavailable`.
+- CPU-rendered full text texture fallback remains forbidden.
 
 ## Dashboard Impact
 
-- Expected row: `Wire atlas A8 artifact route`.
+- Expected row: `A8 atlas text GPU route`.
 - Expected classification: `GPU-gated`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless A8 route plan, WGSL validation, and GPU evidence are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:gpu-api:test
-rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*A8Text*'
+rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*A8Text*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: First positive GPU route for typed text artifacts, still scoped to A8 atlas masks.
+- Move to `ready` only after route dump, instance layout, and focused GPU evidence requirements are reviewed.
 
 ## Linear Labels
 

@@ -14,68 +14,72 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add Thai and CJK shaping boundaries" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M6: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket separe clairement ce que le shaping Thai et CJK doit prouver de ce qui appartient plus tard au paragraph layout.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `OpenType Layout Shaping` slice until "Add Thai and CJK shaping boundaries" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Thai and CJK have important shaping boundaries that are easy to overclaim. Thai requires mark behavior and script itemization but dictionary word breaking is paragraph-owned. CJK requires direct mapping, variation selector handling, localized/vertical forms, and vertical alternate diagnostics without implying ruby, complex line breaking, or full paragraph support.
 
 ## Scope
 
-- Deliver the capability described by "Add Thai and CJK shaping boundaries" within `shaping` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.shaping.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M6 boundaries and update status metadata when execution starts.
+- Add Thai fixtures for base plus above/below marks, tone marks, mixed Latin/Thai script runs, and missing mark-positioning diagnostics.
+- Add CJK fixtures for Han, kana, hangul, localized form where fixture data exists, vertical `vert`/`vrt2` alternates, and `cmap` format 14 variation selector behavior.
+- Record shaping plans, GSUB/GPOS traces, script runs, feature policy choices, and shaped glyph runs.
+- Add explicit diagnostics that dictionary word breaking, ruby layout, and East Asian line-breaking refinement are paragraph-owned and not M6 support claims.
+- Include negative fixtures for unsupported variation selector, missing vertical alternate, and unsupported script boundary.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement Thai dictionary word breaking or paragraph line wrapping.
+- Do not implement ruby, kinsoku, justification, or East Asian paragraph metrics.
+- Do not implement color emoji or fallback font policy.
+- Do not use platform CJK/Thai shapers as normative output.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM6009Plan(
-    val input: ShapingInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class ShapingBoundaryFixture(
+    val name: String,
+    val script: ScriptCode,
+    val text: TextInput,
+    val requestedFeatures: Set<OpenTypeFeatureTag>,
+    val paragraphOwnedDiagnostics: Set<String>,
 )
 
-interface KFontM6009Executor {
-    fun execute(plan: KFontM6009Plan): ShapedGlyphRun
-    fun refusal(code: String = "text.shaping.unsupported"): RouteDiagnostic
-}
+data class CjkVariationSelectorCase(
+    val baseCodePoint: Int,
+    val variationSelector: Int,
+    val expectedGlyphId: GlyphId?,
+    val diagnosticWhenMissing: String?,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.shaping.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `fixture-gated` until all evidence and validation criteria are satisfied.
+- [ ] Thai fixtures prove mark positioning for above/below/tone mark cases and preserve mixed Latin/Thai script boundaries.
+- [ ] Thai dictionary word breaking is diagnosed as paragraph-owned and is not claimed by shaping evidence.
+- [ ] CJK fixtures cover Han direct mapping, kana/hira script tags, hangul direct mapping, vertical alternate request, and variation selector mapping through `cmap` format 14.
+- [ ] Missing vertical alternate or unsupported variation selector emits stable diagnostics without corrupting the base glyph mapping.
+- [ ] `shaped-glyph-run.json` records script tags, feature choices, cluster ranges, glyph IDs, positions, and diagnostics for each boundary fixture.
 
 ## Required Evidence
 
-- `shaping-plan.json` and `shaped-glyph-run.json` dump.
-- GSUB/GPOS trace when lookups are involved.
-- Cluster invariant or script refusal fixture.
-- Classification remains `fixture-gated` until all evidence is attached.
+- `thai-cjk-boundary-report.json` with fixture provenance, script run hashes, feature policy hashes, dump hashes, and paragraph-owned non-claim diagnostics.
+- `script-runs.json`, `shaping-plan.json`, `gsub-trace.json`, `gpos-trace.json`, `shaped-glyph-run.json`, and `cmap-map.json` references for fixtures.
+- Fixtures: `thai-base-marks.otf`, `thai-tone-marks.otf`, `thai-latin-mixed.txt`, `cjk-han-variation-selector.otf`, `cjk-kana-vertical.otf`, `cjk-hangul-direct.otf`, `cjk-missing-vertical-alt.otf`.
+- Diagnostics asserted in tests: `text.shaping.mark-positioning-unavailable`, `text.shaping.feature-unsupported`, `text.shaping.script-unsupported`, `text.shaping.paragraph-boundary-required`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.shaping.*` diagnostic and keep the ticket classified as `fixture-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `text.shaping.thai-mark-unsupported`, `text.shaping.cjk-variation-selector-unsupported`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `fixture-gated` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -87,13 +91,13 @@ interface KFontM6009Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*Thai*' --tests '*Cjk*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Boundary fixtures depend on script itemization, feature policy, and positioning support.
+- Move to `ready` only after paragraph-owned diagnostics and fixture scope are reviewed.
 
 ## Linear Labels
 

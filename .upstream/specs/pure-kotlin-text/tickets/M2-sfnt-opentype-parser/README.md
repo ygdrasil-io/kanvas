@@ -2,7 +2,7 @@
 
 ## Goal
 
-Harden SFNT, TTC, cmap, and table fact parsing with bounded reads and stable diagnostics.
+Harden SFNT, TTC, `cmap`, and table fact parsing with bounded reads, deterministic dumps, and stable diagnostics.
 
 ## Dependencies
 
@@ -10,9 +10,10 @@ M1 deterministic identity and fixture manifest.
 
 ## Exit Criteria
 
-- [ ] Single-face and collection fonts parse through one bounded contract.
-- [ ] Required and optional table failures have stable diagnostics.
-- [ ] Parser facts are dumped without implying scaler, shaping, or color rendering support.
+- [ ] Single-face and collection fonts parse through one bounded request/result contract.
+- [ ] Required and optional table failures have stable diagnostics and manifest-backed malformed fixtures.
+- [ ] `cmap-map.json` covers formats 12, 4, 14, 6, 0, missing code point behavior, and unsupported-format refusal.
+- [ ] `sfnt-directory.json` and `sfnt-tables.json` are deterministic and do not imply scaler, shaping, color, or GPU support.
 
 ## Tickets
 
@@ -28,13 +29,13 @@ M1 deterministic identity and fixture manifest.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:sfnt:test
-rtk ./gradlew --no-daemon :font:core:test
+rtk ./gradlew --no-daemon :font:sfnt:test --tests '*SFNTParser*' --tests '*TTC*' --tests '*TableDirectory*' --tests '*CMap*' --tests '*TableFactDump*' --tests '*MalformedSFNT*'
 ```
 
 ## Non-Claims
 
-- Metadata parsing does not claim glyph rendering, shaping, color glyph, or GPU support.
+- Metadata parsing does not claim glyph rendering, shaping, color glyph, paragraph, fallback, or GPU support.
+- Table presence does not mean table payload support unless a later ticket supplies fixture, dump, oracle, and diagnostic evidence.
 
 ## Status Update Rule
 

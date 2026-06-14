@@ -14,68 +14,72 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add Devanagari shaping fixtures" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M6: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket donne les preuves minimales pour Devanagari: syllabes, reph, matra pre-base et placement des marques.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `OpenType Layout Shaping` slice until "Add Devanagari shaping fixtures" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Devanagari requires script-specific syllable formation, feature phases, reordering, contextual substitutions, and mark positioning. Generic lookup tests cannot prove that clusters remain intact or that required Indic features are applied in the right order.
 
 ## Scope
 
-- Deliver the capability described by "Add Devanagari shaping fixtures" within `shaping` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.shaping.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M6 boundaries and update status metadata when execution starts.
+- Add Devanagari fixture fonts and text inputs for consonant clusters, reph, pre-base matra, below-base form, half form, mark placement, and unsupported syllable/refusal cases.
+- Record an `indic-syllable-plan.json` or equivalent section in `shaping-plan.json` with cluster, syllable type, feature phase, and reorder decisions.
+- Assert required feature policy for `deva` and `dev2`: `nukt`, `akhn`, `rphf`, `blwf`, `half`, `pstf`, `vatu`, `pres`, `abvs`, `blws`, `psts`, `haln`, `dist`, `abvm`, and `blwm`.
+- Link GSUB and GPOS traces to each syllable fixture.
+- Include refusal fixtures for unsupported syllable state, missing required feature, malformed lookup, and cluster invariant failure.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement the full Indic shaping roadmap for scripts outside the required matrix.
+- Do not implement paragraph line breaking, fallback catalog policy, or glyph rendering.
+- Do not use HarfBuzz as the normative oracle for syllable phases.
+- Do not split a Devanagari cluster to recover from missing glyphs.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM6008Plan(
-    val input: ShapingInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class IndicSyllable(
+    val clusterRange: IntRange,
+    val script: OpenTypeScriptTag,
+    val type: IndicSyllableType,
+    val reorderedGlyphs: List<GlyphId>,
+    val featurePhases: List<IndicFeaturePhase>,
 )
 
-interface KFontM6008Executor {
-    fun execute(plan: KFontM6008Plan): ShapedGlyphRun
-    fun refusal(code: String = "text.shaping.unsupported"): RouteDiagnostic
-}
+data class DevanagariFixtureCase(
+    val name: String,
+    val text: TextInput,
+    val expectedSyllables: List<IndicSyllableExpectation>,
+    val requiredFeatures: Set<OpenTypeFeatureTag>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.shaping.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `fixture-gated` until all evidence and validation criteria are satisfied.
+- [ ] Fixtures cover consonant cluster, reph, pre-base matra, below-base form, half form, mark placement, and negative unsupported syllable cases.
+- [ ] Shaping plan records Devanagari syllable boundaries, reorder decisions, feature phases, and Unicode cluster references.
+- [ ] GSUB/GPOS traces show required lookups for substitutions and mark positioning used by each fixture.
+- [ ] Missing required Indic feature or unsupported syllable state refuses the affected cluster.
+- [ ] Cluster ranges from M5 remain intact through reordering and substitutions.
 
 ## Required Evidence
 
-- `shaping-plan.json` and `shaped-glyph-run.json` dump.
-- GSUB/GPOS trace when lookups are involved.
-- Cluster invariant or script refusal fixture.
-- Classification remains `fixture-gated` until all evidence is attached.
+- `devanagari-shaping-report.json` with fixture provenance, expected syllables, feature phases, dump hashes, and pass/refusal status.
+- `shaping-plan.json` or `indic-syllable-plan.json`, `gsub-trace.json`, `gpos-trace.json`, `shaped-glyph-run.json`, and `unicode-segments.json` for each fixture.
+- Fixtures: `devanagari-consonant-cluster.otf`, `devanagari-reph.otf`, `devanagari-prebase-matra.otf`, `devanagari-below-base.otf`, `devanagari-mark-placement.otf`, `devanagari-unsupported-syllable.otf`.
+- Diagnostics asserted in tests: `text.shaping.cluster-invariant-failed`, `text.shaping.feature-unsupported`, `text.shaping.mark-positioning-unavailable`, `text.shaping.lookup-malformed`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.shaping.*` diagnostic and keep the ticket classified as `fixture-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `text.shaping.indic-syllable-unsupported`, `text.shaping.devanagari-phase-unsupported`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `fixture-gated` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -87,13 +91,13 @@ interface KFontM6008Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*DevanagariShaping*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Devanagari evidence depends on M5 clusters/itemization, contextual GSUB, mark positioning, and feature policy.
+- Move to `ready` only after fixture coverage and syllable dump fields are reviewed.
 
 ## Linear Labels
 

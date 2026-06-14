@@ -14,19 +14,19 @@ legacy_gate: ["dftext"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Route `SkTextBlob` glyph runs through typed descriptors" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M13: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket transforme les glyph runs `SkTextBlob` en descriptors typés que le pipeline GPU peut auditer.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Skia-like Facade Migration` slice until "Route `SkTextBlob` glyph runs through typed descriptors" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+`SkTextBlob` is a compatibility API for explicit glyph IDs and positions. It should bypass GSUB shaping, but it still needs typeface identity, glyph validation, metrics, synthetic clusters when source ranges exist, artifact planning, and GPU-safe descriptors. If the blob route keeps mutable `Sk*` objects or untyped glyph arrays past the facade, the GPU renderer cannot enforce the no-`Sk*` boundary or diagnose `dftext`/artifact gates.
 
 ## Scope
 
-- Deliver the capability described by "Route `SkTextBlob` glyph runs through typed descriptors" within `skia-facade` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `kanvas.facade.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M13 boundaries and update status metadata when execution starts.
+- Convert `SkTextBlob` glyph runs into `GlyphRunDescriptor` or equivalent typed descriptors with `TypefaceID`, glyph IDs, positions, advances, transform facts, style/material facts, and optional source text ranges.
+- Validate glyph count, glyph ID bounds, position count, non-finite coordinates, source cluster mapping, and metrics availability through pure Kotlin contracts.
+- Attach synthetic clusters for direct glyph runs when source text ranges are available; otherwise record an explicit cluster-bypass marker.
+- Hand descriptors to glyph artifact planning and GPU handoff without leaking `SkFont`, `SkTypeface`, `SkTextBlob`, live handles, or full CPU-rendered text textures.
+- Keep `dftext` visible until SDF/A8 artifact, atlas/cache, transform, GPU route, and diagnostics evidence are linked by the owning tickets.
 
 ## Non-Goals
 
@@ -48,43 +48,54 @@ The pure Kotlin text target cannot promote the `Skia-like Facade Migration` slic
 ## Design Sketch
 
 ```kotlin
-data class KFontM13004Plan(
-    val input: SkiaFacadeCall,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class SkTextBlobGlyphRunAdapter(
+    val blobId: SkTextBlobID,
+    val typefaceId: TypefaceID,
+    val glyphIds: IntArray,
+    val positions: List<TextPosition>,
+    val sourceTextRanges: List<IntRange>?,
+    val clusterPolicy: DirectGlyphClusterPolicy,
+    val descriptor: GlyphRunDescriptor?,
+    val diagnostics: List<RouteDiagnostic>,
 )
 
-interface KFontM13004Executor {
-    fun execute(plan: KFontM13004Plan): FacadeMigrationEvidence
-    fun refusal(code: String = "kanvas.facade.unsupported"): RouteDiagnostic
-}
+data class SkTextBlobDescriptorDump(
+    val blobHash: String,
+    val descriptorId: GlyphRunDescriptorID,
+    val glyphCount: Int,
+    val typefaceId: TypefaceID,
+    val artifactPlanRefs: List<String>,
+    val noSkLeakage: Boolean,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `kanvas.facade.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Direct glyph runs produce typed `GlyphRunDescriptor` facts without invoking GSUB/GPOS shaping.
+- [ ] Descriptor validation rejects mismatched glyph/position counts, invalid glyph IDs, missing metrics, non-finite positions, and unsupported cluster mappings with stable diagnostics.
+- [ ] Descriptors can be consumed by glyph artifact planning and `DrawTextRun` handoff without `Sk*` object leakage.
+- [ ] Dumps preserve deterministic glyph order, position order, typeface identity, and artifact plan references.
+- [ ] The `dftext` legacy gate remains open unless typed descriptors are paired with SDF/artifact/GPU evidence required by the migration spec.
 
 ## Required Evidence
 
-- Facade/core parity dump or migration inventory row.
-- Diagnostic mapping and remaining legacy gate evidence.
-- PM bundle or dashboard diff.
+- `sktextblob-glyph-run-descriptors.json` covering positioned glyphs, RSXform-like positions if supported, missing source text ranges, synthetic clusters, and invalid glyph/position count fixtures.
+- No-`Sk*` leakage report for descriptor, artifact planner input, and `DrawTextRun` payload.
+- `draw-text-run-descriptor.json` or equivalent GPU handoff dump proving descriptors cross the boundary as typed artifacts.
+- Diagnostic snapshots for invalid glyph ID, mismatched position count, non-finite position, missing metrics, and forbidden CPU-rendered texture fallback.
+- Dashboard row for `dftext` showing remaining SDF/artifact/GPU evidence.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `kanvas.facade.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Invalid direct glyph runs refuse before artifact planning; they must not be reshaped from text as a fallback.
+- Missing GPU artifact support emits glyph/text GPU diagnostics rather than replacing the blob with a CPU-rendered texture.
 - Legacy gate(s) `dftext` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
 
 ## Dashboard Impact
 
-- Expected row: `Route SkTextBlob glyph runs through typed descriptors`.
+- Expected row: `SkTextBlob typed descriptor route`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless descriptor, artifact, no-leakage, and legacy gate evidence are attached.
 
 ## Validation
 

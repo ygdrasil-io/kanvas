@@ -14,67 +14,79 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add pinned Unicode data generation" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M5: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket fixe la version Unicode utilisee par Kanvas, pour que le shaping ne change pas selon le JDK ou la machine de test.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Unicode Segmentation and Bidi` slice until "Add pinned Unicode data generation" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The text target requires UAX #29 grapheme rules, UAX #9 bidi classes, Script and Script_Extensions data, line-break facts, emoji properties, and variation selector facts. Current or prototype behavior cannot be promoted if it reads implicit platform/JDK Unicode data or omits the version and source hashes from dumps.
 
 ## Scope
 
-- Deliver the capability described by "Add pinned Unicode data generation" within `unicode` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.unicode.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M5 boundaries and update status metadata when execution starts.
+- Add a reproducible pure Kotlin Unicode data generation flow for the pinned Unicode version selected by the font/text roadmap.
+- Generate compact tables for Grapheme_Cluster_Break, Bidi_Class, Script, Script_Extensions, Line_Break, General_Category facts needed by segmentation, and Emoji/Extended_Pictographic/Variation_Selector properties.
+- Write a manifest with Unicode version, input file names, input hashes, generator version, generation options, and output hashes.
+- Expose the generated data through a `UnicodeDataSet` contract consumed by M5-002, M5-003, M5-004, and M6 shaping.
+- Emit version mismatch diagnostics when a dump or fixture references a different Unicode data version.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement grapheme segmentation, bidi resolution, or script itemization rules in this ticket.
+- Do not download Unicode data during ordinary tests unless an explicit regeneration task is requested.
+- Do not use ICU, JDK internals, HarfBuzz, browser APIs, or platform text services as normative Unicode data.
+- Do not update expected dumps automatically when the pinned Unicode version changes.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM5001Plan(
-    val input: UnicodeTextInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class UnicodeDataSet(
+    val version: UnicodeVersion,
+    val sourceManifest: UcdSourceManifest,
+    val graphemeBreak: UnicodeRangeTable<GraphemeBreakClass>,
+    val bidiClass: UnicodeRangeTable<BidiClass>,
+    val script: UnicodeRangeTable<ScriptCode>,
+    val scriptExtensions: UnicodeRangeTable<Set<ScriptCode>>,
+    val lineBreak: UnicodeRangeTable<LineBreakClass>,
+    val emojiProperties: UnicodeEmojiProperties,
 )
 
-interface KFontM5001Executor {
-    fun execute(plan: KFontM5001Plan): UnicodeRunDump
-    fun refusal(code: String = "text.unicode.unsupported"): RouteDiagnostic
+data class UcdSourceManifest(
+    val unicodeVersion: String,
+    val inputs: List<UcdInputFile>,
+    val generatorVersion: String,
+    val outputHash: Sha256,
+)
+
+interface UnicodeDataGenerator {
+    fun generate(inputs: List<UcdInputFile>): UnicodeDataSet
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.unicode.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Two clean generations from the same pinned inputs produce byte-identical generated tables and manifest output.
+- [ ] Generated tables include the properties required by grapheme, bidi, script itemization, line breaking, emoji sequences, and variation selectors.
+- [ ] Unit tests fail if generated output references a Unicode version different from the fixture expectation.
+- [ ] The generator records input hashes and refuses unpinned or missing input files.
+- [ ] Shaping-related dumps can serialize the Unicode version without depending on the JDK runtime version.
 
 ## Required Evidence
 
-- Unicode-versioned segmentation, bidi, or script dump.
-- Cluster safety fixture expectations.
-- Unsupported boundary diagnostic snapshot.
+- `unicode-data-manifest.json` with Unicode version, input file list, input SHA-256 hashes, generator version, generated table hashes, and output schema version.
+- Generated table fixtures for Grapheme_Cluster_Break, Bidi_Class, Script, Script_Extensions, Line_Break, emoji properties, and variation selectors.
+- Regression fixture showing `text.shaping.unicode-data-version-mismatch` for a dump generated with the wrong Unicode version.
+- Review diff proving expected outputs are checked in or versioned and not overwritten by ordinary test runs.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.unicode.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `text.shaping.unicode-data-version-mismatch`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -86,13 +98,13 @@ interface KFontM5001Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*UnicodeData*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Foundation ticket for all M5 segmentation and M6 shaping rules.
+- Move to `ready` only after pinned Unicode version and manifest fields are reviewed.
 
 ## Linear Labels
 

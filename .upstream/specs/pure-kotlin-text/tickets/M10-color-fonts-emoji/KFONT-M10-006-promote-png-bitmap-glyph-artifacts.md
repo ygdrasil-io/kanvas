@@ -14,88 +14,91 @@ legacy_gate: ["scaledemoji_rendering"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Promote PNG bitmap glyph artifacts" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M10: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket couvre les glyphes bitmap PNG embarqués sans ouvrir la porte aux codecs natifs ou formats non ciblés.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Color Fonts, Bitmap Glyphs, SVG, and Emoji` slice until "Promote PNG bitmap glyph artifacts" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Bitmap emoji and color glyphs need a typed artifact route, not a general image fallback. The target supports PNG payloads from CBDT/CBLC and sbix only, with deterministic strike selection, origin placement, alpha/premul policy, decode facts, CPU oracle hash, and refusals for non-PNG or malformed payloads. Without this ticket, `scaledemoji_rendering` can remain blocked by an imprecise "bitmap unavailable" label.
 
 ## Scope
 
-- Deliver the capability described by "Promote PNG bitmap glyph artifacts" within `color` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `glyph.color.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M10 boundaries and update status metadata when execution starts.
+- Build `BitmapGlyphPlan` for CBDT/CBLC PNG strikes and sbix PNG strikes using pure Kotlin decode behavior.
+- Record strike selection policy, requested size, selected strike size, glyph origin, placement bounds, scaling policy, premul/alpha policy, source payload hash, decoded pixel hash, and diagnostics.
+- Emit `bitmap-glyph-plan.json` with fixture provenance and expected GPU handoff artifact type.
+- Refuse non-PNG CBDT/sbix payloads, unavailable strikes, malformed PNG payloads, and unsupported platform-specific bitmap formats.
+- Keep M11 responsible for texture ownership, upload, sampling, and GPU evidence.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement JPEG, TIFF, BGRA bitmap strikes, or platform bitmap payloads.
+- Do not route embedded glyph images through a general image codec unless a future text spec accepts it.
+- Do not claim emoji sequence support; KFONT-M10-009 owns sequence planning.
+- Do not retire `scaledemoji_rendering` without GPU route evidence.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md`
-- `.upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md`
 - `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
-- `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
+- `.upstream/specs/gpu-renderer/21-text-glyph-pipeline.md`
 - `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM10006Plan(
-    val input: ColorGlyphRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class BitmapGlyphPlan(
+    val glyphId: GlyphId,
+    val typefaceId: TypefaceID,
+    val tableFamily: BitmapGlyphTableFamily,
+    val requestedSizePx: Float,
+    val selectedStrike: BitmapStrikeRef,
+    val origin: Vec2I,
+    val bounds: RectI,
+    val alphaPolicy: BitmapAlphaPolicy,
+    val scalingPolicy: BitmapScalingPolicy,
+    val sourcePayloadHash: StableHash,
+    val decodedPixelHash: StableHash,
+    val diagnostics: List<TextDiagnostic>,
 )
-
-interface KFontM10006Executor {
-    fun execute(plan: KFontM10006Plan): ColorGlyphPlan
-    fun refusal(code: String = "glyph.color.unsupported"): RouteDiagnostic
-}
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `glyph.color.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] CBDT/CBLC PNG and sbix PNG fixtures produce distinct `BitmapGlyphPlan` dumps.
+- [ ] Strike selection records requested size, selected strike size, fallback/scaling decision, and unavailable-strike diagnostics.
+- [ ] Non-PNG payloads emit `text.bitmap.payload-format-unsupported`.
+- [ ] Malformed PNG payloads emit `text.bitmap.PNG-decode-failed` with payload hash and glyph ID.
+- [ ] The plan can be handed to M11 without font table reads or native codec calls.
 
 ## Required Evidence
 
-- Color, bitmap, SVG, or emoji route plan dump.
-- Fixture manifest entry with provenance and expected route.
-- Refusal diagnostics for unsupported payloads or paint graph states.
+- `bitmap-glyph-plan.json` fixtures for CBDT/CBLC PNG, sbix PNG, unavailable strike, malformed PNG, and non-PNG payload refusal.
+- CPU decoded pixel hash and source payload hash for positive fixtures.
+- Diagnostic snapshots for `text.bitmap.strike-unavailable`, `text.bitmap.PNG-decode-failed`, and `text.bitmap.payload-format-unsupported`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `glyph.color.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
-- Legacy gate(s) `scaledemoji_rendering` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
+- Unavailable bitmap strikes may fall back to COLR/SVG/outline only if route policy records the rejected bitmap route and accepted substitute.
+- Non-PNG formats refuse rather than invoking platform codecs.
+- Legacy gate `scaledemoji_rendering` remains open until bitmap glyph plans have M11 texture/upload evidence.
 
 ## Dashboard Impact
 
-- Expected row: `Promote PNG bitmap glyph artifacts`.
+- Expected row: `PNG bitmap glyph artifacts`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless PNG fixture evidence and refusal diagnostics are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*BitmapGlyph*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Promotes the embedded PNG glyph artifact contract while keeping renderer proof gated.
+- Move to `ready` only after PNG decode provenance, alpha policy, and strike-selection dumps are reviewed.
 
 ## Linear Labels
 

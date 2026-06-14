@@ -14,85 +14,95 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement placeholder layout metrics" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M8: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket permet aux objets inline de réserver une place fiable dans les paragraphes sans perturber les métriques du texte.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Paragraph Engine` slice until "Implement placeholder layout metrics" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The paragraph target includes placeholders for inline objects, but current ticket text does not specify how placeholder dimensions, baselines, line-height participation, range mapping, selection, or hit testing are represented. Without a concrete metric contract, layout could overlap placeholders, misplace baselines, or hand the renderer geometry that cannot be traced back to source text ranges.
 
 ## Scope
 
-- Deliver the capability described by "Implement placeholder layout metrics" within `paragraph` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.paragraph.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M8 boundaries and update status metadata when execution starts.
+- Define `PlaceholderStyle` fields for width, height, alignment, baseline, above-baseline, below-baseline, and line-height participation.
+- Insert placeholder ranges into `ParagraphInput` and exclude them from normal shaping requests.
+- Compute `PlaceholderBox` geometry during line fitting, including text range, line index, baseline offset, and visual bounds.
+- Feed placeholder boxes into selection and hit-test maps.
+- Emit `placeholder-layout.json` or a dedicated section of `paragraph-layout.json` with metrics, alignment policy, and diagnostics.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not render placeholder content or define its draw command payload.
+- Do not implement general inline widgets or layout negotiation outside paragraph metrics.
+- Do not use host UI toolkit placeholder measurement.
+- Do not claim GPU rendering support for placeholder content.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/03-paragraph-engine.md`
-- `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM8006Plan(
-    val input: ParagraphInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class PlaceholderStyle(
+    val widthPx: Float,
+    val heightPx: Float,
+    val alignment: PlaceholderAlignment,
+    val baseline: TextBaseline?,
+    val baselineOffsetPx: Float?,
 )
 
-interface KFontM8006Executor {
-    fun execute(plan: KFontM8006Plan): ParagraphLayoutResult
-    fun refusal(code: String = "text.paragraph.unsupported"): RouteDiagnostic
+data class PlaceholderBox(
+    val placeholderId: PlaceholderId,
+    val sourceRange: TextRange,
+    val lineIndex: Int,
+    val bounds: RectF,
+    val baselineOffsetPx: Float,
+    val participatesInLineHeight: Boolean,
+)
+
+interface PlaceholderLayoutResolver {
+    fun resolve(lines: List<LineLayout>, placeholders: List<StyleRange<PlaceholderStyle>>): List<PlaceholderBox>
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.paragraph.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Placeholder dimensions are finite, non-negative, and validated before line fitting.
+- [ ] Placeholder ranges map to exactly one placeholder token and are excluded from shaping requests.
+- [ ] Baseline, above-baseline, below-baseline, and centered alignments affect line ascent/descent deterministically.
+- [ ] Selection and hit-test dumps reference placeholder IDs and geometry.
+- [ ] Invalid placeholder ranges or metrics emit `text.paragraph.invalid-placeholder` or a narrower accepted diagnostic.
 
 ## Required Evidence
 
-- `paragraph-input.json` or `paragraph-layout.json` dump.
-- Line, box, selection, hit-test, or placeholder fixture.
-- Paragraph diagnostic snapshot for invalid constraints.
+- `placeholder-layout.json` fixture for baseline-aligned, above-baseline, below-baseline, and center-aligned placeholders.
+- `paragraph-layout.json` fixture showing placeholder effect on line ascent, descent, width, and selection boxes.
+- Negative diagnostics for non-finite dimensions, invalid range, missing baseline where required, and placeholder/ellipsis conflict.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.paragraph.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Invalid placeholder metrics refuse paragraph layout for the affected input with stable diagnostics.
+- Placeholder content is never measured by platform UI APIs.
+- When placeholder geometry is missing, selection and hit testing must report the missing placeholder fact instead of returning text-only boxes.
 
 ## Dashboard Impact
 
-- Expected row: `Implement placeholder layout metrics`.
+- Expected row: `Paragraph placeholder layout metrics`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless placeholder geometry and invalid-metric diagnostics are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*Placeholder*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Depends on the paragraph style contract and the line-breaking/fitting path.
+- Move to `ready` only after placeholder metric fields and hit-test integration are reviewed.
 
 ## Linear Labels
 

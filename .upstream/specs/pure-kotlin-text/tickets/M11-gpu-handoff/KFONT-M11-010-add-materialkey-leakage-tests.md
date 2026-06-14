@@ -14,88 +14,88 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add `MaterialKey` leakage tests" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M11: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket protège le cache pipeline: les coordonnées atlas et glyph IDs ne doivent pas devenir identité matériau.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Typed GPU Handoff` slice until "Add `MaterialKey` leakage tests" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Text payloads include many pass-local facts: atlas rectangles, glyph IDs, atlas generations, entry refs, upload tokens, resource handles, and binding refs. Those facts are required for drawing, but they must not enter `MaterialKey` or pipeline/material cache identity unless they affect layout or shader code. Without leakage tests, every glyph batch can fragment material caches or make pipeline keys nondeterministic.
 
 ## Scope
 
-- Deliver the capability described by "Add `MaterialKey` leakage tests" within `gpu-api` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.gpu.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M11 boundaries and update status metadata when execution starts.
+- Add tests that compare `MaterialKey` preimages for text draws with identical material/shader/color facts but different glyph IDs, atlas coordinates, atlas generations, upload tokens, and resource handles.
+- Assert that atlas/page/entry refs live in `GPUTextBinding`, `GPUTextResourcePlan`, or pass-local payloads, not in `MaterialKey`.
+- Emit `text-material-key-leakage-report.json` with material preimage, forbidden text fields, binding payload refs, and diagnostics.
+- Validate allowed key axes: render step layout facts, material descriptor, blend/color plan, clip/depth/stencil state where applicable, and pipeline-layout-affecting resource topology.
+- Add negative fixtures proving leaks are detected.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not remove legitimate layout-affecting or code-affecting specialization axes from pipeline keys.
+- Do not implement new batching heuristics.
+- Do not place glyph identity in a hashed string field to bypass the test.
+- Do not change M9 artifact key definitions.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
 - `.upstream/specs/gpu-renderer/21-text-glyph-pipeline.md`
-- `.upstream/specs/gpu-renderer/09-draw-family-support-matrix.md`
 - `.upstream/target/high-performance-wgsl-pipeline-target.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM11010Plan(
-    val input: DrawTextRunPayload,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class MaterialKeyLeakageCase(
+    val caseId: String,
+    val baselineMaterialKey: MaterialKeyPreimage,
+    val variedTextBinding: GPUTextBinding,
+    val expectedMaterialKey: MaterialKeyPreimage,
+    val forbiddenFields: List<TextMaterialForbiddenField>,
 )
 
-interface KFontM11010Executor {
-    fun execute(plan: KFontM11010Plan): GPUTextRoutePlan
-    fun refusal(code: String = "text.gpu.unsupported"): RouteDiagnostic
-}
+data class TextMaterialForbiddenField(
+    val fieldPath: FieldPath,
+    val reason: String,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.gpu.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `GPU-gated` until all evidence and validation criteria are satisfied.
+- [ ] Changing glyph IDs, atlas UVs, atlas entry refs, atlas generations, live handles, or upload tokens does not change `MaterialKey`.
+- [ ] Changing actual material/color/blend/shader facts does change `MaterialKey` when those facts are material identity.
+- [ ] Forbidden field leaks fail with a diagnostic that names the field path and text subrun.
+- [ ] `GPUTextBinding` and resource plan dumps retain pass-local glyph/atlas facts outside material identity.
+- [ ] The leakage report is deterministic and references M11 subrun/resource plan fixtures.
 
 ## Required Evidence
 
-- Typed `DrawTextRun` or GPU route dump.
-- No-`Sk*` leakage or unsupported route refusal test.
-- GPU/WGSL evidence when a GPU route is promoted.
-- Classification remains `GPU-gated` until all evidence is attached.
+- `text-material-key-leakage-report.json` fixtures for glyph ID variance, atlas coordinate variance, generation variance, upload token variance, and legitimate material color variance.
+- Negative fixture where atlas UVs or glyph IDs are intentionally inserted into `MaterialKey` and rejected.
+- Diff/stat evidence showing binding/resource payloads still carry required atlas facts outside the material key.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.gpu.*` diagnostic and keep the ticket classified as `GPU-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Material-key leakage refuses route promotion until the key preimage is corrected.
+- The renderer must not fix cache churn by dropping glyph/atlas validation facts.
+- CPU texture fallback remains forbidden for material-key conflicts.
 
 ## Dashboard Impact
 
-- Expected row: `Add MaterialKey leakage tests`.
+- Expected row: `Text MaterialKey leakage tests`.
 - Expected classification: `GPU-gated`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless leakage fixtures prove material identity is separate from text resource payloads.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:gpu-api:test
-rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*MaterialKey*Text*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Final M11 cache-identity guardrail before route promotion and batching claims.
+- Move to `ready` only after allowed/forbidden key axes are reviewed.
 
 ## Linear Labels
 

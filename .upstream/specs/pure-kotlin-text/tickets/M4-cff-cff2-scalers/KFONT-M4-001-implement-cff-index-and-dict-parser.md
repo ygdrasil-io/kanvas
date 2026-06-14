@@ -14,67 +14,87 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement CFF INDEX and DICT parser" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M4: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket transforme les fontes OTF/CFF en donnees inspectables avant tout rendu, ce qui evite de promettre un support CFF sur une simple detection de table.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `CFF and CFF2 Scalers` slice until "Implement CFF INDEX and DICT parser" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The SFNT layer can expose `CFF ` and `CFF2` tables, but the target scaler still lacks a bounded pure Kotlin parser for CFF INDEX blocks, DICT operands, FDArray, FDSelect, and Private DICT data. Without those parsed facts, later Type 2 execution cannot know which charstring, subroutine set, widths, or variation store belongs to a glyph.
 
 ## Scope
 
-- Deliver the capability described by "Implement CFF INDEX and DICT parser" within `font-scaler` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.scaler.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M4 boundaries and update status metadata when execution starts.
+- Parse CFF header, Name INDEX, Top DICT INDEX, String INDEX, Global Subr INDEX, CharStrings INDEX metadata, Encoding, Charset, FDArray, FDSelect, and Private DICT with explicit bounds checks.
+- Parse CFF2 top dict and private dict metadata enough to locate charstrings, local subrs, variation store references, and default/nominal width facts for later tickets.
+- Normalize DICT operands into typed records instead of exposing raw byte slices to the scaler.
+- Preserve unknown DICT operators in a dumpable `unknownOperators` list without treating them as support claims.
+- Emit table-local diagnostics with byte range, INDEX name, object index, and operator when offsets, counts, or operands are malformed.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not execute Type 2 charstrings in this ticket.
+- Do not produce glyph paths, bounds, or metrics beyond parsed CFF metadata.
+- Do not implement CFF2 `blend` behavior here.
+- Do not use FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or platform font APIs as normative parsing behavior.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md`
-- `.upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM4001Plan(
-    val input: ScalerGlyphInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class CffFontSet(
+    val source: TypefaceID,
+    val format: CffFormat,
+    val names: List<String>,
+    val topDicts: List<CffTopDict>,
+    val stringIndex: CffIndex<CffStringId>,
+    val globalSubrs: CffIndex<CharStringBytes>,
+    val charsets: Map<CffDictId, CffCharset>,
+    val fdArrays: Map<CffDictId, List<CffFontDict>>,
+    val diagnostics: List<CffParseDiagnostic>,
 )
 
-interface KFontM4001Executor {
-    fun execute(plan: KFontM4001Plan): ScaledGlyphEvidence
-    fun refusal(code: String = "font.scaler.unsupported"): RouteDiagnostic
-}
+data class CffIndex<T>(
+    val name: String,
+    val count: Int,
+    val offSize: Int,
+    val objectRanges: List<ByteRange>,
+    val decoded: List<T>,
+)
+
+data class CffTopDict(
+    val charStringsOffset: Int,
+    val privateDictRange: ByteRange?,
+    val fdArrayOffset: Int?,
+    val fdSelectOffset: Int?,
+    val nominalWidthX: Int?,
+    val defaultWidthX: Int?,
+    val unknownOperators: List<CffDictOperator>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.scaler.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Minimal single-master OTF/CFF fixture parses into a `CffFontSet` with Name, Top DICT, String, Global Subr, CharStrings, and Private DICT ranges.
+- [ ] CID-keyed CFF fixture records FDArray and FDSelect facts for at least two font dicts.
+- [ ] CFF2 fixture records top dict, charstrings, local subrs, and variation store offset metadata without claiming variation output.
+- [ ] Malformed INDEX count, offSize, descending offset, and out-of-table offset fixtures fail with stable diagnostics instead of exceptions.
+- [ ] Unknown DICT operators are preserved in dumps and do not block parsing unless they are required to locate charstrings or private data.
 
 ## Required Evidence
 
-- `glyph-outline.json`, metrics, bounds, or charstring trace dump.
-- CPU path/hash expectation for supported fixtures.
-- Malformed glyph refusal diagnostic.
+- `cff-index-dict.json` dump containing source/typeface IDs, CFF format, INDEX counts, object byte ranges, dict operators, FDArray facts, Private DICT facts, and diagnostics.
+- Fixtures: `cff-minimal.otf`, `cff-cid-keyed.otf`, `cff2-minimal.otf`, `cff-index-bad-offset.otf`, `cff-dict-bad-operand.otf`.
+- Diagnostics asserted in tests: `font.scaler.cff.index-bounds`, `font.scaler.cff.index-offsize-unsupported`, `font.scaler.cff.dict-operand-malformed`, `font.scaler.cff.required-operator-missing`.
+- Review diff showing that no expected output is generated from host-installed fonts.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.scaler.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `font.scaler.cff.index-bounds`, `font.scaler.cff.dict-operand-malformed`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -86,13 +106,13 @@ interface KFontM4001Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:scaler:test
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*CffIndex*' --tests '*CffDict*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Parser scope is bounded to CFF/CFF2 table facts required by later scaler tickets.
+- Move to `ready` only after the fixture names, dump schema, and diagnostic names are accepted.
 
 ## Linear Labels
 

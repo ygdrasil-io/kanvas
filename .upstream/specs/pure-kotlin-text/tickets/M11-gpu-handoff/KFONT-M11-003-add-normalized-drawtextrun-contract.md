@@ -14,25 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add normalized `DrawTextRun` contract" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M11: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket définit le paquet texte que le renderer GPU reçoit, sans reshaper ni relire les fontes.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Typed GPU Handoff` slice until "Add normalized `DrawTextRun` contract" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+GPU route planning needs one normalized text command shape. The payload must point to paragraph/glyph run IDs, artifact refs, transform/clip/layer/material facts, atlas generations, upload dependencies, and text diagnostics. Without a concrete `DrawTextRunPayload`, route tickets can drift into direct glyph arrays, font parser access, or CPU-rendered texture compatibility.
 
 ## Scope
 
-- Deliver the capability described by "Add normalized `DrawTextRun` contract" within `gpu-api` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.gpu.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M11 boundaries and update status metadata when execution starts.
+- Define `NormalizedDrawCommand.DrawTextRun` payload as immutable value objects.
+- Include command ID, text layout result ID or glyph run ID, glyph run descriptor refs, glyph artifact plan refs, transform facts, clip facts, layer facts, material descriptor, blend/color facts, artifact key hashes, atlas generation, invalidation tokens, upload dependency facts, diagnostics, and evidence provenance.
+- Use domain-specific UUID wrappers for text layout, glyph run, artifact, upload, and diagnostic IDs.
+- Emit `draw-text-run-payload.json` with deterministic field order and no forbidden leakage.
+- Add refusal for nondumpable payloads and full text CPU texture routes.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement renderer route selection, subrun splitting, or resource upload in this ticket.
+- Do not include raw text strings beyond evidence provenance fields required by validation.
+- Do not carry `Sk*` objects, font bytes, platform handles, or live GPU resources.
+- Do not claim A8/SDF/color/bitmap/SVG route support.
 
 ## Spec Sources
 
@@ -46,56 +47,62 @@ The pure Kotlin text target cannot promote the `Typed GPU Handoff` slice until "
 ## Design Sketch
 
 ```kotlin
-data class KFontM11003Plan(
-    val input: DrawTextRunPayload,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class DrawTextRunPayload(
+    val commandId: DrawCommandId,
+    val layoutResultId: TextLayoutResultId?,
+    val glyphRunId: GlyphRunDescriptorId?,
+    val glyphRuns: List<GlyphRunDescriptorRef>,
+    val artifacts: List<TextArtifactRef>,
+    val transform: TextTransformFacts,
+    val clip: ClipFacts,
+    val layer: LayerFacts,
+    val material: TextMaterialDescriptor,
+    val blendColor: TextBlendColorFacts,
+    val artifactKeyHashes: List<StableHash>,
+    val atlasGenerations: List<AtlasGeneration>,
+    val uploadDependencies: List<TextUploadDependencyRef>,
+    val diagnostics: List<TextRouteDiagnostic>,
+    val provenance: TextEvidenceProvenance,
 )
-
-interface KFontM11003Executor {
-    fun execute(plan: KFontM11003Plan): GPUTextRoutePlan
-    fun refusal(code: String = "text.gpu.unsupported"): RouteDiagnostic
-}
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.gpu.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `GPU-gated` until all evidence and validation criteria are satisfied.
+- [ ] The payload can represent paragraph output and direct glyph-run output without re-shaping or font parsing.
+- [ ] Every artifact ref includes key hash, artifact type, generation/invalidation facts where relevant, and diagnostics.
+- [ ] `draw-text-run-payload.json` is deterministic and passes the no-`Sk*` leakage validation.
+- [ ] Nondumpable fields refuse with `unsupported.text.payload_nondumpable`.
+- [ ] CPU-rendered complete text texture payloads refuse with `unsupported.text.cpu_rendered_texture_forbidden`.
 
 ## Required Evidence
 
-- Typed `DrawTextRun` or GPU route dump.
-- No-`Sk*` leakage or unsupported route refusal test.
-- GPU/WGSL evidence when a GPU route is promoted.
-- Classification remains `GPU-gated` until all evidence is attached.
+- `draw-text-run-payload.json` fixture with paragraph-produced glyph runs and A8 artifact refs.
+- Direct glyph-run fixture using explicit glyph descriptors and artifact refs.
+- Negative fixtures for nondumpable payload and forbidden CPU-rendered text texture route.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.gpu.*` diagnostic and keep the ticket classified as `GPU-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- If required artifact refs are missing, `DrawTextRun` remains refused until the text stack supplies typed artifacts.
+- The renderer must not re-shape text, choose fallback fonts, or parse font bytes to repair the payload.
+- The row stays `GPU-gated` until normalized payload tests and no-leakage tests pass.
 
 ## Dashboard Impact
 
-- Expected row: `Add normalized DrawTextRun contract`.
+- Expected row: `Normalized DrawTextRun payload`.
 - Expected classification: `GPU-gated`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, because this ticket defines the command contract but not route execution.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:gpu-api:test
-rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*DrawTextRun*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Depends on paragraph/glyph descriptors and no-leakage validation.
+- Move to `ready` only after payload field list and dump schema are reviewed.
 
 ## Linear Labels
 

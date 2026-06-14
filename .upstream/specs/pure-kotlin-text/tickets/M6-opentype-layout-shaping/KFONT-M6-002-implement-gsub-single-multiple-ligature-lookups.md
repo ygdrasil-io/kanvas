@@ -14,67 +14,74 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement GSUB single/multiple/ligature lookups" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M6: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket couvre les substitutions OpenType de base, comme les ligatures, avec une trace qui relie chaque glyph au texte d'origine.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `OpenType Layout Shaping` slice until "Implement GSUB single/multiple/ligature lookups" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The shaping engine cannot support even simple OpenType substitutions until GSUB single, multiple, and ligature lookup behavior is implemented with coverage checks, lookup ordering, cluster preservation, and malformed-table diagnostics.
 
 ## Scope
 
-- Deliver the capability described by "Implement GSUB single/multiple/ligature lookups" within `shaping` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.shaping.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M6 boundaries and update status metadata when execution starts.
+- Implement GSUB LookupType 1 single substitution, LookupType 2 multiple substitution, and LookupType 4 ligature substitution for supported coverage formats.
+- Apply lookups in the feature order supplied by `ShapingPlan` and record before/after glyph sequence facts.
+- Preserve cluster mappings through one-to-one, one-to-many, and many-to-one substitutions.
+- Emit `gsub-trace.json` events with lookup index, feature tag, coverage match, input glyphs, output glyphs, cluster merge/split decision, and diagnostic.
+- Refuse malformed coverage, sequence, ligature set, and glyph ID references with stable diagnostics.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement contextual, chaining contextual, alternate, reverse chaining, or extension substitutions here.
+- Do not implement GPOS positioning or mark attachment.
+- Do not invent script default feature policy; KFONT-M6-006 controls which features are enabled.
+- Do not compare against HarfBuzz as a pass/fail oracle.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM6002Plan(
-    val input: ShapingInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
-)
-
-interface KFontM6002Executor {
-    fun execute(plan: KFontM6002Plan): ShapedGlyphRun
-    fun refusal(code: String = "text.shaping.unsupported"): RouteDiagnostic
+class GsubSubstitutionEngine(
+    private val table: GsubTable,
+    private val diagnostics: MutableList<RouteDiagnostic>,
+) {
+    fun apply(run: MutableGlyphSequence, features: ResolvedFeatureSet): GsubResult
 }
+
+data class GsubTraceEvent(
+    val lookupIndex: Int,
+    val lookupType: GsubLookupType,
+    val featureTag: OpenTypeFeatureTag,
+    val inputGlyphs: List<GlyphId>,
+    val outputGlyphs: List<GlyphId>,
+    val clusterAction: ClusterAction,
+    val diagnostic: RouteDiagnostic?,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.shaping.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Single substitution fixture maps one glyph to another and records the feature and lookup index.
+- [ ] Multiple substitution fixture maps one glyph to multiple glyphs while preserving the original cluster range.
+- [ ] Ligature fixture maps `f` + `i` or equivalent fixture glyphs into one glyph with a merged cluster range.
+- [ ] Malformed coverage, invalid sequence length, and invalid ligature component fixtures emit `text.shaping.lookup-malformed`.
+- [ ] Substitution output is deterministic and independent of external shaping engines.
 
 ## Required Evidence
 
-- `shaping-plan.json` and `shaped-glyph-run.json` dump.
-- GSUB/GPOS trace when lookups are involved.
-- Cluster invariant or script refusal fixture.
+- `gsub-trace.json` for single, multiple, ligature, no-match, and malformed lookup fixtures.
+- `shaped-glyph-run.json` showing cluster mapping before and after substitutions.
+- Fixtures: `gsub-single-substitution.otf`, `gsub-multiple-substitution.otf`, `gsub-ligature-fi.otf`, `gsub-coverage-malformed.otf`, `gsub-ligature-bad-component.otf`.
+- Diagnostics asserted in tests: `text.shaping.lookup-malformed`, `text.shaping.lookup-type-unsupported`, `text.shaping.cluster-invariant-failed`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.shaping.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `text.shaping.lookup-type-unsupported`, `text.shaping.gsub-ligature-malformed`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -86,13 +93,13 @@ interface KFontM6002Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*GsubBasic*' --tests '*Ligature*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Basic GSUB behavior depends on the M6 contract and M2 table facts.
+- Move to `ready` only after fixture fonts and trace fields are reviewed.
 
 ## Linear Labels
 

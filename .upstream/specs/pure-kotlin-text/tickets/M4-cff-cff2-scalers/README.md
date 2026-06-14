@@ -28,7 +28,8 @@ M2 parser facts and M3 variation/scaler foundations.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:scaler:test
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*CffIndex*' --tests '*CffDict*' --tests '*Type2CharString*'
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*CffSubr*' --tests '*CffScaler*' --tests '*Cff2*'
 ```
 
 ## Non-Claims

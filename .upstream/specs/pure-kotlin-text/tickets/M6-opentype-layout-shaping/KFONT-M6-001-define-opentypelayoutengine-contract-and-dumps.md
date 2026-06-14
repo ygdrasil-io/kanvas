@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Define `OpenTypeLayoutEngine` contract and dumps" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M6: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket fixe le contrat du shaping avant les lookups, pour que chaque glyph run explique ses choix et ses refus.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `OpenType Layout Shaping` slice until "Define `OpenTypeLayoutEngine` contract and dumps" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Kanvas needs a stable pure Kotlin shaping boundary that consumes font facts, Unicode clusters, bidi runs, script runs, fallback decisions, features, and glyph mappings. Without a typed `OpenTypeLayoutEngine` contract and canonical dumps, later GSUB/GPOS tickets cannot produce comparable evidence or precise diagnostics.
 
 ## Scope
 
-- Deliver the capability described by "Define `OpenTypeLayoutEngine` contract and dumps" within `shaping` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.shaping.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M6 boundaries and update status metadata when execution starts.
+- Define the explicit shaping pipeline contract from `TextInput` through clusters, bidi, script, fallback run splitting, `cmap`, GSUB, GPOS, and run compaction.
+- Define value objects for `ShapingPlan`, `ResolvedFeatureSet`, `OpenTypeRunInput`, `ShapedGlyphRun`, cluster mappings, glyph positions, fallback-visible run facts, and route diagnostics.
+- Define dump schemas for `shaping-plan.json`, `gsub-trace.json`, `gpos-trace.json`, and `shaped-glyph-run.json`.
+- Require Unicode data version, typeface identity, selected script/language system, requested/enabled/disabled features, and diagnostic reason codes in every dump.
+- Add refusal paths for missing font tables, unsupported scripts/features/lookups, malformed lookup tables, and cluster invariant failures.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement GSUB or GPOS lookup behavior beyond no-op plumbing.
+- Do not implement paragraph visual layout, line breaking, fallback catalog policy, glyph artifacts, or GPU handoff.
+- Do not make `SkCanvas.drawString` perform implicit complex shaping.
+- Do not use HarfBuzz, platform shapers, browser layout, ICU native, CoreText, or DirectWrite as normative shaping behavior.
 
 ## Spec Sources
 
@@ -45,36 +45,50 @@ The pure Kotlin text target cannot promote the `OpenType Layout Shaping` slice u
 ## Design Sketch
 
 ```kotlin
-data class KFontM6001Plan(
-    val input: ShapingInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+interface OpenTypeLayoutEngine {
+    fun shape(input: OpenTypeRunInput): ShapingResult
+}
+
+data class OpenTypeRunInput(
+    val text: TextInput,
+    val typeface: TypefaceID,
+    val clusters: List<GraphemeCluster>,
+    val bidiRun: BidiRun,
+    val scriptRun: ScriptRun,
+    val requestedFeatures: List<FeatureRequest>,
+    val fallbackContext: FallbackRunContext?,
 )
 
-interface KFontM6001Executor {
-    fun execute(plan: KFontM6001Plan): ShapedGlyphRun
-    fun refusal(code: String = "text.shaping.unsupported"): RouteDiagnostic
-}
+data class ShapedGlyphRun(
+    val runId: ShapedRunId,
+    val typeface: TypefaceID,
+    val script: OpenTypeScriptTag,
+    val direction: TextDirection,
+    val glyphs: List<ShapedGlyph>,
+    val diagnostics: List<RouteDiagnostic>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.shaping.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Contract tests can produce a no-op shaped run from a simple mapped Latin fixture while preserving cluster ranges and diagnostics.
+- [ ] Dump schemas include Unicode version, source text hash, typeface ID, script/language system, features, lookup trace references, fallback facts, and cluster mappings.
+- [ ] Missing `GDEF`, `GSUB`, or `GPOS` tables diagnose precisely according to whether the requested script/feature needs them.
+- [ ] Unsupported script, unsupported feature, malformed lookup, missing fallback, and cluster invariant refusals have stable reason codes.
+- [ ] Direct glyph ID input can bypass GSUB while still producing synthetic cluster and GPOS-bypass facts.
 
 ## Required Evidence
 
-- `shaping-plan.json` and `shaped-glyph-run.json` dump.
-- GSUB/GPOS trace when lookups are involved.
-- Cluster invariant or script refusal fixture.
+- `shaping-plan.json` schema fixture for simple Latin, direct glyph run, unsupported script, and missing table cases.
+- `shaped-glyph-run.json` schema fixture with glyph IDs, cluster ranges, advances/placeholders, positions, run direction, and diagnostics.
+- Empty or no-op `gsub-trace.json` and `gpos-trace.json` fixtures proving trace references are stable before lookup implementation.
+- Diagnostics asserted in tests: `text.shaping.script-unsupported`, `text.shaping.feature-unsupported`, `text.shaping.lookup-type-unsupported`, `text.shaping.lookup-malformed`, `text.shaping.cluster-invariant-failed`, `text.shaping.fallback-missing`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.shaping.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `text.shaping.engine-contract-missing`, `text.shaping.script-unsupported`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -86,13 +100,13 @@ interface KFontM6001Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*OpenTypeLayoutEngine*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Contract and dump schema ticket; behavior tickets depend on this shape.
+- Move to `ready` only after schema fields and diagnostic names are reviewed.
 
 ## Linear Labels
 

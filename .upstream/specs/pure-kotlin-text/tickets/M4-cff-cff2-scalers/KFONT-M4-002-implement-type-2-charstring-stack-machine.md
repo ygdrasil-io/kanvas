@@ -14,67 +14,83 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement Type 2 charstring stack machine" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M4: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket rend les glyphes CFF executables en pure Kotlin, avec une trace lisible pour expliquer chaque contour produit ou refuse.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `CFF and CFF2 Scalers` slice until "Implement Type 2 charstring stack machine" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+CFF glyph outlines are encoded as Type 2 charstrings, not as direct SFNT contours. Kanvas needs a deterministic stack machine for operands, path operators, widths, hints-as-metadata, escaped operators, and malformed stack effects before it can generate paths or metrics for OTF/CFF fonts.
 
 ## Scope
 
-- Deliver the capability described by "Implement Type 2 charstring stack machine" within `font-scaler` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.scaler.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M4 boundaries and update status metadata when execution starts.
+- Implement Type 2 number decoding, operand stack handling, transient width extraction, and `endchar` handling.
+- Support path movement, line, curve, and flex operators required by the target: `rmoveto`, `hmoveto`, `vmoveto`, `rlineto`, `hlineto`, `vlineto`, `rrcurveto`, `vhcurveto`, `hvcurveto`, `rcurveline`, `rlinecurve`, `vvcurveto`, `hhcurveto`, `flex`, `hflex`, `hflex1`, and `flex1`.
+- Parse stem and mask hint operators as metadata so they are represented in traces but do not affect normative path output.
+- Record every executed operator, operand consumption, stack depth, path command, width decision, and diagnostic in `cff-charstring-trace.json`.
+- Refuse unsupported escaped operators and malformed stack effects with stable diagnostics.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not resolve local or global subroutines; KFONT-M4-003 owns subroutine call limits.
+- Do not integrate with `cmap`, glyph metrics, or `.notdef` route selection; KFONT-M4-004 owns scaler output.
+- Do not claim hinted raster parity with FreeType or platform renderers.
+- Do not execute Type 1, PFA, PFB, or CFF2 `blend` operators in this ticket.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md`
-- `.upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM4002Plan(
-    val input: ScalerGlyphInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+class Type2CharStringMachine(
+    private val limits: Type2ExecutionLimits,
+    private val trace: MutableList<CharStringTraceEvent>,
+) {
+    fun run(program: CharStringBytes, privateDict: CffPrivateDict): Type2GlyphProgram
+}
+
+data class Type2GlyphProgram(
+    val glyphId: GlyphId,
+    val width: FontUnit?,
+    val commands: List<CffPathCommand>,
+    val hintMetadata: List<CffHintMask>,
+    val diagnostics: List<CffExecutionDiagnostic>,
 )
 
-interface KFontM4002Executor {
-    fun execute(plan: KFontM4002Plan): ScaledGlyphEvidence
-    fun refusal(code: String = "font.scaler.unsupported"): RouteDiagnostic
+sealed interface CharStringTraceEvent {
+    data class Operator(
+        val offset: Int,
+        val op: Type2Operator,
+        val operandsBefore: List<Int>,
+        val stackAfter: List<Int>,
+    ) : CharStringTraceEvent
+    data class PathCommand(val command: CffPathCommand) : CharStringTraceEvent
+    data class Refusal(val diagnostic: CffExecutionDiagnostic) : CharStringTraceEvent
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.scaler.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Line-only, curve-only, mixed line/curve, flex, width, and hintmask fixtures produce stable charstring traces.
+- [ ] Operand stack overflow, underflow, leftover operands at `endchar`, and unsupported escaped operators are refused with stable diagnostics.
+- [ ] Hint operators are serialized as metadata and do not change path command hashes.
+- [ ] `endchar` closes execution deterministically and rejects trailing executable bytes unless a fixture documents an accepted compatibility case.
+- [ ] Repeated execution of the same charstring bytes produces byte-identical trace dumps.
 
 ## Required Evidence
 
-- `glyph-outline.json`, metrics, bounds, or charstring trace dump.
-- CPU path/hash expectation for supported fixtures.
-- Malformed glyph refusal diagnostic.
+- `cff-charstring-trace.json` with charstring offset, operator list, operand snapshots, path commands, width source, hint metadata, and diagnostics.
+- Fixtures: `cff-type2-lines.otf`, `cff-type2-curves.otf`, `cff-type2-flex.otf`, `cff-type2-hints-width.otf`, `cff-type2-stack-underflow.otf`, `cff-type2-unsupported-operator.otf`.
+- Diagnostics asserted in tests: `font.cff-stack-malformed`, `font.cff-operator-unsupported`, `font.scaler.cff.stack-overflow`, `font.scaler.cff.trailing-bytes`.
+- Path command hash expectations for the positive fixtures, separate from final glyph metrics.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.scaler.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `font.scaler.cff.stack-underflow`, `font.scaler.cff.operator-unsupported`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -86,13 +102,13 @@ interface KFontM4002Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:scaler:test
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*Type2CharString*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Execution scope excludes subroutine resolution and scaler integration.
+- Move to `ready` only after Type 2 operator coverage and diagnostics are reviewed against the target spec.
 
 ## Linear Labels
 

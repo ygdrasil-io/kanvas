@@ -14,26 +14,26 @@ legacy_gate: ["typeface"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Complete `TypefaceID` glyph-affecting identity" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M1: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket évite de confondre deux faces qui se ressemblent mais produisent des glyphes différents.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Font Identity and Sources` slice until "Complete `TypefaceID` glyph-affecting identity" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The target requires `TypefaceID` to change whenever a fact that can affect glyph output changes. Current identity cannot be considered complete until it includes source identity, collection index, family/style facts, PostScript name, outline format, variation coordinates, palette, selected `cmap`, scaler mode, fallback catalog generation, and content hash or fixture identity.
 
 ## Scope
 
-- Deliver the capability described by "Complete `TypefaceID` glyph-affecting identity" within `font-core` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.source.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M1 boundaries and update status metadata when execution starts.
+- Define the `TypefaceID` preimage for one face inside a font or collection.
+- Include `FontSourceID`, collection index, PostScript name, family/style metadata, outline format, selected `cmap`, scaler mode, variation coordinates, palette index/overrides, fallback catalog generation, and table availability facts.
+- Ensure variable coordinates and palette differences create distinct IDs even when family names match.
+- Add diagnostics for incomplete identity facts, invalid collection index, or missing usable `cmap`.
+- Keep legacy gate `typeface` open until target-shaped evidence replaces the current contract.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement OpenType shaping, fallback selection, paragraph layout, or glyph artifact caching.
+- Do not make family/style names alone identity handles.
+- Do not retire the `typeface` legacy gate without evidence and dashboard update.
+- Do not depend on platform-native typeface handles.
 
 ## Spec Sources
 
@@ -46,55 +46,62 @@ The pure Kotlin text target cannot promote the `Font Identity and Sources` slice
 ## Design Sketch
 
 ```kotlin
-data class KFontM1002Plan(
-    val input: FontSourceInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class TypefaceIdentityPreimage(
+    val sourceId: FontSourceID,
+    val collectionIndex: Int,
+    val postScriptName: String?,
+    val familyName: String,
+    val styleName: String,
+    val outlineFormat: OutlineFormat,
+    val variationCoordinates: SortedMap<String, Double>,
+    val palette: PaletteSelection?,
+    val selectedCMap: CMapSelection,
+    val scalerMode: ScalerMode,
+    val fallbackCatalogGeneration: Int?,
+    val tableFactsHash: String,
 )
 
-interface KFontM1002Executor {
-    fun execute(plan: KFontM1002Plan): FontIdentityDump
-    fun refusal(code: String = "font.source.unsupported"): RouteDiagnostic
-}
+@JvmInline
+value class TypefaceID(val uuid: kotlin.uuid.Uuid)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.source.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Different collection indices produce different `TypefaceID` values.
+- [ ] Different variation coordinates or palette selections produce different `TypefaceID` values.
+- [ ] The same face selected twice from the same fixture source produces identical IDs and sorted preimage output.
+- [ ] Missing or invalid collection index emits `font.collection-index-invalid`.
+- [ ] The `typeface` legacy gate remains visible until evidence links this identity contract to the facade migration.
 
 ## Required Evidence
 
-- Stable identity or architecture dump.
-- Determinism test over the same fixture input twice.
-- Diagnostic snapshot for invalid or unsupported input.
+- `typeface-id.json` dump for single-face TTF, TTC face index, variable-font axis change, and palette change when a palette fixture exists.
+- Determinism diff showing stable preimage ordering and UUID output.
+- Diagnostic snapshot for invalid collection index or no usable Unicode `cmap`.
+- Dashboard row showing `typeface` still open as a legacy gate.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.source.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- If a face lacks required identity facts, refuse identity promotion with a precise `font.source.*` or `font.sfnt.*` diagnostic instead of generating an anonymous ID.
 - Legacy gate(s) `typeface` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
 
 ## Dashboard Impact
 
-- Expected row: `Complete TypefaceID glyph-affecting identity`.
+- Expected row: `TypefaceID glyph-affecting identity`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no. Identity evidence does not claim glyph rendering.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:core:test
+rtk ./gradlew --no-daemon :font:core:test --tests '*Typeface*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Typeface identity fields are specified, but no `typeface-id.json` evidence is attached yet.
+- Move to `ready` after KFONT-M1-001 lands the source identity model.
 
 ## Linear Labels
 

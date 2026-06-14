@@ -14,88 +14,89 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add no-`Sk*` leakage validation" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M11: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket empêche le handoff GPU texte de redevenir dépendant des objets Skia-like.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Typed GPU Handoff` slice until "Add no-`Sk*` leakage validation" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+M11's boundary rule says GPU text payloads must not carry `SkFont`, `SkTypeface`, `SkShaper`, `SkTextBlob`, `SkPaint`, font bytes, platform handles, raw GPU handles, or CPU-rendered full text textures. The current catalog does not define a validation fixture that proves the boundary. Without it, future route tickets may accidentally pass Skia-like objects through normalized commands.
 
 ## Scope
 
-- Deliver the capability described by "Add no-`Sk*` leakage validation" within `gpu-api` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.gpu.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M11 boundaries and update status metadata when execution starts.
+- Add payload validation for `TextGPUArtifactBundle`, `NormalizedDrawCommand.DrawTextRun`, `GPUTextRunPlan`, `GPUTextSubRunPlan`, and registry descriptors.
+- Forbid `Sk*` API types, mutable text stack objects, font bytes, platform font handles, raw GPU handles, and full text CPU texture payloads.
+- Emit `text-gpu-no-sk-leakage-report.json` with scanned type names, forbidden field paths, payload hashes, and diagnostics.
+- Map leaks to `text.gpu.sk-type-leaked`, `unsupported.text.sk_type_leaked`, or `unsupported.text.cpu_rendered_texture_forbidden`.
+- Add a positive fixture with only value-object IDs and a negative fixture for each forbidden class of field.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not migrate Skia-like facade adapters in this ticket.
+- Do not forbid domain-specific value objects that wrap UUIDs or stable hashes.
+- Do not implement route execution or shader validation.
+- Do not hide leaks by stringifying forbidden objects into labels.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
 - `.upstream/specs/gpu-renderer/21-text-glyph-pipeline.md`
-- `.upstream/specs/gpu-renderer/09-draw-family-support-matrix.md`
 - `.upstream/target/high-performance-wgsl-pipeline-target.md`
 - `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM11002Plan(
-    val input: DrawTextRunPayload,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class TextPayloadLeakCheck(
+    val payloadId: StableId,
+    val payloadKind: TextPayloadKind,
+    val scannedFields: List<FieldPath>,
+    val forbiddenFindings: List<ForbiddenTextPayloadField>,
 )
 
-interface KFontM11002Executor {
-    fun execute(plan: KFontM11002Plan): GPUTextRoutePlan
-    fun refusal(code: String = "text.gpu.unsupported"): RouteDiagnostic
-}
+data class ForbiddenTextPayloadField(
+    val path: FieldPath,
+    val forbiddenKind: ForbiddenPayloadKind,
+    val diagnostic: GPUTextDiagnostic,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.gpu.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `GPU-gated` until all evidence and validation criteria are satisfied.
+- [ ] Positive `DrawTextRun` and artifact bundle fixtures pass with only value objects, stable hashes, UUID wrappers, diagnostics, and artifact refs.
+- [ ] Negative fixtures fail for `SkFont`, `SkTypeface`, `SkTextBlob`, `SkPaint`, font bytes, platform handles, raw GPU handles, and full text CPU textures.
+- [ ] Leak diagnostics include payload kind, field path, and stable reason code.
+- [ ] Stringified or opaque wrappers around forbidden payloads are rejected.
+- [ ] The validation report is deterministic and linked from future route evidence.
 
 ## Required Evidence
 
-- Typed `DrawTextRun` or GPU route dump.
-- No-`Sk*` leakage or unsupported route refusal test.
-- GPU/WGSL evidence when a GPU route is promoted.
-- Classification remains `GPU-gated` until all evidence is attached.
+- `text-gpu-no-sk-leakage-report.json` positive and negative fixtures.
+- Diagnostic snapshots for `unsupported.text.sk_type_leaked` and `unsupported.text.cpu_rendered_texture_forbidden`.
+- Type-scan fixture proving registry descriptors and `DrawTextRun` payloads are covered.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.gpu.*` diagnostic and keep the ticket classified as `GPU-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Any forbidden field refuses route planning before resource upload or shader selection.
+- CPU-rendered full text textures remain forbidden even if they would visually match a fixture.
+- The row stays `GPU-gated` until validation fixtures are enforced in the GPU API test suite.
 
 ## Dashboard Impact
 
-- Expected row: `Add no-Sk* leakage validation`.
+- Expected row: `No Sk leakage in text GPU handoff`.
 - Expected classification: `GPU-gated`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless no-leakage validation evidence is attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:gpu-api:test
-rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*NoSkLeakage*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Boundary validation for all later normalized text command and route tickets.
+- Move to `ready` only after forbidden field kinds and report schema are reviewed.
 
 ## Linear Labels
 

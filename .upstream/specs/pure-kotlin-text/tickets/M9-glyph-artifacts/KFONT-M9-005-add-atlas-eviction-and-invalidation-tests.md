@@ -14,26 +14,26 @@ legacy_gate: ["dftext"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Add atlas eviction and invalidation tests" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M9: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket prouve que les atlas glyph ne réutilisent pas des entrées stale après variation, palette ou éviction.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Glyph Artifacts, A8, SDF, Outline, and Cache` slice until "Add atlas eviction and invalidation tests" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+A glyph atlas artifact is useful only if its generation, entries, budget, and invalidation rules are visible. The current ticket does not require tests for stale generations, eviction, palette or variation invalidation, atlas capacity overflow, or source mask hash changes. Without those checks, GPU handoff could sample old atlas rectangles or silently drop glyphs under cache pressure.
 
 ## Scope
 
-- Deliver the capability described by "Add atlas eviction and invalidation tests" within `glyph` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `glyph.artifact.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M9 boundaries and update status metadata when execution starts.
+- Define deterministic `GlyphAtlasArtifact` and `SDFGlyphAtlasArtifact` dumps for A8 and SDF inputs.
+- Record artifact key preimage, compact hash, atlas generation, page/entry list, dimensions, row stride, source mask hashes, upload byte hash, memory budget, lifetime class, and invalidation token.
+- Add tests for eviction, atlas-capacity refusal, stale generation detection, font source invalidation, variation change, palette change, SDF spread change, and renderer descriptor version change.
+- Emit `glyph-atlas.json`, `glyph-atlas-eviction-trace.json`, and stale-generation diagnostics.
+- Keep GPU texture creation and upload execution for M11; this ticket owns CPU-prepared atlas artifacts only.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement WebGPU texture allocation or bind groups.
+- Do not merge glyph atlas lifetime with image, path, or coverage atlas lifetime.
+- Do not hide atlas overflow by dropping glyphs.
+- Do not retire `dftext` without M11 sampling and ordering validation.
 
 ## Spec Sources
 
@@ -46,55 +46,65 @@ The pure Kotlin text target cannot promote the `Glyph Artifacts, A8, SDF, Outlin
 ## Design Sketch
 
 ```kotlin
-data class KFontM9005Plan(
-    val input: GlyphArtifactRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class GlyphAtlasArtifact(
+    val artifactKey: GlyphAtlasArtifactKey,
+    val generation: AtlasGeneration,
+    val format: GlyphMaskFormat,
+    val dimensions: IntSize,
+    val entries: List<GlyphAtlasEntry>,
+    val sourceMaskHashes: List<StableHash>,
+    val uploadByteHash: StableHash,
+    val invalidationToken: AtlasInvalidationToken,
+    val diagnostics: List<TextDiagnostic>,
 )
 
-interface KFontM9005Executor {
-    fun execute(plan: KFontM9005Plan): GlyphArtifactPlan
-    fun refusal(code: String = "glyph.artifact.unsupported"): RouteDiagnostic
-}
+data class GlyphAtlasEntry(
+    val strikeKeyHash: StableHash,
+    val rect: RectI,
+    val sourceBounds: RectI,
+    val paddingPx: Int,
+    val sourceMaskHash: StableHash,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `glyph.artifact.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Eviction changes atlas generation and records which strike keys were evicted.
+- [ ] Variation, palette, SDF spread, renderer descriptor version, and source font invalidation produce new keys or stale-generation diagnostics.
+- [ ] Atlas capacity overflow emits `text.glyph.atlas-capacity-exceeded` and never drops glyphs silently.
+- [ ] `glyph-atlas.json` includes every entry rect, source mask hash, upload byte hash, invalidation token, and budget fact.
+- [ ] GPU consumers can detect stale atlas generations from the artifact dump without parsing fonts or masks again.
 
 ## Required Evidence
 
-- `glyph-artifact-plan.json` or `glyph-atlas.json` dump.
-- CPU artifact hash, bounds, and cache key preimage.
-- Route refusal or stale-generation diagnostic.
+- `glyph-atlas.json` fixture for A8 atlas and SDF atlas inputs.
+- `glyph-atlas-eviction-trace.json` showing eviction order, generation increments, invalidation token changes, and resident byte counts.
+- Refusal fixture for atlas capacity overflow and stale generation reuse.
+- Diagnostic snapshot with `text.glyph.atlas-generation-stale` and `text.glyph.atlas-capacity-exceeded`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `glyph.artifact.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
-- Legacy gate(s) `dftext` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
+- Stale atlas entries refuse until regenerated or explicitly rebuilt within budget.
+- Capacity overflow may split the plan only if the split preserves all glyphs and records the generation boundaries.
+- Legacy gate `dftext` remains open until SDF atlas artifacts have M11 upload-before-sample evidence.
 
 ## Dashboard Impact
 
-- Expected row: `Add atlas eviction and invalidation tests`.
+- Expected row: `Glyph atlas eviction and invalidation`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless atlas generation and stale-refusal evidence are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*Atlas*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Supplies generation and invalidation evidence required before GPU atlas sampling can be claimed.
+- Move to `ready` only after atlas artifact fields and eviction scenarios are reviewed.
 
 ## Linear Labels
 

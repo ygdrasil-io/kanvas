@@ -14,89 +14,93 @@ legacy_gate: ["coloremoji_blendmodes"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Add COLRv1 recursion, cycle and bounds fixtures" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M10: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket fournit les fixtures qui empêchent les graphes COLRv1 cycliques ou trop grands de devenir des claims implicites.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Color Fonts, Bitmap Glyphs, SVG, and Emoji` slice until "Add COLRv1 recursion, cycle and bounds fixtures" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+COLRv1 graph traversal needs adversarial evidence. Solid, gradient, transform, composite, and clip support is not complete unless recursion depth, cycle detection, operation budget, bounds propagation, and malformed offsets are tested with generated or bundled fixtures. This ticket is fixture-gated because the implementation cannot be promoted without durable fixture provenance.
 
 ## Scope
 
-- Deliver the capability described by "Add COLRv1 recursion, cycle and bounds fixtures" within `color` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `glyph.color.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M10 boundaries and update status metadata when execution starts.
+- Add a COLRv1 fixture manifest for bounded recursion, explicit cycle, deep `PaintColrGlyph`, composite/clip bounds, transform bounds, excessive operation count, and malformed paint offsets.
+- Record fixture provenance, generated source bytes or generation recipe, expected route, expected diagnostics, and expected dump names.
+- Emit `colrv1-fixture-manifest.json` and link each fixture to `colrv1-paint-graph.json` expectations.
+- Add refusal expectations for `text.color.COLRv1-cycle-detected` and `text.color.COLRv1-budget-exceeded`.
+- Preserve `coloremoji_blendmodes` until these fixtures and downstream renderer evidence are linked.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not add broad real-world font corpora without minimized provenance.
+- Do not use Skia or browser output as normative fixture expectations.
+- Do not change COLRv1 operation support scope in this fixture-only ticket.
+- Do not retire any legacy color emoji gate.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md`
-- `.upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md`
-- `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
 - `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM10005Plan(
-    val input: ColorGlyphRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class COLRv1FixtureCase(
+    val fixtureId: String,
+    val fontSourceId: FontSourceID,
+    val glyphId: GlyphId,
+    val operationFocus: COLRv1FixtureFocus,
+    val expectedRoute: ColorGlyphRoute,
+    val expectedDiagnostics: List<String>,
+    val expectedDumpFiles: List<String>,
+    val provenance: FixtureProvenance,
 )
 
-interface KFontM10005Executor {
-    fun execute(plan: KFontM10005Plan): ColorGlyphPlan
-    fun refusal(code: String = "glyph.color.unsupported"): RouteDiagnostic
-}
+data class COLRv1BoundsExpectation(
+    val fixtureId: String,
+    val expectedConservativeBounds: RectF,
+    val expectedTightBoundsHash: StableHash?,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `glyph.color.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `fixture-gated` until all evidence and validation criteria are satisfied.
+- [ ] The manifest includes positive bounds fixtures and negative cycle, recursion-depth, operation-budget, and malformed-offset fixtures.
+- [ ] Every fixture records provenance and expected diagnostic codes before support is promoted.
+- [ ] Cycle and recursion cases are minimized and deterministic.
+- [ ] Bounds fixtures cover transform, composite, clip, nested glyph, and nested COLR glyph cases.
+- [ ] Dashboard classification remains `fixture-gated` until fixture bytes, expectations, and review diffs are attached.
 
 ## Required Evidence
 
-- Color, bitmap, SVG, or emoji route plan dump.
-- Fixture manifest entry with provenance and expected route.
-- Refusal diagnostics for unsupported payloads or paint graph states.
-- Classification remains `fixture-gated` until all evidence is attached.
+- `colrv1-fixture-manifest.json` with provenance and expected route for every fixture.
+- Expected `colrv1-paint-graph.json` dumps for positive bounds fixtures.
+- Refusal snapshots for `text.color.COLRv1-cycle-detected` and `text.color.COLRv1-budget-exceeded`.
+- Review diff showing fixture expectation changes during rebaseline, if any.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `glyph.color.*` diagnostic and keep the ticket classified as `fixture-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
-- Legacy gate(s) `coloremoji_blendmodes` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
+- Cycle or recursion overflow refuses the color glyph route and may fall back to monochrome only under explicit fallback policy.
+- Missing fixture provenance keeps the support row `fixture-gated`.
+- Legacy gate `coloremoji_blendmodes` remains open until fixture and renderer evidence exist.
 
 ## Dashboard Impact
 
-- Expected row: `Add COLRv1 recursion, cycle and bounds fixtures`.
+- Expected row: `COLRv1 recursion, cycle, and bounds fixtures`.
 - Expected classification: `fixture-gated`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless fixture provenance and expected diagnostics are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*COLRv1*Fixture*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Fixture-gated support evidence for COLRv1 traversal and bounds.
+- Move to `ready` only after fixture manifest fields and generated-font provenance are reviewed.
 
 ## Linear Labels
 

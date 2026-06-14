@@ -14,87 +14,92 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement COLRv1 gradient and variable-gradient operation group" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M10: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket sépare les gradients COLRv1 des autres opérations pour prouver précisément les couleurs variables.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Color Fonts, Bitmap Glyphs, SVG, and Emoji` slice until "Implement COLRv1 gradient and variable-gradient operation group" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+COLRv1 gradients affect rendering semantics, bounds, color interpolation, variation data, and later GPU material planning. The missing slice is support for `PaintLinearGradient`, `PaintRadialGradient`, `PaintSweepGradient`, and variable gradient stops, with dumps that expose stop ordering, palette resolution, coordinate spaces, and unsupported variation cases.
 
 ## Scope
 
-- Deliver the capability described by "Implement COLRv1 gradient and variable-gradient operation group" within `color` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `glyph.color.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M10 boundaries and update status metadata when execution starts.
+- Implement COLRv1 linear, radial, and sweep gradient paint nodes with deterministic stop ordering and color resolution.
+- Support variable gradient stops when the required variation data is available and diagnosed when it is absent or malformed.
+- Record gradient geometry, color line facts, extend mode, palette references, variation coordinates, and bounds in `colrv1-paint-graph.json`.
+- Add budget checks for maximum gradient stops and malformed coordinate payloads.
+- Emit renderer-neutral `ColorGlyphPlan` facts for later M11 lowering; no GPU material route is claimed here.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement transforms, composites, clips, layers, or destination-read behavior in this ticket.
+- Do not implement a general gradient renderer outside glyph-scoped COLRv1 plans.
+- Do not create WGSL or renderer material keys.
+- Do not accept external engine gradient output as normative proof.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md`
-- `.upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md`
-- `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
+- `.upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM10003Plan(
-    val input: ColorGlyphRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class COLRv1GradientPaintOp(
+    val nodeId: PaintNodeId,
+    val kind: GradientKind,
+    val colorLine: List<ResolvedGradientStop>,
+    val geometry: GradientGeometry,
+    val extendMode: GradientExtendMode,
+    val variationStatus: VariationGradientStatus,
+    val bounds: RectF,
 )
 
-interface KFontM10003Executor {
-    fun execute(plan: KFontM10003Plan): ColorGlyphPlan
-    fun refusal(code: String = "glyph.color.unsupported"): RouteDiagnostic
-}
+data class ResolvedGradientStop(
+    val offset: Float,
+    val color: ResolvedGlyphColor,
+    val paletteEntry: PaletteEntryRef?,
+    val variationDelta: ColorStopVariationDelta?,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `glyph.color.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Fixtures cover linear, radial, and sweep gradients with stable stop order and resolved colors.
+- [ ] Variable gradient stops include variation coordinates and deltas in the dump when supported.
+- [ ] Missing or malformed variation data emits `text.color.COLRv1-paint-unsupported` or a narrower variable-gradient diagnostic.
+- [ ] Gradient stop budget overflow emits `text.color.COLRv1-budget-exceeded`.
+- [ ] The color glyph plan remains renderer-neutral and does not create WGSL, material keys, or GPU resources.
 
 ## Required Evidence
 
-- Color, bitmap, SVG, or emoji route plan dump.
-- Fixture manifest entry with provenance and expected route.
-- Refusal diagnostics for unsupported payloads or paint graph states.
+- `colrv1-paint-graph.json` fixtures for linear, radial, sweep, and variable-stop gradients.
+- `color-glyph-plan.json` fixture showing gradient nodes embedded in a glyph plan.
+- Refusal fixtures for malformed gradient coordinates, excessive stop count, and missing variation data.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `glyph.color.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported gradient nodes refuse the color route unless monochrome fallback is explicitly accepted by the style and route policy.
+- Variable-gradient failure must not be downgraded to a non-variable gradient without a diagnostic.
+- Gradient evidence remains `tracked-gap` until operation-specific fixtures exist.
 
 ## Dashboard Impact
 
-- Expected row: `Implement COLRv1 gradient and variable-gradient operation group`.
+- Expected row: `COLRv1 gradient operation group`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless gradient and variable-gradient evidence is attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*COLRv1*Gradient*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Depends on the base COLRv1 graph traversal and color glyph plan shape.
+- Move to `ready` only after variable-gradient dump fields and budget diagnostics are reviewed.
 
 ## Linear Labels
 

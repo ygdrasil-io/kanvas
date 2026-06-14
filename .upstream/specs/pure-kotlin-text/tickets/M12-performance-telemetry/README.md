@@ -28,7 +28,8 @@ Subsystem contracts from M1 through M11.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
+rtk ./gradlew --no-daemon :font:core:test :font:sfnt:test :font:scaler:test :font:text:test :font:glyph:test :font:gpu-api:test
+rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings pipelinePmBundle
 ```
 
 ## Non-Claims

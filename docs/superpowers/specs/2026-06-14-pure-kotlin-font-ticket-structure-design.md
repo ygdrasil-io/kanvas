@@ -20,7 +20,7 @@ the durable gates, and the target acceptance rules.
     ticket-template.md
   M0-claims-ci-diagnostics/
     README.md
-    KFONT-M0-001-wire-font-modules-ci.md
+    KFONT-M0-001-wire-pure-kotlin-font-modules-into-ci.md
   M1-font-identity-sources/
     README.md
   M2-sfnt-opentype-parser/
@@ -124,15 +124,27 @@ Each ticket uses this section order:
 6. `Design Sketch`
 7. `Acceptance Criteria`
 8. `Required Evidence`
-9. `Validation`
-10. `Status Notes`
-11. `Linear Labels`
+9. `Fallback / Refusal Behavior`
+10. `Dashboard Impact`
+11. `Validation`
+12. `Status Notes`
+13. `Linear Labels`
 
 The `PM Note` is written in simple French. It explains why the ticket matters
 to product delivery without deep implementation language.
 
 The rest of the ticket may be in English. Technical terms can stay in English
 when they are the clearest names for the API, spec, or implementation concept.
+
+`Fallback / Refusal Behavior` describes what happens when the target route is
+not supported, dependency-gated, fixture-gated, or intentionally unsupported.
+It must name stable diagnostics and must keep legacy gates visible until the
+ticket evidence allows retirement.
+
+`Dashboard Impact` names the expected dashboard or PM bundle row, the expected
+claim classification, and whether claim promotion is allowed. Claim promotion
+is normally refused until all required evidence is attached and validation has
+passed.
 
 ## Design Sketch
 
@@ -214,6 +226,8 @@ the markdown catalog, but they must preserve:
 - spec sources;
 - acceptance criteria;
 - required evidence;
+- fallback/refusal behavior;
+- dashboard impact;
 - validation command;
 - legacy gate and claim impact when present.
 
@@ -223,4 +237,6 @@ the markdown catalog, but they must preserve:
 - Every ticket has explicit status metadata.
 - Every ticket includes a French PM note.
 - Every technical ticket can include Kotlin-like pseudo-code as reference.
+- Every ticket includes explicit fallback/refusal behavior before validation.
+- Every ticket includes dashboard impact before validation.
 - The structure keeps markdown as source of truth before any Linear import.

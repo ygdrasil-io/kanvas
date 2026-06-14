@@ -14,67 +14,82 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement mark and cursive positioning" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M6: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket positionne correctement les marques et attaches cursives, sans quoi Arabic, Hebrew et Devanagari restent visuellement faux.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `OpenType Layout Shaping` slice until "Implement mark and cursive positioning" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Required script rows depend on GPOS mark-to-base, mark-to-ligature, mark-to-mark, and cursive attachment behavior. Without anchors, GDEF glyph classes, mark attachment classes, and attachment traces, Kanvas cannot claim complex script shaping even if glyph substitutions work.
 
 ## Scope
 
-- Deliver the capability described by "Implement mark and cursive positioning" within `shaping` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.shaping.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M6 boundaries and update status metadata when execution starts.
+- Implement GPOS LookupType 3 cursive attachment and LookupTypes 4, 5, and 6 mark positioning.
+- Consume GDEF glyph classes, mark attachment classes, and ligature caret facts when required by a lookup.
+- Resolve anchor formats needed by target fixtures, including x/y coordinates and device/variation placeholders that later tickets can fill.
+- Emit `gpos-trace.json` events for base/mark/ligature glyph selection, anchor resolution, attachment vector, cursive entry/exit anchors, and diagnostics.
+- Preserve cluster mappings and glyph identities through mark and cursive positioning.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement device tables, variation adjustments, or extension positioning; KFONT-M6-010 owns those.
+- Do not implement script-specific syllable or joining policy; fixture tickets and feature policy own script behavior.
+- Do not synthesize anchors when GPOS/GDEF data is missing.
+- Do not render glyphs or evaluate visual images in this ticket.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM6005Plan(
-    val input: ShapingInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class OpenTypeAnchor(
+    val format: AnchorFormat,
+    val x: FontUnit,
+    val y: FontUnit,
+    val pointIndex: Int?,
+    val variationDevice: VariationDeviceRef?,
 )
 
-interface KFontM6005Executor {
-    fun execute(plan: KFontM6005Plan): ShapedGlyphRun
-    fun refusal(code: String = "text.shaping.unsupported"): RouteDiagnostic
-}
+data class MarkAttachment(
+    val markGlyph: GlyphId,
+    val baseGlyph: GlyphId,
+    val markClass: Int,
+    val markAnchor: OpenTypeAnchor,
+    val baseAnchor: OpenTypeAnchor,
+    val adjustment: GposValueRecord,
+)
+
+data class CursiveAttachment(
+    val previousGlyph: GlyphId,
+    val currentGlyph: GlyphId,
+    val exitAnchor: OpenTypeAnchor,
+    val entryAnchor: OpenTypeAnchor,
+    val adjustment: GposValueRecord,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.shaping.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Mark-to-base fixture positions a combining mark using GDEF class and anchor data.
+- [ ] Mark-to-ligature fixture attaches marks to the correct ligature component.
+- [ ] Mark-to-mark fixture stacks two marks deterministically.
+- [ ] Cursive fixture applies entry/exit anchors and records attachment chain order.
+- [ ] Missing required GDEF or malformed anchor data emits `text.shaping.gdef-required`, `text.shaping.mark-positioning-unavailable`, or `text.shaping.cursive-attachment-unavailable` as appropriate.
 
 ## Required Evidence
 
-- `shaping-plan.json` and `shaped-glyph-run.json` dump.
-- GSUB/GPOS trace when lookups are involved.
-- Cluster invariant or script refusal fixture.
+- `gpos-trace.json` with anchor formats, glyph classes, mark classes, ligature component index, cursive chain links, attachment vectors, and diagnostics.
+- `shaped-glyph-run.json` showing final mark offsets, cursive advances, cluster mappings, and run direction.
+- Fixtures: `gpos-mark-to-base.otf`, `gpos-mark-to-ligature.otf`, `gpos-mark-to-mark.otf`, `gpos-cursive-attachment.otf`, `gpos-missing-gdef.otf`, `gpos-anchor-malformed.otf`.
+- Diagnostics asserted in tests: `text.shaping.gdef-required`, `text.shaping.mark-positioning-unavailable`, `text.shaping.cursive-attachment-unavailable`, `text.shaping.lookup-malformed`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.shaping.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `text.shaping.gdef-required`, `text.shaping.mark-positioning-unsupported`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -86,13 +101,13 @@ interface KFontM6005Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*GposMark*' --tests '*Cursive*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Builds on base GPOS value application from KFONT-M6-004.
+- Move to `ready` only after required anchor formats and GDEF diagnostics are reviewed.
 
 ## Linear Labels
 

@@ -14,19 +14,19 @@ legacy_gate: ["dftext"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Add glyph artifact and cache metrics" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M12: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket rend auditables les coûts d'artifacts glyph, d'atlas et de cache avant toute décision sur `dftext`.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Performance and Telemetry` slice until "Add glyph artifact and cache metrics" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The glyph target introduces representation decisions, `GlyphStrikeKey`, A8 masks, SDF masks, color/bitmap/SVG plans, atlas packing, eviction, and invalidation. M12 lacks metrics that show which route was selected, how expensive artifact generation was, and whether cache pressure or atlas churn caused a regression. Without that visibility, `dftext` and SDF-related work can be overclaimed by cache hits or hidden CPU preparation.
 
 ## Scope
 
-- Deliver the capability described by "Add glyph artifact and cache metrics" within `telemetry` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.telemetry.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M12 boundaries and update status metadata when execution starts.
+- Emit representation route counts for outline, A8, SDF, COLR, PNG bitmap, SVG, and unsupported glyph routes.
+- Emit artifact generation metrics for A8 generation time, SDF generation time, COLR paint graph evaluation time, PNG decode time, SVG glyph evaluation time, and source mask/hash count.
+- Emit cache and atlas metrics for `GlyphStrikeKey` count, key preimage hash, atlas occupancy, pack time, hit/miss/eviction, stale generation refusal count, invalidation token changes, cache memory, upload byte expectation, and artifact budget refusals.
+- Cover fixtures for A8 Latin masks, SDF-eligible outlines, SDF transform refusal, color/bitmap/SVG route plans or explicit gates, atlas capacity pressure, and stale atlas generation.
+- Keep cache telemetry deterministic: no live texture handles, process object identities, or host paths in dumps.
 
 ## Non-Goals
 
@@ -50,43 +50,57 @@ The pure Kotlin text target cannot promote the `Performance and Telemetry` slice
 ## Design Sketch
 
 ```kotlin
-data class KFontM12004Plan(
-    val input: TelemetrySampleInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class GlyphArtifactMetricSample(
+    val glyphRunId: GlyphRunDescriptorID,
+    val routeCounts: Map<GlyphRepresentationRoute, Int>,
+    val a8GenerationMicros: MetricDistribution?,
+    val sdfGenerationMicros: MetricDistribution?,
+    val colorPlanMicros: MetricDistribution?,
+    val bitmapDecodeMicros: MetricDistribution?,
+    val svgPlanMicros: MetricDistribution?,
+    val diagnostics: List<RouteDiagnostic>,
 )
 
-interface KFontM12004Executor {
-    fun execute(plan: KFontM12004Plan): FontTelemetrySample
-    fun refusal(code: String = "font.telemetry.unsupported"): RouteDiagnostic
-}
+data class GlyphCacheMetricSample(
+    val atlasArtifactId: GlyphAtlasArtifactID,
+    val strikeKeyCount: Int,
+    val cacheHits: Long,
+    val cacheMisses: Long,
+    val evictions: Long,
+    val occupancyRatio: Double,
+    val packMicros: MetricDistribution,
+    val memoryBytes: Long,
+    val staleGenerationRefusals: Int,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.telemetry.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Each glyph route produces a route count, generation-time series when applicable, and refusal count when unsupported.
+- [ ] A8 and SDF metrics are separated; an A8 cache hit cannot satisfy SDF or `dftext` evidence.
+- [ ] Atlas metrics include occupancy, pack time, generation token, stale-generation refusal count, memory bytes, and eviction count.
+- [ ] `GlyphStrikeKey` telemetry exposes deterministic preimage hashes without leaking font bytes or live GPU handles.
+- [ ] The `dftext` legacy gate remains open unless SDF contract, atlas/cache telemetry, transform policy, CPU evidence, GPU evidence when claimed, and dashboard updates are all linked.
 
 ## Required Evidence
 
-- Telemetry schema or metric dump.
-- Repeated-run sample showing deterministic dimensions.
-- Dashboard or trend report sample.
+- `glyph-artifact-metrics.json` covering outline, A8, SDF-eligible, SDF-refused, COLR/bitmap/SVG planned or gated routes.
+- `glyph-cache-metrics.json` covering hit, miss, eviction, stale generation, atlas capacity pressure, and invalidation token changes.
+- `glyph-atlas-occupancy.json` or equivalent dump with stable atlas artifact ID, key hashes, dimensions, entry count, and occupancy ratio.
+- Diagnostic snapshots for `text.glyph.SDF-transform-unsupported`, `text.glyph.atlas-capacity-exceeded`, and `text.glyph.atlas-generation-stale`.
+- Dashboard trend excerpt with glyph artifact and glyph cache rows, plus `dftext` still visible when not retired.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.telemetry.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported artifact routes must record route-specific diagnostics rather than being counted as A8 fallback success.
+- Atlas overflow may record split/refusal facts; it must not silently drop glyphs or reset occupancy counters.
 - Legacy gate(s) `dftext` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
 
 ## Dashboard Impact
 
-- Expected row: `Add glyph artifact and cache metrics`.
+- Expected rows: `Glyph artifact metrics`, `Glyph cache metrics`, `Glyph atlas occupancy`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no; cache telemetry supports future gate decisions but is not itself `dftext` support.
 
 ## Validation
 

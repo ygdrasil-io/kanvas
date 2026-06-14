@@ -4,6 +4,24 @@ This catalog is the markdown source of truth for pure Kotlin font system tickets
 
 Tickets are grouped by milestone for human navigation. Each ticket includes a French PM note, target spec sources, Kotlin-like pseudo-code, acceptance criteria, required evidence, validation commands, status metadata, fallback/refusal behavior, dashboard impact, and optional Linear labels.
 
+## Ticket Section Order
+
+Tickets use this body order:
+
+1. `PM Note`
+2. `Problem`
+3. `Scope`
+4. `Non-Goals`
+5. `Spec Sources`
+6. `Design Sketch`
+7. `Acceptance Criteria`
+8. `Required Evidence`
+9. `Fallback / Refusal Behavior`
+10. `Dashboard Impact`
+11. `Validation`
+12. `Status Notes`
+13. `Linear Labels`
+
 ## Status Model
 
 | Status | Meaning |

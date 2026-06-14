@@ -14,25 +14,26 @@ legacy_gate: ["dftext", "scaledemoji_rendering", "coloremoji_blendmodes"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Align `font:gpu-api` with target artifact registry" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M11: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket donne au renderer GPU une liste typée des artifacts texte qu'il peut accepter ou refuser.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Typed GPU Handoff` slice until "Align `font:gpu-api` with target artifact registry" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The GPU handoff cannot depend on ad hoc text payloads. It needs a registry that names every text artifact type, key preimage, lifetime class, invalidation facts, upload budget, supported route, and refusal code. Without this registry, M9/M10 artifacts may exist but still be invisible to GPU route selection, or worse, accepted through untyped compatibility paths.
 
 ## Scope
 
-- Deliver the capability described by "Align `font:gpu-api` with target artifact registry" within `gpu-api` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.gpu.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M11 boundaries and update status metadata when execution starts.
+- Register `GlyphAtlasArtifact`, `SDFGlyphAtlasArtifact`, `GlyphUploadPlan`, `OutlineGlyphPlan`, `ColorGlyphPlan`, `BitmapGlyphPlan`, and `SVGGlyphPlan`.
+- For each artifact type, record descriptor version, owner subsystem, key preimage fields, compact hash, lifetime class, invalidation token, memory/upload budget class, supported GPU routes, and missing/stale/budget diagnostics.
+- Emit `text-gpu-artifact-registry.json` with deterministic ordering and no `Sk*`, font bytes, or live GPU handles.
+- Add unregistered artifact refusal mapping to `text.gpu.artifact-unregistered` and `unsupported.text.artifact_unregistered`.
+- Preserve legacy gates until specific artifact routes have implementation and GPU evidence.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement A8/SDF/color/bitmap/SVG GPU rendering in this registry ticket.
+- Do not allocate WebGPU resources or build pipeline keys.
+- Do not parse fonts, decode glyph payloads, shape text, or rebuild glyph atlases in `font:gpu-api`.
+- Do not retire `dftext`, `scaledemoji_rendering`, or `coloremoji_blendmodes`.
 
 ## Spec Sources
 
@@ -46,57 +47,62 @@ The pure Kotlin text target cannot promote the `Typed GPU Handoff` slice until "
 ## Design Sketch
 
 ```kotlin
-data class KFontM11001Plan(
-    val input: DrawTextRunPayload,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class TextGPUArtifactDescriptor(
+    val artifactType: TextArtifactType,
+    val descriptorVersion: ArtifactDescriptorVersion,
+    val owner: ArtifactOwner = ArtifactOwner.PureKotlinText,
+    val keyPreimageSchema: KeyPreimageSchema,
+    val supportedRoutes: Set<GPUTextRoute>,
+    val lifetimeClass: ArtifactLifetimeClass,
+    val invalidationFacts: List<InvalidationFactKind>,
+    val memoryBudgetClass: TextArtifactBudgetClass,
+    val uploadBudgetClass: TextUploadBudgetClass?,
+    val missingDiagnostic: String,
 )
 
-interface KFontM11001Executor {
-    fun execute(plan: KFontM11001Plan): GPUTextRoutePlan
-    fun refusal(code: String = "text.gpu.unsupported"): RouteDiagnostic
+interface TextGPUArtifactRegistry {
+    fun descriptor(type: TextArtifactType): TextGPUArtifactDescriptor?
+    fun refuseUnregistered(typeName: String, artifactHash: StableHash?): GPUTextDiagnostic
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.gpu.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `GPU-gated` until all evidence and validation criteria are satisfied.
+- [ ] The registry dump lists every target text artifact type and its supported GPU route family.
+- [ ] Unregistered artifacts refuse with both handoff and renderer route diagnostics.
+- [ ] Descriptor key preimage schemas include generation and invalidation facts where relevant.
+- [ ] Registry descriptors contain no `Sk*` types, font bytes, raw GPU handles, or CPU-rendered full text texture routes.
+- [ ] Legacy gate rows remain `GPU-gated` until individual route tickets attach GPU evidence.
 
 ## Required Evidence
 
-- Typed `DrawTextRun` or GPU route dump.
-- No-`Sk*` leakage or unsupported route refusal test.
-- GPU/WGSL evidence when a GPU route is promoted.
-- Classification remains `GPU-gated` until all evidence is attached.
+- `text-gpu-artifact-registry.json` fixture covering all seven text artifact types.
+- Negative fixture for unknown artifact type with `text.gpu.artifact-unregistered` and `unsupported.text.artifact_unregistered`.
+- Review dump proving descriptor order and hashes are deterministic.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.gpu.*` diagnostic and keep the ticket classified as `GPU-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
-- Legacy gate(s) `dftext`, `scaledemoji_rendering`, `coloremoji_blendmodes` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
+- Unknown or stale artifacts refuse before route planning.
+- Registration is not a support claim; route support stays `GPU-gated` until a route-specific ticket proves execution.
+- Legacy gates `dftext`, `scaledemoji_rendering`, and `coloremoji_blendmodes` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
 
 ## Dashboard Impact
 
-- Expected row: `Align font:gpu-api with target artifact registry`.
+- Expected row: `Text GPU artifact registry`.
 - Expected classification: `GPU-gated`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, because artifact registration alone is not renderer support.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:gpu-api:test
-rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*ArtifactRegistry*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Establishes the artifact registry consumed by all M11 route tickets.
+- Move to `ready` only after artifact type names, route families, and refusal code mapping are reviewed.
 
 ## Linear Labels
 

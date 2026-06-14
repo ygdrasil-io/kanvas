@@ -14,67 +14,78 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement GPOS single/pair positioning" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M6: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket apporte le kerning et les ajustements de position de base avec des preuves numeriques stables.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `OpenType Layout Shaping` slice until "Implement GPOS single/pair positioning" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Glyph IDs alone are not enough for shaped output. Kanvas must apply GPOS single adjustments and pair adjustments so advances, offsets, and kerning facts are deterministic and visible in dumps instead of being hidden in renderer behavior.
 
 ## Scope
 
-- Deliver the capability described by "Implement GPOS single/pair positioning" within `shaping` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.shaping.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M6 boundaries and update status metadata when execution starts.
+- Implement GPOS LookupType 1 single positioning and LookupType 2 pair positioning for supported value formats.
+- Support pair positioning formats 1 and 2, including pair sets, class pair records, value records, and horizontal/vertical adjustment fields required by target fixtures.
+- Apply positioning in lookup order to the current glyph buffer and preserve cluster identity.
+- Emit `gpos-trace.json` events with lookup index, feature tag, matched glyphs/classes, value records, before/after positions, and diagnostics.
+- Refuse malformed coverage, class definitions, value formats, or out-of-range pair records with stable diagnostics.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement cursive attachment, mark positioning, contextual positioning, extension positioning, device tables, or variation adjustments.
+- Do not implement glyph rasterization, atlas placement, or GPU handoff.
+- Do not infer kerning from legacy `kern` tables unless a separate parser/adapter explicitly maps it into this contract.
+- Do not use platform text APIs as normative positioning behavior.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM6004Plan(
-    val input: ShapingInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+class GposPositioningEngine(
+    private val table: GposTable,
+    private val diagnostics: MutableList<RouteDiagnostic>,
+) {
+    fun apply(run: PositionedGlyphBuffer, features: ResolvedFeatureSet): GposResult
+}
+
+data class GposValueRecord(
+    val xPlacement: FontUnit = FontUnit.Zero,
+    val yPlacement: FontUnit = FontUnit.Zero,
+    val xAdvance: FontUnit = FontUnit.Zero,
+    val yAdvance: FontUnit = FontUnit.Zero,
 )
 
-interface KFontM6004Executor {
-    fun execute(plan: KFontM6004Plan): ShapedGlyphRun
-    fun refusal(code: String = "text.shaping.unsupported"): RouteDiagnostic
-}
+data class GposPairAdjustment(
+    val first: GlyphId,
+    val second: GlyphId,
+    val firstValue: GposValueRecord,
+    val secondValue: GposValueRecord,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.shaping.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Single positioning fixture applies x/y placement and advance adjustments and records them in `gpos-trace.json`.
+- [ ] Pair positioning format 1 fixture applies a specific kerning pair.
+- [ ] Pair positioning format 2 fixture applies class-based kerning and records class IDs.
+- [ ] Malformed value formats, coverage tables, class definitions, and out-of-range pair records refuse with `text.shaping.lookup-malformed`.
+- [ ] `shaped-glyph-run.json` records final positions and advances after GPOS.
 
 ## Required Evidence
 
-- `shaping-plan.json` and `shaped-glyph-run.json` dump.
-- GSUB/GPOS trace when lookups are involved.
-- Cluster invariant or script refusal fixture.
+- `gpos-trace.json` with lookup type, feature tag, coverage match, value records, class IDs, before/after positions, and diagnostics.
+- `shaped-glyph-run.json` with final advances, offsets, cluster ranges, and positioning trace references.
+- Fixtures: `gpos-single-adjustment.otf`, `gpos-pair-format1-kerning.otf`, `gpos-pair-format2-class.otf`, `gpos-valueformat-malformed.otf`, `gpos-pair-out-of-range.otf`.
+- Diagnostics asserted in tests: `text.shaping.lookup-malformed`, `text.shaping.lookup-type-unsupported`, `text.shaping.cluster-invariant-failed`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.shaping.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `text.shaping.gpos-value-malformed`, `text.shaping.pair-positioning-unsupported`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -86,13 +97,13 @@ interface KFontM6004Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*GposPair*' --tests '*Kerning*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Base GPOS positioning depends on shaping contract and parsed table facts.
+- Move to `ready` only after value-format coverage and kerning fixtures are reviewed.
 
 ## Linear Labels
 

@@ -14,67 +14,80 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Replace basic bidi resolver" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M5: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket donne des runs RTL/LTR fiables au shaping, sans laisser le rendu dependre d'un moteur texte de la plateforme.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Unicode Segmentation and Bidi` slice until "Replace basic bidi resolver" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Complex scripts such as Hebrew and Arabic require bidi levels, run direction, and isolate/embedding behavior before shaping and paragraph layout can make correct decisions. A basic resolver cannot safely handle mixed LTR/RTL text, numbers, neutrals, isolates, or paragraph-level diagnostics.
 
 ## Scope
 
-- Deliver the capability described by "Replace basic bidi resolver" within `unicode` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.unicode.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M5 boundaries and update status metadata when execution starts.
+- Implement the UAX #9 run-level bidi resolver needed by shaping, using pinned Bidi_Class data.
+- Resolve paragraph base direction, explicit embeddings/overrides/isolates, weak and neutral types, paired bracket facts when available, and stable run boundaries.
+- Serialize logical ranges, embedding levels, resolved direction, paragraph direction, isolate state, and diagnostics in `bidi-runs.json`.
+- Expose diagnostics when paragraph-level visual ordering is required but the caller requested only single-run shaping.
+- Keep paragraph line ordering as a later M8 responsibility while providing enough run facts for M6 shaping fixtures.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement paragraph visual line layout, line breaking, ellipsis, hit testing, or selection boxes.
+- Do not shape Arabic joining forms or Hebrew marks; M6 owns GSUB/GPOS behavior.
+- Do not call ICU, Java Bidi, browser layout, CoreText, DirectWrite, or platform shapers as normative bidi behavior.
+- Do not silently strip bidi control characters from evidence dumps.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM5003Plan(
-    val input: UnicodeTextInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+class BidiResolver(
+    private val unicode: UnicodeDataSet,
+    private val options: BidiResolverOptions,
+) {
+    fun resolve(input: TextInput, clusters: List<GraphemeCluster>): BidiResolution
+}
+
+data class BidiRun(
+    val logicalUtf16Range: IntRange,
+    val clusterRange: IntRange,
+    val embeddingLevel: Int,
+    val direction: TextDirection,
+    val paragraphDirection: TextDirection,
+    val sourceControls: List<BidiControl>,
 )
 
-interface KFontM5003Executor {
-    fun execute(plan: KFontM5003Plan): UnicodeRunDump
-    fun refusal(code: String = "text.unicode.unsupported"): RouteDiagnostic
-}
+data class BidiTraceEvent(
+    val rule: String,
+    val range: IntRange,
+    val before: BidiClass,
+    val after: BidiClass,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.unicode.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Mixed Latin/Hebrew, Latin/Arabic, numbers inside RTL text, neutral punctuation, and isolate-control fixtures produce stable logical bidi runs.
+- [ ] `bidi-runs.json` records Unicode version, paragraph direction, embedding levels, source controls, and per-rule trace facts.
+- [ ] Single-run shaping requests for text that needs paragraph-level ordering emit a diagnostic without pretending paragraph layout was performed.
+- [ ] Bidi run ranges align to grapheme cluster boundaries from KFONT-M5-002.
+- [ ] Invalid or unbalanced bidi controls produce stable diagnostics and do not corrupt following text ranges.
 
 ## Required Evidence
 
-- Unicode-versioned segmentation, bidi, or script dump.
-- Cluster safety fixture expectations.
-- Unsupported boundary diagnostic snapshot.
+- `bidi-runs.json` with input hash, Unicode version, cluster references, resolved bidi classes, embedding levels, run directions, paragraph direction, and diagnostics.
+- Fixtures: `bidi-hebrew-latin.txt`, `bidi-arabic-number-neutral.txt`, `bidi-isolate-controls.txt`, `bidi-unbalanced-controls.txt`, `bidi-single-run-needs-paragraph.txt`.
+- Diagnostics asserted in tests: `text.shaping.unicode-data-version-mismatch`, `text.shaping.paragraph-bidi-required`, `text.unicode.bidi-control-unbalanced`.
+- Review note labeling any external UAX #9 conformance comparison as drift-only.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.unicode.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `text.shaping.bidi-context-required`, `text.shaping.bidi-data-malformed`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -86,13 +99,13 @@ interface KFontM5003Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*Bidi*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Bidi run facts are owned by M5; visual line ordering remains M8.
+- Move to `ready` only after bidi control handling and fixture texts are reviewed.
 
 ## Linear Labels
 

@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add phantom point and advance delta support" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M3: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket aligne les contours variables et les avances, pour éviter des glyphes justes mais mal espacés.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `TrueType glyf Scaler` slice until "Add phantom point and advance delta support" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+TrueType variation support affects more than visible contour points. Phantom points and advance deltas can change horizontal and vertical advances through `gvar`, `HVAR`, `VVAR`, and `MVAR`. Without this support, varied outlines may be correct while glyph metrics and text spacing remain wrong.
 
 ## Scope
 
-- Deliver the capability described by "Add phantom point and advance delta support" within `font-scaler` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.scaler.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M3 boundaries and update status metadata when execution starts.
+- Model left side bearing, right side bearing, top origin, and bottom origin phantom points for TrueType glyphs.
+- Apply `gvar` phantom point deltas where they affect advances.
+- Apply `HVAR`, `VVAR`, and `MVAR` metrics deltas when available and diagnosed when unavailable.
+- Emit variation-adjusted `glyph-metrics.json` for min/default/max axis positions.
+- Keep variation coordinates in scaler and cache-relevant identity preimages.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement paragraph layout or full line breaking.
+- Do not implement CFF2 metrics variation.
+- Do not claim vertical text layout beyond font metric extraction and scaler facts.
+- Do not implement a hinting VM.
 
 ## Spec Sources
 
@@ -46,54 +46,63 @@ The pure Kotlin text target cannot promote the `TrueType glyf Scaler` slice unti
 ## Design Sketch
 
 ```kotlin
-data class KFontM3003Plan(
-    val input: ScalerGlyphInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class PhantomPointSet(
+    val leftSideBearing: Point26Dot6,
+    val rightSideBearing: Point26Dot6,
+    val topOrigin: Point26Dot6?,
+    val bottomOrigin: Point26Dot6?,
 )
 
-interface KFontM3003Executor {
-    fun execute(plan: KFontM3003Plan): ScaledGlyphEvidence
-    fun refusal(code: String = "font.scaler.unsupported"): RouteDiagnostic
+data class AdvanceDeltaResult(
+    val glyphId: GlyphID,
+    val variationPosition: VariationPosition,
+    val horizontalAdvance: Int,
+    val verticalAdvance: Int?,
+    val diagnostics: List<SerializedFontDiagnostic>,
+)
+
+class TrueTypeAdvanceDeltaResolver {
+    fun resolve(glyph: GlyfGlyph, position: VariationPosition): AdvanceDeltaResult
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.scaler.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Horizontal advance changes caused by phantom points are reflected in `glyph-metrics.json`.
+- [ ] `HVAR`, `VVAR`, and `MVAR` data are applied when fixtures provide them and diagnosed when required data is malformed or unavailable.
+- [ ] Variation coordinates are included in relevant scaler identity or cache keys.
+- [ ] Default coordinates match base `hmtx`/`vmtx` metrics when no deltas apply.
+- [ ] Missing variation metrics emit `font.metrics-variation-unavailable` or `font.variation-data-malformed` as appropriate.
 
 ## Required Evidence
 
-- `glyph-outline.json`, metrics, bounds, or charstring trace dump.
-- CPU path/hash expectation for supported fixtures.
-- Malformed glyph refusal diagnostic.
+- `glyph-metrics.json` for base/default and varied min/max positions showing advances, side bearings, phantom points, and applied deltas.
+- `variation-deltas.json` entries that include phantom point deltas.
+- Diagnostic snapshot for malformed `HVAR`, `VVAR`, or `MVAR` data.
+- Determinism diff for repeated metric dump generation.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.scaler.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- If metrics variation data is unavailable but default metrics are semantically valid, emit a visible diagnostic and keep the requested scope classified according to the missing blocker.
+- If default fallback would misrepresent the requested variation instance, refuse the glyph metrics route.
 
 ## Dashboard Impact
 
-- Expected row: `Add phantom point and advance delta support`.
+- Expected row: `TrueType phantom points and advance deltas`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: only for the covered variation metric slice with dumps and diagnostics attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:scaler:test
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*PhantomPoint*' --tests '*AdvanceDelta*' --tests '*HVAR*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Phantom and advance-delta evidence is specified, but no metrics dump is attached yet.
+- Move to `ready` after IUP interpolation tests establish variation delta handling.
 
 ## Linear Labels
 

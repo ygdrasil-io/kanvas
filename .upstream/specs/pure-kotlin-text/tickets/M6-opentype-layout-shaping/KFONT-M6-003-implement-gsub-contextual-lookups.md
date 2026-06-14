@@ -14,67 +14,77 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement GSUB contextual lookups" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M6: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket permet les substitutions qui dependent du voisinage, indispensables aux alternates et formes contextuelles des scripts complexes.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `OpenType Layout Shaping` slice until "Implement GSUB contextual lookups" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Many required script features need context-sensitive substitution, not just direct glyph replacement. Without bounded contextual matching, Kanvas cannot evaluate input sequence, class, and coverage-based rules, nor explain why a contextual rule matched or refused.
 
 ## Scope
 
-- Deliver the capability described by "Implement GSUB contextual lookups" within `shaping` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.shaping.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M6 boundaries and update status metadata when execution starts.
+- Implement GSUB contextual substitution LookupType 5 formats 1, 2, and 3.
+- Match glyph sequence, class-based, and coverage-based contexts against the current glyph buffer.
+- Apply nested substitution records only when context matches and cluster invariants remain valid.
+- Emit `gsub-trace.json` events for context match attempts, selected rule, nested lookup application, and refusal diagnostics.
+- Add cycle and re-entry guards for nested lookup application inside a contextual rule.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement chaining contextual substitution, reverse chaining substitution, or extension substitution; KFONT-M6-010 owns those lookup classes.
+- Do not implement Indic syllable reordering or Arabic joining policy in this ticket.
+- Do not implement GPOS contextual positioning.
+- Do not use HarfBuzz trace output as normative evidence.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM6003Plan(
-    val input: ShapingInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+class GsubContextMatcher(
+    private val classDefs: Map<ClassDefId, GlyphClassDef>,
+    private val coverageTables: Map<CoverageId, GlyphCoverage>,
+) {
+    fun match(ruleSet: ContextRuleSet, cursor: GlyphCursor): ContextMatch?
+}
+
+data class ContextMatch(
+    val lookupIndex: Int,
+    val format: ContextFormat,
+    val inputRange: IntRange,
+    val matchedGlyphs: List<GlyphId>,
+    val substitutions: List<NestedSubstitutionRecord>,
 )
 
-interface KFontM6003Executor {
-    fun execute(plan: KFontM6003Plan): ShapedGlyphRun
-    fun refusal(code: String = "text.shaping.unsupported"): RouteDiagnostic
-}
+data class NestedSubstitutionRecord(
+    val sequenceIndex: Int,
+    val nestedLookupIndex: Int,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.shaping.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Format 1 glyph-sequence context fixture applies a nested substitution only for the matching neighbor sequence.
+- [ ] Format 2 class-based context fixture matches glyph classes and rejects malformed class definitions.
+- [ ] Format 3 coverage-based context fixture matches multiple coverage tables deterministically.
+- [ ] Nested lookup cycles or excessive re-entry emit a stable diagnostic and stop before corrupting the glyph buffer.
+- [ ] Contextual substitutions preserve cluster ranges or refuse with `text.shaping.cluster-invariant-failed`.
 
 ## Required Evidence
 
-- `shaping-plan.json` and `shaped-glyph-run.json` dump.
-- GSUB/GPOS trace when lookups are involved.
-- Cluster invariant or script refusal fixture.
+- `gsub-trace.json` with context format, cursor position, matched rule, nested lookup records, before/after glyph buffer, and diagnostics.
+- `shaped-glyph-run.json` for positive contextual alternate and negative no-match fixtures.
+- Fixtures: `gsub-context-format1.otf`, `gsub-context-format2-class.otf`, `gsub-context-format3-coverage.otf`, `gsub-context-nested-cycle.otf`, `gsub-context-malformed-classdef.otf`.
+- Diagnostics asserted in tests: `text.shaping.lookup-malformed`, `text.shaping.lookup-type-unsupported`, `text.shaping.cluster-invariant-failed`, `text.shaping.lookup-cycle-detected`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.shaping.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `text.shaping.lookup-malformed`, `text.shaping.context-match-unsupported`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -86,13 +96,13 @@ interface KFontM6003Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*GsubContext*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Context matching builds on the basic GSUB buffer from KFONT-M6-002.
+- Move to `ready` only after context fixture formats and cycle diagnostics are reviewed.
 
 ## Linear Labels
 

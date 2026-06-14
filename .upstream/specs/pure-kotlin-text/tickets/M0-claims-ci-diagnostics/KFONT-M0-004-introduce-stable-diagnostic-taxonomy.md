@@ -14,26 +14,26 @@ legacy_gate: ["font.native-engine-unavailable", "font.bitmap-strike-unavailable"
 
 ## PM Note
 
-Ce ticket sert à livrer "Introduce stable diagnostic taxonomy" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M0: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket transforme les refus font en raisons stables, compréhensibles et suivables dans les reports.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Claims, CI, and Diagnostics` slice until "Introduce stable diagnostic taxonomy" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Current and legacy font gaps can be described with broad labels such as native engine unavailable, bitmap strike unavailable, or emoji shaping unsupported. The pure Kotlin target needs stable diagnostic namespaces before later tickets can claim support, refuse a route, or retire a legacy gate without losing traceability.
 
 ## Scope
 
-- Deliver the capability described by "Introduce stable diagnostic taxonomy" within `diagnostics` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.diagnostic.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M0 boundaries and update status metadata when execution starts.
+- Define stable namespace families: `font.source.*`, `font.sfnt.*`, `font.scaler.*`, `text.shaping.*`, `text.paragraph.*`, `glyph.artifact.*`, and `text.gpu.*`.
+- Map transitional GPU and renderer refusals into `text.gpu.*`, `unsupported.text.*`, or `glyph.artifact.*` as appropriate.
+- Map durable legacy diagnostics from `legacy_gate` to target classifications without closing them.
+- Require diagnostics to include subject, source identity when available, route, severity, and claim impact.
+- Add review examples for malformed font data, dependency-gated behavior, expected unsupported behavior, and drift-only external comparisons.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement support for any refused behavior.
+- Do not remove or retire legacy gates in this ticket.
+- Do not introduce generic labels such as `font missing` as accepted diagnostics.
+- Do not make external engines normative oracles.
 
 ## Spec Sources
 
@@ -46,55 +46,70 @@ The pure Kotlin text target cannot promote the `Claims, CI, and Diagnostics` sli
 ## Design Sketch
 
 ```kotlin
-data class KFontM0004Plan(
-    val input: DiagnosticTaxonomyInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+enum class FontClaimImpact {
+    TargetSupported,
+    CurrentSupported,
+    TrackedGap,
+    DependencyGated,
+    FixtureGated,
+    GPUGated,
+    ExpectedUnsupported,
+    DriftOnly,
+}
+
+data class FontDiagnosticCode(
+    val code: String,
+    val namespace: String,
+    val impact: FontClaimImpact,
+    val requiredFields: Set<String>,
 )
 
-interface KFontM0004Executor {
-    fun execute(plan: KFontM0004Plan): DiagnosticTaxonomyReport
-    fun refusal(code: String = "font.diagnostic.unsupported"): RouteDiagnostic
-}
+data class LegacyDiagnosticMapping(
+    val legacyCode: String,
+    val targetCode: String,
+    val classification: FontClaimImpact,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.diagnostic.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Every accepted diagnostic code belongs to one of the target namespace families.
+- [ ] `font.native-engine-unavailable` maps to `expected-unsupported` or `drift-only`, never to a product dependency.
+- [ ] `font.bitmap-strike-unavailable` maps to a route-specific bitmap/color refusal, not a generic font failure.
+- [ ] `font.emoji-sequence-shaping-unsupported` maps to shaping or emoji route diagnostics without claiming complex shaping support.
+- [ ] Diagnostics are serializable and contain enough deterministic fields to appear in evidence dumps.
 
 ## Required Evidence
 
-- Target dump.
-- Fixture evidence.
-- Stable diagnostic snapshot.
+- `font-diagnostic-taxonomy.json` or markdown table listing code, namespace, classification, and required fields.
+- Legacy mapping table for `font.native-engine-unavailable`, `font.bitmap-strike-unavailable`, and `font.emoji-sequence-shaping-unsupported`.
+- Snapshot diagnostics for at least one source failure, one SFNT failure, one scaler failure, one shaping refusal, and one GPU/text route refusal.
+- Dashboard sample proving generic labels are rejected.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.diagnostic.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unknown or generic diagnostics must be classified as `tracked-gap` until mapped to a stable namespace.
 - Legacy gate(s) `font.native-engine-unavailable`, `font.bitmap-strike-unavailable`, `font.emoji-sequence-shaping-unsupported` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
+- Silent fallback to native font behavior is not allowed.
 
 ## Dashboard Impact
 
-- Expected row: `Introduce stable diagnostic taxonomy`.
+- Expected row: `pure-kotlin-font diagnostic taxonomy`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no. The taxonomy enables future promotion but is not support evidence.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:core:test
+rtk ./gradlew --no-daemon :font:core:test --tests '*DiagnosticTaxonomy*'
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePerformanceTrendWarnings pipelinePmBundle
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Diagnostic namespaces and legacy mappings are specified, but no taxonomy artifact is attached yet.
+- Move to `ready` after KFONT-M0-003 freezes the owning package/module boundaries for diagnostics.
 
 ## Linear Labels
 

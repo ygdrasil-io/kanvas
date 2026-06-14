@@ -14,26 +14,26 @@ legacy_gate: ["scaledemoji"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Add cluster-safe fallback segmentation tests" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M7: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket garantit que le fallback change de fonte sans casser les clusters visibles, surtout pour emoji et scripts complexes.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Fallback and System Fonts` slice until "Add cluster-safe fallback segmentation tests" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Fallback often happens at missing glyph boundaries, but the target requires cluster-safe behavior. Emoji ZWJ sequences, variation selectors, combining marks, Indic clusters, Arabic marks, and mixed-script clusters must never be split across fallback font runs unless a reviewed refusal says the whole cluster is unsupported.
 
 ## Scope
 
-- Deliver the capability described by "Add cluster-safe fallback segmentation tests" within `fallback` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.fallback.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M7 boundaries and update status metadata when execution starts.
+- Add fallback fixtures that reuse M5 cluster-safety cases and route them through fallback decision traces.
+- Assert that `ResolvedFontRun` boundaries align with grapheme cluster boundaries and preserve original UTF-16 ranges.
+- Cover emoji ZWJ, skin tone, VS15/VS16, combining Latin marks, Arabic mark clusters, Devanagari conjuncts, Thai tone marks, CJK variation selectors, and mixed bidi text.
+- Emit `fallback-segmentation-report.json` linking cluster-safety, fallback decision, resolved run, and shaped run dumps.
+- Keep `scaledemoji` fixture-gated until emoji shaping, fallback, and color/outline route evidence exists.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement color emoji rendering, COLR/bitmap/SVG dispatch, or emoji glyph artifacts.
+- Do not retire the `scaledemoji` legacy gate.
+- Do not add host system font scanning.
+- Do not use platform emoji fallback or browser segmentation as normative behavior.
 
 ## Spec Sources
 
@@ -46,38 +46,44 @@ The pure Kotlin text target cannot promote the `Fallback and System Fonts` slice
 ## Design Sketch
 
 ```kotlin
-data class KFontM7004Plan(
-    val input: FallbackRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class ClusterSafeFallbackCase(
+    val name: String,
+    val text: TextInput,
+    val clusters: List<GraphemeCluster>,
+    val requestedFamily: FontFamilyName,
+    val expectedRunBoundaries: List<IntRange>,
+    val expectedDiagnostics: Set<String>,
 )
 
-interface KFontM7004Executor {
-    fun execute(plan: KFontM7004Plan): FallbackDecisionTrace
-    fun refusal(code: String = "text.fallback.unsupported"): RouteDiagnostic
-}
+data class FallbackSegmentationInvariant(
+    val clusterRange: IntRange,
+    val resolvedRuns: List<ResolvedFontRun>,
+    val passed: Boolean,
+    val diagnostic: RouteDiagnostic?,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.fallback.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `fixture-gated` until all evidence and validation criteria are satisfied.
+- [ ] Fallback run boundaries never split a grapheme cluster in positive fixtures.
+- [ ] Negative fixture that would require splitting an emoji ZWJ or combining-mark cluster refuses the whole cluster.
+- [ ] `fallback-segmentation-report.json` links `cluster-safety-report.json`, `fallback-decision-trace.json`, `resolved-font-runs.json`, and `shaped-glyph-run.json`.
+- [ ] `scaledemoji` remains explicitly fixture-gated because cluster-safe fallback is not color emoji rendering support.
+- [ ] Host-dependent fallback is marked when any host-scanned source participates in a non-normative fixture.
 
 ## Required Evidence
 
-- `font-catalog.json` or `resolved-font-runs.json` dump.
-- `fallback-decision-trace.json` with selected/refused faces.
-- Host-dependent or missing-glyph diagnostic snapshot.
-- Classification remains `fixture-gated` until all evidence is attached.
+- `fallback-segmentation-report.json` with input hash, Unicode version, cluster ranges, fallback run ranges, invariant results, dump hashes, legacy gate references, and diagnostics.
+- `fallback-decision-trace.json`, `resolved-font-runs.json`, `cluster-safety-report.json`, and `shaped-glyph-run.json` references for every fixture.
+- Fixtures: `fallback-cluster-emoji-zwj.txt`, `fallback-cluster-skin-tone.txt`, `fallback-cluster-vs15-vs16.txt`, `fallback-cluster-latin-mark.txt`, `fallback-cluster-arabic-mark.txt`, `fallback-cluster-devanagari.txt`, `fallback-cluster-thai.txt`, `fallback-cluster-cjk-vs.txt`, `fallback-cluster-negative-split.txt`.
+- Diagnostics asserted in tests: `text.shaping.cluster-invariant-failed`, `text.shaping.emoji-sequence-unsupported`, `text.shaping.fallback-missing`, `font.fallback-glyph-unavailable`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.fallback.*` diagnostic and keep the ticket classified as `fixture-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
-- Legacy gate(s) `scaledemoji` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
+- Unsupported or malformed paths must emit one of: `text.fallback.cluster-split-forbidden`, `text.fallback.emoji-fallback-unavailable`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `fixture-gated` until the listed evidence and validation pass.
+- Legacy gate mapping remains visible in dashboard output until the ticket evidence retires it explicitly.
 
 ## Dashboard Impact
 
@@ -89,13 +95,13 @@ interface KFontM7004Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*FallbackSegmentation*' --tests '*ClusterSafety*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Fallback cluster safety depends on M5 cluster invariants and M7 decision traces.
+- Move to `ready` only after fixture list and legacy gate wording are reviewed.
 
 ## Linear Labels
 
@@ -103,4 +109,3 @@ rtk ./gradlew --no-daemon :font:text:test
 - `milestone:M7`
 - `area:fallback`
 - `claim:fixture-gated`
-- `legacy:scaledemoji`

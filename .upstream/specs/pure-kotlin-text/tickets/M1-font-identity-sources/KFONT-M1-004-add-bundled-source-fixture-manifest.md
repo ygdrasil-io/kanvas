@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add bundled source fixture manifest" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M1: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket liste les fontes de test autorisées afin que les preuves ne dépendent pas de la machine du développeur.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Font Identity and Sources` slice until "Add bundled source fixture manifest" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Later parser and scaler tickets need fixtures with known provenance, license, source bytes, and intended coverage. Without a bundled source manifest, evidence can accidentally rely on host system fonts or unreviewed binary blobs, which makes support claims non-reproducible and keeps M1 fixture-gated.
 
 ## Scope
 
-- Deliver the capability described by "Add bundled source fixture manifest" within `fixtures` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.fixture.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M1 boundaries and update status metadata when execution starts.
+- Define a fixture manifest schema for bundled and generated font sources.
+- Include fixture ID, source kind, file path or generator ID, license/provenance, content hash, byte length, face count, intended table coverage, and normative/non-normative status.
+- Seed manifest entries for minimum M1/M2 coverage: single TTF, TTC face index, OTF/CFF candidate, variable font candidate, malformed directory, and missing required table.
+- Mark host-scanned fonts as non-normative unless their bytes are captured into the manifest.
+- Connect manifest entries to `font-source.json` and `typeface-id.json` dump generation.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement SFNT table parsing or scaler behavior.
+- Do not claim CFF, variable font, or malformed parser support just because a fixture is listed.
+- Do not add proprietary or license-unclear font binaries.
+- Do not use system font lookup as normative fixture discovery.
 
 ## Spec Sources
 
@@ -46,55 +46,62 @@ The pure Kotlin text target cannot promote the `Font Identity and Sources` slice
 ## Design Sketch
 
 ```kotlin
-data class KFontM1004Plan(
-    val input: FixtureManifestInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class BundledFontFixtureManifestEntry(
+    val fixtureId: String,
+    val sourceKind: FontSourceKind,
+    val relativePath: String?,
+    val generatorId: String?,
+    val license: String,
+    val sha256: String,
+    val byteLength: Long,
+    val faceCount: Int,
+    val coverageTags: SortedSet<String>,
+    val normative: Boolean,
 )
 
-interface KFontM1004Executor {
-    fun execute(plan: KFontM1004Plan): FixtureManifestEntry
-    fun refusal(code: String = "font.fixture.unsupported"): RouteDiagnostic
-}
+data class FontFixtureManifest(
+    val schemaVersion: Int,
+    val entries: List<BundledFontFixtureManifestEntry>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.fixture.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `fixture-gated` until all evidence and validation criteria are satisfied.
+- [ ] Every normative fixture entry has license/provenance, SHA-256, byte length, face count, and coverage tags.
+- [ ] Generated fixtures record generator ID and source parameters.
+- [ ] Host-dependent sources are either excluded from normative entries or explicitly marked non-normative.
+- [ ] The manifest includes fixtures or planned generated fixtures for single TTF, TTC face index, malformed directory, and missing required table.
+- [ ] The dashboard keeps the row `fixture-gated` until manifest entries and dump evidence are linked.
 
 ## Required Evidence
 
-- Target dump.
-- Fixture evidence.
-- Stable diagnostic snapshot.
-- Classification remains `fixture-gated` until all evidence is attached.
+- `font-fixtures-manifest.json` or equivalent manifest with the minimum fixture families.
+- Hash verification output for all bundled binary fixtures.
+- Generated fixture provenance for any fixture not stored as raw bytes.
+- `font-source.json` sample showing a manifest-backed fixture ID.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.fixture.*` diagnostic and keep the ticket classified as `fixture-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- A fixture without clear license, provenance, or hash must be refused as normative evidence with `font.fixture.provenance-missing` or equivalent.
+- Classification remains `fixture-gated` until all required manifest evidence is attached.
 
 ## Dashboard Impact
 
-- Expected row: `Add bundled source fixture manifest`.
+- Expected row: `bundled font fixture manifest`.
 - Expected classification: `fixture-gated`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no. Listing a fixture only unlocks later parser/scaler evidence.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:core:test
+rtk ./gradlew --no-daemon :font:core:test --tests '*FixtureManifest*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Manifest schema and minimum coverage are specified, but no manifest artifact is attached yet.
+- Move to `ready` after source identity dumps can reference manifest-backed fixture IDs.
 
 ## Linear Labels
 

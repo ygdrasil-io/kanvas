@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Complete `FontSourceID` provenance model" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M1: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket rend chaque source de fonte traçable, pour savoir si une preuve vient d'une fixture fiable ou de la machine locale.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Font Identity and Sources` slice until "Complete `FontSourceID` provenance model" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Kanvas cannot use font fixtures, user bytes, streams, files, or system scans as normative evidence until each source has stable identity and provenance. The current target requires `FontSourceID` to capture source kind, content hash when available, host dependence, face count, parser generation, table tags, and diagnostics for skipped or malformed sources.
 
 ## Scope
 
-- Deliver the capability described by "Complete `FontSourceID` provenance model" within `font-core` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.source.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M1 boundaries and update status metadata when execution starts.
+- Define `FontSourceID` as a stable UUID-backed value derived from provenance facts, not object identity.
+- Model `BundledFontSource`, `GeneratedFixtureFontSource`, `UserDataFontSource`, `UserStreamFontSource`, `UserFileFontSource`, and `SystemScannedFontSource`.
+- Include content hash when bytes are available and a host-dependent marker when a system scan is involved.
+- Track face count, supported table tags, parser generation, and source diagnostics.
+- Add deterministic equality and dump preimage behavior for repeated scans of identical inputs.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not parse glyph outlines or shaping tables beyond the source-level table-tag facts needed for identity.
+- Do not treat host system fonts as normative fixtures unless their bytes are captured.
+- Do not introduce platform-native font APIs as source providers.
+- Do not implement fallback family selection in this ticket.
 
 ## Spec Sources
 
@@ -46,54 +46,66 @@ The pure Kotlin text target cannot promote the `Font Identity and Sources` slice
 ## Design Sketch
 
 ```kotlin
-data class KFontM1001Plan(
-    val input: FontSourceInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+enum class FontSourceKind { Bundled, GeneratedFixture, UserData, UserStream, UserFile, SystemScanned }
+
+data class FontSourceProvenance(
+    val kind: FontSourceKind,
+    val declaredName: String?,
+    val licenseId: String?,
+    val hostDependent: Boolean,
+    val originPath: String?,
 )
 
-interface KFontM1001Executor {
-    fun execute(plan: KFontM1001Plan): FontIdentityDump
-    fun refusal(code: String = "font.source.unsupported"): RouteDiagnostic
-}
+data class FontSourceIdentityPreimage(
+    val provenance: FontSourceProvenance,
+    val contentSha256: String?,
+    val byteLength: Long?,
+    val faceCount: Int,
+    val tableTags: List<String>,
+    val parserGeneration: Int,
+)
+
+@JvmInline
+value class FontSourceID(val uuid: kotlin.uuid.Uuid)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.source.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] The same bundled or generated fixture bytes produce the same `FontSourceID` across repeated runs.
+- [ ] Two different byte streams with the same display name produce different source IDs.
+- [ ] `SystemScannedFontSource` records `hostDependent = true` unless bytes are captured into a fixture manifest.
+- [ ] Source diagnostics use stable codes such as `font.source.unreadable`, `font.source.host-dependent`, or `font.source.duplicate-face`.
+- [ ] No dump contains memory addresses, unordered map output, absolute temp paths, or other nondeterministic fields.
 
 ## Required Evidence
 
-- Stable identity or architecture dump.
-- Determinism test over the same fixture input twice.
-- Diagnostic snapshot for invalid or unsupported input.
+- `font-source.json` dump for one bundled fixture, one generated fixture, one user-data source, and one system-scanned source marked host-dependent.
+- Determinism diff showing two runs over the same fixture produce identical source IDs and dump ordering.
+- Diagnostic snapshot for unreadable source bytes or skipped system-scan entry.
+- Source identity preimage documentation listing every field used to derive the UUID.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.source.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- A source without bytes and without stable provenance must emit `font.source.host-dependent` or a more precise refusal and remain non-normative.
+- Unreadable or malformed source inputs must not be converted into anonymous fallback fonts.
 
 ## Dashboard Impact
 
-- Expected row: `Complete FontSourceID provenance model`.
+- Expected row: `FontSourceID provenance`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no. Source identity is prerequisite evidence, not rendering support.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:core:test
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontSource*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Source identity fields are specified, but no `font-source.json` evidence is attached yet.
+- Move to `ready` after M0 diagnostics and module boundaries are accepted.
 
 ## Linear Labels
 

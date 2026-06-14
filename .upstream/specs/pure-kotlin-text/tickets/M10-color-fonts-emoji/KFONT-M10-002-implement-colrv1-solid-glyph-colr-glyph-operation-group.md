@@ -14,87 +14,97 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement COLRv1 solid/glyph/colr-glyph operation group" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M10: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket couvre le premier noyau COLRv1: couleurs solides, glyphes référencés et graphes COLR imbriqués.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Color Fonts, Bitmap Glyphs, SVG, and Emoji` slice until "Implement COLRv1 solid/glyph/colr-glyph operation group" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+COLRv1 support must be promoted by paint operation groups, not by a single vague "paint graph" claim. The first missing slice is the solid/glyph/colr-glyph group: `PaintSolid`, `PaintVarSolid`, `PaintGlyph`, and `PaintColrGlyph`. These operations establish graph traversal, palette/variation color resolution, nested glyph references, bounds propagation, and refusal behavior for unsupported recursion.
 
 ## Scope
 
-- Deliver the capability described by "Implement COLRv1 solid/glyph/colr-glyph operation group" within `color` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `glyph.color.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M10 boundaries and update status metadata when execution starts.
+- Implement COLRv1 paint graph nodes for `PaintSolid`, `PaintVarSolid`, `PaintGlyph`, and `PaintColrGlyph`.
+- Resolve palette colors, variable color deltas when variation data is available, glyph references, nested COLR glyph references, graph node IDs, and bounds.
+- Enforce recursion depth and operation-count budgets for this operation group.
+- Emit `colrv1-paint-graph.json` and `color-glyph-plan.json` sections for accepted and refused graph walks.
+- Add diagnostics for missing glyph references, unsupported variable color data, recursion budget overflow, and malformed graph offsets.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement gradients, transforms, composites, clips, or cycle fixture expansion in this ticket.
+- Do not render the graph to pixels or GPU primitives.
+- Do not use Skia output as normative proof.
+- Do not silently substitute COLRv0 behavior for COLRv1 graph failures.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md`
 - `.upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md`
-- `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM10002Plan(
-    val input: ColorGlyphRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
-)
+sealed interface COLRv1PaintOp {
+    val nodeId: PaintNodeId
 
-interface KFontM10002Executor {
-    fun execute(plan: KFontM10002Plan): ColorGlyphPlan
-    fun refusal(code: String = "glyph.color.unsupported"): RouteDiagnostic
+    data class Solid(
+        override val nodeId: PaintNodeId,
+        val color: ResolvedGlyphColor,
+    ) : COLRv1PaintOp
+
+    data class Glyph(
+        override val nodeId: PaintNodeId,
+        val glyphId: GlyphId,
+        val child: PaintNodeId,
+        val glyphBounds: RectF,
+    ) : COLRv1PaintOp
+
+    data class ColrGlyph(
+        override val nodeId: PaintNodeId,
+        val baseGlyphId: GlyphId,
+        val childGraph: PaintNodeId,
+    ) : COLRv1PaintOp
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `glyph.color.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Fixtures cover `PaintSolid`, `PaintVarSolid`, `PaintGlyph`, and `PaintColrGlyph` as separate graph nodes with stable node IDs.
+- [ ] Bounds are computed for referenced glyph nodes and included in the color glyph plan.
+- [ ] Recursion depth and operation budget overflow emit `text.color.COLRv1-budget-exceeded`.
+- [ ] Missing or malformed graph offsets emit `text.color.COLR-malformed` with glyph ID and node ID.
+- [ ] The dump distinguishes accepted solid/glyph operations from unimplemented gradient/transform/composite operations.
 
 ## Required Evidence
 
-- Color, bitmap, SVG, or emoji route plan dump.
-- Fixture manifest entry with provenance and expected route.
-- Refusal diagnostics for unsupported payloads or paint graph states.
+- `colrv1-paint-graph.json` fixture for a solid color glyph and nested `PaintColrGlyph`.
+- `color-glyph-plan.json` fixture linking COLRv1 graph nodes to `GlyphArtifactPlan` refs.
+- Refusal fixture for recursion budget overflow and malformed glyph reference.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `glyph.color.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed COLRv1 nodes refuse the color route for the affected glyph range.
+- Monochrome fallback is allowed only when `ColorGlyphFallbackPolicy` records the rejected COLRv1 route and accepted outline substitute.
+- The ticket remains `tracked-gap` until operation-specific fixtures are reviewed.
 
 ## Dashboard Impact
 
-- Expected row: `Implement COLRv1 solid/glyph/colr-glyph operation group`.
+- Expected row: `COLRv1 solid/glyph operation group`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless the operation group has paint graph dumps and refusal fixtures.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*COLRv1*Solid*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: First COLRv1 operation group; later tickets add gradients, transforms, composites, clips, and fixtures.
+- Move to `ready` only after operation IDs, budget fields, and fallback policy are reviewed.
 
 ## Linear Labels
 

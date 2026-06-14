@@ -14,25 +14,25 @@ legacy_gate: ["coloremoji_blendmodes", "scaledemoji", "scaledemoji_rendering", "
 
 ## PM Note
 
-Ce ticket sert à livrer "Harden dashboard claim classification" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M0: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket empêche le dashboard de transformer un début de preuve en promesse produit trop large.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Claims, CI, and Diagnostics` slice until "Harden dashboard claim classification" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The pure Kotlin font target separates many support surfaces: outline paths, simple Latin atlas text, complex shaping, fallback, emoji/color, SDF, LCD, GPU handoff, and external drift. The dashboard must reject generic success labels and classify each row by the real blocker. Otherwise legacy gates such as emoji, SDF, and Fontations comparisons can look like product support before evidence exists.
 
 ## Scope
 
-- Deliver the capability described by "Harden dashboard claim classification" within `validation-dashboard` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.claim.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M0 boundaries and update status metadata when execution starts.
+- Add dashboard rules for `target-supported`, `current-supported`, `tracked-gap`, `DependencyGated`, `fixture-gated`, `GPU-gated`, `expected-unsupported`, and `drift-only`.
+- Split text/font dashboard rows into at least `outline/path`, `simple-latin atlas`, `complex shaping`, `fallback`, `emoji/color`, `SDF`, and `LCD`.
+- Require evidence links for fixture provenance, dumps, CPU oracle artifacts, GPU artifacts when claimed, route diagnostics, and refusal diagnostics.
+- Reject generic labels such as `font missing`, `text works`, or `emoji supported` without route-specific proof.
+- Preserve all `legacy_gate` rows until the new evidence bundle names the replacement support or refusal scope.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
+- Do not close any legacy gate in this ticket.
+- Do not add new rendering support, shaping support, or GPU support.
+- Do not treat external drift reports as normative support evidence.
 
 ## Spec Sources
 
@@ -45,55 +45,61 @@ The pure Kotlin text target cannot promote the `Claims, CI, and Diagnostics` sli
 ## Design Sketch
 
 ```kotlin
-data class KFontM0005Plan(
-    val input: ClaimDashboardInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class FontEvidenceSet(
+    val fixtureProvenance: String?,
+    val parserDump: String?,
+    val glyphDump: String?,
+    val cpuOracle: String?,
+    val gpuArtifact: String?,
+    val routeDiagnostics: List<String>,
 )
 
-interface KFontM0005Executor {
-    fun execute(plan: KFontM0005Plan): ClaimDashboardReport
-    fun refusal(code: String = "font.claim.unsupported"): RouteDiagnostic
-}
+data class FontDashboardClaimRule(
+    val row: String,
+    val requestedClassification: FontClaimImpact,
+    val requiredEvidence: Set<EvidenceKind>,
+)
+
+fun classifyFontClaim(rule: FontDashboardClaimRule, evidence: FontEvidenceSet): FontClaimImpact
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.claim.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Rows without fixture provenance and deterministic dumps cannot become `target-supported`.
+- [ ] CPU-only evidence cannot imply GPU renderer support; those rows stay `GPU-gated` when GPU is claimed without GPU artifacts.
+- [ ] External FreeType, Fontations, or HarfBuzz comparisons classify as `drift-only` unless Kanvas-owned normative evidence exists.
+- [ ] Legacy rows for `coloremoji_blendmodes`, `scaledemoji`, `scaledemoji_rendering`, `dftext`, `fontations`, `fontations_ft_compare`, and `pdf_never_embed` remain visible.
+- [ ] `pipelinePmBundle` or the dashboard gate fails on generic text/font labels that do not name route and evidence.
 
 ## Required Evidence
 
-- Target dump.
-- Fixture evidence.
-- Stable diagnostic snapshot.
+- Dashboard classification report with one row for each claim taxonomy value.
+- Negative dashboard fixture showing rejection of a generic `font missing` or `emoji supported` label.
+- Evidence-link sample for a CPU-only row and a GPU-gated row.
+- Legacy gate mapping table for all gates listed in the front matter.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.claim.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Rows missing required evidence must downgrade to `tracked-gap`, `fixture-gated`, `DependencyGated`, `GPU-gated`, `expected-unsupported`, or `drift-only` according to the missing blocker.
 - Legacy gate(s) `coloremoji_blendmodes`, `scaledemoji`, `scaledemoji_rendering`, `dftext`, `fontations`, `fontations_ft_compare`, `pdf_never_embed` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
 
 ## Dashboard Impact
 
-- Expected row: `Harden dashboard claim classification`.
+- Expected row: `pure-kotlin-font claim classification`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no. This ticket controls classification, not feature support.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:core:test
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePerformanceTrendWarnings pipelinePmBundle
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Dashboard rules are specified, but no report or negative fixture is attached yet.
+- Move to `ready` after KFONT-M0-004 provides the accepted diagnostic taxonomy.
 
 ## Linear Labels
 

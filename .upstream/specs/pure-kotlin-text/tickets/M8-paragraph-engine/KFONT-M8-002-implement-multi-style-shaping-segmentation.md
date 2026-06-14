@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement multi-style shaping segmentation" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M8: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket garantit que le texte riche est découpé en runs façonnables sans casser les clusters ni masquer les fallbacks.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Paragraph Engine` slice until "Implement multi-style shaping segmentation" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Paragraph layout cannot feed the shaping engine by sending the entire string as one run. Style changes, fallback faces, script boundaries, bidi runs, variation settings, and placeholder ranges all affect shaping and glyph identity. The missing gap is a deterministic segmentation layer that converts `ParagraphInput` into `ParagraphShapingRequest` values while preserving cluster safety and attaching fallback diagnostics to exact text ranges.
 
 ## Scope
 
-- Deliver the capability described by "Implement multi-style shaping segmentation" within `paragraph` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.paragraph.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M8 boundaries and update status metadata when execution starts.
+- Convert `ParagraphInput` style ranges into ordered shaping segments using grapheme cluster boundaries from M5.
+- Split by text style, paragraph direction, script itemization, fallback font resolution, OpenType feature set, variation coordinates, palette choice, and placeholder exclusion ranges.
+- Produce `ParagraphShapingRequest` values consumed by the M6 shaping engine without parsing fonts in the paragraph module.
+- Merge `text.shaping.*`, `text.fallback.*`, and `text.paragraph.*` diagnostics by source text range in the paragraph dump.
+- Emit deterministic `paragraph-shaping-requests.json` and include segment references in `paragraph-layout.json`.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement GSUB/GPOS lookup behavior or fallback font selection policy in this ticket.
+- Do not implement line fitting, ellipsis, selection boxes, or GPU artifact planning.
+- Do not silently split inside grapheme clusters to satisfy a style boundary.
+- Do not use native text engines as pass/fail oracles.
 
 ## Spec Sources
 
@@ -45,54 +45,65 @@ The pure Kotlin text target cannot promote the `Paragraph Engine` slice until "I
 ## Design Sketch
 
 ```kotlin
-data class KFontM8002Plan(
-    val input: ParagraphInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class ParagraphShapingRequest(
+    val range: TextRange,
+    val text: String,
+    val style: TextStyle,
+    val paragraphDirection: TextDirection,
+    val script: UnicodeScript,
+    val locale: LocaleTag?,
+    val typeface: TypefaceID,
+    val fallbackTraceId: StableId,
+    val clusterBoundaryPolicy: ClusterBoundaryPolicy,
 )
 
-interface KFontM8002Executor {
-    fun execute(plan: KFontM8002Plan): ParagraphLayoutResult
-    fun refusal(code: String = "text.paragraph.unsupported"): RouteDiagnostic
+interface ParagraphShapingSegmenter {
+    fun segment(
+        input: ParagraphInput,
+        unicodeFacts: UnicodeSegmentationFacts,
+        fallbackRuns: List<ResolvedFontRun>,
+        bidiRuns: List<BidiRun>,
+    ): ParagraphShapingPlan
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.paragraph.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Adjacent ranges with identical shaping-affecting style and typeface facts coalesce into one `ParagraphShapingRequest`.
+- [ ] A style boundary inside a grapheme cluster is refused or widened according to a documented cluster policy, with `text.paragraph.cluster-boundary-violation`.
+- [ ] Fallback segmentation preserves the original cluster order and records every attempted family/typeface for missing glyph ranges.
+- [ ] Placeholders are excluded from shaping requests and leave explicit placeholder tokens in the paragraph input trace.
+- [ ] Bidi/script/style/fallback splits are deterministic and dumpable for the same input, font catalog, and Unicode data version.
 
 ## Required Evidence
 
-- `paragraph-input.json` or `paragraph-layout.json` dump.
-- Line, box, selection, hit-test, or placeholder fixture.
-- Paragraph diagnostic snapshot for invalid constraints.
+- `paragraph-shaping-requests.json` fixture with mixed Latin/Arabic text, two text styles, one variation axis change, and one fallback range.
+- Cluster-boundary negative fixture using combining marks or emoji ZWJ sequence across a style boundary.
+- Diagnostic snapshot showing shaping and fallback diagnostics merged by text range.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.paragraph.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Missing fallback data keeps the affected range unshaped and emits `text.paragraph.fallback-unresolved` or a narrower `text.fallback.*` reason.
+- Unsupported script or shaping dependency remains visible as a range diagnostic; the paragraph engine must not substitute host shaping.
+- The dashboard stays `tracked-gap` until segmentation fixtures cover mixed style, fallback, bidi, and placeholder boundaries.
 
 ## Dashboard Impact
 
-- Expected row: `Implement multi-style shaping segmentation`.
+- Expected row: `Paragraph multi-style shaping segmentation`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless segmentation dumps and range diagnostics are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*ParagraphShaping*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Depends on the paragraph style contract and the M6 shaping request boundary.
+- Move to `ready` only after cluster-boundary and fallback trace formats are reviewed.
 
 ## Linear Labels
 

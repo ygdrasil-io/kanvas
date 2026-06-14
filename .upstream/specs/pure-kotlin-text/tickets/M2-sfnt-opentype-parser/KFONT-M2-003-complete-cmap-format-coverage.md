@@ -14,26 +14,25 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Complete cmap format coverage" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M2: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket vérifie que les caractères Unicode trouvent des glyphes de façon stable, ou refusent proprement.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `SFNT/OpenType Parser` slice until "Complete cmap format coverage" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Kanvas text cannot progress beyond parser facts unless Unicode `cmap` selection is deterministic and bounded. The target requires formats 12 and 4 as primary mappings, format 14 for variation selectors, formats 6 and 0 as legacy fallbacks, stable glyph ID `0` for missing code points, and precise diagnostics for unsupported or unusable `cmap` subtables.
 
 ## Scope
 
-- Deliver the capability described by "Complete cmap format coverage" within `font-sfnt` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.sfnt.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M2 boundaries and update status metadata when execution starts.
+- Parse and select Unicode `cmap` format 12, format 4, format 14, format 6, and format 0 according to target priority.
+- Treat format 13 as fixture-gated unless product fixtures justify many-to-one support.
+- Emit `font.cmap-format-unsupported` for unsupported formats and a stable no-usable-Unicode-`cmap` diagnostic when selection fails.
+- Produce `cmap-map.json` with selected subtable, platform/encoding IDs, mapped ranges, missing-codepoint behavior, and variation selector facts.
+- Keep glyph ID lookup pure parser behavior; do not shape clusters or render glyphs.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement GSUB, GPOS, bidi, segmentation, fallback runs, or paragraph layout.
+- Do not support rare legacy encodings unless they are accepted into the Kanvas required script matrix.
+- Do not claim glyph outline support from successful `cmap` mapping alone.
 
 ## Spec Sources
 
@@ -45,54 +44,63 @@ The pure Kotlin text target cannot promote the `SFNT/OpenType Parser` slice unti
 ## Design Sketch
 
 ```kotlin
-data class KFontM2003Plan(
-    val input: SFNTBytes,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+sealed interface CMapSubtable {
+    val platformId: Int
+    val encodingId: Int
+    fun glyphIdFor(codePoint: Int, variationSelector: Int? = null): GlyphID
+}
+
+data class CMapSelection(
+    val format: Int,
+    val priority: Int,
+    val unicodeCoverageRanges: List<IntRange>,
+    val variationSelectorSupported: Boolean,
 )
 
-interface KFontM2003Executor {
-    fun execute(plan: KFontM2003Plan): SFNTFactDump
-    fun refusal(code: String = "font.sfnt.unsupported"): RouteDiagnostic
-}
+class CMapTable(
+    val subtables: List<CMapSubtable>,
+    val diagnostics: List<SerializedFontDiagnostic>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.sfnt.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Format 12 and format 4 fixtures map expected Unicode code points to stable glyph IDs.
+- [ ] Format 14 fixtures expose variation selector mappings without changing base mapping semantics.
+- [ ] Format 6 and format 0 fixtures are lower-priority fallbacks and do not override a usable format 12 or 4 Unicode subtable.
+- [ ] Missing code points return glyph ID `0` and appear in `cmap-map.json` test evidence.
+- [ ] Unsupported formats emit `font.cmap-format-unsupported` with format, platform ID, encoding ID, and source face identity.
 
 ## Required Evidence
 
-- `sfnt-directory.json` or `sfnt-tables.json` dump.
-- Fixture bytes or manifest entry with provenance.
-- Malformed-input diagnostic snapshot.
+- `cmap-map.json` for fixtures covering formats 12, 4, 14, 6, and 0.
+- Unsupported-format diagnostic snapshot with exact format and subtable identity.
+- Selection-priority test proving format 12 or 4 wins over legacy fallback subtables.
+- Missing-codepoint test evidence showing stable glyph ID `0`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.sfnt.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Fonts with no usable Unicode `cmap` must refuse parser promotion with a precise diagnostic.
+- Format 13 remains fixture-gated or refused until reviewed product fixtures require it.
+- The parser must not call shaping or platform APIs to compensate for unsupported `cmap` data.
 
 ## Dashboard Impact
 
-- Expected row: `Complete cmap format coverage`.
+- Expected row: `cmap Unicode coverage`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no. `cmap` support is parser evidence, not shaping or rendering support.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:sfnt:test
+rtk ./gradlew --no-daemon :font:sfnt:test --tests '*CMap*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: `cmap` coverage requirements are specified, but no `cmap-map.json` evidence is attached yet.
+- Move to `ready` after SFNT entry points and directory diagnostics are available.
 
 ## Linear Labels
 

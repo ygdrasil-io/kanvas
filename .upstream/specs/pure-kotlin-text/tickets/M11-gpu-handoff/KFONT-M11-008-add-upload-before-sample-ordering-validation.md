@@ -14,89 +14,92 @@ legacy_gate: ["dftext"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Add upload-before-sample ordering validation" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M11: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket garantit qu'un draw texte ne peut pas échantillonner un atlas avant son upload ou après son éviction.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Typed GPU Handoff` slice until "Add upload-before-sample ordering validation" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Text atlas routes are only correct if resource uploads, generation validation, instance buffer uploads, draw sampling, eviction, compaction, clip/layer barriers, and destination-read barriers are ordered. The current catalog does not require proof that an atlas upload precedes sampling or that stale generations refuse. Without this, GPU text can pass once and then fail under atlas mutation.
 
 ## Scope
 
-- Deliver the capability described by "Add upload-before-sample ordering validation" within `gpu-api` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.gpu.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M11 boundaries and update status metadata when execution starts.
+- Define `GPUTextOrderingToken` linking text artifact generation, atlas upload task, atlas page/resource generation, instance buffer upload, draw sampling, and eviction/compaction barriers.
+- Validate upload-before-sample ordering for A8 atlas route and leave SDF/color/bitmap/SVG order cases as dependency-gated until routes exist.
+- Emit `gpu-text-ordering-trace.json` with task IDs, dependency edges, generation checks, resource state, draw refs, and diagnostics.
+- Add stale generation, missing upload edge, unsafe eviction-before-draw, and instance-upload-after-draw negative tests.
+- Preserve visual order and route diagnostics through splits and barriers.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement a general GPU task graph scheduler.
+- Do not execute all text routes; unsupported route order cases may remain diagnostic fixtures.
+- Do not hide ordering problems by rebuilding atlases without budget and diagnostics.
+- Do not retire `dftext` without SDF upload and sampling evidence.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
 - `.upstream/specs/gpu-renderer/21-text-glyph-pipeline.md`
-- `.upstream/specs/gpu-renderer/09-draw-family-support-matrix.md`
 - `.upstream/target/high-performance-wgsl-pipeline-target.md`
 - `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM11008Plan(
-    val input: DrawTextRunPayload,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class GPUTextOrderingToken(
+    val tokenId: GPUTextOrderingTokenId,
+    val artifactGeneration: ArtifactGeneration,
+    val atlasUploadTask: GPUTaskId?,
+    val atlasPageGeneration: AtlasPageGeneration?,
+    val instanceUploadTask: GPUTaskId?,
+    val drawTask: GPUTaskId,
+    val barriers: List<GPUTextOrderingBarrier>,
 )
 
-interface KFontM11008Executor {
-    fun execute(plan: KFontM11008Plan): GPUTextRoutePlan
-    fun refusal(code: String = "text.gpu.unsupported"): RouteDiagnostic
-}
+data class GPUTextOrderingValidation(
+    val token: GPUTextOrderingToken,
+    val dependencyEdges: List<GPUTaskEdge>,
+    val diagnostics: List<GPUTextDiagnostic>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.gpu.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `GPU-gated` until all evidence and validation criteria are satisfied.
+- [ ] Accepted A8 atlas draws have explicit upload-before-sample and instance-upload-before-draw edges.
+- [ ] Stale atlas generation refuses with `unsupported.text.atlas_generation_stale`.
+- [ ] Missing upload edge refuses with `unsupported.text.upload_plan_missing` or `unsupported.text.upload_failed`.
+- [ ] Eviction or compaction cannot move before dependent draws without a recorded barrier.
+- [ ] `gpu-text-ordering-trace.json` is deterministic and references subrun, resource, upload, and draw IDs.
 
 ## Required Evidence
 
-- Typed `DrawTextRun` or GPU route dump.
-- No-`Sk*` leakage or unsupported route refusal test.
-- GPU/WGSL evidence when a GPU route is promoted.
-- Classification remains `GPU-gated` until all evidence is attached.
+- `gpu-text-ordering-trace.json` accepted A8 route fixture with upload, instance upload, draw, and generation validation edges.
+- Negative fixtures for missing upload, stale generation, eviction-before-draw, and instance-upload-after-draw.
+- Dashboard note keeping `dftext` open until SDF upload-before-sample evidence exists.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.gpu.*` diagnostic and keep the ticket classified as `GPU-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
-- Legacy gate(s) `dftext` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
+- Missing ordering proof refuses route execution rather than sampling existing resources opportunistically.
+- Stale generations rebuild only through an explicit upload plan within budget; otherwise they refuse.
+- Legacy gate `dftext` remains open until SDF ordering and sampling evidence are linked.
 
 ## Dashboard Impact
 
-- Expected row: `Add upload-before-sample ordering validation`.
+- Expected row: `Text upload-before-sample ordering`.
 - Expected classification: `GPU-gated`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless ordering traces and stale-generation refusals are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:gpu-api:test
-rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*TextOrdering*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Depends on an A8 route plan and resource/upload/binding contracts.
+- Move to `ready` only after ordering token fields and negative ordering cases are reviewed.
 
 ## Linear Labels
 

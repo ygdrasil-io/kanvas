@@ -6,13 +6,14 @@ Make font source and typeface identity deterministic, dumpable, and independent 
 
 ## Dependencies
 
-M0 boundaries and diagnostics.
+M0 module boundaries, CI coverage, and diagnostic taxonomy.
 
 ## Exit Criteria
 
-- [ ] Font source and typeface identity are stable across repeated fixture runs.
-- [ ] Source/typeface dumps are deterministic and reviewable.
-- [ ] Fixture provenance is captured before parser support is promoted.
+- [ ] `FontSourceID` covers provenance, content hash, host dependence, face count, table tags, and parser generation.
+- [ ] `TypefaceID` changes for collection index, variation coordinates, palette, selected `cmap`, scaler mode, and source bytes.
+- [ ] `font-source.json` and `typeface-id.json` are deterministic across repeated fixture runs.
+- [ ] Fixture provenance is captured before parser or scaler support is promoted.
 
 ## Tickets
 
@@ -27,12 +28,13 @@ M0 boundaries and diagnostics.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:core:test
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontSource*' --tests '*Typeface*' --tests '*IdentityDump*' --tests '*FixtureManifest*'
 ```
 
 ## Non-Claims
 
-- No fallback, shaping, or glyph cache support is claimed by identity alone.
+- Source and typeface identity do not claim fallback, shaping, glyph scaling, glyph cache, or GPU support.
+- Host system fonts remain non-normative unless their bytes and provenance are captured as fixtures.
 
 ## Status Update Rule
 

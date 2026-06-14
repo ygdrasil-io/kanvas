@@ -14,19 +14,19 @@ legacy_gate: ["scaledemoji", "scaledemoji_rendering"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Route explicit `SkShaper` APIs through pure Kotlin shaping" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M13: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket connecte les appels `SkShaper` explicites au moteur de shaping pure Kotlin, avec refus clairs pour les scripts ou emoji non prouvés.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Skia-like Facade Migration` slice until "Route explicit `SkShaper` APIs through pure Kotlin shaping" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+`SkShaper` is the compatibility boundary for complex shaping, but it must not become an independent shaping implementation or silently broaden `SkCanvas.drawString`. The facade needs to pass text, font, script/language, feature, direction, fallback, and cluster data into the pure Kotlin shaping engine, then expose shaped glyph runs with the same deterministic diagnostics and evidence required by the script matrix.
 
 ## Scope
 
-- Deliver the capability described by "Route explicit `SkShaper` APIs through pure Kotlin shaping" within `skia-facade` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `kanvas.facade.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M13 boundaries and update status metadata when execution starts.
+- Adapt explicit `SkShaper` text APIs to pure Kotlin shaping requests with text range, `TypefaceID`, script, language, direction, OpenType features, variation coordinates, fallback policy, and cluster output.
+- Preserve the distinction between explicit shaping APIs and the simple `SkCanvas.drawString` route.
+- Map shaped output to `ShapedGlyphRun` facts: glyph IDs, clusters, positions, direction, script/language, enabled/disabled features, fallback runs, and diagnostics.
+- Cover required script matrix slices that are supported by dependencies and emit stable refusals for unsupported script phases, emoji sequences, fallback gaps, or missing paragraph-level bidi context.
+- Keep `scaledemoji` and `scaledemoji_rendering` gates visible until shaping, fallback, color glyph dispatch, artifact route, and dashboard evidence all exist.
 
 ## Non-Goals
 
@@ -48,43 +48,51 @@ The pure Kotlin text target cannot promote the `Skia-like Facade Migration` slic
 ## Design Sketch
 
 ```kotlin
-data class KFontM13003Plan(
-    val input: SkiaFacadeCall,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class SkShaperFacadeRequest(
+    val text: String,
+    val textRange: IntRange,
+    val typefaceId: TypefaceID,
+    val script: OpenTypeScriptTag?,
+    val language: Bcp47LanguageTag?,
+    val direction: TextDirection,
+    val features: List<OpenTypeFeatureSetting>,
+    val fallbackPolicy: FallbackPolicy,
 )
 
-interface KFontM13003Executor {
-    fun execute(plan: KFontM13003Plan): FacadeMigrationEvidence
-    fun refusal(code: String = "kanvas.facade.unsupported"): RouteDiagnostic
-}
+data class SkShaperAdapter(
+    val request: SkShaperFacadeRequest,
+    val shapedRun: ShapedGlyphRun?,
+    val facadeClusters: List<FacadeClusterRange>,
+    val diagnostics: List<RouteDiagnostic>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `kanvas.facade.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Explicit `SkShaper` calls delegate to pure Kotlin shaping and expose `ShapedGlyphRun` glyph IDs, clusters, positions, direction, script/language, features, fallback runs, and diagnostics.
+- [ ] Unsupported scripts, unsupported OpenType features, missing fallback, emoji sequence gaps, and paragraph-only bidi requirements produce stable `text.shaping.*` diagnostics through the facade.
+- [ ] `SkCanvas.drawString` behavior is unchanged by this ticket and remains the simple deterministic path.
+- [ ] Facade cluster ranges match pure Kotlin cluster ranges for every supported fixture.
+- [ ] Legacy gates `scaledemoji` and `scaledemoji_rendering` remain open until shaping plus glyph/color/GPU evidence required by those gates is linked.
 
 ## Required Evidence
 
-- Facade/core parity dump or migration inventory row.
-- Diagnostic mapping and remaining legacy gate evidence.
-- PM bundle or dashboard diff.
+- `skshaper-shaping-dump.json` for Latin ligature/kerning, Arabic joining, Devanagari reordering, mixed bidi, fallback split, and emoji VS/ZWJ or explicit refusal fixtures.
+- Facade/core parity dump comparing `SkShaper` output with pure Kotlin `ShapedGlyphRun` dumps for glyph IDs, clusters, positions, features, fallback runs, and diagnostics.
+- Diagnostic snapshots for `text.shaping.feature-unsupported`, `text.shaping.emoji-sequence-unsupported`, `text.shaping.fallback-missing`, and paragraph-context bidi refusal.
+- Dashboard rows for `scaledemoji` and `scaledemoji_rendering` showing remaining evidence requirements.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `kanvas.facade.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported shaping requests refuse by text range and diagnostic; they do not call HarfBuzz, CoreText, DirectWrite, or platform shapers.
+- Emoji sequences are refused as sequences when unsupported, not approximated as unrelated individual code points.
 - Legacy gate(s) `scaledemoji`, `scaledemoji_rendering` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
 
 ## Dashboard Impact
 
-- Expected row: `Route explicit SkShaper APIs through pure Kotlin shaping`.
+- Expected row: `SkShaper pure Kotlin route`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless supported script and legacy gate evidence are attached.
 
 ## Validation
 

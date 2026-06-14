@@ -2,17 +2,19 @@
 
 ## Goal
 
-Implement typed color glyph, bitmap PNG, bounded SVG, and emoji route plans with fixtures and refusal classes.
+Promote non-outline glyph representations into typed, pure Kotlin plans: COLRv0 layers, COLRv1 paint-operation groups, PNG bitmap glyphs, bounded SVG glyphs, emoji route traces, and fixture manifests with precise refusals.
 
 ## Dependencies
 
-M2 parser facts, M5 clusters, M6 shaping, M7 fallback, and M9 artifact planning.
+M2 supplies color, bitmap, and SVG table facts. M5 supplies Unicode emoji data and cluster boundaries. M6 supplies shaped runs and sequence facts. M7 supplies fallback decisions. M9 supplies glyph representation taxonomy and artifact keys.
 
 ## Exit Criteria
 
-- [ ] COLRv0/COLRv1, PNG bitmap, SVG, and emoji route decisions have fixture evidence.
-- [ ] Unsupported color/SVG/emoji behavior refuses with stable diagnostics.
-- [ ] Legacy color/emoji gates remain visible until rendering and GPU evidence exist.
+- [ ] COLRv0 and COLRv1 plans expose palette, paint graph, bounds, recursion, cycle, budget, and fallback facts.
+- [ ] PNG bitmap glyph plans expose strike selection, alpha policy, source/decoded hashes, and non-PNG refusals.
+- [ ] SVG glyph plans are pure Kotlin, glyph-scoped, bounded, and backed by supported/refused fixture classes.
+- [ ] Emoji route traces show sequence kind, fallback attempts, selected representation, cluster safety, and diagnostics.
+- [ ] The color/emoji fixture manifest maps every promoted route and legacy gate to provenance, expected dumps, diagnostics, and remaining GPU evidence.
 
 ## Tickets
 
@@ -33,12 +35,16 @@ M2 parser facts, M5 clusters, M6 shaping, M7 fallback, and M9 artifact planning.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*COLR*' --tests '*BitmapGlyph*' --tests '*SVGGlyph*' --tests '*Emoji*'
 ```
+
+Required evidence for this milestone includes `color-glyph-plan.json`, `colrv1-paint-graph.json`, `color-glyph-composite-plan.json`, `colrv1-fixture-manifest.json`, `bitmap-glyph-plan.json`, `svg-glyph-plan.json`, `svg-glyph-fixture-manifest.json`, `emoji-route-trace.json`, and `color-emoji-fixture-manifest.json`.
 
 ## Non-Claims
 
-- Color metadata parsing is not a GPU rendering support claim.
+- Metadata-only parsing is not color glyph rendering support.
+- CPU/text color plans do not claim GPU composite, texture, SVG vector, or emoji rendering; M11 owns those route proofs.
+- `scaledemoji`, `scaledemoji_rendering`, and `coloremoji_blendmodes` remain open until fixture, implementation, CPU oracle, GPU evidence, diagnostics, and dashboard updates are all linked.
 
 ## Status Update Rule
 

@@ -14,89 +14,95 @@ legacy_gate: ["dftext"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Add resource/upload/instance/binding plan contracts" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M11: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket décrit comment un subrun texte devient ressources, uploads, instances et bindings GPU vérifiables.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Typed GPU Handoff` slice until "Add resource/upload/instance/binding plan contracts" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Subrun route selection is not enough. The GPU renderer needs typed plans for atlas/bitmap textures, upload dependencies, instance buffers, uniforms, samplers, texture views, bindings, and lifetime owner scopes. Without these contracts, payload gathering can hide uploads, mix material identity with resource refs, or sample stale atlas generations.
 
 ## Scope
 
-- Deliver the capability described by "Add resource/upload/instance/binding plan contracts" within `gpu-api` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.gpu.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M11 boundaries and update status metadata when execution starts.
+- Define `GPUTextResourcePlan`, `GPUTextUploadPlan`, `GPUTextInstanceLayout`, `GPUTextInstanceBufferPlan`, `GPUTextBinding`, `GPUTextAtlasDescriptor`, `GPUTextAtlasPageDescriptor`, and `GPUTextAtlasEntryRef` dump schemas.
+- Record texture ownership plans, sampler descriptors, view descriptor hashes, upload byte ranges, row stride, staging buffer requirements, instance stride/alignment, binding layout hash, and lifetime scope.
+- Keep pass-local resource refs and atlas entry refs out of `MaterialKey`.
+- Emit `gpu-text-resource-plan.json`, `gpu-text-upload-plan.json`, `gpu-text-instance-layout.json`, and `gpu-text-binding-plan.json`.
+- Add refusals for missing upload plan, upload budget overflow, unavailable atlas page, missing entry, and binding layout unavailable.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not execute WebGPU uploads or submit command buffers here.
+- Do not define material-key content; KFONT-M11-010 validates leakage separately.
+- Do not merge glyph atlas, image, path, and coverage atlas lifetimes.
+- Do not retire `dftext` without upload ordering and SDF sampling evidence.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
 - `.upstream/specs/gpu-renderer/21-text-glyph-pipeline.md`
-- `.upstream/specs/gpu-renderer/09-draw-family-support-matrix.md`
 - `.upstream/target/high-performance-wgsl-pipeline-target.md`
 - `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM11007Plan(
-    val input: DrawTextRunPayload,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class GPUTextResourcePlan(
+    val subRunId: GPUTextSubRunId,
+    val textureOwnership: List<GPUTextureOwnershipPlanRef>,
+    val uploadDependencies: List<GPUTextUploadPlan>,
+    val instanceBuffer: GPUTextInstanceBufferPlan,
+    val bindings: List<GPUTextBinding>,
+    val lifetimeScope: GPUResourceLifetimeScope,
+    val diagnostics: List<GPUTextDiagnostic>,
 )
 
-interface KFontM11007Executor {
-    fun execute(plan: KFontM11007Plan): GPUTextRoutePlan
-    fun refusal(code: String = "text.gpu.unsupported"): RouteDiagnostic
-}
+data class GPUTextBinding(
+    val subRunId: GPUTextSubRunId,
+    val renderStep: GPUTextRenderStep,
+    val artifactType: TextArtifactType,
+    val bindingLayoutHash: StableHash,
+    val atlasGenerationFacts: List<AtlasGenerationFact>,
+    val materialPlanRef: MaterialPlanRef,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.gpu.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `GPU-gated` until all evidence and validation criteria are satisfied.
+- [ ] Resource, upload, instance, and binding dumps are deterministic and reference subrun IDs.
+- [ ] Upload plans record source artifact key, destination texture plan, byte ranges, row stride, page/region, staging needs, and upload-before-sample dependency.
+- [ ] Instance layout dumps include glyph target rect/origin, UV/source rect, page index, SDF params where relevant, representation flags, stride, and alignment.
+- [ ] Bindings reference atlas/page generations and resource slots without entering material identity.
+- [ ] Missing upload plan, upload budget overflow, missing atlas page, and binding layout failure emit route-specific diagnostics.
 
 ## Required Evidence
 
-- Typed `DrawTextRun` or GPU route dump.
-- No-`Sk*` leakage or unsupported route refusal test.
-- GPU/WGSL evidence when a GPU route is promoted.
-- Classification remains `GPU-gated` until all evidence is attached.
+- `gpu-text-resource-plan.json`, `gpu-text-upload-plan.json`, `gpu-text-instance-layout.json`, and `gpu-text-binding-plan.json` fixtures for an A8 atlas subrun.
+- Refusal snapshots for `unsupported.text.upload_plan_missing`, `unsupported.text.upload_budget_exceeded`, `unsupported.text.atlas_page_unavailable`, and `unsupported.text.binding_layout_unavailable`.
+- Evidence that `GPUTextBinding` stays payload/resource data, not `MaterialKey` data.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.gpu.*` diagnostic and keep the ticket classified as `GPU-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
-- Legacy gate(s) `dftext` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
+- Missing or over-budget upload plans refuse route execution; they do not trigger CPU texture fallback.
+- Stale atlas/page generations refuse or request an explicit rebuild within budget.
+- Legacy gate `dftext` remains open until SDF resource/upload/binding plans and sampling evidence are complete.
 
 ## Dashboard Impact
 
-- Expected row: `Add resource/upload/instance/binding plan contracts`.
+- Expected row: `Text GPU resource/upload/instance/binding contracts`.
 - Expected classification: `GPU-gated`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless plan dumps and refusal diagnostics are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:gpu-api:test
-rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextResource*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Creates the resource planning contract needed before ordering and material-key leakage tests.
+- Move to `ready` only after each plan schema and resource lifetime rule are reviewed.
 
 ## Linear Labels
 

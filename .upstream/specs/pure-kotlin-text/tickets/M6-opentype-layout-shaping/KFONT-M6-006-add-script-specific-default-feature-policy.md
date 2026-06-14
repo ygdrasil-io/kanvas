@@ -14,67 +14,77 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add script-specific default feature policy" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M6: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket rend explicites les features OpenType activees par script, au lieu de copier un comportement cache d'une plateforme.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `OpenType Layout Shaping` slice until "Add script-specific default feature policy" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+GSUB and GPOS lookup implementations are not enough unless Kanvas knows which features are enabled for each script, language system, and user request. The target script matrix requires explicit defaults for Latin, Greek, Cyrillic, Hebrew, Arabic, Devanagari, Thai, CJK, and Emoji, plus diagnostics for unsupported or disabled features.
 
 ## Scope
 
-- Deliver the capability described by "Add script-specific default feature policy" within `shaping` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.shaping.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M6 boundaries and update status metadata when execution starts.
+- Define a `ScriptFeaturePolicy` for each required script matrix row and OpenType script tag.
+- Resolve requested features, disabled features, script defaults, language-system defaults, and compatibility choices into a deterministic `ResolvedFeatureSet`.
+- Serialize requested, enabled, disabled, unsupported, and defaulted features in `shaping-plan.json`.
+- Add diagnostics for unsupported features, missing language systems, and features that are valid but intentionally disabled for the current route.
+- Keep `SkCanvas.drawString` outside complex default feature enablement unless an explicit shaping API requests it.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement feature lookup execution; GSUB/GPOS tickets own behavior.
+- Do not add new script rows beyond the target matrix.
+- Do not infer defaults from HarfBuzz, CoreText, DirectWrite, or browser shaping at runtime.
+- Do not implement paragraph style inheritance or rich text spans.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM6006Plan(
-    val input: ShapingInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class ScriptFeaturePolicy(
+    val script: ScriptCode,
+    val openTypeTags: List<OpenTypeScriptTag>,
+    val requiredDefaults: Set<OpenTypeFeatureTag>,
+    val optionalDefaults: Set<OpenTypeFeatureTag>,
+    val refusalWhenMissing: Set<OpenTypeFeatureTag>,
 )
 
-interface KFontM6006Executor {
-    fun execute(plan: KFontM6006Plan): ShapedGlyphRun
-    fun refusal(code: String = "text.shaping.unsupported"): RouteDiagnostic
+class FeatureResolver(
+    private val policies: RequiredScriptFeaturePolicies,
+) {
+    fun resolve(run: ScriptRun, tableFacts: OpenTypeLayoutFacts, request: FeatureRequestSet): ResolvedFeatureSet
 }
+
+data class ResolvedFeatureSet(
+    val enabled: List<ResolvedFeature>,
+    val disabled: List<ResolvedFeature>,
+    val unsupported: List<FeatureDiagnostic>,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.shaping.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Latin, Greek, Cyrillic, Hebrew, Arabic, Devanagari, Thai, CJK, and Emoji script rows have explicit default feature sets.
+- [ ] `shaping-plan.json` records user-requested features, script defaults, enabled lookups, disabled features, unsupported features, and language-system choice.
+- [ ] Arabic defaults include joining/form features and cursive/mark requirements; Devanagari defaults include required Indic phase features; CJK defaults include vertical alternates only for vertical text requests.
+- [ ] Unsupported discretionary features diagnose without blocking required defaults for simple scripts.
+- [ ] Simple `drawString` path records that complex shaping defaults were not implicitly enabled.
 
 ## Required Evidence
 
-- `shaping-plan.json` and `shaped-glyph-run.json` dump.
-- GSUB/GPOS trace when lookups are involved.
-- Cluster invariant or script refusal fixture.
+- `feature-policy-matrix.json` mapping each required script family to OpenType script tags, default features, optional features, and refusal-on-missing features.
+- `shaping-plan.json` fixtures for Latin ligature/kerning, Arabic forms/cursive, Devanagari Indic features, Thai marks, CJK vertical alternates, Emoji variation selectors, and unsupported discretionary feature request.
+- Diagnostics asserted in tests: `text.shaping.feature-unsupported`, `text.shaping.script-unsupported`, `text.shaping.gdef-required`, `text.shaping.mark-positioning-unavailable`, `text.shaping.cursive-attachment-unavailable`.
+- Review note documenting that external shaper defaults are drift-only references.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.shaping.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported or malformed paths must emit one of: `text.shaping.feature-unsupported`, `text.shaping.feature-policy-missing`.
+- The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
+- Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
 ## Dashboard Impact
 
@@ -86,13 +96,13 @@ interface KFontM6006Executor {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*FeaturePolicy*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Policy ticket depends on script itemization and the M6 shaping contract.
+- Move to `ready` only after the matrix row feature sets are reviewed.
 
 ## Linear Labels
 

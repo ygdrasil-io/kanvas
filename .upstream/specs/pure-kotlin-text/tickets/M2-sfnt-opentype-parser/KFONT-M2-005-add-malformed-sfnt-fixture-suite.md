@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add malformed SFNT fixture suite" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M2: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket ajoute les fontes volontairement cassées qui prouvent que le parser refuse proprement.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `SFNT/OpenType Parser` slice until "Add malformed SFNT fixture suite" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Malformed SFNT behavior must be tested with narrow, reviewed fixtures. Without a fixture suite, parser diagnostics can look correct in code review but remain unproven for dangerous inputs such as bad headers, invalid offsets, overlapping tables, missing required tables, unsupported `cmap` formats, or malformed optional tables.
 
 ## Scope
 
-- Deliver the capability described by "Add malformed SFNT fixture suite" within `fixtures` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.fixture.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M2 boundaries and update status metadata when execution starts.
+- Add generated or bundled malformed fixtures for bad SFNT version, truncated header, invalid TTC index, out-of-bounds table record, overlapping tables, duplicate tag, missing required table, malformed optional table, and unsupported `cmap` format.
+- Record fixture provenance, hash, generator parameters, intended diagnostic, and expected parser outcome in the fixture manifest.
+- Ensure each fixture is small and focused on one failure mode.
+- Link each fixture to `sfnt-directory.json`, `sfnt-tables.json`, or `cmap-map.json` evidence.
+- Keep malformed fixtures pure Kotlin and independent from external parser behavior.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not add broad fuzzing infrastructure in this ticket.
+- Do not create fixtures that require proprietary font data.
+- Do not mark malformed recovery as support unless the spec explicitly allows safe optional-table fallback.
+- Do not test glyph outline malformation here; that belongs to M3.
 
 ## Spec Sources
 
@@ -45,55 +45,64 @@ The pure Kotlin text target cannot promote the `SFNT/OpenType Parser` slice unti
 ## Design Sketch
 
 ```kotlin
-data class KFontM2005Plan(
-    val input: FixtureManifestInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
-)
-
-interface KFontM2005Executor {
-    fun execute(plan: KFontM2005Plan): FixtureManifestEntry
-    fun refusal(code: String = "font.fixture.unsupported"): RouteDiagnostic
+enum class MalformedSFNTCase {
+    BadVersion,
+    TruncatedHeader,
+    InvalidCollectionIndex,
+    TableOutOfBounds,
+    OverlappingTables,
+    DuplicateTag,
+    MissingRequiredTable,
+    MalformedOptionalTable,
+    UnsupportedCMapFormat,
 }
+
+data class MalformedSFNTFixture(
+    val fixtureId: String,
+    val case: MalformedSFNTCase,
+    val sha256: String,
+    val expectedDiagnostic: String,
+    val expectedOutcome: ParserOutcome,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.fixture.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `fixture-gated` until all evidence and validation criteria are satisfied.
+- [ ] Each malformed fixture has one primary expected diagnostic and a stable source hash.
+- [ ] Required-table malformed fixtures reject the face instead of producing partial support claims.
+- [ ] Optional-table malformed fixtures preserve ordinary outline parsing only when the target spec allows fallback.
+- [ ] Unsupported `cmap` fixture emits `font.cmap-format-unsupported`.
+- [ ] Fixture generation is deterministic and does not depend on external font engines.
 
 ## Required Evidence
 
-- Target dump.
-- Fixture evidence.
-- Stable diagnostic snapshot.
-- Classification remains `fixture-gated` until all evidence is attached.
+- Malformed fixture manifest entries with fixture ID, generator or source path, hash, case, and expected diagnostic.
+- Diagnostic snapshots for each malformed SFNT case listed in Scope.
+- `sfnt-directory.json`, `sfnt-tables.json`, or `cmap-map.json` outputs proving each failure mode.
+- Determinism output proving generated malformed fixtures are byte-identical across runs.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.fixture.*` diagnostic and keep the ticket classified as `fixture-gated`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Malformed fixture evidence remains `fixture-gated` until every listed case has manifest and diagnostic output.
+- Parser recovery must be explicit: required failures refuse, optional failures fail closed, and unsupported formats diagnose.
 
 ## Dashboard Impact
 
-- Expected row: `Add malformed SFNT fixture suite`.
+- Expected row: `malformed SFNT fixture suite`.
 - Expected classification: `fixture-gated`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no until every required malformed fixture and diagnostic snapshot is attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:core:test
+rtk ./gradlew --no-daemon :font:sfnt:test --tests '*MalformedSFNT*' --tests '*FixtureManifest*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Malformed fixture cases are specified, but no suite evidence is attached yet.
+- Move to `ready` after bounded directory diagnostics and OpenType fact dumps define the expected outputs.
 
 ## Linear Labels
 

@@ -14,87 +14,93 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement bounded SVG glyph renderer primitives" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M10: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket cible un sous-ensemble SVG de glyphes, pas un moteur SVG général.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Color Fonts, Bitmap Glyphs, SVG, and Emoji` slice until "Implement bounded SVG glyph renderer primitives" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+SVG-in-OpenType glyphs are mandatory for the complete target, but the support must be pure Kotlin, glyph-scoped, static, and bounded. The missing slice is a `SVGGlyphPlan` for supported primitives: root/viewBox, groups, paths, basic shapes, transforms, fill/stroke, opacity, gradients, clip paths, `defs`/`symbol`, and bounded `use` references. Without a concrete plan, SVG support could accidentally depend on native SVG engines or unbounded document behavior.
 
 ## Scope
 
-- Deliver the capability described by "Implement bounded SVG glyph renderer primitives" within `color` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `glyph.color.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M10 boundaries and update status metadata when execution starts.
+- Parse glyph-scoped SVG document records from M2 table facts and select the record for a glyph ID.
+- Convert supported static SVG primitives into `SVGGlyphPlan` value objects with path/material refs, transforms, gradients, clips, bounds, color inheritance, and diagnostics.
+- Enforce limits for document bytes, generated path commands, gradient stops, `use` recursion depth, and primitive count.
+- Emit `svg-glyph-plan.json` with source document hash, viewBox, glyph bounds, primitive list, and renderer-neutral route facts.
+- Preserve monochrome fallback only when a valid outline exists and style permits it.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement scripts, animation, filters, `foreignObject`, external resources, network fetches, embedded text layout, or dynamic CSS selectors.
+- Do not build a general SVG renderer for application content.
+- Do not allocate GPU resources or lower to WGSL.
+- Do not use a native SVG renderer as normative behavior.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md`
-- `.upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md`
 - `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
+- `.upstream/specs/gpu-renderer/21-text-glyph-pipeline.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
-- `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM10007Plan(
-    val input: ColorGlyphRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class SVGGlyphPlan(
+    val glyphId: GlyphId,
+    val typefaceId: TypefaceID,
+    val documentHash: StableHash,
+    val viewBox: RectF,
+    val primitives: List<SVGGlyphPrimitive>,
+    val bounds: RectF,
+    val resourceLimits: SVGGlyphResourceLimits,
+    val diagnostics: List<TextDiagnostic>,
 )
 
-interface KFontM10007Executor {
-    fun execute(plan: KFontM10007Plan): ColorGlyphPlan
-    fun refusal(code: String = "glyph.color.unsupported"): RouteDiagnostic
+sealed interface SVGGlyphPrimitive {
+    data class Path(val pathDataHash: StableHash, val paint: SVGPaintSpec, val transform: Matrix3x3) : SVGGlyphPrimitive
+    data class Clip(val clipId: String, val childRefs: List<Int>, val bounds: RectF) : SVGGlyphPrimitive
+    data class Gradient(val gradientId: String, val stops: List<ResolvedGradientStop>) : SVGGlyphPrimitive
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `glyph.color.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Fixtures cover static path, basic shape, transform, fill, stroke, opacity, linear/radial gradient, clip path, `defs`/`symbol`, and bounded `use`.
+- [ ] `svg-glyph-plan.json` records document hash, viewBox, bounds, primitive count, limit decisions, and diagnostics.
+- [ ] Unsupported dynamic features refuse with `text.SVG.feature-unsupported` or a narrower SVG diagnostic.
+- [ ] `use` recursion is bounded and deterministic.
+- [ ] The plan is glyph-scoped and contains no network, native renderer, or GPU handle references.
 
 ## Required Evidence
 
-- Color, bitmap, SVG, or emoji route plan dump.
-- Fixture manifest entry with provenance and expected route.
-- Refusal diagnostics for unsupported payloads or paint graph states.
+- `svg-glyph-plan.json` fixtures for supported path, gradient, transform, clip, and bounded `use` cases.
+- Bounds dump for each positive SVG fixture.
+- Limit diagnostics for excessive path commands, gradient stops, or `use` recursion depth.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `glyph.color.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported SVG primitives refuse the SVG route for the glyph and may fall back to monochrome outline only when policy allows.
+- External resources, scripts, animation, and network references always refuse; they are not dependency gates.
+- Silent native SVG fallback is not allowed.
 
 ## Dashboard Impact
 
-- Expected row: `Implement bounded SVG glyph renderer primitives`.
+- Expected row: `SVG glyph renderer primitives`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless supported primitive fixtures and refusal diagnostics are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*SVGGlyph*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Establishes the accepted pure Kotlin SVG glyph subset before SVG refusal fixtures are finalized.
+- Move to `ready` only after primitive list, resource limits, and plan schema are reviewed.
 
 ## Linear Labels
 

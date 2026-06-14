@@ -14,26 +14,26 @@ legacy_gate: ["dftext"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement production SDF generator boundaries" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M9: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket borne le support SDF avant de rouvrir les claims historiques `dftext`.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Glyph Artifacts, A8, SDF, Outline, and Cache` slice until "Implement production SDF generator boundaries" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Distance-field text cannot be promoted from smoke evidence. The SDF route needs an explicit mathematical contract, eligibility policy, key fields, padding, normalization, quantization, and refusal behavior. Without this ticket, `dftext` could be retired using an unbounded generator, a transform-unsafe SDF, or an artifact that the GPU later samples with incompatible parameters.
 
 ## Scope
 
-- Deliver the capability described by "Implement production SDF generator boundaries" within `glyph` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `glyph.artifact.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M9 boundaries and update status metadata when execution starts.
+- Generate SDF artifacts only from accepted closed outline paths in glyph space.
+- Use the normalized contract `clamp(0.5 + signedDistance / (2 * spreadPx), 0, 1)` with positive distance inside filled contours and R8Unorm storage.
+- Record spread, source resolution, padding, bounds, quantization, output hash, and SDF eligibility in `sdf-glyph-artifact.json`.
+- Enforce transform eligibility for finite identity, translate, scale, and accepted affine transforms without perspective.
+- Emit refusals for non-closed outlines, hairline stroke, unsupported color glyphs, perspective transforms, unsupported LCD, and generation budget overflow.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement LCD SDF or perspective SDF support.
+- Do not accept bitmap alpha as SDF source without a future promotion fixture.
+- Do not implement GPU sampling or WGSL SDF reconstruction; M11 owns renderer validation.
+- Do not retire `dftext` without CPU artifact evidence, GPU route evidence, diagnostics, and dashboard updates.
 
 ## Spec Sources
 
@@ -46,55 +46,62 @@ The pure Kotlin text target cannot promote the `Glyph Artifacts, A8, SDF, Outlin
 ## Design Sketch
 
 ```kotlin
-data class KFontM9004Plan(
-    val input: GlyphArtifactRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class SDFGlyphArtifact(
+    val strikeKey: GlyphStrikeKey,
+    val sourceOutlineHash: StableHash,
+    val spreadPx: Float,
+    val sourceResolution: SDFSourceResolution,
+    val atlasPaddingPx: Int,
+    val bounds: RectI,
+    val format: GlyphMaskFormat = GlyphMaskFormat.R8Unorm,
+    val normalizedDistanceHash: StableHash,
+    val eligibility: SDFEligibility,
+    val diagnostics: List<TextDiagnostic>,
 )
 
-interface KFontM9004Executor {
-    fun execute(plan: KFontM9004Plan): GlyphArtifactPlan
-    fun refusal(code: String = "glyph.artifact.unsupported"): RouteDiagnostic
+interface SDFGlyphGenerator {
+    fun generate(plan: OutlineGlyphPlan, params: SDFGenerationParams): SDFGlyphArtifact
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `glyph.artifact.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] SDF dumps include spread, padding, normalization formula version, quantization policy, source bounds, and output hash.
+- [ ] `GlyphStrikeKey` changes when spread, source resolution, variation, palette, transform bucket, or renderer descriptor version changes.
+- [ ] Non-closed geometry, perspective transforms, hairline strokes, color glyph sources, and LCD requests refuse with route-specific diagnostics.
+- [ ] Fallback order is A8, outline, then refusal, and every fallback decision appears in `glyph-artifact-plan.json`.
+- [ ] `dftext` remains open until this CPU artifact evidence is paired with M11 GPU sampling evidence.
 
 ## Required Evidence
 
-- `glyph-artifact-plan.json` or `glyph-atlas.json` dump.
-- CPU artifact hash, bounds, and cache key preimage.
-- Route refusal or stale-generation diagnostic.
+- `sdf-glyph-artifact.json` fixture for a closed outline with default spread and one non-default spread.
+- `sdf-normalization-dump.json` or equivalent section showing signed-distance samples around the 0.5 edge.
+- Refusal fixtures for perspective transform, non-closed contour, unsupported color glyph, hairline stroke, and LCD request.
+- Dashboard evidence keeping `dftext` classified as open until GPU handoff evidence exists.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `glyph.artifact.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
-- Legacy gate(s) `dftext` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
+- Unsafe SDF requests fall back to A8 or outline only when route policy says the substitute preserves semantics.
+- Generation failure emits `text.glyph.SDF-generation-failed`; transform refusal emits `text.glyph.SDF-transform-unsupported`.
+- Legacy gate `dftext` remains open until implementation evidence, diagnostics, GPU sampling, and dashboard updates are linked.
 
 ## Dashboard Impact
 
-- Expected row: `Implement production SDF generator boundaries`.
+- Expected row: `SDF glyph artifact route / dftext`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless CPU SDF evidence is combined with M11 GPU route evidence.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*SDF*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Owns the CPU SDF contract and keeps `dftext` visible as a legacy gate.
+- Move to `ready` only after SDF formula, eligibility, padding, and refusal fixtures are reviewed.
 
 ## Linear Labels
 

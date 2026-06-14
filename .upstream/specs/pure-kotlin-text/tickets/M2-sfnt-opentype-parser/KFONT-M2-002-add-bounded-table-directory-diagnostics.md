@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Add bounded table directory diagnostics" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M2: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket rend les fontes cassées compréhensibles sans mettre en danger tout le parseur.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `SFNT/OpenType Parser` slice until "Add bounded table directory diagnostics" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+SFNT table directories define offsets, lengths, checksums, tags, and required table presence. The parser must reject out-of-bounds reads, overlapping or duplicated records, missing required tables, and malformed optional tables with precise diagnostics. Without these diagnostics, malformed fixtures can crash the parse or be misreported as generic font failure.
 
 ## Scope
 
-- Deliver the capability described by "Add bounded table directory diagnostics" within `font-sfnt` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.sfnt.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M2 boundaries and update status metadata when execution starts.
+- Validate SFNT header, table count, search fields, table record offsets, lengths, and checksum fields with bounded reads.
+- Detect duplicate table tags, overlapping slices, zero-length required tables, and records that exceed source byte bounds.
+- Emit required-table diagnostics for `cmap`, `head`, `hhea`, `hmtx`, `maxp`, `name`, `OS/2`, `post`, `loca`, and `glyf` when the outline contract requires them.
+- Distinguish malformed required tables from malformed optional tables.
+- Add deterministic diagnostics to `sfnt-directory.json`.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement detailed parsing of each table payload.
+- Do not decide scaler support or glyph rendering policy.
+- Do not silently repair malformed offsets or lengths.
+- Do not widen parser bounds to satisfy a malformed fixture.
 
 ## Spec Sources
 
@@ -45,54 +45,64 @@ The pure Kotlin text target cannot promote the `SFNT/OpenType Parser` slice unti
 ## Design Sketch
 
 ```kotlin
-data class KFontM2002Plan(
-    val input: SFNTBytes,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class SFNTTableRecord(
+    val tag: String,
+    val checksum: UInt,
+    val offset: UInt,
+    val length: UInt,
 )
 
-interface KFontM2002Executor {
-    fun execute(plan: KFontM2002Plan): SFNTFactDump
-    fun refusal(code: String = "font.sfnt.unsupported"): RouteDiagnostic
+data class TableDirectoryDiagnostic(
+    val code: String,
+    val tag: String?,
+    val offset: UInt?,
+    val length: UInt?,
+    val sourceLength: UInt,
+)
+
+class SFNTTableDirectoryValidator {
+    fun validate(records: List<SFNTTableRecord>, sourceLength: UInt): List<TableDirectoryDiagnostic>
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.sfnt.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Out-of-bounds table records emit a stable diagnostic such as `font.sfnt.table-out-of-bounds`.
+- [ ] Missing required tables emit `font.required-table-missing` with the missing tag and face identity.
+- [ ] Malformed optional tables emit `font.optional-table-malformed` without invalidating ordinary outline text when safe.
+- [ ] Duplicate or overlapping table records are reported deterministically and do not depend on map iteration order.
+- [ ] The parser never reads beyond the declared bounded byte source while producing diagnostics.
 
 ## Required Evidence
 
-- `sfnt-directory.json` or `sfnt-tables.json` dump.
-- Fixture bytes or manifest entry with provenance.
-- Malformed-input diagnostic snapshot.
+- `sfnt-directory.json` diagnostics for out-of-bounds, duplicate tag, overlapping table, missing required table, and malformed optional table fixtures.
+- Malformed fixture manifest entries with source hash and intended diagnostic.
+- Unit test output proving invalid offsets/lengths do not crash the parser.
+- Negative evidence that no generic `font missing` dashboard label is emitted for table directory failures.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.sfnt.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Required-table failures reject the face with the precise missing or malformed table diagnostic.
+- Optional-table failures must fail closed and keep parsing eligible outline text only when the spec permits that fallback.
+- Silent offset clamping or host-parser fallback is not allowed.
 
 ## Dashboard Impact
 
-- Expected row: `Add bounded table directory diagnostics`.
+- Expected row: `SFNT bounded table directory diagnostics`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no until malformed fixture evidence and diagnostics are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:sfnt:test
+rtk ./gradlew --no-daemon :font:sfnt:test --tests '*TableDirectory*' --tests '*MalformedSFNT*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Directory diagnostic cases are specified, but no malformed fixture evidence is attached yet.
+- Move to `ready` after KFONT-M0-004 accepts diagnostic namespace rules and KFONT-M2-001 defines parse entry points.
 
 ## Linear Labels
 

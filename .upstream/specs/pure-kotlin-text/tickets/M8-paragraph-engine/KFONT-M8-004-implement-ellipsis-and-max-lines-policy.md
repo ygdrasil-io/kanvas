@@ -14,85 +14,97 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Implement ellipsis and max-lines policy" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M8: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket évite les coupures de texte invisibles ou incohérentes quand une UI impose un nombre de lignes.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Paragraph Engine` slice until "Implement ellipsis and max-lines policy" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Paragraph layout needs a deterministic truncation policy after shaping and line fitting. The current catalog does not specify how `maxLines`, ellipsis glyph shaping, bidi visual order, placeholders, and cluster-safe replacement interact. Without this ticket, a paragraph could cut inside a cluster, hide an unshaped ellipsis, or report line metrics that no longer match the glyph runs.
 
 ## Scope
 
-- Deliver the capability described by "Implement ellipsis and max-lines policy" within `paragraph` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `text.paragraph.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M8 boundaries and update status metadata when execution starts.
+- Add `EllipsisPolicy` handling to line fitting for `maxLines`, width-constrained lines, and hard/soft break boundaries.
+- Shape the ellipsis string through the same segmentation path as paragraph text and record its glyph run provenance.
+- Replace only cluster-safe trailing content and preserve visual-order facts for bidi lines.
+- Record per-line ellipsis state, truncated source range, visible range, and ellipsis glyph descriptors in `paragraph-layout.json`.
+- Emit diagnostics for missing ellipsis glyph, no room for ellipsis, invalid `maxLines`, and placeholder truncation conflicts.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement the UAX #14 break map or shaping segmentation here.
+- Do not add middle/head truncation variants unless accepted by a later policy update.
+- Do not turn ellipsis into a GPU rendering support claim.
+- Do not silently drop content without reporting the truncated range.
 
 ## Spec Sources
 
 - `.upstream/specs/pure-kotlin-text/ROADMAP.md`
 - `.upstream/specs/pure-kotlin-text/03-paragraph-engine.md`
-- `.upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md`
 - `.upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md`
 
 ## Design Sketch
 
 ```kotlin
-data class KFontM8004Plan(
-    val input: ParagraphInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class EllipsisPolicy(
+    val maxLines: Int?,
+    val ellipsisText: String,
+    val placement: EllipsisPlacement = EllipsisPlacement.End,
 )
 
-interface KFontM8004Executor {
-    fun execute(plan: KFontM8004Plan): ParagraphLayoutResult
-    fun refusal(code: String = "text.paragraph.unsupported"): RouteDiagnostic
+data class TruncatedLine(
+    val lineIndex: Int,
+    val visibleRange: TextRange,
+    val truncatedRange: TextRange,
+    val ellipsisGlyphRun: GlyphRunDescriptor?,
+    val diagnostics: List<TextDiagnostic>,
+)
+
+interface ParagraphLineFitter {
+    fun fitLines(
+        shapedRuns: List<ShapedGlyphRun>,
+        breaks: LineBreakMap,
+        policy: EllipsisPolicy,
+        widthPx: Float,
+    ): List<LineLayout>
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `text.paragraph.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] `maxLines` truncation never cuts inside a grapheme cluster or shaped glyph cluster.
+- [ ] Ellipsis glyphs are shaped with the active trailing style and recorded as a distinct glyph run descriptor.
+- [ ] Bidi lines preserve visual ordering after truncation and record visible logical ranges.
+- [ ] Placeholder ranges that cannot be partially truncated produce `text.paragraph.placeholder-ellipsis-conflict`.
+- [ ] `paragraph-layout.json` includes `isEllipsized`, visible range, truncated range, and ellipsis glyph provenance per affected line.
 
 ## Required Evidence
 
-- `paragraph-input.json` or `paragraph-layout.json` dump.
-- Line, box, selection, hit-test, or placeholder fixture.
-- Paragraph diagnostic snapshot for invalid constraints.
+- `paragraph-layout.json` fixtures for one-line overflow, multi-line overflow, mixed style ellipsis, bidi text, and placeholder-adjacent truncation.
+- Negative fixture for missing ellipsis glyph and no-room-for-ellipsis cases.
+- Diagnostic snapshot using `text.paragraph.ellipsis-glyph-missing`, `text.paragraph.ellipsis-no-room`, or a narrower accepted reason.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `text.paragraph.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- If ellipsis cannot be shaped, the line fit refuses the ellipsized layout instead of drawing unmarked clipped text.
+- If `maxLines` is invalid, layout returns `text.paragraph.invalid-max-lines`.
+- Host paragraph truncation APIs are not allowed as fallback.
 
 ## Dashboard Impact
 
-- Expected row: `Implement ellipsis and max-lines policy`.
+- Expected row: `Paragraph ellipsis and max-lines policy`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, unless truncation fixtures cover clusters, bidi, and placeholder conflict cases.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*Ellipsis*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Depends on stable shaping requests and line-break maps.
+- Move to `ready` only after the truncation dump fields and refusal codes are reviewed.
 
 ## Linear Labels
 

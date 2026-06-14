@@ -28,7 +28,8 @@ M0 diagnostics and M2 cmap facts.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*UnicodeData*' --tests '*Grapheme*' --tests '*Bidi*'
+rtk ./gradlew --no-daemon :font:text:test --tests '*ScriptItem*' --tests '*ClusterSafety*'
 ```
 
 ## Non-Claims

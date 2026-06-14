@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Freeze module/package layout for the pure Kotlin font core" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M0: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket fixe les frontières techniques pour éviter que les prochains tickets mélangent parsing font, shaping et renderer GPU.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Claims, CI, and Diagnostics` slice until "Freeze module/package layout for the pure Kotlin font core" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The target architecture defines package ownership and dependency direction, but the font ticket catalog still needs an auditable implementation slice that freezes the initial module/package layout. Without a frozen boundary, later SFNT, scaler, glyph artifact, or facade work can leak `Sk*` APIs into pure Kotlin modules or add a back dependency from font code to `:gpu-renderer`.
 
 ## Scope
 
-- Deliver the capability described by "Freeze module/package layout for the pure Kotlin font core" within `font-architecture` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.architecture.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M0 boundaries and update status metadata when execution starts.
+- Define the initial Gradle module candidates and package roots for font core, SFNT parsing, scaler, text shaping, glyph artifacts, and GPU-facing API contracts.
+- Encode dependency direction rules from `:kanvas-skia` adapters toward pure Kotlin font/text modules, never the reverse.
+- Add boundary diagnostics for `Sk*` leakage, GPU renderer back edges, and package-root mismatches.
+- Produce a reviewable module-boundary dump or report that maps package root to owner area.
+- Keep exact Gradle module names aligned with KFONT-M0-001, while treating package roots as normative.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement the modules' font behavior.
+- Do not rename existing production packages outside the reviewed architecture change.
+- Do not add a dependency from pure Kotlin font/text modules to `:gpu-renderer`.
+- Do not make native font APIs normative.
 
 ## Spec Sources
 
@@ -46,54 +46,61 @@ The pure Kotlin text target cannot promote the `Claims, CI, and Diagnostics` sli
 ## Design Sketch
 
 ```kotlin
-data class KFontM0003Plan(
-    val input: ModuleBoundaryInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+enum class FontOwnerArea { Core, SFNT, Scaler, Shaping, Paragraph, Glyph, GPUApi, Facade }
+
+data class FontPackageBoundary(
+    val owner: FontOwnerArea,
+    val modulePath: String,
+    val packageRoot: String,
+    val allowedDependencies: Set<FontOwnerArea>,
 )
 
-interface KFontM0003Executor {
-    fun execute(plan: KFontM0003Plan): ModuleBoundaryReport
-    fun refusal(code: String = "font.architecture.unsupported"): RouteDiagnostic
-}
+data class BoundaryViolation(
+    val code: String,
+    val sourcePackage: String,
+    val forbiddenSymbol: String,
+)
+
+fun validateFontBoundaries(boundaries: List<FontPackageBoundary>): List<BoundaryViolation>
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.architecture.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] The boundary report lists `org.graphiks.kanvas.font`, `org.graphiks.kanvas.font.scaler`, and text/glyph package roots with their owner areas.
+- [ ] Pure Kotlin font/text/glyph modules have no direct dependency on `:gpu-renderer`.
+- [ ] Pure Kotlin modules do not expose `SkFont`, `SkTypeface`, `SkPaint`, or other `Sk*` facade types in their public contracts.
+- [ ] Boundary violations use stable diagnostics such as `font.architecture.skia-api-leak` and `font.architecture.gpu-backedge`.
+- [ ] The dashboard keeps this row as `tracked-gap` until the boundary report and validation output are attached.
 
 ## Required Evidence
 
-- Stable identity or architecture dump.
-- Determinism test over the same fixture input twice.
-- Diagnostic snapshot for invalid or unsupported input.
+- `font-module-boundaries.json` or equivalent architecture report.
+- Dependency graph or Gradle output proving allowed module direction.
+- Diagnostic snapshot for a synthetic `Sk*` leak or forbidden GPU back edge.
+- Output from the focused boundary validation command.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.architecture.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- If exact Gradle modules are not created yet, the ticket may stay `tracked-gap` with package-root rules and a missing-module diagnostic.
+- Do not allow `:kanvas-skia` compatibility needs to weaken pure Kotlin package boundaries.
 
 ## Dashboard Impact
 
-- Expected row: `Freeze module/package layout for the pure Kotlin font core`.
+- Expected row: `pure-kotlin-font module boundaries`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no. This is architecture evidence, not rendering support.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:core:test
+rtk ./gradlew --no-daemon :font:core:test --tests '*ModuleBoundary*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Boundary contracts are specified, but no architecture report is attached yet.
+- Move to `ready` after the CI lane from KFONT-M0-001 can execute the boundary checks.
 
 ## Linear Labels
 

@@ -14,19 +14,19 @@ legacy_gate: ["dftext"]
 
 ## PM Note
 
-Ce ticket sert à livrer "Add GPU handoff metrics" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M12: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket montre ce que le renderer GPU reçoit vraiment du texte: artifacts typés, uploads, réutilisation et refus.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Performance and Telemetry` slice until "Add GPU handoff metrics" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+The GPU handoff spec forbids the renderer from parsing fonts, reshaping text, or replacing unsupported text with a CPU-rendered full texture. M12 has no metrics proving how many `DrawTextRun` commands used typed artifacts, how many upload dependencies were created, which routes were reused, or which routes refused. Without this, GPU text regressions and `dftext` gate decisions cannot be audited.
 
 ## Scope
 
-- Deliver the capability described by "Add GPU handoff metrics" within `telemetry` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `font.telemetry.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M12 boundaries and update status metadata when execution starts.
+- Emit GPU handoff metrics for artifact registry lookup time, artifact type count, `DrawTextRun` route count, selected GPU route class, upload dependency count, upload byte count, upload plan reuse, artifact reuse, stale generation refusals, and artifact budget refusals.
+- Cover typed text artifacts: `GlyphAtlasArtifact`, `SDFGlyphAtlasArtifact`, `GlyphUploadPlan`, `ColorGlyphPlan`, `BitmapGlyphPlan`, `SVGGlyphPlan`, and `OutlineGlyphPlan`.
+- Record refusal diagnostics for unregistered artifacts, nondeterministic artifact keys, missing upload plans, missing GPU capability, transform refusal, color/SVG refusal, and forbidden CPU-rendered text textures.
+- Keep `Sk*` objects, font bytes, live GPU handles, and material-key leakage out of handoff telemetry dumps.
+- Use KFONT-M12-001 aggregation while preserving the handoff boundary from `06-gpu-renderer-handoff.md`.
 
 ## Non-Goals
 
@@ -50,43 +50,55 @@ The pure Kotlin text target cannot promote the `Performance and Telemetry` slice
 ## Design Sketch
 
 ```kotlin
-data class KFontM12005Plan(
-    val input: TelemetrySampleInput,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
+data class GPUTextHandoffMetricSample(
+    val drawTextRunId: DrawCommandID,
+    val artifactTypes: Map<TextArtifactType, Int>,
+    val gpuRouteCounts: Map<GPURouteClass, Int>,
+    val registryLookupMicros: MetricDistribution,
+    val uploadDependencyCount: Int,
+    val uploadBytes: Long,
+    val artifactReuseCount: Long,
+    val uploadPlanReuseCount: Long,
+    val refusedRouteCount: Int,
+    val diagnostics: List<RouteDiagnostic>,
 )
 
-interface KFontM12005Executor {
-    fun execute(plan: KFontM12005Plan): FontTelemetrySample
-    fun refusal(code: String = "font.telemetry.unsupported"): RouteDiagnostic
-}
+data class GPUTextRefusalMetric(
+    val artifactKeyHash: String?,
+    val route: TextRouteKind,
+    val code: String,
+    val dependencyGate: String?,
+    val dashboardClaimImpact: ClaimImpact,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `font.telemetry.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Handoff samples count every typed artifact and every `DrawTextRun` route selected or refused.
+- [ ] Upload byte counts, upload dependency counts, artifact reuse, and upload-plan reuse are serialized separately.
+- [ ] Stale generation, artifact budget, capability, transform, color, SVG, and CPU-rendered-texture refusals keep stable `text.gpu.*` diagnostics.
+- [ ] Telemetry dumps prove no `Sk*` object, font bytes, live GPU handle, atlas coordinate, glyph ID list, or upload token leaks into `MaterialKey` identity.
+- [ ] The `dftext` legacy gate remains open unless SDF artifact, atlas/cache, transform policy, GPU route evidence, diagnostics, and dashboard updates are linked.
 
 ## Required Evidence
 
-- Telemetry schema or metric dump.
-- Repeated-run sample showing deterministic dimensions.
-- Dashboard or trend report sample.
+- `gpu-text-handoff-metrics.json` covering A8 atlas, SDF atlas or SDF-gated route, outline, color/bitmap/SVG planned or refused routes.
+- `draw-text-run-upload-plan.json` with stable artifact key hashes, upload byte counts, dependency order, and reuse counters.
+- Diagnostic snapshots for `text.gpu.artifact-unregistered`, `text.gpu.upload-plan-missing`, `text.gpu.atlas-generation-stale`, and `text.gpu.CPU-rendered-texture-forbidden`.
+- No-`Sk*` and `MaterialKey` leakage report excerpt tied to the same fixtures.
+- Dashboard trend excerpt with GPU handoff rows and `dftext` still visible when not retired.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `font.telemetry.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- Unsupported GPU routes emit `text.gpu.*` diagnostics and remain visible in telemetry; they are not converted into CPU-rendered texture compatibility.
+- Missing typed artifacts refuse with `text.gpu.artifact-unregistered` or a narrower dependency diagnostic.
 - Legacy gate(s) `dftext` remain open until implementation evidence, diagnostics, and dashboard updates are linked.
 
 ## Dashboard Impact
 
-- Expected row: `Add GPU handoff metrics`.
+- Expected rows: `GPU text handoff metrics`, `GPU text upload metrics`, `GPU text route refusals`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no; this ticket exposes route costs and refusals but does not promote GPU text support alone.
 
 ## Validation
 

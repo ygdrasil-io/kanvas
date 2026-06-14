@@ -14,26 +14,26 @@ legacy_gate: null
 
 ## PM Note
 
-Ce ticket sert à livrer "Complete `GlyphStrikeKey`" de façon vérifiable. Pour le PM, il donne un statut clair au gap du milestone M9: tant que les preuves demandées ne sont pas là, on ne promet pas le support complet.
+Ce ticket rend l'identité d'un glyph reproductible, condition nécessaire pour comparer les caches et les atlas.
 
 ## Problem
 
-The pure Kotlin text target cannot promote the `Glyph Artifacts, A8, SDF, Outline, and Cache` slice until "Complete `GlyphStrikeKey`" is implemented or explicitly refused with deterministic evidence. This ticket turns the roadmap item into one auditable work unit with clear ownership, diagnostics, and validation.
+Glyph artifacts cannot be cached or invalidated safely unless every rendering-affecting fact is part of the key. The current ticket text does not name the facts that distinguish A8, SDF, outline, color, bitmap, SVG, palette, variation, transform, and Unicode-sensitive emoji output. Without a complete `GlyphStrikeKey`, later atlas and GPU handoff tickets can pass accidentally with stale or nondeterministic artifacts.
 
 ## Scope
 
-- Deliver the capability described by "Complete `GlyphStrikeKey`" within `glyph` ownership.
-- Use pure Kotlin normative behavior; external engines may appear only in optional drift reports.
-- Emit stable `glyph.artifact.*` diagnostics for unsupported, malformed, or dependency-gated behavior.
-- Produce deterministic dumps or fixture evidence that can be reviewed without host-specific state.
-- Keep the work inside milestone M9 boundaries and update status metadata when execution starts.
+- Define `GlyphStrikeKey` as a stable value object with deterministic serialization and compact hash.
+- Include `TypefaceID`, glyph ID, source cluster facts when relevant, text size, variation coordinates, palette identity, representation route, mask format, transform bucket, subpixel bucket, edging/antialiasing mode, SDF spread/resolution, renderer descriptor version, and Unicode data version.
+- Add key preimage dumps for A8, SDF, outline, COLR, bitmap PNG, SVG, and unsupported routes.
+- Emit diagnostics for missing typeface identity, nondeterministic key fields, unsupported LCD requests, and route-specific key gaps.
+- Keep GPU resource identity, atlas coordinates, live handles, and upload tokens out of the strike key.
 
 ## Non-Goals
 
-- Do not promote support without the Required Evidence section attached.
-- Do not claim GPU renderer support unless a dedicated GPU route ticket provides evidence.
-- Do not migrate or rewrite Skia-like facade APIs in this ticket.
-- Do not use HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, or fontconfig as normative behavior.
+- Do not implement A8 rasterization, SDF generation, atlas packing, or GPU upload here.
+- Do not claim color/emoji rendering support; M10 owns those plan details.
+- Do not use object identity, mutable cache addresses, or platform font handles in the key.
+- Do not retire `dftext` or any GPU text gate from this contract-only work.
 
 ## Spec Sources
 
@@ -46,54 +46,64 @@ The pure Kotlin text target cannot promote the `Glyph Artifacts, A8, SDF, Outlin
 ## Design Sketch
 
 ```kotlin
-data class KFontM9001Plan(
-    val input: GlyphArtifactRequest,
-    val sourceRefs: List<SpecRef>,
-    val diagnostics: MutableList<RouteDiagnostic> = mutableListOf(),
-)
-
-interface KFontM9001Executor {
-    fun execute(plan: KFontM9001Plan): GlyphArtifactPlan
-    fun refusal(code: String = "glyph.artifact.unsupported"): RouteDiagnostic
+data class GlyphStrikeKey(
+    val typefaceId: TypefaceID,
+    val glyphId: GlyphId,
+    val clusterFingerprint: ClusterFingerprint?,
+    val textSizePx: Float,
+    val variations: VariationCoordinates,
+    val palette: FontPaletteID?,
+    val route: GlyphRepresentationRoute,
+    val maskFormat: GlyphMaskFormat?,
+    val transformBucket: TransformBucket,
+    val subpixelBucket: SubpixelBucket,
+    val edging: GlyphEdging,
+    val sdf: SDFStrikeParams?,
+    val rendererDescriptorVersion: RendererDescriptorVersion,
+    val unicodeVersion: UnicodeVersion,
+) {
+    fun preimage(): GlyphStrikeKeyPreimage
+    fun stableHash(): StableHash
 }
 ```
 
 ## Acceptance Criteria
 
-- [ ] The ticket capability has a reviewed implementation or a reviewed explicit refusal path.
-- [ ] Relevant diagnostics use `glyph.artifact.*` and include enough subject data to debug the failure.
-- [ ] Fixture or dump output is deterministic across repeated runs on the same inputs.
-- [ ] Status metadata, milestone README, and top-level status summary are updated when the ticket moves out of `proposed`.
-- [ ] Dashboard classification remains `tracked-gap` until all evidence and validation criteria are satisfied.
+- [ ] Changing any rendering-affecting fact listed in scope changes the key preimage and compact hash.
+- [ ] Repeated construction from deterministic font sources produces byte-identical key dumps.
+- [ ] The key rejects nondeterministic object identity, host font handles, atlas coordinates, GPU handles, and upload tokens.
+- [ ] Unsupported LCD requests are keyed only as refused requests and emit `text.glyph.LCD-future-research`.
+- [ ] A `glyph-strike-key.json` fixture covers A8, SDF, outline, COLR, bitmap PNG, SVG, variation, palette, and Unicode-sensitive routes.
 
 ## Required Evidence
 
-- `glyph-artifact-plan.json` or `glyph-atlas.json` dump.
-- CPU artifact hash, bounds, and cache key preimage.
-- Route refusal or stale-generation diagnostic.
+- `glyph-strike-key.json` fixtures with full preimage and compact hash for every target route family.
+- Negative dump for missing `TypefaceID`, nondeterministic host source, and forbidden live-handle fields.
+- Diagnostic snapshot using `text.glyph.cache-key-nondeterministic`, `text.glyph.LCD-future-research`, or a narrower accepted reason.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported paths must emit a stable `glyph.artifact.*` diagnostic and keep the ticket classified as `tracked-gap`.
-- Silent fallback to host/platform/native font behavior is not allowed.
+- A glyph request without a deterministic strike key refuses before artifact generation.
+- Unsupported representation requests remain explicit refused key records rather than falling back silently to A8 or outline.
+- Host-dependent system font facts must be marked in the preimage and cannot become normative evidence without captured bytes.
 
 ## Dashboard Impact
 
-- Expected row: `Complete GlyphStrikeKey`.
+- Expected row: `GlyphStrikeKey completeness`.
 - Expected classification: `tracked-gap`.
-- Claim promotion allowed: no, unless all Required Evidence is attached and validation has passed.
+- Claim promotion allowed: no, because this ticket only establishes glyph artifact identity.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*GlyphStrikeKey*'
 ```
 
 ## Status Notes
 
-- `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed`: Blocks artifact planning, atlas invalidation, and GPU text handoff identity.
+- Move to `ready` only after key fields, hash preimage format, and forbidden-field checks are reviewed.
 
 ## Linear Labels
 

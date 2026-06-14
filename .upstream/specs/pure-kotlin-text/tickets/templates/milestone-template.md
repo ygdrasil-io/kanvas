@@ -19,6 +19,9 @@ State upstream milestone or ticket dependencies.
 
 ## Validation Bundle
 
+Include `rtk git diff --check` plus milestone-specific module, dashboard, PM,
+or evidence commands. Avoid a bundle that only repeats generic ticket checks.
+
 ```bash
 rtk git diff --check
 ```
