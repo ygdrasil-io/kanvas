@@ -1,5 +1,16 @@
 {
-  "auditWarnings": [],
+  "auditWarnings": [
+    "Missing Kadre evidence file: eventLoop -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/EventLoop.kt",
+    "Missing Kadre evidence file: activeEventLoop -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/ActiveEventLoop.kt",
+    "Missing Kadre evidence file: applicationHandler -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/ApplicationHandler.kt",
+    "Missing Kadre evidence file: window -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/Window.kt",
+    "Missing Kadre evidence file: windowAttributes -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/WindowAttributes.kt",
+    "Missing Kadre evidence file: events -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/Events.kt",
+    "Missing Kadre evidence file: rawHandles -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/RawHandles.kt",
+    "Missing Kadre evidence file: frameTimingTracer -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/FrameTimingTracer.kt",
+    "Missing Kadre evidence file: helloTriangle -> external/poc-koreos/samples/hello-triangle/src/main/kotlin/org/graphiks/kadre/samples/hellotriangle/Main.kt",
+    "Missing Kadre evidence file: helloWindow -> external/poc-koreos/samples/hello-window/src/commonMain/kotlin/org/graphiks/kadre/samples/hellowindow/HelloApp.kt"
+  ],
   "capabilities": {
     "diagnostics": {
       "evidenceReadiness": "native-runnable",
@@ -7,13 +18,13 @@
       "kanvasAdapterStatus": "native-kadre-standalone-present-loop-implemented",
       "nativePresented": true,
       "requiredBehavior": "Expose host, backend, adapter, surface format, and failure reason in telemetry.",
-      "requiredEvidenceReady": true,
+      "requiredEvidenceReady": false,
       "sourceEvidence": {
-        "HelloTriangle.Adapter": true,
-        "HelloTriangle.SurfaceTextureStatus": true,
-        "HelloTriangle.supportedFormats": true,
-        "RawHandles.RawDisplayHandle": true,
-        "RawHandles.RawWindowHandle": true
+        "HelloTriangle.Adapter": false,
+        "HelloTriangle.SurfaceTextureStatus": false,
+        "HelloTriangle.supportedFormats": false,
+        "RawHandles.RawDisplayHandle": false,
+        "RawHandles.RawWindowHandle": false
       }
     },
     "export": {
@@ -28,37 +39,37 @@
       }
     },
     "frameClock": {
-      "evidenceReadiness": "ready-with-optional-gap",
+      "evidenceReadiness": "partial",
       "kadreEvidenceStatus": "available-as-redraw-loop-and-frame-tracer",
       "kanvasAdapterStatus": "route-contract-defined",
       "nativePresented": false,
       "requiredBehavior": "Provide vsync-like callback or monotonic timer suitable for smoke tests.",
-      "requiredEvidenceReady": true,
+      "requiredEvidenceReady": false,
       "sourceEvidence": {
-        "ActiveEventLoop.controlFlow": true,
-        "ActiveEventLoop.setControlFlow": true,
-        "EventLoop.runApp": true,
-        "FrameTimingTracer.FrameTimingTracer": true,
-        "FrameTimingTracer.onPresentEnd": true,
-        "FrameTimingTracer.onRedrawStart": true,
+        "ActiveEventLoop.controlFlow": false,
+        "ActiveEventLoop.setControlFlow": false,
+        "EventLoop.runApp": false,
+        "FrameTimingTracer.FrameTimingTracer": false,
+        "FrameTimingTracer.onPresentEnd": false,
+        "FrameTimingTracer.onRedrawStart": false,
         "HelloWindow.requestRedraw": false,
-        "Window.requestRedraw": true
+        "Window.requestRedraw": false
       }
     },
     "input": {
-      "evidenceReadiness": "ready",
+      "evidenceReadiness": "partial",
       "kadreEvidenceStatus": "available-in-event-api",
       "kanvasAdapterStatus": "route-contract-defined",
       "nativePresented": false,
       "requiredBehavior": "Forward pointer, keyboard, and close events to the runtime update phase.",
-      "requiredEvidenceReady": true,
+      "requiredEvidenceReady": false,
       "sourceEvidence": {
-        "CloseRequested": true,
-        "KeyboardInput": true,
-        "MouseInput": true,
-        "MouseWheel": true,
-        "PointerMoved": true,
-        "Touch": true
+        "CloseRequested": false,
+        "KeyboardInput": false,
+        "MouseInput": false,
+        "MouseWheel": false,
+        "PointerMoved": false,
+        "Touch": false
       }
     },
     "nativePresentation": {
@@ -67,10 +78,10 @@
       "kanvasAdapterStatus": "native-kadre-standalone-present-loop-implemented",
       "nativePresented": true,
       "requiredBehavior": "Present a bounded WebGPU frame in a Kadre native window and keep Kanvas display-list replay as a separate claim.",
-      "requiredEvidenceReady": true,
+      "requiredEvidenceReady": false,
       "sourceEvidence": {
-        "HelloTriangle.SurfaceTextureStatus.success": true,
-        "HelloTriangle.present()": true
+        "HelloTriangle.SurfaceTextureStatus.success": false,
+        "HelloTriangle.present()": false
       }
     },
     "present": {
@@ -79,27 +90,27 @@
       "kanvasAdapterStatus": "native-kadre-standalone-present-loop-implemented",
       "nativePresented": true,
       "requiredBehavior": "Present a completed Kanvas frame and expose present timing proxy where available.",
-      "requiredEvidenceReady": true,
+      "requiredEvidenceReady": false,
       "sourceEvidence": {
-        "HelloTriangle.getCurrentTexture": true,
-        "HelloTriangle.present()": true,
-        "HelloTriangle.queue.submit": true
+        "HelloTriangle.getCurrentTexture": false,
+        "HelloTriangle.present()": false,
+        "HelloTriangle.queue.submit": false
       }
     },
     "resize": {
-      "evidenceReadiness": "ready",
+      "evidenceReadiness": "partial",
       "kadreEvidenceStatus": "available-in-window-and-event-api",
       "kanvasAdapterStatus": "route-contract-defined",
       "nativePresented": false,
       "requiredBehavior": "Report physical size, scale factor, and resize events before the next frame plan.",
-      "requiredEvidenceReady": true,
+      "requiredEvidenceReady": false,
       "sourceEvidence": {
-        "Events.ScaleFactorChanged": true,
-        "Events.WindowEvent.Resized": true,
-        "HelloTriangle.configure(": true,
-        "HelloTriangle.handleResize": true,
-        "Window.innerSize": true,
-        "Window.scaleFactor": true
+        "Events.ScaleFactorChanged": false,
+        "Events.WindowEvent.Resized": false,
+        "HelloTriangle.configure(": false,
+        "HelloTriangle.handleResize": false,
+        "Window.innerSize": false,
+        "Window.scaleFactor": false
       }
     },
     "surfaceCreation": {
@@ -108,82 +119,62 @@
       "kanvasAdapterStatus": "native-kadre-standalone-present-loop-implemented",
       "nativePresented": true,
       "requiredBehavior": "Create a WebGPU/wgpu4-compatible drawable surface with adapter/device metadata.",
-      "requiredEvidenceReady": true,
+      "requiredEvidenceReady": false,
       "sourceEvidence": {
-        "ActiveEventLoop.createWindow": true,
-        "ApplicationHandler.ActiveEventLoop": true,
-        "ApplicationHandler.canCreateSurfaces": true,
-        "HelloTriangle.getSurfaceFromMetalLayer": true,
-        "HelloTriangle.requestAdapter": true,
-        "HelloTriangle.requestDevice": true,
-        "WindowAttributes.WindowAttributes": true
+        "ActiveEventLoop.createWindow": false,
+        "ApplicationHandler.ActiveEventLoop": false,
+        "ApplicationHandler.canCreateSurfaces": false,
+        "HelloTriangle.getSurfaceFromMetalLayer": false,
+        "HelloTriangle.requestAdapter": false,
+        "HelloTriangle.requestDevice": false,
+        "WindowAttributes.WindowAttributes": false
       }
     }
   },
-  "generatedAt": "2026-06-01T14:04:40Z",
+  "generatedAt": "2026-06-14T11:12:12Z",
   "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
   "kadreCoreFiles": {
     "activeEventLoop": {
-      "bytes": 1610,
-      "exists": true,
-      "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/ActiveEventLoop.kt",
-      "sha256": "78e37d1e4ecc7ab673f8695123419bb21641e692837207f04954506adc608582"
+      "exists": false,
+      "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/ActiveEventLoop.kt"
     },
     "applicationHandler": {
-      "bytes": 3168,
-      "exists": true,
-      "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/ApplicationHandler.kt",
-      "sha256": "fe5d5b84b4f2f24e837703535dfc90f15cdc14f92040f55a5966400bb2618d63"
+      "exists": false,
+      "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/ApplicationHandler.kt"
     },
     "eventLoop": {
-      "bytes": 1143,
-      "exists": true,
-      "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/EventLoop.kt",
-      "sha256": "70a44dbfb620ef010819bb16f21586c032a1254242d02df9dd19ea9119f33bd8"
+      "exists": false,
+      "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/EventLoop.kt"
     },
     "events": {
-      "bytes": 13067,
-      "exists": true,
-      "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/Events.kt",
-      "sha256": "a20acdfcd15371da111b0094cc6b6b029413ec2bd0ef0570882776b73e7d1eea"
+      "exists": false,
+      "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/Events.kt"
     },
     "frameTimingTracer": {
-      "bytes": 3935,
-      "exists": true,
-      "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/FrameTimingTracer.kt",
-      "sha256": "39cf3a4d3faa3fbc62ef63677a016f434dfb0e2543ee95245fb70e1f2168f03e"
+      "exists": false,
+      "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/FrameTimingTracer.kt"
     },
     "rawHandles": {
-      "bytes": 6589,
-      "exists": true,
-      "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/RawHandles.kt",
-      "sha256": "469382e07ffa945ab400f9c50f280bb890c129e8b6d600f2f78cb7dbab8c98e5"
+      "exists": false,
+      "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/RawHandles.kt"
     },
     "window": {
-      "bytes": 1995,
-      "exists": true,
-      "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/Window.kt",
-      "sha256": "fce42cce93d100aa73e78af62e1d245b2c6f6e18cbc91ccda56beb514bdf731a"
+      "exists": false,
+      "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/Window.kt"
     },
     "windowAttributes": {
-      "bytes": 650,
-      "exists": true,
-      "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/WindowAttributes.kt",
-      "sha256": "490dc09342b323c42cc3958ca30114370652abe3e67e3f2867a8cde4c86712ca"
+      "exists": false,
+      "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/WindowAttributes.kt"
     }
   },
   "kadreSampleFiles": {
     "helloTriangle": {
-      "bytes": 21078,
-      "exists": true,
-      "path": "external/poc-koreos/samples/hello-triangle/src/main/kotlin/org/graphiks/kadre/samples/hellotriangle/Main.kt",
-      "sha256": "6dd8a581da64640507a9509efac19803bb6f33da8df800c1a019343d02687fb6"
+      "exists": false,
+      "path": "external/poc-koreos/samples/hello-triangle/src/main/kotlin/org/graphiks/kadre/samples/hellotriangle/Main.kt"
     },
     "helloWindow": {
-      "bytes": 3549,
-      "exists": true,
-      "path": "external/poc-koreos/samples/hello-window/src/commonMain/kotlin/org/graphiks/kadre/samples/hellowindow/HelloApp.kt",
-      "sha256": "161bdaace9d698129bad17d4028f5e24a38ae09b613d092d2b67941aba96bd13"
+      "exists": false,
+      "path": "external/poc-koreos/samples/hello-window/src/commonMain/kotlin/org/graphiks/kadre/samples/hellowindow/HelloApp.kt"
     }
   },
   "linearIssues": [
@@ -198,9 +189,9 @@
   ],
   "repository": {
     "gitmodulesEntryPresent": true,
-    "kadreSubmoduleCommit": "b5e3ebd89e3e04b208d8d0308b6c61d1a31b316c",
+    "kadreSubmoduleCommit": "950622b9941ab81f11a229bba183aa1c4bfbfe09",
     "kadreSubmodulePath": "external/poc-koreos",
-    "rootCommit": "6c5d4a7a6622427f9ff41c260ba892d434c6dbd0",
+    "rootCommit": "950622b9941ab81f11a229bba183aa1c4bfbfe09",
     "settingsIncludeBuildPresent": true
   },
   "schemaVersion": 1,

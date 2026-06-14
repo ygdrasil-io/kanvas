@@ -2,10 +2,10 @@
   "claimLevel": "bridge-smoke",
   "measured": {
     "frames": 120,
-    "p50OverlayPlanningMs": 0.0016,
+    "p50OverlayPlanningMs": 0.0017,
     "p95OverlayPlanningMs": 0.0021,
     "source": "python evidence generator overlay planning loop",
-    "totalMs": 0.3315
+    "totalMs": 0.3724
   },
   "nativeFrameTimingClaim": "none",
   "sampleFrames": [
@@ -13,7 +13,7 @@
       "animatedTransformX": 40.0,
       "checksum": "982d2d3070971ef1",
       "frame": 0,
-      "measuredOverlayPlanningMs": 0.0192,
+      "measuredOverlayPlanningMs": 0.0202,
       "routeCount": 7,
       "runtimeEffectKnob": 0.72,
       "unsupportedCount": 1
@@ -22,7 +22,7 @@
       "animatedTransformX": 145.0,
       "checksum": "847f3bfb9833db3d",
       "frame": 60,
-      "measuredOverlayPlanningMs": 0.0016,
+      "measuredOverlayPlanningMs": 0.0017,
       "routeCount": 7,
       "runtimeEffectKnob": 0.72,
       "unsupportedCount": 1

@@ -49,6 +49,7 @@ dependencies {
     implementation(project(":kanvas-skia"))
     implementation(project(":math"))
     implementation(project(":render-pipeline"))
+    implementation(project(":gpu-renderer"))
     implementation("org.graphiks:core-jvm:1.0.0-SNAPSHOT")
     implementation("org.graphiks:parser-jvm:1.0.0-SNAPSHOT")
     implementation("org.graphiks:generator-jvm:1.0.0-SNAPSHOT")
@@ -154,6 +155,50 @@ tasks.register<JavaExec>("gpuInventoryFailureReport") {
     args(
         file("build/test-results/test").absolutePath,
         file("build/reports/gpu-inventory").absolutePath,
+    )
+}
+
+tasks.register<JavaExec>("gpuRendererR6ExecutedFirstRoutePmEvidenceBundle") {
+    group = "verification"
+    description = "Writes opt-in diagnostic WebGPU executed first-route PM evidence without product route activation."
+
+    val outputDir = layout.buildDirectory.dir("reports/gpu-renderer-r6-executed-first-route-pm-evidence")
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.gpu.webgpu.GpuRendererFirstRouteExecutedPMEvidenceExportKt")
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+    jvmArgs(buildList {
+        add("--add-opens=java.base/java.lang=ALL-UNNAMED")
+        add("--enable-native-access=ALL-UNNAMED")
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+    })
+    args(outputDir.get().asFile.absolutePath)
+
+    doFirst {
+        outputDir.get().asFile.deleteRecursively()
+    }
+}
+
+tasks.register<Exec>("validateGpuRendererR6ExecutedFirstRoutePmEvidenceBundle") {
+    group = "verification"
+    description = "Validates the opt-in diagnostic WebGPU executed first-route PM evidence bundle."
+
+    val outputDir = layout.buildDirectory.dir("reports/gpu-renderer-r6-executed-first-route-pm-evidence")
+    val validator = rootProject.layout.projectDirectory.file("scripts/validate_gpu_renderer_r6_executed_pm_evidence_bundle.py")
+
+    dependsOn("gpuRendererR6ExecutedFirstRoutePmEvidenceBundle")
+    inputs.file(validator)
+    inputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+    commandLine(
+        "python3",
+        validator.asFile.absolutePath,
+        rootProject.layout.projectDirectory.asFile.absolutePath,
+        outputDir.get().asFile.absolutePath,
+        "--write-summary",
     )
 }
 
@@ -324,6 +369,9 @@ tasks.withType<Test> {
     }
     System.getProperty("kanvas.webgpu.m60F16ShaderCaptureInterpretationPolicyFor463.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16ShaderCaptureInterpretationPolicyFor463.enabled", it)
+    }
+    System.getProperty("kanvas.requireWebGpuFirstRouteEvidence")?.let {
+        systemProperty("kanvas.requireWebGpuFirstRouteEvidence", it)
     }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")

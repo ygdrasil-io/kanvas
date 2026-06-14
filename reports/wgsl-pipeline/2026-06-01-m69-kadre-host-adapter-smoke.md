@@ -13,18 +13,18 @@ M69 replaces the M68 generic native-launch blocker with a concrete route decisio
 - Native presented frames: `3`
 - Native claim: `bounded standalone WGSL present loop; Kanvas display-list replay is not claimed`
 - Headless pixel proof: `True`
-- Kadre source audit ready: `True`
-- Native presentation source ready: `True`
+- Kadre source audit ready: `False`
+- Native presentation source ready: `False`
 
 ## Host Contract
 
 | Capability | Kadre evidence | Evidence readiness | Kanvas adapter status | Native presented |
 |---|---|---|---|---:|
 | `surfaceCreation` | `available-in-window-api-and-wgpu4k-sample` | `native-runnable` | `native-kadre-standalone-present-loop-implemented` | `True` |
-| `resize` | `available-in-window-and-event-api` | `ready` | `route-contract-defined` | `False` |
+| `resize` | `available-in-window-and-event-api` | `partial` | `route-contract-defined` | `False` |
 | `present` | `available-in-wgpu4k-sample` | `native-runnable` | `native-kadre-standalone-present-loop-implemented` | `True` |
-| `input` | `available-in-event-api` | `ready` | `route-contract-defined` | `False` |
-| `frameClock` | `available-as-redraw-loop-and-frame-tracer` | `ready-with-optional-gap` | `route-contract-defined` | `False` |
+| `input` | `available-in-event-api` | `partial` | `route-contract-defined` | `False` |
+| `frameClock` | `available-as-redraw-loop-and-frame-tracer` | `partial` | `route-contract-defined` | `False` |
 | `diagnostics` | `partial-host-diagnostics-available` | `native-runnable` | `native-kadre-standalone-present-loop-implemented` | `True` |
 | `export` | `not-a-kadre-core-feature` | `ready` | `headless-export-ready-native-export-pending` | `False` |
 | `nativePresentation` | `host-capable-via-sample` | `native-runnable` | `native-kadre-standalone-present-loop-implemented` | `True` |
@@ -49,8 +49,8 @@ M69 replaces the M68 generic native-launch blocker with a concrete route decisio
 - Native surface: `640` x `420` `BGRA8Unorm`
 - Native first/average present duration: `35.1017` / `14.9912` ms
 - Headless slot count: `3`
-- Headless median frame min/max: `8.9599` / `12.9778` ms
-- Headless p95 max: `13.249` ms
+- Headless median frame min/max: `9.2756` / `13.202` ms
+- Headless p95 max: `26.0364` ms
 
 ## Artifacts
 

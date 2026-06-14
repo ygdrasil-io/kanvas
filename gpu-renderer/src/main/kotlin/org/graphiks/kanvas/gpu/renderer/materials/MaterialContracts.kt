@@ -234,12 +234,23 @@ data class GPUMaterialRootSet(
     val payloadShapeHash: String,
 )
 
-/** WGSL snippet dictionary entry. */
+/**
+ * WGSL snippet dictionary entry owned by material lowering.
+ *
+ * Snippets describe material-source code fragments and their ABI requirements;
+ * they are not arbitrary product WGSL input. Missing snippets, incompatible
+ * versions, graph cycles, or unmet feature requirements must surface as stable
+ * material diagnostics before generic WGSL module assembly.
+ */
 data class WGSLSnippet(
     val snippetId: WGSLSnippetID,
     val sourceHash: String,
     val entryPoint: String,
     val requiredBindings: List<String>,
+    val category: String = "material-source",
+    val version: String = "v1",
+    val uniformLayoutHashes: List<String> = emptyList(),
+    val requiredFeatures: List<String> = emptyList(),
 )
 
 /** WGSL snippet dependency node. */
@@ -256,6 +267,15 @@ data class GPUMaterialAssemblyPlan(
     val snippetGraph: List<WGSLSnippetNode>,
     val moduleSalt: String,
 )
+
+/** Result of expanding a material dictionary entry into a module assembly plan. */
+sealed interface GPUMaterialAssemblyResult {
+    /** Material dictionary expansion accepted with a deterministic assembly plan. */
+    data class Accepted(val plan: GPUMaterialAssemblyPlan) : GPUMaterialAssemblyResult
+
+    /** Material dictionary expansion refused before WGSL assembly. */
+    data class Refused(val diagnostic: GPUMaterialSourceDiagnostic) : GPUMaterialAssemblyResult
+}
 
 /** Material source payload plan. */
 data class GPUMaterialSourcePayloadPlan(

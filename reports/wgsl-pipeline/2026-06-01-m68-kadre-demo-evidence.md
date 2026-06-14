@@ -8,7 +8,7 @@ M68 now has Kadre source evidence through the `external/poc-koreos` submodule, b
 
 - Kadre source build present: `True`
 - Kadre submodule declared: `True`
-- Kadre submodule commit: `b5e3ebd89e3e04b208d8d0308b6c61d1a31b316c`
+- Kadre submodule commit: `950622b9941ab81f11a229bba183aa1c4bfbfe09`
 - Native Kanvas launch status: `blocked`
 - Native launch reason: `m68.kadre-host-adapter-not-implemented`
 
@@ -40,7 +40,7 @@ These rows are source/evidence inputs for the future native scene, not a native 
 
 - Measured source: `python evidence generator overlay planning loop`
 - Measured frames: `120`
-- p50 overlay planning: `0.0016 ms`
+- p50 overlay planning: `0.0017 ms`
 - p95 overlay planning: `0.0021 ms`
 - Native frame timing claim: `none`
 - Static host metadata: `Kadre` / `wgpu4k/WebGPU through future Kanvas host adapter`
@@ -62,7 +62,18 @@ These rows are source/evidence inputs for the future native scene, not a native 
 
 ## Validation Issues
 
-- None for this bridge-smoke scope.
+- Kadre file missing: readme -> external/poc-koreos/README.md
+- Kadre file missing: settings -> external/poc-koreos/settings.gradle.kts
+- Kadre file missing: facadeBuild -> external/poc-koreos/kadre/build.gradle.kts
+- Kadre file missing: eventLoop -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/EventLoop.kt
+- Kadre file missing: activeEventLoop -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/ActiveEventLoop.kt
+- Kadre file missing: window -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/Window.kt
+- Kadre file missing: events -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/Events.kt
+- Kadre file missing: handler -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/ApplicationHandler.kt
+- Kadre file missing: rawHandles -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/RawHandles.kt
+- Kadre file missing: frameTracer -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/FrameTimingTracer.kt
+- Kadre file missing: helloWindow -> external/poc-koreos/samples/hello-window/src/commonMain/kotlin/org/graphiks/kadre/samples/hellowindow/HelloApp.kt
+- Kadre file missing: helloTriangle -> external/poc-koreos/samples/hello-triangle/src/main/kotlin/org/graphiks/kadre/samples/hellotriangle/Main.kt
 
 ## Validation
 
