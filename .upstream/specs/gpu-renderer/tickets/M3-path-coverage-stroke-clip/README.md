@@ -29,13 +29,14 @@ or coverage artifact routes must cite `19-path-coverage-atlas-strategy.md`,
 | [KGPU-M3-002 - Add stencil-cover path route candidate](KGPU-M3-002-add-stencil-cover-path-route-candidate.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry-passes` | `KGPU-M3-001` | `path fill legacy` |
 | [KGPU-M3-003 - Add simple stroke route candidate](KGPU-M3-003-add-simple-stroke-route-candidate.md) | `proposed` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `geometry-stroke` | `KGPU-M3-001` | `stroke legacy` |
 | [KGPU-M3-004 - Add bounded clip rrect and path route candidate](KGPU-M3-004-add-bounded-clip-rrect-and-path-route-candidate.md) | `proposed` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `clips-atlas` | `KGPU-M3-001` | `clip legacy` |
-| [KGPU-M3-005 - Add path and coverage atlas refusal policy gates](KGPU-M3-005-add-path-and-coverage-atlas-refusal-policy-gates.md) | `proposed` | `P1` | `RefuseRequired` | `RefuseDiagnostic` | `false` | `false` | `atlas-policy` | `KGPU-M3-001` | - |
+| [KGPU-M3-005 - Add path and coverage atlas refusal policy gates](KGPU-M3-005-add-path-and-coverage-atlas-refusal-policy-gates.md) | `done` | `P1` | `RefuseRequired` | `RefuseDiagnostic` | `false` | `false` | `atlas-policy` | `KGPU-M3-001` | - |
 
 ## Validation Bundle
 
 ```bash
 rtk git diff --check
 rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.geometry.BasicPathFillPreparedRouteTest
+rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.geometry.AtlasPolicyRefusalGateTest
 rtk ./gradlew --no-daemon :gpu-renderer:check
 rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Coverage*' --tests '*Path*'
 ```
@@ -56,6 +57,12 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Coverage*' --tests '*Path*'
   gate, not as KGPU-M3-001 route evidence.
 - Independent review `019ec7c5-ae98-7382-b5e2-865bd4734a59` accepted KGPU-M3-001
   for `done` with no findings.
+- `AtlasPolicyRefusalGateTest` records path/coverage atlas refusal policy gates
+  for selector-only evidence, missing budget/generation/synchronization facts,
+  nondeterministic content keys, `RefuseRequired` dashboard classification, and
+  explicit non-claims against atlas generation or atlas-backed support.
+- Independent review `019ec7d2-85bf-7d90-977d-8c7ee86f2710` accepted KGPU-M3-005
+  for `done` with no findings.
 
 ## Non-Claims
 
@@ -63,6 +70,8 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Coverage*' --tests '*Path*'
   texture fallback.
 - Prepared artifacts are not product support until consumed by an accepted GPU
   route.
+- Selector-only atlas evidence, cache/atlas hits, and refusal diagnostics do
+  not count as path or coverage atlas support.
 
 ## Status Update Rule
 

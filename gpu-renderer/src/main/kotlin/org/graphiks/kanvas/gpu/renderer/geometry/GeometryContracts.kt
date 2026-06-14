@@ -181,6 +181,128 @@ data class GPUGeometryDiagnostic(
     val terminal: Boolean,
 )
 
+/** Atlas policy request used to prove refusal gates without atlas activation. */
+data class GPUAtlasPolicyRequest(
+    val routeLabel: String,
+    val artifactType: String,
+    val policyMode: String,
+    val contentKeyLabel: String,
+    val boundsLabel: String,
+    val availableFacts: Set<String>,
+    val selectorEvidenceOnly: Boolean = false,
+)
+
+/** Atlas-specific diagnostic emitted by accepted future routes or current refusals. */
+data class GPUAtlasDiagnostic(
+    val code: String,
+    val routeLabel: String,
+    val artifactType: String,
+    val policyMode: String,
+    val message: String,
+    val terminal: Boolean,
+)
+
+/** Refusal-only atlas policy result for M3 coverage/path atlas gates. */
+data class GPUAtlasPolicyRefusal(
+    val diagnostic: GPUAtlasDiagnostic,
+    val classification: String,
+    val requiredFacts: List<String>,
+    val missingFacts: List<String>,
+    val dashboardRow: String = "gpu-renderer.atlas-policy-refusal",
+) {
+    /** Emits stable refusal evidence without raw atlas keys or resource handles. */
+    fun dumpLines(): List<String> =
+        listOf(
+            "atlas-policy:refused row=$dashboardRow classification=$classification " +
+                "route=${diagnostic.routeLabel} artifact=${diagnostic.artifactType} " +
+                "policy=${diagnostic.policyMode} reason=${diagnostic.code}",
+            "atlas-policy:required facts=${requiredFacts.joinToString(",")}",
+            "atlas-policy:missing facts=${missingFacts.joinToString(",")}",
+            atlasPolicyNonClaimLine,
+        )
+}
+
+/** Keeps path and coverage atlas evidence fail-closed until policy gates land. */
+class GPUAtlasPolicyRefusalGate {
+    /** Evaluates a path or coverage atlas request as a required refusal. */
+    fun evaluate(request: GPUAtlasPolicyRequest): GPUAtlasPolicyRefusal {
+        val requiredFacts = request.requiredFacts()
+        val missingFacts = request.missingPolicyFacts(requiredFacts)
+        val diagnosticCode = request.refusalCode(missingFacts)
+        val effectiveMissingFacts = when (diagnosticCode) {
+            "unsupported.atlas.key_nondeterministic" -> listOf("content-key")
+            "unsupported.coverage.mask_bounds_invalid" -> listOf("bounds-proof")
+            else -> missingFacts
+        }
+
+        return GPUAtlasPolicyRefusal(
+            diagnostic = GPUAtlasDiagnostic(
+                code = diagnosticCode,
+                routeLabel = request.routeLabel,
+                artifactType = request.artifactType,
+                policyMode = request.policyMode,
+                message = "Atlas route refused: $diagnosticCode",
+                terminal = true,
+            ),
+            classification = "RefuseRequired",
+            requiredFacts = requiredFacts,
+            missingFacts = effectiveMissingFacts,
+        )
+    }
+
+    private fun GPUAtlasPolicyRequest.requiredFacts(): List<String> =
+        when (artifactType) {
+            "PathAtlasArtifact" -> pathAtlasRequiredFacts
+            "CoverageMaskArtifact" -> coverageAtlasRequiredFacts
+            else -> commonAtlasRequiredFacts
+        }
+
+    private fun GPUAtlasPolicyRequest.missingPolicyFacts(requiredFacts: List<String>): List<String> =
+        requiredFacts
+            .filterNot { fact -> availableFacts.contains(fact) }
+            .let { missing ->
+                if (selectorEvidenceOnly) {
+                    missing + "selector-only-evidence"
+                } else {
+                    missing
+                }
+            }
+
+    private fun GPUAtlasPolicyRequest.refusalCode(missingFacts: List<String>): String =
+        when {
+            !contentKeyLabel.isCanonicalAtlasContentKey() -> "unsupported.atlas.key_nondeterministic"
+            boundsLabel.isBlank() -> "unsupported.coverage.mask_bounds_invalid"
+            selectorEvidenceOnly -> "unsupported.atlas.policy_unavailable"
+            missingFacts.any { it in atlasPolicyFacts } -> "unsupported.atlas.policy_unavailable"
+            missingFacts.any { it in atlasSyncFacts } -> "unsupported.atlas.sync_unavailable"
+            else -> "unsupported.atlas.policy_unavailable"
+        }
+
+    private companion object {
+        val commonAtlasRequiredFacts = listOf(
+            "content-key",
+            "bounds-proof",
+            "budget-policy",
+            "generation-policy",
+            "eviction-policy",
+            "use-token-policy",
+            "mutation-ordering",
+            "upload-before-sample",
+            "sync-policy",
+        )
+        val pathAtlasRequiredFacts = commonAtlasRequiredFacts + "gpu-sampling-evidence"
+        val coverageAtlasRequiredFacts = commonAtlasRequiredFacts
+        val atlasPolicyFacts = setOf(
+            "budget-policy",
+            "generation-policy",
+            "eviction-policy",
+            "use-token-policy",
+            "mutation-ordering",
+        )
+        val atlasSyncFacts = setOf("upload-before-sample", "sync-policy")
+    }
+}
+
 /** Builds the first M3 prepared path-fill route evidence without product activation. */
 class GPUBasicPathFillPreparedPlanner(
     private val maxEdges: Int = 256,
@@ -323,3 +445,14 @@ private fun String.sanitizeForArtifactKey(): String =
 
 private const val pathFillNonClaimLine =
     "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback no-broad-path-aa"
+
+private fun String.isCanonicalAtlasContentKey(): Boolean =
+    isNotBlank() &&
+        contains(":") &&
+        !contains("handle", ignoreCase = true) &&
+        !contains("pointer", ignoreCase = true) &&
+        !contains("0x", ignoreCase = true)
+
+private const val atlasPolicyNonClaimLine =
+    "atlas-policy:nonclaim no-atlas-generation no-path-atlas-support no-coverage-atlas-support " +
+        "no-selector-only-support no-hidden-cpu-texture-fallback"
