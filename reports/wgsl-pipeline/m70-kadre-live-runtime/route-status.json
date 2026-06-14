@@ -24,7 +24,7 @@
     "source": "kanvas-skia SkBitmap/SkCanvas"
   },
   "frameClockSource": "kadre.appkit.control-flow-poll",
-  "generatedAt": "2026-06-01T18:13:43Z",
+  "generatedAt": "2026-06-14T11:12:13Z",
   "generatedBy": "scripts/m70_kadre_live_runtime_evidence.py",
   "linearIssues": [
     "FOR-60",
@@ -321,10 +321,10 @@
     "frameClockSource": "kadre.appkit.control-flow-poll",
     "gatePhase": "reportingOnly",
     "lane": "frame.kadre-windowed",
-    "measuredP50Ms": 8.4459,
-    "measuredP95Ms": 8.6865,
+    "measuredP50Ms": 8.4664,
+    "measuredP95Ms": 8.7863,
     "measuredSampleCount": 150,
-    "measuredWorstMs": 10.067,
+    "measuredWorstMs": 9.6325,
     "reportingOnly": true,
     "surfaceStatusCount": 180,
     "totalSampleCount": 180,

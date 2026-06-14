@@ -42,7 +42,7 @@ No global visual threshold was weakened. No renderer visual fix is claimed in th
 
 | Row | Family | Status | Reference | CPU | GPU | Root cause |
 |---|---|---|---|---:|---:|---|
-| `m66-crop-image-filter-nonnull-prepass-skia` | Image filters | `pass` | `skia-upstream` | 84.88% | 98.13% | `filter.bounds-prepass` |
+| `m66-crop-image-filter-nonnull-prepass-skia` | Image filters | `pass` | `skia-upstream` | 84.88% | 98.44% | `filter.bounds-prepass` |
 | `m66-image-filter-compose-cf-matrix-transform-oracle` | Image filters | `pass` | `test-oracle` | 100.00% | 100.00% | `none` |
 | `m66-aaclip-bounded-grid-skia` | Path AA / coverage | `pass` | `skia-upstream` | 97.00% | 98.83% | `coverage.aa-grid-threshold` |
 | `m66-analytic-aa-convex-cpu-oracle` | Path AA / coverage | `pass` | `cpu-oracle` | 100.00% | 100.00% | `none` |

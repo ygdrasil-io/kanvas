@@ -8,7 +8,17 @@ value class GPURenderStepID(val value: String) {
     }
 }
 
-/** Draw invocation expanded from analysis and layer planning. */
+/**
+ * Draw invocation expanded from analysis and layer planning.
+ *
+ * The invocation owns only immutable planning evidence: command identity,
+ * render-step selection, ordering, pipeline key, optional binding slots, and
+ * bounds hashes. It must not claim concrete resources or backend submission.
+ * `scissorBoundsHash` is present only when analysis accepted a simple device
+ * rectangle clip; otherwise unsupported clips must have refused before pass
+ * construction. This adapts Graphite's late clip/pass evidence idea into a
+ * Kanvas-owned hash contract without importing Graphite task ownership.
+ */
 data class GPUDrawInvocation(
     val commandIdValue: Int,
     val analysisRecordId: String,
@@ -21,6 +31,7 @@ data class GPUDrawInvocation(
     val uniformSlot: String? = null,
     val resourceSlot: String? = null,
     val boundsHash: String,
+    val scissorBoundsHash: String? = null,
     val originalPaintOrder: Int,
 )
 
@@ -116,3 +127,76 @@ data class GPUPassDiagnostic(
     val invocationId: String? = null,
     val terminal: Boolean,
 )
+
+/** Builds first-route pass descriptors whose contents remain pre-materialization planning records. */
+object GPUFirstRoutePassBuilder {
+    /**
+     * Builds an accepted FillRect pass with invocation identity but no concrete resource or binding slots.
+     *
+     * Callers must pass only analysis-proven command and scissor bounds. A
+     * non-null `scissorBoundsHash` means the invocation preserves a simple
+     * device-rectangle clip for later backend encoding; unsupported clips must
+     * use [refusedFillRect] instead.
+     */
+    fun acceptedFillRect(
+        commandIdValue: Int,
+        analysisRecordId: String,
+        renderStepIdentity: String,
+        sortKey: Long,
+        pipelineKeyHash: String,
+        boundsHash: String,
+        scissorBoundsHash: String?,
+        originalPaintOrder: Int,
+        targetStateHash: String,
+    ): GPUDrawPass {
+        val invocation = GPUDrawInvocation(
+            commandIdValue = commandIdValue,
+            analysisRecordId = analysisRecordId,
+            renderStepIndex = 0,
+            renderStepId = GPURenderStepID(renderStepIdentity),
+            role = "fill",
+            layerScopeId = "root",
+            sortKey = sortKey,
+            pipelineKeyHash = pipelineKeyHash,
+            uniformSlot = null,
+            resourceSlot = null,
+            boundsHash = boundsHash,
+            scissorBoundsHash = scissorBoundsHash,
+            originalPaintOrder = originalPaintOrder,
+        )
+        return GPUDrawPass(
+            passId = "pass.root.$commandIdValue",
+            targetStateHash = targetStateHash,
+            layerScopeId = "root",
+            loadStoreLabel = "load.store",
+            invocations = listOf(invocation),
+            pipelineKeys = listOf(pipelineKeyHash),
+            barriers = emptyList(),
+        )
+    }
+
+    /** Builds an empty refused pass so unsupported inputs cannot produce executable draw work. */
+    fun refusedFillRect(
+        commandIdValue: Int,
+        targetStateHash: String,
+        code: String,
+    ): GPUDrawPass {
+        val passId = "pass.refused.$commandIdValue"
+        return GPUDrawPass(
+            passId = passId,
+            targetStateHash = targetStateHash,
+            layerScopeId = "root",
+            loadStoreLabel = "refused",
+            invocations = emptyList(),
+            pipelineKeys = emptyList(),
+            barriers = emptyList(),
+            diagnostics = listOf(
+                GPUPassDiagnostic(
+                    code = code,
+                    passId = passId,
+                    terminal = true,
+                ),
+            ),
+        )
+    }
+}

@@ -48,7 +48,7 @@
       "sourceEvidenceStatus": "source-evidence-ready"
     }
   ],
-  "generatedAt": "2026-06-01T12:23:10Z",
+  "generatedAt": "2026-06-14T11:12:12Z",
   "generatedBy": "scripts/m68_kadre_demo_evidence.py",
   "nativeRoute": {
     "reason": "m68.kadre-host-adapter-not-implemented",

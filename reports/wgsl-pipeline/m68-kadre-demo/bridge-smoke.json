@@ -1,12 +1,25 @@
 {
   "claimLevel": "bridge-smoke",
   "environment": {
-    "cwd": "/private/tmp/kanvas-m67-m68",
+    "cwd": "/Users/chaos/.codex/worktrees/4c3f/kanvas",
     "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
     "python": "3.14.5"
   },
-  "failures": [],
-  "generatedAt": "2026-06-01T12:23:10Z",
+  "failures": [
+    "Kadre file missing: readme -> external/poc-koreos/README.md",
+    "Kadre file missing: settings -> external/poc-koreos/settings.gradle.kts",
+    "Kadre file missing: facadeBuild -> external/poc-koreos/kadre/build.gradle.kts",
+    "Kadre file missing: eventLoop -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/EventLoop.kt",
+    "Kadre file missing: activeEventLoop -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/ActiveEventLoop.kt",
+    "Kadre file missing: window -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/Window.kt",
+    "Kadre file missing: events -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/Events.kt",
+    "Kadre file missing: handler -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/ApplicationHandler.kt",
+    "Kadre file missing: rawHandles -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/RawHandles.kt",
+    "Kadre file missing: frameTracer -> external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/FrameTimingTracer.kt",
+    "Kadre file missing: helloWindow -> external/poc-koreos/samples/hello-window/src/commonMain/kotlin/org/graphiks/kadre/samples/hellowindow/HelloApp.kt",
+    "Kadre file missing: helloTriangle -> external/poc-koreos/samples/hello-triangle/src/main/kotlin/org/graphiks/kadre/samples/hellotriangle/Main.kt"
+  ],
+  "generatedAt": "2026-06-14T11:12:12Z",
   "generatedBy": "scripts/m68_kadre_demo_evidence.py",
   "linearIssues": [
     "FOR-50",
@@ -20,5 +33,5 @@
     "status": "blocked"
   },
   "schemaVersion": 1,
-  "status": "pass"
+  "status": "blocked"
 }

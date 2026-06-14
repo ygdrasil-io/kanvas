@@ -8711,3 +8711,68 @@ tasks.register<Exec>("injectKan056GlyphAtlasRouteHardeningIntoPmBundle") {
     outputs.dir(bundleDir.map { it.dir("release/kan-056-glyph-atlas-route-hardening") })
     outputs.upToDateWhen { false }
 }
+
+tasks.register<Exec>("injectGpuRendererR6FirstRoutePmEvidenceIntoPmBundle") {
+    group = "verification"
+    description = "Injects the :gpu-renderer R6 first-route PM evidence bundle into the generated pipelinePmBundle manifest."
+    dependsOn(":gpu-renderer:gpuRendererR6FirstRoutePmEvidenceBundle")
+    mustRunAfter("pipelinePmBundle")
+    mustRunAfter("injectKan056GlyphAtlasRouteHardeningIntoPmBundle")
+
+    val outputDir = layout.projectDirectory.dir("gpu-renderer/build/reports/gpu-renderer-r6-first-route-pm-evidence")
+    val bundleDir = layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle")
+    commandLine(
+        "python3",
+        "scripts/validate_gpu_renderer_r6_pm_evidence_bundle.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+        "--inject-pm-bundle",
+        bundleDir.get().asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_gpu_renderer_r6_pm_evidence_bundle.py"))
+    inputs.dir(outputDir)
+    inputs.file(bundleDir.map { it.file("manifest.json") })
+    outputs.file(bundleDir.map { it.file("manifest.json") })
+    outputs.dir(bundleDir.map { it.dir("release/gpu-renderer-r6-first-route-pm-evidence") })
+    outputs.upToDateWhen { false }
+}
+
+tasks.register<Exec>("validateGpuRendererR6AdapterBackedPromotionReadinessBoundary") {
+    group = "verification"
+    description = "Validates the opt-in adapter-backed GPU renderer R6 promotion boundary without product route activation."
+    dependsOn("pipelinePmBundle")
+    dependsOn("injectGpuRendererR6FirstRoutePmEvidenceIntoPmBundle")
+    dependsOn(":gpu-raster:validateGpuRendererR6ExecutedFirstRoutePmEvidenceBundle")
+
+    val validator = layout.projectDirectory.file("scripts/validate_gpu_renderer_r6_promotion_readiness_boundary.py")
+    val bundleDir = layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle")
+    val executedSummary = layout.projectDirectory.file(
+        "gpu-raster/build/reports/gpu-renderer-r6-executed-first-route-pm-evidence/" +
+            "diagnostic-webgpu-first-route-pm-evidence-summary.json",
+    )
+    val report = layout.projectDirectory.file("reports/gpu-renderer/2026-06-14-r6-promotion-readiness-boundary.md")
+
+    commandLine(
+        "python3",
+        validator.asFile.absolutePath,
+        rootDir.absolutePath,
+        "--pm-bundle-dir",
+        bundleDir.get().asFile.absolutePath,
+        "--executed-summary",
+        executedSummary.asFile.absolutePath,
+        "--require-executed-summary",
+        "--write-report",
+        report.asFile.absolutePath,
+    )
+    inputs.file(validator)
+    inputs.file(bundleDir.map { it.file("manifest.json") })
+    inputs.file(bundleDir.map { it.file("release/gpu-renderer-r6-first-route-pm-evidence/pm-bundle-manifest-entry.json") })
+    inputs.file(executedSummary)
+    outputs.file(report)
+    outputs.upToDateWhen { false }
+}
+
+tasks.named("pipelinePmBundle") {
+    dependsOn(":gpu-renderer:gpuRendererR6FirstRoutePmEvidenceBundle")
+    finalizedBy("injectGpuRendererR6FirstRoutePmEvidenceIntoPmBundle")
+}

@@ -68,7 +68,7 @@ M70-A/B/C turn the PM-validated M69 native smoke into a PM-visible live-runtime 
 - Autonomous frame clock: `True`
 - Autonomous frame requests: `359`
 - Measured samples: `150`
-- p50/p95/worst: `8.4459` / `8.6865` / `10.067` ms
+- p50/p95/worst: `8.4664` / `8.7863` / `9.6325` ms
 - Surface status samples: `180`
 
 ## Artifacts

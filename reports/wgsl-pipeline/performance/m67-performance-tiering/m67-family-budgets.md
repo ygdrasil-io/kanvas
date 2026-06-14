@@ -6,7 +6,7 @@ Status: mixed candidate/reporting-only budget inventory.
 
 | Family | Tier | Status | Measured | Lane | Metric | Reason |
 |---|---|---|---|---|---|---|
-| core paint/blend | P0 pipeline | `candidate` | True | `frame.headless-webgpu` | 8.9599 / 9.3046 ms | M67 candidate from M65 headless/offscreen smoke telemetry. |
+| core paint/blend | P0 pipeline | `candidate` | True | `frame.headless-webgpu` | 9.2756 / 12.2369 ms | M67 candidate from M65 headless/offscreen smoke telemetry. |
 | runtime effect | P1 family | `reporting-only` | False | `frame.headless-webgpu` | not measured | M65 times a synthetic preview slot, but runtime display-list replay is refused; do not count as runtime-effect performance support. |
 | path/clip | P1 family | `reporting-only` | False | `family.path-clip` | not measured | No isolated M67 Path/clip timing payload exists yet; do not count the baseline transform smoke as a Path/clip measurement. |
 | image/bitmap | P1 family | `reporting-only` | False | `family.image-bitmap` | not measured | No isolated M67 bitmap sampling or upload timing payload exists yet. |

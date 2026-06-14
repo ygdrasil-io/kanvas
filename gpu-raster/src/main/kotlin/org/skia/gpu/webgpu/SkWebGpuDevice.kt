@@ -7083,6 +7083,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
     private var lastSolidRectPathForDiagnostics: String? = null
     private var lastCoverageSelectionForDiagnostics: WebGpuCoverageSelection? = null
     private var lastImageFilterRouteForDiagnostics: ImageFilterRouteDiagnostics? = null
+    private var gpuRendererShadowCommandId: Int = 0
+    private var lastGpuRendererShadowResult: GpuRendererShadowResult? = null
 
     private val rectBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
         BindGroupLayoutDescriptor(
@@ -7278,6 +7280,9 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
 
     internal fun imageFilterRouteDiagnosticsForTests(): ImageFilterRouteDiagnostics? =
         lastImageFilterRouteForDiagnostics
+
+    internal fun gpuRendererShadowResultForTests(): GpuRendererShadowResult? =
+        lastGpuRendererShadowResult
 
     // ─── Polygon pipeline (G3.3a) — vertex buffer in device coords ─────────
 
@@ -15203,13 +15208,35 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         //          to integer coords and uses 1-pixel non-AA edges (matches
         //          SkScan::HairLineRgn).
         when (paint.style) {
-            SkPaint.Style.kFill_Style -> drawFillRect(rect, clip, paint)
+            SkPaint.Style.kFill_Style -> {
+                shadowFillRectForGpuRendererEvidence(rect, clip, paint)
+                drawFillRect(rect, clip, paint)
+            }
             SkPaint.Style.kStroke_Style -> drawStrokeRect(rect, clip, paint)
             SkPaint.Style.kStrokeAndFill_Style -> {
+                shadowFillRectForGpuRendererEvidence(rect, clip, paint)
                 drawFillRect(rect, clip, paint)
                 drawStrokeRect(rect, clip, paint)
             }
         }
+    }
+
+    private fun shadowFillRectForGpuRendererEvidence(rect: SkRect, clip: SkIRect, paint: SkPaint) {
+        val config = GpuRendererShadowConfig.fromSystemProperties()
+        val commandId = if (config.mode == GpuRendererShadowMode.Shadow) {
+            gpuRendererShadowCommandId++
+        } else {
+            0
+        }
+        lastGpuRendererShadowResult = shadowFillRectForLegacyPath(
+            config = config,
+            commandId = commandId,
+            rect = rect,
+            clip = clip,
+            paint = paint,
+            targetWidth = width,
+            targetHeight = height,
+        )
     }
 
     private fun drawFillRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {

@@ -16,10 +16,10 @@
           "sha256": "5e4ea8a5f74c1eb45e64873ee0120bb2a315f1e7343b7fba2ba5d30d83c88d31"
         },
         {
-          "bytes": 6375,
+          "bytes": 6386,
           "exists": true,
           "path": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json",
-          "sha256": "9a7b1b5efb348b034710341c44a91a809c65d9d40b226e04d0c34a9f58f25eb0"
+          "sha256": "9971c7948da5ec1e3dc57ff2842a63aff78c1763c01dc656f1bbe46ec864e8a2"
         }
       ],
       "claim": "M65 provides synthetic/offscreen frame motion; M68 does not yet present it through Kadre.",
@@ -100,10 +100,10 @@
       "allArtifactsPresent": true,
       "artifacts": [
         {
-          "bytes": 1440,
+          "bytes": 1522,
           "exists": true,
           "path": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/gpu.png",
-          "sha256": "051090a08b8b6b89f88e54094d4b387691808877da052bbecd27fbd149cf2f87"
+          "sha256": "de0fffaf614896762f4fc93866e44bcb28c804f59b297283a48fe8bdd5b22fb5"
         },
         {
           "bytes": 659,
@@ -209,7 +209,7 @@
       "status": "source-evidence-ready"
     }
   ],
-  "generatedAt": "2026-06-01T12:23:10Z",
+  "generatedAt": "2026-06-14T11:12:12Z",
   "generatedBy": "scripts/m68_kadre_demo_evidence.py",
   "linearIssues": [
     "FOR-50",
