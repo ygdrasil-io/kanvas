@@ -10,8 +10,8 @@ evidence.
 | Ticket | Status | Evidence | Remaining gate |
 |---|---|---|---|
 | KGPU-M1-001 | `done` | `reports/gpu-renderer/2026-06-14-m1-promotion-policy-decision.md` accepts launching the controlled M1 promotion path in the current state. | None for policy; no product route activation is implied. |
-| KGPU-M1-002 | `ready` | Root PM bundle remains refusal-first and non-promotional. KGPU-M1-001 is accepted. | Implement activation-candidate PM packaging without product activation or release blocking. |
-| KGPU-M1-003 | `blocked` | No product flag added. | Activation-candidate PM packaging from KGPU-M1-002. |
+| KGPU-M1-002 | `done` | Root PM bundle now packages `ActivationCandidate` state with `packagingState=activation-candidate`, explicit adapter evidence provenance, `productRouteActivated=false`, `releaseBlocking=false`, and `readinessDelta=0.0`. Independent review `019ec714-40ab-73b1-a242-9dc36c3b2694` approved the evidence. | None for PM packaging; no product route activation is implied. |
+| KGPU-M1-003 | `ready` | KGPU-M1-001 and KGPU-M1-002 are done. No product flag added yet. | Implement a controlled solid `FillRect` first-route flag that stays disabled by default and preserves legacy behavior. |
 | KGPU-M1-004 | `blocked` | No rollback/parity route added. | Controlled product flag from KGPU-M1-003. |
 | KGPU-M2-001 | `review` | Added isolated `:gpu-renderer` `FillRRect` command, planner, native/refused route decisions, pass/task evidence, command-shape version bump, and validation fixture ownership line. Independent review found no blocking claim/status issue. | Adapter-backed or explicitly skipped GPU evidence before `done`; no `gpu-raster` product activation. |
 
@@ -65,6 +65,8 @@ All commands above passed after RED/GREEN implementation and final validation.
 - M1 product activation policy was accepted as a controlled promotion path in
   `reports/gpu-renderer/2026-06-14-m1-promotion-policy-decision.md`; this is
   not product route activation.
+- M1-002 activation-candidate packaging changes the PM bundle state only; the
+  root validation report remains `Incomplete` and non-release-blocking.
 - No product flag, default route, or rollback path was added.
 - No `gpu-raster` route was enabled or modified for `FillRRect`.
 - M2-001 is not `done`; adapter-backed or explicitly skipped GPU evidence and

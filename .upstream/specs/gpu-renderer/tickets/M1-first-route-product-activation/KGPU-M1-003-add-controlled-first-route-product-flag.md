@@ -1,7 +1,7 @@
 ---
 id: KGPU-M1-003
 title: "Add controlled first-route product flag"
-status: blocked
+status: ready
 milestone: M1
 priority: P0
 owner_area: gpu-raster-adapter
@@ -88,9 +88,11 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: KGPU-M1-001 is accepted, but the product flag must still wait on
-  KGPU-M1-002 activation-candidate PM packaging. No default or opt-in product
-  flag should be added before that evidence lands.
+- `ready`: KGPU-M1-001 is accepted and KGPU-M1-002 is done with independent
+  review approval. Scope remains limited to adding an explicit controlled flag
+  for solid `FillRect`; the flag must stay disabled by default, legacy behavior
+  must remain available, and no unsupported variants or broad GPU route support
+  may be claimed.
 
 ## Linear Labels
 
