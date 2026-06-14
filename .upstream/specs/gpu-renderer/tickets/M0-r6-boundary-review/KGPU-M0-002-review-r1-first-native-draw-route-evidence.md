@@ -1,7 +1,7 @@
 ---
 id: KGPU-M0-002
 title: "Review R1 first native draw route evidence"
-status: review
+status: done
 milestone: M0
 priority: P0
 owner_area: analysis-routing-passes
@@ -61,9 +61,9 @@ data class FirstRouteReview(val acceptedRouteDump: String, val refusalDumps: Lis
 
 ## Acceptance Criteria
 
-- [ ] Accepted solid `FillRect` route dump is linked.
-- [ ] Canonical unsupported branch refusals are linked.
-- [ ] Product activation remains `false`.
+- [x] Accepted solid `FillRect` route dump is linked.
+- [x] Canonical unsupported branch refusals are linked.
+- [x] Product activation remains `false`.
 
 ## Required Evidence
 
@@ -91,7 +91,10 @@ rtk git diff --check
 
 ## Status Notes
 
-- `review`: R1 evidence exists and requires independent acceptance.
+- `done`: Independent review accepted the R1 first-route evidence as
+  `ImplementationCandidate` only. Product activation remains `false`, and this
+  ticket does not claim rrect, gradient, path, image, text, filter, or
+  runtime-effect support.
 
 ## Linear Labels
 
