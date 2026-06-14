@@ -5,7 +5,7 @@ status: proposed
 milestone: M10
 priority: P1
 owner_area: docs-evidence
-claim_impact: RefuseRequired
+claim_impact: PolicyGated
 route_kind: CPUReferenceOnly
 product_activation: false
 release_blocking: false
@@ -71,7 +71,7 @@ Tickets relying on archived acceptance criteria remain blocked.
 ## Dashboard Impact
 
 - Expected row: `gpu-renderer.archive-hygiene`
-- Expected classification: `RefuseRequired`
+- Expected classification: `PolicyGated`
 - Claim promotion allowed: no.
 
 ## Validation

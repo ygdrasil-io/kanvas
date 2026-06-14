@@ -10,7 +10,7 @@ route_kind: CPUReferenceOnly
 product_activation: false
 release_blocking: false
 adapter_required: true
-depends_on: [KGPU-M10-002]
+depends_on: [KGPU-M10-002, KGPU-M1-004]
 legacy_gate: "gpu-raster legacy"
 ---
 
@@ -29,6 +29,9 @@ activation policy, rollback, and PM update.
 
 - Define retirement checklist for promoted replacement slices.
 - Add guards against broad deletion.
+- Require each concrete retirement row to name the accepted replacement ticket,
+  activation decision, rollback evidence, and PM evidence before any legacy
+  code path can be removed.
 
 ## Non-Goals
 
@@ -58,6 +61,8 @@ data class LegacyRetirementGate(val legacyRoute: String, val promotedReplacement
 - [ ] Retirement requires accepted replacement ticket.
 - [ ] Rollback and PM evidence are linked.
 - [ ] Archived plans remain historical only.
+- [ ] Generic migration gates cannot retire a route unless the route-specific
+      replacement ticket is accepted and linked.
 
 ## Required Evidence
 
@@ -65,7 +70,8 @@ data class LegacyRetirementGate(val legacyRoute: String, val promotedReplacement
 
 ## Fallback / Refusal Behavior
 
-If any replacement evidence is missing, legacy route remains.
+If any replacement evidence is missing, or if the replacement ticket is not
+accepted and linked, the legacy route remains.
 
 ## Dashboard Impact
 

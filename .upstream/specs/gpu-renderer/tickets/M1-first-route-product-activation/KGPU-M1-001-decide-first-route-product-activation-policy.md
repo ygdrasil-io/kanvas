@@ -6,7 +6,7 @@ milestone: M1
 priority: P0
 owner_area: product-validation
 claim_impact: PolicyGated
-route_kind: GPUNative
+route_kind: CPUReferenceOnly
 product_activation: false
 release_blocking: false
 adapter_required: true
@@ -31,6 +31,8 @@ requires a separate policy decision and rollback plan.
 - Define activation criteria for the first solid `FillRect` route.
 - Require reviewed non-skipped adapter-backed evidence.
 - Define release/product decision fields and rollback preconditions.
+- Produce a policy decision record only; this ticket does not execute or
+  promote the native route itself.
 
 ## Non-Goals
 

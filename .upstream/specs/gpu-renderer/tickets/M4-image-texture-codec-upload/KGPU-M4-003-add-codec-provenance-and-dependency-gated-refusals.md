@@ -6,7 +6,7 @@ milestone: M4
 priority: P1
 owner_area: images-codecs
 claim_impact: DependencyGated
-route_kind: CPUPreparedGPU
+route_kind: RefuseDiagnostic
 product_activation: false
 release_blocking: false
 adapter_required: false
@@ -34,6 +34,8 @@ facts, and nondeterminism policy.
 
 - Do not implement all codecs.
 - Do not accept platform decoder behavior without descriptors.
+- Do not promote a `CPUPreparedGPU` uploaded-texture route from provenance
+  metadata alone.
 
 ## Spec Sources
 
@@ -82,7 +84,8 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Codec provenance first, implementation later.
+- `proposed`: Codec provenance and refusal gates first; prepared upload
+  implementation remains in later tickets.
 
 ## Linear Labels
 

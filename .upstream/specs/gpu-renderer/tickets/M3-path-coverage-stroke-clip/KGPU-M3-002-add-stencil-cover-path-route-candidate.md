@@ -59,6 +59,8 @@ data class StencilCoverEvidence(val stencilPlan: String, val coverPass: String)
 - [ ] Stencil and cover ordering is dumpable.
 - [ ] Unsupported fill/clip/target cases refuse.
 - [ ] GPU evidence or explicit skipped reason is linked.
+- [ ] Any prepared-path continuation remains owned by `KGPU-M3-001` and is not
+      promoted by this `GPUNative` candidate ticket.
 
 ## Required Evidence
 
@@ -68,7 +70,9 @@ data class StencilCoverEvidence(val stencilPlan: String, val coverPass: String)
 
 ## Fallback / Refusal Behavior
 
-If stencil-cover cannot preserve semantics, route refuses or remains prepared.
+If stencil-cover cannot preserve semantics, this `GPUNative` candidate refuses.
+Any prepared-path continuation remains under `KGPU-M3-001` and is not promoted
+by this ticket.
 
 ## Dashboard Impact
 

@@ -31,7 +31,7 @@ boundary report, and validation scripts generated on 2026-06-14.
 | [KGPU-M0-004 - Review R3 material payload and pipeline key evidence](KGPU-M0-004-review-r3-material-payload-and-pipeline-key-evidence.md) | `review` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `payloads-pipelines` | `KGPU-M0-003` | - |
 | [KGPU-M0-005 - Review R4 resource execution and readback evidence](KGPU-M0-005-review-r4-resource-execution-and-readback-evidence.md) | `review` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `resources-execution` | `KGPU-M0-004` | - |
 | [KGPU-M0-006 - Review R5 recording task graph evidence](KGPU-M0-006-review-r5-recording-task-graph-evidence.md) | `review` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `recording` | `KGPU-M0-005` | - |
-| [KGPU-M0-007 - Review R6 PM evidence and promotion boundary](KGPU-M0-007-review-r6-pm-evidence-and-promotion-boundary.md) | `review` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `validation-pm` | `KGPU-M0-001`..`KGPU-M0-006` | `pipelinePmBundle` |
+| [KGPU-M0-007 - Review R6 PM evidence and promotion boundary](KGPU-M0-007-review-r6-pm-evidence-and-promotion-boundary.md) | `review` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `validation-pm` | `KGPU-M0-001`, `KGPU-M0-002`, `KGPU-M0-003`, `KGPU-M0-004`, `KGPU-M0-005`, `KGPU-M0-006` | `pipelinePmBundle` |
 
 ## Validation Bundle
 
