@@ -425,6 +425,52 @@ class TextStackSurfaceTest {
     }
 
     @Test
+    fun latinGsubGposGoldenPinsFixtureNonClaims() {
+        assertProjectFileContains(
+            "reports/font/fixtures/expected/shaping/latin-gsub-gpos-goldens.json",
+            "\"dumpId\": \"latin-gsub-gpos-goldens\"",
+            "\"fixtureId\": \"font-source-liberation-core\"",
+            "\"caseId\": \"latin-fi-liga-requested\"",
+            "\"caseId\": \"latin-kern-requested-off\"",
+            "\"no-complete-gsub-gpos-support-claim\"",
+            "\"no-greek-cyrillic-hebrew-promotion-claim\"",
+            "\"no-native-shaper-oracle-claim\"",
+        )
+    }
+
+    @Test
+    fun arabicSeedReadinessGoldenPinsDiagnosticsWithoutSupportClaim() {
+        assertProjectFileContains(
+            "reports/font/fixtures/expected/shaping/arabic-seed-readiness.json",
+            "\"dumpId\": \"arabic-seed-readiness\"",
+            "\"script\": \"Arabic\"",
+            "\"joining-forms\"",
+            "\"lam-alef\"",
+            "\"text.shaping.cursive-attachment-unavailable\"",
+            "\"text.shaping.mark-positioning-unavailable\"",
+            "\"text.shaping.gdef-required\"",
+            "\"text.shaping.paragraph-bidi-required\"",
+            "\"no-arabic-shaping-support-claim\"",
+            "\"no-complex-shaping-support-claim\"",
+            "\"no-native-shaper-oracle-claim\"",
+        )
+    }
+
+    @Test
+    fun paragraphInputGoldenPinsSchemaCasesAndNonClaims() {
+        assertProjectFileContains(
+            "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json",
+            "\"dumpId\": \"paragraph-input-goldens\"",
+            "\"caseId\": \"multi-style-with-placeholder\"",
+            "\"invalid-range\"",
+            "\"non-finite-placeholder-metric\"",
+            "\"unsupported-baseline\"",
+            "\"no-complete-paragraph-layout-claim\"",
+            "\"no-skia-paragraph-parity-claim\"",
+        )
+    }
+
+    @Test
     fun basicScriptItemizerAttachesCommonAndInheritedToAdjacentStrongScripts() {
         val request = ShapingRequest("ab-\u0301cd \u05D0\u05D1!")
 
@@ -1301,6 +1347,13 @@ class TextStackSurfaceTest {
 
     private fun readProjectFile(relativePath: String): String =
         Files.readString(projectRoot().resolve(relativePath))
+
+    private fun assertProjectFileContains(relativePath: String, vararg expectedTokens: String) {
+        val dump = readProjectFile(relativePath)
+        expectedTokens.forEach { expected ->
+            assertTrue(dump.contains(expected), "Expected $relativePath to contain $expected")
+        }
+    }
 
     private fun projectRoot(): Path =
         generateSequence(Paths.get("").toAbsolutePath()) { it.parent }

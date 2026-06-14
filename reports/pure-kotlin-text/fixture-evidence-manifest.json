@@ -135,7 +135,8 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
-        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt"
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/shaping/arabic-seed-readiness.json"
       ],
       "requiredEvidenceGates": [
         "Add Arabic positive and refusal rows for joining forms, lam-alef, marks, cursive attachment, and mixed bidi.",
@@ -312,7 +313,8 @@
         "font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt",
         "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
-        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt"
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/shaping/latin-gsub-gpos-goldens.json"
       ],
       "requiredEvidenceGates": [
         "Add Latin fixture provenance for cmap-backed glyph IDs, GSUB feature lookup order, and GPOS pair positioning data.",
@@ -346,7 +348,8 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
-        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt"
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json"
       ],
       "requiredEvidenceGates": [
         "Add rich style runs fixture evidence.",
@@ -379,7 +382,8 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
-        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt"
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json"
       ],
       "requiredEvidenceGates": [
         "Add bidi visual line ordering rows that name PKT-07 and PKT-08 shaping blockers separately.",

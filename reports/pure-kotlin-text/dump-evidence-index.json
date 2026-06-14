@@ -54,6 +54,40 @@
       ]
     },
     {
+      "dumpId": "arabic-seed-readiness",
+      "ownerTicket": "PKT-08B",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Kanvas Required Script Matrix"
+      },
+      "producerPaths": [
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/shaping/arabic-seed-readiness.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "nonClaims",
+        "ownerTickets",
+        "requiredDiagnostics",
+        "schemaVersion",
+        "script"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Arabic seed golden changes require diagnostic review and matrix checkpoint updates without Arabic or complex shaping support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-arabic-shaping-support-claim",
+        "no-complex-shaping-support-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
       "dumpId": "cff-cff2-readiness",
       "ownerTicket": "PKT-05B",
       "classification": "golden-gated",
@@ -212,6 +246,71 @@
         "producer-only",
         "no-complete-atlas-lifecycle-claim",
         "no-gpu-upload-execution-claim"
+      ]
+    },
+    {
+      "dumpId": "latin-gsub-gpos-goldens",
+      "ownerTicket": "PKT-07B",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "GSUB Target"
+      },
+      "producerPaths": [
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/shaping/latin-gsub-gpos-goldens.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "fixtureId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Latin GSUB/GPOS golden changes require fixture provenance, feature-order and cluster review, and matrix checkpoint updates without broader script promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-gsub-gpos-support-claim",
+        "no-greek-cyrillic-hebrew-promotion-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "dumpId": "paragraph-input-goldens",
+      "ownerTicket": "PKT-09C",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Builder Contract"
+      },
+      "producerPaths": [
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Paragraph input golden changes require style-range, placeholder, diagnostic, and shaping/fallback blocker review without complete paragraph support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-paragraph-layout-claim",
+        "no-skia-paragraph-parity-claim"
       ]
     },
     {

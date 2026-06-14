@@ -664,6 +664,46 @@ Remaining gate: this is fixture-contract and dump-golden setup only. It does
 not claim complete GSUB/GPOS support, Greek/Cyrillic/Hebrew promotion, complex
 script shaping, native shaper parity, or complete shaping conformance.
 
+### PKT-07B: Latin GSUB/GPOS Fixture Goldens
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/expected/shaping/latin-gsub-gpos-goldens.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `latin-gsub-gpos-goldens.json` records Latin-only `liga`/`kern`
+  requested-on/off golden readiness cases for `font-source-liberation-core`.
+- The fixture manifest points `latin-gsub-gpos-fixtures` at the checked-in
+  Latin expected dump.
+- The dump evidence index records `latin-gsub-gpos-goldens` as
+  `golden-gated` producer evidence with non-claiming policy.
+- `TextStackSurfaceTest` loads the expected dump and asserts the fixture ID,
+  cases, and non-claims remain present.
+
+Validation:
+
+```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:text:test
+rtk git diff --cached --check
+```
+
+Remaining gate: this is Latin fixture-golden readiness only. It does not claim
+complete GSUB/GPOS support, Greek/Cyrillic/Hebrew promotion, complex script
+shaping, native shaper oracle status, CPU oracle evidence, or GPU text
+evidence.
+
 ### PKT-08A: Complex-Script Readiness Matrix
 
 Status: implemented with local diff review.
@@ -697,6 +737,48 @@ rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 Remaining gate: this is readiness-matrix evidence only. It does not claim
 Arabic, Indic, Thai, CJK, emoji, complete GSUB/GPOS, complex shaping, or native
 shaper parity support.
+
+### PKT-08B: Arabic Fixture Row Seed
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/expected/shaping/arabic-seed-readiness.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `arabic-seed-readiness.json` records the Arabic seed rows for joining forms,
+  lam-alef, marks, cursive attachment, and mixed bidi.
+- The expected dump records required diagnostics for unavailable cursive
+  attachment, mark positioning, GDEF, and paragraph bidi requirements.
+- The fixture manifest points `complex-script-fixture-matrix` at the checked-in
+  Arabic seed dump.
+- The dump evidence index records `arabic-seed-readiness` as `golden-gated`
+  producer evidence with non-claiming policy.
+- `TextStackSurfaceTest` loads the expected dump and asserts diagnostics and
+  non-claims remain present without asserting Arabic shaping support.
+
+Validation:
+
+```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:text:test
+rtk git diff --cached --check
+```
+
+Remaining gate: this is Arabic fixture-row seed evidence only. It does not
+claim Arabic shaping support, Indic/Thai/CJK/emoji shaping support, complete
+complex shaping, native shaper oracle status, CPU oracle evidence, or GPU text
+evidence.
 
 ### PKT-09A: Paragraph Semantic Layout Dumps And Refusals
 
@@ -769,6 +851,47 @@ Remaining gate: this is fixture/golden matrix evidence only. It does not claim
 complete paragraph layout, full bidi visual ordering, rich text parity,
 complete hit testing/selection, complete ellipsis insertion, or Skia Paragraph
 parity.
+
+### PKT-09C: ParagraphInput Contract And Golden Schema
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `paragraph-input-goldens.json` records the paragraph input golden schema for
+  a multi-style placeholder case plus invalid-range, non-finite metric, and
+  unsupported-baseline negative cases.
+- The fixture manifest points both `paragraph` and
+  `paragraph-fixture-goldens` at the checked-in paragraph expected dump.
+- The dump evidence index records `paragraph-input-goldens` as `golden-gated`
+  producer evidence with non-claiming policy.
+- `TextStackSurfaceTest` loads the expected dump and asserts the schema cases
+  and paragraph non-claims remain present.
+
+Validation:
+
+```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:text:test
+rtk git diff --cached --check
+```
+
+Remaining gate: this is paragraph input golden-schema evidence only. It does
+not claim complete paragraph layout, full bidi visual ordering, rich text
+parity, complete selection/hit testing, ellipsis insertion, Skia Paragraph
+parity, CPU oracle evidence, or GPU text evidence.
 
 ### PKT-10A: Glyph Strike-Key Preimage And Route Diagnostic Dumps
 

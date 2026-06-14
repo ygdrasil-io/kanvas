@@ -50,11 +50,14 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
         self.assertEqual(
             {
                 "a8-atlas-build-result",
+                "arabic-seed-readiness",
                 "cff-cff2-readiness",
                 "cmap-contract",
                 "fallback-catalog-build",
                 "font-source-liberation-scan-root",
                 "glyph-atlas-lifecycle",
+                "latin-gsub-gpos-goldens",
+                "paragraph-input-goldens",
                 "paragraph-layout-result",
                 "png-glyph-image",
                 "sdf-atlas-build-result",
