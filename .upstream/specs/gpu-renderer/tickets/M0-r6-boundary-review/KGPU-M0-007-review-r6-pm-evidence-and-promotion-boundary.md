@@ -1,7 +1,7 @@
 ---
 id: KGPU-M0-007
 title: "Review R6 PM evidence and promotion boundary"
-status: review
+status: done
 milestone: M0
 priority: P0
 owner_area: validation-pm
@@ -35,7 +35,7 @@ boundary must be reviewed before any activation or readiness claim.
 
 ## Non-Goals
 
-- Do not mark R6 done.
+- Do not mark R6 product activation done.
 - Do not move readiness.
 - Do not make adapter-backed evidence a root PM dependency.
 
@@ -61,10 +61,10 @@ data class PromotionBoundaryReview(val rootStatus: String, val executedStatus: S
 
 ## Acceptance Criteria
 
-- [ ] Root bundle remains `Incomplete` unless activation policy changes.
-- [ ] Executed diagnostic evidence remains opt-in and adapter-backed.
-- [ ] Product route activated remains `false`.
-- [ ] Readiness delta remains `0.0`.
+- [x] Root bundle remains `Incomplete` unless activation policy changes.
+- [x] Executed diagnostic evidence remains opt-in and adapter-backed.
+- [x] Product route activated remains `false`.
+- [x] Readiness delta remains `0.0`.
 
 ## Required Evidence
 
@@ -94,7 +94,14 @@ rtk git diff --check
 
 ## Status Notes
 
-- `review`: R6 boundary evidence exists and requires independent acceptance.
+- `done`: Independent review accepted the fresh R6 promotion-boundary validation
+  from `validateGpuRendererR6AdapterBackedPromotionReadinessBoundary`. The
+  boundary is `promotion-boundary-held`: root PM bundle remains `Incomplete`,
+  executed diagnostic evidence is `Passed`, adapter-backed, and not a root
+  `pipelinePmBundle` dependency, `productRouteActivated=false`,
+  `releaseBlocking=false`, and `readinessDelta=0.0`. This closes the review
+  ticket only; it does not mark R6 support done, move readiness, or remove the
+  explicit release/product activation decision gate.
 
 ## Linear Labels
 

@@ -1,7 +1,7 @@
 ---
 id: KGPU-M0-001
 title: "Review R0 structure guard evidence"
-status: review
+status: done
 milestone: M0
 priority: P0
 owner_area: validation
@@ -59,9 +59,9 @@ data class StructureReviewEvidence(val checks: List<String>, val violations: Lis
 
 ## Acceptance Criteria
 
-- [ ] `:gpu-renderer:check` evidence is linked.
-- [ ] Boundary checks reject forbidden imports and package cycles.
-- [ ] R0 remains `review` until the reviewer accepts the linked evidence.
+- [x] `:gpu-renderer:check` evidence is linked.
+- [x] Boundary checks reject forbidden imports and package cycles.
+- [x] R0 remained `review` until independent review accepted the linked evidence.
 
 ## Required Evidence
 
@@ -89,7 +89,9 @@ rtk git diff --check
 
 ## Status Notes
 
-- `review`: R0 evidence exists and requires independent acceptance.
+- `done`: Independent review accepted the R0 structure guard evidence as
+  `ImplementationCandidate` only. This status does not activate product
+  support or a renderer route.
 
 ## Linear Labels
 

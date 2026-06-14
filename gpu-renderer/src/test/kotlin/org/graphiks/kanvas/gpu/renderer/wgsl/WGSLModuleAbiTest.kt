@@ -47,10 +47,12 @@ class WGSLModuleAbiTest {
         assertContains(module.source, "@group(0) @binding(0) var<uniform> frame")
         assertContains(module.source, "@group(1) @binding(0) var<uniform> solidMaterial")
         assertContains(module.source, "return solidMaterial.color")
+        assertContains(module.abiDump().lines(), "moduleHash=${module.moduleHash.value}")
 
         assertEquals(
             """
             module=solid-rect-render
+            moduleHash=${module.moduleHash.value}
             entryPoints=vertex:vs_main,fragment:fs_main
             parser=unavailable:wgsl4k
             binding=0/0 frame uniform-buffer min=64
