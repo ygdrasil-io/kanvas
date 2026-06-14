@@ -28,6 +28,10 @@ data class GPUStrokeDescriptor(
     val join: String,
     val miter: Float,
     val dashOrPathEffectRef: String? = null,
+    val transformClass: String = "identity",
+    val finiteWidth: Boolean = true,
+    val hairline: Boolean = false,
+    val edgeCount: Int = 0,
 )
 
 /** Geometry route selected for a shape. */
@@ -368,28 +372,144 @@ class GPUBasicPathFillPreparedPlanner(
     }
 }
 
+/** Builds the first M3 prepared simple-stroke route evidence without product activation. */
+class GPUSimpleStrokePreparedPlanner(
+    private val maxEdges: Int = 128,
+) {
+    /**
+     * Plans one bounded simple stroke as a typed CPU-prepared GPU geometry artifact.
+     *
+     * The plan is contract evidence only: CPU work may expand stroke geometry
+     * into buffers consumed by a GPU render step, but it does not rasterize
+     * shaded pixels, submit adapter work, or claim broad stroke parity.
+     */
+    fun plan(
+        descriptor: GPUShapeDescriptor,
+        path: GPUPathDescriptor,
+        stroke: GPUStrokeDescriptor,
+    ): GPUGeometryPlan {
+        val refusalCode = descriptor.strokeRefusalCode() ?: path.strokePathRefusalCode() ?: stroke.refusalCode(maxEdges)
+        if (refusalCode != null) {
+            val diagnostic = GPUGeometryDiagnostic(
+                code = refusalCode,
+                geometryLabel = descriptor.shapeKind.ifBlank { "path-stroke" },
+                message = "Simple prepared stroke refused: $refusalCode",
+                terminal = true,
+            )
+            return GPUGeometryPlan(
+                descriptor = descriptor,
+                path = path,
+                stroke = stroke,
+                route = GPUGeometryRoute.Refused(diagnostic),
+                diagnostics = listOf(diagnostic),
+            )
+        }
+
+        val descriptorHash = stroke.preparedStrokeDescriptorHash(path)
+        val expansionPlan = GPUStrokeExpansionPlan(
+            strokeDescriptorHash = descriptorHash,
+            expansionMode = strokeExpansionMode,
+            joinsRequireFallback = false,
+            outputBoundsLabel = descriptor.boundsLabel,
+        )
+        val artifact = PrecomputedGeometryArtifact(
+            artifactKey = "prepared.stroke.${descriptorHash.removePrefix("stroke.")}",
+            boundsLabel = descriptor.boundsLabel,
+            generation = 1,
+            lifetimeClass = "recording-local",
+            budgetClass = "stroke-simple",
+        )
+
+        return GPUGeometryPlan(
+            descriptor = descriptor,
+            path = path,
+            stroke = stroke,
+            route = GPUGeometryRoute.Prepared(
+                GPUPreparedGeometryPlan(
+                    artifact = artifact,
+                    consumerKind = strokeConsumerKind,
+                    invalidationFacts = strokeInvalidationFacts,
+                ),
+            ),
+            diagnostics = listOf(
+                GPUGeometryDiagnostic(
+                    code = "geometry:stroke.prepared",
+                    geometryLabel = descriptor.shapeKind,
+                    message = "Prepared simple stroke artifact is available for $strokeConsumerKind",
+                    terminal = false,
+                ),
+            ),
+        )
+    }
+
+    private companion object {
+        const val strokeConsumerKind = "stroke-strip.render-step"
+        const val strokeExpansionMode = "cpu-prepared-stroke-strip"
+        val strokeInvalidationFacts = listOf(
+            "path-content-hash",
+            "stroke-width",
+            "cap",
+            "join",
+            "miter",
+            "transform-class",
+            "bounds-proof",
+        )
+    }
+}
+
 /** Emits stable M3 path-fill evidence lines for reports and tests. */
 fun GPUGeometryPlan.dumpLines(): List<String> =
     when (val selectedRoute = route) {
         is GPUGeometryRoute.Prepared -> {
-            val pathDescriptor = requireNotNull(path) { "prepared path-fill dump requires a path descriptor" }
-            listOf(
-                "geometry:path-fill.prepared routeKind=CPUPreparedGPU consumer=${selectedRoute.plan.consumerKind}",
-                "path:descriptor key=${pathDescriptor.pathKey} verbs=${pathDescriptor.verbCount} " +
-                    "points=${pathDescriptor.pointCount} fillRule=${pathDescriptor.fillRule} " +
-                    "inverse=${pathDescriptor.inverseFill} transform=${pathDescriptor.transformClass} " +
-                    "edges=${pathDescriptor.edgeCount} finite=${pathDescriptor.finiteProof} " +
-                    "volatility=${pathDescriptor.volatility}",
-                "artifact:key=${selectedRoute.plan.artifact.artifactKey} " +
-                    "lifetime=${selectedRoute.plan.artifact.lifetimeClass} " +
-                    "budget=${selectedRoute.plan.artifact.budgetClass} " +
-                    "bounds=${selectedRoute.plan.artifact.boundsLabel}",
-                pathFillNonClaimLine,
-            )
+            if (stroke != null) {
+                val pathDescriptor = requireNotNull(path) { "prepared stroke dump requires a path descriptor" }
+                val expansionPlan = GPUStrokeExpansionPlan(
+                    strokeDescriptorHash = stroke.preparedStrokeDescriptorHash(pathDescriptor),
+                    expansionMode = "cpu-prepared-stroke-strip",
+                    joinsRequireFallback = false,
+                    outputBoundsLabel = descriptor.boundsLabel,
+                )
+                listOf(
+                    "geometry:stroke.prepared routeKind=CPUPreparedGPU consumer=${selectedRoute.plan.consumerKind}",
+                    "stroke:descriptor path=${pathDescriptor.pathKey} width=${stroke.width} " +
+                        "cap=${stroke.cap} join=${stroke.join} miter=${stroke.miter} " +
+                        "transform=${stroke.transformClass} edges=${stroke.edgeCount} " +
+                        "finite=${stroke.finiteWidth} hairline=${stroke.hairline} " +
+                        "dash=${stroke.dashOrPathEffectRef ?: "none"}",
+                    "stroke:expansion mode=${expansionPlan.expansionMode} " +
+                        "descriptorHash=${expansionPlan.strokeDescriptorHash} " +
+                        "outputBounds=${expansionPlan.outputBoundsLabel} " +
+                        "joinsFallback=${expansionPlan.joinsRequireFallback}",
+                    "artifact:key=${selectedRoute.plan.artifact.artifactKey} " +
+                        "lifetime=${selectedRoute.plan.artifact.lifetimeClass} " +
+                        "budget=${selectedRoute.plan.artifact.budgetClass} " +
+                        "bounds=${selectedRoute.plan.artifact.boundsLabel}",
+                    strokeNonClaimLine,
+                )
+            } else {
+                val pathDescriptor = requireNotNull(path) { "prepared path-fill dump requires a path descriptor" }
+                listOf(
+                    "geometry:path-fill.prepared routeKind=CPUPreparedGPU consumer=${selectedRoute.plan.consumerKind}",
+                    "path:descriptor key=${pathDescriptor.pathKey} verbs=${pathDescriptor.verbCount} " +
+                        "points=${pathDescriptor.pointCount} fillRule=${pathDescriptor.fillRule} " +
+                        "inverse=${pathDescriptor.inverseFill} transform=${pathDescriptor.transformClass} " +
+                        "edges=${pathDescriptor.edgeCount} finite=${pathDescriptor.finiteProof} " +
+                        "volatility=${pathDescriptor.volatility}",
+                    "artifact:key=${selectedRoute.plan.artifact.artifactKey} " +
+                        "lifetime=${selectedRoute.plan.artifact.lifetimeClass} " +
+                        "budget=${selectedRoute.plan.artifact.budgetClass} " +
+                        "bounds=${selectedRoute.plan.artifact.boundsLabel}",
+                    pathFillNonClaimLine,
+                )
+            }
         }
         is GPUGeometryRoute.Refused -> listOf(
-            "geometry:path-fill.refused reason=${selectedRoute.diagnostic.code}",
-            pathFillNonClaimLine,
+            if (stroke != null) {
+                "geometry:stroke.refused reason=${selectedRoute.diagnostic.code}"
+            } else {
+                "geometry:path-fill.refused reason=${selectedRoute.diagnostic.code}"
+            },
+            if (stroke != null) strokeNonClaimLine else pathFillNonClaimLine,
         )
         is GPUGeometryRoute.Analytic,
         is GPUGeometryRoute.Tessellation,
@@ -445,6 +565,54 @@ private fun String.sanitizeForArtifactKey(): String =
 
 private const val pathFillNonClaimLine =
     "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback no-broad-path-aa"
+
+private fun GPUShapeDescriptor.strokeRefusalCode(): String? =
+    when {
+        shapeKind != "path-stroke" -> "unsupported.geometry.shape_kind"
+        boundsLabel.isBlank() -> "unsupported.geometry.path_nonfinite"
+        antiAliasMode !in setOf("coverage-aa", "none") -> "unsupported.stroke.aa_mode"
+        else -> null
+    }
+
+private fun GPUPathDescriptor.strokePathRefusalCode(): String? =
+    when {
+        !pathKey.isCanonicalPathKey() -> "unsupported.geometry.path_key_nondeterministic"
+        verbCount <= 0 || pointCount <= 0 -> "unsupported.geometry.descriptor_invalid"
+        finiteProof != "finite" -> "unsupported.geometry.path_nonfinite"
+        volatility != "immutable" -> "unsupported.geometry.path_mutable"
+        inverseFill -> "unsupported.geometry.path_empty_inverse_unbounded"
+        else -> null
+    }
+
+private fun GPUStrokeDescriptor.refusalCode(maxEdges: Int): String? =
+    when {
+        !finiteWidth || !width.isFinite() || width <= 0f -> "unsupported.stroke.width_invalid"
+        hairline -> "unsupported.stroke.hairline_policy"
+        cap != "Butt" -> "unsupported.stroke.cap"
+        join != "Miter" -> "unsupported.stroke.join"
+        miter < 1f -> "unsupported.stroke.miter_limit"
+        dashOrPathEffectRef?.startsWith("dash:") == true -> "unsupported.stroke.dash_complex"
+        dashOrPathEffectRef != null -> "unsupported.stroke.path_effect_unregistered"
+        transformClass == "nonuniform" -> "unsupported.stroke.nonuniform_transform"
+        transformClass !in setOf("identity", "translate") -> "unsupported.geometry.perspective_path"
+        edgeCount < 0 || edgeCount > maxEdges -> "unsupported.stroke.expansion_budget_exceeded"
+        else -> null
+    }
+
+private fun GPUStrokeDescriptor.preparedStrokeDescriptorHash(path: GPUPathDescriptor): String =
+    "stroke.${path.pathKey.sanitizeForArtifactKey()}.width${width.stableLabel()}.${cap.lowercase()}." +
+        "${join.lowercase()}${miter.stableLabel()}.$transformClass.edges$edgeCount"
+
+private fun Float.stableLabel(): String =
+    if (this % 1f == 0f) {
+        toInt().toString()
+    } else {
+        toString().replace('.', '_')
+    }
+
+private const val strokeNonClaimLine =
+    "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback " +
+        "no-broad-stroke-parity no-hairline no-dash no-round-cap-join"
 
 private fun String.isCanonicalAtlasContentKey(): Boolean =
     isNotBlank() &&
