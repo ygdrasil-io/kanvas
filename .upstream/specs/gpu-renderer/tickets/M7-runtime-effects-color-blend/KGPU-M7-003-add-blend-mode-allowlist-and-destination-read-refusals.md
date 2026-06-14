@@ -1,7 +1,7 @@
 ---
 id: KGPU-M7-003
 title: "Add blend mode allowlist and destination-read refusals"
-status: proposed
+status: blocked
 milestone: M7
 priority: P0
 owner_area: blend-destination-read
@@ -83,7 +83,11 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Selected modes only.
+- `blocked`: Depends on KGPU-M5-002 and native destination-read strategy
+  evidence. Remaining gate is target-copy or existing-intermediate evidence
+  with ordering, bounds, resource, payload, readback, and refusal artifacts; no
+  framebuffer-fetch, active-attachment sampling, all-blend-mode support, or
+  CPU-rendered blend fallback is implied.
 
 ## Linear Labels
 
