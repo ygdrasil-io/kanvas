@@ -59,6 +59,11 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Coverage*' --tests '*Path*'
   gate, not as KGPU-M3-001 route evidence.
 - Independent review `019ec7c5-ae98-7382-b5e2-865bd4734a59` accepted KGPU-M3-001
   for `done` with no findings.
+- KGPU-M3-002 remains `proposed` because it is a `GPUNative` stencil-cover
+  candidate. Its remaining gate is native/adapter evidence for depth/stencil
+  capability, stencil producer before cover consumer ordering, pass/resource
+  and readback artifacts, and explicit skipped-lane or refusal diagnostics. The
+  prepared-path evidence from KGPU-M3-001 does not promote this native route.
 - `AtlasPolicyRefusalGateTest` records path/coverage atlas refusal policy gates
   for selector-only evidence, missing budget/generation/synchronization facts,
   nondeterministic content keys, `RefuseRequired` dashboard classification, and
