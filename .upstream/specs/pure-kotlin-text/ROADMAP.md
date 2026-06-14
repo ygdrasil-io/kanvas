@@ -9,9 +9,9 @@ sélection de représentations glyph, artifacts CPU/GPU, diagnostics, validation
 et migration de la façade Skia-like vers ce cœur.
 
 Cette roadmap vise la cible décrite par `.upstream/specs/pure-kotlin-text/`.
-Les specs historiques sous `.upstream/specs/font/` restent utiles pour
-comprendre l'état courant, les refus actifs et les preuves existantes, mais
-elles ne suffisent pas à déclarer le système complet.
+Elle doit rester autoportante: les anciennes specs font peuvent disparaître
+après migration des gates durables, des diagnostics legacy et des baselines de
+preuve dans ce pack.
 
 ## Contraintes non négociables
 
@@ -102,6 +102,7 @@ Chaque ticket issu de cette roadmap doit inclure:
 - fixture ou raison `fixture-gated`;
 - dump attendu;
 - diagnostic attendu;
+- gate legacy éventuelle et diagnostic target correspondant;
 - commande de validation;
 - impact dashboard/report;
 - route CPU/GPU revendiquée ou refusée.
@@ -705,6 +706,8 @@ Résultat attendu:
 - Dumps source/typeface/SFNT disponibles.
 - Fixtures minimales listées.
 - Dashboard empêchant les claims implicites.
+- Gates legacy critiques conservées dans ce pack, sans dépendre d'une ancienne
+  spec font.
 
 Cette tranche ne doit pas essayer de résoudre CFF, GSUB/GPOS, paragraph, color
 ou GPU handoff. Elle rend ces travaux exécutables sans ambiguïté.

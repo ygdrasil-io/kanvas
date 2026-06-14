@@ -19,8 +19,6 @@ not product dependencies and are not normative test oracles for this pack.
 
 - GPU renderer target specs:
   `.upstream/specs/gpu-renderer/README.md`
-- Current font state and gates:
-  `.upstream/specs/font/README.md`
 - Current pure Kotlin OpenType evidence:
   `docs/opentype-font-backend.md`
 - Existing portable font entry points:
@@ -34,16 +32,20 @@ not product dependencies and are not normative test oracles for this pack.
 - GPU renderer text family dependency gate:
   `.upstream/specs/gpu-renderer/09-draw-family-support-matrix.md`
 
-## Relationship To Existing Font Specs
+## Legacy Font Pack Retirement
 
-`.upstream/specs/font/` remains the current-state and gated-route evidence pack.
-It records what Kanvas can do today and how current refusals are diagnosed.
+Older font specs are transitional current-state evidence only. This pack owns
+the durable target, the support taxonomy, and the forward migration gates for
+the pure Kotlin font system.
 
-This pack records the complete target. It may reference current code as a
-prototype or migration source, but it does not make current behavior complete
-by documenting it. Current refusals stay active until a pure Kotlin target
-contract has implementation evidence, CPU oracle evidence, GPU evidence where
-GPU support is claimed, and stable diagnostics.
+Current behavior may be referenced as prototype or migration evidence, but it
+does not become complete support by being documented here. Current refusals
+stay active until a pure Kotlin target contract has implementation evidence,
+CPU oracle evidence, GPU evidence where GPU support is claimed, and stable
+diagnostics.
+
+The durable legacy gates that must survive retirement of older font specs are
+carried in `09-migration-from-current-font-pack.md`.
 
 ## Hard Constraints
 
