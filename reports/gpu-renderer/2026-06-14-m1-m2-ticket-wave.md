@@ -15,6 +15,19 @@ evidence.
 | KGPU-M1-004 | `blocked` | No rollback/parity route added. | Controlled product flag from KGPU-M1-003. |
 | KGPU-M2-001 | `review` | Added isolated `:gpu-renderer` `FillRRect` command, planner, native/refused route decisions, pass/task evidence, command-shape version bump, and validation fixture ownership line. Independent review found no blocking claim/status issue. | Adapter-backed or explicitly skipped GPU evidence before `done`; no `gpu-raster` product activation. |
 
+## Remaining Catalog Gates
+
+- M2-002 and M2-003 remain `proposed` because both depend on KGPU-M2-001
+  moving past review; M2-004 depends on KGPU-M2-001, KGPU-M2-002, and
+  KGPU-M2-003.
+- M3, M4, M5, M7, and M8 remain dependency-gated through M2/M4/M5 route
+  foundations.
+- M6 remains dependency-gated on pure Kotlin text/font deliverables such as
+  KFONT-M11-003, KFONT-M11-004, KFONT-M11-007, KFONT-M11-008, and
+  KFONT-M11-009.
+- M9 and M10 remain policy-gated through KGPU-M1-001 and downstream M1
+  activation/rollback tickets.
+
 ## Evidence
 
 - `NormalizedDrawCommand.FillRRect` and `GPUFillRRectCommandBuilder` capture
