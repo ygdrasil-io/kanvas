@@ -12,6 +12,7 @@ Port Kotlin de la bibliothèque graphique 2D [Skia](https://skia.org/).
 ## Guides
 
 - [Pure Kotlin OpenType font backend](opentype-font-backend.md) — périmètre supporté, limites sans shaping/native, et commandes de validation.
+- [Pure Kotlin font system roadmap](pure-kotlin-font-system-roadmap.md) — roadmap complète vers un système font/text/glyph pure Kotlin avec gates de preuve.
 - [Font GM post-AWT rebaseline](font-gm-post-awt-rebaseline.md) — classification des GM fonts après retrait du backend font AWT.
 
 ## Correspondance Kotlin ↔ Skia upstream
