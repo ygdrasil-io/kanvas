@@ -79,6 +79,54 @@ class FontFixtureAssetsValidatorTest(unittest.TestCase):
                 validator.validate_index(root, payload)
             self.assertIn("missing asset", str(failure.exception))
 
+    def test_rejects_bool_size_bytes(self) -> None:
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "reports/font/fixtures/fonts").mkdir(parents=True)
+            (root / "reports/font/fixtures/licenses").mkdir(parents=True)
+            asset_path = root / "reports/font/fixtures/fonts/one-byte.ttf"
+            asset_path.write_bytes(b"x")
+            (root / "reports/font/fixtures/licenses/OFL-1.1.txt").write_text("license\n", encoding="utf-8")
+            payload = {
+                "schemaVersion": 1,
+                "indexId": "font-fixture-assets",
+                "fixtureRoot": "reports/font/fixtures",
+                "licensePolicy": ["Apache-2.0", "SIL-OFL-1.1"],
+                "sizeBudgetBytes": 20 * 1024 * 1024,
+                "offlinePolicy": "tests-must-not-download",
+                "fixtures": [
+                    {
+                        "fixtureId": "bool-size",
+                        "familyId": "font-source-sfnt",
+                        "ownerTickets": ["PKT-02D"],
+                        "source": {
+                            "kind": "synthetic-kanvas",
+                            "project": "Kanvas",
+                            "url": "reports/font/fixtures/fonts/one-byte.ttf",
+                            "version": "test",
+                        },
+                        "license": {
+                            "id": "SIL-OFL-1.1",
+                            "path": "reports/font/fixtures/licenses/OFL-1.1.txt",
+                        },
+                        "assets": [
+                            {
+                                "path": "reports/font/fixtures/fonts/one-byte.ttf",
+                                "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881",
+                                "sizeBytes": True,
+                                "role": "font",
+                            }
+                        ],
+                        "expectedDumps": [],
+                        "nonClaims": ["no-complete-target-support-claim"],
+                    }
+                ],
+            }
+            with self.assertRaises(validator.ValidationError) as failure:
+                validator.validate_index(root, payload)
+            self.assertIn("sizeBytes", str(failure.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

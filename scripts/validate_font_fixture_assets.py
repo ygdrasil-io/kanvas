@@ -72,6 +72,14 @@ def require_string_list(value: Any, label: str, *, allow_empty: bool = False) ->
     return value
 
 
+def require_non_negative_int(value: Any, label: str) -> int:
+    require(
+        isinstance(value, int) and not isinstance(value, bool) and value >= 0,
+        f"{label} must be non-negative integer",
+    )
+    return value
+
+
 def repo_path(root: Path, relative_path: str, label: str) -> Path:
     require_string(relative_path, label)
     require(not Path(relative_path).is_absolute(), f"{label} must be relative: {relative_path}")
@@ -162,10 +170,9 @@ def validate_fixture(root: Path, fixture: Any, index: int, accepted_licenses: li
             actual_hash == expected_hash,
             f"{fixture_id}.assets[{asset_index}] SHA-256 mismatch: {asset['path']}",
         )
-        expected_size = asset["sizeBytes"]
-        require(
-            isinstance(expected_size, int) and expected_size >= 0,
-            f"{fixture_id}.assets[{asset_index}].sizeBytes must be non-negative integer",
+        expected_size = require_non_negative_int(
+            asset["sizeBytes"],
+            f"{fixture_id}.assets[{asset_index}].sizeBytes",
         )
         actual_size = asset_path.stat().st_size
         require(
@@ -193,8 +200,8 @@ def validate_index(root: Path, index: dict[str, Any]) -> None:
     require(index["fixtureRoot"] == "reports/font/fixtures", "fixtureRoot changed")
     require(index["licensePolicy"] == ACCEPTED_LICENSES, "licensePolicy changed")
     require(index["offlinePolicy"] == "tests-must-not-download", "offlinePolicy changed")
-    size_budget = index["sizeBudgetBytes"]
-    require(isinstance(size_budget, int) and size_budget == 20 * 1024 * 1024, "sizeBudgetBytes must be 20 MiB")
+    size_budget = require_non_negative_int(index["sizeBudgetBytes"], "sizeBudgetBytes")
+    require(size_budget == 20 * 1024 * 1024, "sizeBudgetBytes must be 20 MiB")
     fixtures = index["fixtures"]
     require(isinstance(fixtures, list), "fixtures must be a list")
     fixture_ids = [
