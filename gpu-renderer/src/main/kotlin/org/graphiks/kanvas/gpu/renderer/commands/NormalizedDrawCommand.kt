@@ -64,16 +64,26 @@ enum class GPUDrawKind {
     FillRect,
 }
 
-/** Coarse transform classification captured before analysis. */
+/** Transform class captured by the command adapter before route analysis. */
 enum class GPUTransformType {
     /** Identity transform with no coordinate remapping. */
     Identity,
+    /** Pure translation transform that keeps rectangles axis-aligned. */
+    Translate,
+    /** Perspective transform outside the first native route. */
+    Perspective,
+    /** Singular transform outside the first native route. */
+    Singular,
 }
 
-/** Coarse clip classification captured before analysis. */
+/** Clip class captured by the command adapter before route analysis. */
 enum class GPUClipKind {
     /** No effective clipping beyond the target. */
     WideOpen,
+    /** A single device-space rectangle scissor clip. */
+    DeviceRect,
+    /** A clip stack that needs later stencil, mask, or analytic clip work. */
+    ComplexStack,
 }
 
 /** Coarse material classification captured before material lowering. */
@@ -98,18 +108,34 @@ data class GPUBounds(
     val bottom: Float,
 )
 
-/** Captured transform facts consumed by later coordinate planning. */
+/** Captured transform facts owned by commands and consumed by analysis without replaying Canvas state. */
 data class GPUTransformFacts(
     val type: GPUTransformType,
+    val translateX: Float = 0f,
+    val translateY: Float = 0f,
 ) {
     /** Creates identity transform facts for first-slice fixtures. */
     companion object {
         /** Returns a transform fact record with identity classification. */
         fun identity(): GPUTransformFacts = GPUTransformFacts(GPUTransformType.Identity)
+
+        /** Returns a transform fact record with translate-like classification. */
+        fun translation(x: Float, y: Float): GPUTransformFacts =
+            GPUTransformFacts(
+                type = GPUTransformType.Translate,
+                translateX = x,
+                translateY = y,
+            )
+
+        /** Returns a transform fact record with perspective classification. */
+        fun perspective(): GPUTransformFacts = GPUTransformFacts(GPUTransformType.Perspective)
+
+        /** Returns a transform fact record with singular classification. */
+        fun singular(): GPUTransformFacts = GPUTransformFacts(GPUTransformType.Singular)
     }
 }
 
-/** Captured clip facts consumed by later clip planning. */
+/** Captured clip facts owned by commands; complex stacks remain explicit refusal inputs for this slice. */
 data class GPUClipFacts(
     val kind: GPUClipKind,
     val bounds: GPUBounds,
@@ -119,10 +145,18 @@ data class GPUClipFacts(
         /** Returns a wide-open clip bounded by the provided conservative area. */
         fun wideOpen(bounds: GPUBounds): GPUClipFacts =
             GPUClipFacts(kind = GPUClipKind.WideOpen, bounds = bounds)
+
+        /** Returns a single device-rectangle clip for first-route scissor fixtures. */
+        fun deviceRect(bounds: GPUBounds): GPUClipFacts =
+            GPUClipFacts(kind = GPUClipKind.DeviceRect, bounds = bounds)
+
+        /** Returns a complex clip stack fact record that must refuse in the first route. */
+        fun complexStack(bounds: GPUBounds): GPUClipFacts =
+            GPUClipFacts(kind = GPUClipKind.ComplexStack, bounds = bounds)
     }
 }
 
-/** Captured render-target facts attached to the command layer. */
+/** Captured render-target facts needed for first-route validation without exposing backend texture handles. */
 data class GPUTargetFacts(
     val width: Int,
     val height: Int,
@@ -135,14 +169,59 @@ data class GPUTargetFacts(
     }
 }
 
-/** Captured layer facts for normalized commands. */
+/** Layer scope classification captured before layer planning and offscreen materialization. */
+enum class GPULayerScopeKind {
+    /** Root target scope with no saveLayer isolation. */
+    Root,
+    /** saveLayer or equivalent offscreen scope requiring later proof. */
+    SaveLayer,
+}
+
+/** Captured layer facts that keep layer/filter/destination-read requirements visible to analysis. */
 data class GPULayerFacts(
     val target: GPUTargetFacts,
+    val scopeKind: GPULayerScopeKind = GPULayerScopeKind.Root,
+    val requiresFilter: Boolean = false,
+    val requiresDestinationRead: Boolean = false,
 ) {
     /** Constructors for layer fact records. */
     companion object {
         /** Returns a root-layer fact record for the provided target. */
         fun root(target: GPUTargetFacts): GPULayerFacts = GPULayerFacts(target)
+
+        /** Returns a saveLayer fact record that remains refused by the first route. */
+        fun saveLayer(target: GPUTargetFacts): GPULayerFacts =
+            GPULayerFacts(target = target, scopeKind = GPULayerScopeKind.SaveLayer)
+    }
+}
+
+/** Blend classification captured before fixed-function blend planning and destination-read strategy selection. */
+enum class GPUBlendKind {
+    /** Source-over fixed-function blend accepted by the first route. */
+    SrcOver,
+    /** Unsupported blend mode that must refuse deterministically. */
+    Unsupported,
+}
+
+/** Captured blend facts; unsupported or destination-reading blends are refused before pass construction. */
+data class GPUBlendFacts(
+    val kind: GPUBlendKind,
+    val modeLabel: String,
+    val requiresDestinationRead: Boolean,
+) {
+    /** Constructors for first-route blend fact records. */
+    companion object {
+        /** Returns accepted source-over fixed-function blend facts. */
+        fun srcOver(): GPUBlendFacts =
+            GPUBlendFacts(kind = GPUBlendKind.SrcOver, modeLabel = "src_over", requiresDestinationRead = false)
+
+        /** Returns an unsupported blend mode fact record. */
+        fun unsupported(modeLabel: String): GPUBlendFacts =
+            GPUBlendFacts(kind = GPUBlendKind.Unsupported, modeLabel = modeLabel, requiresDestinationRead = false)
+
+        /** Returns a blend fact record that requires destination-read planning. */
+        fun destinationReadRequired(): GPUBlendFacts =
+            GPUBlendFacts(kind = GPUBlendKind.SrcOver, modeLabel = "dst_read", requiresDestinationRead = true)
     }
 }
 
@@ -184,6 +263,52 @@ data class GPUCommandSource(
     }
 }
 
+/** Builds Kanvas-owned first-route FillRect commands from already-normalized facts. */
+object GPUFillRectCommandBuilder {
+    /**
+     * Builds an immutable FillRect command from facts already captured by the caller.
+     *
+     * Ownership stays with the command package: this builder records geometry,
+     * transform, clip, layer, material, blend, ordering, and source provenance
+     * without lowering materials, allocating resources, or choosing a backend.
+     * Defaults are deliberately narrow: root layer, source-over blend, identity
+     * transform, and a wide-open clip derived from the rectangle bounds. Invalid
+     * or unsupported facts are preserved so analysis can return stable terminal
+     * diagnostics instead of hiding failures during command construction.
+     */
+    fun build(
+        commandId: GPUDrawCommandID,
+        rect: GPURect,
+        target: GPUTargetFacts,
+        material: GPUMaterialDescriptor,
+        transform: GPUTransformFacts = GPUTransformFacts.identity(),
+        clip: GPUClipFacts? = null,
+        layer: GPULayerFacts? = null,
+        blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        paintOrder: Int = 0,
+        source: GPUCommandSource = GPUCommandSource(adapter = "gpu-renderer", operation = "fillRect"),
+    ): NormalizedDrawCommand.FillRect {
+        val bounds = rect.toBounds()
+        val resolvedClip = clip ?: GPUClipFacts.wideOpen(bounds = bounds)
+        return NormalizedDrawCommand.FillRect(
+            commandId = commandId,
+            rect = rect,
+            transform = transform,
+            clip = resolvedClip,
+            layer = layer ?: GPULayerFacts.root(target = target),
+            material = material,
+            blend = blend,
+            bounds = bounds,
+            ordering = GPUOrderingFacts(
+                paintOrder = paintOrder,
+                dependsOnDestination = false,
+                requiresBarrier = false,
+            ),
+            source = source,
+        )
+    }
+}
+
 /** High-level draw command after legacy state has been captured and normalized. */
 sealed interface NormalizedDrawCommand {
     /** Recording-local command identifier. */
@@ -198,6 +323,8 @@ sealed interface NormalizedDrawCommand {
     val layer: GPULayerFacts
     /** Captured material descriptor. */
     val material: GPUMaterialDescriptor
+    /** Captured blend facts. */
+    val blend: GPUBlendFacts
     /** Conservative command bounds. */
     val bounds: GPUBounds
     /** Captured ordering facts. */
@@ -217,6 +344,7 @@ sealed interface NormalizedDrawCommand {
         override val clip: GPUClipFacts,
         override val layer: GPULayerFacts,
         override val material: GPUMaterialDescriptor,
+        override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
         override val bounds: GPUBounds,
         override val ordering: GPUOrderingFacts,
         override val source: GPUCommandSource,
@@ -224,3 +352,7 @@ sealed interface NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRect
     }
 }
+
+/** Converts rectangle geometry to conservative command bounds. */
+private fun GPURect.toBounds(): GPUBounds =
+    GPUBounds(left = left, top = top, right = right, bottom = bottom)

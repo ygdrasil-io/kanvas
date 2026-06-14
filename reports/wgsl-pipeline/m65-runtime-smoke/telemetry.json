@@ -1,12 +1,12 @@
 {
   "claimLevel": "reporting-only",
   "environment": {
-    "cwd": "/private/tmp/kanvas-m67-m68",
+    "cwd": "/Users/chaos/.codex/worktrees/4c3f/kanvas",
     "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
     "python": "3.14.5"
   },
   "frameCount": 120,
-  "generatedAt": "2026-06-01T12:23:09Z",
+  "generatedAt": "2026-06-14T11:12:12Z",
   "generatedBy": "scripts/m65_runtime_smoke.py",
   "host": {
     "auditedCommit": "9dae217144fde70bdafddcf60855e2329921b1e5",
@@ -45,8 +45,8 @@
       "sourceEvidence": [],
       "status": "pass",
       "telemetrySummary": {
-        "averageFps": 111.39,
-        "averageFrameMs": 8.9777,
+        "averageFps": 102.3,
+        "averageFrameMs": 9.7755,
         "cpuPlanningMedianMs": 0.19,
         "cpuUpdateMedianMs": 0.12,
         "finalFrame": {
@@ -64,9 +64,9 @@
           "transparentPixels": 0
         },
         "frames": 120,
-        "medianFrameMs": 8.9599,
-        "offscreenRenderMedianMs": 8.6493,
-        "p95FrameMs": 9.3046
+        "medianFrameMs": 9.2756,
+        "offscreenRenderMedianMs": 8.971,
+        "p95FrameMs": 12.2369
       },
       "title": "M65 baseline transform smoke"
     },
@@ -103,8 +103,8 @@
       ],
       "status": "expected-unsupported",
       "telemetrySummary": {
-        "averageFps": 77.01,
-        "averageFrameMs": 12.9848,
+        "averageFps": 68.0,
+        "averageFrameMs": 14.7059,
         "cpuPlanningMedianMs": 0.19,
         "cpuUpdateMedianMs": 0.12,
         "finalFrame": {
@@ -122,9 +122,9 @@
           "transparentPixels": 0
         },
         "frames": 120,
-        "medianFrameMs": 12.9778,
-        "offscreenRenderMedianMs": 12.6863,
-        "p95FrameMs": 13.249
+        "medianFrameMs": 13.202,
+        "offscreenRenderMedianMs": 12.8924,
+        "p95FrameMs": 26.0364
       },
       "title": "M63 color/blend scene slot"
     },
@@ -161,8 +161,8 @@
       ],
       "status": "expected-unsupported",
       "telemetrySummary": {
-        "averageFps": 80.11,
-        "averageFrameMs": 12.4829,
+        "averageFps": 73.7,
+        "averageFrameMs": 13.568,
         "cpuPlanningMedianMs": 0.19,
         "cpuUpdateMedianMs": 0.12,
         "finalFrame": {
@@ -180,9 +180,9 @@
           "transparentPixels": 0
         },
         "frames": 120,
-        "medianFrameMs": 12.4671,
-        "offscreenRenderMedianMs": 12.1547,
-        "p95FrameMs": 12.702
+        "medianFrameMs": 12.8265,
+        "offscreenRenderMedianMs": 12.5065,
+        "p95FrameMs": 17.2254
       },
       "title": "M64 registered runtime-effect scene slot"
     }

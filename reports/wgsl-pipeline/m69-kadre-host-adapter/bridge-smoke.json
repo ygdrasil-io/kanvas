@@ -1,11 +1,11 @@
 {
   "environment": {
-    "cwd": "/private/tmp/kanvas-m69-kadre",
+    "cwd": "/Users/chaos/.codex/worktrees/4c3f/kanvas",
     "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
     "python": "3.14.5"
   },
   "failures": [],
-  "generatedAt": "2026-06-01T14:04:40Z",
+  "generatedAt": "2026-06-14T11:12:12Z",
   "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
   "linearIssues": [
     "FOR-56",

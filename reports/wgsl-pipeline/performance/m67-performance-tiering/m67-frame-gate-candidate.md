@@ -22,9 +22,9 @@ Fixture: `normal`.
 
 | Scene | Tier | Status | Samples | Median ms | P95 ms | Nonblank | Regression label |
 |---|---|---|---:|---:|---:|---|---|
-| `p0-live-baseline` | P0 frame | `pass` | 120 | 8.9599 | 9.3046 | True | `m67.headless-offscreen-candidate-without-native-adapter` |
-| `p0-live-m63` | P1 family | `warn` | 120 | 12.9778 | 13.249 | True | `m65.runtime-display-list-replay-not-wired` |
-| `p0-live-m64` | P1 family | `warn` | 120 | 12.4671 | 12.702 | True | `m65.runtime-display-list-replay-not-wired` |
+| `p0-live-baseline` | P0 frame | `pass` | 120 | 9.2756 | 12.2369 | True | `m67.headless-offscreen-candidate-without-native-adapter` |
+| `p0-live-m63` | P1 family | `warn` | 120 | 13.202 | 26.0364 | True | `m65.runtime-display-list-replay-not-wired` |
+| `p0-live-m64` | P1 family | `warn` | 120 | 12.8265 | 17.2254 | True | `m65.runtime-display-list-replay-not-wired` |
 
 ## Policy
 

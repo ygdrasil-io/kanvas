@@ -3,7 +3,7 @@
     "failures": [],
     "m65NonblankPixelProof": true,
     "nativeClaim": "bounded standalone WGSL present loop; Kanvas display-list replay is not claimed",
-    "nativePresentationSourceReady": true,
+    "nativePresentationSourceReady": false,
     "nativeSmoke": {
       "adapterInfo": "AdapterInfo(architecture=, description=, device=Apple M2 Max, subgroupMaxSize=0, subgroupMinSize=0, vendor=, isFallbackAdapter=false)",
       "cpuReference": {
@@ -49,16 +49,16 @@
     },
     "requiredM65Files": [
       {
-        "bytes": 6375,
+        "bytes": 6386,
         "exists": true,
         "path": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json",
-        "sha256": "9a7b1b5efb348b034710341c44a91a809c65d9d40b226e04d0c34a9f58f25eb0"
+        "sha256": "9971c7948da5ec1e3dc57ff2842a63aff78c1763c01dc656f1bbe46ec864e8a2"
       },
       {
-        "bytes": 5344,
+        "bytes": 5341,
         "exists": true,
         "path": "reports/wgsl-pipeline/m65-runtime-smoke/slots.json",
-        "sha256": "7545c1c670aab0615fc1574e11f3dd2f444db324dbc163bff939f16c374aba13"
+        "sha256": "5c79be1e5bcf8a7e831cd6f239f2bdd43a950801c71437f1e37d8f35576b9457"
       },
       {
         "bytes": 12574,
@@ -73,9 +73,9 @@
         "sha256": "5e4ea8a5f74c1eb45e64873ee0120bb2a315f1e7343b7fba2ba5d30d83c88d31"
       }
     ],
-    "sourceAuditReady": true
+    "sourceAuditReady": false
   },
-  "generatedAt": "2026-06-01T14:04:40Z",
+  "generatedAt": "2026-06-14T11:12:12Z",
   "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
   "linearIssues": [
     "FOR-56",

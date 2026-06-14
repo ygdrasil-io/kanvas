@@ -12,7 +12,7 @@
           "generatedWgslSha256": "d8f4ba263d2618301bbc32f2a993f3c6b42896e377bb05f2b3e8904085e75777",
           "generatedWgslFeatureFlag": "kanvas.gpu.generatedLinearGradient.enabled",
           "generatedWgslDiagnostics": [],
-          "pipelineKeyDump": "preimage=pipeline.key v=1 layout=[] code=[generatedPath=true,shaderFamily=linearGradient] state=[];hash=c1b43df0d2f772bb4ffbf41965fd58ef3c62439154fe89bbee05afbe84c12185;uniformFacts=[]\npreimage=pipeline.key v=1 layout=[] code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver];hash=7c61fefc33c27aefe36a32512718f5eeeb4f76584c301ab2626de4767c4bf1d5;uniformFacts=[]",
+          "pipelineKeyDump": "preimage=pipeline.key v=1 layout=[] code=[generatedPath=true,shaderFamily=solidRect] state=[];hash=1de5e33f4453bcf029ef5fbb443e01803f35205e7c74d646fc89678c5e00ad29;uniformFacts=[]\npreimage=pipeline.key v=1 layout=[] code=[generatedPath=true,shaderFamily=linearGradient] state=[];hash=c1b43df0d2f772bb4ffbf41965fd58ef3c62439154fe89bbee05afbe84c12185;uniformFacts=[]\npreimage=pipeline.key v=1 layout=[] code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver];hash=7c61fefc33c27aefe36a32512718f5eeeb4f76584c301ab2626de4767c4bf1d5;uniformFacts=[]",
           "cpuNonWhitePixels": 8512,
           "webGpuNonWhitePixels": 8512,
           "tolerance": 4,

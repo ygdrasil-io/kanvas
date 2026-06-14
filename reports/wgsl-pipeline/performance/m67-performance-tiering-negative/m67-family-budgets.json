@@ -15,8 +15,8 @@
       "lane": "frame.headless-webgpu",
       "measured": true,
       "measurementType": "live frame benchmark",
-      "medianMs": 8.9599,
-      "p95Ms": 9.3046,
+      "medianMs": 9.2756,
+      "p95Ms": 12.2369,
       "reason": "M67 candidate from M65 headless/offscreen smoke telemetry.",
       "releaseBlocking": false,
       "sampleCount": 120,
@@ -109,7 +109,7 @@
     }
   ],
   "fixture": "negative-quarantine",
-  "generatedAt": "2026-06-01T12:23:11Z",
+  "generatedAt": "2026-06-14T11:12:12Z",
   "generatedBy": "scripts/m67_performance_tiering.py",
   "schemaVersion": 1,
   "sourceTelemetry": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json"

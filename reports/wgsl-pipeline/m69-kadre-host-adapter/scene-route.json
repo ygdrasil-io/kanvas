@@ -1,6 +1,6 @@
 {
   "claimLevel": "native-runnable",
-  "generatedAt": "2026-06-01T14:04:40Z",
+  "generatedAt": "2026-06-14T11:12:12Z",
   "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
   "headlessPixelProof": {
     "frameCount": 120,
@@ -9,8 +9,8 @@
       {
         "finalFrameNonblank": true,
         "firstFrameNonblank": true,
-        "medianFrameMs": 8.9599,
-        "p95FrameMs": 9.3046,
+        "medianFrameMs": 9.2756,
+        "p95FrameMs": 12.2369,
         "runtimeRoute": "headless.offscreen.smoke-renderer.v1",
         "slot": "baseline",
         "status": "pass",
@@ -19,8 +19,8 @@
       {
         "finalFrameNonblank": true,
         "firstFrameNonblank": true,
-        "medianFrameMs": 12.9778,
-        "p95FrameMs": 13.249,
+        "medianFrameMs": 13.202,
+        "p95FrameMs": 26.0364,
         "runtimeRoute": "headless.offscreen.slot-preview",
         "slot": "m63",
         "status": "expected-unsupported",
@@ -29,8 +29,8 @@
       {
         "finalFrameNonblank": true,
         "firstFrameNonblank": true,
-        "medianFrameMs": 12.4671,
-        "p95FrameMs": 12.702,
+        "medianFrameMs": 12.8265,
+        "p95FrameMs": 17.2254,
         "runtimeRoute": "headless.offscreen.slot-preview",
         "slot": "m64",
         "status": "expected-unsupported",
@@ -118,10 +118,10 @@
           "sha256": "5e4ea8a5f74c1eb45e64873ee0120bb2a315f1e7343b7fba2ba5d30d83c88d31"
         },
         {
-          "bytes": 6375,
+          "bytes": 6386,
           "exists": true,
           "path": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json",
-          "sha256": "9a7b1b5efb348b034710341c44a91a809c65d9d40b226e04d0c34a9f58f25eb0"
+          "sha256": "9971c7948da5ec1e3dc57ff2842a63aff78c1763c01dc656f1bbe46ec864e8a2"
         }
       ],
       "feature": "animated transform",

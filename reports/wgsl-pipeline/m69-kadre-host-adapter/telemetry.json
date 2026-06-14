@@ -9,13 +9,13 @@
     "native": "kadre-redraw-loop",
     "targetFrames": 120
   },
-  "generatedAt": "2026-06-01T14:04:40Z",
+  "generatedAt": "2026-06-14T11:12:12Z",
   "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
   "headlessTimingSummary": {
-    "medianFrameMsMax": 12.9778,
-    "medianFrameMsMin": 8.9599,
+    "medianFrameMsMax": 13.202,
+    "medianFrameMsMin": 9.2756,
     "notNativeTiming": true,
-    "p95FrameMsMax": 13.249,
+    "p95FrameMsMax": 26.0364,
     "slotCount": 3,
     "source": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json"
   },

@@ -1,11 +1,11 @@
 {
-  "commit": "9211e89c7c88",
+  "commit": "950622b9941a",
   "counters": {
     "measuredRows": 3,
     "rows": 3
   },
   "fixture": "negative-quarantine",
-  "generatedAt": "2026-06-01T12:23:11Z",
+  "generatedAt": "2026-06-14T11:12:12Z",
   "generatedBy": "scripts/m67_performance_tiering.py",
   "rows": [
     {
@@ -16,7 +16,7 @@
       },
       "backend": "headless-offscreen",
       "baseline": {
-        "commit": "9211e89c7c88",
+        "commit": "950622b9941a",
         "name": "m65-headless-offscreen-baseline",
         "owner": "FOR-45/FOR-46",
         "source": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json"
@@ -41,19 +41,19 @@
         "jdk": "not-measured-by-m65-python-smoke",
         "kadreRefusalReason": "m65.kadre-host-not-wired",
         "kadreStatus": "blocked-not-wired",
-        "m65Cwd": "/private/tmp/kanvas-m67-m68",
+        "m65Cwd": "/Users/chaos/.codex/worktrees/4c3f/kanvas",
         "osArchitecture": "macOS-26.5-arm64-arm-64bit-Mach-O",
         "python": "3.14.5"
       },
       "lane": "frame.headless-webgpu",
-      "medianMs": 8.9599,
+      "medianMs": 9.2756,
       "nonClaims": [
         "This is not native Kadre present timing.",
         "This is not a release-blocking FPS gate.",
         "M65 synthetic/offscreen timing is measured only for the Python smoke lane."
       ],
       "nonblank": true,
-      "p95Ms": 9.3046,
+      "p95Ms": 12.2369,
       "payloadStatus": "measured",
       "quarantineReasons": [
         "adapter eligibility intentionally mismatched by negative fixture"
@@ -70,7 +70,7 @@
       "tier": "P0 frame",
       "title": "M65 baseline transform smoke",
       "warningP95Ms": 33.3,
-      "worstFrameMs": 9.3046
+      "worstFrameMs": 12.2369
     },
     {
       "adapter": "not-measured",
@@ -80,7 +80,7 @@
       },
       "backend": "headless-offscreen",
       "baseline": {
-        "commit": "9211e89c7c88",
+        "commit": "950622b9941a",
         "name": "m65-headless-offscreen-baseline",
         "owner": "FOR-45/FOR-46",
         "source": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json"
@@ -105,19 +105,19 @@
         "jdk": "not-measured-by-m65-python-smoke",
         "kadreRefusalReason": "m65.kadre-host-not-wired",
         "kadreStatus": "blocked-not-wired",
-        "m65Cwd": "/private/tmp/kanvas-m67-m68",
+        "m65Cwd": "/Users/chaos/.codex/worktrees/4c3f/kanvas",
         "osArchitecture": "macOS-26.5-arm64-arm-64bit-Mach-O",
         "python": "3.14.5"
       },
       "lane": "frame.headless-webgpu",
-      "medianMs": 12.9778,
+      "medianMs": 13.202,
       "nonClaims": [
         "This is not native Kadre present timing.",
         "This is not a release-blocking FPS gate.",
         "M65 synthetic/offscreen timing is measured only for the Python smoke lane."
       ],
       "nonblank": true,
-      "p95Ms": 13.249,
+      "p95Ms": 26.0364,
       "payloadStatus": "measured",
       "quarantineReasons": [
         "adapter eligibility intentionally mismatched by negative fixture"
@@ -134,7 +134,7 @@
       "tier": "P1 family",
       "title": "M63 color/blend scene slot",
       "warningP95Ms": 33.3,
-      "worstFrameMs": 13.249
+      "worstFrameMs": 26.0364
     },
     {
       "adapter": "not-measured",
@@ -144,7 +144,7 @@
       },
       "backend": "headless-offscreen",
       "baseline": {
-        "commit": "9211e89c7c88",
+        "commit": "950622b9941a",
         "name": "m65-headless-offscreen-baseline",
         "owner": "FOR-45/FOR-46",
         "source": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json"
@@ -169,19 +169,19 @@
         "jdk": "not-measured-by-m65-python-smoke",
         "kadreRefusalReason": "m65.kadre-host-not-wired",
         "kadreStatus": "blocked-not-wired",
-        "m65Cwd": "/private/tmp/kanvas-m67-m68",
+        "m65Cwd": "/Users/chaos/.codex/worktrees/4c3f/kanvas",
         "osArchitecture": "macOS-26.5-arm64-arm-64bit-Mach-O",
         "python": "3.14.5"
       },
       "lane": "frame.headless-webgpu",
-      "medianMs": 12.4671,
+      "medianMs": 12.8265,
       "nonClaims": [
         "This is not native Kadre present timing.",
         "This is not a release-blocking FPS gate.",
         "M65 synthetic/offscreen timing is measured only for the Python smoke lane."
       ],
       "nonblank": true,
-      "p95Ms": 12.702,
+      "p95Ms": 17.2254,
       "payloadStatus": "measured",
       "quarantineReasons": [
         "adapter eligibility intentionally mismatched by negative fixture"
@@ -198,7 +198,7 @@
       "tier": "P1 family",
       "title": "M64 registered runtime-effect scene slot",
       "warningP95Ms": 33.3,
-      "worstFrameMs": 12.702
+      "worstFrameMs": 17.2254
     }
   ],
   "schemaVersion": 1,

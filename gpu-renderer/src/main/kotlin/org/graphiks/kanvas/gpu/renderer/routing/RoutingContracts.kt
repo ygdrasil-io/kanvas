@@ -106,3 +106,34 @@ data class GPURouteDiagnostic(
     val artifactKey: CPUPreparedGPUArtifactKey? = null,
     val terminal: Boolean,
 )
+
+/** Builds first-route routing decisions as immutable Kanvas contracts, not backend submission state. */
+object GPUFirstRouteDecisionBuilder {
+    /** Builds a native FillRect decision only after analysis has validated first-slice command facts. */
+    fun nativeFillRect(
+        commandIdValue: Int,
+        pipelinePreimageHash: String,
+        renderStepIdentity: String,
+        requirements: List<String>,
+    ): GPURouteDecision.Native =
+        GPURouteDecision.Native(
+            route = GPUNativeRoute(
+                routeId = "route.fill_rect.$commandIdValue",
+                consumerKind = "native.fill_rect.solid",
+                renderStepIdentity = renderStepIdentity,
+                pipelinePreimageHash = pipelinePreimageHash,
+                requirements = requirements,
+            ),
+        )
+
+    /** Builds a terminal route refusal with the canonical reason code preserved for dumps and gates. */
+    fun refused(code: String, stage: String): GPURouteDecision.Refused =
+        GPURouteDecision.Refused(
+            diagnostic = RefuseDiagnostic(
+                code = code,
+                message = "FillRect first native route refused: $code",
+                stage = stage,
+                terminal = true,
+            ),
+        )
+}
