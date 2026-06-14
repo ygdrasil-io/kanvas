@@ -545,6 +545,43 @@ Remaining gate: this is diagnostic-family hardening only. It does not claim
 complete GSUB/GPOS coverage, full required script matrix support, or complete
 pure Kotlin shaping conformance.
 
+### PKT-06C: Pinned Unicode-Data Generation Contract
+
+Status: implemented with local diff review.
+
+Files:
+
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_pure_kotlin_text_fixture_manifest.py`
+- `scripts/test_validate_pure_kotlin_text_fixture_manifest.py`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `fixture-evidence-manifest.json` now records the required
+  `unicode-data-generation` fixture family as `fixture-gated`.
+- The row requires a pinned Unicode data version, source file names and
+  checksums for script/bidi/grapheme/default-ignorable inputs, generated dump
+  schema rows, and mismatch diagnostics for version, checksum, and schema
+  drift before replacing `BasicUnicodeData`.
+- The row keeps the JDK Unicode version policy explicit: product behavior must
+  not depend on it unless that dependency is diagnosed.
+- The fixture manifest validator now treats the Unicode-data generation row as
+  required, and tests assert the row keeps the `no-complete-ucd-claim`
+  non-claim.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+```
+
+Remaining gate: this is generation-contract planning only. It does not claim a
+complete Unicode Character Database, UAX #9 bidi conformance, UAX #14 line
+breaking, UAX #29 segmentation, emoji property coverage, or full script matrix
+support.
+
 ### PKT-09A: Paragraph Semantic Layout Dumps And Refusals
 
 Status: implemented and independently reviewed.

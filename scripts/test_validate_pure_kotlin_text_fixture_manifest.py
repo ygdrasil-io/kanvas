@@ -64,6 +64,7 @@ class PureKotlinTextFixtureManifestTest(unittest.TestCase):
                 "shaping-scripts",
                 "svg-glyphs",
                 "truetype-scaler",
+                "unicode-data-generation",
             },
             set(family_ids),
         )
@@ -77,6 +78,10 @@ class PureKotlinTextFixtureManifestTest(unittest.TestCase):
         self.assertIn(
             "Add cmap format 14 positive variation-selector fixture rows.",
             rows_by_id["sfnt-malformed-tables"]["requiredEvidenceGates"],
+        )
+        self.assertIn(
+            "no-complete-ucd-claim",
+            rows_by_id["unicode-data-generation"]["nonClaims"],
         )
 
     def test_validator_rejects_hidden_support_claims_and_missing_gates(self) -> None:

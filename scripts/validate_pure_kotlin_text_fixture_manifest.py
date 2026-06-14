@@ -33,6 +33,7 @@ REQUIRED_FAMILIES = {
     "shaping-scripts",
     "svg-glyphs",
     "truetype-scaler",
+    "unicode-data-generation",
 }
 
 TOP_LEVEL_KEYS = [

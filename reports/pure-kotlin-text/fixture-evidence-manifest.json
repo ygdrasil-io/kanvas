@@ -464,6 +464,40 @@
         "no-complete-hinting-vm-claim",
         "no-pixel-perfect-native-scaler-parity-claim"
       ]
+    },
+    {
+      "familyId": "unicode-data-generation",
+      "familyName": "Unicode data generation",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Unicode Version Policy"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt"
+      ],
+      "requiredEvidenceGates": [
+        "Add a pinned Unicode data version row before replacing BasicUnicodeData.",
+        "Document source file names and checksums for script, bidi, grapheme, and default-ignorable data inputs.",
+        "Add generated dump schema rows for sample script, bidi, grapheme, and default-ignorable facts.",
+        "Add mismatch diagnostics for generated-data version, source checksum, and generated dump schema drift.",
+        "Keep product behavior independent of the JDK Unicode version unless that dependency is explicitly diagnosed."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "fixtureCommands": [
+        "Add a deterministic Unicode-data generator or no-op validator before promoting beyond BasicUnicodeData."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-ucd-claim",
+        "no-uax9-conformance-claim",
+        "no-uax14-uax29-conformance-claim"
+      ]
     }
   ]
 }
