@@ -426,48 +426,100 @@ class TextStackSurfaceTest {
 
     @Test
     fun latinGsubGposGoldenPinsFixtureNonClaims() {
-        assertProjectFileContains(
+        val dump = readJsonProjectFile(
             "reports/font/fixtures/expected/shaping/latin-gsub-gpos-goldens.json",
-            "\"dumpId\": \"latin-gsub-gpos-goldens\"",
-            "\"fixtureId\": \"font-source-liberation-core\"",
-            "\"caseId\": \"latin-fi-liga-requested\"",
-            "\"caseId\": \"latin-kern-requested-off\"",
-            "\"no-complete-gsub-gpos-support-claim\"",
-            "\"no-greek-cyrillic-hebrew-promotion-claim\"",
-            "\"no-native-shaper-oracle-claim\"",
         )
+        val cases = dump.requiredObjectList("cases")
+
+        assertEquals(1L, dump["schemaVersion"])
+        assertEquals("latin-gsub-gpos-goldens", dump.requiredString("dumpId"))
+        assertEquals(listOf("PKT-07B"), dump.requiredStringList("ownerTickets"))
+        assertEquals("font-source-liberation-core", dump.requiredString("fixtureId"))
+        assertEquals(listOf("latin-fi-liga-requested", "latin-kern-requested-off"), cases.map { it.requiredString("caseId") })
+        assertEquals("office", cases[0].requiredString("text"))
+        assertEquals(mapOf("liga" to true, "kern" to true), cases[0].requiredObject("features"))
+        assertEquals(
+            listOf("feature-order", "glyph-sequence", "cluster-map", "advance-adjustments"),
+            cases[0].requiredStringList("requiredDumpFields"),
+        )
+        assertEquals("AV", cases[1].requiredString("text"))
+        assertEquals(mapOf("liga" to false, "kern" to false), cases[1].requiredObject("features"))
+        assertEquals(
+            listOf("feature-order", "glyph-sequence", "cluster-map"),
+            cases[1].requiredStringList("requiredDumpFields"),
+        )
+        assertEquals(
+            listOf(
+                "no-complete-gsub-gpos-support-claim",
+                "no-greek-cyrillic-hebrew-promotion-claim",
+                "no-native-shaper-oracle-claim",
+            ),
+            dump.requiredStringList("nonClaims"),
+        )
+        assertNoSupportPromotionClaims(dump)
     }
 
     @Test
     fun arabicSeedReadinessGoldenPinsDiagnosticsWithoutSupportClaim() {
-        assertProjectFileContains(
+        val dump = readJsonProjectFile(
             "reports/font/fixtures/expected/shaping/arabic-seed-readiness.json",
-            "\"dumpId\": \"arabic-seed-readiness\"",
-            "\"script\": \"Arabic\"",
-            "\"joining-forms\"",
-            "\"lam-alef\"",
-            "\"text.shaping.cursive-attachment-unavailable\"",
-            "\"text.shaping.mark-positioning-unavailable\"",
-            "\"text.shaping.gdef-required\"",
-            "\"text.shaping.paragraph-bidi-required\"",
-            "\"no-arabic-shaping-support-claim\"",
-            "\"no-complex-shaping-support-claim\"",
-            "\"no-native-shaper-oracle-claim\"",
         )
+
+        assertEquals(1L, dump["schemaVersion"])
+        assertEquals("arabic-seed-readiness", dump.requiredString("dumpId"))
+        assertEquals(listOf("PKT-08B"), dump.requiredStringList("ownerTickets"))
+        assertEquals("Arabic", dump.requiredString("script"))
+        assertEquals(
+            listOf("joining-forms", "lam-alef", "marks", "cursive-attachment", "mixed-bidi"),
+            dump.requiredStringList("cases"),
+        )
+        assertEquals(
+            listOf(
+                "text.shaping.cursive-attachment-unavailable",
+                "text.shaping.mark-positioning-unavailable",
+                "text.shaping.gdef-required",
+                "text.shaping.paragraph-bidi-required",
+            ),
+            dump.requiredStringList("requiredDiagnostics"),
+        )
+        assertEquals(
+            listOf(
+                "no-arabic-shaping-support-claim",
+                "no-complex-shaping-support-claim",
+                "no-native-shaper-oracle-claim",
+            ),
+            dump.requiredStringList("nonClaims"),
+        )
+        assertNoSupportPromotionClaims(dump)
     }
 
     @Test
     fun paragraphInputGoldenPinsSchemaCasesAndNonClaims() {
-        assertProjectFileContains(
+        val dump = readJsonProjectFile(
             "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json",
-            "\"dumpId\": \"paragraph-input-goldens\"",
-            "\"caseId\": \"multi-style-with-placeholder\"",
-            "\"invalid-range\"",
-            "\"non-finite-placeholder-metric\"",
-            "\"unsupported-baseline\"",
-            "\"no-complete-paragraph-layout-claim\"",
-            "\"no-skia-paragraph-parity-claim\"",
         )
+        val cases = dump.requiredObjectList("cases")
+        val styleRuns = cases.single().requiredObjectList("styleRuns")
+
+        assertEquals(1L, dump["schemaVersion"])
+        assertEquals("paragraph-input-goldens", dump.requiredString("dumpId"))
+        assertEquals(listOf("PKT-09C"), dump.requiredStringList("ownerTickets"))
+        assertEquals("multi-style-with-placeholder", cases.single().requiredString("caseId"))
+        assertEquals("hello [box] world", cases.single().requiredString("text"))
+        assertEquals(listOf(0L, 5L), styleRuns[0].requiredLongList("range"))
+        assertEquals("Liberation Sans", styleRuns[0].requiredString("family"))
+        assertEquals(listOf(12L, 17L), styleRuns[1].requiredLongList("range"))
+        assertEquals("Liberation Serif", styleRuns[1].requiredString("family"))
+        assertEquals(listOf(listOf(6L, 11L)), cases.single().requiredLongLists("placeholderRanges"))
+        assertEquals(
+            listOf("invalid-range", "non-finite-placeholder-metric", "unsupported-baseline"),
+            dump.requiredStringList("negativeCases"),
+        )
+        assertEquals(
+            listOf("no-complete-paragraph-layout-claim", "no-skia-paragraph-parity-claim"),
+            dump.requiredStringList("nonClaims"),
+        )
+        assertNoSupportPromotionClaims(dump)
     }
 
     @Test
@@ -1348,11 +1400,185 @@ class TextStackSurfaceTest {
     private fun readProjectFile(relativePath: String): String =
         Files.readString(projectRoot().resolve(relativePath))
 
-    private fun assertProjectFileContains(relativePath: String, vararg expectedTokens: String) {
-        val dump = readProjectFile(relativePath)
-        expectedTokens.forEach { expected ->
-            assertTrue(dump.contains(expected), "Expected $relativePath to contain $expected")
+    private fun readJsonProjectFile(relativePath: String): Map<String, Any?> =
+        jsonObject(JsonParser(readProjectFile(relativePath)).parse(), relativePath)
+
+    private fun Map<String, Any?>.requiredObject(key: String): Map<String, Any?> =
+        jsonObject(this[key], key)
+
+    private fun Map<String, Any?>.requiredString(key: String): String =
+        this[key] as? String ?: error("Expected $key to be a string")
+
+    private fun Map<String, Any?>.requiredObjectList(key: String): List<Map<String, Any?>> =
+        requiredList(key).mapIndexed { index, value -> jsonObject(value, "$key[$index]") }
+
+    private fun Map<String, Any?>.requiredStringList(key: String): List<String> =
+        requiredList(key).mapIndexed { index, value ->
+            value as? String ?: error("Expected $key[$index] to be a string")
         }
+
+    private fun Map<String, Any?>.requiredLongList(key: String): List<Long> =
+        requiredList(key).mapIndexed { index, value ->
+            value as? Long ?: error("Expected $key[$index] to be a number")
+        }
+
+    private fun Map<String, Any?>.requiredLongLists(key: String): List<List<Long>> =
+        requiredList(key).mapIndexed { index, value ->
+            jsonList(value, "$key[$index]").mapIndexed { nestedIndex, nestedValue ->
+                nestedValue as? Long ?: error("Expected $key[$index][$nestedIndex] to be a number")
+            }
+        }
+
+    private fun Map<String, Any?>.requiredList(key: String): List<Any?> =
+        jsonList(this[key], key)
+
+    @Suppress("UNCHECKED_CAST")
+    private fun jsonObject(value: Any?, path: String): Map<String, Any?> =
+        (value as? Map<String, Any?>) ?: error("Expected $path to be a JSON object")
+
+    @Suppress("UNCHECKED_CAST")
+    private fun jsonList(value: Any?, path: String): List<Any?> =
+        (value as? List<Any?>) ?: error("Expected $path to be a JSON array")
+
+    private fun assertNoSupportPromotionClaims(value: Any?, path: String = "$", insideNonClaims: Boolean = false) {
+        when (value) {
+            is Map<*, *> -> value.forEach { (key, child) ->
+                assertTrue(key is String, "Expected JSON object key at $path to be a string")
+                assertFalse(key == "supportClaim", "Unexpected supportClaim key at $path")
+                assertNoSupportPromotionClaims(child, "$path.$key", insideNonClaims = key == "nonClaims")
+            }
+            is List<*> -> value.forEachIndexed { index, child ->
+                assertNoSupportPromotionClaims(child, "$path[$index]", insideNonClaims)
+            }
+            is String -> if (!insideNonClaims) {
+                val normalized = value.lowercase()
+                assertFalse(normalized.contains("supportclaim"), "Unexpected support claim value at $path: $value")
+                assertFalse(
+                    normalized.contains("supported") && !normalized.contains("unsupported"),
+                    "Unexpected support promotion value at $path: $value",
+                )
+            }
+        }
+    }
+
+    private class JsonParser(private val source: String) {
+        private var index = 0
+
+        fun parse(): Any? {
+            val value = parseValue()
+            skipWhitespace()
+            require(index == source.length) { "Unexpected trailing JSON content at offset $index" }
+            return value
+        }
+
+        private fun parseValue(): Any? {
+            skipWhitespace()
+            return when (peek()) {
+                '{' -> parseObject()
+                '[' -> parseArray()
+                '"' -> parseString()
+                't' -> parseLiteral("true", true)
+                'f' -> parseLiteral("false", false)
+                'n' -> parseLiteral("null", null)
+                else -> parseNumber()
+            }
+        }
+
+        private fun parseObject(): Map<String, Any?> {
+            expect('{')
+            skipWhitespace()
+            val result = linkedMapOf<String, Any?>()
+            if (consumeIf('}')) return result
+            while (true) {
+                skipWhitespace()
+                val key = parseString()
+                skipWhitespace()
+                expect(':')
+                result[key] = parseValue()
+                skipWhitespace()
+                if (consumeIf('}')) return result
+                expect(',')
+            }
+        }
+
+        private fun parseArray(): List<Any?> {
+            expect('[')
+            skipWhitespace()
+            val result = mutableListOf<Any?>()
+            if (consumeIf(']')) return result
+            while (true) {
+                result += parseValue()
+                skipWhitespace()
+                if (consumeIf(']')) return result
+                expect(',')
+            }
+        }
+
+        private fun parseString(): String {
+            expect('"')
+            val result = StringBuilder()
+            while (index < source.length) {
+                val ch = source[index++]
+                when (ch) {
+                    '"' -> return result.toString()
+                    '\\' -> result.append(parseEscape())
+                    else -> result.append(ch)
+                }
+            }
+            error("Unterminated JSON string")
+        }
+
+        private fun parseEscape(): Char =
+            when (val escaped = source.getOrNull(index++) ?: error("Unterminated JSON escape")) {
+                '"', '\\', '/' -> escaped
+                'b' -> '\b'
+                'f' -> '\u000C'
+                'n' -> '\n'
+                'r' -> '\r'
+                't' -> '\t'
+                'u' -> {
+                    val hex = source.substring(index, index + 4)
+                    index += 4
+                    hex.toInt(16).toChar()
+                }
+                else -> error("Unsupported JSON escape \\$escaped at offset ${index - 1}")
+            }
+
+        private fun parseNumber(): Long {
+            val start = index
+            if (peek() == '-') index += 1
+            while (peekOrNull()?.isDigit() == true) index += 1
+            require(start < index) { "Expected JSON value at offset $index" }
+            return source.substring(start, index).toLong()
+        }
+
+        private fun parseLiteral(token: String, value: Any?): Any? {
+            require(source.startsWith(token, index)) { "Expected $token at offset $index" }
+            index += token.length
+            return value
+        }
+
+        private fun skipWhitespace() {
+            while (peekOrNull()?.isWhitespace() == true) index += 1
+        }
+
+        private fun expect(expected: Char) {
+            val actual = peek()
+            require(actual == expected) { "Expected $expected at offset $index but found $actual" }
+            index += 1
+        }
+
+        private fun consumeIf(expected: Char): Boolean {
+            if (peekOrNull() != expected) return false
+            index += 1
+            return true
+        }
+
+        private fun peek(): Char =
+            peekOrNull() ?: error("Unexpected end of JSON input")
+
+        private fun peekOrNull(): Char? =
+            source.getOrNull(index)
     }
 
     private fun projectRoot(): Path =

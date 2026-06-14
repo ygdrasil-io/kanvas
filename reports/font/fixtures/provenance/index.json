@@ -88,6 +88,8 @@
       ],
       "expectedDumps": [
         "reports/font/fixtures/expected/font-source/liberation-scan-root.json",
+        "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json",
+        "reports/font/fixtures/expected/shaping/latin-gsub-gpos-goldens.json",
         "reports/font/fixtures/expected/sfnt/sfnt-cmap-format14-readiness.json"
       ],
       "nonClaims": [

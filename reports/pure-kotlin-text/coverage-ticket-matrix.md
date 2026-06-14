@@ -696,7 +696,7 @@ rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk ./gradlew --no-daemon :font:text:test
-rtk git diff --cached --check
+rtk git diff --check
 ```
 
 Remaining gate: this is Latin fixture-golden readiness only. It does not claim
@@ -772,7 +772,7 @@ rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk ./gradlew --no-daemon :font:text:test
-rtk git diff --cached --check
+rtk git diff --check
 ```
 
 Remaining gate: this is Arabic fixture-row seed evidence only. It does not
@@ -885,7 +885,7 @@ rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk ./gradlew --no-daemon :font:text:test
-rtk git diff --cached --check
+rtk git diff --check
 ```
 
 Remaining gate: this is paragraph input golden-schema evidence only. It does
