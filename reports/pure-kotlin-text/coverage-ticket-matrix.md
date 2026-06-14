@@ -628,6 +628,76 @@ claim UAX #9 bidi conformance, claim UAX #14 line breaking, claim UAX #29
 segmentation, claim emoji property coverage, or claim full script matrix
 support.
 
+### PKT-07A: Latin GSUB/GPOS Fixture Contract
+
+Status: implemented with local diff review.
+
+Files:
+
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_pure_kotlin_text_fixture_manifest.py`
+- `scripts/test_validate_pure_kotlin_text_fixture_manifest.py`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `fixture-evidence-manifest.json` now records the required
+  `latin-gsub-gpos-fixtures` fixture family as `fixture-gated`, separate from
+  the broader `shaping-scripts` row.
+- The row requires Latin fixture provenance for `cmap`-backed glyph IDs, GSUB
+  feature lookup order, GPOS pair positioning data, requested/enabled/disabled
+  feature dump fields, expected glyph ID or fixture-local glyph-name dumps,
+  cluster ranges, and fallback diagnostics.
+- The row explicitly keeps Greek, Cyrillic, Hebrew, and complex-script
+  promotion out of this Latin slice.
+- The fixture manifest validator treats the Latin row as required, and tests
+  assert its non-promotion non-claim remains present.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+```
+
+Remaining gate: this is fixture-contract and dump-golden setup only. It does
+not claim complete GSUB/GPOS support, Greek/Cyrillic/Hebrew promotion, complex
+script shaping, native shaper parity, or complete shaping conformance.
+
+### PKT-08A: Complex-Script Readiness Matrix
+
+Status: implemented with local diff review.
+
+Files:
+
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_pure_kotlin_text_fixture_manifest.py`
+- `scripts/test_validate_pure_kotlin_text_fixture_manifest.py`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `fixture-evidence-manifest.json` now records the required
+  `complex-script-fixture-matrix` fixture family as `fixture-gated`.
+- The row splits complex-script readiness into Arabic, Devanagari, Thai, CJK,
+  and emoji rows with positive and refusal expectations instead of hiding them
+  behind a broad shaping claim.
+- The required gates name script-specific phase/feature evidence, fallback or
+  unsupported-boundary diagnostics, and paragraph-owned blockers where
+  applicable.
+- Tests assert the Arabic positive/refusal gate remains present.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+```
+
+Remaining gate: this is readiness-matrix evidence only. It does not claim
+Arabic, Indic, Thai, CJK, emoji, complete GSUB/GPOS, complex shaping, or native
+shaper parity support.
+
 ### PKT-09A: Paragraph Semantic Layout Dumps And Refusals
 
 Status: implemented and independently reviewed.
@@ -664,6 +734,41 @@ rtk ./gradlew --no-daemon :font:text:test
 Remaining gate: this is current-state semantic dump and refusal hardening only.
 It does not claim full rich text, full bidi visual ordering, complete
 selection/hit testing, complete ellipsis insertion, or Skia Paragraph parity.
+
+### PKT-09B: Paragraph Fixture And Golden Matrix
+
+Status: implemented with local diff review.
+
+Files:
+
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_pure_kotlin_text_fixture_manifest.py`
+- `scripts/test_validate_pure_kotlin_text_fixture_manifest.py`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `fixture-evidence-manifest.json` now records the required
+  `paragraph-fixture-goldens` fixture family as `fixture-gated`.
+- The row distinguishes paragraph-owned behavior from shaping-owned blockers:
+  bidi visual line ordering, rich style/feature/variation/decorations,
+  placeholders, ellipsis, hard/soft wrap, max-lines policy, hit testing,
+  selection boxes, word boundaries, and grapheme boundaries.
+- The row requires refusal diagnostics that name PKT-07/08 shaping blockers
+  separately from paragraph layout gates.
+- Tests assert the bidi visual-line blocker wording remains present.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+```
+
+Remaining gate: this is fixture/golden matrix evidence only. It does not claim
+complete paragraph layout, full bidi visual ordering, rich text parity,
+complete hit testing/selection, complete ellipsis insertion, or Skia Paragraph
+parity.
 
 ### PKT-10A: Glyph Strike-Key Preimage And Route Diagnostic Dumps
 

@@ -125,6 +125,40 @@
       ]
     },
     {
+      "familyId": "complex-script-fixture-matrix",
+      "familyName": "Complex script fixture matrix",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Kanvas required script matrix"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt"
+      ],
+      "requiredEvidenceGates": [
+        "Add Arabic positive and refusal rows for joining forms, lam-alef, marks, cursive attachment, and mixed bidi.",
+        "Add Devanagari positive and refusal rows for syllable formation, reph, pre-base matra, below-base forms, and mark placement.",
+        "Add Thai positive and refusal rows for base+mark clusters, tone marks, mixed Latin/Thai runs, and paragraph-owned dictionary diagnostics.",
+        "Add CJK positive and refusal rows for Han, kana, vertical alternates, variation selectors, and paragraph-owned ruby/line-break diagnostics.",
+        "Add emoji shaping positive and refusal rows for VS15/VS16, skin tone, ZWJ sequence, fallback emoji font, and unsupported-sequence refusals."
+      ],
+      "validationCommands": [
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk ./gradlew --no-daemon :font:text:test"
+      ],
+      "fixtureCommands": [
+        "Split complex-script fixtures by script family before any script promotion beyond Latin."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-arabic-shaping-support-claim",
+        "no-indic-shaping-support-claim",
+        "no-cjk-or-emoji-shaping-support-claim"
+      ]
+    },
+    {
       "familyId": "emoji",
       "familyName": "Emoji",
       "classification": "fixture-gated",
@@ -266,6 +300,42 @@
       ]
     },
     {
+      "familyId": "latin-gsub-gpos-fixtures",
+      "familyName": "Latin GSUB/GPOS fixture contract",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "GSUB Target"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt",
+        "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt"
+      ],
+      "requiredEvidenceGates": [
+        "Add Latin fixture provenance for cmap-backed glyph IDs, GSUB feature lookup order, and GPOS pair positioning data.",
+        "Add requested, enabled, disabled, and unsupported feature dump fields before enabling broader feature behavior.",
+        "Add expected glyph ID or fixture-local glyph-name dumps for liga, kern, requested-off, and unsupported-feature cases.",
+        "Add cluster range and fallback diagnostic expectations for every Latin fixture row.",
+        "Keep Greek, Cyrillic, Hebrew, and complex-script promotion out of this Latin contract slice."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test :font:sfnt:test",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "fixtureCommands": [
+        "Generate deterministic Latin GSUB/GPOS fixtures and reviewed dump goldens before implementing wider shaping support."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gsub-gpos-claim",
+        "no-greek-cyrillic-hebrew-promotion-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
       "familyId": "paragraph",
       "familyName": "Paragraph",
       "classification": "current-supported",
@@ -296,6 +366,40 @@
         "no-complete-rich-text-layout-claim",
         "no-complete-bidi-visual-ordering-claim",
         "no-paragraph-parity-claim"
+      ]
+    },
+    {
+      "familyId": "paragraph-fixture-goldens",
+      "familyName": "Paragraph fixture and golden matrix",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Output Contracts"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt"
+      ],
+      "requiredEvidenceGates": [
+        "Add bidi visual line ordering rows that name PKT-07 and PKT-08 shaping blockers separately.",
+        "Add rich style, feature, variation, decoration, and placeholder interaction rows.",
+        "Add ellipsis, hard-break, soft-wrap, and max-lines policy rows with refusal diagnostics.",
+        "Add hit-test, selection box, word boundary, and grapheme boundary golden rows.",
+        "Keep paragraph-owned layout diagnostics separate from shaping-owned fallback and script diagnostics."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "fixtureCommands": [
+        "Generate paragraph semantic layout goldens only after shaping-owned blockers are named per row."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-paragraph-layout-claim",
+        "no-full-bidi-visual-ordering-claim",
+        "no-rich-text-parity-claim"
       ]
     },
     {
