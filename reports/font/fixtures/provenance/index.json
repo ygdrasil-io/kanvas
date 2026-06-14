@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "indexId": "font-fixture-assets",
+  "fixtureRoot": "reports/font/fixtures",
+  "licensePolicy": [
+    "Apache-2.0",
+    "SIL-OFL-1.1"
+  ],
+  "sizeBudgetBytes": 20971520,
+  "offlinePolicy": "tests-must-not-download",
+  "fixtures": [
+    {
+      "fixtureId": "color-colrv1-test-glyphs",
+      "familyId": "color-glyphs",
+      "ownerTickets": [
+        "PKT-11D",
+        "KFONT-M10-010"
+      ],
+      "source": {
+        "kind": "in-repo-existing",
+        "project": "googlefonts/color-fonts test glyphs",
+        "url": "https://github.com/googlefonts/color-fonts",
+        "version": "0046ea4c3b69e9fbbe464c2594816894e3aa5e4b"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/test_glyphs_colrv1-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/color/test_glyphs-glyf_colr_1.ttf",
+          "sha256": "8aa611b1ca97044ac6f13dc982fde29256612f0a5acc6ef47ca541a7a5b99b28",
+          "sizeBytes": 21568,
+          "role": "colrv1-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/color/test_glyphs-glyf_colr_1_variable.ttf",
+          "sha256": "ad575a09d6748aebcb3b90ffd384c64d5c64b5fd9927967e7cd7cc0d70c98d34",
+          "sizeBytes": 53096,
+          "role": "colrv1-variable-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-colrv1-rendering-claim",
+        "no-gpu-color-glyph-support-claim"
+      ]
+    },
+    {
+      "fixtureId": "font-source-liberation-core",
+      "familyId": "font-source-sfnt",
+      "ownerTickets": [
+        "PKT-02D",
+        "PKT-03D",
+        "KFONT-M1-004",
+        "KFONT-M2-005"
+      ],
+      "source": {
+        "kind": "in-repo-existing",
+        "project": "Liberation Fonts",
+        "url": "kanvas-skia/src/main/resources/fonts/liberation",
+        "version": "repo-vendored-existing"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/liberation-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/liberation/LiberationMono-Regular.ttf",
+          "sha256": "f2b83c763e8afd21709333370bed4774337fae82267937e2b5aea7e2fbd922c1",
+          "sizeBytes": 319508,
+          "role": "monospace-ttf"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/liberation/LiberationSans-Regular.ttf",
+          "sha256": "76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+          "sizeBytes": 410712,
+          "role": "sans-ttf"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/liberation/LiberationSerif-Regular.ttf",
+          "sha256": "058ea80864aef09a23f45cbec2bb5400bc3dfbdea01c3f10538a21fcb497fb74",
+          "sizeBytes": 393576,
+          "role": "serif-ttf"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/font-source/liberation-scan-root.json",
+        "reports/font/fixtures/expected/glyph/a8-sdf-atlas-lifecycle.json",
+        "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json",
+        "reports/font/fixtures/expected/shaping/latin-gsub-gpos-goldens.json",
+        "reports/font/fixtures/expected/sfnt/sfnt-cmap-format14-readiness.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-system-font-discovery-claim",
+        "no-host-platform-fallback-claim"
+      ]
+    },
+    {
+      "fixtureId": "scaler-roboto-flex-variable",
+      "familyId": "truetype-scaler",
+      "ownerTickets": [
+        "PKT-04C",
+        "KFONT-M3-002",
+        "KFONT-M3-003",
+        "KFONT-M3-004"
+      ],
+      "source": {
+        "kind": "vendored-external",
+        "project": "Roboto Flex",
+        "url": "https://raw.githubusercontent.com/googlefonts/roboto-flex/main/fonts/RobotoFlex%5BGRAD%2CXOPQ%2CXTRA%2CYOPQ%2CYTAS%2CYTDE%2CYTFI%2CYTLC%2CYTUC%2Copsz%2Cslnt%2Cwdth%2Cwght%5D.ttf",
+        "version": "googlefonts/roboto-flex main blob 0abe2ee29292f1b39f59103d069feda87cde585e"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/roboto-flex-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/scaler/RobotoFlex-Variable.ttf",
+          "sha256": "94a7ea95ccee28c54885a507e3cc0a534ce41ec61d413935df0e07261a7ffe63",
+          "sizeBytes": 1775480,
+          "role": "truetype-variable-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/scaler/truetype-variation-readiness.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-full-variable-font-support-claim",
+        "no-native-scaler-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "scaler-source-serif-cff",
+      "familyId": "cff-cff2-scaler",
+      "ownerTickets": [
+        "PKT-05B",
+        "KFONT-M4-001",
+        "KFONT-M4-002",
+        "KFONT-M4-003",
+        "KFONT-M4-004",
+        "KFONT-M4-005"
+      ],
+      "source": {
+        "kind": "vendored-external",
+        "project": "Source Serif",
+        "url": "https://github.com/adobe-fonts/source-serif/releases/download/4.005R/source-serif-4.005_Desktop.zip",
+        "version": "4.005R"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/source-serif-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/scaler/SourceSerif4-Regular.otf",
+          "sha256": "edf160d0d584deee8a3bb2c3371b2a7624ca63580fbe02c57c1f4c91e84d8787",
+          "sizeBytes": 241392,
+          "role": "cff-otf-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/scaler/cff-cff2-readiness.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-cff-rendering-support-claim",
+        "no-cff2-variation-support-claim",
+        "no-native-scaler-oracle-claim"
+      ]
+    }
+  ]
+}

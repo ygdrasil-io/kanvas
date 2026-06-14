@@ -171,6 +171,42 @@ Remaining gate: this is source evidence and fallback-catalog hardening only. It
 does not claim complete SFNT parsing, TTC/OTC support, scaler coverage, or
 complete source-discovery behavior.
 
+### PKT-02C: System-Scan Refusal And Provenance Fixture Plan
+
+Status: implemented with local diff review.
+
+Files:
+
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_pure_kotlin_text_fixture_manifest.py`
+- `scripts/test_validate_pure_kotlin_text_fixture_manifest.py`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `fixture-evidence-manifest.json` now records the required
+  `font-source-system-scan` fixture family as `fixture-gated`.
+- The row requires deterministic scan-root fixtures from explicit in-repo
+  paths, skipped-file diagnostics for unreadable/malformed/unsupported and
+  duplicate source candidates, host-dependent markers, fallback order dump
+  fields, and no hidden platform font registry or native font API.
+- The fixture manifest validator now treats the system-scan row as required,
+  so the actionable plan cannot disappear without validation failure.
+- Tests assert the row remains present and preserves the
+  `no-platform-font-api-claim` non-claim.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+```
+
+Remaining gate: this is fixture/provenance planning only. It does not claim
+complete system font discovery, host fallback parity, implicit root scanning,
+SFNT parsing, scaler support, shaping fallback support, or platform/native
+font API behavior.
+
 ### PKT-03A: SFNT/OpenType Face Evidence Dumps
 
 Status: implemented and independently reviewed.
@@ -207,6 +243,126 @@ rtk ./gradlew --no-daemon :font:sfnt:test
 Remaining gate: this is parser evidence hardening only. It does not claim
 complete SFNT conformance, TrueType scaler support, CFF/CFF2 support, or
 complete font-source coverage.
+
+### PKT-03C: Malformed Table And Format-14 Fixture Plan
+
+Status: implemented with local diff review.
+
+Files:
+
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_pure_kotlin_text_fixture_manifest.py`
+- `scripts/test_validate_pure_kotlin_text_fixture_manifest.py`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `fixture-evidence-manifest.json` now records the required
+  `sfnt-malformed-tables` fixture family as `fixture-gated`.
+- The row makes missing required table diagnostics, malformed optional table
+  diagnostics, TTC face-index positive/refusal rows, and `cmap` format 14
+  positive/refusal expectations explicit before parser promotion.
+- The fixture manifest validator now treats the malformed SFNT row as
+  required, preserving the actionable fixture plan.
+- Tests assert the row remains present and keeps the format 14
+  variation-selector gate visible.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+```
+
+Remaining gate: this is fixture planning only. It does not claim complete SFNT
+conformance, complete required-table validation, `cmap` format 14 support,
+CFF/CFF2 support, scaler support, shaping support, or platform font behavior.
+
+### PKT-02D: Deterministic System Scan Fixture Goldens
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/expected/font-source/liberation-scan-root.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+
+Evidence:
+
+- `liberation-scan-root.json` materializes an explicit in-repo scan-root golden
+  for `reports/font/fixtures/fonts/liberation` with `hostDependent=false`.
+- The golden records deterministic accepted-family order for Liberation Mono,
+  Liberation Sans, and Liberation Serif with empty scan diagnostics.
+- Provenance and manifest rows attach the expected dump without adding implicit
+  filesystem scanning or host font registry behavior.
+- The dump index records `font-source-liberation-scan-root` as
+  `golden-gated`, and the validator now requires that row.
+- Focused `font/core` coverage loads only the three explicit Liberation fixture
+  paths and verifies deterministic fallback catalog ordering.
+
+Validation:
+
+```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:core:test :font:sfnt:test
+rtk git diff --check
+```
+
+Remaining gate: this is deterministic fixture and golden evidence only. It does
+not claim complete system font discovery, host fallback parity, implicit root
+scanning, SFNT parsing coverage, scaler support, shaping fallback support, or
+platform/native font API behavior.
+
+### PKT-03D: Malformed SFNT And CMap Format 14 Fixture Pack
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/expected/sfnt/sfnt-cmap-format14-readiness.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+
+Evidence:
+
+- `sfnt-cmap-format14-readiness.json` records the Liberation core SFNT
+  required-table set and keeps format 14 status `fixture-gated`.
+- The readiness golden records `font.cmap.format14-fixture-missing` as the
+  explicit diagnostic for the current non-claim.
+- Provenance and manifest rows attach the expected dump without promoting
+  complete SFNT or `cmap` format 14 support.
+- The dump index records `sfnt-cmap-format14-readiness` as `golden-gated`, and
+  the validator now requires that row.
+- Focused `font/sfnt` coverage opens `LiberationSans-Regular.ttf`, verifies the
+  required SFNT directory tags through Kanvas SFNT APIs, and asserts the
+  format 14 gate remains explicit.
+
+Validation:
+
+```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:core:test :font:sfnt:test
+rtk git diff --check
+```
+
+Remaining gate: this is required-table and format 14 readiness evidence only.
+It does not claim complete SFNT conformance, complete required-table
+validation, complete `cmap` format 14 support, CFF/CFF2, scaler support,
+shaping support, platform font behavior, native oracle behavior, or GPU route
+support.
 
 ### PKT-04A: TrueType Scaler Evidence Dumps
 
@@ -252,6 +408,110 @@ does not claim complete CFF/CFF2 support, full IUP interpolation, phantom-point
 metrics, `avar` application, HVAR/VVAR/MVAR support, complete variable-font
 support, native engine parity, or pixel-perfect hinting.
 
+
+### PKT-04C: TrueType Variation Fixture Goldens
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/fonts/scaler/RobotoFlex-Variable.ttf`
+- `reports/font/fixtures/licenses/roboto-flex-OFL-1.1.txt`
+- `reports/font/fixtures/expected/scaler/truetype-variation-readiness.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+
+Evidence:
+
+- Vendored official Roboto Flex variable TrueType bytes from
+  `googlefonts/roboto-flex` main with SIL-OFL-1.1 license evidence and recorded
+  GitHub blob provenance `0abe2ee29292f1b39f59103d069feda87cde585e`.
+- `truetype-variation-readiness.json` records PKT-04C readiness requirements for
+  IUP, phantom-point/advance delta, `avar`, HVAR/VVAR/MVAR metric-refusal,
+  normalized-coordinate, path-hash, bounds, and variation-diagnostic evidence.
+- The provenance index records fixture ID `scaler-roboto-flex-variable`,
+  SHA-256, size, license path, expected dump, and non-claims.
+- The fixture manifest and dump index attach the golden as coordination evidence
+  without promoting full variable-font support.
+- Focused scaler coverage opens the vendored font bytes, asserts the readiness
+  dump and non-claims, and existing variation diagnostics/refusals remain
+  explicit.
+- Local `Stroking.ttf`, `Stroking.otf`, and `Variable.ttf` stand-ins were
+  rejected because `skia-integration-tests/src/test/resources/fonts/Stroking_VARIABLE_PROVENANCE.md`
+  does not name an accepted license.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:scaler:test
+rtk git diff --check
+```
+
+Remaining gate: this is fixture readiness and refusal/golden evidence only. It
+claims no full variable-font support, no complete target support, no native
+scaler oracle, no hinting VM, no HVAR/VVAR/MVAR implementation support, and no
+GPU text route support.
+
+### PKT-05B: CFF INDEX/DICT Fixture Pack And Refusal Goldens
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/fonts/scaler/SourceSerif4-Regular.otf`
+- `reports/font/fixtures/licenses/source-serif-OFL-1.1.txt`
+- `reports/font/fixtures/expected/scaler/cff-cff2-readiness.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+
+Evidence:
+
+- Vendored official Source Serif 4.005R desktop CFF OTF bytes from the Adobe
+  release zip with SIL-OFL-1.1 license evidence, extracting only
+  `source-serif-4.005_Desktop/OTF/SourceSerif4-Regular.otf`.
+- `cff-cff2-readiness.json` records PKT-05B readiness requirements for CFF
+  INDEX/dict rows, Type 2 line/curve/flex/endchar/width expectations,
+  local/global subroutines, malformed INDEX/dict/bounds/stack/operator
+  refusals, and CFF2 blend/vsindex/variation-store rows.
+- The provenance index records fixture ID `scaler-source-serif-cff`, SHA-256,
+  size, license path, expected dump, and CFF/CFF2 non-claims.
+- The fixture manifest and dump index attach the golden as coordination evidence
+  without promoting CFF rendering or CFF2 variation support.
+- Focused scaler coverage opens the vendored OTF bytes, asserts the readiness
+  dump and non-claims, and existing CFF/CFF2 Type 2 charstring refusals remain
+  explicit.
+- Local `Stroking.ttf`, `Stroking.otf`, and `Variable.ttf` stand-ins were
+  rejected because `skia-integration-tests/src/test/resources/fonts/Stroking_VARIABLE_PROVENANCE.md`
+  does not name an accepted license.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:scaler:test
+rtk git diff --check
+```
+
+Remaining gate: this is fixture readiness and refusal/golden evidence only. It
+claims no CFF rendering support, no CFF2 variation support, no Type 2
+interpreter support, no complete target support, no native scaler oracle, and no
+GPU text route support.
+
 ### PKT-06A: Stable Shaping Diagnostic Families
 
 Status: implemented and independently reviewed.
@@ -284,6 +544,241 @@ rtk ./gradlew --no-daemon :font:text:test
 Remaining gate: this is diagnostic-family hardening only. It does not claim
 complete GSUB/GPOS coverage, full required script matrix support, or complete
 pure Kotlin shaping conformance.
+
+### PKT-06C: Pinned Unicode-Data Generation Contract
+
+Status: implemented with local diff review.
+
+Files:
+
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_pure_kotlin_text_fixture_manifest.py`
+- `scripts/test_validate_pure_kotlin_text_fixture_manifest.py`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `fixture-evidence-manifest.json` now records the required
+  `unicode-data-generation` fixture family as `fixture-gated`.
+- The row requires a pinned Unicode data version, source file names and
+  checksums for script/bidi/grapheme/default-ignorable inputs, generated dump
+  schema rows, and mismatch diagnostics for version, checksum, and schema
+  drift before replacing `BasicUnicodeData`.
+- The row keeps the JDK Unicode version policy explicit: product behavior must
+  not depend on it unless that dependency is diagnosed.
+- The fixture manifest validator now treats the Unicode-data generation row as
+  required, and tests assert the row keeps the `no-complete-ucd-claim`
+  non-claim.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+```
+
+Remaining gate: this is generation-contract planning only. It does not claim a
+complete Unicode Character Database, UAX #9 bidi conformance, UAX #14 line
+breaking, UAX #29 segmentation, emoji property coverage, or full script matrix
+support.
+
+### PKT-06D: Unicode 16.0 Metadata
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/expected/unicode/unicode-16-source-manifest.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `unicode-16-source-manifest.json` pins Unicode version `16.0.0`, the
+  official UCD source URL, the bounded source file list needed for future
+  generation, fixture-creation-only download policy, and offline ordinary
+  validation policy.
+- `fixture-evidence-manifest.json` attaches the expected manifest to the
+  `unicode-data-generation` family as current coordination evidence.
+- `dump-evidence-index.json` points the existing `unicode-data-seed` producer
+  row at the new expected manifest without adding a new required dump ID.
+- Focused `font/text` coverage loads the manifest from the project root and
+  asserts the pinned Unicode version, offline validation policy, and
+  `no-complete-ucd-claim` non-claim.
+- The font fixture provenance index was not changed because its current schema
+  requires font assets and an accepted font license; applying `SIL-OFL-1.1` or
+  inventing a font asset row for Unicode data would be unsafe provenance.
+
+Validation:
+
+```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:text:test --tests '*TextStackSurfaceTest*'
+rtk git diff --check
+```
+
+Remaining gate: this is Unicode metadata and coordination evidence only. It
+does not replace `BasicUnicodeData`, add generator checksum coverage, add
+runtime mismatch diagnostics, claim a complete Unicode Character Database,
+claim UAX #9 bidi conformance, claim UAX #14 line breaking, claim UAX #29
+segmentation, claim emoji property coverage, or claim full script matrix
+support.
+
+### PKT-07A: Latin GSUB/GPOS Fixture Contract
+
+Status: implemented with local diff review.
+
+Files:
+
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_pure_kotlin_text_fixture_manifest.py`
+- `scripts/test_validate_pure_kotlin_text_fixture_manifest.py`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `fixture-evidence-manifest.json` now records the required
+  `latin-gsub-gpos-fixtures` fixture family as `fixture-gated`, separate from
+  the broader `shaping-scripts` row.
+- The row requires Latin fixture provenance for `cmap`-backed glyph IDs, GSUB
+  feature lookup order, GPOS pair positioning data, requested/enabled/disabled
+  feature dump fields, expected glyph ID or fixture-local glyph-name dumps,
+  cluster ranges, and fallback diagnostics.
+- The row explicitly keeps Greek, Cyrillic, Hebrew, and complex-script
+  promotion out of this Latin slice.
+- The fixture manifest validator treats the Latin row as required, and tests
+  assert its non-promotion non-claim remains present.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+```
+
+Remaining gate: this is fixture-contract and dump-golden setup only. It does
+not claim complete GSUB/GPOS support, Greek/Cyrillic/Hebrew promotion, complex
+script shaping, native shaper parity, or complete shaping conformance.
+
+### PKT-07B: Latin GSUB/GPOS Fixture Goldens
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/expected/shaping/latin-gsub-gpos-goldens.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `latin-gsub-gpos-goldens.json` records Latin-only `liga`/`kern`
+  requested-on/off golden readiness cases for `font-source-liberation-core`.
+- The fixture manifest points `latin-gsub-gpos-fixtures` at the checked-in
+  Latin expected dump.
+- The dump evidence index records `latin-gsub-gpos-goldens` as
+  `golden-gated` producer evidence with non-claiming policy.
+- `TextStackSurfaceTest` loads the expected dump and asserts the fixture ID,
+  cases, and non-claims remain present.
+
+Validation:
+
+```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:text:test
+rtk git diff --check
+```
+
+Remaining gate: this is Latin fixture-golden readiness only. It does not claim
+complete GSUB/GPOS support, Greek/Cyrillic/Hebrew promotion, complex script
+shaping, native shaper oracle status, CPU oracle evidence, or GPU text
+evidence.
+
+### PKT-08A: Complex-Script Readiness Matrix
+
+Status: implemented with local diff review.
+
+Files:
+
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_pure_kotlin_text_fixture_manifest.py`
+- `scripts/test_validate_pure_kotlin_text_fixture_manifest.py`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `fixture-evidence-manifest.json` now records the required
+  `complex-script-fixture-matrix` fixture family as `fixture-gated`.
+- The row splits complex-script readiness into Arabic, Devanagari, Thai, CJK,
+  and emoji rows with positive and refusal expectations instead of hiding them
+  behind a broad shaping claim.
+- The required gates name script-specific phase/feature evidence, fallback or
+  unsupported-boundary diagnostics, and paragraph-owned blockers where
+  applicable.
+- Tests assert the Arabic positive/refusal gate remains present.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+```
+
+Remaining gate: this is readiness-matrix evidence only. It does not claim
+Arabic, Indic, Thai, CJK, emoji, complete GSUB/GPOS, complex shaping, or native
+shaper parity support.
+
+### PKT-08B: Arabic Fixture Row Seed
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/expected/shaping/arabic-seed-readiness.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `arabic-seed-readiness.json` records the Arabic seed rows for joining forms,
+  lam-alef, marks, cursive attachment, and mixed bidi.
+- The expected dump records required diagnostics for unavailable cursive
+  attachment, mark positioning, GDEF, and paragraph bidi requirements.
+- The fixture manifest points `complex-script-fixture-matrix` at the checked-in
+  Arabic seed dump.
+- The dump evidence index records `arabic-seed-readiness` as `golden-gated`
+  producer evidence with non-claiming policy.
+- `TextStackSurfaceTest` loads the expected dump and asserts diagnostics and
+  non-claims remain present without asserting Arabic shaping support.
+
+Validation:
+
+```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:text:test
+rtk git diff --check
+```
+
+Remaining gate: this is Arabic fixture-row seed evidence only. It does not
+claim Arabic shaping support, Indic/Thai/CJK/emoji shaping support, complete
+complex shaping, native shaper oracle status, CPU oracle evidence, or GPU text
+evidence.
 
 ### PKT-09A: Paragraph Semantic Layout Dumps And Refusals
 
@@ -322,6 +817,82 @@ Remaining gate: this is current-state semantic dump and refusal hardening only.
 It does not claim full rich text, full bidi visual ordering, complete
 selection/hit testing, complete ellipsis insertion, or Skia Paragraph parity.
 
+### PKT-09B: Paragraph Fixture And Golden Matrix
+
+Status: implemented with local diff review.
+
+Files:
+
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_pure_kotlin_text_fixture_manifest.py`
+- `scripts/test_validate_pure_kotlin_text_fixture_manifest.py`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `fixture-evidence-manifest.json` now records the required
+  `paragraph-fixture-goldens` fixture family as `fixture-gated`.
+- The row distinguishes paragraph-owned behavior from shaping-owned blockers:
+  bidi visual line ordering, rich style/feature/variation/decorations,
+  placeholders, ellipsis, hard/soft wrap, max-lines policy, hit testing,
+  selection boxes, word boundaries, and grapheme boundaries.
+- The row requires refusal diagnostics that name PKT-07/08 shaping blockers
+  separately from paragraph layout gates.
+- Tests assert the bidi visual-line blocker wording remains present.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+```
+
+Remaining gate: this is fixture/golden matrix evidence only. It does not claim
+complete paragraph layout, full bidi visual ordering, rich text parity,
+complete hit testing/selection, complete ellipsis insertion, or Skia Paragraph
+parity.
+
+### PKT-09C: ParagraphInput Contract And Golden Schema
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `paragraph-input-goldens.json` records the paragraph input golden schema for
+  a multi-style placeholder case plus invalid-range, non-finite metric, and
+  unsupported-baseline negative cases.
+- The fixture manifest points both `paragraph` and
+  `paragraph-fixture-goldens` at the checked-in paragraph expected dump.
+- The dump evidence index records `paragraph-input-goldens` as `golden-gated`
+  producer evidence with non-claiming policy.
+- `TextStackSurfaceTest` loads the expected dump and asserts the schema cases
+  and paragraph non-claims remain present.
+
+Validation:
+
+```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:text:test
+rtk git diff --check
+```
+
+Remaining gate: this is paragraph input golden-schema evidence only. It does
+not claim complete paragraph layout, full bidi visual ordering, rich text
+parity, complete selection/hit testing, ellipsis insertion, Skia Paragraph
+parity, CPU oracle evidence, or GPU text evidence.
+
 ### PKT-10A: Glyph Strike-Key Preimage And Route Diagnostic Dumps
 
 Status: implemented and independently reviewed.
@@ -358,6 +929,55 @@ rtk ./gradlew --no-daemon :font:glyph:test
 Remaining gate: this is key/dump hardening only. It does not claim complete
 A8/SDF artifact generation, atlas lifecycle support, color glyph support, or
 GPU text-route promotion.
+
+### PKT-10D: A8/SDF Atlas Lifecycle Fixture Contract
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/expected/glyph/a8-sdf-atlas-lifecycle.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `a8-sdf-atlas-lifecycle.json` records the PKT-10D dump contract for the
+  `font-source-liberation-core` fixture, including A8 atlas pack, SDF
+  normalization, SDF transform refusal, capacity, stale generation, key
+  preimage, mask/SDF hash, generation token, invalidation token, and budget
+  evidence requirements.
+- The expected dump names stable glyph diagnostics for SDF transform/generation
+  refusal, atlas capacity, stale generation, nondeterministic key, and artifact
+  budget gates without adding GPU upload evidence.
+- The provenance index attaches the expected dump to
+  `font-source-liberation-core`, and the fixture manifest attaches it to the
+  `a8-sdf-artifacts` current evidence paths.
+- The dump evidence index records `a8-sdf-atlas-lifecycle` as `golden-gated`
+  producer evidence with explicit non-claims.
+- `GlyphSurfaceTest` loads the expected dump and asserts exact structured
+  values for dump ID, owner ticket, fixture ID, required diagnostics, and
+  non-claims.
+
+Validation:
+
+```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk git diff --check
+```
+
+Remaining gate: this is fixture-contract evidence only. It does not claim
+complete A8 atlas support, complete SDF production, complete atlas lifecycle
+support, GPU upload execution, renderer resource ownership, or GPU text-route
+promotion.
 
 ### PKT-11A: Color Glyph Planning Evidence Dumps
 
@@ -404,6 +1024,53 @@ Remaining gate: this is planning and diagnostic evidence only. It does not
 claim complete COLRv1 rendering, complete PNG bitmap glyph routing, complete
 SVG-in-OpenType rendering, complete emoji sequence shaping, GPU color glyph
 support, or native/platform fallback behavior.
+
+### PKT-11D: Color Glyph Fixture Family Split
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `reports/font/fixtures/expected/color/color-svg-emoji-goldens.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `color-svg-emoji-goldens.json` records the PKT-11D dump contract for the
+  `color-colrv1-test-glyphs` fixture across the `color-glyphs`,
+  `png-bitmap-glyphs`, `svg-glyphs`, and `emoji` fixture families.
+- The expected dump names required refusal diagnostics for COLRv1 cycle/budget,
+  PNG decode/strike/payload, SVG external-resource/feature/budget, and emoji
+  sequence/fallback/color-glyph unavailable gates.
+- The provenance index attaches the expected dump to
+  `color-colrv1-test-glyphs`, and the fixture manifest attaches it to the
+  color, PNG, SVG, and emoji current evidence paths.
+- The dump evidence index records `color-svg-emoji-goldens` as `golden-gated`
+  producer evidence with explicit non-claims.
+- `ColorGlyphSurfaceTest` loads the expected dump and asserts exact structured
+  values for dump ID, fixture ID, color families, required refusals, and
+  non-claims.
+
+Validation:
+
+```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk git diff --check
+```
+
+Remaining gate: this is fixture-family split and refusal-contract evidence
+only. It does not claim complete COLRv1 rendering, PNG bitmap glyph routing,
+SVG-in-OpenType rendering, emoji sequence shaping, GPU color glyph support,
+platform fallback behavior, or CPU oracle hash coverage.
 
 ### PKT-12A: GPU Renderer `DrawTextRun` Handoff Surface
 

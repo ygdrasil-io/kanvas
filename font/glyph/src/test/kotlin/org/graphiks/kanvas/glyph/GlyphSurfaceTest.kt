@@ -3,6 +3,8 @@ package org.graphiks.kanvas.glyph
 import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.kanvas.glyph.gpu.GPUGlyphRunID
 import org.graphiks.kanvas.glyph.gpu.GPUGlyphRunDescriptor
+import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -873,6 +875,38 @@ class GlyphSurfaceTest {
         )
     }
 
+    @Test
+    fun a8SdfAtlasLifecycleGoldenRecordsFixtureDiagnosticsAndNonClaims() {
+        val dump = readProjectFile("reports/font/fixtures/expected/glyph/a8-sdf-atlas-lifecycle.json")
+
+        assertEquals("a8-sdf-atlas-lifecycle", jsonStringField(dump, "dumpId"))
+        assertEquals(listOf("PKT-10D"), jsonStringArrayField(dump, "ownerTickets"))
+        assertEquals(listOf("font-source-liberation-core"), jsonStringArrayField(dump, "fixtureIds"))
+        assertEquals(
+            listOf(
+                "text.glyph.SDF-transform-unsupported",
+                "text.glyph.SDF-generation-failed",
+                "text.glyph.atlas-capacity-exceeded",
+                "text.glyph.atlas-generation-stale",
+                "text.glyph.cache-key-nondeterministic",
+                "text.glyph.artifact-budget-exceeded",
+            ),
+            jsonStringArrayField(dump, "requiredDiagnostics"),
+        )
+        assertEquals(
+            listOf(
+                "no-complete-target-support-claim",
+                "no-complete-a8-atlas-claim",
+                "no-complete-sdf-production-claim",
+                "no-complete-atlas-lifecycle-claim",
+                "no-gpu-text-route-claim",
+                "no-gpu-upload-execution-claim",
+                "no-renderer-resource-ownership-claim",
+            ),
+            jsonStringArrayField(dump, "nonClaims"),
+        )
+    }
+
     private fun a8Mask(glyphId: Int, width: Int, height: Int): A8GlyphMask =
         A8GlyphMask(
             glyphId = glyphId,
@@ -895,4 +929,34 @@ class GlyphSurfaceTest {
 
     private fun typefaceId(uuid: String): TypefaceID =
         TypefaceID(Uuid.parse(uuid))
+
+    private fun readProjectFile(relativePath: String): String =
+        Files.readString(kanvasProjectRoot().resolve(relativePath))
+
+    private fun kanvasProjectRoot(): Path {
+        var current = Path.of("").toAbsolutePath().normalize()
+        while (current.parent != null) {
+            if (Files.isDirectory(current.resolve("reports/font/fixtures"))) {
+                return current
+            }
+            current = current.parent
+        }
+        error("Unable to locate Kanvas project root from ${Path.of("").toAbsolutePath()}")
+    }
+
+    private fun jsonStringField(json: String, field: String): String {
+        val pattern = Regex("\"" + Regex.escape(field) + "\"\\s*:\\s*\"([^\"]+)\"")
+        return pattern.find(json)?.groupValues?.get(1)
+            ?: error("Missing JSON string field $field")
+    }
+
+    private fun jsonStringArrayField(json: String, field: String): List<String> {
+        val pattern = Regex(
+            "\"" + Regex.escape(field) + "\"\\s*:\\s*\\[(.*?)\\]",
+            RegexOption.DOT_MATCHES_ALL,
+        )
+        val body = pattern.find(json)?.groupValues?.get(1)
+            ?: error("Missing JSON array field $field")
+        return Regex("\"([^\"]+)\"").findAll(body).map { match -> match.groupValues[1] }.toList()
+    }
 }

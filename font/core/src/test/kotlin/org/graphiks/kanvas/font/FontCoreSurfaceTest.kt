@@ -7,6 +7,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 import java.nio.file.Files
+import java.nio.file.Path
 
 class FontCoreSurfaceTest {
     @Test
@@ -95,6 +96,37 @@ class FontCoreSurfaceTest {
         } finally {
             root.toFile().deleteRecursively()
         }
+    }
+
+    @Test
+    fun catalogsExplicitLiberationFixturePathsInDeterministicFamilyOrder() {
+        val fixturePaths = listOf(
+            fixturePath("reports/font/fixtures/fonts/liberation/LiberationSans-Regular.ttf"),
+            fixturePath("reports/font/fixtures/fonts/liberation/LiberationSerif-Regular.ttf"),
+            fixturePath("reports/font/fixtures/fonts/liberation/LiberationMono-Regular.ttf"),
+        )
+        val expectedDump = fixturePath("reports/font/fixtures/expected/font-source/liberation-scan-root.json")
+        val faces = fixturePaths.mapIndexed { index, path ->
+            fixtureFace(
+                uuid = "550e8400-e29b-41d4-a716-44665544100$index",
+                path = path,
+                familyName = when (path.fileName.toString()) {
+                    "LiberationMono-Regular.ttf" -> "Liberation Mono"
+                    "LiberationSans-Regular.ttf" -> "Liberation Sans"
+                    "LiberationSerif-Regular.ttf" -> "Liberation Serif"
+                    else -> error("Unexpected fixture path: $path")
+                },
+            )
+        }
+
+        val catalog = FallbackCatalog.fromFaces(faces)
+
+        assertEquals(
+            listOf("Liberation Mono", "Liberation Sans", "Liberation Serif"),
+            catalog.availableFamilyNames(),
+        )
+        assertEquals(3, fixturePaths.count { Files.isRegularFile(it) })
+        assertTrue(Files.readString(expectedDump).contains("\"hostDependent\": false"))
     }
 
     @Test
@@ -464,5 +496,34 @@ class FontCoreSurfaceTest {
                 styleName = styleName,
             ),
         )
+    }
+
+    private fun fixtureFace(uuid: String, path: Path, familyName: String): FontFace {
+        val sourceId = FontSourceID(Uuid.parse(uuid.replaceRange(uuid.length - 1, uuid.length, "0")))
+        val typefaceId = TypefaceID(Uuid.parse(uuid))
+        return FontFace(
+            typeface = TypefaceData(
+                id = typefaceId,
+                source = FontSource(
+                    id = sourceId,
+                    kind = FontSourceKind.FILE,
+                    displayName = path.fileName.toString(),
+                    bytes = Files.readAllBytes(path),
+                ),
+                familyName = familyName,
+                styleName = "Regular",
+            ),
+        )
+    }
+
+    private fun fixturePath(relativePath: String): Path =
+        projectRoot().resolve(relativePath).normalize()
+
+    private fun projectRoot(): Path {
+        var current = Path.of("").toAbsolutePath().normalize()
+        while (current.parent != null && !Files.isDirectory(current.resolve("reports/font/fixtures"))) {
+            current = current.parent
+        }
+        return current
     }
 }

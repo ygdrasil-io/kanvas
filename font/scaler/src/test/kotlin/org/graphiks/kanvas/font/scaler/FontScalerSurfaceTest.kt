@@ -16,6 +16,8 @@ import org.graphiks.kanvas.font.sfnt.SFNTTableDirectory
 import org.graphiks.kanvas.font.sfnt.SFNTTableTag
 import org.graphiks.kanvas.font.sfnt.VariationTables
 import java.security.MessageDigest
+import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.uuid.Uuid
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -1380,6 +1382,42 @@ class FontScalerSurfaceTest {
             assertTrue(failure.message.orEmpty().contains("Type 2 charstring"))
             assertTrue(failure.message.orEmpty().contains("glyphId 1"))
         }
+    }
+
+    @Test
+    fun scalerReadinessFixturesAreVendoredReadableAndNonClaiming() {
+        val fixtureRoot = kanvasProjectRoot().resolve("reports/font/fixtures")
+        val robotoFlexBytes = Files.readAllBytes(fixtureRoot.resolve("fonts/scaler/RobotoFlex-Variable.ttf"))
+        val sourceSerifBytes = Files.readAllBytes(fixtureRoot.resolve("fonts/scaler/SourceSerif4-Regular.otf"))
+        val trueTypeReadiness = Files.readString(
+            fixtureRoot.resolve("expected/scaler/truetype-variation-readiness.json"),
+        )
+        val cffReadiness = Files.readString(
+            fixtureRoot.resolve("expected/scaler/cff-cff2-readiness.json"),
+        )
+
+        assertTrue(robotoFlexBytes.isNotEmpty())
+        assertTrue(sourceSerifBytes.isNotEmpty())
+        assertTrue(trueTypeReadiness.contains("\"dumpId\": \"truetype-variation-readiness\""))
+        assertTrue(trueTypeReadiness.contains("\"scaler-roboto-flex-variable\""))
+        assertTrue(trueTypeReadiness.contains("\"no-full-variable-font-support-claim\""))
+        assertTrue(trueTypeReadiness.contains("\"no-native-scaler-oracle-claim\""))
+        assertTrue(cffReadiness.contains("\"dumpId\": \"cff-cff2-readiness\""))
+        assertTrue(cffReadiness.contains("\"scaler-source-serif-cff\""))
+        assertTrue(cffReadiness.contains("\"no-cff-rendering-support-claim\""))
+        assertTrue(cffReadiness.contains("\"no-cff2-variation-support-claim\""))
+        assertTrue(cffReadiness.contains("\"no-native-scaler-oracle-claim\""))
+    }
+
+    private fun kanvasProjectRoot(): Path {
+        var current = Path.of("").toAbsolutePath()
+        while (current.parent != null) {
+            if (Files.isDirectory(current.resolve("reports/font/fixtures"))) {
+                return current
+            }
+            current = current.parent
+        }
+        error("Unable to locate Kanvas project root from ${Path.of("").toAbsolutePath()}")
     }
 
     private fun simpleSquareGlyphData(): ByteArray = bytes(
