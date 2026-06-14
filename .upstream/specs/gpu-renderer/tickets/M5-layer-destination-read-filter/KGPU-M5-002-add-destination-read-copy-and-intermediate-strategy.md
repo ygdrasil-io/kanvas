@@ -1,7 +1,7 @@
 ---
 id: KGPU-M5-002
 title: "Add destination-read copy and intermediate strategy"
-status: proposed
+status: blocked
 milestone: M5
 priority: P0
 owner_area: destination-read
@@ -84,7 +84,12 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Required before dst-dependent filters/blends.
+- `blocked`: Depends on KGPU-M5-001 and requires accepted saveLayer/offscreen
+  target ownership plus native WebGPU/adapter evidence for bounded
+  destination-copy or validated intermediate strategy,
+  pass split/copy-before-sample ordering, active-attachment sampling refusal,
+  texture-binding/copy-usage validation, and CPU/GPU/reference evidence before
+  any `GPUNative` destination-read route claim.
 
 ## Linear Labels
 
