@@ -88,9 +88,9 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: Product flag must wait on KGPU-M1-001 and KGPU-M1-002. Remaining
-  gate: accepted activation policy and activation-candidate PM packaging;
-  no default or opt-in product flag should be added before those decisions.
+- `blocked`: KGPU-M1-001 is accepted, but the product flag must still wait on
+  KGPU-M1-002 activation-candidate PM packaging. No default or opt-in product
+  flag should be added before that evidence lands.
 
 ## Linear Labels
 

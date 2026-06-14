@@ -9,9 +9,9 @@ evidence.
 
 | Ticket | Status | Evidence | Remaining gate |
 |---|---|---|---|
-| KGPU-M1-001 | `blocked` | `reports/gpu-renderer/2026-06-14-r6-promotion-readiness-boundary.md` still records `Product route activated: false`, `Readiness delta: 0.0`, and `Promotion decision required: true`. | Explicit release/product activation decision plus reviewed non-skipped adapter-backed R6 evidence. |
-| KGPU-M1-002 | `blocked` | Root PM bundle remains refusal-first and non-promotional. | Accepted KGPU-M1-001 policy before activation-candidate PM packaging. |
-| KGPU-M1-003 | `blocked` | No product flag added. | Accepted policy and activation-candidate PM packaging. |
+| KGPU-M1-001 | `done` | `reports/gpu-renderer/2026-06-14-m1-promotion-policy-decision.md` accepts launching the controlled M1 promotion path in the current state. | None for policy; no product route activation is implied. |
+| KGPU-M1-002 | `ready` | Root PM bundle remains refusal-first and non-promotional. KGPU-M1-001 is accepted. | Implement activation-candidate PM packaging without product activation or release blocking. |
+| KGPU-M1-003 | `blocked` | No product flag added. | Activation-candidate PM packaging from KGPU-M1-002. |
 | KGPU-M1-004 | `blocked` | No rollback/parity route added. | Controlled product flag from KGPU-M1-003. |
 | KGPU-M2-001 | `review` | Added isolated `:gpu-renderer` `FillRRect` command, planner, native/refused route decisions, pass/task evidence, command-shape version bump, and validation fixture ownership line. Independent review found no blocking claim/status issue. | Adapter-backed or explicitly skipped GPU evidence before `done`; no `gpu-raster` product activation. |
 
@@ -25,8 +25,8 @@ evidence.
 - M6 remains dependency-gated on pure Kotlin text/font deliverables such as
   KFONT-M11-003, KFONT-M11-004, KFONT-M11-007, KFONT-M11-008, and
   KFONT-M11-009.
-- M9 and M10 remain policy-gated through KGPU-M1-001 and downstream M1
-  activation/rollback tickets.
+- M9 and M10 remain later-order and dependency-gated through downstream M1
+  activation/rollback tickets and feature-specific promotion evidence.
 
 ## Evidence
 
@@ -62,7 +62,9 @@ All commands above passed after RED/GREEN implementation and final validation.
 
 ## Non-Claims
 
-- No M1 product activation decision was made.
+- M1 product activation policy was accepted as a controlled promotion path in
+  `reports/gpu-renderer/2026-06-14-m1-promotion-policy-decision.md`; this is
+  not product route activation.
 - No product flag, default route, or rollback path was added.
 - No `gpu-raster` route was enabled or modified for `FillRRect`.
 - M2-001 is not `done`; adapter-backed or explicitly skipped GPU evidence and

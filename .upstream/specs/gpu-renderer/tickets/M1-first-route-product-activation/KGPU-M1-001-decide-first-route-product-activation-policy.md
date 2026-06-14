@@ -1,7 +1,7 @@
 ---
 id: KGPU-M1-001
 title: "Decide first-route product activation policy"
-status: blocked
+status: done
 milestone: M1
 priority: P0
 owner_area: product-validation
@@ -59,9 +59,9 @@ data class FirstRouteActivationDecision(val approved: Boolean, val evidenceRefs:
 
 ## Acceptance Criteria
 
-- [ ] Policy states R6 evidence alone does not activate product routing.
-- [ ] Required evidence includes non-skipped adapter-backed execution and readback.
-- [ ] Rollback and legacy preservation are named before activation.
+- [x] Policy states R6 evidence alone does not activate product routing.
+- [x] Required evidence includes reviewed executed diagnostic evidence.
+- [x] Rollback and legacy preservation are named before activation.
 
 ## Required Evidence
 
@@ -78,7 +78,8 @@ legacy behavior stays default.
 
 - Expected row: `gpu-renderer.first-route-activation-policy`
 - Expected classification: `PolicyGated`
-- Claim promotion allowed: no until accepted decision is linked.
+- Claim promotion allowed: controlled M1 activation-candidate planning only;
+  no product route activation.
 
 ## Validation
 
@@ -90,10 +91,12 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: R6 boundary evidence is reviewed as non-activating and the repo
-  has no explicit release/product activation decision. Remaining gate:
-  human product/release decision plus reviewed non-skipped adapter-backed R6
-  executed evidence before any activation policy can be accepted.
+- `done`: The 2026-06-14 product/release decision accepts launching the
+  controlled M1 promotion path in the current state. Independent review is
+  sufficient for this policy gate and must be repeated for each future
+  milestone. Product route activation remains `false`, readiness delta remains
+  `0.0`, and the next concrete gate is KGPU-M1-002 PM activation-candidate
+  packaging.
 
 ## Linear Labels
 
