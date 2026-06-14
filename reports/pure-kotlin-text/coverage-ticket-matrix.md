@@ -618,7 +618,7 @@ rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk ./gradlew --no-daemon :font:text:test --tests '*TextStackSurfaceTest*'
-rtk git diff --cached --check
+rtk git diff --check
 ```
 
 Remaining gate: this is Unicode metadata and coordination evidence only. It
