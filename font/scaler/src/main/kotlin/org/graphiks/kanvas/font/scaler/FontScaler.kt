@@ -4,6 +4,7 @@ import org.graphiks.kanvas.font.sfnt.OpenTypeFaceData
 import org.graphiks.kanvas.font.sfnt.HorizontalGlyphMetric
 import org.graphiks.kanvas.font.sfnt.MetricsTables
 import org.graphiks.kanvas.font.sfnt.SFNTTableTag
+import java.security.MessageDigest
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -183,6 +184,187 @@ data class GlyphMetrics(
     val advanceY: Double,
     val bounds: GlyphBounds,
 )
+
+/**
+ * Stable scaler diagnostic code families used by evidence dumps.
+ */
+object FontScalerDiagnosticCodes {
+    const val OUTLINE_FORMAT_UNSUPPORTED: String = "font.outline-format-unsupported"
+    const val CFF_OPERATOR_UNSUPPORTED: String = "font.cff-operator-unsupported"
+    const val VARIATION_DATA_MALFORMED: String = "font.variation-data-malformed"
+    const val VARIATION_AXIS_UNSUPPORTED: String = "font.variation-axis-unsupported"
+    const val METRICS_VARIATION_UNAVAILABLE: String = "font.metrics-variation-unavailable"
+    const val REQUIRED_TABLE_MISSING: String = "font.required-table-missing"
+}
+
+/**
+ * One stable scaler diagnostic attached to a glyph evidence dump.
+ *
+ * @property code Stable reason-code family.
+ * @property detail Deterministic leaf detail inside the reason-code family.
+ * @property operation Operation that produced the diagnostic, such as `outline` or `metrics`.
+ * @property glyphId Glyph affected by the diagnostic.
+ * @property severity Stable severity label such as `refusal` or `warning`.
+ */
+data class FontScalerDiagnostic(
+    val code: String,
+    val detail: String,
+    val operation: String,
+    val glyphId: UInt,
+    val severity: String = "refusal",
+) {
+    init {
+        require(code.isStableToken()) { "font scaler diagnostic code must be a stable token." }
+        require(detail.isStableToken()) { "font scaler diagnostic detail must be a stable token." }
+        require(operation.isStableToken()) { "font scaler diagnostic operation must be a stable token." }
+        require(severity.isStableToken()) { "font scaler diagnostic severity must be a stable token." }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(scalerJsonString("code")).append(": ").append(scalerJsonString(code)).append(", ")
+        append(scalerJsonString("detail")).append(": ").append(scalerJsonString(detail)).append(", ")
+        append(scalerJsonString("operation")).append(": ").append(scalerJsonString(operation)).append(", ")
+        append(scalerJsonString("glyphId")).append(": ").append(glyphId.toString()).append(", ")
+        append(scalerJsonString("severity")).append(": ").append(scalerJsonString(severity))
+        append("}")
+    }
+}
+
+/**
+ * Unsupported scaler operation carrying stable evidence diagnostics.
+ */
+class FontScalerRefusalException(
+    val diagnostic: FontScalerDiagnostic,
+    message: String,
+) : UnsupportedOperationException(message)
+
+/**
+ * One variation coordinate in deterministic evidence order.
+ *
+ * @property tag Four-character OpenType axis tag.
+ * @property value User-space or normalized coordinate value.
+ */
+data class VariationCoordinateEvidence(
+    val tag: String,
+    val value: Double,
+) {
+    init {
+        require(tag.length == 4) { "variation evidence axis tag must contain exactly four characters." }
+        require(tag.all { character -> character.code in 0x20..0x7e }) {
+            "variation evidence axis tag $tag must contain printable ASCII characters."
+        }
+        require(value.isFinite()) { "variation evidence axis $tag value must be finite." }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(scalerJsonString("tag")).append(": ").append(scalerJsonString(tag)).append(", ")
+        append(scalerJsonString("value")).append(": ").append(value.toCanonicalScalerNumber())
+        append("}")
+    }
+}
+
+/**
+ * Bounded `loca` range facts for one TrueType glyph.
+ *
+ * @property start Inclusive byte offset in the `glyf` table.
+ * @property endExclusive Exclusive byte offset in the `glyf` table.
+ * @property byteLength Number of bytes in the glyph range.
+ * @property isEmpty Whether the `loca` entry points to an empty glyph.
+ */
+data class TrueTypeLocaRangeEvidence(
+    val start: Int,
+    val endExclusive: Int,
+    val byteLength: Int,
+    val isEmpty: Boolean,
+) {
+    init {
+        require(start >= 0) { "loca evidence start must be non-negative." }
+        require(endExclusive >= start) { "loca evidence endExclusive must be at least start." }
+        require(byteLength == endExclusive - start) { "loca evidence byteLength must match the range." }
+        require(isEmpty == (byteLength == 0)) { "loca evidence isEmpty must match byteLength." }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(scalerJsonString("start")).append(": ").append(start).append(", ")
+        append(scalerJsonString("endExclusive")).append(": ").append(endExclusive).append(", ")
+        append(scalerJsonString("byteLength")).append(": ").append(byteLength).append(", ")
+        append(scalerJsonString("isEmpty")).append(": ").append(isEmpty)
+        append("}")
+    }
+}
+
+/**
+ * Deterministic current-state evidence for one scaled TrueType `glyf` glyph.
+ *
+ * The dump is intentionally narrow: it records the current pure Kotlin `glyf` scaler output and
+ * stable refusals without claiming complete CFF/CFF2, IUP, phantom metrics, or full variable-font
+ * support.
+ */
+data class ScaledTrueTypeGlyphEvidence(
+    val glyphId: UInt,
+    val requestedVariationPosition: List<VariationCoordinateEvidence>,
+    val normalizedVariationPosition: List<VariationCoordinateEvidence>,
+    val outlineCommands: List<String>,
+    val outlineCommandDump: String,
+    val outlineCommandDumpSha256: String,
+    val conservativeBounds: GlyphBounds?,
+    val metrics: GlyphMetrics?,
+    val locaRange: TrueTypeLocaRangeEvidence,
+    val scalerFamily: String = TRUE_TYPE_GLYF_SCALER_FAMILY,
+    val route: String = TRUE_TYPE_GLYF_SCALER_ROUTE,
+    val diagnostics: List<FontScalerDiagnostic> = emptyList(),
+) {
+    init {
+        require(requestedVariationPosition.isSortedByTag()) {
+            "requested variation evidence coordinates must be sorted by axis tag."
+        }
+        require(normalizedVariationPosition.isSortedByTag()) {
+            "normalized variation evidence coordinates must be sorted by axis tag."
+        }
+        require(outlineCommands.none { line -> line.any { it == '\n' || it == '\r' } }) {
+            "outline command evidence lines must be single-line."
+        }
+        require(outlineCommandDump == outlineCommands.joinToString("\n")) {
+            "outline command dump must match outlineCommands."
+        }
+        require(outlineCommandDumpSha256 == outlineCommandDump.scalerSha256Hex()) {
+            "outline command dump SHA-256 must match outlineCommandDump."
+        }
+        require(scalerFamily.isStableToken()) { "scalerFamily must be a stable token." }
+        require(route.isStableToken()) { "route must be a stable token." }
+    }
+
+    /**
+     * Serializes this evidence with stable field order and no host-dependent facts.
+     */
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  ").append(scalerJsonString("glyphId")).append(": ").append(glyphId.toString()).append(",\n")
+        append("  ").append(scalerJsonString("scalerFamily")).append(": ")
+            .append(scalerJsonString(scalerFamily)).append(",\n")
+        append("  ").append(scalerJsonString("route")).append(": ").append(scalerJsonString(route)).append(",\n")
+        append("  ").append(scalerJsonString("locaRange")).append(": ")
+            .append(locaRange.toCanonicalJson()).append(",\n")
+        append("  ").append(scalerJsonString("requestedVariationPosition")).append(": ")
+            .append(requestedVariationPosition.toCoordinateJson()).append(",\n")
+        append("  ").append(scalerJsonString("normalizedVariationPosition")).append(": ")
+            .append(normalizedVariationPosition.toCoordinateJson()).append(",\n")
+        append("  ").append(scalerJsonString("outlineCommands")).append(": ")
+            .append(outlineCommands.toJsonStringArray()).append(",\n")
+        append("  ").append(scalerJsonString("outlineCommandDumpSha256")).append(": ")
+            .append(scalerJsonString(outlineCommandDumpSha256)).append(",\n")
+        append("  ").append(scalerJsonString("conservativeBounds")).append(": ")
+            .append(conservativeBounds?.toCanonicalJson() ?: "null").append(",\n")
+        append("  ").append(scalerJsonString("metrics")).append(": ")
+            .append(metrics?.toCanonicalJson() ?: "null").append(",\n")
+        append("  ").append(scalerJsonString("diagnostics")).append(": ")
+            .append(diagnostics.toDiagnosticJson()).append("\n")
+        append("}")
+    }
+}
 
 /**
  * Horizontal TrueType glyph metric decoded from `hmtx`-equivalent data.
@@ -1043,6 +1225,11 @@ class TrueTypeGlyphVariationDeltas internal constructor(
     internal fun yDelta(pointIndex: Int): Double = yDeltas.getOrElse(pointIndex) { 0.0 }
 }
 
+internal data class TrueTypeGvarSimpleGlyphDeltaResult(
+    val deltas: TrueTypeGlyphVariationDeltas? = null,
+    val requiresIupInterpolation: Boolean = false,
+)
+
 /**
  * Bounded model for the TrueType `gvar` table subset used by the pure Kotlin font scaler.
  *
@@ -1080,69 +1267,82 @@ class TrueTypeGvarTable private constructor(
         glyphId: UInt,
         pointCount: Int,
         normalizedCoordinates: List<Double>,
-    ): TrueTypeGlyphVariationDeltas? {
+    ): TrueTypeGlyphVariationDeltas? =
+        simpleGlyphDeltaResult(
+            glyphId = glyphId,
+            pointCount = pointCount,
+            normalizedCoordinates = normalizedCoordinates,
+        ).deltas
+
+    internal fun simpleGlyphDeltaResult(
+        glyphId: UInt,
+        pointCount: Int,
+        normalizedCoordinates: List<Double>,
+    ): TrueTypeGvarSimpleGlyphDeltaResult {
+        fun unavailable(): TrueTypeGvarSimpleGlyphDeltaResult = TrueTypeGvarSimpleGlyphDeltaResult()
+
         if (pointCount <= 0) {
-            return null
+            return unavailable()
         }
         val glyphIndex = glyphId.toLong()
         if (glyphIndex < 0 || glyphIndex + 1 >= glyphOffsets.size || glyphIndex > Int.MAX_VALUE) {
-            return null
+            return unavailable()
         }
-        val maxPointCount = pointCount.checkedPlusPhantomCount() ?: return null
-        val start = glyphDataStart.checkedPlus(glyphOffsets[glyphIndex.toInt()]) ?: return null
-        val end = glyphDataStart.checkedPlus(glyphOffsets[glyphIndex.toInt() + 1]) ?: return null
+        val maxPointCount = pointCount.checkedPlusPhantomCount() ?: return unavailable()
+        val start = glyphDataStart.checkedPlus(glyphOffsets[glyphIndex.toInt()]) ?: return unavailable()
+        val end = glyphDataStart.checkedPlus(glyphOffsets[glyphIndex.toInt() + 1]) ?: return unavailable()
         if (start == end) {
-            return null
+            return unavailable()
         }
         if (!data.fitsGvar(start, 4, end)) {
-            return null
+            return unavailable()
         }
 
-        val tupleVariationCountField = data.readUInt16OrNull(start, end) ?: return null
+        val tupleVariationCountField = data.readUInt16OrNull(start, end) ?: return unavailable()
         val tupleVariationCount = tupleVariationCountField and GVAR_TUPLE_COUNT_MASK
         if (tupleVariationCount <= 0) {
-            return null
+            return unavailable()
         }
-        val offsetToData = data.readUInt16OrNull(start + 2, end) ?: return null
-        val tupleDataStart = start.checkedPlus(offsetToData) ?: return null
+        val offsetToData = data.readUInt16OrNull(start + 2, end) ?: return unavailable()
+        val tupleDataStart = start.checkedPlus(offsetToData) ?: return unavailable()
         if (tupleDataStart < start || tupleDataStart > end) {
-            return null
+            return unavailable()
         }
 
         val headers = ArrayList<TrueTypeGvarTupleHeader>(tupleVariationCount)
         var headerOffset = start + 4
         repeat(tupleVariationCount) {
             if (!data.fitsGvar(headerOffset, 4, end)) {
-                return null
+                return unavailable()
             }
-            val variationDataSize = data.readUInt16OrNull(headerOffset, end) ?: return null
-            val tupleIndex = data.readUInt16OrNull(headerOffset + 2, end) ?: return null
+            val variationDataSize = data.readUInt16OrNull(headerOffset, end) ?: return unavailable()
+            val tupleIndex = data.readUInt16OrNull(headerOffset + 2, end) ?: return unavailable()
             headerOffset += 4
             val peak = when {
                 tupleIndex and GVAR_EMBEDDED_PEAK_TUPLE != 0 -> {
                     if (!data.fitsGvar(headerOffset, axisCount * 2, end)) {
-                        return null
+                        return unavailable()
                     }
                     DoubleArray(axisCount) { axis ->
-                        data.readF2Dot14OrNull(headerOffset + axis * 2, end) ?: return null
+                        data.readF2Dot14OrNull(headerOffset + axis * 2, end) ?: return unavailable()
                     }.also {
                         headerOffset += axisCount * 2
                     }
                 }
-                else -> sharedTuples.getOrNull(tupleIndex and GVAR_TUPLE_INDEX_MASK) ?: return null
+                else -> sharedTuples.getOrNull(tupleIndex and GVAR_TUPLE_INDEX_MASK) ?: return unavailable()
             }
             val startTuple: DoubleArray?
             val endTuple: DoubleArray?
             if (tupleIndex and GVAR_INTERMEDIATE_REGION != 0) {
                 if (!data.fitsGvar(headerOffset, axisCount * 4, end)) {
-                    return null
+                    return unavailable()
                 }
                 startTuple = DoubleArray(axisCount) { axis ->
-                    data.readF2Dot14OrNull(headerOffset + axis * 2, end) ?: return null
+                    data.readF2Dot14OrNull(headerOffset + axis * 2, end) ?: return unavailable()
                 }
                 headerOffset += axisCount * 2
                 endTuple = DoubleArray(axisCount) { axis ->
-                    data.readF2Dot14OrNull(headerOffset + axis * 2, end) ?: return null
+                    data.readF2Dot14OrNull(headerOffset + axis * 2, end) ?: return unavailable()
                 }
                 headerOffset += axisCount * 2
             } else {
@@ -1158,7 +1358,7 @@ class TrueTypeGvarTable private constructor(
             )
         }
         if (tupleDataStart < headerOffset || tupleDataStart > end) {
-            return null
+            return unavailable()
         }
 
         var dataOffset = tupleDataStart
@@ -1167,19 +1367,20 @@ class TrueTypeGvarTable private constructor(
                 offset = dataOffset,
                 maxPointCount = maxPointCount,
                 limit = end,
-            ) ?: return null
+            ) ?: return unavailable()
             dataOffset = points.nextOffset
             points.values
         } else {
             null
         }
 
+        var requiresIupInterpolation = false
         val xDeltas = DoubleArray(pointCount)
         val yDeltas = DoubleArray(pointCount)
         for (header in headers) {
-            val tupleEnd = dataOffset.checkedPlus(header.variationDataSize) ?: return null
+            val tupleEnd = dataOffset.checkedPlus(header.variationDataSize) ?: return unavailable()
             if (tupleEnd > end) {
-                return null
+                return unavailable()
             }
             var tupleDataOffset = dataOffset
             val privatePoints = if (header.tupleIndex and GVAR_PRIVATE_POINT_NUMBERS != 0) {
@@ -1187,7 +1388,7 @@ class TrueTypeGvarTable private constructor(
                     offset = tupleDataOffset,
                     maxPointCount = maxPointCount,
                     limit = tupleEnd,
-                ) ?: return null
+                ) ?: return unavailable()
                 tupleDataOffset = points.nextOffset
                 points.values
             } else {
@@ -1195,6 +1396,7 @@ class TrueTypeGvarTable private constructor(
             }
             val targetPoints = privatePoints ?: sharedPoints ?: IntArray(maxPointCount) { it }
             if (!targetPoints.isCompleteGvarPointSet(maxPointCount)) {
+                requiresIupInterpolation = true
                 dataOffset = tupleEnd
                 continue
             }
@@ -1202,15 +1404,15 @@ class TrueTypeGvarTable private constructor(
                 offset = tupleDataOffset,
                 count = targetPoints.size,
                 limit = tupleEnd,
-            ) ?: return null
+            ) ?: return unavailable()
             tupleDataOffset = tupleXDeltas.nextOffset
             val tupleYDeltas = readPackedGvarDeltas(
                 offset = tupleDataOffset,
                 count = targetPoints.size,
                 limit = tupleEnd,
-            ) ?: return null
+            ) ?: return unavailable()
             if (tupleYDeltas.nextOffset > tupleEnd) {
-                return null
+                return unavailable()
             }
 
             val scalar = tupleScalar(
@@ -1231,7 +1433,10 @@ class TrueTypeGvarTable private constructor(
             dataOffset = tupleEnd
         }
 
-        return TrueTypeGlyphVariationDeltas(xDeltas = xDeltas, yDeltas = yDeltas)
+        return TrueTypeGvarSimpleGlyphDeltaResult(
+            deltas = TrueTypeGlyphVariationDeltas(xDeltas = xDeltas, yDeltas = yDeltas),
+            requiresIupInterpolation = requiresIupInterpolation,
+        )
     }
 
     private fun readPackedGvarPoints(
@@ -1702,6 +1907,122 @@ class ParsedTrueTypeGlyphScaler(
         )
     }
 
+    /**
+     * Produces deterministic current-state evidence for one scaled TrueType glyph.
+     *
+     * @param glyphId Font-specific glyph identifier.
+     * @param position Already-normalized variation position when [gvar] is present.
+     * @return Canonical glyph evidence with outline, metrics, `loca`, variation, route, and
+     * diagnostic facts.
+     */
+    fun scaledGlyphEvidence(
+        glyphId: UInt,
+        position: VariationPosition = VariationPosition(),
+    ): ScaledTrueTypeGlyphEvidence =
+        scaledGlyphEvidence(
+            glyphId = glyphId,
+            position = position,
+            requestedPosition = position,
+        )
+
+    internal fun scaledGlyphEvidence(
+        glyphId: UInt,
+        position: VariationPosition,
+        requestedPosition: VariationPosition,
+        additionalDiagnostics: List<FontScalerDiagnostic> = emptyList(),
+        includeNormalizedVariationPosition: Boolean = true,
+    ): ScaledTrueTypeGlyphEvidence {
+        val diagnostics = additionalDiagnostics.toMutableList()
+        val range = loca.rangeForGlyph(glyphId)
+        val variationPositionDiagnostic = positionValidationDiagnostic(glyphId, position)
+        if (variationPositionDiagnostic != null) {
+            diagnostics += variationPositionDiagnostic
+        }
+        val normalizedCoordinates = if (variationPositionDiagnostic == null) {
+            normalizedCoordinates(position)
+        } else {
+            emptyList()
+        }
+        val normalizedVariationPosition = if (gvar != null && includeNormalizedVariationPosition) {
+            normalizedAxisOrder.zip(normalizedCoordinates)
+                .map { (tag, value) -> VariationCoordinateEvidence(tag = tag, value = value) }
+                .sortedBy { coordinate -> coordinate.tag }
+        } else {
+            emptyList()
+        }
+        if (variationPositionDiagnostic == null) {
+            diagnostics += gvarEvidenceDiagnostics(
+                glyphId = glyphId,
+                normalizedCoordinates = normalizedCoordinates,
+            )
+        }
+        if (gvar == null && requestedPosition.axes.isNotEmpty()) {
+            diagnostics += FontScalerDiagnostic(
+                code = FontScalerDiagnosticCodes.VARIATION_AXIS_UNSUPPORTED,
+                detail = "truetype.gvar-unavailable",
+                operation = "variation",
+                glyphId = glyphId,
+                severity = "warning",
+            )
+        }
+        if (gvar != null && normalizedCoordinates.any { coordinate -> coordinate != 0.0 }) {
+            diagnostics += FontScalerDiagnostic(
+                code = FontScalerDiagnosticCodes.METRICS_VARIATION_UNAVAILABLE,
+                detail = "truetype.phantom-metrics-unavailable",
+                operation = "metrics",
+                glyphId = glyphId,
+                severity = "warning",
+            )
+        }
+
+        val outline = runCatching {
+            resolveGlyphOutline(
+                glyphId = glyphId,
+                depth = 0,
+                normalizedCoordinates = normalizedCoordinates,
+            ).scaled(scale)
+        }.getOrElse { error ->
+            val diagnostic = error.toFontScalerDiagnosticOrNull(
+                glyphId = glyphId,
+                operation = "outline",
+            )
+            if (diagnostic != null) {
+                diagnostics += diagnostic
+                null
+            } else {
+                throw error
+            }
+        }
+        val metrics = runCatching { metrics(glyphId = glyphId, position = position) }
+            .getOrElse { error ->
+                val diagnostic = error.toFontScalerDiagnosticOrNull(
+                    glyphId = glyphId,
+                    operation = "metrics",
+                )
+                if (diagnostic != null) {
+                    diagnostics += diagnostic
+                    null
+                } else {
+                    throw error
+                }
+            }
+        val outlineCommands = outline?.commands.orEmpty().map { command -> command.toEvidenceLine() }
+        val outlineCommandDump = outlineCommands.joinToString("\n")
+
+        return ScaledTrueTypeGlyphEvidence(
+            glyphId = glyphId,
+            requestedVariationPosition = requestedPosition.toEvidenceCoordinates(),
+            normalizedVariationPosition = normalizedVariationPosition,
+            outlineCommands = outlineCommands,
+            outlineCommandDump = outlineCommandDump,
+            outlineCommandDumpSha256 = outlineCommandDump.scalerSha256Hex(),
+            conservativeBounds = outline?.conservativeBounds(),
+            metrics = metrics,
+            locaRange = range.toEvidence(),
+            diagnostics = diagnostics.sortedWith(fontScalerDiagnosticOrdering),
+        )
+    }
+
     private fun parseGlyph(glyphId: UInt): TrueTypeGlyph =
         TrueTypeGlyfTableParser.parseGlyph(
             glyfTable = glyfTable,
@@ -1715,8 +2036,14 @@ class ParsedTrueTypeGlyphScaler(
         normalizedCoordinates: List<Double>,
     ): GlyphOutline {
         if (depth > MAX_COMPOSITE_GLYPH_DEPTH) {
-            throw UnsupportedOperationException(
-                "composite glyph resolution depth cap $MAX_COMPOSITE_GLYPH_DEPTH exceeded at glyphId $glyphId.",
+            throw FontScalerRefusalException(
+                diagnostic = FontScalerDiagnostic(
+                    code = FontScalerDiagnosticCodes.OUTLINE_FORMAT_UNSUPPORTED,
+                    detail = "truetype.composite-recursion-depth",
+                    operation = "outline",
+                    glyphId = glyphId,
+                ),
+                message = "composite glyph resolution depth cap $MAX_COMPOSITE_GLYPH_DEPTH exceeded at glyphId $glyphId.",
             )
         }
         return when (val glyph = parseGlyph(glyphId)) {
@@ -1749,11 +2076,17 @@ class ParsedTrueTypeGlyphScaler(
                 when (val arguments = component.arguments) {
                     is TrueTypeCompositeGlyphArgument.XyValues -> Unit
                     is TrueTypeCompositeGlyphArgument.PointMatching -> {
-                        throw UnsupportedOperationException(
-                            "composite point-matching arguments are not supported for glyphId $glyphId " +
-                                "component glyphId ${component.glyphId}: " +
-                                "compound point ${arguments.compoundPointIndex}, " +
-                                "component point ${arguments.componentPointIndex}.",
+                        throw FontScalerRefusalException(
+                            diagnostic = FontScalerDiagnostic(
+                                code = FontScalerDiagnosticCodes.OUTLINE_FORMAT_UNSUPPORTED,
+                                detail = "truetype.composite-point-matching",
+                                operation = "outline",
+                                glyphId = glyphId,
+                            ),
+                            message = "composite point-matching arguments are not supported for glyphId $glyphId " +
+                                "component glyphId ${component.glyphId}: compound point " +
+                                "${arguments.compoundPointIndex}, component point " +
+                                "${arguments.componentPointIndex}.",
                         )
                     }
                 }
@@ -1782,6 +2115,36 @@ class ParsedTrueTypeGlyphScaler(
         )
     }
 
+    private fun gvarEvidenceDiagnostics(
+        glyphId: UInt,
+        normalizedCoordinates: List<Double>,
+    ): List<FontScalerDiagnostic> {
+        val gvar = gvar ?: return emptyList()
+        val glyph = parseGlyph(glyphId)
+        if (glyph !is TrueTypeGlyph.Simple) {
+            return emptyList()
+        }
+        val pointCount = glyph.endPointsOfContours.lastOrNull()?.plus(1) ?: 0
+        val result = gvar.simpleGlyphDeltaResult(
+            glyphId = glyphId,
+            pointCount = pointCount,
+            normalizedCoordinates = normalizedCoordinates,
+        )
+        return if (result.requiresIupInterpolation) {
+            listOf(
+                FontScalerDiagnostic(
+                    code = FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED,
+                    detail = "truetype.gvar-iup-unavailable",
+                    operation = "variation",
+                    glyphId = glyphId,
+                    severity = "warning",
+                ),
+            )
+        } else {
+            emptyList()
+        }
+    }
+
     private fun normalizedCoordinates(position: VariationPosition): List<Double> {
         val gvar = gvar ?: return emptyList()
         position.axes.forEach { (tag, value) ->
@@ -1798,6 +2161,34 @@ class ParsedTrueTypeGlyphScaler(
             }
         }
     }
+
+    private fun positionValidationDiagnostic(
+        glyphId: UInt,
+        position: VariationPosition,
+    ): FontScalerDiagnostic? {
+        if (gvar == null) {
+            return null
+        }
+        position.axes.toSortedMap().forEach { (tag, value) ->
+            if (tag !in normalizedAxisTags) {
+                return FontScalerDiagnostic(
+                    code = FontScalerDiagnosticCodes.VARIATION_AXIS_UNSUPPORTED,
+                    detail = "truetype.gvar-axis",
+                    operation = "variation",
+                    glyphId = glyphId,
+                )
+            }
+            if (!value.isFinite()) {
+                return FontScalerDiagnostic(
+                    code = FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED,
+                    detail = "truetype.variation-position-non-finite",
+                    operation = "variation",
+                    glyphId = glyphId,
+                )
+            }
+        }
+        return null
+    }
 }
 
 private fun TrueTypeGlyphHeader.toGlyphBounds(): GlyphBounds =
@@ -1807,6 +2198,127 @@ private fun TrueTypeGlyphHeader.toGlyphBounds(): GlyphBounds =
         right = xMax.toDouble(),
         bottom = yMax.toDouble(),
     )
+
+private const val TRUE_TYPE_GLYF_SCALER_FAMILY = "truetype-glyf"
+private const val TRUE_TYPE_GLYF_SCALER_ROUTE = "font.scaler.truetype-glyf"
+
+private val fontScalerDiagnosticOrdering = compareBy<FontScalerDiagnostic>(
+    { diagnostic -> diagnostic.operation },
+    { diagnostic -> diagnostic.code },
+    { diagnostic -> diagnostic.detail },
+    { diagnostic -> diagnostic.glyphId.toString() },
+    { diagnostic -> diagnostic.severity },
+)
+
+private fun VariationPosition.toEvidenceCoordinates(): List<VariationCoordinateEvidence> =
+    axes.toSortedMap().mapNotNull { (tag, value) ->
+        if (value.isFinite()) {
+            VariationCoordinateEvidence(tag = tag, value = value)
+        } else {
+            null
+        }
+    }
+
+private fun TrueTypeGlyphDataRange.toEvidence(): TrueTypeLocaRangeEvidence {
+    val byteLength = endExclusive - start
+    return TrueTypeLocaRangeEvidence(
+        start = start,
+        endExclusive = endExclusive,
+        byteLength = byteLength,
+        isEmpty = byteLength == 0,
+    )
+}
+
+private fun List<VariationCoordinateEvidence>.isSortedByTag(): Boolean =
+    zipWithNext().all { (left, right) -> left.tag <= right.tag }
+
+private fun List<VariationCoordinateEvidence>.toCoordinateJson(): String =
+    joinToString(prefix = "[", postfix = "]") { coordinate -> coordinate.toCanonicalJson() }
+
+private fun List<String>.toJsonStringArray(): String =
+    joinToString(prefix = "[", postfix = "]") { value -> scalerJsonString(value) }
+
+private fun List<FontScalerDiagnostic>.toDiagnosticJson(): String =
+    joinToString(prefix = "[", postfix = "]") { diagnostic -> diagnostic.toCanonicalJson() }
+
+private fun GlyphBounds.toCanonicalJson(): String = buildString {
+    append("{")
+    append(scalerJsonString("left")).append(": ").append(left.toCanonicalScalerNumber()).append(", ")
+    append(scalerJsonString("top")).append(": ").append(top.toCanonicalScalerNumber()).append(", ")
+    append(scalerJsonString("right")).append(": ").append(right.toCanonicalScalerNumber()).append(", ")
+    append(scalerJsonString("bottom")).append(": ").append(bottom.toCanonicalScalerNumber())
+    append("}")
+}
+
+private fun GlyphMetrics.toCanonicalJson(): String = buildString {
+    append("{")
+    append(scalerJsonString("advanceX")).append(": ").append(advanceX.toCanonicalScalerNumber()).append(", ")
+    append(scalerJsonString("advanceY")).append(": ").append(advanceY.toCanonicalScalerNumber()).append(", ")
+    append(scalerJsonString("bounds")).append(": ").append(bounds.toCanonicalJson())
+    append("}")
+}
+
+private fun OutlineCommand.toEvidenceLine(): String =
+    when (this) {
+        is OutlineCommand.MoveTo -> "M ${x.toCanonicalScalerNumber()} ${y.toCanonicalScalerNumber()}"
+        is OutlineCommand.LineTo -> "L ${x.toCanonicalScalerNumber()} ${y.toCanonicalScalerNumber()}"
+        is OutlineCommand.QuadraticTo -> "Q ${controlX.toCanonicalScalerNumber()} " +
+            "${controlY.toCanonicalScalerNumber()} ${x.toCanonicalScalerNumber()} ${y.toCanonicalScalerNumber()}"
+        is OutlineCommand.CubicTo -> "C ${controlX1.toCanonicalScalerNumber()} " +
+            "${controlY1.toCanonicalScalerNumber()} ${controlX2.toCanonicalScalerNumber()} " +
+            "${controlY2.toCanonicalScalerNumber()} ${x.toCanonicalScalerNumber()} ${y.toCanonicalScalerNumber()}"
+        OutlineCommand.Close -> "Z"
+    }
+
+private fun Throwable.toFontScalerDiagnosticOrNull(
+    glyphId: UInt,
+    operation: String,
+): FontScalerDiagnostic? =
+    when (this) {
+        is FontScalerRefusalException -> diagnostic.copy(operation = operation, glyphId = glyphId)
+        else -> null
+    }
+
+private fun String.isStableToken(): Boolean =
+    isNotEmpty() && all { character ->
+        character in 'a'..'z' ||
+            character in '0'..'9' ||
+            character == '.' ||
+            character == '-' ||
+            character == '_'
+    }
+
+private fun Double.toCanonicalScalerNumber(): String {
+    require(isFinite()) { "scaler evidence number must be finite." }
+    return toString()
+}
+
+private fun scalerJsonString(value: String): String = buildString {
+    append('"')
+    value.forEach { character ->
+        when (character) {
+            '\\' -> append("\\\\")
+            '"' -> append("\\\"")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            else -> {
+                if (character.code < 0x20) {
+                    append("\\u")
+                    append(character.code.toString(16).padStart(4, '0'))
+                } else {
+                    append(character)
+                }
+            }
+        }
+    }
+    append('"')
+}
+
+private fun String.scalerSha256Hex(): String =
+    MessageDigest.getInstance("SHA-256")
+        .digest(toByteArray(Charsets.UTF_8))
+        .joinToString("") { byte -> "%02x".format(byte) }
 
 private const val FLAG_ON_CURVE = 0x01
 private const val FLAG_X_SHORT_VECTOR = 0x02
@@ -2242,10 +2754,74 @@ class TrueTypeGlyfScaler(
             position = position.normalizedForGvar(),
         )
 
+    /**
+     * Produces deterministic current-state evidence for one TrueType `glyf` glyph.
+     *
+     * Requested variation coordinates are recorded in user-space coordinates. When `gvar` and
+     * `fvar` data are available, normalized coordinates are recorded separately in stable axis order.
+     */
+    fun scaledGlyphEvidence(
+        glyphId: UInt,
+        position: VariationPosition = VariationPosition(),
+    ): ScaledTrueTypeGlyphEvidence {
+        val normalizationDiagnostics = position.normalizationDiagnostics(glyphId)
+        val normalizedPosition = if (normalizationDiagnostics.isEmpty()) {
+            position.normalizedForGvar()
+        } else {
+            VariationPosition()
+        }
+        return parsedScaler.scaledGlyphEvidence(
+            glyphId = glyphId,
+            position = normalizedPosition,
+            requestedPosition = position,
+            additionalDiagnostics = normalizationDiagnostics + avarDiagnostics(glyphId),
+            includeNormalizedVariationPosition = normalizationDiagnostics.isEmpty(),
+        )
+    }
+
     private fun VariationPosition.normalizedForGvar(): VariationPosition {
         val normalizer = variationNormalizer ?: return this
         return VariationPosition(axes = normalizer.normalize(this))
     }
+
+    private fun VariationPosition.normalizationDiagnostics(glyphId: UInt): List<FontScalerDiagnostic> {
+        if (variationNormalizer == null) {
+            return emptyList()
+        }
+        val supportedAxisTags = face.variations.axes.map { axis -> axis.tag.text }.toSet()
+        return axes.toSortedMap().mapNotNull { (tag, value) ->
+            when {
+                tag !in supportedAxisTags -> FontScalerDiagnostic(
+                    code = FontScalerDiagnosticCodes.VARIATION_AXIS_UNSUPPORTED,
+                    detail = "truetype.gvar-axis",
+                    operation = "variation",
+                    glyphId = glyphId,
+                )
+                !value.isFinite() -> FontScalerDiagnostic(
+                    code = FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED,
+                    detail = "truetype.variation-position-non-finite",
+                    operation = "variation",
+                    glyphId = glyphId,
+                )
+                else -> null
+            }
+        }
+    }
+
+    private fun avarDiagnostics(glyphId: UInt): List<FontScalerDiagnostic> =
+        if (face.variations.axisSegmentMaps.isNotEmpty()) {
+            listOf(
+                FontScalerDiagnostic(
+                    code = FontScalerDiagnosticCodes.VARIATION_AXIS_UNSUPPORTED,
+                    detail = "truetype.avar-unapplied",
+                    operation = "variation",
+                    glyphId = glyphId,
+                    severity = "warning",
+                ),
+            )
+        } else {
+            emptyList()
+        }
 }
 
 private fun OpenTypeFaceData.requiredRawTableBytes(tag: String): ByteArray =

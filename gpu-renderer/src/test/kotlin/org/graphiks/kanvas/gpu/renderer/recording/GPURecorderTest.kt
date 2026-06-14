@@ -16,6 +16,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRectCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
@@ -96,6 +97,30 @@ class GPURecorderTest {
             "decision:refuse:analysis.fill_rect.8:unsupported.clip.complex_stack",
         )
         assertContains(recording.routeDiagnostics, "refused:unsupported.clip.complex_stack")
+    }
+
+    /** Text handoff commands stay visible as terminal refusals until a text GPU route is promoted. */
+    @Test
+    fun `draw text run records explicit refused task without render work`() {
+        val recorder = GPURecorder(
+            recordingId = GPURecordingID("recording.text-refused"),
+            capabilities = firstSliceCapabilities(),
+        )
+
+        recorder.record(drawTextRun(commandIdValue = 13))
+        val recording = recorder.close()
+
+        val task = assertIs<GPUTask.Refused>(recording.taskList.tasks.single())
+        assertEquals("unsupported.text.draw_run_route_unavailable", task.diagnostic.code)
+        assertEquals(GPURecordingID("recording.text-refused"), task.diagnostic.recordingId)
+        assertEquals("task.refused.13", task.diagnostic.taskId)
+        assertTrue(task.diagnostic.terminal)
+        assertFalse(recording.taskList.tasks.any { it is GPUTask.Render })
+        assertContains(
+            recording.analysisDecisionDump.lines,
+            "decision:refuse:analysis.draw_text_run.13:unsupported.text.draw_run_route_unavailable",
+        )
+        assertContains(recording.routeDiagnostics, "refused:unsupported.text.draw_run_route_unavailable")
     }
 
     /** First-slice recordings are one-shot even when the target key is otherwise identical. */
@@ -185,6 +210,34 @@ class GPURecorderTest {
             paintOrder = paintOrder,
             source = GPUCommandSource(adapter = "unit-test", operation = "fillRect"),
         )
+
+    /** Text command fixture with dumpable command-owned facts and no backend route activation. */
+    private fun drawTextRun(commandIdValue: Int): NormalizedDrawCommand.DrawTextRun {
+        val bounds = GPUBounds(0f, 0f, 128f, 64f)
+        val target = GPUTargetFacts(width = 128, height = 64, colorFormat = "rgba8unorm")
+        return NormalizedDrawCommand.DrawTextRun(
+            commandId = GPUDrawCommandID(commandIdValue),
+            textLayoutResultId = "layout-$commandIdValue",
+            glyphRunId = "glyph-run-$commandIdValue",
+            glyphRunDescriptorRefs = listOf("glyph-run-$commandIdValue"),
+            artifactRefs = emptyList(),
+            artifactKeyHashes = emptyList(),
+            atlasGenerationTokens = emptyList(),
+            uploadDependencyFacts = emptyList(),
+            routeDiagnostics = emptyList(),
+            transform = GPUTransformFacts.identity(),
+            clip = GPUClipFacts.wideOpen(bounds = bounds),
+            layer = GPULayerFacts.root(target = target),
+            material = GPUMaterialDescriptor.SolidColor(r = 0f, g = 0f, b = 0f, a = 1f),
+            bounds = bounds,
+            ordering = GPUOrderingFacts(
+                paintOrder = commandIdValue,
+                dependsOnDestination = false,
+                requiresBarrier = false,
+            ),
+            source = GPUCommandSource(adapter = "unit-test", operation = "drawTextRun"),
+        )
+    }
 
     /** Capability snapshot that enables only the first native FillRect route. */
     private fun firstSliceCapabilities(): GPUCapabilities =

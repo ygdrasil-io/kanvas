@@ -4,10 +4,15 @@ import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysis
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisDecision
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUAnalysisDependency
+import org.graphiks.kanvas.gpu.renderer.analysis.GPUAnalysisDiagnostic
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUFirstRoutePlan
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUFirstRoutePlanner
+import org.graphiks.kanvas.gpu.renderer.analysis.SortKey
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
+import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 
 /** Stable recording identifier. */
@@ -193,9 +198,9 @@ object GPURecordingOrder {
  *
  * The recorder owns command intake for the R5 slice. It accepts immutable
  * [NormalizedDrawCommand] values, plans the currently supported FillRect route,
- * and closes into an immutable [GPURecording]. It does not accept Canvas state,
- * allocate materials/resources, submit backend work, or hide unsupported draws
- * behind CPU fallback. Calling [record] after [close] fails with
+ * explicitly refuses text handoff commands, and closes into an immutable
+ * [GPURecording]. It does not accept Canvas state, allocate materials/resources,
+ * submit backend work, or hide unsupported draws behind CPU fallback. Calling [record] after [close] fails with
  * [IllegalStateException]; unsupported command facts become refused analysis and
  * task diagnostics instead of exceptions.
  */
@@ -254,7 +259,48 @@ class GPURecorder(
     private fun planCommand(command: NormalizedDrawCommand): GPUFirstRoutePlan =
         when (command) {
             is NormalizedDrawCommand.FillRect -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
+            is NormalizedDrawCommand.DrawTextRun -> refusedDrawTextRunPlan(command)
         }
+
+    private fun refusedDrawTextRunPlan(command: NormalizedDrawCommand.DrawTextRun): GPUFirstRoutePlan {
+        val code = "unsupported.text.draw_run_route_unavailable"
+        val recordId = "analysis.draw_text_run.${command.commandId.value}"
+        val diagnostic = GPUAnalysisDiagnostic(
+            code = code,
+            recordId = recordId,
+            decisionId = "refused.draw_text_run.${command.commandId.value}",
+            terminal = true,
+        )
+        val textDiagnostics = command.routeDiagnostics.map { textDiagnostic ->
+            GPUAnalysisDiagnostic(
+                code = textDiagnostic.code,
+                recordId = recordId,
+                decisionId = "text.draw_text_run.${command.commandId.value}",
+                terminal = textDiagnostic.terminal,
+            )
+        }
+        val analysisRecord = GPUDrawAnalysisRecord(
+            recordId = recordId,
+            commandIdValue = command.commandId.value,
+            commandFamily = "DrawTextRun",
+            boundsHash = command.bounds.recordingBoundsHash(),
+            routeDecisionLabel = "refused.$code",
+            materialKeyHash = "none",
+            renderStepCandidates = emptyList(),
+            sortKey = SortKey(command.ordering.paintOrder.toLong()),
+            diagnostics = listOf(diagnostic) + textDiagnostics,
+        )
+        return GPUFirstRoutePlan(
+            analysisRecord = analysisRecord,
+            analysisDecision = GPUDrawAnalysisDecision.Refuse(recordId = recordId, diagnostic = diagnostic),
+            routeDecision = GPUFirstRouteDecisionBuilder.refused(code = code, stage = "analysis"),
+            pass = GPUFirstRoutePassBuilder.refusedFillRect(
+                commandIdValue = command.commandId.value,
+                targetStateHash = command.recordingTargetStateHash(),
+                code = code,
+            ),
+        )
+    }
 
     @Suppress("unused")
     private fun scopeEvidence(): List<String> =
@@ -632,6 +678,12 @@ private fun List<NormalizedDrawCommand>.targetFormatClass(): String {
         else -> formats.joinToString("+")
     }
 }
+
+private fun GPUBounds.recordingBoundsHash(): String =
+    "bounds:$left,$top,$right,$bottom"
+
+private fun NormalizedDrawCommand.recordingTargetStateHash(): String =
+    "target.${layer.target.colorFormat}.${layer.target.width}x${layer.target.height}"
 
 private fun GPUCapabilities.capabilityClass(): String =
     facts

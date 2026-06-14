@@ -2,6 +2,8 @@ package org.graphiks.kanvas.font
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 import java.nio.file.Files
@@ -93,6 +95,104 @@ class FontCoreSurfaceTest {
         } finally {
             root.toFile().deleteRecursively()
         }
+    }
+
+    @Test
+    fun dumpsSourceProvenanceEvidenceDeterministically() {
+        val sourceId = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440100"))
+        val source = FontSource(
+            id = sourceId,
+            kind = FontSourceKind.MEMORY,
+            displayName = "Fixture Sans",
+            bytes = byteArrayOf(1, 2, 3),
+        )
+        val diagnostic = FontSourceDiagnostic(
+            sourceId = sourceId,
+            message = "missing hhea",
+            causeCode = "font.required-table-missing",
+            causeMessage = "hhea",
+        )
+
+        val evidence = source.provenanceEvidence(
+            faceCount = 1,
+            tableTags = listOf("name", "cmap", "head", "cmap"),
+            diagnostics = listOf(diagnostic),
+        )
+
+        assertEquals("039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81", evidence.contentSha256)
+        assertFalse(evidence.hostDependent)
+        assertEquals(listOf("cmap", "head", "name"), evidence.tableTags)
+        assertEquals(
+            "sourceId=550e8400-e29b-41d4-a716-446655440100 kind=MEMORY displayName=\"Fixture Sans\" " +
+                "contentSha256=039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81 " +
+                "hostDependent=false faceCount=1 tableTags=[cmap,head,name] " +
+                "diagnostics=[font.required-table-missing sourceId=550e8400-e29b-41d4-a716-446655440100 " +
+                "message=\"missing hhea\" causeMessage=\"hhea\"]",
+            evidence.dump(),
+        )
+
+        val systemEvidence = source.copy(kind = FontSourceKind.SYSTEM, bytes = ByteArray(0)).provenanceEvidence(faceCount = 0)
+
+        assertTrue(systemEvidence.hostDependent)
+        assertEquals("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", systemEvidence.contentSha256)
+        assertTrue(systemEvidence.dump().contains("hostDependent=true"))
+    }
+
+    @Test
+    fun fontSourceEvidenceRejectsUnnormalizedAndUnstableTableTags() {
+        val sourceId = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440101"))
+
+        val unnormalized = assertFailsWith<IllegalArgumentException> {
+            FontSourceEvidence(
+                sourceId = sourceId,
+                kind = FontSourceKind.MEMORY,
+                displayName = "Fixture Sans",
+                contentSha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                hostDependent = false,
+                faceCount = 1,
+                tableTags = listOf("name", "cmap", "name"),
+            )
+        }
+        assertTrue(unnormalized.message.orEmpty().contains("sorted and deduplicated"))
+
+        val malformed = assertFailsWith<IllegalArgumentException> {
+            FontSourceEvidence(
+                sourceId = sourceId,
+                kind = FontSourceKind.MEMORY,
+                displayName = "Fixture Sans",
+                contentSha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                hostDependent = false,
+                faceCount = 1,
+                tableTags = listOf("cm\np"),
+            )
+        }
+        assertTrue(malformed.message.orEmpty().contains("printable ASCII"))
+    }
+
+    @Test
+    fun fontSourceEvidenceRejectsUnstableHashesAndDiagnosticCodes() {
+        val sourceId = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440102"))
+
+        val malformedHash = assertFailsWith<IllegalArgumentException> {
+            FontSourceEvidence(
+                sourceId = sourceId,
+                kind = FontSourceKind.MEMORY,
+                displayName = "Fixture Sans",
+                contentSha256 = "not-a-sha256\n",
+                hostDependent = false,
+                faceCount = 1,
+            )
+        }
+        assertTrue(malformedHash.message.orEmpty().contains("lowercase hexadecimal SHA-256"))
+
+        val malformedCode = assertFailsWith<IllegalArgumentException> {
+            FontSourceDiagnostic(
+                sourceId = sourceId,
+                message = "bad code",
+                causeCode = "font.source\nbad",
+            )
+        }
+        assertTrue(malformedCode.message.orEmpty().contains("stable one-line diagnostic code"))
     }
 
     @Test

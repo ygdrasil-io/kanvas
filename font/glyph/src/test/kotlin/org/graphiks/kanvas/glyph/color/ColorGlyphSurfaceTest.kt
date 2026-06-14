@@ -6,6 +6,7 @@ import org.graphiks.kanvas.glyph.OutlineGlyphRepresentation
 import org.graphiks.kanvas.glyph.gpu.GPUGlyphRunDescriptor
 import org.graphiks.kanvas.glyph.gpu.GPUGlyphRunID
 import java.io.ByteArrayOutputStream
+import java.security.MessageDigest
 import java.util.zip.CRC32
 import java.util.zip.Deflater
 import kotlin.test.Test
@@ -415,6 +416,64 @@ class ColorGlyphSurfaceTest {
     }
 
     @Test
+    fun recordsEmojiGlyphDispatchDiagnosticsWithStableCodesAndDetails() {
+        val dispatcher = SimpleEmojiGlyphDispatcher(
+            EmojiGlyphRouteAvailability(
+                bitmapGlyphs = setOf(60),
+                pngGlyphs = setOf(60),
+                outlineGlyphs = setOf(60),
+            ),
+        )
+
+        val dispatch = dispatcher.dispatch(glyphId = 60, strikeKey = strikeKey())
+        val dump = dispatch.toCanonicalJson()
+
+        assertEquals("bitmap", dispatch.route)
+        assertEquals(
+            listOf(
+                ColorGlyphDiagnosticCodes.ColorGlyphUnavailable,
+                ColorGlyphDiagnosticCodes.EmojiRouteSelected,
+                ColorGlyphDiagnosticCodes.EmojiRouteLowerPreferenceSkipped,
+                ColorGlyphDiagnosticCodes.EmojiRouteLowerPreferenceSkipped,
+            ),
+            dispatch.diagnostics.map { diagnostic -> diagnostic.code },
+        )
+        assertEquals(
+            listOf(
+                "candidate=colr;glyphId=60;sizePx=16.0",
+                "selected=bitmap;glyphId=60;sizePx=16.0",
+                "candidate=png;selected=bitmap;glyphId=60;sizePx=16.0",
+                "candidate=outline;selected=bitmap;glyphId=60;sizePx=16.0",
+            ),
+            dispatch.diagnostics.map { diagnostic -> diagnostic.detail },
+        )
+        assertEquals(listOf("info", "info", "info", "info"), dispatch.diagnostics.map { it.severity })
+        assertEquals(64, dispatch.dumpSha256.length)
+        assertTrue(dump.contains("\"code\": \"text.emoji.color-glyph-unavailable\""))
+        assertTrue(dump.contains("\"detail\": \"candidate=colr;glyphId=60;sizePx=16.0\""))
+        assertTrue(dump.contains("\"severity\": \"info\""))
+        assertEvidenceDumpClean(dump)
+    }
+
+    @Test
+    fun recordsFullMissingEmojiRouteRefusalWithStableSpecCode() {
+        val dispatch = SimpleEmojiGlyphDispatcher(EmojiGlyphRouteAvailability())
+            .dispatch(glyphId = 61, strikeKey = strikeKey())
+
+        assertEquals("missing", dispatch.route)
+        assertTrue(
+            dispatch.diagnostics.any { diagnostic ->
+                diagnostic.route == "missing" &&
+                    diagnostic.code == ColorGlyphDiagnosticCodes.EmojiFallbackUnavailable &&
+                    diagnostic.detail == "glyphId=61;sizePx=16.0;availableRoutes=none" &&
+                    diagnostic.severity == "warning"
+            },
+        )
+        assertTrue(dispatch.toCanonicalJson().contains("\"code\": \"text.emoji.fallback-unavailable\""))
+        assertEvidenceDumpClean(dispatch.toCanonicalJson())
+    }
+
+    @Test
     fun plansColorGlyphRunByRoutePriorityWithStableFallbackDiagnostics() {
         val planner = SimpleColorGlyphPlanner(
             availability = EmojiGlyphRouteAvailability(
@@ -459,6 +518,107 @@ class ColorGlyphSurfaceTest {
                     diagnostic.severity == "warning"
             },
         )
+    }
+
+    @Test
+    fun dumpsColorGlyphPlanningResultWithStableRouteOrderAndHashes() {
+        val planner = SimpleColorGlyphPlanner(
+            availability = EmojiGlyphRouteAvailability(
+                colrGlyphs = setOf(10),
+                bitmapGlyphs = setOf(10, 20),
+                pngGlyphs = setOf(10, 20, 30),
+                svgGlyphs = setOf(10, 20, 30, 40),
+                outlineGlyphs = setOf(10, 20, 30, 40, 50),
+            ),
+            outlineRepresentations = mapOf(
+                50 to OutlineGlyphRepresentation(glyphId = 50, pathCommands = listOf("M 0 0")),
+            ),
+        )
+        val run = glyphRun(glyphIds = listOf(10, 20, 30, 40, 50, 60))
+
+        val first = planner.plan(run = run, strikeKey = strikeKey())
+        val second = planner.plan(run = run, strikeKey = strikeKey())
+        val dump = first.toCanonicalJson()
+
+        assertEquals(first.toCanonicalJson(), second.toCanonicalJson())
+        assertEquals(first.dumpSha256, second.dumpSha256)
+        assertEquals(64, first.dumpSha256.length)
+        assertTrue(dump.contains("\"routeOrder\": [\"colr\", \"bitmap\", \"png\", \"svg\", \"outline\"]"))
+        assertTrue(dump.indexOf("\"glyphId\": 10") < dump.indexOf("\"glyphId\": 20"))
+        assertTrue(dump.indexOf("\"glyphId\": 20") < dump.indexOf("\"glyphId\": 30"))
+        assertTrue(dump.indexOf("\"glyphId\": 30") < dump.indexOf("\"glyphId\": 40"))
+        assertTrue(dump.indexOf("\"glyphId\": 40") < dump.indexOf("\"glyphId\": 50"))
+        assertTrue(dump.contains("\"outlineFallback\": true"))
+        assertTrue(dump.contains("\"pathCommandCount\": 1"))
+        assertTrue(dump.contains("\"code\": \"text.emoji.fallback-unavailable\""))
+        assertEvidenceDumpClean(dump)
+    }
+
+    @Test
+    fun dumpHashesTrackMutableListContentsAfterFirstRead() {
+        val dispatchDiagnostics = mutableListOf(
+            ColorGlyphDiagnostic(
+                glyphId = 70,
+                route = "colr",
+                message = "Selected colr route for glyph 70 at 16.0px.",
+                code = ColorGlyphDiagnosticCodes.EmojiRouteSelected,
+                detail = "selected=colr;glyphId=70;sizePx=16.0",
+            ),
+        )
+        val dispatch = EmojiGlyphDispatch(
+            glyphId = 70,
+            route = "colr",
+            diagnostics = dispatchDiagnostics,
+        )
+        val firstDispatchHash = dispatch.dumpSha256
+
+        dispatchDiagnostics += ColorGlyphDiagnostic(
+            glyphId = 71,
+            route = "png",
+            message = "Route png is unavailable for glyph 71 at 16.0px.",
+            code = ColorGlyphDiagnosticCodes.ColorGlyphUnavailable,
+            detail = "candidate=png;glyphId=71;sizePx=16.0",
+        )
+        val mutatedDispatchDump = dispatch.toCanonicalJson()
+
+        assertTrue(mutatedDispatchDump.contains("\"glyphId\": 71"))
+        assertEquals(canonicalDumpBodySha256(mutatedDispatchDump), dispatch.dumpSha256)
+        assertTrue(dispatch.dumpSha256 != firstDispatchHash)
+
+        val routes = mutableListOf(ColorGlyphRoute(glyphId = 72, route = "colr"))
+        val planningResult = ColorGlyphPlanningResult(routes = routes)
+        val firstPlanningHash = planningResult.dumpSha256
+
+        routes += ColorGlyphRoute(glyphId = 73, route = "png")
+        val mutatedPlanningDump = planningResult.toCanonicalJson()
+
+        assertTrue(mutatedPlanningDump.contains("\"glyphId\": 73"))
+        assertEquals(canonicalDumpBodySha256(mutatedPlanningDump), planningResult.dumpSha256)
+        assertTrue(planningResult.dumpSha256 != firstPlanningHash)
+    }
+
+    @Test
+    fun colorGlyphDiagnosticKeepsFourArgumentJvmConstructorCompatibility() {
+        val constructor = ColorGlyphDiagnostic::class.java.getConstructor(
+            Int::class.javaObjectType,
+            String::class.java,
+            String::class.java,
+            String::class.java,
+        )
+
+        val diagnostic = constructor.newInstance(
+            74,
+            "colr",
+            "Route colr is unavailable for glyph 74 at 16.0px.",
+            "warning",
+        ) as ColorGlyphDiagnostic
+
+        assertEquals(74, diagnostic.glyphId)
+        assertEquals("colr", diagnostic.route)
+        assertEquals("Route colr is unavailable for glyph 74 at 16.0px.", diagnostic.message)
+        assertEquals("warning", diagnostic.severity)
+        assertEquals(ColorGlyphDiagnosticCodes.ColorGlyphUnavailable, diagnostic.code)
+        assertEquals(diagnostic.message, diagnostic.detail)
     }
 
     @Test
@@ -975,4 +1135,36 @@ class ColorGlyphSurfaceTest {
             typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655441201")),
             sizePx = 16f,
         )
+
+    private fun canonicalDumpBodySha256(dump: String): String {
+        val body = dump.replace(
+            Regex(",\n  \"dumpSha256\": \"[0-9a-f]{64}\"\n}\\n$"),
+            "\n}\n",
+        )
+        return MessageDigest.getInstance("SHA-256")
+            .digest(body.toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xFF) }
+    }
+
+    private fun assertEvidenceDumpClean(dump: String) {
+        val forbiddenTokens = listOf(
+            "Sk",
+            "HarfBuzz",
+            "FreeType",
+            "Fontations",
+            "AWT",
+            "JNI",
+            "CoreText",
+            "DirectWrite",
+            "fontconfig",
+            "gpuHandle",
+            "nativeHandle",
+            "/Users/",
+            "tmp/",
+        )
+        forbiddenTokens.forEach { token ->
+            assertTrue(!dump.contains(token), "Dump must not contain forbidden token $token: $dump")
+        }
+        assertTrue(!Regex("@[0-9a-fA-F]{4,}").containsMatchIn(dump), "Dump must not contain object identity: $dump")
+    }
 }
