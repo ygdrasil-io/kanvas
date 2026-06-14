@@ -799,10 +799,11 @@ public class BasicOpenTypeShapingEngine(
  * Resolved font runs use [ResolvedFontRun.start] and [ResolvedFontRun.end] as
  * offsets relative to the fallback request text. Those offsets are intersected
  * with the cluster-expanded shaping range, sorted, and consumed without
- * duplicating overlapping resolver output. Gaps that no resolver run covers produce
- * [UNRESOLVED_FONT_RUN_DIAGNOSTIC_CODE] diagnostics and no glyphs, allowing
- * callers to surface missing fallback coverage distinctly from
- * [MISSING_GLYPH_DIAGNOSTIC_CODE] diagnostics produced by [glyphMapper].
+ * duplicating overlapping resolver output. Gaps that no resolver run covers
+ * produce [UNRESOLVED_FONT_RUN_DIAGNOSTIC_CODE] diagnostics and no glyphs. Both
+ * unresolved fallback runs and `.notdef` glyph mapping use the same stable
+ * `text.shaping.fallback-missing` diagnostic family; callers that need the
+ * narrower cause must inspect the diagnostic message and text range.
  *
  * @param fontResolver Font core resolver used to assign concrete fallback font
  * runs for the requested text slice.
@@ -1121,24 +1122,41 @@ public data class ShapingDiagnostic(
 )
 
 /**
- * Stable diagnostic code emitted when glyph mapping falls back to `.notdef`.
+ * Stable spec diagnostic family emitted when glyph or fallback font coverage is missing.
  */
-public const val MISSING_GLYPH_DIAGNOSTIC_CODE: String = "missing-glyph"
+public const val TEXT_SHAPING_FALLBACK_MISSING_DIAGNOSTIC_CODE: String = "text.shaping.fallback-missing"
 
 /**
- * Stable diagnostic code emitted when font fallback leaves a text range without a resolved font.
+ * Stable spec diagnostic family emitted when a requested shaping feature cannot be applied.
  */
-public const val UNRESOLVED_FONT_RUN_DIAGNOSTIC_CODE: String = "unresolved-font-run"
+public const val TEXT_SHAPING_FEATURE_UNSUPPORTED_DIAGNOSTIC_CODE: String = "text.shaping.feature-unsupported"
 
 /**
- * Stable diagnostic code emitted when an opt-in OpenType `kern` table is present but cannot be applied.
+ * Stable spec diagnostic family emitted when shaping cluster invariants are violated.
  */
-public const val KERN_TABLE_UNAPPLIED_DIAGNOSTIC_CODE: String = "kern-table-unapplied"
+public const val TEXT_SHAPING_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE: String =
+    "text.shaping.cluster-invariant-failed"
 
 /**
- * Stable diagnostic code emitted when font fallback assigns different typefaces to the same shaping cluster.
+ * Semantic alias emitted when glyph mapping falls back to `.notdef`.
  */
-public const val CONFLICTING_FONT_RUN_DIAGNOSTIC_CODE: String = "conflicting-font-run"
+public const val MISSING_GLYPH_DIAGNOSTIC_CODE: String = TEXT_SHAPING_FALLBACK_MISSING_DIAGNOSTIC_CODE
+
+/**
+ * Semantic alias emitted when font fallback leaves a text range without a resolved font.
+ */
+public const val UNRESOLVED_FONT_RUN_DIAGNOSTIC_CODE: String = TEXT_SHAPING_FALLBACK_MISSING_DIAGNOSTIC_CODE
+
+/**
+ * Semantic alias emitted when an opt-in OpenType pair-position table is present but cannot be applied.
+ */
+public const val KERN_TABLE_UNAPPLIED_DIAGNOSTIC_CODE: String = TEXT_SHAPING_FEATURE_UNSUPPORTED_DIAGNOSTIC_CODE
+
+/**
+ * Semantic alias emitted when font fallback assigns different typefaces to the same shaping cluster.
+ */
+public const val CONFLICTING_FONT_RUN_DIAGNOSTIC_CODE: String =
+    TEXT_SHAPING_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE
 
 private const val SCRIPT_LATIN = "Latn"
 private const val SCRIPT_ARABIC = "Arab"

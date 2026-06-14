@@ -9,6 +9,184 @@ import kotlin.uuid.Uuid
 
 class GPUTextArtifactsSurfaceTest {
     @Test
+    fun `artifact references enumerate typed bundle artifacts as deterministic dumpable records`() {
+        val atlasKey = fixtureArtifactKey(
+            uuid = "550e8400-e29b-41d4-a716-446655441001",
+            generation = 1,
+            contentFingerprint = "glyph-atlas-a8",
+        )
+        val sdfAtlasKey = fixtureArtifactKey(
+            uuid = "550e8400-e29b-41d4-a716-446655441002",
+            generation = 2,
+            contentFingerprint = "glyph-atlas-sdf",
+        )
+        val glyphUploadKey = fixtureArtifactKey(
+            uuid = "550e8400-e29b-41d4-a716-446655441003",
+            generation = 3,
+            contentFingerprint = "glyph-upload-plan",
+        )
+        val outlineKey = fixtureArtifactKey(
+            uuid = "550e8400-e29b-41d4-a716-446655441004",
+            generation = 4,
+            contentFingerprint = "outline-glyph-plan",
+        )
+        val colorKey = fixtureArtifactKey(
+            uuid = "550e8400-e29b-41d4-a716-446655441005",
+            generation = 5,
+            contentFingerprint = "color-glyph-plan",
+        )
+        val bitmapKey = fixtureArtifactKey(
+            uuid = "550e8400-e29b-41d4-a716-446655441006",
+            generation = 6,
+            contentFingerprint = "bitmap-glyph-plan",
+        )
+        val svgKey = fixtureArtifactKey(
+            uuid = "550e8400-e29b-41d4-a716-446655441007",
+            generation = 7,
+            contentFingerprint = "svg-glyph-plan",
+        )
+        val bundle = TextGPUArtifactBundle(
+            artifactKey = fixtureArtifactKey(
+                uuid = "550e8400-e29b-41d4-a716-446655441000",
+                generation = 0,
+                contentFingerprint = "bundle-root",
+            ),
+            uploadPlans = listOf(
+                GPUTextUploadPlan(
+                    artifactKey = glyphUploadKey,
+                    ranges = listOf(GPUTextUploadRange(offset = 0, size = 16, label = "glyph-upload")),
+                    byteSize = 16,
+                ),
+            ),
+            glyphUploadPlans = listOf(
+                GlyphUploadPlan(
+                    artifactKey = glyphUploadKey,
+                    uploadPlan = GPUTextUploadPlan(
+                        artifactKey = glyphUploadKey,
+                        ranges = listOf(GPUTextUploadRange(offset = 0, size = 16, label = "glyph-upload")),
+                        byteSize = 16,
+                    ),
+                    glyphIDs = listOf(11U),
+                ),
+            ),
+            outlineGlyphPlans = listOf(
+                OutlineGlyphPlan(
+                    artifactKey = outlineKey,
+                    glyphIDs = listOf(12U),
+                    windingRule = "non-zero",
+                ),
+            ),
+            colorGlyphPlans = listOf(
+                ColorGlyphPlan(
+                    artifactKey = colorKey,
+                    glyphIDs = listOf(13U),
+                    layerCount = 2,
+                ),
+            ),
+            bitmapGlyphPlans = listOf(
+                BitmapGlyphPlan(
+                    artifactKey = bitmapKey,
+                    glyphIDs = listOf(14U),
+                    colorFormat = "rgba8888",
+                ),
+            ),
+            svgGlyphPlans = listOf(
+                SVGGlyphPlan(
+                    artifactKey = svgKey,
+                    glyphIDs = listOf(15U),
+                    documentCount = 1,
+                ),
+            ),
+            atlases = listOf(
+                GlyphAtlasArtifact(
+                    artifactKey = atlasKey,
+                    width = 128,
+                    height = 128,
+                    format = "r8",
+                ),
+            ),
+            sdfAtlases = listOf(
+                SDFGlyphAtlasArtifact(
+                    atlas = GlyphAtlasArtifact(
+                        artifactKey = sdfAtlasKey,
+                        width = 256,
+                        height = 256,
+                        format = "r8",
+                    ),
+                    distanceRange = 4.0f,
+                ),
+            ),
+            diagnostics = GPUTextRouteDiagnostics(
+                diagnostics = emptyList(),
+                refusalRequired = false,
+            ),
+        )
+
+        val references = bundle.artifactReferences()
+
+        assertEquals(references, bundle.artifactReferences())
+        assertEquals(
+            listOf(
+                "GlyphAtlasArtifact",
+                "SDFGlyphAtlasArtifact",
+                "GlyphUploadPlan",
+                "OutlineGlyphPlan",
+                "ColorGlyphPlan",
+                "BitmapGlyphPlan",
+                "SVGGlyphPlan",
+            ),
+            references.map { it.artifactName },
+        )
+        assertEquals((1..7).toList(), references.map { it.generation.value })
+        assertEquals(
+            listOf(
+                "glyph-atlas-a8",
+                "glyph-atlas-sdf",
+                "glyph-upload-plan",
+                "outline-glyph-plan",
+                "color-glyph-plan",
+                "bitmap-glyph-plan",
+                "svg-glyph-plan",
+            ),
+            references.map { it.contentFingerprint },
+        )
+        assertEquals(
+            listOf(
+                "TextGPUArtifactBundle.atlases",
+                "TextGPUArtifactBundle.sdfAtlases",
+                "TextGPUArtifactBundle.glyphUploadPlans",
+                "TextGPUArtifactBundle.outlineGlyphPlans",
+                "TextGPUArtifactBundle.colorGlyphPlans",
+                "TextGPUArtifactBundle.bitmapGlyphPlans",
+                "TextGPUArtifactBundle.svgGlyphPlans",
+            ),
+            references.map { it.sourceLabel },
+        )
+
+        val dump = references.joinToString(separator = "\n")
+        assertTrue(dump.contains("GPUTextArtifactReference"))
+        assertTrue(dump.contains("artifactName=GlyphAtlasArtifact"))
+        listOf(
+            "renderer=",
+            "fontParser",
+            "Sk",
+            "Texture",
+            "Sampler",
+            "BindGroup",
+            "CommandEncoder",
+            "GPUHandle",
+        ).forEach { forbiddenToken ->
+            assertFalse(
+                dump.contains(forbiddenToken),
+                "Reference dump leaked forbidden token $forbiddenToken: $dump",
+            )
+        }
+        assertTrue(references.all { it.toString() != it.contentFingerprint })
+        assertFalse(references.map { it.artifactID.value.toHexDashString() }.contains("glyph-atlas-a8"))
+        assertFalse(references.map { it.contentFingerprint }.contains("550e8400-e29b-41d4-a716-446655441001"))
+    }
+
+    @Test
     fun `gpu text artifact surface is composed from dumpable value objects`() {
         val layoutID = GPUTextLayoutResultID(Uuid.parse("550e8400-e29b-41d4-a716-446655440200"))
         val runID = GPUGlyphRunID(Uuid.parse("550e8400-e29b-41d4-a716-446655440201"))
@@ -153,4 +331,14 @@ class GPUTextArtifactsSurfaceTest {
             invalidPlan.validateRanges(),
         )
     }
+
+    private fun fixtureArtifactKey(
+        uuid: String,
+        generation: Int,
+        contentFingerprint: String,
+    ): GPUTextArtifactKey = GPUTextArtifactKey(
+        artifactID = GPUTextArtifactID(Uuid.parse(uuid)),
+        generation = GPUTextArtifactGeneration(generation),
+        contentFingerprint = contentFingerprint,
+    )
 }

@@ -4,6 +4,7 @@ import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.kanvas.text.shaping.FeatureSet
 import org.graphiks.kanvas.text.shaping.OpenTypeShapingEngine
 import org.graphiks.kanvas.text.shaping.ShapedGlyphRun
+import org.graphiks.kanvas.text.shaping.ShapingDiagnostic
 import org.graphiks.kanvas.text.shaping.ShapingRequest
 
 /**
@@ -97,6 +98,36 @@ public data class ParagraphStyle(
 )
 
 /**
+ * Stable diagnostic family emitted when a paragraph layout width constraint is non-finite.
+ */
+public const val PARAGRAPH_LAYOUT_CONSTRAINT_NON_FINITE_DIAGNOSTIC_CODE: String =
+    "text.paragraph.constraint-non-finite"
+
+/**
+ * Stable diagnostic family emitted when a paragraph layout width constraint is negative.
+ */
+public const val PARAGRAPH_LAYOUT_CONSTRAINT_NEGATIVE_DIAGNOSTIC_CODE: String =
+    "text.paragraph.constraint-negative"
+
+/**
+ * Stable diagnostic family emitted when max-line truncation requested ellipsis insertion.
+ */
+public const val PARAGRAPH_LAYOUT_MAX_LINES_ELLIPSIS_UNSUPPORTED_DIAGNOSTIC_CODE: String =
+    "text.paragraph.max-lines-ellipsis-unsupported"
+
+/**
+ * Stable diagnostic family emitted when paragraph maxLines is invalid.
+ */
+public const val PARAGRAPH_LAYOUT_MAX_LINES_INVALID_DIAGNOSTIC_CODE: String =
+    "text.paragraph.max-lines-invalid"
+
+/**
+ * Stable diagnostic family emitted when paragraph lineHeight is non-finite.
+ */
+public const val PARAGRAPH_LAYOUT_LINE_HEIGHT_NON_FINITE_DIAGNOSTIC_CODE: String =
+    "text.paragraph.line-height-non-finite"
+
+/**
  * Defines style applied to a logical range of text.
  *
  * @property typefaceId Stable typeface identifier requested for this style
@@ -168,13 +199,42 @@ public class BasicParagraphLayoutEngine(
      * Lays out [paragraph] into shaped lines within finite, non-negative [maxWidth] logical pixels.
      */
     override fun layout(paragraph: Paragraph, maxWidth: Float): ParagraphLayoutResult {
-        requireValidMaxWidth(maxWidth)
-        if (paragraph.text.isEmpty()) return ParagraphLayoutResult(paragraph = paragraph)
+        maxWidthConstraintDiagnostic(maxWidth)?.let { diagnostic ->
+            return ParagraphLayoutResult(
+                paragraph = paragraph,
+                maxWidth = maxWidth,
+                diagnostics = listOf(diagnostic),
+                layoutRefused = true,
+            )
+        }
+        paragraphStyleDiagnostic(paragraph.paragraphStyle)?.let { diagnostic ->
+            return ParagraphLayoutResult(
+                paragraph = paragraph,
+                maxWidth = maxWidth,
+                diagnostics = listOf(diagnostic),
+                layoutRefused = true,
+            )
+        }
+        if (paragraph.text.isEmpty()) {
+            return ParagraphLayoutResult(
+                paragraph = paragraph,
+                maxWidth = maxWidth,
+            )
+        }
 
         val brokenRanges = lineBreaker.breakLines(paragraph, maxWidth)
         val maxLines = paragraph.paragraphStyle.maxLines
         val visibleRanges = if (maxLines == null) brokenRanges else brokenRanges.take(maxLines)
         val didOverflowHeight = maxLines != null && brokenRanges.size > visibleRanges.size
+        val diagnostics = mutableListOf<ParagraphLayoutDiagnostic>()
+        if (didOverflowHeight && paragraph.paragraphStyle.ellipsis != null) {
+            diagnostics += ParagraphLayoutDiagnostic(
+                code = PARAGRAPH_LAYOUT_MAX_LINES_ELLIPSIS_UNSUPPORTED_DIAGNOSTIC_CODE,
+                message = "maxLines ellipsis is not implemented by the current paragraph engine.",
+                textRange = hiddenTextRange(visibleRanges, brokenRanges),
+                severity = "refusal",
+            )
+        }
 
         var y = 0f
         var paragraphWidth = 0f
@@ -192,6 +252,7 @@ public class BasicParagraphLayoutEngine(
                 ),
             )
             val glyphRuns = shapingResult.glyphRuns
+            diagnostics += shapingResult.diagnostics.map { diagnostic -> diagnostic.toParagraphLayoutDiagnostic() }
             val lineWidth = glyphRuns.sumOf { it.advanceX.toDouble() }.toFloat()
             val lineHeight = paragraph.paragraphStyle.lineHeight ?: style.fontSize
             val ascent = -style.fontSize * ASCENT_FRACTION
@@ -232,10 +293,12 @@ public class BasicParagraphLayoutEngine(
         return ParagraphLayoutResult(
             paragraph = paragraph,
             lines = lines,
+            maxWidth = maxWidth,
             width = paragraphWidth,
             height = y,
             didOverflowHeight = didOverflowHeight,
             didOverflowWidth = lines.any { it.metrics.width > maxWidth },
+            diagnostics = diagnostics,
         )
     }
 }
@@ -249,15 +312,107 @@ public class BasicParagraphLayoutEngine(
  * @property height Actual paragraph height in logical pixels.
  * @property didOverflowHeight True when max-lines or vertical constraints clipped content.
  * @property didOverflowWidth True when at least one line exceeded the layout width.
+ * @property diagnostics Stable paragraph layout diagnostics and unsupported-behavior refusals.
+ * @property layoutRefused True when invalid input prevented any layout attempt.
  */
 public data class ParagraphLayoutResult(
     public val paragraph: Paragraph,
     public val lines: List<LineLayout> = emptyList(),
+    public val maxWidth: Float? = null,
     public val width: Float = 0f,
     public val height: Float = 0f,
     public val didOverflowHeight: Boolean = false,
     public val didOverflowWidth: Boolean = false,
-)
+    public val diagnostics: List<ParagraphLayoutDiagnostic> = emptyList(),
+    public val layoutRefused: Boolean = false,
+) {
+    /**
+     * Serializes the current paragraph layout facts into deterministic JSON for test evidence.
+     *
+     * This is a conservative current-state dump: it records input ranges,
+     * layout metrics, line boxes, overflow flags, and diagnostics. It does not
+     * claim rich text splitting, complete bidi, selection, hit testing, or Skia
+     * Paragraph parity.
+     */
+    public fun dump(): String = buildString {
+        append("{\n")
+        append("  \"schema\": \"kanvas.paragraph.layout.v1\",\n")
+        append("  \"input\": {\n")
+        append("    \"text\": ").append(paragraphJsonString(paragraph.text)).append(",\n")
+        append("    \"textLength\": ").append(paragraph.text.length).append(",\n")
+        append("    \"paragraphStyle\": ").append(paragraph.paragraphStyle.toDumpJson()).append(",\n")
+        append("    \"textStyles\": ")
+        appendParagraphJsonArray(
+            values = paragraph.textStyles.entries.sortedByRange(),
+            entryIndent = "      ",
+            closingIndent = "    ",
+        ) { (range, style) ->
+            style.toDumpJson(range)
+        }
+        append(",\n")
+        append("    \"placeholders\": ")
+        appendParagraphJsonArray(
+            values = paragraph.placeholders.entries.sortedByRange(),
+            entryIndent = "      ",
+            closingIndent = "    ",
+        ) { (range, placeholder) ->
+            placeholder.toDumpJson(range)
+        }
+        append("\n")
+        append("  },\n")
+        append("  \"layout\": {\"maxWidth\": ")
+            .append(paragraphJsonNullableFloat(maxWidth))
+            .append(", \"width\": ")
+            .append(paragraphJsonFloat(width))
+            .append(", \"height\": ")
+            .append(paragraphJsonFloat(height))
+            .append(", \"didOverflowWidth\": ")
+            .append(didOverflowWidth)
+            .append(", \"didOverflowHeight\": ")
+            .append(didOverflowHeight)
+            .append(", \"layoutRefused\": ")
+            .append(layoutRefused)
+            .append("},\n")
+        append("  \"lines\": ")
+        appendParagraphJsonArray(
+            values = lines.withIndex().toList(),
+            entryIndent = "    ",
+            closingIndent = "  ",
+        ) { (index, line) ->
+            line.toDumpJson(index)
+        }
+        append(",\n")
+        append("  \"diagnostics\": ")
+        appendParagraphJsonArray(
+            values = diagnostics,
+            entryIndent = "    ",
+            closingIndent = "  ",
+        ) { diagnostic -> diagnostic.toDumpJson() }
+        append("\n")
+        append("}\n")
+    }
+}
+
+/**
+ * Stable paragraph layout diagnostic or refusal fact for dumps and validation evidence.
+ *
+ * @property code Stable machine-readable diagnostic code.
+ * @property message Human-readable single-line detail.
+ * @property textRange Optional inclusive UTF-16 range associated with the diagnostic.
+ * @property severity Stable classification such as `diagnostic` or `refusal`.
+ */
+public data class ParagraphLayoutDiagnostic(
+    public val code: String,
+    public val message: String,
+    public val textRange: IntRange? = null,
+    public val severity: String = "diagnostic",
+) {
+    init {
+        require(code.isStableParagraphDiagnosticToken()) { "code must be a stable one-line diagnostic code." }
+        require(severity.isStableParagraphDiagnosticToken()) { "severity must be a stable one-line diagnostic token." }
+        require('\n' !in message && '\r' !in message) { "message must be a single line." }
+    }
+}
 
 /**
  * Computes legal line break ranges for paragraph layout.
@@ -433,9 +588,221 @@ private const val OBJECT_REPLACEMENT_CHARACTER: Char = '\uFFFC'
 private const val ASCENT_FRACTION: Float = 0.8f
 private const val DESCENT_FRACTION: Float = 0.2f
 
+private fun maxWidthConstraintDiagnostic(maxWidth: Float): ParagraphLayoutDiagnostic? =
+    when {
+        !maxWidth.isFinite() -> ParagraphLayoutDiagnostic(
+            code = PARAGRAPH_LAYOUT_CONSTRAINT_NON_FINITE_DIAGNOSTIC_CODE,
+            message = "maxWidth must be finite.",
+            severity = "refusal",
+        )
+        maxWidth < 0f -> ParagraphLayoutDiagnostic(
+            code = PARAGRAPH_LAYOUT_CONSTRAINT_NEGATIVE_DIAGNOSTIC_CODE,
+            message = "maxWidth must be non-negative.",
+            severity = "refusal",
+        )
+        else -> null
+    }
+
+private fun paragraphStyleDiagnostic(style: ParagraphStyle): ParagraphLayoutDiagnostic? =
+    when {
+        style.maxLines != null && style.maxLines < 0 -> ParagraphLayoutDiagnostic(
+            code = PARAGRAPH_LAYOUT_MAX_LINES_INVALID_DIAGNOSTIC_CODE,
+            message = "maxLines must be non-negative when present.",
+            severity = "refusal",
+        )
+        style.lineHeight != null && !style.lineHeight.isFinite() -> ParagraphLayoutDiagnostic(
+            code = PARAGRAPH_LAYOUT_LINE_HEIGHT_NON_FINITE_DIAGNOSTIC_CODE,
+            message = "lineHeight must be finite when present.",
+            severity = "refusal",
+        )
+        else -> null
+    }
+
+private fun ShapingDiagnostic.toParagraphLayoutDiagnostic(): ParagraphLayoutDiagnostic =
+    ParagraphLayoutDiagnostic(
+        code = code,
+        message = message,
+        textRange = textRange,
+        severity = "diagnostic",
+    )
+
+private fun hiddenTextRange(
+    visibleRanges: List<IntRange>,
+    brokenRanges: List<IntRange>,
+): IntRange? {
+    val firstHidden = brokenRanges.getOrNull(visibleRanges.size)?.first ?: return null
+    val lastHidden = brokenRanges.lastOrNull()?.last ?: return null
+    return if (firstHidden <= lastHidden) firstHidden..lastHidden else null
+}
+
 private fun requireValidMaxWidth(maxWidth: Float) {
     require(maxWidth.isFinite() && maxWidth >= 0f) { "maxWidth must be finite and non-negative." }
 }
+
+private fun ParagraphStyle.toDumpJson(): String = buildString {
+    append("{\"textAlign\": ")
+        .append(paragraphJsonString(textAlign))
+        .append(", \"textDirection\": ")
+        .append(textDirection)
+        .append(", \"maxLines\": ")
+        .append(maxLines?.toString() ?: "null")
+        .append(", \"ellipsis\": ")
+        .append(paragraphJsonNullableString(ellipsis))
+        .append(", \"lineHeight\": ")
+        .append(paragraphJsonNullableFloat(lineHeight))
+        .append("}")
+}
+
+private fun TextStyle.toDumpJson(range: IntRange): String = buildString {
+    append("{\"range\": ")
+        .append(paragraphJsonString(range.toDumpLabel()))
+        .append(", \"typefaceId\": ")
+        .append(typefaceId?.value?.toString()?.let(::paragraphJsonString) ?: "null")
+        .append(", \"fontSize\": ")
+        .append(paragraphJsonFloat(fontSize))
+        .append(", \"locale\": ")
+        .append(paragraphJsonNullableString(locale))
+        .append(", \"features\": ")
+        .append(features.toDumpJson())
+        .append("}")
+}
+
+private fun PlaceholderStyle.toDumpJson(range: IntRange): String = buildString {
+    append("{\"range\": ")
+        .append(paragraphJsonString(range.toDumpLabel()))
+        .append(", \"width\": ")
+        .append(paragraphJsonFloat(width))
+        .append(", \"height\": ")
+        .append(paragraphJsonFloat(height))
+        .append(", \"baselineOffset\": ")
+        .append(paragraphJsonFloat(baselineOffset))
+        .append(", \"alignment\": ")
+        .append(paragraphJsonString(alignment))
+        .append("}")
+}
+
+private fun LineLayout.toDumpJson(index: Int): String = buildString {
+    append("{\"index\": ")
+        .append(index)
+        .append(", \"textRange\": ")
+        .append(paragraphJsonString(textRange.toDumpLabel()))
+        .append(", \"metrics\": ")
+        .append(metrics.toDumpJson())
+        .append(", \"boxes\": ")
+        .append(boxes.joinToString(prefix = "[", postfix = "]") { box -> box.toDumpJson() })
+        .append(", \"glyphRunCount\": ")
+        .append(glyphRuns.size)
+        .append("}")
+}
+
+private fun LineMetrics.toDumpJson(): String = buildString {
+    append("{\"ascent\": ")
+        .append(paragraphJsonFloat(ascent))
+        .append(", \"descent\": ")
+        .append(paragraphJsonFloat(descent))
+        .append(", \"leading\": ")
+        .append(paragraphJsonFloat(leading))
+        .append(", \"width\": ")
+        .append(paragraphJsonFloat(width))
+        .append(", \"baseline\": ")
+        .append(paragraphJsonFloat(baseline))
+        .append("}")
+}
+
+private fun TextBox.toDumpJson(): String = buildString {
+    append("{\"textRange\": ")
+        .append(paragraphJsonString(textRange.toDumpLabel()))
+        .append(", \"left\": ")
+        .append(paragraphJsonFloat(left))
+        .append(", \"top\": ")
+        .append(paragraphJsonFloat(top))
+        .append(", \"right\": ")
+        .append(paragraphJsonFloat(right))
+        .append(", \"bottom\": ")
+        .append(paragraphJsonFloat(bottom))
+        .append(", \"direction\": ")
+        .append(direction)
+        .append("}")
+}
+
+private fun ParagraphLayoutDiagnostic.toDumpJson(): String = buildString {
+    append("{\"code\": ")
+        .append(paragraphJsonString(code))
+        .append(", \"message\": ")
+        .append(paragraphJsonString(message))
+        .append(", \"textRange\": ")
+        .append(textRange?.toDumpLabel()?.let(::paragraphJsonString) ?: "null")
+        .append(", \"severity\": ")
+        .append(paragraphJsonString(severity))
+        .append("}")
+}
+
+private fun Map<String, Int>.toDumpJson(): String =
+    entries.sortedBy { it.key }.joinToString(prefix = "[", postfix = "]") { (tag, value) ->
+        "{\"tag\": ${paragraphJsonString(tag)}, \"value\": $value}"
+    }
+
+private fun <V> Set<Map.Entry<IntRange, V>>.sortedByRange(): List<Map.Entry<IntRange, V>> =
+    sortedWith(compareBy<Map.Entry<IntRange, V>> { it.key.first }.thenBy { it.key.last })
+
+private fun <T> StringBuilder.appendParagraphJsonArray(
+    values: List<T>,
+    entryIndent: String,
+    closingIndent: String,
+    encode: (T) -> String,
+) {
+    if (values.isEmpty()) {
+        append("[]")
+        return
+    }
+    append("[\n")
+    values.forEachIndexed { index, value ->
+        append(entryIndent).append(encode(value))
+        if (index != values.lastIndex) append(",")
+        append("\n")
+    }
+    append(closingIndent).append("]")
+}
+
+private fun paragraphJsonNullableString(value: String?): String =
+    value?.let(::paragraphJsonString) ?: "null"
+
+private fun paragraphJsonNullableFloat(value: Float?): String =
+    value?.let(::paragraphJsonFloat) ?: "null"
+
+private fun paragraphJsonFloat(value: Float): String =
+    if (value.isFinite()) value.toString() else paragraphJsonString(value.toString())
+
+private fun paragraphJsonString(value: String): String = buildString {
+    append('"')
+    value.forEach { char ->
+        when (char) {
+            '\\' -> append("\\\\")
+            '"' -> append("\\\"")
+            '\b' -> append("\\b")
+            '\u000C' -> append("\\f")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            else -> {
+                if (char.code in 0x20..0x7E) {
+                    append(char)
+                } else {
+                    append("\\u")
+                    append(char.code.toString(16).padStart(4, '0'))
+                }
+            }
+        }
+    }
+    append('"')
+}
+
+private fun IntRange.toDumpLabel(): String = "$first..$last"
+
+private fun String.isStableParagraphDiagnosticToken(): Boolean =
+    isNotBlank() && all { char ->
+        char in 'a'..'z' || char in '0'..'9' || char == '.' || char == '-' || char == '_'
+    }
 
 private fun Paragraph.primaryStyleFor(textRange: IntRange): TextStyle =
     textStyles.entries.firstOrNull { (range) -> range.overlaps(textRange) }?.value ?: TextStyle()

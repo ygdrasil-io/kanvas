@@ -30,8 +30,12 @@ import org.graphiks.kanvas.text.paragraph.BasicParagraphLayoutEngine
 import org.graphiks.kanvas.text.paragraph.LineBreaker
 import org.graphiks.kanvas.text.paragraph.LineLayout
 import org.graphiks.kanvas.text.paragraph.LineMetrics
+import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LAYOUT_CONSTRAINT_NEGATIVE_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LAYOUT_CONSTRAINT_NON_FINITE_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LAYOUT_MAX_LINES_ELLIPSIS_UNSUPPORTED_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.Paragraph
 import org.graphiks.kanvas.text.paragraph.ParagraphBuilder
+import org.graphiks.kanvas.text.paragraph.ParagraphLayoutDiagnostic
 import org.graphiks.kanvas.text.paragraph.ParagraphLayoutEngine
 import org.graphiks.kanvas.text.paragraph.ParagraphLayoutResult
 import org.graphiks.kanvas.text.paragraph.ParagraphStyle
@@ -114,13 +118,22 @@ class TextStackSurfaceTest {
             LineLayout::class.simpleName,
             LineMetrics::class.simpleName,
             TextBox::class.simpleName,
+            ParagraphLayoutDiagnostic::class.simpleName,
             HitTestResult::class.simpleName,
             SelectionRange::class.simpleName,
             TextPosition::class.simpleName,
         )
 
         assertEquals(25, shapingTypes.size)
-        assertEquals(14, paragraphTypes.size)
+        assertEquals(15, paragraphTypes.size)
+    }
+
+    @Test
+    fun shapingDiagnosticCodesUseStableSpecFamilies() {
+        assertEquals("text.shaping.fallback-missing", MISSING_GLYPH_DIAGNOSTIC_CODE)
+        assertEquals(MISSING_GLYPH_DIAGNOSTIC_CODE, UNRESOLVED_FONT_RUN_DIAGNOSTIC_CODE)
+        assertEquals("text.shaping.feature-unsupported", KERN_TABLE_UNAPPLIED_DIAGNOSTIC_CODE)
+        assertEquals("text.shaping.cluster-invariant-failed", CONFLICTING_FONT_RUN_DIAGNOSTIC_CODE)
     }
 
     @Test
@@ -176,13 +189,125 @@ class TextStackSurfaceTest {
     }
 
     @Test
+    fun paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically() {
+        val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
+        val paragraph = ParagraphBuilder(ParagraphStyle(textDirection = 1))
+            .append("aa bb c", TextStyle(fontSize = 10f, locale = "en-US"))
+            .build()
+
+        val result = layoutEngine.layout(paragraph, maxWidth = 50f)
+
+        assertEquals(
+            """
+            {
+              "schema": "kanvas.paragraph.layout.v1",
+              "input": {
+                "text": "aa bb c",
+                "textLength": 7,
+                "paragraphStyle": {"textAlign": "start", "textDirection": 1, "maxLines": null, "ellipsis": null, "lineHeight": null},
+                "textStyles": [
+                  {"range": "0..6", "typefaceId": null, "fontSize": 10.0, "locale": "en-US", "features": []}
+                ],
+                "placeholders": []
+              },
+              "layout": {"maxWidth": 50.0, "width": 50.0, "height": 20.0, "didOverflowWidth": false, "didOverflowHeight": false, "layoutRefused": false},
+              "lines": [
+                {"index": 0, "textRange": "0..4", "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 50.0, "baseline": 8.0}, "boxes": [{"textRange": "0..4", "left": 0.0, "top": 0.0, "right": 50.0, "bottom": 10.0, "direction": 1}], "glyphRunCount": 1},
+                {"index": 1, "textRange": "6..6", "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 10.0, "baseline": 18.0}, "boxes": [{"textRange": "6..6", "left": 0.0, "top": 10.0, "right": 10.0, "bottom": 20.0, "direction": 1}], "glyphRunCount": 1}
+              ],
+              "diagnostics": []
+            }
+            """.trimIndent() + "\n",
+            result.dump(),
+        )
+        assertFalse(result.dump().contains("@"))
+        assertFalse(result.dump().contains("Sk"))
+    }
+
+    @Test
+    fun paragraphLayoutDiagnosesMaxLineEllipsisUnsupportedInResultDump() {
+        val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
+        val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "..."))
+            .append("aa bb c", TextStyle(fontSize = 10f))
+            .build()
+
+        val result = layoutEngine.layout(paragraph, maxWidth = 50f)
+
+        assertEquals(1, result.lines.size)
+        assertTrue(result.didOverflowHeight)
+        assertEquals(
+            listOf(
+                ParagraphLayoutDiagnostic(
+                    code = PARAGRAPH_LAYOUT_MAX_LINES_ELLIPSIS_UNSUPPORTED_DIAGNOSTIC_CODE,
+                    message = "maxLines ellipsis is not implemented by the current paragraph engine.",
+                    textRange = 6..6,
+                    severity = "refusal",
+                ),
+            ),
+            result.diagnostics,
+        )
+        assertTrue(result.dump().contains("\"code\": \"text.paragraph.max-lines-ellipsis-unsupported\""))
+        assertTrue(result.dump().contains("\"textRange\": \"6..6\""))
+    }
+
+    @Test
+    fun paragraphLayoutMergesShapingDiagnosticsIntoResultDump() {
+        val shapingDiagnostic = ShapingDiagnostic(
+            code = MISSING_GLYPH_DIAGNOSTIC_CODE,
+            message = "Missing glyph U+0041.",
+            textRange = 0..0,
+        )
+        val layoutEngine = BasicParagraphLayoutEngine(
+            RecordingShapingEngine(diagnostics = listOf(shapingDiagnostic)),
+        )
+        val paragraph = ParagraphBuilder()
+            .append("A", TextStyle(fontSize = 10f))
+            .build()
+
+        val result = layoutEngine.layout(paragraph, maxWidth = 50f)
+
+        assertEquals(
+            ParagraphLayoutDiagnostic(
+                code = MISSING_GLYPH_DIAGNOSTIC_CODE,
+                message = "Missing glyph U+0041.",
+                textRange = 0..0,
+                severity = "diagnostic",
+            ),
+            result.diagnostics.single(),
+        )
+        assertTrue(result.dump().contains("\"code\": \"text.shaping.fallback-missing\""))
+        assertTrue(result.dump().contains("\"textRange\": \"0..0\""))
+    }
+
+    @Test
+    fun paragraphLayoutDumpsInvalidStylePolicyRefusals() {
+        val negativeMaxLines = ParagraphBuilder(ParagraphStyle(maxLines = -1))
+            .append("abc", TextStyle(fontSize = 10f))
+            .build()
+        val nonFiniteLineHeight = ParagraphBuilder(ParagraphStyle(lineHeight = Float.POSITIVE_INFINITY))
+            .append("abc", TextStyle(fontSize = 10f))
+            .build()
+        val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
+
+        val maxLinesResult = layoutEngine.layout(negativeMaxLines, maxWidth = 50f)
+        val lineHeightResult = layoutEngine.layout(nonFiniteLineHeight, maxWidth = 50f)
+
+        assertTrue(maxLinesResult.layoutRefused)
+        assertTrue(lineHeightResult.layoutRefused)
+        assertEquals("text.paragraph.max-lines-invalid", maxLinesResult.diagnostics.single().code)
+        assertEquals("text.paragraph.line-height-non-finite", lineHeightResult.diagnostics.single().code)
+        assertTrue(maxLinesResult.dump().contains("\"code\": \"text.paragraph.max-lines-invalid\""))
+        assertTrue(lineHeightResult.dump().contains("\"code\": \"text.paragraph.line-height-non-finite\""))
+    }
+
+    @Test
     fun basicParagraphLayoutEngineHandlesEmptyParagraphWithoutShaping() {
         val engine = RecordingShapingEngine()
 
         val result = BasicParagraphLayoutEngine(engine).layout(ParagraphBuilder().build(), maxWidth = 50f)
 
         assertEquals(emptyList(), engine.requests)
-        assertEquals(ParagraphLayoutResult(paragraph = result.paragraph), result)
+        assertEquals(ParagraphLayoutResult(paragraph = result.paragraph, maxWidth = 50f), result)
     }
 
     @Test
@@ -216,7 +341,7 @@ class TextStackSurfaceTest {
     }
 
     @Test
-    fun paragraphLayoutRejectsInvalidMaxWidth() {
+    fun paragraphLayoutDumpsInvalidMaxWidthRefusals() {
         val paragraph = ParagraphBuilder()
             .append("abc", TextStyle(fontSize = 10f))
             .build()
@@ -229,17 +354,31 @@ class TextStackSurfaceTest {
         val breakerNegative = assertFailsWith<IllegalArgumentException> {
             lineBreaker.breakLines(paragraph, -1f)
         }
-        val layoutNaN = assertFailsWith<IllegalArgumentException> {
-            layoutEngine.layout(paragraph, Float.NaN)
-        }
-        val layoutNegative = assertFailsWith<IllegalArgumentException> {
-            layoutEngine.layout(paragraph, -1f)
-        }
+        val layoutNaN = layoutEngine.layout(paragraph, Float.NaN)
+        val layoutNegative = layoutEngine.layout(paragraph, -1f)
 
         assertTrue(breakerNaN.message.orEmpty().contains("maxWidth"))
         assertTrue(breakerNegative.message.orEmpty().contains("maxWidth"))
-        assertTrue(layoutNaN.message.orEmpty().contains("maxWidth"))
-        assertTrue(layoutNegative.message.orEmpty().contains("maxWidth"))
+        assertEquals(
+            ParagraphLayoutDiagnostic(
+                code = PARAGRAPH_LAYOUT_CONSTRAINT_NON_FINITE_DIAGNOSTIC_CODE,
+                message = "maxWidth must be finite.",
+                severity = "refusal",
+            ),
+            layoutNaN.diagnostics.single(),
+        )
+        assertEquals(
+            ParagraphLayoutDiagnostic(
+                code = PARAGRAPH_LAYOUT_CONSTRAINT_NEGATIVE_DIAGNOSTIC_CODE,
+                message = "maxWidth must be non-negative.",
+                severity = "refusal",
+            ),
+            layoutNegative.diagnostics.single(),
+        )
+        assertTrue(layoutNaN.layoutRefused)
+        assertTrue(layoutNegative.layoutRefused)
+        assertTrue(layoutNaN.dump().contains("\"maxWidth\": \"NaN\""))
+        assertTrue(layoutNegative.dump().contains("\"maxWidth\": -1.0"))
     }
 
     @Test
@@ -1082,7 +1221,9 @@ class TextStackSurfaceTest {
         }
     }
 
-    private class RecordingShapingEngine : OpenTypeShapingEngine {
+    private class RecordingShapingEngine(
+        private val diagnostics: List<ShapingDiagnostic> = emptyList(),
+    ) : OpenTypeShapingEngine {
         val requests = mutableListOf<ShapingRequest>()
 
         override fun shape(request: ShapingRequest): ShapingResult {
@@ -1104,6 +1245,7 @@ class TextStackSurfaceTest {
                         fontSize = request.fontSize,
                     ),
                 ),
+                diagnostics = diagnostics,
             )
         }
     }

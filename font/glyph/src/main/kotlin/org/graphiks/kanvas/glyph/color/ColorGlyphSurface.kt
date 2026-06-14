@@ -5,6 +5,7 @@ import org.graphiks.kanvas.glyph.GlyphStrikeKey
 import org.graphiks.kanvas.glyph.OutlineGlyphRepresentation
 import org.graphiks.kanvas.glyph.gpu.GPUGlyphRunDescriptor
 import java.io.ByteArrayOutputStream
+import java.security.MessageDigest
 import java.util.zip.CRC32
 import java.util.zip.DataFormatException
 import java.util.zip.Inflater
@@ -1778,6 +1779,8 @@ class SimpleEmojiGlyphDispatcher(
                     route = "missing",
                     message = "No emoji glyph route is available for glyph $glyphId at ${strikeKey.sizePx}px.",
                     severity = "warning",
+                    code = ColorGlyphDiagnosticCodes.EmojiFallbackUnavailable,
+                    detail = "glyphId=$glyphId;sizePx=${strikeKey.sizePx};availableRoutes=none",
                 ),
             )
         }
@@ -1798,13 +1801,17 @@ class SimpleEmojiGlyphDispatcher(
                         glyphId = glyphId,
                         route = candidate.route,
                         message = "Selected ${candidate.route} route for glyph $glyphId at ${strikeKey.sizePx}px.",
+                        code = ColorGlyphDiagnosticCodes.EmojiRouteSelected,
+                        detail = "selected=${candidate.route};glyphId=$glyphId;sizePx=${strikeKey.sizePx}",
                     )
                 }
                 candidate.available -> {
                     diagnostics += ColorGlyphDiagnostic(
                         glyphId = glyphId,
                         route = candidate.route,
-                        message = "Skipped ${candidate.route} route for glyph $glyphId because it has lower preference than ${selected.route}.",
+                        message = "Route ${candidate.route} skipped for glyph $glyphId because it has lower preference than ${selected.route}.",
+                        code = ColorGlyphDiagnosticCodes.EmojiRouteLowerPreferenceSkipped,
+                        detail = "candidate=${candidate.route};selected=${selected.route};glyphId=$glyphId;sizePx=${strikeKey.sizePx}",
                     )
                 }
             }
@@ -1837,7 +1844,16 @@ class SimpleEmojiGlyphDispatcher(
             glyphId = glyphId,
             route = route,
             message = "Route $route is unavailable for glyph $glyphId at ${strikeKey.sizePx}px.",
+            code = unavailableDiagnosticCode(route),
+            detail = "candidate=$route;glyphId=$glyphId;sizePx=${strikeKey.sizePx}",
         )
+
+    private fun unavailableDiagnosticCode(route: String): String =
+        when (route) {
+            "bitmap" -> ColorGlyphDiagnosticCodes.BitmapStrikeUnavailable
+            "outline" -> ColorGlyphDiagnosticCodes.EmojiFallbackUnavailable
+            else -> ColorGlyphDiagnosticCodes.ColorGlyphUnavailable
+        }
 }
 
 /**
@@ -1851,7 +1867,50 @@ data class EmojiGlyphDispatch(
     val glyphId: Int,
     val route: String,
     val diagnostics: List<ColorGlyphDiagnostic> = emptyList(),
-)
+) {
+    /**
+     * SHA-256 digest of this dispatch dump without the `dumpSha256` field.
+     */
+    val dumpSha256: String
+        get() = colorGlyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    /**
+     * Serializes the dispatch decision as deterministic JSON evidence.
+     *
+     * @return canonical JSON dump ending with a newline.
+     */
+    fun toCanonicalJson(): String = canonicalJson(includeDumpSha256 = true)
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendColorGlyphJsonField("schema", EmojiDispatchSchema, comma = true)
+        appendColorGlyphJsonField("glyphId", glyphId, comma = true)
+        append("  ")
+        append(colorGlyphJsonString("routeOrder"))
+        append(": ")
+        appendColorGlyphRouteOrderJson()
+        append(",\n")
+        appendColorGlyphJsonField("selectedRoute", route, comma = true)
+        append("  ")
+        append(colorGlyphJsonString("diagnostics"))
+        append(": ")
+        appendColorGlyphDiagnosticsJson(diagnostics, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendColorGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+
+    companion object {
+        /**
+         * Stable schema label for emoji glyph dispatch evidence.
+         */
+        const val EmojiDispatchSchema: String = "org.graphiks.kanvas.glyph.color.EmojiGlyphDispatch.v1"
+    }
+}
 
 /**
  * Describes a color glyph planning result without duplicating public GPU API plan classes.
@@ -1862,7 +1921,53 @@ data class EmojiGlyphDispatch(
 data class ColorGlyphPlanningResult(
     val routes: List<ColorGlyphRoute>,
     val diagnostics: List<ColorGlyphDiagnostic> = emptyList(),
-)
+) {
+    /**
+     * SHA-256 digest of this planning dump without the `dumpSha256` field.
+     */
+    val dumpSha256: String
+        get() = colorGlyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    /**
+     * Serializes selected routes and diagnostics as deterministic JSON evidence.
+     *
+     * @return canonical JSON dump ending with a newline.
+     */
+    fun toCanonicalJson(): String = canonicalJson(includeDumpSha256 = true)
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendColorGlyphJsonField("schema", PlanningResultSchema, comma = true)
+        append("  ")
+        append(colorGlyphJsonString("routeOrder"))
+        append(": ")
+        appendColorGlyphRouteOrderJson()
+        append(",\n")
+        append("  ")
+        append(colorGlyphJsonString("selectedRoutes"))
+        append(": ")
+        appendColorGlyphRoutesJson(routes, indent = "  ")
+        append(",\n")
+        append("  ")
+        append(colorGlyphJsonString("diagnostics"))
+        append(": ")
+        appendColorGlyphDiagnosticsJson(diagnostics, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendColorGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+
+    companion object {
+        /**
+         * Stable schema label for color glyph planning evidence.
+         */
+        const val PlanningResultSchema: String = "org.graphiks.kanvas.glyph.color.ColorGlyphPlanningResult.v1"
+    }
+}
 
 /**
  * Metadata-only color glyph route selected for one glyph.
@@ -1884,6 +1989,51 @@ data class ColorGlyphRoute(
             "Outline color glyph routes must carry an outline representation, and non-outline routes must not."
         }
     }
+
+    /**
+     * Serializes this selected route as deterministic JSON evidence.
+     *
+     * @return canonical JSON object without a trailing newline.
+     */
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("glyphId")).append(": ").append(glyphId).append(", ")
+        append(colorGlyphJsonString("route")).append(": ").append(colorGlyphJsonString(route)).append(", ")
+        append(colorGlyphJsonString("outlineFallback")).append(": ").append(route == "outline").append(", ")
+        append(colorGlyphJsonString("outlineFacts")).append(": ")
+        if (outline == null) {
+            append("null")
+        } else {
+            append("{")
+            append(colorGlyphJsonString("pathCommandCount")).append(": ").append(outline.pathCommands.size).append(", ")
+            append(colorGlyphJsonString("windingRule")).append(": ").append(colorGlyphJsonString(outline.windingRule))
+            append("}")
+        }
+        append("}")
+    }
+}
+
+/**
+ * Stable diagnostic code families used by color glyph planning and emoji dispatch evidence.
+ */
+object ColorGlyphDiagnosticCodes {
+    const val CPALMalformed: String = "text.color.CPAL-malformed"
+    const val COLRMalformed: String = "text.color.COLR-malformed"
+    const val COLRV1PaintUnsupported: String = "text.color.COLRv1-paint-unsupported"
+    const val COLRV1CycleDetected: String = "text.color.COLRv1-cycle-detected"
+    const val COLRV1BudgetExceeded: String = "text.color.COLRv1-budget-exceeded"
+    const val PNGDecodeFailed: String = "text.bitmap.PNG-decode-failed"
+    const val BitmapStrikeUnavailable: String = "text.bitmap.strike-unavailable"
+    const val BitmapPayloadFormatUnsupported: String = "text.bitmap.payload-format-unsupported"
+    const val SVGDocumentMalformed: String = "text.SVG.document-malformed"
+    const val SVGFeatureUnsupported: String = "text.SVG.feature-unsupported"
+    const val SVGExternalResourceRefused: String = "text.SVG.external-resource-refused"
+    const val SVGBudgetExceeded: String = "text.SVG.budget-exceeded"
+    const val EmojiSequenceUnsupported: String = "text.emoji.sequence-unsupported"
+    const val EmojiFallbackUnavailable: String = "text.emoji.fallback-unavailable"
+    const val ColorGlyphUnavailable: String = "text.emoji.color-glyph-unavailable"
+    const val EmojiRouteSelected: String = "text.emoji.route-selected"
+    const val EmojiRouteLowerPreferenceSkipped: String = "text.emoji.route-lower-preference-skipped"
 }
 
 /**
@@ -1893,12 +2043,19 @@ data class ColorGlyphRoute(
  * @property route selected or attempted color route.
  * @property message human-readable diagnostic message.
  * @property severity severity label for logs and PM evidence.
+ * @property code stable diagnostic code suitable for route dumps and PM evidence.
+ * @property detail stable machine-readable detail string without host-specific facts.
+ *
+ * The primary constructor keeps JVM overloads for the original four-field constructor. The
+ * Kotlin data-class `copy(...)` signature follows the current property set.
  */
-data class ColorGlyphDiagnostic(
+data class ColorGlyphDiagnostic @JvmOverloads constructor(
     val glyphId: Int?,
     val route: String,
     val message: String,
     val severity: String = "info",
+    val code: String = ColorGlyphDiagnosticCodes.ColorGlyphUnavailable,
+    val detail: String = message,
 ) {
     /**
      * Converts this color diagnostic into a generic glyph route diagnostic.
@@ -1912,6 +2069,22 @@ data class ColorGlyphDiagnostic(
             message = message,
             severity = severity,
         )
+
+    /**
+     * Serializes this color diagnostic with stable field order and JSON escaping.
+     *
+     * @return canonical JSON object without a trailing newline.
+     */
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("glyphId")).append(": ").append(glyphId ?: "null").append(", ")
+        append(colorGlyphJsonString("route")).append(": ").append(colorGlyphJsonString(route)).append(", ")
+        append(colorGlyphJsonString("code")).append(": ").append(colorGlyphJsonString(code)).append(", ")
+        append(colorGlyphJsonString("detail")).append(": ").append(colorGlyphJsonString(detail)).append(", ")
+        append(colorGlyphJsonString("severity")).append(": ").append(colorGlyphJsonString(severity)).append(", ")
+        append(colorGlyphJsonString("message")).append(": ").append(colorGlyphJsonString(message))
+        append("}")
+    }
 }
 
 /**
@@ -1922,7 +2095,104 @@ private data class EmojiRouteCandidate(
     val available: Boolean,
 )
 
-private val COLOR_GLYPH_ROUTES = setOf("colr", "bitmap", "png", "svg", "outline")
+private val COLOR_GLYPH_ROUTE_ORDER = listOf("colr", "bitmap", "png", "svg", "outline")
+private val COLOR_GLYPH_ROUTES = COLOR_GLYPH_ROUTE_ORDER.toSet()
+
+/**
+ * Appends a canonical JSON string field using the module's two-space object indentation.
+ */
+private fun StringBuilder.appendColorGlyphJsonField(name: String, value: String, comma: Boolean) {
+    append("  ")
+    append(colorGlyphJsonString(name))
+    append(": ")
+    append(colorGlyphJsonString(value))
+    if (comma) append(",")
+    append("\n")
+}
+
+/**
+ * Appends a canonical JSON integer field using the module's two-space object indentation.
+ */
+private fun StringBuilder.appendColorGlyphJsonField(name: String, value: Int, comma: Boolean) {
+    append("  ")
+    append(colorGlyphJsonString(name))
+    append(": ")
+    append(value)
+    if (comma) append(",")
+    append("\n")
+}
+
+/**
+ * Appends the stable route preference order used by emoji color glyph dispatch.
+ */
+private fun StringBuilder.appendColorGlyphRouteOrderJson() {
+    append(COLOR_GLYPH_ROUTE_ORDER.joinToString(prefix = "[", postfix = "]") { route ->
+        colorGlyphJsonString(route)
+    })
+}
+
+/**
+ * Appends selected routes as a canonical JSON array while preserving planning order.
+ */
+private fun StringBuilder.appendColorGlyphRoutesJson(routes: List<ColorGlyphRoute>, indent: String) {
+    append("[")
+    if (routes.isNotEmpty()) {
+        append("\n")
+        append(routes.joinToString(",\n") { route -> "$indent  ${route.toCanonicalJson()}" })
+        append("\n")
+        append(indent)
+    }
+    append("]")
+}
+
+/**
+ * Appends diagnostics as a canonical JSON array while preserving route evidence order.
+ */
+private fun StringBuilder.appendColorGlyphDiagnosticsJson(diagnostics: List<ColorGlyphDiagnostic>, indent: String) {
+    append("[")
+    if (diagnostics.isNotEmpty()) {
+        append("\n")
+        append(diagnostics.joinToString(",\n") { diagnostic -> "$indent  ${diagnostic.toCanonicalJson()}" })
+        append("\n")
+        append(indent)
+    }
+    append("]")
+}
+
+/**
+ * Escapes a string for canonical JSON evidence.
+ */
+private fun colorGlyphJsonString(value: String): String = buildString {
+    append('"')
+    value.forEach { character ->
+        when (character) {
+            '\\' -> append("\\\\")
+            '"' -> append("\\\"")
+            '\b' -> append("\\b")
+            '\u000C' -> append("\\f")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            else -> {
+                if (character.code < 0x20) {
+                    append("\\u")
+                    append(character.code.toString(16).padStart(4, '0'))
+                } else {
+                    append(character)
+                }
+            }
+        }
+    }
+    append('"')
+}
+
+/**
+ * Computes a lowercase SHA-256 digest for deterministic color glyph evidence.
+ */
+private fun colorGlyphSha256(bytes: ByteArray): String =
+    MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { byte ->
+        "%02x".format(byte.toInt() and 0xFF)
+    }
 
 /**
  * Bounds-checked big-endian reader for raw OpenType color table bytes.
