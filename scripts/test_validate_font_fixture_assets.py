@@ -185,6 +185,25 @@ class FontFixtureAssetsValidatorTest(unittest.TestCase):
                 validator.validate_index(root, payload)
             self.assertIn("reports/font/fixtures/fonts", str(failure.exception))
 
+    def test_rejects_asset_path_traversal_outside_fixture_fonts_root(self) -> None:
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "reports/font/fixtures/fonts").mkdir(parents=True)
+            (root / "reports/font/fixtures/licenses").mkdir(parents=True)
+            (root / "reports/font/outside.ttf").write_bytes(b"x")
+            (root / "reports/font/fixtures/licenses/OFL-1.1.txt").write_text("license\n", encoding="utf-8")
+            asset_path = root / "reports/font/outside.ttf"
+            payload = valid_payload(
+                asset_path,
+                license_path="reports/font/fixtures/licenses/OFL-1.1.txt",
+                asset_row_path="reports/font/fixtures/fonts/../../outside.ttf",
+                expected_dumps=[],
+            )
+            with self.assertRaises(validator.ValidationError) as failure:
+                validator.validate_index(root, payload)
+            self.assertIn("reports/font/fixtures/fonts", str(failure.exception))
+
     def test_rejects_license_path_outside_fixture_licenses_root(self) -> None:
         validator = load_validator()
         with tempfile.TemporaryDirectory() as temp:
@@ -197,6 +216,25 @@ class FontFixtureAssetsValidatorTest(unittest.TestCase):
             payload = valid_payload(
                 asset_path,
                 license_path="licenses/OFL-1.1.txt",
+                asset_row_path="reports/font/fixtures/fonts/one-byte.ttf",
+                expected_dumps=[],
+            )
+            with self.assertRaises(validator.ValidationError) as failure:
+                validator.validate_index(root, payload)
+            self.assertIn("reports/font/fixtures/licenses", str(failure.exception))
+
+    def test_rejects_license_path_traversal_outside_fixture_licenses_root(self) -> None:
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "reports/font/fixtures/fonts").mkdir(parents=True)
+            (root / "reports/font/fixtures/licenses").mkdir(parents=True)
+            asset_path = root / "reports/font/fixtures/fonts/one-byte.ttf"
+            asset_path.write_bytes(b"x")
+            (root / "reports/font/outside-license.txt").write_text("license\n", encoding="utf-8")
+            payload = valid_payload(
+                asset_path,
+                license_path="reports/font/fixtures/licenses/../../outside-license.txt",
                 asset_row_path="reports/font/fixtures/fonts/one-byte.ttf",
                 expected_dumps=[],
             )
@@ -220,6 +258,27 @@ class FontFixtureAssetsValidatorTest(unittest.TestCase):
                 license_path="reports/font/fixtures/licenses/OFL-1.1.txt",
                 asset_row_path="reports/font/fixtures/fonts/one-byte.ttf",
                 expected_dumps=["expected/dump.json"],
+            )
+            with self.assertRaises(validator.ValidationError) as failure:
+                validator.validate_index(root, payload)
+            self.assertIn("reports/font/fixtures/expected", str(failure.exception))
+
+    def test_rejects_expected_dump_path_traversal_outside_fixture_expected_root(self) -> None:
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "reports/font/fixtures/fonts").mkdir(parents=True)
+            (root / "reports/font/fixtures/licenses").mkdir(parents=True)
+            (root / "reports/font/fixtures/expected").mkdir(parents=True)
+            asset_path = root / "reports/font/fixtures/fonts/one-byte.ttf"
+            asset_path.write_bytes(b"x")
+            (root / "reports/font/fixtures/licenses/OFL-1.1.txt").write_text("license\n", encoding="utf-8")
+            (root / "reports/font/outside-dump.json").write_text("{}\n", encoding="utf-8")
+            payload = valid_payload(
+                asset_path,
+                license_path="reports/font/fixtures/licenses/OFL-1.1.txt",
+                asset_row_path="reports/font/fixtures/fonts/one-byte.ttf",
+                expected_dumps=["reports/font/fixtures/expected/../../outside-dump.json"],
             )
             with self.assertRaises(validator.ValidationError) as failure:
                 validator.validate_index(root, payload)

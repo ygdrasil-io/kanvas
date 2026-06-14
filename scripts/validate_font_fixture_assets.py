@@ -95,12 +95,12 @@ def repo_path(root: Path, relative_path: str, label: str) -> Path:
     return resolved_path
 
 
-def require_under(relative_path: str, required_root: str, label: str) -> None:
+def require_under(root: Path, relative_path: str, required_root: str, label: str) -> None:
     require_string(relative_path, label)
-    relative = Path(relative_path)
-    required = Path(required_root)
+    resolved_path = repo_path(root, relative_path, label)
+    resolved_required_root = repo_path(root, required_root, required_root)
     require(
-        relative == required or required in relative.parents,
+        resolved_path == resolved_required_root or resolved_required_root in resolved_path.parents,
         f"{label} must be under {required_root}: {relative_path}",
     )
 
@@ -159,7 +159,7 @@ def validate_fixture(root: Path, fixture: Any, index: int, accepted_licenses: li
     require_keys(license_payload, LICENSE_KEYS, f"{fixture_id}.license")
     license_id = require_string(license_payload["id"], f"{fixture_id}.license.id")
     require(license_id in accepted_licenses, f"{fixture_id}.license.id is not accepted: {license_id}")
-    require_under(license_payload["path"], LICENSE_ROOT, f"{fixture_id}.license.path")
+    require_under(root, license_payload["path"], LICENSE_ROOT, f"{fixture_id}.license.path")
     require_file(root, license_payload["path"], f"{fixture_id}.license.path")
 
     total_size = 0
@@ -168,7 +168,7 @@ def validate_fixture(root: Path, fixture: Any, index: int, accepted_licenses: li
     for asset_index, asset in enumerate(assets):
         require(isinstance(asset, dict), f"{fixture_id}.assets[{asset_index}] must be an object")
         require_keys(asset, ASSET_KEYS, f"{fixture_id}.assets[{asset_index}]")
-        require_under(asset["path"], FONT_ROOT, f"{fixture_id}.assets[{asset_index}].path")
+        require_under(root, asset["path"], FONT_ROOT, f"{fixture_id}.assets[{asset_index}].path")
         asset_path = require_file(
             root,
             asset["path"],
@@ -198,7 +198,7 @@ def validate_fixture(root: Path, fixture: Any, index: int, accepted_licenses: li
         total_size += actual_size
 
     for dump_path in require_string_list(fixture["expectedDumps"], f"{fixture_id}.expectedDumps", allow_empty=True):
-        require_under(dump_path, EXPECTED_ROOT, f"{fixture_id}.expectedDumps")
+        require_under(root, dump_path, EXPECTED_ROOT, f"{fixture_id}.expectedDumps")
         require_file(root, dump_path, f"{fixture_id}.expectedDumps")
 
     non_claims = require_string_list(fixture["nonClaims"], f"{fixture_id}.nonClaims")
