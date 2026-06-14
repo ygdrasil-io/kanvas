@@ -12,7 +12,7 @@ evidence.
 | KGPU-M1-001 | `done` | `reports/gpu-renderer/2026-06-14-m1-promotion-policy-decision.md` accepts launching the controlled M1 promotion path in the current state. | None for policy; no product route activation is implied. |
 | KGPU-M1-002 | `done` | Root PM bundle now packages `ActivationCandidate` state with `packagingState=activation-candidate`, explicit adapter evidence provenance, `productRouteActivated=false`, `releaseBlocking=false`, and `readinessDelta=0.0`. Independent review `019ec714-40ab-73b1-a242-9dc36c3b2694` approved the evidence. | None for PM packaging; no product route activation is implied. |
 | KGPU-M1-003 | `done` | Added explicit `kanvas.gpu.renderer.product.fillRect` flag diagnostics for solid `FillRect`; default remains disabled, legacy rendering remains visible, `StrokeAndFill` product expansion refuses, and no GPU renderer submit/readback is introduced. Independent review `019ec724-9088-7512-b14c-e5c5090e84dd` approved the evidence. | None for controlled flag; rollback/parity remains KGPU-M1-004. |
-| KGPU-M1-004 | `ready` | KGPU-M1-003 is done. No rollback/parity route added yet. | Add rollback/parity validation around the controlled first-route flag. |
+| KGPU-M1-004 | `done` | Added rollback/parity validator and adapter-backed checksum evidence across legacy-before, product-flagged, and legacy-rollback runs; mismatch failures keep activation false with stable diagnostics. Independent review `019ec731-4bf3-7e60-9ab6-af513036a6e9` approved the evidence. | None for M1 rollback/parity; no default product route activation is implied. |
 | KGPU-M2-001 | `review` | Added isolated `:gpu-renderer` `FillRRect` command, planner, native/refused route decisions, pass/task evidence, command-shape version bump, and validation fixture ownership line. Independent review found no blocking claim/status issue. | Adapter-backed or explicitly skipped GPU evidence before `done`; no `gpu-raster` product activation. |
 
 ## Remaining Catalog Gates
@@ -69,6 +69,8 @@ All commands above passed after RED/GREEN implementation and final validation.
   root validation report remains `Incomplete` and non-release-blocking.
 - M1-003 adds a controlled local product flag diagnostic, but no default route
   or rollback path was added.
+- M1-004 adds rollback/parity validation around that flag; it still does not
+  enable a default product route or mark the route release-blocking.
 - No `gpu-raster` route was enabled or modified for `FillRRect`.
 - M2-001 is not `done`; adapter-backed or explicitly skipped GPU evidence and
   independent review remain required.
