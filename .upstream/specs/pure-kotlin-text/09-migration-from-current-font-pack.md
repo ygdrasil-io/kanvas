@@ -14,17 +14,13 @@ before old gates can be retired.
 
 ## Current Pack Role
 
-`.upstream/specs/font/` remains active as current-state evidence. It records:
+The older font pack is transitional current-state evidence. It is expected to
+be retired once this pack carries the durable gates, blocker names, migration
+rules, and validation taxonomy needed for the complete target.
 
-- current OpenType backend scope;
-- current simple text and `SkShaper` boundary;
-- current glyph representation gates;
-- current color font and emoji gates;
-- current validation and GM classification policy.
-
-This new pack records the complete target. When the two packs differ, the
-current pack describes what is true now and this pack describes what must
-become true before final support claims.
+This pack records the complete target. Current code can be reused as prototype
+or migration evidence, but current behavior does not become complete support
+until it satisfies this pack's contracts and evidence rules.
 
 ## Reusable Current Assets
 
@@ -39,7 +35,39 @@ Reusable prototypes and evidence:
 | `SkCpuGlyphCache.kt` | Prototype for A8 glyph inventory, mask dumps, key preimages, and CPU oracle hashes. |
 | `SkWebGpuGlyphAtlas.kt` | Prototype for atlas upload-plan evidence, not final GPU renderer artifact API. |
 | Font fixtures in `kanvas-skia` and `skia-integration-tests` | Candidate fixtures after provenance and target route review. |
-| `.upstream/specs/font/` | Source of current gates and stable blocker names. |
+
+## Durable Legacy Gates
+
+These gates must remain visible after the older font pack disappears. They are
+not support claims; they are blocker rows that must either be retired with
+evidence or kept with explicit refusal policy.
+
+| Gate | Target owner | Required retirement evidence |
+|---|---|---|
+| `coloremoji_blendmodes` | `05-color-fonts-bitmap-svg-emoji.md`, `06-gpu-renderer-handoff.md` | COLR/emoji color route, blend/composite policy, CPU oracle, GPU artifact when GPU is claimed. |
+| `scaledemoji` | `02-opentype-layout-shaping-engine.md`, `05-color-fonts-bitmap-svg-emoji.md` | Emoji sequence shaping, emoji fallback, selected color glyph representation, route diagnostics. |
+| `scaledemoji_rendering` | `05-color-fonts-bitmap-svg-emoji.md`, `06-gpu-renderer-handoff.md` | Emoji glyph artifact plan, renderer route evidence, unsupported sequence refusals. |
+| `dftext` | `04-glyph-representation-and-artifacts.md`, `06-gpu-renderer-handoff.md`, `08-performance-budgets-and-telemetry.md` | SDF artifact contract, atlas/cache telemetry, transform policy, CPU/GPU evidence for the claimed slice. |
+| `fontations` | `07-validation-conformance-and-drift.md` | Remains `drift-only` or `expected-unsupported`; no Fontations dependency is allowed for normative support. |
+| `fontations_ft_compare` | `07-validation-conformance-and-drift.md` | Optional drift report only; FreeType/Fontations parity is not a product oracle. |
+| `pdf_never_embed` | Adjacent PDF/font-subset workstream | Keep separate from the pure Kotlin runtime font core unless a future PDF subset spec adopts it. |
+
+Rows such as `gammatext`, `dftext_blob_persp`, and `typeface` may provide useful
+regression evidence, but they must not be used to imply broad text, SDF,
+perspective, Type1/PFA/PFB, or FreeType parity support.
+
+## Baselines To Preserve
+
+The following baselines remain useful after legacy spec retirement:
+
+| Baseline | How to use it |
+|---|---|
+| Bundled Liberation families | Deterministic bundled font baseline for family/style matching, fallback, and simple text fixtures. |
+| Tiny generated fonts | Preferred parser/scaler/shaping/color fixtures when license-compatible and easier to audit than external binaries. |
+| Simple `drawString` path rendering | Current compatibility behavior; keep simple and deterministic, not a complex shaping claim. |
+| `drawTextBlob` glyph-run rendering | Compatibility route for explicit glyph IDs and positions; migrate toward typed glyph run descriptors. |
+| Simple WebGPU text smoke evidence | Current proof that outline/path text can reach WebGPU; not proof of broad glyph atlas or shaping support. |
+| CPU glyph mask inventory | Prototype evidence for future A8 artifacts, key preimages, and oracle hashes. |
 
 ## Contracts To Replace Or Promote
 
@@ -78,6 +106,25 @@ No gate is retired by substituting:
 - broad visual tolerances;
 - untyped CPU preparation;
 - metadata parsing without rendering support.
+
+## Legacy Diagnostic Mapping
+
+Older diagnostics should be mapped into the target taxonomy before support is
+promoted.
+
+| Legacy diagnostic | Target classification |
+|---|---|
+| `font.native-engine-unavailable` | `expected-unsupported` or `drift-only` for native FreeType/Fontations parity requests. |
+| `font.bitmap-strike-unavailable` | `text.color.bitmap-strike-unavailable` or equivalent route-specific bitmap refusal. |
+| `font.bitmap-glyph-decode-unavailable` | `text.color.bitmap-glyph-decode-unavailable` until the PNG decoder and artifact route are proved. |
+| `font.bitmap-glyph-format-unsupported` | `expected-unsupported` for non-PNG payloads unless a future spec expands codec scope. |
+| `font.emoji-table-dispatch-unavailable` | `text.shaping.emoji-sequence-unsupported` or `text.color.route-unavailable`, depending on blocker. |
+| `font.emoji-sequence-shaping-unsupported` | `text.shaping.emoji-sequence-unsupported`. |
+| `font.emoji-fallback-unavailable` | `text.shaping.fallback-unavailable` with emoji-capable face facts. |
+| `STUB.FONTATIONS` | `drift-only` or `expected-unsupported`; never a product dependency gate. |
+| `STUB.EMOJI_TABLES` | Split into shaping, fallback, COLR/bitmap/SVG, and GPU route blockers. |
+| `STUB.DF_TEXT_FULL_GM` | Split into SDF artifact, atlas/cache, transform, and GPU route blockers. |
+| `STUB.PDF_TABLE_SUBSET_FONTMGR` | Adjacent PDF subset workstream, not pure Kotlin runtime font support. |
 
 ## Migration Categories
 
@@ -120,7 +167,6 @@ artifact contracts and tests. GPU renderer integration should happen only after:
 
 When implementation work starts, update:
 
-- `.upstream/specs/font/` for current-state changes;
 - this pack for complete-target contract changes;
 - `.upstream/specs/gpu-renderer/09-draw-family-support-matrix.md` only when
   the text dependency gate changes;
@@ -135,3 +181,5 @@ When implementation work starts, update:
 - Old font gates remain visible until evidence retires them.
 - GPU renderer text integration waits for typed artifacts and deterministic
   diagnostics.
+- The durable gates listed here are sufficient to retire the older font specs
+  without losing blocker traceability.
