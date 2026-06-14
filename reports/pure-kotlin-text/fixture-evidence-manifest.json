@@ -37,7 +37,8 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
-        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt"
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/glyph/a8-sdf-atlas-lifecycle.json"
       ],
       "requiredEvidenceGates": [
         "Add A8 atlas pack fixture evidence.",
@@ -68,7 +69,9 @@
         "section": "CFF and CFF2 scaler coverage"
       },
       "currentEvidencePaths": [
-        "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+        "reports/font/fixtures/expected/scaler/cff-cff2-readiness.json"
       ],
       "requiredEvidenceGates": [
         "Add CFF Type 2 line, curve, and flex glyph fixtures.",
@@ -100,7 +103,8 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
-        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt"
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
       ],
       "requiredEvidenceGates": [
         "Add COLRv0 layer fixture evidence.",
@@ -123,6 +127,41 @@
       ]
     },
     {
+      "familyId": "complex-script-fixture-matrix",
+      "familyName": "Complex script fixture matrix",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Kanvas required script matrix"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/shaping/arabic-seed-readiness.json"
+      ],
+      "requiredEvidenceGates": [
+        "Add Arabic positive and refusal rows for joining forms, lam-alef, marks, cursive attachment, and mixed bidi.",
+        "Add Devanagari positive and refusal rows for syllable formation, reph, pre-base matra, below-base forms, and mark placement.",
+        "Add Thai positive and refusal rows for base+mark clusters, tone marks, mixed Latin/Thai runs, and paragraph-owned dictionary diagnostics.",
+        "Add CJK positive and refusal rows for Han, kana, vertical alternates, variation selectors, and paragraph-owned ruby/line-break diagnostics.",
+        "Add emoji shaping positive and refusal rows for VS15/VS16, skin tone, ZWJ sequence, fallback emoji font, and unsupported-sequence refusals."
+      ],
+      "validationCommands": [
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk ./gradlew --no-daemon :font:text:test"
+      ],
+      "fixtureCommands": [
+        "Split complex-script fixtures by script family before any script promotion beyond Latin."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-arabic-shaping-support-claim",
+        "no-indic-shaping-support-claim",
+        "no-cjk-or-emoji-shaping-support-claim"
+      ]
+    },
+    {
       "familyId": "emoji",
       "familyName": "Emoji",
       "classification": "fixture-gated",
@@ -133,7 +172,8 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
-        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt"
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
       ],
       "requiredEvidenceGates": [
         "Add VS15 and VS16 emoji fixture evidence.",
@@ -168,7 +208,9 @@
         "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
         "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt",
         "font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt",
-        "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt"
+        "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+        "reports/font/fixtures/expected/font-source/liberation-scan-root.json",
+        "reports/font/fixtures/expected/sfnt/sfnt-cmap-format14-readiness.json"
       ],
       "requiredEvidenceGates": [
         "Add single TTF fixture provenance.",
@@ -188,6 +230,41 @@
         "no-complete-sfnt-conformance-claim",
         "no-complete-ttc-otc-claim",
         "no-implicit-system-font-scan-claim"
+      ]
+    },
+    {
+      "familyId": "font-source-system-scan",
+      "familyName": "Font source system scan",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "Font sources, SFNT/OpenType parsing, and collections"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt",
+        "reports/font/fixtures/expected/font-source/liberation-scan-root.json"
+      ],
+      "requiredEvidenceGates": [
+        "Add a deterministic scan-root input fixture that lists explicit in-repo paths instead of implicit host roots.",
+        "Add skipped-file diagnostics for unreadable, malformed, unsupported, and duplicate source candidates.",
+        "Mark every system-scan source and fallback catalog dump as host-dependent when it depends on scan input.",
+        "Record fallback order dump fields for source identity, display name, content hash, and scan diagnostic codes.",
+        "Keep all discovery pure Kotlin with no hidden platform font registry or native font API."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "fixtureCommands": [
+        "Generate only deterministic scan-root fixtures from explicit repo paths before promoting system-scan evidence."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-system-font-discovery-claim",
+        "no-host-fallback-parity-claim",
+        "no-platform-font-api-claim"
       ]
     },
     {
@@ -227,6 +304,43 @@
       ]
     },
     {
+      "familyId": "latin-gsub-gpos-fixtures",
+      "familyName": "Latin GSUB/GPOS fixture contract",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "GSUB Target"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt",
+        "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/shaping/latin-gsub-gpos-goldens.json"
+      ],
+      "requiredEvidenceGates": [
+        "Add Latin fixture provenance for cmap-backed glyph IDs, GSUB feature lookup order, and GPOS pair positioning data.",
+        "Add requested, enabled, disabled, and unsupported feature dump fields before enabling broader feature behavior.",
+        "Add expected glyph ID or fixture-local glyph-name dumps for liga, kern, requested-off, and unsupported-feature cases.",
+        "Add cluster range and fallback diagnostic expectations for every Latin fixture row.",
+        "Keep Greek, Cyrillic, Hebrew, and complex-script promotion out of this Latin contract slice."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test :font:sfnt:test",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "fixtureCommands": [
+        "Generate deterministic Latin GSUB/GPOS fixtures and reviewed dump goldens before implementing wider shaping support."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gsub-gpos-claim",
+        "no-greek-cyrillic-hebrew-promotion-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
       "familyId": "paragraph",
       "familyName": "Paragraph",
       "classification": "current-supported",
@@ -237,7 +351,8 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
-        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt"
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json"
       ],
       "requiredEvidenceGates": [
         "Add rich style runs fixture evidence.",
@@ -260,6 +375,41 @@
       ]
     },
     {
+      "familyId": "paragraph-fixture-goldens",
+      "familyName": "Paragraph fixture and golden matrix",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Output Contracts"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json"
+      ],
+      "requiredEvidenceGates": [
+        "Add bidi visual line ordering rows that name PKT-07 and PKT-08 shaping blockers separately.",
+        "Add rich style, feature, variation, decoration, and placeholder interaction rows.",
+        "Add ellipsis, hard-break, soft-wrap, and max-lines policy rows with refusal diagnostics.",
+        "Add hit-test, selection box, word boundary, and grapheme boundary golden rows.",
+        "Keep paragraph-owned layout diagnostics separate from shaping-owned fallback and script diagnostics."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "fixtureCommands": [
+        "Generate paragraph semantic layout goldens only after shaping-owned blockers are named per row."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-paragraph-layout-claim",
+        "no-full-bidi-visual-ordering-claim",
+        "no-rich-text-parity-claim"
+      ]
+    },
+    {
       "familyId": "png-bitmap-glyphs",
       "familyName": "PNG bitmap glyphs",
       "classification": "fixture-gated",
@@ -270,7 +420,8 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
-        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt"
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
       ],
       "requiredEvidenceGates": [
         "Add CBDT/CBLC PNG fixture evidence.",
@@ -290,6 +441,41 @@
         "no-complete-png-bitmap-glyph-routing-claim",
         "no-non-png-bitmap-payload-support-claim",
         "no-gpu-bitmap-glyph-route-claim"
+      ]
+    },
+    {
+      "familyId": "sfnt-malformed-tables",
+      "familyName": "SFNT malformed table fixtures",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "`cmap` Contract"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt",
+        "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+        "reports/font/fixtures/expected/sfnt/sfnt-cmap-format14-readiness.json"
+      ],
+      "requiredEvidenceGates": [
+        "Add missing required table fixture rows with stable refusal diagnostics.",
+        "Add malformed optional table fixture rows that preserve bounded face parsing diagnostics.",
+        "Add TTC face-index positive and out-of-range refusal fixture rows.",
+        "Add cmap format 14 positive variation-selector fixture rows.",
+        "Add cmap format 14 unsupported or malformed refusal rows without claiming complete cmap coverage."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:sfnt:test",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "fixtureCommands": [
+        "Generate or bundle deterministic malformed SFNT fixtures with expected diagnostics before parser support promotion."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-sfnt-conformance-claim",
+        "no-complete-cmap-format-14-claim",
+        "no-cff-cff2-scaler-claim"
       ]
     },
     {
@@ -335,7 +521,8 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
-        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt"
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
       ],
       "requiredEvidenceGates": [
         "Add static path SVG glyph fixture evidence.",
@@ -368,7 +555,8 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
-        "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt"
+        "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+        "reports/font/fixtures/expected/scaler/truetype-variation-readiness.json"
       ],
       "requiredEvidenceGates": [
         "Add simple glyph fixture evidence.",
@@ -388,6 +576,41 @@
         "no-complete-variable-font-support-claim",
         "no-complete-hinting-vm-claim",
         "no-pixel-perfect-native-scaler-parity-claim"
+      ]
+    },
+    {
+      "familyId": "unicode-data-generation",
+      "familyName": "Unicode data generation",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Unicode Version Policy"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/unicode/unicode-16-source-manifest.json"
+      ],
+      "requiredEvidenceGates": [
+        "Add a pinned Unicode data version row before replacing BasicUnicodeData.",
+        "Document source file names and checksums for script, bidi, grapheme, and default-ignorable data inputs.",
+        "Add generated dump schema rows for sample script, bidi, grapheme, and default-ignorable facts.",
+        "Add mismatch diagnostics for generated-data version, source checksum, and generated dump schema drift.",
+        "Keep product behavior independent of the JDK Unicode version unless that dependency is explicitly diagnosed."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "fixtureCommands": [
+        "Add a deterministic Unicode-data generator or no-op validator before promoting beyond BasicUnicodeData."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-ucd-claim",
+        "no-uax9-conformance-claim",
+        "no-uax14-uax29-conformance-claim"
       ]
     }
   ]

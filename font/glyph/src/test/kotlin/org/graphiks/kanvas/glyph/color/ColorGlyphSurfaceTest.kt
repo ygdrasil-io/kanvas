@@ -6,6 +6,8 @@ import org.graphiks.kanvas.glyph.OutlineGlyphRepresentation
 import org.graphiks.kanvas.glyph.gpu.GPUGlyphRunDescriptor
 import org.graphiks.kanvas.glyph.gpu.GPUGlyphRunID
 import java.io.ByteArrayOutputStream
+import java.nio.file.Files
+import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.zip.CRC32
 import java.util.zip.Deflater
@@ -776,6 +778,51 @@ class ColorGlyphSurfaceTest {
         assertNull(selector.select(glyphId = 92, requestedSizePx = 18f))
     }
 
+    @Test
+    fun colorSvgEmojiGoldenRecordsFixtureFamiliesRefusalsAndNonClaims() {
+        val dump = readProjectFile("reports/font/fixtures/expected/color/color-svg-emoji-goldens.json")
+
+        assertEquals("color-svg-emoji-goldens", jsonStringField(dump, "dumpId"))
+        assertEquals(listOf("color-colrv1-test-glyphs"), jsonStringArrayField(dump, "fixtureIds"))
+        assertEquals(
+            listOf(
+                "color-glyphs",
+                "png-bitmap-glyphs",
+                "svg-glyphs",
+                "emoji",
+            ),
+            jsonStringArrayField(dump, "colorFamilies"),
+        )
+        assertEquals(
+            listOf(
+                "text.color.COLRv1-cycle-detected",
+                "text.color.COLRv1-budget-exceeded",
+                "text.bitmap.PNG-decode-failed",
+                "text.bitmap.strike-unavailable",
+                "text.bitmap.payload-format-unsupported",
+                "text.SVG.external-resource-refused",
+                "text.SVG.feature-unsupported",
+                "text.SVG.budget-exceeded",
+                "text.emoji.sequence-unsupported",
+                "text.emoji.fallback-unavailable",
+                "text.emoji.color-glyph-unavailable",
+            ),
+            jsonStringArrayField(dump, "requiredRefusals"),
+        )
+        assertEquals(
+            listOf(
+                "no-complete-target-support-claim",
+                "no-complete-colrv1-rendering-claim",
+                "no-complete-png-bitmap-glyph-routing-claim",
+                "no-complete-svg-in-opentype-rendering-claim",
+                "no-emoji-zwj-shaping-claim",
+                "no-gpu-color-glyph-support-claim",
+                "no-platform-color-font-fallback-claim",
+            ),
+            jsonStringArrayField(dump, "nonClaims"),
+        )
+    }
+
     private fun syntheticCpalV0(): ByteArray {
         val bytes = ByteArray(32)
         writeU16(bytes, 0, 0)
@@ -1166,5 +1213,35 @@ class ColorGlyphSurfaceTest {
             assertTrue(!dump.contains(token), "Dump must not contain forbidden token $token: $dump")
         }
         assertTrue(!Regex("@[0-9a-fA-F]{4,}").containsMatchIn(dump), "Dump must not contain object identity: $dump")
+    }
+
+    private fun readProjectFile(relativePath: String): String =
+        Files.readString(kanvasProjectRoot().resolve(relativePath))
+
+    private fun kanvasProjectRoot(): Path {
+        var current = Path.of("").toAbsolutePath().normalize()
+        while (current.parent != null) {
+            if (Files.isDirectory(current.resolve("reports/font/fixtures"))) {
+                return current
+            }
+            current = current.parent
+        }
+        error("Unable to locate Kanvas project root from ${Path.of("").toAbsolutePath()}")
+    }
+
+    private fun jsonStringField(json: String, field: String): String {
+        val pattern = Regex("\"" + Regex.escape(field) + "\"\\s*:\\s*\"([^\"]+)\"")
+        return pattern.find(json)?.groupValues?.get(1)
+            ?: error("Missing JSON string field $field")
+    }
+
+    private fun jsonStringArrayField(json: String, field: String): List<String> {
+        val pattern = Regex(
+            "\"" + Regex.escape(field) + "\"\\s*:\\s*\\[(.*?)\\]",
+            RegexOption.DOT_MATCHES_ALL,
+        )
+        val body = pattern.find(json)?.groupValues?.get(1)
+            ?: error("Missing JSON array field $field")
+        return Regex("\"([^\"]+)\"").findAll(body).map { match -> match.groupValues[1] }.toList()
     }
 }

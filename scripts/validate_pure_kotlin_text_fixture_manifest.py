@@ -23,14 +23,20 @@ REQUIRED_FAMILIES = {
     "a8-sdf-artifacts",
     "cff-cff2-scaler",
     "color-glyphs",
+    "complex-script-fixture-matrix",
     "emoji",
     "font-source-sfnt",
+    "font-source-system-scan",
     "gpu-handoff",
+    "latin-gsub-gpos-fixtures",
     "paragraph",
+    "paragraph-fixture-goldens",
     "png-bitmap-glyphs",
+    "sfnt-malformed-tables",
     "shaping-scripts",
     "svg-glyphs",
     "truetype-scaler",
+    "unicode-data-generation",
 }
 
 TOP_LEVEL_KEYS = [

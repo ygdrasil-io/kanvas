@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "dumpId": "paragraph-input-goldens",
+  "ownerTickets": [
+    "PKT-09C"
+  ],
+  "cases": [
+    {
+      "caseId": "multi-style-with-placeholder",
+      "text": "hello [box] world",
+      "styleRuns": [
+        {
+          "range": [0, 5],
+          "family": "Liberation Sans"
+        },
+        {
+          "range": [12, 17],
+          "family": "Liberation Serif"
+        }
+      ],
+      "placeholderRanges": [
+        [6, 11]
+      ]
+    }
+  ],
+  "negativeCases": [
+    "invalid-range",
+    "non-finite-placeholder-metric",
+    "unsupported-baseline"
+  ],
+  "nonClaims": [
+    "no-complete-paragraph-layout-claim",
+    "no-skia-paragraph-parity-claim"
+  ]
+}

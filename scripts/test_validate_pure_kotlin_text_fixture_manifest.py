@@ -54,18 +54,50 @@ class PureKotlinTextFixtureManifestTest(unittest.TestCase):
                 "a8-sdf-artifacts",
                 "cff-cff2-scaler",
                 "color-glyphs",
+                "complex-script-fixture-matrix",
                 "emoji",
                 "font-source-sfnt",
+                "font-source-system-scan",
                 "gpu-handoff",
+                "latin-gsub-gpos-fixtures",
                 "paragraph",
+                "paragraph-fixture-goldens",
                 "png-bitmap-glyphs",
+                "sfnt-malformed-tables",
                 "shaping-scripts",
                 "svg-glyphs",
                 "truetype-scaler",
+                "unicode-data-generation",
             },
             set(family_ids),
         )
         self.assertNotIn("target-supported", {row["classification"] for row in rows})
+
+        rows_by_id = {row["familyId"]: row for row in rows}
+        self.assertIn(
+            "no-platform-font-api-claim",
+            rows_by_id["font-source-system-scan"]["nonClaims"],
+        )
+        self.assertIn(
+            "Add cmap format 14 positive variation-selector fixture rows.",
+            rows_by_id["sfnt-malformed-tables"]["requiredEvidenceGates"],
+        )
+        self.assertIn(
+            "no-complete-ucd-claim",
+            rows_by_id["unicode-data-generation"]["nonClaims"],
+        )
+        self.assertIn(
+            "Add Arabic positive and refusal rows for joining forms, lam-alef, marks, cursive attachment, and mixed bidi.",
+            rows_by_id["complex-script-fixture-matrix"]["requiredEvidenceGates"],
+        )
+        self.assertIn(
+            "no-greek-cyrillic-hebrew-promotion-claim",
+            rows_by_id["latin-gsub-gpos-fixtures"]["nonClaims"],
+        )
+        self.assertIn(
+            "Add bidi visual line ordering rows that name PKT-07 and PKT-08 shaping blockers separately.",
+            rows_by_id["paragraph-fixture-goldens"]["requiredEvidenceGates"],
+        )
 
     def test_validator_rejects_hidden_support_claims_and_missing_gates(self) -> None:
         validator = load_validator()
