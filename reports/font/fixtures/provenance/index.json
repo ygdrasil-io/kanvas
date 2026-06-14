@@ -8,5 +8,90 @@
   ],
   "sizeBudgetBytes": 20971520,
   "offlinePolicy": "tests-must-not-download",
-  "fixtures": []
+  "fixtures": [
+    {
+      "fixtureId": "color-colrv1-test-glyphs",
+      "familyId": "color-glyphs",
+      "ownerTickets": [
+        "PKT-11D",
+        "KFONT-M10-010"
+      ],
+      "source": {
+        "kind": "in-repo-existing",
+        "project": "googlefonts/color-fonts test glyphs",
+        "url": "https://github.com/googlefonts/color-fonts",
+        "version": "0046ea4c3b69e9fbbe464c2594816894e3aa5e4b"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/test_glyphs_colrv1-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/color/test_glyphs-glyf_colr_1.ttf",
+          "sha256": "8aa611b1ca97044ac6f13dc982fde29256612f0a5acc6ef47ca541a7a5b99b28",
+          "sizeBytes": 21568,
+          "role": "colrv1-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/color/test_glyphs-glyf_colr_1_variable.ttf",
+          "sha256": "ad575a09d6748aebcb3b90ffd384c64d5c64b5fd9927967e7cd7cc0d70c98d34",
+          "sizeBytes": 53096,
+          "role": "colrv1-variable-font"
+        }
+      ],
+      "expectedDumps": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-colrv1-rendering-claim",
+        "no-gpu-color-glyph-support-claim"
+      ]
+    },
+    {
+      "fixtureId": "font-source-liberation-core",
+      "familyId": "font-source-sfnt",
+      "ownerTickets": [
+        "PKT-02D",
+        "PKT-03D",
+        "KFONT-M1-004",
+        "KFONT-M2-005"
+      ],
+      "source": {
+        "kind": "in-repo-existing",
+        "project": "Liberation Fonts",
+        "url": "kanvas-skia/src/main/resources/fonts/liberation",
+        "version": "repo-vendored-existing"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/liberation-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/liberation/LiberationMono-Regular.ttf",
+          "sha256": "f2b83c763e8afd21709333370bed4774337fae82267937e2b5aea7e2fbd922c1",
+          "sizeBytes": 319508,
+          "role": "monospace-ttf"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/liberation/LiberationSans-Regular.ttf",
+          "sha256": "76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+          "sizeBytes": 410712,
+          "role": "sans-ttf"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/liberation/LiberationSerif-Regular.ttf",
+          "sha256": "058ea80864aef09a23f45cbec2bb5400bc3dfbdea01c3f10538a21fcb497fb74",
+          "sizeBytes": 393576,
+          "role": "serif-ttf"
+        }
+      ],
+      "expectedDumps": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-system-font-discovery-claim",
+        "no-host-platform-fallback-claim"
+      ]
+    }
+  ]
 }
