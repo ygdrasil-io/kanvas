@@ -1,0 +1,394 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "pure-kotlin-text-fixture-evidence-manifest",
+  "sourceSpec": {
+    "path": ".upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md",
+    "section": "Target Fixture Manifest"
+  },
+  "supportClaim": "coordination-evidence-infrastructure-no-support-claim",
+  "oraclePolicy": {
+    "normative": "Kanvas-owned fixtures, bundled deterministic fonts, versioned dumps, CPU oracle artifacts, route diagnostics, and GPU artifacts only when GPU support is claimed.",
+    "externalComparisons": "Optional external comparisons are drift-only and cannot define pass/fail behavior."
+  },
+  "nonClaims": [
+    "This manifest is coordination and evidence infrastructure only; it does not promote complete pure Kotlin text support.",
+    "HarfBuzz, FreeType, Fontations, AWT, JNI, CoreText, DirectWrite, fontconfig, platform shapers, and native engines are not normative oracles for this manifest.",
+    "No row below claims target-supported behavior."
+  ],
+  "dashboardClassifications": [
+    "target-supported",
+    "current-supported",
+    "tracked-gap",
+    "expected-unsupported",
+    "fixture-gated",
+    "GPU-gated",
+    "drift-only"
+  ],
+  "validationCommand": "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+  "fixtureFamilies": [
+    {
+      "familyId": "a8-sdf-artifacts",
+      "familyName": "A8/SDF artifacts",
+      "classification": "tracked-gap",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        "section": "Glyph artifact tests"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt"
+      ],
+      "requiredEvidenceGates": [
+        "Add A8 atlas pack fixture evidence.",
+        "Add SDF normalization fixture evidence.",
+        "Add SDF transform refusal evidence.",
+        "Add atlas capacity refusal evidence.",
+        "Add stale generation refusal evidence."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test"
+      ],
+      "fixtureCommands": [
+        "No complete-target fixture generation command exists yet; this row tracks required PKT-10 fixture evidence."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-a8-atlas-claim",
+        "no-complete-sdf-generation-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
+      "familyId": "cff-cff2-scaler",
+      "familyName": "CFF/CFF2 scaler",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "CFF and CFF2 scaler coverage"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+      ],
+      "requiredEvidenceGates": [
+        "Add CFF Type 2 line, curve, and flex glyph fixtures.",
+        "Add local and global subroutine fixtures.",
+        "Add malformed stack and unsupported operator refusal fixtures.",
+        "Add CFF2 blend and vsindex fixtures."
+      ],
+      "validationCommands": [
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "fixtureCommands": [
+        "Generate or bundle deterministic CFF/CFF2 fixtures with provenance before any support claim."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-cff-rendering-support-claim",
+        "no-cff2-variation-support-claim",
+        "no-native-scaler-oracle-claim"
+      ]
+    },
+    {
+      "familyId": "color-glyphs",
+      "familyName": "Color glyphs",
+      "classification": "tracked-gap",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
+        "section": "Color glyph tests"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt"
+      ],
+      "requiredEvidenceGates": [
+        "Add COLRv0 layer fixture evidence.",
+        "Add COLRv1 solid, gradient, transform, composite, and clip fixture evidence.",
+        "Add cycle refusal evidence.",
+        "Add color glyph budget refusal evidence."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest",
+        "rtk ./gradlew --no-daemon :font:glyph:test"
+      ],
+      "fixtureCommands": [
+        "No complete COLR/COLRv1 fixture generation command exists yet; current evidence is planning and diagnostics only."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-colrv1-rendering-claim",
+        "no-gpu-color-glyph-support-claim",
+        "no-platform-color-font-fallback-claim"
+      ]
+    },
+    {
+      "familyId": "emoji",
+      "familyName": "Emoji",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
+        "section": "Emoji dispatch"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt"
+      ],
+      "requiredEvidenceGates": [
+        "Add VS15 and VS16 emoji fixture evidence.",
+        "Add skin tone fixture evidence.",
+        "Add ZWJ family sequence fixture evidence.",
+        "Add emoji fallback unavailable refusal evidence.",
+        "Add color glyph unavailable refusal evidence."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest"
+      ],
+      "fixtureCommands": [
+        "Generate deterministic emoji sequence fixtures and expected dispatch dumps before support promotion."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-emoji-zwj-shaping-claim",
+        "no-platform-emoji-engine-claim",
+        "no-color-glyph-fallback-support-claim"
+      ]
+    },
+    {
+      "familyId": "font-source-sfnt",
+      "familyName": "Font source/SFNT",
+      "classification": "current-supported",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "Font sources, SFNT/OpenType parsing, and collections"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt",
+        "font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt",
+        "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt"
+      ],
+      "requiredEvidenceGates": [
+        "Add single TTF fixture provenance.",
+        "Add TTC face-index fixture provenance.",
+        "Add malformed required table diagnostics.",
+        "Add malformed optional table diagnostics.",
+        "Add system-scan skipped file diagnostic evidence."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test :font:sfnt:test"
+      ],
+      "fixtureCommands": [
+        "Current PKT-02A and PKT-03A evidence covers narrower source and face dumps only."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-sfnt-conformance-claim",
+        "no-complete-ttc-otc-claim",
+        "no-implicit-system-font-scan-claim"
+      ]
+    },
+    {
+      "familyId": "gpu-handoff",
+      "familyName": "GPU handoff",
+      "classification": "GPU-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md",
+        "section": "GPU renderer handoff contracts"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifacts.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifactsSurfaceTest.kt",
+        "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/commands/NormalizedDrawCommand.kt",
+        "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/text/TextContracts.kt",
+        "gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/text/GPUTextCommandHandoffTest.kt"
+      ],
+      "requiredEvidenceGates": [
+        "Add DrawTextRun registered artifact fixture evidence.",
+        "Add unregistered artifact refusal evidence.",
+        "Add upload plan dump evidence.",
+        "Add route evidence proving no CPU-rendered texture route.",
+        "Add adapter-backed GPU evidence before any GPU support claim."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test :gpu-renderer:test"
+      ],
+      "fixtureCommands": [
+        "Current PKT-12A/PKT-12B evidence is contract-only and does not activate a GPU text route."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-gpu-text-route-claim",
+        "no-wgsl-text-pipeline-claim",
+        "no-cpu-rendered-texture-route-claim"
+      ]
+    },
+    {
+      "familyId": "paragraph",
+      "familyName": "Paragraph",
+      "classification": "current-supported",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Paragraph tests"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt"
+      ],
+      "requiredEvidenceGates": [
+        "Add rich style runs fixture evidence.",
+        "Add bidi paragraph fixture evidence.",
+        "Add hard and soft line break fixture evidence.",
+        "Add ellipsis, placeholders, selection boxes, and hit testing evidence.",
+        "Retain shaping and fallback gates for complete paragraph claims."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test"
+      ],
+      "fixtureCommands": [
+        "Current PKT-09A evidence covers semantic dumps and refusals only."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-rich-text-layout-claim",
+        "no-complete-bidi-visual-ordering-claim",
+        "no-paragraph-parity-claim"
+      ]
+    },
+    {
+      "familyId": "png-bitmap-glyphs",
+      "familyName": "PNG bitmap glyphs",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
+        "section": "PNG bitmap glyphs"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt"
+      ],
+      "requiredEvidenceGates": [
+        "Add CBDT/CBLC PNG fixture evidence.",
+        "Add sbix PNG fixture evidence.",
+        "Add unavailable strike refusal evidence.",
+        "Add malformed PNG refusal evidence.",
+        "Add non-PNG payload refusal evidence."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest"
+      ],
+      "fixtureCommands": [
+        "Generate deterministic PNG bitmap glyph fixtures before support promotion."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-png-bitmap-glyph-routing-claim",
+        "no-non-png-bitmap-payload-support-claim",
+        "no-gpu-bitmap-glyph-route-claim"
+      ]
+    },
+    {
+      "familyId": "shaping-scripts",
+      "familyName": "Shaping scripts",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Kanvas required script matrix"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt"
+      ],
+      "requiredEvidenceGates": [
+        "Add one positive fixture for every row in the required script matrix.",
+        "Add one refusal or diagnostic fixture for every row in the required script matrix.",
+        "Add shaping dumps with clusters, feature order, fallback runs, and stable diagnostics.",
+        "Keep external drift comparisons non-normative."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test"
+      ],
+      "fixtureCommands": [
+        "Generate deterministic per-script shaping fixtures with reviewed expected dumps before support promotion."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gsub-gpos-claim",
+        "no-complex-script-support-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "familyId": "svg-glyphs",
+      "familyName": "SVG glyphs",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
+        "section": "SVG glyphs"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt"
+      ],
+      "requiredEvidenceGates": [
+        "Add static path SVG glyph fixture evidence.",
+        "Add gradient, transform, and clip fixture evidence.",
+        "Add use recursion refusal evidence.",
+        "Add external resource refusal evidence.",
+        "Add unsupported feature refusal evidence."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest"
+      ],
+      "fixtureCommands": [
+        "Generate deterministic SVG-in-OpenType fixtures with security refusal expectations before support promotion."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-svg-in-opentype-rendering-claim",
+        "no-external-svg-resource-support-claim",
+        "no-gpu-svg-glyph-route-claim"
+      ]
+    },
+    {
+      "familyId": "truetype-scaler",
+      "familyName": "TrueType scaler",
+      "classification": "current-supported",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "TrueType glyf and variations"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+        "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt"
+      ],
+      "requiredEvidenceGates": [
+        "Add simple glyph fixture evidence.",
+        "Add composite glyph and component transform fixture evidence.",
+        "Add gvar simple and composite delta fixture evidence.",
+        "Add avar coordinate mapping fixture evidence.",
+        "Retain diagnostics for current variation gaps until implementation evidence lands."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:scaler:test"
+      ],
+      "fixtureCommands": [
+        "Current PKT-04A evidence covers narrower TrueType glyf evidence and explicit variation gaps."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-variable-font-support-claim",
+        "no-complete-hinting-vm-claim",
+        "no-pixel-perfect-native-scaler-parity-claim"
+      ]
+    }
+  ]
+}

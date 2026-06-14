@@ -3,7 +3,6 @@ package org.graphiks.kanvas.glyph
 import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.kanvas.glyph.gpu.GPUGlyphRunDescriptor
 import java.security.MessageDigest
-import java.util.Locale
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -19,6 +18,15 @@ import kotlin.math.sqrt
  * @property subpixelX fractional x placement bucket.
  * @property subpixelY fractional y placement bucket.
  * @property variationCoordinates normalized variation axis coordinates keyed by axis tag.
+ * @property representationRoute stable glyph representation route label when known.
+ * @property maskFormat stable mask format label when the route produces a mask.
+ * @property transformBucket deterministic transform class used for cache separation.
+ * @property edging antialiasing or edging policy that affects generated coverage.
+ * @property sdfSpreadPx SDF spread in source pixels when an SDF route is selected.
+ * @property sdfSourceResolutionPx source SDF resolution selected for this strike.
+ * @property paletteIdentity palette identity for color glyph routes when applicable.
+ * @property unicodeDataVersion Unicode data version when cluster or emoji facts affect output.
+ * @property rendererVersion route-specific renderer version for SVG, COLR, bitmap, or masks.
  */
 data class GlyphStrikeKey(
     val typefaceId: TypefaceID,
@@ -28,7 +36,105 @@ data class GlyphStrikeKey(
     val subpixelX: Float = 0f,
     val subpixelY: Float = 0f,
     val variationCoordinates: Map<String, Float> = emptyMap(),
-)
+    val representationRoute: String = UnspecifiedRepresentationRoute,
+    val maskFormat: String = NoMaskFormat,
+    val transformBucket: String = DefaultTransformBucket,
+    val edging: String = DefaultEdging,
+    val sdfSpreadPx: Float? = null,
+    val sdfSourceResolutionPx: Float? = null,
+    val paletteIdentity: String? = null,
+    val unicodeDataVersion: String? = null,
+    val rendererVersion: String? = null,
+) {
+    /**
+     * Serializes every strike and glyph fact that can affect rendered output into canonical JSON.
+     *
+     * The output is intentionally independent of map iteration order and object identity so it can
+     * be used directly in route diagnostics, golden fixtures, PM evidence, and cache-key audits.
+     *
+     * @param glyphId font-specific glyph identifier represented by this strike entry.
+     * @return stable JSON preimage ending with a newline.
+     */
+    fun canonicalPreimage(glyphId: Int): String {
+        requireFiniteStrikeFacts()
+
+        return buildString {
+            append("{\n")
+            appendGlyphJsonField("schema", PreimageSchema, comma = true)
+            appendGlyphJsonField("typefaceId", typefaceId.value.toString(), comma = true)
+            appendGlyphJsonField("glyphId", glyphId, comma = true)
+            appendGlyphJsonField("sizePx", sizePx, comma = true)
+            appendGlyphJsonField("scaleX", scaleX, comma = true)
+            appendGlyphJsonField("scaleY", scaleY, comma = true)
+            appendGlyphJsonField("transformBucket", transformBucket, comma = true)
+            append("  \"subpixelBucket\": {\"x\": ")
+            append(glyphFloatToken(subpixelX))
+            append(", \"y\": ")
+            append(glyphFloatToken(subpixelY))
+            append("},\n")
+            appendGlyphJsonField("route", representationRoute, comma = true)
+            appendGlyphJsonField("maskFormat", maskFormat, comma = true)
+            appendGlyphJsonField("edging", edging, comma = true)
+            append("  \"variationCoordinates\": ")
+            appendVariationCoordinatesJson(variationCoordinates)
+            append(",\n")
+            append("  \"paletteIdentity\": ")
+            append(glyphJsonNullableString(paletteIdentity))
+            append(",\n")
+            append("  \"sdf\": {\"spreadPx\": ")
+            append(glyphNullableFloatToken(sdfSpreadPx))
+            append(", \"sourceResolutionPx\": ")
+            append(glyphNullableFloatToken(sdfSourceResolutionPx))
+            append("},\n")
+            append("  \"unicodeDataVersion\": ")
+            append(glyphJsonNullableString(unicodeDataVersion))
+            append(",\n")
+            append("  \"rendererVersion\": ")
+            append(glyphJsonNullableString(rendererVersion))
+            append("\n")
+            append("}\n")
+        }
+    }
+
+    /**
+     * Computes a SHA-256 hash of [canonicalPreimage] for compact diagnostics and cache evidence.
+     *
+     * @param glyphId font-specific glyph identifier represented by this strike entry.
+     * @return lowercase hexadecimal SHA-256 digest of the canonical preimage.
+     */
+    fun preimageSha256(glyphId: Int): String =
+        glyphSha256(canonicalPreimage(glyphId).toByteArray(Charsets.UTF_8))
+
+    /**
+     * Shared canonical labels for strike-key dumps.
+     */
+    companion object {
+        /**
+         * Stable schema label included in every canonical strike-key preimage.
+         */
+        const val PreimageSchema: String = "org.graphiks.kanvas.glyph.GlyphStrikeKey.v1"
+
+        /**
+         * Default route label for existing callers that have not selected a representation route.
+         */
+        const val UnspecifiedRepresentationRoute: String = "text.glyph.route-unspecified"
+
+        /**
+         * Default mask format for outline, deferred, or route-unspecified strikes.
+         */
+        const val NoMaskFormat: String = "none"
+
+        /**
+         * Default transform bucket for existing callers that only provide scale fields.
+         */
+        const val DefaultTransformBucket: String = "identity"
+
+        /**
+         * Default coverage policy for current grayscale mask generation.
+         */
+        const val DefaultEdging: String = "antialias"
+    }
+}
 
 /**
  * Represents the selected intermediate representation for one glyph before final handoff to
@@ -913,7 +1019,54 @@ data class GlyphRouteDiagnostic(
     val route: String,
     val message: String,
     val severity: String = "info",
-)
+) {
+    /**
+     * SHA-256 digest of [toCanonicalJson] for compact route evidence.
+     */
+    val dumpSha256: String by lazy {
+        glyphSha256(toCanonicalJson().toByteArray(Charsets.UTF_8))
+    }
+
+    /**
+     * Serializes this diagnostic with stable field order and JSON escaping.
+     *
+     * @return canonical JSON object without a trailing newline.
+     */
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendGlyphJsonNullableField("glyphId", glyphId, comma = true)
+        appendGlyphJsonField("route", route, comma = true)
+        appendGlyphJsonField("severity", severity, comma = true)
+        appendGlyphJsonField("message", message, comma = false)
+        append("}")
+    }
+}
+
+/**
+ * Serializes route diagnostics into a deterministic JSON array.
+ *
+ * The input order is preserved because planner diagnostics are route evidence; callers that need a
+ * different order should sort explicitly before calling this helper.
+ *
+ * @return canonical JSON array ending with a newline.
+ */
+fun List<GlyphRouteDiagnostic>.toCanonicalGlyphRouteDiagnosticsJson(): String = buildString {
+    append("[")
+    if (isNotEmpty()) {
+        append("\n")
+        append(joinToString(",\n") { diagnostic -> diagnostic.toCanonicalJson().prependIndent("  ") })
+        append("\n")
+    }
+    append("]\n")
+}
+
+/**
+ * Computes a compact hash for [toCanonicalGlyphRouteDiagnosticsJson].
+ *
+ * @return lowercase hexadecimal SHA-256 digest of the canonical diagnostics dump.
+ */
+fun List<GlyphRouteDiagnostic>.glyphRouteDiagnosticsSha256(): String =
+    glyphSha256(toCanonicalGlyphRouteDiagnosticsJson().toByteArray(Charsets.UTF_8))
 
 private const val MaxGlyphPathCommands = 4_096
 private const val MaxGeneratedA8MaskPixels = 16_777_216L
@@ -990,6 +1143,15 @@ private data class AtlasItem(
  * @property subpixelX fractional x placement bucket.
  * @property subpixelY fractional y placement bucket.
  * @property variationCoordinates variation coordinates sorted by axis tag.
+ * @property representationRoute stable glyph representation route label.
+ * @property maskFormat stable mask format label.
+ * @property transformBucket deterministic transform class used for cache separation.
+ * @property edging antialiasing or edging policy that affects generated coverage.
+ * @property sdfSpreadPx SDF spread in source pixels when applicable.
+ * @property sdfSourceResolutionPx source SDF resolution selected for this strike.
+ * @property paletteIdentity palette identity for color glyph routes when applicable.
+ * @property unicodeDataVersion Unicode data version when cluster or emoji facts affect output.
+ * @property rendererVersion route-specific renderer version for SVG, COLR, bitmap, or masks.
  */
 private data class GlyphCacheKey(
     val typefaceId: TypefaceID,
@@ -1000,6 +1162,15 @@ private data class GlyphCacheKey(
     val subpixelX: Float,
     val subpixelY: Float,
     val variationCoordinates: List<GlyphVariationCoordinate>,
+    val representationRoute: String,
+    val maskFormat: String,
+    val transformBucket: String,
+    val edging: String,
+    val sdfSpreadPx: Float?,
+    val sdfSourceResolutionPx: Float?,
+    val paletteIdentity: String?,
+    val unicodeDataVersion: String?,
+    val rendererVersion: String?,
 ) {
     companion object {
         /**
@@ -1021,6 +1192,15 @@ private data class GlyphCacheKey(
                 variationCoordinates = strikeKey.variationCoordinates.toSortedMap().map { (axisTag, value) ->
                     GlyphVariationCoordinate(axisTag = axisTag, value = value)
                 },
+                representationRoute = strikeKey.representationRoute,
+                maskFormat = strikeKey.maskFormat,
+                transformBucket = strikeKey.transformBucket,
+                edging = strikeKey.edging,
+                sdfSpreadPx = strikeKey.sdfSpreadPx,
+                sdfSourceResolutionPx = strikeKey.sdfSourceResolutionPx,
+                paletteIdentity = strikeKey.paletteIdentity,
+                unicodeDataVersion = strikeKey.unicodeDataVersion,
+                rendererVersion = strikeKey.rendererVersion,
             )
     }
 }
@@ -1737,6 +1917,47 @@ private fun GlyphMaskSummary.toCanonicalJson(): String = buildString {
 }
 
 /**
+ * Rejects non-finite strike facts before canonical preimage serialization.
+ */
+private fun GlyphStrikeKey.requireFiniteStrikeFacts() {
+    require(sizePx.isFinite()) { "Glyph strike sizePx must be finite." }
+    require(scaleX.isFinite() && scaleY.isFinite()) { "Glyph strike scales must be finite." }
+    require(subpixelX.isFinite() && subpixelY.isFinite()) {
+        "Glyph strike subpixel buckets must be finite."
+    }
+    variationCoordinates.forEach { (axisTag, value) ->
+        require(value.isFinite()) {
+            "Glyph strike variation coordinate '$axisTag' must be finite."
+        }
+    }
+    require(sdfSpreadPx == null || sdfSpreadPx.isFinite()) {
+        "Glyph strike SDF spread must be finite when present."
+    }
+    require(sdfSourceResolutionPx == null || sdfSourceResolutionPx.isFinite()) {
+        "Glyph strike SDF source resolution must be finite when present."
+    }
+}
+
+/**
+ * Serializes variation coordinates in axis-tag order for stable strike-key preimages.
+ */
+private fun StringBuilder.appendVariationCoordinatesJson(variationCoordinates: Map<String, Float>) {
+    val sortedCoordinates = variationCoordinates.toSortedMap()
+    if (sortedCoordinates.isEmpty()) {
+        append("[]")
+        return
+    }
+
+    append("[\n")
+    append(
+        sortedCoordinates.entries.joinToString(",\n") { (axisTag, value) ->
+            "    {\"axis\": ${glyphJsonString(axisTag)}, \"value\": ${glyphFloatToken(value)}}"
+        },
+    )
+    append("\n  ]")
+}
+
+/**
  * Appends a stable string JSON field.
  */
 private fun StringBuilder.appendGlyphJsonField(name: String, value: String, comma: Boolean) {
@@ -1752,6 +1973,16 @@ private fun StringBuilder.appendGlyphJsonNullableField(name: String, value: Stri
     append("  ").append(glyphJsonString(name)).append(": ")
     append(if (value == null) "null" else glyphJsonString(value))
     if (comma) append(",")
+}
+
+/**
+ * Appends a stable nullable integer JSON field.
+ */
+private fun StringBuilder.appendGlyphJsonNullableField(name: String, value: Int?, comma: Boolean) {
+    append("  ").append(glyphJsonString(name)).append(": ")
+    append(value?.toString() ?: "null")
+    if (comma) append(",")
+    append("\n")
 }
 
 /**
@@ -1804,12 +2035,29 @@ private fun glyphCodePointLabel(codePoint: Int): String =
     "U+${codePoint.toString(16).uppercase().padStart(4, '0')}"
 
 /**
- * Formats a finite float using stable US-locale decimal syntax.
+ * Formats a finite float using the JVM/Kotlin round-trip decimal syntax.
  */
 private fun glyphFloatToken(value: Float): String {
     require(value.isFinite()) { "Glyph inventory float values must be finite." }
-    return String.format(Locale.US, "%.6f", value).trimEnd('0').trimEnd('.').ifEmpty { "0" }
+    val token = value.toString()
+    return if (token.endsWith(".0") && 'E' !in token && 'e' !in token) {
+        token.dropLast(2)
+    } else {
+        token
+    }
 }
+
+/**
+ * Formats a nullable finite float for compact JSON object fields.
+ */
+private fun glyphNullableFloatToken(value: Float?): String =
+    value?.let { glyphFloatToken(it) } ?: "null"
+
+/**
+ * Escapes a nullable string for compact JSON object fields.
+ */
+private fun glyphJsonNullableString(value: String?): String =
+    value?.let { glyphJsonString(it) } ?: "null"
 
 /**
  * Computes a lowercase SHA-256 digest for deterministic evidence identifiers.

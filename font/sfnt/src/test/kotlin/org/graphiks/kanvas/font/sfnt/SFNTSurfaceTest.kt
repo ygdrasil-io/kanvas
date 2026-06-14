@@ -5,6 +5,7 @@ import org.graphiks.kanvas.font.FontSourceKind
 import org.graphiks.kanvas.font.FontSource
 import org.graphiks.kanvas.font.FontSlant
 import org.graphiks.kanvas.font.TypefaceID
+import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -696,6 +697,264 @@ class SFNTSurfaceTest {
         assertEquals(secondParsed.id, secondReparsed.id)
         assertEquals(emptyList(), firstParsed.diagnostics)
         assertEquals(emptyList(), secondParsed.diagnostics)
+    }
+
+    @Test
+    fun openTypeFaceDataProducesDeterministicFaceEvidenceJson() {
+        val malformedName = ByteArray(5)
+        val cmap = cmapTable(
+            testCMapRecord(
+                platformId = 3,
+                encodingId = 10,
+                subtable = format12Subtable(
+                    testFormat12Group(startCharCode = 0x1f600, endCharCode = 0x1f600, startGlyphId = 300),
+                ),
+            ),
+        )
+        val head = headTable(
+            unitsPerEm = 1000,
+            bounds = OpenTypeFontBounds(xMin = -40, yMin = -200, xMax = 980, yMax = 840),
+            indexToLocFormat = 1,
+        )
+        val hhea = hheaTable(
+            ascender = 820,
+            descender = -180,
+            lineGap = 40,
+            numberOfHMetrics = 2,
+        )
+        val maxp = maxpTable(numGlyphs = 2)
+        val hmtx = hmtxTable(
+            metric(advanceWidth = 500, leftSideBearing = -20),
+            metric(advanceWidth = 450, leftSideBearing = 7),
+        )
+        val source = memoryFontSource(
+            ttcFont(
+                sfntFont(),
+                sfntFont(
+                    "hhea" to hhea,
+                    "name" to malformedName,
+                    "hmtx" to hmtx,
+                    "head" to head,
+                    "cmap" to cmap,
+                    "maxp" to maxp,
+                ),
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source, faceIndex = 1)
+        val evidence = parsed.faceEvidence()
+
+        assertEquals(1, evidence.faceIndex)
+        assertEquals(source.id, evidence.sourceId)
+        assertEquals(parsed.id, evidence.typefaceId)
+        assertEquals("0x00010000", evidence.scalerType)
+        assertEquals("TrueType", evidence.scalerTypeLabel)
+        assertEquals(listOf("cmap", "head", "hhea", "hmtx", "maxp", "name"), evidence.tableRecords.map { it.tag })
+        assertEquals(cmap.size, evidence.tableRecords.single { it.tag == "cmap" }.rawByteLength)
+        assertEquals(cmap.sha256Hex(), evidence.tableRecords.single { it.tag == "cmap" }.rawSha256)
+        assertEquals(
+            OpenTypeCMapEvidence(
+                platformId = 3,
+                encodingId = 10,
+                format = 12,
+                offset = 12,
+                length = 28,
+                mappingKind = "format12-segmented-coverage",
+                mappingEntryCount = 1,
+                encodingRecordCount = 1,
+                parsedSubtableCount = 1,
+            ),
+            evidence.preferredCMap,
+        )
+        assertEquals(1000, evidence.metrics.unitsPerEm)
+        assertEquals(2, evidence.metrics.numGlyphs)
+        assertEquals(2, evidence.metrics.horizontalMetricCount)
+        assertEquals(SFNTTableTag("name"), evidence.diagnostics.single().table)
+        assertEquals("INVALID_TABLE", evidence.diagnostics.single().causeCode)
+        assertEquals(evidence.toCanonicalJson(), evidence.toCanonicalJson())
+        assertEquals(
+            """
+            {
+              "faceIndex": 1,
+              "sourceId": "${source.id.value}",
+              "typefaceId": "${parsed.id.value}",
+              "sourceKind": "MEMORY",
+              "scalerType": "0x00010000",
+              "scalerTypeLabel": "TrueType",
+              "tables": [
+                {
+                  "tag": "cmap",
+                  "checksum": "0x00000000",
+                  "offset": 243,
+                  "length": 40,
+                  "rawByteLength": 40,
+                  "rawSha256": "${cmap.sha256Hex()}"
+                },
+                {
+                  "tag": "head",
+                  "checksum": "0x00000000",
+                  "offset": 189,
+                  "length": 54,
+                  "rawByteLength": 54,
+                  "rawSha256": "${head.sha256Hex()}"
+                },
+                {
+                  "tag": "hhea",
+                  "checksum": "0x00000000",
+                  "offset": 140,
+                  "length": 36,
+                  "rawByteLength": 36,
+                  "rawSha256": "${hhea.sha256Hex()}"
+                },
+                {
+                  "tag": "hmtx",
+                  "checksum": "0x00000000",
+                  "offset": 181,
+                  "length": 8,
+                  "rawByteLength": 8,
+                  "rawSha256": "${hmtx.sha256Hex()}"
+                },
+                {
+                  "tag": "maxp",
+                  "checksum": "0x00000000",
+                  "offset": 283,
+                  "length": 6,
+                  "rawByteLength": 6,
+                  "rawSha256": "${maxp.sha256Hex()}"
+                },
+                {
+                  "tag": "name",
+                  "checksum": "0x00000000",
+                  "offset": 176,
+                  "length": 5,
+                  "rawByteLength": 5,
+                  "rawSha256": "${malformedName.sha256Hex()}"
+                }
+              ],
+              "preferredCMap": {
+                "platformId": 3,
+                "encodingId": 10,
+                "format": 12,
+                "offset": 12,
+                "length": 28,
+                "mappingKind": "format12-segmented-coverage",
+                "mappingEntryCount": 1,
+                "encodingRecordCount": 1,
+                "parsedSubtableCount": 1
+              },
+              "metrics": {
+                "unitsPerEm": 1000,
+                "ascender": 820,
+                "descender": -180,
+                "lineGap": 40,
+                "numGlyphs": 2,
+                "numberOfHMetrics": 2,
+                "horizontalMetricCount": 2,
+                "indexToLocFormat": 1,
+                "bounds": {
+                  "xMin": -40,
+                  "yMin": -200,
+                  "xMax": 980,
+                  "yMax": 840
+                }
+              },
+              "diagnostics": [
+                {
+                  "table": "name",
+                  "causeCode": "INVALID_TABLE",
+                  "message": "Unable to parse OpenType table name.",
+                  "causeMessage": "OpenType name table must contain at least 6 bytes for the header."
+                }
+              ]
+            }
+            """.trimIndent() + "\n",
+            evidence.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun openTypeFaceDataKeepsExistingPositionalConstructorOrder() {
+        val source = memoryFontSource(byteArrayOf())
+        val directory = SFNTTableDirectory(scalerType = 0x00010000u)
+        val cmap = CMapTable(subtables = mapOf("compat" to listOf(1, 2, 3)))
+        val names = NameTable(records = mapOf("3:1:1033:1" to "Compat Sans"))
+
+        val data = OpenTypeFaceData(
+            TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440190")),
+            source,
+            directory,
+            cmap,
+            names,
+        )
+
+        assertEquals(cmap, data.cmap)
+        assertEquals(names, data.names)
+        assertEquals(0, data.faceIndex)
+    }
+
+    @Test
+    fun openTypeFaceEvidenceRejectsUnstableConstructorInputs() {
+        val sourceId = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440191"))
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440192"))
+        val metrics = OpenTypeMetricsEvidence(
+            unitsPerEm = null,
+            ascender = null,
+            descender = null,
+            lineGap = null,
+            numGlyphs = null,
+            numberOfHMetrics = null,
+            horizontalMetricCount = 0,
+            indexToLocFormat = null,
+            bounds = null,
+        )
+        val firstDiagnostic = OpenTypeParseDiagnosticEvidence(
+            table = SFNTTableTag("name"),
+            causeCode = "INVALID_TABLE",
+            message = "name table malformed",
+            causeMessage = null,
+        )
+        val secondDiagnostic = OpenTypeParseDiagnosticEvidence(
+            table = SFNTTableTag("cmap"),
+            causeCode = "INVALID_TABLE",
+            message = "cmap table malformed",
+            causeMessage = null,
+        )
+
+        val unsortedDiagnostics = assertFailsWith<IllegalArgumentException> {
+            OpenTypeFaceEvidence(
+                faceIndex = 0,
+                sourceId = sourceId,
+                typefaceId = typefaceId,
+                sourceKind = FontSourceKind.MEMORY,
+                scalerType = "0x00010000",
+                scalerTypeLabel = "TrueType",
+                tableRecords = emptyList(),
+                preferredCMap = null,
+                metrics = metrics,
+                diagnostics = listOf(firstDiagnostic, secondDiagnostic),
+            )
+        }
+        assertTrue(unsortedDiagnostics.message.orEmpty().contains("diagnostics must be sorted"))
+
+        val malformedCode = assertFailsWith<IllegalArgumentException> {
+            OpenTypeParseDiagnosticEvidence(
+                table = SFNTTableTag("name"),
+                causeCode = "INVALID\nTABLE",
+                message = "bad code",
+                causeMessage = null,
+            )
+        }
+        assertTrue(malformedCode.message.orEmpty().contains("stable one-line"))
+
+        val malformedTag = assertFailsWith<IllegalArgumentException> {
+            OpenTypeParseDiagnosticEvidence(
+                table = SFNTTableTag("cm\np"),
+                causeCode = "INVALID_TABLE",
+                message = "bad tag",
+                causeMessage = null,
+            )
+        }
+        assertTrue(malformedTag.message.orEmpty().contains("printable ASCII SFNT tag"))
     }
 
     @Test
@@ -2905,4 +3164,9 @@ class SFNTSurfaceTest {
 
     private fun ByteArray.toUnsignedByteList(): List<Int> =
         map { it.toInt() and 0xff }
+
+    private fun ByteArray.sha256Hex(): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(this)
+            .joinToString(separator = "") { byte -> (byte.toInt() and 0xff).toString(16).padStart(2, '0') }
 }

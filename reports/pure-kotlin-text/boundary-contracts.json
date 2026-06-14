@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "pure-kotlin-text-boundary-contracts",
+  "sourceSpec": {
+    "path": ".upstream/specs/pure-kotlin-text/00-architecture-and-module-boundaries.md",
+    "section": "Architecture And Module Boundaries"
+  },
+  "artifactType": "audit-coordination-boundary-manifest",
+  "supportClaim": "audit-coordination-artifact-no-support-claim",
+  "nonClaims": [
+    "not-a-support-claim",
+    "no-rendering-support-claim",
+    "no-GPU-text-route-promotion",
+    "no-implementation-module-change",
+    "no-fixture-or-CPU-or-GPU-evidence-added"
+  ],
+  "validationCommand": "rtk python3 scripts/validate_pure_kotlin_text_boundary_contracts.py",
+  "targetPackageRoots": [
+    {
+      "id": "font-core",
+      "packageRoot": "org.graphiks.kanvas.font",
+      "ownerArea": "Font core and SFNT metadata",
+      "sourceRoots": [
+        "font/core/src/main/kotlin",
+        "font/sfnt/src/main/kotlin"
+      ],
+      "boundaryRole": "Owns font sources, typeface identity, table access, collections, fallback catalog facts, and font diagnostics."
+    },
+    {
+      "id": "font-scaler",
+      "packageRoot": "org.graphiks.kanvas.font.scaler",
+      "ownerArea": "Font scaler",
+      "sourceRoots": [
+        "font/scaler/src/main/kotlin"
+      ],
+      "boundaryRole": "Owns outline, bounds, variation, metric, and scaler diagnostic facts prepared from pure Kotlin font data."
+    },
+    {
+      "id": "glyph-artifacts",
+      "packageRoot": "org.graphiks.kanvas.glyph",
+      "ownerArea": "Glyph artifacts",
+      "sourceRoots": [
+        "font/glyph/src/main/kotlin"
+      ],
+      "boundaryRole": "Owns glyph representation selection, strike keys, mask facts, artifact planning, cache facts, and glyph route diagnostics."
+    },
+    {
+      "id": "gpu-renderer-commands",
+      "packageRoot": "org.graphiks.kanvas.gpu.renderer.commands",
+      "ownerArea": "GPU renderer command consumer",
+      "sourceRoots": [
+        "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/commands"
+      ],
+      "boundaryRole": "Consumes dumpable text-stack artifact references through normalized draw command payloads."
+    },
+    {
+      "id": "gpu-renderer-text",
+      "packageRoot": "org.graphiks.kanvas.gpu.renderer.text",
+      "ownerArea": "GPU renderer text consumer",
+      "sourceRoots": [
+        "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/text"
+      ],
+      "boundaryRole": "Owns renderer-side text route records, artifact refs, route diagnostics, and refusal code names."
+    },
+    {
+      "id": "gpu-text-handoff",
+      "packageRoot": "org.graphiks.kanvas.glyph.gpu",
+      "ownerArea": "GPU text handoff",
+      "sourceRoots": [
+        "font/gpu-api/src/main/kotlin"
+      ],
+      "boundaryRole": "Owns renderer-neutral text artifact value objects, generation tokens, upload plans, and route diagnostics."
+    },
+    {
+      "id": "paragraph",
+      "packageRoot": "org.graphiks.kanvas.text.paragraph",
+      "ownerArea": "Paragraph",
+      "sourceRoots": [
+        "font/text/src/main/kotlin"
+      ],
+      "boundaryRole": "Owns paragraph builder, run layout, line metrics, visual boxes, selection, hit-test, and paragraph diagnostics."
+    },
+    {
+      "id": "shaping",
+      "packageRoot": "org.graphiks.kanvas.text.shaping",
+      "ownerArea": "Shaping",
+      "sourceRoots": [
+        "font/text/src/main/kotlin"
+      ],
+      "boundaryRole": "Owns segmentation, bidi/script run facts, glyph IDs, clusters, positions, features, fallback facts, and shaping diagnostics."
+    }
+  ],
+  "contractSymbols": [
+    {
+      "id": "font-source-id",
+      "symbol": "FontSourceID",
+      "qualifiedName": "org.graphiks.kanvas.font.FontSourceID",
+      "kind": "value class",
+      "packageRoot": "org.graphiks.kanvas.font",
+      "ownerFile": "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
+      "ownerArea": "Font core",
+      "contractRole": "Stable source identity for bundled, user, stream, file, generated, or system-scanned font data."
+    },
+    {
+      "id": "glyph-strike-key",
+      "symbol": "GlyphStrikeKey",
+      "qualifiedName": "org.graphiks.kanvas.glyph.GlyphStrikeKey",
+      "kind": "data class",
+      "packageRoot": "org.graphiks.kanvas.glyph",
+      "ownerFile": "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
+      "ownerArea": "Glyph artifacts",
+      "contractRole": "Deterministic cache-key preimage for glyph size, transform, representation, variation, palette, edging, and subpixel facts."
+    },
+    {
+      "id": "gpu-glyph-run-descriptor",
+      "symbol": "GPUGlyphRunDescriptor",
+      "qualifiedName": "org.graphiks.kanvas.glyph.gpu.GPUGlyphRunDescriptor",
+      "kind": "data class",
+      "packageRoot": "org.graphiks.kanvas.glyph.gpu",
+      "ownerFile": "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifacts.kt",
+      "ownerArea": "GPU text handoff",
+      "contractRole": "Renderer-neutral glyph run descriptor carrying text provenance, glyph IDs, positions, script, and bidi facts."
+    },
+    {
+      "id": "gpu-text-artifact-generation",
+      "symbol": "GPUTextArtifactGeneration",
+      "qualifiedName": "org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration",
+      "kind": "value class",
+      "packageRoot": "org.graphiks.kanvas.glyph.gpu",
+      "ownerFile": "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifacts.kt",
+      "ownerArea": "GPU text handoff",
+      "contractRole": "Monotonic artifact generation token used by artifact caches, handoff records, and stale-artifact diagnostics."
+    },
+    {
+      "id": "gpu-text-artifact-id",
+      "symbol": "GPUTextArtifactID",
+      "qualifiedName": "org.graphiks.kanvas.glyph.gpu.GPUTextArtifactID",
+      "kind": "value class",
+      "packageRoot": "org.graphiks.kanvas.glyph.gpu",
+      "ownerFile": "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifacts.kt",
+      "ownerArea": "GPU text handoff",
+      "contractRole": "Stable logical artifact identity separated from content fingerprints and renderer handles."
+    },
+    {
+      "id": "gpu-text-artifact-reference",
+      "symbol": "GPUTextArtifactReference",
+      "qualifiedName": "org.graphiks.kanvas.glyph.gpu.GPUTextArtifactReference",
+      "kind": "data class",
+      "packageRoot": "org.graphiks.kanvas.glyph.gpu",
+      "ownerFile": "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifacts.kt",
+      "ownerArea": "GPU text handoff",
+      "contractRole": "Dumpable typed reference from a text artifact plan to artifact identity, generation, fingerprint, and source label."
+    },
+    {
+      "id": "gpu-text-diagnostic-codes",
+      "symbol": "GPUTextDiagnosticCodes",
+      "qualifiedName": "org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnosticCodes",
+      "kind": "object",
+      "packageRoot": "org.graphiks.kanvas.gpu.renderer.text",
+      "ownerFile": "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/text/TextContracts.kt",
+      "ownerArea": "GPU renderer text consumer",
+      "contractRole": "Stable renderer-side text refusal code inventory for payload, artifact, upload, atlas, route, and binding diagnostics."
+    },
+    {
+      "id": "gpu-text-route-diagnostics",
+      "symbol": "GPUTextRouteDiagnostics",
+      "qualifiedName": "org.graphiks.kanvas.glyph.gpu.GPUTextRouteDiagnostics",
+      "kind": "data class",
+      "packageRoot": "org.graphiks.kanvas.glyph.gpu",
+      "ownerFile": "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifacts.kt",
+      "ownerArea": "GPU text handoff",
+      "contractRole": "Serializable planning diagnostics and refusal-required state for text artifact route decisions."
+    },
+    {
+      "id": "normalized-draw-command-draw-text-run",
+      "symbol": "NormalizedDrawCommand.DrawTextRun",
+      "qualifiedName": "org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand.DrawTextRun",
+      "kind": "data class",
+      "packageRoot": "org.graphiks.kanvas.gpu.renderer.commands",
+      "ownerFile": "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/commands/NormalizedDrawCommand.kt",
+      "ownerArea": "GPU renderer command consumer",
+      "contractRole": "Normalized renderer command payload for prepared text-stack artifact references and route diagnostics."
+    },
+    {
+      "id": "typeface-id",
+      "symbol": "TypefaceID",
+      "qualifiedName": "org.graphiks.kanvas.font.TypefaceID",
+      "kind": "value class",
+      "packageRoot": "org.graphiks.kanvas.font",
+      "ownerFile": "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
+      "ownerArea": "Font core",
+      "contractRole": "Stable typeface identity for one face, collection index, variation position, palette, and source hash."
+    }
+  ]
+}
