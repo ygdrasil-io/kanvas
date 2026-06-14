@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPULayerScopeKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
@@ -324,6 +325,8 @@ class GPUFirstRoutePlanner(
             !rrect.hasAcceptedRadii() -> "unsupported.geometry.rrect_radii"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
+            transform.type == GPUTransformType.Scale -> "unsupported.transform.rrect_scale_unproven"
+            transform.type == GPUTransformType.Affine -> "unsupported.transform.rrect_affine_unproven"
             transform.type !in acceptedTransformTypes -> "unsupported.transform.class_downgrade"
             clip.kind == GPUClipKind.ComplexStack -> "unsupported.clip.complex_stack"
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
@@ -375,14 +378,18 @@ private fun NormalizedDrawCommand.FillRect.coordinateRefusalCode(): String? =
 private fun NormalizedDrawCommand.FillRRect.coordinateRefusalCode(): String? =
     when {
         transform.hasNonFiniteFacts() -> "unsupported.transform.non_finite"
-        rrect.hasNaN() || bounds.hasNaN() || clip.bounds.hasNaN() -> "unsupported.bounds.nan"
-        rrect.hasNonFinite() || bounds.hasNonFinite() || clip.bounds.hasNonFinite() -> "unsupported.bounds.non_finite"
+        rrect.rect.hasNaN() || bounds.hasNaN() || clip.bounds.hasNaN() -> "unsupported.bounds.nan"
+        rrect.rect.hasNonFinite() || bounds.hasNonFinite() || clip.bounds.hasNonFinite() ->
+            "unsupported.bounds.non_finite"
+        rrect.hasNaN() || rrect.hasNonFinite() -> "unsupported.geometry.rrect_radii"
         else -> null
     }
 
 /** Returns true when captured transform payload facts cannot be trusted by analysis. */
 private fun GPUTransformFacts.hasNonFiniteFacts(): Boolean =
-    !translateX.isFinite() || !translateY.isFinite()
+    !translateX.isFinite() || !translateY.isFinite() ||
+        !scaleX.isFinite() || !scaleY.isFinite() ||
+        !skewX.isFinite() || !skewY.isFinite()
 
 /** Emits stable analysis facts for accepted transform classifications. */
 private fun GPUTransformFacts.analysisDiagnostics(
@@ -397,6 +404,8 @@ private fun GPUTransformFacts.analysisDiagnostics(
                 terminal = false,
             ),
         )
+        GPUTransformType.Scale,
+        GPUTransformType.Affine,
         GPUTransformType.Perspective,
         GPUTransformType.Singular,
         -> emptyList()
@@ -442,26 +451,47 @@ private fun GPURect.hasNonFinite(): Boolean =
 
 /** Returns true when any rounded rectangle coordinate or radius is NaN. */
 private fun GPURRect.hasNaN(): Boolean =
-    rect.hasNaN() || radiusX.isNaN() || radiusY.isNaN()
+    topLeft.hasNaN() || topRight.hasNaN() || bottomRight.hasNaN() || bottomLeft.hasNaN()
 
 /** Returns true when any rounded rectangle coordinate or radius is infinite or NaN. */
 private fun GPURRect.hasNonFinite(): Boolean =
-    rect.hasNonFinite() || !radiusX.isFinite() || !radiusY.isFinite()
+    topLeft.hasNonFinite() || topRight.hasNonFinite() ||
+        bottomRight.hasNonFinite() || bottomLeft.hasNonFinite()
+
+/** Returns true when either radius component is NaN. */
+private fun GPURRectCornerRadii.hasNaN(): Boolean =
+    x.isNaN() || y.isNaN()
+
+/** Returns true when either radius component is infinite or NaN. */
+private fun GPURRectCornerRadii.hasNonFinite(): Boolean =
+    !x.isFinite() || !y.isFinite()
+
+/** Returns true when both radius components are finite and positive. */
+private fun GPURRectCornerRadii.hasPositiveFiniteRadii(): Boolean =
+    x.isFinite() && y.isFinite() && x > 0f && y > 0f
 
 /** Returns true when rrect radii are finite, positive, and already normalized for the rect extent. */
 private fun GPURRect.hasAcceptedRadii(): Boolean {
-    if (radiusX <= 0f || radiusY <= 0f) return false
     val width = rect.right - rect.left
     val height = rect.bottom - rect.top
     if (width <= 0f || height <= 0f) return false
-    return radiusX <= width / 2f && radiusY <= height / 2f
+    if (!topLeft.hasPositiveFiniteRadii() || !topRight.hasPositiveFiniteRadii()) return false
+    if (!bottomRight.hasPositiveFiniteRadii() || !bottomLeft.hasPositiveFiniteRadii()) return false
+    return topLeft.x + topRight.x <= width &&
+        bottomLeft.x + bottomRight.x <= width &&
+        topLeft.y + bottomLeft.y <= height &&
+        topRight.y + bottomRight.y <= height
 }
 
 /** Emits stable accepted rrect geometry facts for analysis dumps. */
 private fun GPURRect.analysisDiagnostics(recordId: String): List<GPUAnalysisDiagnostic> =
     listOf(
         GPUAnalysisDiagnostic(
-            code = "geometry:rrect.radii=$radiusX,$radiusY",
+            code = "geometry:rrect.corner_radii=" +
+                "tl(${topLeft.x},${topLeft.y});" +
+                "tr(${topRight.x},${topRight.y});" +
+                "br(${bottomRight.x},${bottomRight.y});" +
+                "bl(${bottomLeft.x},${bottomLeft.y})",
             recordId = recordId,
             terminal = false,
         ),

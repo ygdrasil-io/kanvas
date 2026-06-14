@@ -100,7 +100,33 @@ class NormalizedDrawCommandTest {
         assertEquals(GPUTransformType.Identity, command.transform.type)
         assertEquals(GPUClipKind.WideOpen, command.clip.kind)
         assertEquals(GPUMaterialKind.SolidColor, command.material.kind)
+        assertEquals(GPURRectCornerRadii(x = 4f, y = 6f), command.rrect.topLeft)
+        assertEquals(GPURRectCornerRadii(x = 4f, y = 6f), command.rrect.topRight)
+        assertEquals(GPURRectCornerRadii(x = 4f, y = 6f), command.rrect.bottomRight)
+        assertEquals(GPURRectCornerRadii(x = 4f, y = 6f), command.rrect.bottomLeft)
         assertEquals(GPUBounds(left = 1f, top = 2f, right = 21f, bottom = 32f), command.bounds)
         assertEquals("unit-test:fillRRect#17", command.diagnosticName)
+    }
+
+    /** Ensures rounded rectangles can preserve Graphite-style per-corner x/y radii. */
+    @Test
+    fun `fill rrect command captures per corner radii for GPU renderer core`() {
+        val command = GPUFillRRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(18),
+            rrect = GPURRect(
+                rect = GPURect(left = 1f, top = 2f, right = 41f, bottom = 52f),
+                topLeft = GPURRectCornerRadii(x = 3f, y = 4f),
+                topRight = GPURRectCornerRadii(x = 5f, y = 6f),
+                bottomRight = GPURRectCornerRadii(x = 7f, y = 8f),
+                bottomLeft = GPURRectCornerRadii(x = 9f, y = 10f),
+            ),
+            target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 0.2f, g = 0.4f, b = 0.8f, a = 1f),
+        )
+
+        assertEquals(GPURRectCornerRadii(x = 3f, y = 4f), command.rrect.topLeft)
+        assertEquals(GPURRectCornerRadii(x = 5f, y = 6f), command.rrect.topRight)
+        assertEquals(GPURRectCornerRadii(x = 7f, y = 8f), command.rrect.bottomRight)
+        assertEquals(GPURRectCornerRadii(x = 9f, y = 10f), command.rrect.bottomLeft)
     }
 }

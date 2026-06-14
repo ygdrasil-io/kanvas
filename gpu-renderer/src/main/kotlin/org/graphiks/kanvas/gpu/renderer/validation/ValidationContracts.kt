@@ -1761,6 +1761,8 @@ private val firstRoutePositiveEvidenceCategories = setOf(
 private val firstRouteUnsupportedFamilies = listOf(
     "perspective-transform",
     "singular-transform",
+    "rrect-scale-transform",
+    "rrect-affine-transform",
     "unsupported-target-format",
     "unsupported-blend",
     "non-simple-clip",

@@ -1,7 +1,7 @@
 ---
 id: KGPU-M2-001
 title: "Add native `FillRRect` first expansion route"
-status: review
+status: done
 milestone: M2
 priority: P0
 owner_area: geometry-passes
@@ -29,8 +29,8 @@ WGSL/key/payload, resource, and refusal evidence.
 ## Scope
 
 - Add `FillRRect` normalized command and route fixtures.
-- Add accepted solid rrect evidence and refusals for unsupported radii,
-  transforms, clips, blends, and target formats.
+- Add accepted solid rrect route-candidate evidence and refusals for
+  unsupported per-corner radii, transforms, clips, blends, and target formats.
 
 ## Non-Goals
 
@@ -65,7 +65,7 @@ data class GPURRectRouteEvidence(val commandDump: String, val routeDump: String)
 
 ## Required Evidence
 
-- RRect accepted/refused dumps.
+- RRect accepted/refused dumps, including deterministic per-corner radii facts.
 - WGSL/reflection and pipeline-key evidence if module shape changes.
 - Adapter-backed or explicit skipped GPU evidence.
 
@@ -90,11 +90,15 @@ rtk git diff --check
 
 ## Status Notes
 
-- `review`: Isolated `:gpu-renderer` command, analysis, native route, pass,
-  recording, and ownership-fixture evidence exists for solid `FillRRect`.
-  Product activation remains false. Independent review found no blocking
-  claim/status issue. Remaining gate: adapter-backed or explicitly skipped GPU
-  evidence before this can move to `done`; no `gpu-raster` product route was
+- `done`: Isolated `:gpu-renderer` command, analysis, native route-candidate,
+  pass, recording, and ownership-fixture evidence exists for solid
+  `FillRRect`. Graphite-alignment remediation now keeps per-corner x/y radii
+  facts and explicit unproven scale/affine transform refusals.
+  `M2SimpleSceneEvidenceTest` adds the closeout scene line
+  `rrect:accepted routeCandidate=native.fill_rrect.solid` plus explicit
+  `gpu-lane:explicit-skipped` evidence. Product activation remains false.
+  Independent review `019ec7aa-f95b-7f40-9f40-1bf80d87d2b9` accepted the
+  skipped-GPU lane evidence and confirmed no `gpu-raster` product route was
   enabled.
 
 ## Linear Labels

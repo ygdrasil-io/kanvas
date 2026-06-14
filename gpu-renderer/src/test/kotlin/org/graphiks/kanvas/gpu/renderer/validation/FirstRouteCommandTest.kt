@@ -29,7 +29,7 @@ class FirstRouteCommandTest {
                 "execution:GPUCommandSubmission.Refused:first-route submission dump schema refuses before backend work",
                 "telemetry:GPUTelemetryLedger:first-route telemetry dump schema",
                 "routing:NegativeCPUFallbackRefusal:forbidden CPU-rendered texture fallback remains refused",
-                "routing:UnsupportedRouteFamilyRefusal:first-route unsupportedFamilies=perspective-transform,singular-transform,unsupported-target-format,unsupported-blend,non-simple-clip,layer-filter-destination-read,missing-capability,wgsl-validation-or-abi-mismatch diagnostics=none",
+                "routing:UnsupportedRouteFamilyRefusal:first-route unsupportedFamilies=perspective-transform,singular-transform,rrect-scale-transform,rrect-affine-transform,unsupported-target-format,unsupported-blend,non-simple-clip,layer-filter-destination-read,missing-capability,wgsl-validation-or-abi-mismatch diagnostics=none",
             ),
             actual = lines,
         )

@@ -18,6 +18,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
@@ -124,7 +125,10 @@ class FirstRoutePlannerTest {
         assertEquals("native.fill_rrect.solid", routeDecision.route.consumerKind)
         assertEquals("rrect.fill.coverage", routeDecision.route.renderStepIdentity)
         assertEquals(listOf("first_slice.fill_rrect.native"), routeDecision.route.requirements)
-        assertContains(plan.analysisRecord.diagnostics.map { it.code }, "geometry:rrect.radii=4.0,5.0")
+        assertContains(
+            plan.analysisRecord.diagnostics.map { it.code },
+            "geometry:rrect.corner_radii=tl(4.0,5.0);tr(4.0,5.0);br(4.0,5.0);bl(4.0,5.0)",
+        )
         assertEquals(emptyList(), analysisDecision.resourceDeclarations)
         assertEquals("pass.root.14", plan.pass.passId)
         assertEquals(listOf("pending.pipeline.fill_rrect.solid.rgba8unorm.src_over"), plan.pass.pipelineKeys)
@@ -138,6 +142,31 @@ class FirstRoutePlannerTest {
         assertNull(invocation.resourceSlot)
     }
 
+    /** Accepted non-uniform rrect radii are captured deterministically before materialization. */
+    @Test
+    fun `solid fill rrect records per corner radii facts deterministically`() {
+        val command = GPUFillRRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(15),
+            rrect = GPURRect(
+                rect = GPURect(left = 2f, top = 3f, right = 42f, bottom = 53f),
+                topLeft = GPURRectCornerRadii(x = 3f, y = 4f),
+                topRight = GPURRectCornerRadii(x = 5f, y = 6f),
+                bottomRight = GPURRectCornerRadii(x = 7f, y = 8f),
+                bottomLeft = GPURRectCornerRadii(x = 9f, y = 10f),
+            ),
+            target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0.25f, b = 0.5f, a = 1f),
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities = firstSliceRRectCapabilities()).plan(command)
+
+        assertIs<GPURouteDecision.Native>(plan.routeDecision)
+        assertContains(
+            plan.analysisRecord.diagnostics.map { it.code },
+            "geometry:rrect.corner_radii=tl(3.0,4.0);tr(5.0,6.0);br(7.0,8.0);bl(9.0,10.0)",
+        )
+    }
+
     /** Unsupported rrect variants refuse with canonical diagnostics and no pass work. */
     @Test
     fun `unsupported fill rrect variants produce canonical refusal diagnostics`() {
@@ -145,11 +174,27 @@ class FirstRoutePlannerTest {
         val cases = listOf(
             "unsupported.geometry.rrect_radii" to firstRRectRouteCommand(
                 target = target,
-                rrect = firstRouteRRect.copy(radiusX = 0f),
+                rrect = firstRouteRRect.copy(topLeft = firstRouteRRect.topLeft.copy(x = 0f)),
             ),
             "unsupported.geometry.rrect_radii" to firstRRectRouteCommand(
                 target = target,
-                rrect = firstRouteRRect.copy(radiusY = 99f),
+                rrect = firstRouteRRect.copy(topRight = firstRouteRRect.topRight.copy(y = Float.POSITIVE_INFINITY)),
+            ),
+            "unsupported.geometry.rrect_radii" to firstRRectRouteCommand(
+                target = target,
+                rrect = firstRouteRRect.copy(bottomRight = firstRouteRRect.bottomRight.copy(x = -1f)),
+            ),
+            "unsupported.geometry.rrect_radii" to firstRRectRouteCommand(
+                target = target,
+                rrect = firstRouteRRect.copy(bottomLeft = firstRouteRRect.bottomLeft.copy(x = 99f)),
+            ),
+            "unsupported.transform.rrect_scale_unproven" to firstRRectRouteCommand(
+                target = target,
+                transform = GPUTransformFacts.scale(x = 2f, y = 2f),
+            ),
+            "unsupported.transform.rrect_affine_unproven" to firstRRectRouteCommand(
+                target = target,
+                transform = GPUTransformFacts.affine(scaleX = 1f, skewX = 0.25f, skewY = 0f, scaleY = 1f),
             ),
             "unsupported.transform.perspective" to firstRRectRouteCommand(
                 target = target,

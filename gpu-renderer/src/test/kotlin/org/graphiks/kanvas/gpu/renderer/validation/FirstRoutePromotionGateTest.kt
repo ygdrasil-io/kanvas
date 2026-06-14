@@ -92,9 +92,9 @@ class FirstRoutePromotionGateTest {
         assertContains(
             result.diagnostics.joinToString("\n"),
             "unsupported-route-refusals requires UnsupportedRouteFamilyRefusal covering canonical " +
-                "first-route unsupported families; missing=singular-transform,unsupported-target-format," +
-                "unsupported-blend,non-simple-clip,layer-filter-destination-read,missing-capability," +
-                "wgsl-validation-or-abi-mismatch",
+                "first-route unsupported families; missing=singular-transform,rrect-scale-transform," +
+                "rrect-affine-transform,unsupported-target-format,unsupported-blend,non-simple-clip," +
+                "layer-filter-destination-read,missing-capability,wgsl-validation-or-abi-mismatch",
         )
     }
 
@@ -279,8 +279,9 @@ class FirstRoutePromotionGateTest {
                 ownerPackage = "routing",
                 concept = "UnsupportedRouteFamilyRefusal",
                 detail = "first-route unsupportedFamilies=perspective-transform,singular-transform," +
-                    "unsupported-target-format,unsupported-blend,non-simple-clip,layer-filter-destination-read," +
-                    "missing-capability,wgsl-validation-or-abi-mismatch diagnostics=none",
+                    "rrect-scale-transform,rrect-affine-transform,unsupported-target-format,unsupported-blend," +
+                    "non-simple-clip,layer-filter-destination-read,missing-capability," +
+                    "wgsl-validation-or-abi-mismatch diagnostics=none",
             ),
         )
 
