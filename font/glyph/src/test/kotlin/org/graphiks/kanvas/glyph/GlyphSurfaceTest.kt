@@ -459,6 +459,123 @@ class GlyphSurfaceTest {
     }
 
     @Test
+    fun glyphStrikeKeyCanonicalPreimageIncludesRenderingFactsInStableOrder() {
+        val strikeKey = GlyphStrikeKey(
+            typefaceId = typefaceId("550e8400-e29b-41d4-a716-446655441061"),
+            sizePx = 18f,
+            scaleX = 1.25f,
+            scaleY = 0.75f,
+            subpixelX = 0.5f,
+            subpixelY = 0.25f,
+            variationCoordinates = mapOf("wght" to 0.6f, "wdth" to 0.25f),
+            representationRoute = "text.glyph.mask.SDF",
+            maskFormat = "R8Unorm",
+            transformBucket = "affine.scale-translate",
+            edging = "antialias",
+            sdfSpreadPx = 8f,
+            sdfSourceResolutionPx = 18f,
+            paletteIdentity = "cpal.palette.3",
+            unicodeDataVersion = "Unicode-15.1.0",
+            rendererVersion = "kanvas.sdf.cpu.v1",
+        )
+
+        assertEquals(
+            """
+            {
+              "schema": "org.graphiks.kanvas.glyph.GlyphStrikeKey.v1",
+              "typefaceId": "550e8400-e29b-41d4-a716-446655441061",
+              "glyphId": 77,
+              "sizePx": 18,
+              "scaleX": 1.25,
+              "scaleY": 0.75,
+              "transformBucket": "affine.scale-translate",
+              "subpixelBucket": {"x": 0.5, "y": 0.25},
+              "route": "text.glyph.mask.SDF",
+              "maskFormat": "R8Unorm",
+              "edging": "antialias",
+              "variationCoordinates": [
+                {"axis": "wdth", "value": 0.25},
+                {"axis": "wght", "value": 0.6}
+              ],
+              "paletteIdentity": "cpal.palette.3",
+              "sdf": {"spreadPx": 8, "sourceResolutionPx": 18},
+              "unicodeDataVersion": "Unicode-15.1.0",
+              "rendererVersion": "kanvas.sdf.cpu.v1"
+            }
+            """.trimIndent() + "\n",
+            strikeKey.canonicalPreimage(glyphId = 77),
+        )
+        assertEquals(64, strikeKey.preimageSha256(glyphId = 77).length)
+    }
+
+    @Test
+    fun glyphStrikeKeyPreimageHashNormalizesVariationOrderAndTracksRouteFacts() {
+        val strikeKey = GlyphStrikeKey(
+            typefaceId = typefaceId("550e8400-e29b-41d4-a716-446655441062"),
+            sizePx = 16f,
+            variationCoordinates = mapOf("wght" to 0.55f, "opsz" to 14f),
+            representationRoute = "text.glyph.mask.A8",
+            maskFormat = "A8",
+            paletteIdentity = "cpal.palette.1",
+            unicodeDataVersion = "Unicode-15.1.0",
+        )
+        val sameFactsDifferentVariationOrder = strikeKey.copy(
+            variationCoordinates = mapOf("opsz" to 14f, "wght" to 0.55f),
+        )
+
+        assertEquals(strikeKey.canonicalPreimage(glyphId = 12), sameFactsDifferentVariationOrder.canonicalPreimage(glyphId = 12))
+        assertEquals(strikeKey.preimageSha256(glyphId = 12), sameFactsDifferentVariationOrder.preimageSha256(glyphId = 12))
+        assertTrue(
+            strikeKey.preimageSha256(glyphId = 12) != strikeKey.copy(paletteIdentity = "cpal.palette.2").preimageSha256(glyphId = 12),
+        )
+        assertTrue(
+            strikeKey.preimageSha256(glyphId = 12) != strikeKey.copy(unicodeDataVersion = "Unicode-16.0.0").preimageSha256(glyphId = 12),
+        )
+        assertTrue(
+            strikeKey.preimageSha256(glyphId = 12) != strikeKey.copy(representationRoute = "text.glyph.mask.SDF").preimageSha256(glyphId = 12),
+        )
+    }
+
+    @Test
+    fun glyphStrikeKeyPreimagePreservesDistinctFloatFacts() {
+        val strikeKey = GlyphStrikeKey(
+            typefaceId = typefaceId("550e8400-e29b-41d4-a716-446655441066"),
+            sizePx = 16f,
+            subpixelX = 0f,
+            variationCoordinates = mapOf("wght" to 0f),
+        )
+        val distinctSubpixel = strikeKey.copy(subpixelX = 0.0000001f)
+        val distinctVariation = strikeKey.copy(variationCoordinates = mapOf("wght" to 0.0000001f))
+
+        assertTrue(strikeKey.canonicalPreimage(glyphId = 9) != distinctSubpixel.canonicalPreimage(glyphId = 9))
+        assertTrue(strikeKey.preimageSha256(glyphId = 9) != distinctSubpixel.preimageSha256(glyphId = 9))
+        assertTrue(strikeKey.canonicalPreimage(glyphId = 9) != distinctVariation.canonicalPreimage(glyphId = 9))
+        assertTrue(strikeKey.preimageSha256(glyphId = 9) != distinctVariation.preimageSha256(glyphId = 9))
+    }
+
+    @Test
+    fun inMemoryGlyphCacheSeparatesRenderingRoutePaletteAndUnicodeFacts() {
+        val cache = InMemoryGlyphCache(GlyphCacheBudget(maxBytes = 16_384, maxEntries = 8))
+        val strikeKey = GlyphStrikeKey(
+            typefaceId = typefaceId("550e8400-e29b-41d4-a716-446655441063"),
+            sizePx = 16f,
+            representationRoute = "text.glyph.mask.A8",
+            maskFormat = "A8",
+            paletteIdentity = "cpal.palette.1",
+            unicodeDataVersion = "Unicode-15.1.0",
+        )
+        val representation = A8GlyphMask(glyphId = 88, width = 1, height = 1, pixels = listOf(255))
+
+        cache.put(strikeKey, representation)
+
+        assertEquals(representation, cache.get(strikeKey, glyphId = 88))
+        assertEquals(null, cache.get(strikeKey.copy(representationRoute = "text.glyph.mask.SDF"), glyphId = 88))
+        assertEquals(null, cache.get(strikeKey.copy(maskFormat = "R8Unorm"), glyphId = 88))
+        assertEquals(null, cache.get(strikeKey.copy(paletteIdentity = "cpal.palette.2"), glyphId = 88))
+        assertEquals(null, cache.get(strikeKey.copy(unicodeDataVersion = "Unicode-16.0.0"), glyphId = 88))
+    }
+
+    @Test
     fun inMemoryGlyphCacheEvictsOldestEntriesWhenEntryBudgetIsExceeded() {
         val cache = InMemoryGlyphCache(GlyphCacheBudget(maxBytes = 16_384, maxEntries = 2))
         val strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441011")
@@ -552,6 +669,49 @@ class GlyphSurfaceTest {
         assertEquals(listOf("sdf", "sdf"), plan.diagnostics.map { it.route })
         assertTrue(plan.diagnostics.all { diagnostic -> diagnostic.severity == "warning" })
         assertTrue(plan.diagnostics.all { diagnostic -> diagnostic.message.contains("requested") })
+    }
+
+    @Test
+    fun routeDiagnosticsHaveCanonicalDumpAndStableHash() {
+        val diagnostics = listOf(
+            GlyphRouteDiagnostic(
+                glyphId = 20,
+                route = "text.glyph.mask.SDF",
+                severity = "warning",
+                message = "No \"SDF\" route\navailable.",
+            ),
+            GlyphRouteDiagnostic(
+                glyphId = null,
+                route = "text.glyph.unsupported",
+                severity = "info",
+                message = "LCD is future research.",
+            ),
+        )
+
+        assertEquals(
+            """
+            [
+              {
+                "glyphId": 20,
+                "route": "text.glyph.mask.SDF",
+                "severity": "warning",
+                "message": "No \"SDF\" route\navailable."
+              },
+              {
+                "glyphId": null,
+                "route": "text.glyph.unsupported",
+                "severity": "info",
+                "message": "LCD is future research."
+              }
+            ]
+            """.trimIndent() + "\n",
+            diagnostics.toCanonicalGlyphRouteDiagnosticsJson(),
+        )
+        assertEquals(64, diagnostics.glyphRouteDiagnosticsSha256().length)
+        assertEquals(
+            diagnostics.glyphRouteDiagnosticsSha256(),
+            diagnostics.toList().glyphRouteDiagnosticsSha256(),
+        )
     }
 
     @Test

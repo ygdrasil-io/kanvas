@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.commands
 
+import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic
+import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
+
 /** Canonical command identifier name used by the package layout target. */
 @JvmInline
 value class GPUDrawCommandID(val value: Int) {
@@ -62,6 +65,8 @@ data class GPUCommandCapture(
 enum class GPUDrawKind {
     /** Filled rectangle command family. */
     FillRect,
+    /** Text run command family with prepared text stack artifacts. */
+    DrawTextRun,
 }
 
 /** Coarse transform classification captured before analysis. */
@@ -222,5 +227,27 @@ sealed interface NormalizedDrawCommand {
         override val source: GPUCommandSource,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRect
+    }
+
+    /** Text run command with only dumpable text-stack artifact references. */
+    data class DrawTextRun(
+        override val commandId: GPUDrawCommandID,
+        val textLayoutResultId: String?,
+        val glyphRunId: String?,
+        val glyphRunDescriptorRefs: List<String>,
+        val artifactRefs: List<GPUTextArtifactRef>,
+        val artifactKeyHashes: List<String>,
+        val atlasGenerationTokens: List<String>,
+        val uploadDependencyFacts: List<String>,
+        val routeDiagnostics: List<GPUTextDiagnostic>,
+        override val transform: GPUTransformFacts,
+        override val clip: GPUClipFacts,
+        override val layer: GPULayerFacts,
+        override val material: GPUMaterialDescriptor,
+        override val bounds: GPUBounds,
+        override val ordering: GPUOrderingFacts,
+        override val source: GPUCommandSource,
+    ) : NormalizedDrawCommand {
+        override val drawKind: GPUDrawKind = GPUDrawKind.DrawTextRun
     }
 }

@@ -139,6 +139,31 @@ data class GPUTextArtifactKey(
 )
 
 /**
+ * Dumpable reference to a typed GPU text artifact plan.
+ *
+ * The reference names the artifact plan type and its stable artifact key facts
+ * without carrying the plan object, renderer state, GPU handles, font parser
+ * state, or parsed glyph payloads. It is intentionally richer than a compact
+ * content fingerprint string so diagnostics can preserve identity, generation,
+ * content, and source provenance independently.
+ *
+ * @property artifactName Public artifact plan type name.
+ * @property artifactID Stable logical artifact identifier.
+ * @property generation Artifact generation associated with the planned
+ * content.
+ * @property contentFingerprint Dumpable content fingerprint or compact key
+ * hash for the artifact content.
+ * @property sourceLabel Bundle or plan field that produced the reference.
+ */
+data class GPUTextArtifactReference(
+    val artifactName: String,
+    val artifactID: GPUTextArtifactID,
+    val generation: GPUTextArtifactGeneration,
+    val contentFingerprint: String,
+    val sourceLabel: String,
+)
+
+/**
  * Byte range that should be uploaded for a text artifact payload.
  *
  * The range describes an offset and length in a CPU-side payload. It does not
@@ -404,6 +429,76 @@ data class SVGGlyphPlan(
 )
 
 /**
+ * Returns a dumpable reference to this glyph atlas artifact.
+ */
+fun GlyphAtlasArtifact.artifactReference(
+    sourceLabel: String = "GlyphAtlasArtifact",
+): GPUTextArtifactReference = artifactKey.toArtifactReference(
+    artifactName = "GlyphAtlasArtifact",
+    sourceLabel = sourceLabel,
+)
+
+/**
+ * Returns a dumpable reference to this SDF glyph atlas artifact.
+ */
+fun SDFGlyphAtlasArtifact.artifactReference(
+    sourceLabel: String = "SDFGlyphAtlasArtifact",
+): GPUTextArtifactReference = atlas.artifactKey.toArtifactReference(
+    artifactName = "SDFGlyphAtlasArtifact",
+    sourceLabel = sourceLabel,
+)
+
+/**
+ * Returns a dumpable reference to this glyph upload plan.
+ */
+fun GlyphUploadPlan.artifactReference(
+    sourceLabel: String = "GlyphUploadPlan",
+): GPUTextArtifactReference = artifactKey.toArtifactReference(
+    artifactName = "GlyphUploadPlan",
+    sourceLabel = sourceLabel,
+)
+
+/**
+ * Returns a dumpable reference to this outline glyph plan.
+ */
+fun OutlineGlyphPlan.artifactReference(
+    sourceLabel: String = "OutlineGlyphPlan",
+): GPUTextArtifactReference = artifactKey.toArtifactReference(
+    artifactName = "OutlineGlyphPlan",
+    sourceLabel = sourceLabel,
+)
+
+/**
+ * Returns a dumpable reference to this color glyph plan.
+ */
+fun ColorGlyphPlan.artifactReference(
+    sourceLabel: String = "ColorGlyphPlan",
+): GPUTextArtifactReference = artifactKey.toArtifactReference(
+    artifactName = "ColorGlyphPlan",
+    sourceLabel = sourceLabel,
+)
+
+/**
+ * Returns a dumpable reference to this bitmap glyph plan.
+ */
+fun BitmapGlyphPlan.artifactReference(
+    sourceLabel: String = "BitmapGlyphPlan",
+): GPUTextArtifactReference = artifactKey.toArtifactReference(
+    artifactName = "BitmapGlyphPlan",
+    sourceLabel = sourceLabel,
+)
+
+/**
+ * Returns a dumpable reference to this SVG glyph plan.
+ */
+fun SVGGlyphPlan.artifactReference(
+    sourceLabel: String = "SVGGlyphPlan",
+): GPUTextArtifactReference = artifactKey.toArtifactReference(
+    artifactName = "SVGGlyphPlan",
+    sourceLabel = sourceLabel,
+)
+
+/**
  * Complete bundle of pure Kotlin GPU text artifacts.
  *
  * The bundle is the handoff object from font/text planning toward a future
@@ -433,4 +528,50 @@ data class TextGPUArtifactBundle(
     val atlases: List<GlyphAtlasArtifact>,
     val sdfAtlases: List<SDFGlyphAtlasArtifact>,
     val diagnostics: GPUTextRouteDiagnostics,
+)
+
+/**
+ * Returns all typed artifact references in a stable handoff order.
+ *
+ * The order is category-first and then preserves each bundle list's order:
+ * `GlyphAtlasArtifact`, `SDFGlyphAtlasArtifact`, `GlyphUploadPlan`,
+ * `OutlineGlyphPlan`, `ColorGlyphPlan`, `BitmapGlyphPlan`, and `SVGGlyphPlan`.
+ * Generic byte upload plans are intentionally not surfaced as a separate
+ * category because the typed `GlyphUploadPlan` owns the handoff reference.
+ */
+fun TextGPUArtifactBundle.artifactReferences(): List<GPUTextArtifactReference> {
+    val references = mutableListOf<GPUTextArtifactReference>()
+    atlases.mapTo(references) {
+        it.artifactReference(sourceLabel = "TextGPUArtifactBundle.atlases")
+    }
+    sdfAtlases.mapTo(references) {
+        it.artifactReference(sourceLabel = "TextGPUArtifactBundle.sdfAtlases")
+    }
+    glyphUploadPlans.mapTo(references) {
+        it.artifactReference(sourceLabel = "TextGPUArtifactBundle.glyphUploadPlans")
+    }
+    outlineGlyphPlans.mapTo(references) {
+        it.artifactReference(sourceLabel = "TextGPUArtifactBundle.outlineGlyphPlans")
+    }
+    colorGlyphPlans.mapTo(references) {
+        it.artifactReference(sourceLabel = "TextGPUArtifactBundle.colorGlyphPlans")
+    }
+    bitmapGlyphPlans.mapTo(references) {
+        it.artifactReference(sourceLabel = "TextGPUArtifactBundle.bitmapGlyphPlans")
+    }
+    svgGlyphPlans.mapTo(references) {
+        it.artifactReference(sourceLabel = "TextGPUArtifactBundle.svgGlyphPlans")
+    }
+    return references
+}
+
+private fun GPUTextArtifactKey.toArtifactReference(
+    artifactName: String,
+    sourceLabel: String,
+): GPUTextArtifactReference = GPUTextArtifactReference(
+    artifactName = artifactName,
+    artifactID = artifactID,
+    generation = generation,
+    contentFingerprint = contentFingerprint,
+    sourceLabel = sourceLabel,
 )

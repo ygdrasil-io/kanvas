@@ -6,9 +6,16 @@ import org.graphiks.kanvas.font.FontSourceKind
 import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.kanvas.font.sfnt.HorizontalGlyphMetric
 import org.graphiks.kanvas.font.sfnt.MetricsTables
+import org.graphiks.kanvas.font.sfnt.OpenTypeAvarAxisSegmentMap
+import org.graphiks.kanvas.font.sfnt.OpenTypeAvarSegment
 import org.graphiks.kanvas.font.sfnt.OpenTypeFaceData
+import org.graphiks.kanvas.font.sfnt.OpenTypeFixed16Dot16
+import org.graphiks.kanvas.font.sfnt.OpenTypeVariationAxis
+import org.graphiks.kanvas.font.sfnt.OpenTypeVariationAxisTag
 import org.graphiks.kanvas.font.sfnt.SFNTTableDirectory
 import org.graphiks.kanvas.font.sfnt.SFNTTableTag
+import org.graphiks.kanvas.font.sfnt.VariationTables
+import java.security.MessageDigest
 import kotlin.uuid.Uuid
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -527,6 +534,320 @@ class FontScalerSurfaceTest {
             ),
             scaler.metrics(glyphId = 0u),
         )
+    }
+
+    @Test
+    fun parsedTrueTypeGlyphEvidenceDumpsSimpleGlyphDeterministically() {
+        val simpleSquare = simpleSquareGlyphData()
+        val scaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = simpleSquare,
+            loca = TrueTypeLocaTable(offsets = listOf(0, simpleSquare.size, simpleSquare.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+                1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+            ),
+        )
+
+        val evidence = scaler.scaledGlyphEvidence(glyphId = 0u)
+        val repeated = scaler.scaledGlyphEvidence(glyphId = 0u)
+        val dump = evidence.toCanonicalJson()
+
+        assertEquals(evidence, repeated)
+        assertEquals(dump, repeated.toCanonicalJson())
+        assertEquals(0u, evidence.glyphId)
+        assertEquals("truetype-glyf", evidence.scalerFamily)
+        assertEquals("font.scaler.truetype-glyf", evidence.route)
+        assertEquals(
+            TrueTypeLocaRangeEvidence(
+                start = 0,
+                endExclusive = simpleSquare.size,
+                byteLength = simpleSquare.size,
+                isEmpty = false,
+            ),
+            evidence.locaRange,
+        )
+        assertEquals(emptyList(), evidence.requestedVariationPosition)
+        assertEquals(emptyList(), evidence.normalizedVariationPosition)
+        assertEquals(
+            listOf(
+                "M 0.0 0.0",
+                "L 100.0 0.0",
+                "L 100.0 100.0",
+                "L 0.0 100.0",
+                "Z",
+            ),
+            evidence.outlineCommands,
+        )
+        assertEquals(
+            evidence.outlineCommandDump.sha256Hex(),
+            evidence.outlineCommandDumpSha256,
+        )
+        assertEquals(GlyphBounds(left = 0.0, top = 0.0, right = 100.0, bottom = 100.0), evidence.conservativeBounds)
+        assertEquals(
+            GlyphMetrics(
+                advanceX = 600.0,
+                advanceY = 0.0,
+                bounds = GlyphBounds(left = 0.0, top = 0.0, right = 100.0, bottom = 100.0),
+            ),
+            evidence.metrics,
+        )
+        assertEquals(emptyList(), evidence.diagnostics)
+        assertTrue(!dump.contains("@"))
+        assertTrue(!Regex("""\bSk[A-Za-z0-9_]*""").containsMatchIn(dump))
+    }
+
+    @Test
+    fun parsedTrueTypeGlyphEvidenceSortsRequestedVariationAxesInDumps() {
+        val simpleSquare = simpleSquareGlyphData()
+        val scaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = simpleSquare,
+            loca = TrueTypeLocaTable(offsets = listOf(0, simpleSquare.size, simpleSquare.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+                1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+            ),
+        )
+
+        val evidence = scaler.scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(
+                axes = mapOf(
+                    "wght" to 400.0,
+                    "wdth" to 100.0,
+                ),
+            ),
+        )
+        val dump = evidence.toCanonicalJson()
+
+        assertEquals(
+            listOf(
+                VariationCoordinateEvidence(tag = "wdth", value = 100.0),
+                VariationCoordinateEvidence(tag = "wght", value = 400.0),
+            ),
+            evidence.requestedVariationPosition,
+        )
+        assertTrue(dump.indexOf("\"tag\": \"wdth\"") < dump.indexOf("\"tag\": \"wght\""))
+        assertTrue(evidence.diagnostics.any { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.VARIATION_AXIS_UNSUPPORTED &&
+                diagnostic.detail == "truetype.gvar-unavailable"
+        })
+    }
+
+    @Test
+    fun trueTypeGlyfEvidenceShowsRequestedAndNormalizedVariationFacts() {
+        val simpleSquare = simpleSquareGlyphData().withTrueTypePadding()
+        val scaler = TrueTypeGlyfScaler(
+            face = syntheticTrueTypeFace(
+                rawTables = mapOf(
+                    SFNTTableTag("loca") to shortLocaForOffsets(0, simpleSquare.size, simpleSquare.size)
+                        .toUnsignedByteList(),
+                    SFNTTableTag("glyf") to simpleSquare.toUnsignedByteList(),
+                    SFNTTableTag("gvar") to singleAxisGvarWithAllPointDelta().toUnsignedByteList(),
+                ),
+                variations = VariationTables(
+                    axes = listOf(
+                        variationAxis(tag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+                    ),
+                ),
+            ),
+        )
+
+        val evidence = scaler.scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to 900.0)),
+        )
+        val dump = evidence.toCanonicalJson()
+
+        assertEquals(listOf(VariationCoordinateEvidence(tag = "wght", value = 900.0)), evidence.requestedVariationPosition)
+        assertEquals(listOf(VariationCoordinateEvidence(tag = "wght", value = 1.0)), evidence.normalizedVariationPosition)
+        assertEquals(
+            listOf(
+                "M 0.0 0.0",
+                "L 100.0 0.0",
+                "L 120.0 90.0",
+                "L 0.0 100.0",
+                "Z",
+            ),
+            evidence.outlineCommands,
+        )
+        assertTrue(evidence.diagnostics.any { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.METRICS_VARIATION_UNAVAILABLE
+        })
+        assertTrue(dump.indexOf("\"requestedVariationPosition\"") < dump.indexOf("\"normalizedVariationPosition\""))
+        assertTrue(!dump.contains("@"))
+        assertTrue(!Regex("""\bSk[A-Za-z0-9_]*""").containsMatchIn(dump))
+    }
+
+    @Test
+    fun parsedTrueTypeGlyphEvidenceReportsPartialGvarIupGap() {
+        val simpleSquare = simpleSquareGlyphData()
+        val scaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = simpleSquare,
+            loca = TrueTypeLocaTable(offsets = listOf(0, simpleSquare.size, simpleSquare.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+                1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+            ),
+            gvar = TrueTypeGvarTable.parse(
+                data = singleAxisGvarWithPointDelta(),
+                axisCount = 1,
+                glyphCount = 2,
+            ),
+            normalizedAxisOrder = listOf("wght"),
+        )
+
+        val evidence = scaler.scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to 1.0)),
+        )
+
+        assertEquals(
+            listOf(
+                "M 0.0 0.0",
+                "L 100.0 0.0",
+                "L 100.0 100.0",
+                "L 0.0 100.0",
+                "Z",
+            ),
+            evidence.outlineCommands,
+        )
+        assertTrue(evidence.diagnostics.any { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED &&
+                diagnostic.detail == "truetype.gvar-iup-unavailable" &&
+                diagnostic.severity == "warning"
+        })
+        assertTrue(evidence.toCanonicalJson().contains("\"detail\": \"truetype.gvar-iup-unavailable\""))
+    }
+
+    @Test
+    fun trueTypeGlyfEvidenceReportsUnknownRequestedAxisWithoutThrowing() {
+        val simpleSquare = simpleSquareGlyphData().withTrueTypePadding()
+        val scaler = variableTrueTypeGlyfScaler(simpleSquare = simpleSquare)
+
+        val evidence = scaler.scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wdth" to 100.0)),
+        )
+
+        assertEquals(listOf(VariationCoordinateEvidence(tag = "wdth", value = 100.0)), evidence.requestedVariationPosition)
+        assertEquals(emptyList(), evidence.normalizedVariationPosition)
+        assertEquals(
+            listOf(
+                "M 0.0 0.0",
+                "L 100.0 0.0",
+                "L 100.0 100.0",
+                "L 0.0 100.0",
+                "Z",
+            ),
+            evidence.outlineCommands,
+        )
+        assertTrue(evidence.diagnostics.any { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.VARIATION_AXIS_UNSUPPORTED &&
+                diagnostic.detail == "truetype.gvar-axis"
+        })
+    }
+
+    @Test
+    fun trueTypeGlyfEvidenceReportsNonFiniteRequestedAxisWithoutThrowing() {
+        val simpleSquare = simpleSquareGlyphData().withTrueTypePadding()
+        val scaler = variableTrueTypeGlyfScaler(simpleSquare = simpleSquare)
+
+        val evidence = scaler.scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to Double.NaN)),
+        )
+
+        assertEquals(emptyList(), evidence.requestedVariationPosition)
+        assertEquals(emptyList(), evidence.normalizedVariationPosition)
+        assertEquals(
+            listOf(
+                "M 0.0 0.0",
+                "L 100.0 0.0",
+                "L 100.0 100.0",
+                "L 0.0 100.0",
+                "Z",
+            ),
+            evidence.outlineCommands,
+        )
+        assertTrue(evidence.diagnostics.any { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED &&
+                diagnostic.detail == "truetype.variation-position-non-finite"
+        })
+    }
+
+    @Test
+    fun trueTypeGlyfEvidenceReportsAvarRemappingNotApplied() {
+        val simpleSquare = simpleSquareGlyphData().withTrueTypePadding()
+        val scaler = variableTrueTypeGlyfScaler(
+            simpleSquare = simpleSquare,
+            variations = VariationTables(
+                axes = listOf(
+                    variationAxis(tag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+                ),
+                axisSegmentMaps = listOf(
+                    OpenTypeAvarAxisSegmentMap(
+                        segments = listOf(
+                            OpenTypeAvarSegment(fromCoordinate = -1.0, toCoordinate = -1.0),
+                            OpenTypeAvarSegment(fromCoordinate = 0.0, toCoordinate = 0.0),
+                            OpenTypeAvarSegment(fromCoordinate = 1.0, toCoordinate = 0.75),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val evidence = scaler.scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to 900.0)),
+        )
+
+        assertEquals(listOf(VariationCoordinateEvidence(tag = "wght", value = 1.0)), evidence.normalizedVariationPosition)
+        assertTrue(evidence.diagnostics.any { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.VARIATION_AXIS_UNSUPPORTED &&
+                diagnostic.detail == "truetype.avar-unapplied" &&
+                diagnostic.severity == "warning"
+        })
+        assertTrue(evidence.toCanonicalJson().contains("\"detail\": \"truetype.avar-unapplied\""))
+    }
+
+    @Test
+    fun parsedTrueTypeGlyphEvidenceReportsCompositePointMatchingRefusalCode() {
+        val compositeGlyph = compositeGlyphData(
+            *componentRecord(
+                flags = 0x0001,
+                glyphId = 1,
+                arg1 = 0,
+                arg2 = 1,
+            ),
+        )
+        val simpleSquare = simpleSquareGlyphData()
+        val scaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = compositeGlyph + simpleSquare,
+            loca = TrueTypeLocaTable(offsets = listOf(0, compositeGlyph.size, compositeGlyph.size + simpleSquare.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+                1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+            ),
+        )
+
+        val evidence = scaler.scaledGlyphEvidence(glyphId = 0u)
+
+        assertEquals(emptyList(), evidence.outlineCommands)
+        assertNull(evidence.conservativeBounds)
+        assertEquals(
+            listOf(
+                FontScalerDiagnostic(
+                    code = FontScalerDiagnosticCodes.OUTLINE_FORMAT_UNSUPPORTED,
+                    detail = "truetype.composite-point-matching",
+                    operation = "outline",
+                    glyphId = 0u,
+                    severity = "refusal",
+                ),
+            ),
+            evidence.diagnostics,
+        )
+        assertTrue(evidence.toCanonicalJson().contains("\"code\": \"font.outline-format-unsupported\""))
+        assertTrue(evidence.toCanonicalJson().contains("\"detail\": \"truetype.composite-point-matching\""))
     }
 
     @Test
@@ -1204,6 +1525,7 @@ class FontScalerSurfaceTest {
     private fun syntheticTrueTypeFace(
         rawTables: Map<SFNTTableTag, List<Int>>,
         metrics: MetricsTables = sfntMetricsForFactory(),
+        variations: VariationTables = VariationTables(),
     ): OpenTypeFaceData = OpenTypeFaceData(
         id = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440201")),
         source = FontSource(
@@ -1214,7 +1536,41 @@ class FontScalerSurfaceTest {
         ),
         directory = SFNTTableDirectory(scalerType = 0x00010000u),
         metrics = metrics,
+        variations = variations,
         rawTables = rawTables,
+    )
+
+    private fun variableTrueTypeGlyfScaler(
+        simpleSquare: ByteArray,
+        variations: VariationTables = VariationTables(
+            axes = listOf(
+                variationAxis(tag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+            ),
+        ),
+    ): TrueTypeGlyfScaler = TrueTypeGlyfScaler(
+        face = syntheticTrueTypeFace(
+            rawTables = mapOf(
+                SFNTTableTag("loca") to shortLocaForOffsets(0, simpleSquare.size, simpleSquare.size)
+                    .toUnsignedByteList(),
+                SFNTTableTag("glyf") to simpleSquare.toUnsignedByteList(),
+                SFNTTableTag("gvar") to singleAxisGvarWithAllPointDelta().toUnsignedByteList(),
+            ),
+            variations = variations,
+        ),
+    )
+
+    private fun variationAxis(
+        tag: String,
+        minimum: Double,
+        defaultValue: Double,
+        maximum: Double,
+    ): OpenTypeVariationAxis = OpenTypeVariationAxis(
+        tag = OpenTypeVariationAxisTag(text = tag, rawValue = tag.toOpenTypeTagValue()),
+        minimum = OpenTypeFixed16Dot16(minimum.toFixed16Dot16()),
+        defaultValue = OpenTypeFixed16Dot16(defaultValue.toFixed16Dot16()),
+        maximum = OpenTypeFixed16Dot16(maximum.toFixed16Dot16()),
+        flags = 0,
+        nameId = 256,
     )
 
     private fun shortLocaForOffsets(vararg offsets: Int): ByteArray {
@@ -1228,6 +1584,20 @@ class FontScalerSurfaceTest {
     }
 
     private fun ByteArray.toUnsignedByteList(): List<Int> = map { it.toInt() and 0xff }
+
+    private fun String.toOpenTypeTagValue(): Int {
+        require(length == 4)
+        return fold(0) { accumulator, character ->
+            (accumulator shl 8) or (character.code and 0xff)
+        }
+    }
+
+    private fun Double.toFixed16Dot16(): Int = (this * 65536.0).toInt()
+
+    private fun String.sha256Hex(): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(byte) }
 
     private fun bytes(vararg values: Int): ByteArray = values.map { it.toByte() }.toByteArray()
 }

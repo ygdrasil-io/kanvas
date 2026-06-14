@@ -256,6 +256,7 @@ class DefaultOpenTypeFaceParser(
         return OpenTypeFaceData(
             id = deterministicTypefaceId(source, faceIndex),
             source = source,
+            faceIndex = faceIndex,
             directory = directory,
             cmap = cmap,
             names = names,
@@ -1065,6 +1066,8 @@ class DefaultOpenTypeFaceParser(
  * byte values in table-directory units for later layers that need payloads this
  * parser does not interpret.
  * @property diagnostics Non-fatal parse diagnostics.
+ * @property faceIndex Zero-based selected face index from a single-face SFNT or
+ * TTC/OpenType collection.
  */
 data class OpenTypeFaceData(
     val id: TypefaceID,
@@ -1079,7 +1082,292 @@ data class OpenTypeFaceData(
     val color: ColorFontTables = ColorFontTables(),
     val rawTables: Map<SFNTTableTag, List<Int>> = emptyMap(),
     val diagnostics: List<OpenTypeParseDiagnostic> = emptyList(),
-)
+    val faceIndex: Int = 0,
+) {
+    init {
+        require(faceIndex >= 0) {
+            "OpenType faceIndex must be non-negative; received $faceIndex."
+        }
+    }
+}
+
+/**
+ * Deterministic evidence for one parsed SFNT/OpenType face.
+ *
+ * This is a dump surface for already-parsed facts. It does not parse outlines,
+ * claim scaler completeness, or promote CFF/CFF2 support.
+ *
+ * @property faceIndex Zero-based selected face index.
+ * @property sourceId Stable source identity.
+ * @property typefaceId Stable parsed typeface identity.
+ * @property sourceKind Source provenance kind from font core.
+ * @property scalerType Raw SFNT scaler type as lowercase hexadecimal.
+ * @property scalerTypeLabel Human-readable raw scaler tag or version label.
+ * @property tableRecords Directory table records sorted for deterministic dumps.
+ * @property preferredCMap Preferred parsed `cmap` facts used by lookup, when present.
+ * @property metrics Parsed metric summary.
+ * @property diagnostics Non-fatal parse diagnostics.
+ */
+data class OpenTypeFaceEvidence(
+    val faceIndex: Int,
+    val sourceId: FontSourceID,
+    val typefaceId: TypefaceID,
+    val sourceKind: FontSourceKind,
+    val scalerType: String,
+    val scalerTypeLabel: String,
+    val tableRecords: List<SFNTTableEvidence>,
+    val preferredCMap: OpenTypeCMapEvidence?,
+    val metrics: OpenTypeMetricsEvidence,
+    val diagnostics: List<OpenTypeParseDiagnosticEvidence>,
+) {
+    init {
+        require(faceIndex >= 0) {
+            "OpenType face evidence faceIndex must be non-negative."
+        }
+        require(scalerType.matches(SFNT_HEX_UINT32_PATTERN)) {
+            "OpenType face evidence scalerType must be lowercase hexadecimal uint32 text."
+        }
+        require(tableRecords == tableRecords.sortedWith(SFNT_TABLE_EVIDENCE_ORDER)) {
+            "OpenType face evidence tableRecords must be sorted by tag, offset, length, and checksum."
+        }
+        require(diagnostics == diagnostics.sortedWith(SFNT_DIAGNOSTIC_EVIDENCE_ORDER)) {
+            "OpenType face evidence diagnostics must be sorted by table, causeCode, message, and causeMessage."
+        }
+    }
+
+    /**
+     * Serializes the evidence as canonical JSON with stable field order.
+     *
+     * @return deterministic JSON ending with a newline.
+     */
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("faceIndex", faceIndex, indent = "  ", comma = true)
+        appendSFNTJsonField("sourceId", sourceId.value.toString(), indent = "  ", comma = true)
+        appendSFNTJsonField("typefaceId", typefaceId.value.toString(), indent = "  ", comma = true)
+        appendSFNTJsonField("sourceKind", sourceKind.name, indent = "  ", comma = true)
+        appendSFNTJsonField("scalerType", scalerType, indent = "  ", comma = true)
+        appendSFNTJsonField("scalerTypeLabel", scalerTypeLabel, indent = "  ", comma = true)
+        append("  \"tables\": [")
+        if (tableRecords.isNotEmpty()) {
+            append("\n")
+            append(tableRecords.joinToString(",\n") { record -> record.toCanonicalJson().prependIndent("    ") })
+            append("\n  ")
+        }
+        append("],\n")
+        append("  \"preferredCMap\": ")
+        append(preferredCMap?.toCanonicalJson()?.prependIndent("  ")?.trimStart() ?: "null")
+        append(",\n")
+        append("  \"metrics\": ")
+        append(metrics.toCanonicalJson().prependIndent("  ").trimStart())
+        append(",\n")
+        append("  \"diagnostics\": [")
+        if (diagnostics.isNotEmpty()) {
+            append("\n")
+            append(diagnostics.joinToString(",\n") { diagnostic -> diagnostic.toCanonicalJson().prependIndent("    ") })
+            append("\n  ")
+        }
+        append("]\n")
+        append("}\n")
+    }
+}
+
+/**
+ * Deterministic evidence for one SFNT table directory record and copied raw payload.
+ */
+data class SFNTTableEvidence(
+    val tag: String,
+    val checksum: String,
+    val offset: Long,
+    val length: Long,
+    val rawByteLength: Int?,
+    val rawSha256: String?,
+) {
+    init {
+        require(tag.isStableSFNTTableTag()) {
+            "SFNT table evidence tag must be a four-character printable ASCII SFNT tag."
+        }
+        require(checksum.matches(SFNT_HEX_UINT32_PATTERN)) {
+            "SFNT table evidence checksum must be lowercase hexadecimal uint32 text."
+        }
+        require(offset >= 0L) { "SFNT table evidence offset must be non-negative." }
+        require(length >= 0L) { "SFNT table evidence length must be non-negative." }
+        require(rawByteLength == null || rawByteLength >= 0) {
+            "SFNT table evidence rawByteLength must be non-negative when present."
+        }
+        require(rawSha256 == null || rawSha256.matches(SFNT_SHA256_PATTERN)) {
+            "SFNT table evidence rawSha256 must be lowercase hexadecimal SHA-256 text when present."
+        }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("tag", tag, indent = "  ", comma = true)
+        appendSFNTJsonField("checksum", checksum, indent = "  ", comma = true)
+        appendSFNTJsonField("offset", offset, indent = "  ", comma = true)
+        appendSFNTJsonField("length", this@SFNTTableEvidence.length, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("rawByteLength", rawByteLength, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("rawSha256", rawSha256, indent = "  ", comma = false)
+        append("}")
+    }
+}
+
+/**
+ * Preferred parsed `cmap` subtable facts for face evidence.
+ */
+data class OpenTypeCMapEvidence(
+    val platformId: Int,
+    val encodingId: Int,
+    val format: Int,
+    val offset: Int,
+    val length: Int,
+    val mappingKind: String,
+    val mappingEntryCount: Int,
+    val encodingRecordCount: Int,
+    val parsedSubtableCount: Int,
+) {
+    init {
+        require(platformId >= 0) { "OpenType cmap evidence platformId must be non-negative." }
+        require(encodingId >= 0) { "OpenType cmap evidence encodingId must be non-negative." }
+        require(format >= 0) { "OpenType cmap evidence format must be non-negative." }
+        require(offset >= 0) { "OpenType cmap evidence offset must be non-negative." }
+        require(length >= 0) { "OpenType cmap evidence length must be non-negative." }
+        require(mappingEntryCount >= 0) { "OpenType cmap evidence mappingEntryCount must be non-negative." }
+        require(encodingRecordCount >= 0) { "OpenType cmap evidence encodingRecordCount must be non-negative." }
+        require(parsedSubtableCount >= 0) { "OpenType cmap evidence parsedSubtableCount must be non-negative." }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("platformId", platformId, indent = "  ", comma = true)
+        appendSFNTJsonField("encodingId", encodingId, indent = "  ", comma = true)
+        appendSFNTJsonField("format", format, indent = "  ", comma = true)
+        appendSFNTJsonField("offset", offset, indent = "  ", comma = true)
+        appendSFNTJsonField("length", this@OpenTypeCMapEvidence.length, indent = "  ", comma = true)
+        appendSFNTJsonField("mappingKind", mappingKind, indent = "  ", comma = true)
+        appendSFNTJsonField("mappingEntryCount", mappingEntryCount, indent = "  ", comma = true)
+        appendSFNTJsonField("encodingRecordCount", encodingRecordCount, indent = "  ", comma = true)
+        appendSFNTJsonField("parsedSubtableCount", parsedSubtableCount, indent = "  ", comma = false)
+        append("}")
+    }
+}
+
+/**
+ * Parsed metric summary for face evidence.
+ */
+data class OpenTypeMetricsEvidence(
+    val unitsPerEm: Int?,
+    val ascender: Int?,
+    val descender: Int?,
+    val lineGap: Int?,
+    val numGlyphs: Int?,
+    val numberOfHMetrics: Int?,
+    val horizontalMetricCount: Int,
+    val indexToLocFormat: Int?,
+    val bounds: OpenTypeBoundsEvidence?,
+) {
+    init {
+        require(horizontalMetricCount >= 0) {
+            "OpenType metrics evidence horizontalMetricCount must be non-negative."
+        }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendSFNTJsonNullableField("unitsPerEm", unitsPerEm, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("ascender", ascender, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("descender", descender, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("lineGap", lineGap, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("numGlyphs", numGlyphs, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("numberOfHMetrics", numberOfHMetrics, indent = "  ", comma = true)
+        appendSFNTJsonField("horizontalMetricCount", horizontalMetricCount, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("indexToLocFormat", indexToLocFormat, indent = "  ", comma = true)
+        append("  \"bounds\": ")
+        append(bounds?.toCanonicalJson()?.prependIndent("  ")?.trimStart() ?: "null")
+        append("\n")
+        append("}")
+    }
+}
+
+/**
+ * Parsed global font bounds for face evidence.
+ */
+data class OpenTypeBoundsEvidence(
+    val xMin: Int,
+    val yMin: Int,
+    val xMax: Int,
+    val yMax: Int,
+) {
+    internal fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("xMin", xMin, indent = "  ", comma = true)
+        appendSFNTJsonField("yMin", yMin, indent = "  ", comma = true)
+        appendSFNTJsonField("xMax", xMax, indent = "  ", comma = true)
+        appendSFNTJsonField("yMax", yMax, indent = "  ", comma = false)
+        append("}")
+    }
+}
+
+/**
+ * Dumpable non-fatal parse diagnostic facts for face evidence.
+ */
+data class OpenTypeParseDiagnosticEvidence(
+    val table: SFNTTableTag?,
+    val causeCode: String?,
+    val message: String,
+    val causeMessage: String?,
+) {
+    init {
+        require(table == null || table.value.isStableSFNTTableTag()) {
+            "OpenType parse diagnostic evidence table must be a four-character printable ASCII SFNT tag."
+        }
+        require(causeCode == null || causeCode.isStableSFNTDiagnosticToken()) {
+            "OpenType parse diagnostic evidence causeCode must be a stable one-line diagnostic token."
+        }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendSFNTJsonNullableField("table", table?.value, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("causeCode", causeCode, indent = "  ", comma = true)
+        appendSFNTJsonField("message", message, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("causeMessage", causeMessage, indent = "  ", comma = false)
+        append("}")
+    }
+}
+
+/**
+ * Builds deterministic evidence for this parsed face.
+ *
+ * @return selected face, identity, table, preferred `cmap`, metric, and diagnostic facts.
+ */
+fun OpenTypeFaceData.faceEvidence(): OpenTypeFaceEvidence =
+    OpenTypeFaceEvidence(
+        faceIndex = faceIndex,
+        sourceId = source.id,
+        typefaceId = id,
+        sourceKind = source.kind,
+        scalerType = directory.scalerType.toSFNTUInt32Hex(),
+        scalerTypeLabel = directory.scalerType.toSFNTScalerTypeLabel(),
+        tableRecords = directory.tables
+            .map { record ->
+                val rawBytes = rawTables[record.tag]?.toSFNTRawTableByteArray(record.tag)
+                SFNTTableEvidence(
+                    tag = record.tag.value,
+                    checksum = record.checksum.toSFNTUInt32Hex(),
+                    offset = record.offset.toLong(),
+                    length = record.length.toLong(),
+                    rawByteLength = rawBytes?.size,
+                    rawSha256 = rawBytes?.sfntSha256Hex(),
+                )
+            }
+            .sortedWith(SFNT_TABLE_EVIDENCE_ORDER),
+        preferredCMap = cmap.preferredSubtable?.toEvidence(cmap),
+        metrics = metrics.toEvidence(),
+        diagnostics = diagnostics
+            .map(OpenTypeParseDiagnostic::toEvidence)
+            .sortedWith(SFNT_DIAGNOSTIC_EVIDENCE_ORDER),
+    )
 
 /**
  * Parsed `cmap` table container for Unicode to glyph ID mappings.
@@ -1890,6 +2178,173 @@ fun OpenTypeFaceData.rawTableBytes(tag: SFNTTableTag): ByteArray? =
 fun OpenTypeFaceData.rawTableBytes(tag: String): ByteArray? =
     rawTableBytes(SFNTTableTag(tag))
 
+private fun CMapSubtable.toEvidence(table: CMapTable): OpenTypeCMapEvidence =
+    OpenTypeCMapEvidence(
+        platformId = platformId,
+        encodingId = encodingId,
+        format = format,
+        offset = offset,
+        length = length,
+        mappingKind = mapping.evidenceKind(),
+        mappingEntryCount = mapping.evidenceEntryCount(),
+        encodingRecordCount = table.encodingRecords.size,
+        parsedSubtableCount = table.mappings.size,
+    )
+
+private fun CMapMapping.evidenceKind(): String =
+    when (this) {
+        is CMapFormat0Mapping -> "format0-byte-array"
+        is CMapFormat6Mapping -> "format6-trimmed-array"
+        is CMapFormat4Mapping -> "format4-segments"
+        is CMapFormat12Mapping -> "format12-segmented-coverage"
+    }
+
+private fun CMapMapping.evidenceEntryCount(): Int =
+    when (this) {
+        is CMapFormat0Mapping -> glyphIds.size
+        is CMapFormat6Mapping -> glyphIds.size
+        is CMapFormat4Mapping -> segments.size
+        is CMapFormat12Mapping -> groups.size
+    }
+
+private fun MetricsTables.toEvidence(): OpenTypeMetricsEvidence =
+    OpenTypeMetricsEvidence(
+        unitsPerEm = unitsPerEm,
+        ascender = ascender,
+        descender = descender,
+        lineGap = lineGap,
+        numGlyphs = numGlyphs,
+        numberOfHMetrics = numberOfHMetrics,
+        horizontalMetricCount = horizontalMetrics.size,
+        indexToLocFormat = indexToLocFormat,
+        bounds = bounds?.let { bounds ->
+            OpenTypeBoundsEvidence(
+                xMin = bounds.xMin,
+                yMin = bounds.yMin,
+                xMax = bounds.xMax,
+                yMax = bounds.yMax,
+            )
+        },
+    )
+
+private fun OpenTypeParseDiagnostic.toEvidence(): OpenTypeParseDiagnosticEvidence =
+    OpenTypeParseDiagnosticEvidence(
+        table = table,
+        causeCode = causeCode,
+        message = message,
+        causeMessage = causeMessage,
+    )
+
+private fun List<Int>.toSFNTRawTableByteArray(tag: SFNTTableTag): ByteArray =
+    mapIndexed { index, value ->
+        require(value in 0..UINT8_MAX) {
+            "OpenType raw table ${tag.value} byte at index $index must be in 0..255, found $value."
+        }
+        value.toByte()
+    }.toByteArray()
+
+private fun UInt.toSFNTUInt32Hex(): String =
+    "0x${toString(radix = 16).padStart(8, '0')}"
+
+private fun UInt.toSFNTScalerTypeLabel(): String =
+    when (this) {
+        0x00010000u -> "TrueType"
+        0x4f54544fu -> "OTTO"
+        0x74727565u -> "true"
+        0x74797031u -> "typ1"
+        else -> "unknown"
+    }
+
+private fun String.isStableSFNTTableTag(): Boolean =
+    length == 4 && all { character -> character.code in 0x20..0x7E }
+
+private fun String.isStableSFNTDiagnosticToken(): Boolean =
+    isNotEmpty() && all { character -> character.code in 0x21..0x7E }
+
+private fun ByteArray.sfntSha256Hex(): String =
+    MessageDigest.getInstance("SHA-256")
+        .digest(this)
+        .joinToString(separator = "") { byte -> (byte.toInt() and 0xff).toString(16).padStart(2, '0') }
+
+private fun StringBuilder.appendSFNTJsonField(
+    name: String,
+    value: String,
+    indent: String,
+    comma: Boolean,
+) {
+    append(indent).append(sfntJsonString(name)).append(": ").append(sfntJsonString(value))
+    if (comma) append(",")
+    append("\n")
+}
+
+private fun StringBuilder.appendSFNTJsonField(
+    name: String,
+    value: Int,
+    indent: String,
+    comma: Boolean,
+) {
+    append(indent).append(sfntJsonString(name)).append(": ").append(value)
+    if (comma) append(",")
+    append("\n")
+}
+
+private fun StringBuilder.appendSFNTJsonField(
+    name: String,
+    value: Long,
+    indent: String,
+    comma: Boolean,
+) {
+    append(indent).append(sfntJsonString(name)).append(": ").append(value)
+    if (comma) append(",")
+    append("\n")
+}
+
+private fun StringBuilder.appendSFNTJsonNullableField(
+    name: String,
+    value: String?,
+    indent: String,
+    comma: Boolean,
+) {
+    append(indent).append(sfntJsonString(name)).append(": ")
+    append(value?.let(::sfntJsonString) ?: "null")
+    if (comma) append(",")
+    append("\n")
+}
+
+private fun StringBuilder.appendSFNTJsonNullableField(
+    name: String,
+    value: Int?,
+    indent: String,
+    comma: Boolean,
+) {
+    append(indent).append(sfntJsonString(name)).append(": ")
+    append(value?.toString() ?: "null")
+    if (comma) append(",")
+    append("\n")
+}
+
+private fun sfntJsonString(value: String): String = buildString {
+    append('"')
+    for (ch in value) {
+        when (ch) {
+            '\\' -> append("\\\\")
+            '"' -> append("\\\"")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            else -> {
+                if (ch.code < 0x20 || ch.code > 0x7e) {
+                    append("\\u")
+                    append(ch.code.toString(16).padStart(4, '0'))
+                } else {
+                    append(ch)
+                }
+            }
+        }
+    }
+    append('"')
+}
+
 /**
  * Pure Kotlin factory for turning OpenType sources into core typeface metadata.
  */
@@ -2097,6 +2552,20 @@ private const val OS2_USE_TYPO_METRICS_FLAG = 0x0080
 private const val OS2_FS_SELECTION_OBLIQUE_FLAG = 0x0200
 private const val HEAD_MAC_STYLE_BOLD_FLAG = 0x0001
 private const val HEAD_MAC_STYLE_ITALIC_FLAG = 0x0002
+private val SFNT_HEX_UINT32_PATTERN = Regex("0x[0-9a-f]{8}")
+private val SFNT_SHA256_PATTERN = Regex("[0-9a-f]{64}")
+private val SFNT_TABLE_EVIDENCE_ORDER = compareBy<SFNTTableEvidence>(
+    { it.tag },
+    { it.offset },
+    { it.length },
+    { it.checksum },
+)
+private val SFNT_DIAGNOSTIC_EVIDENCE_ORDER = compareBy<OpenTypeParseDiagnosticEvidence>(
+    { it.table?.value.orEmpty() },
+    { it.causeCode.orEmpty() },
+    { it.message },
+    { it.causeMessage.orEmpty() },
+)
 private val NAME_TABLE_TAG = SFNTTableTag("name")
 private val CMAP_TABLE_TAG = SFNTTableTag("cmap")
 private val HEAD_TABLE_TAG = SFNTTableTag("head")

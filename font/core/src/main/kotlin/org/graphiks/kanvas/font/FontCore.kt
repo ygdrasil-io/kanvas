@@ -4,6 +4,7 @@ import java.io.IOException
 import java.io.UncheckedIOException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.security.MessageDigest
 import kotlin.io.path.extension
 import kotlin.io.path.isRegularFile
 import kotlin.uuid.Uuid
@@ -183,7 +184,139 @@ data class FontSourceDiagnostic(
     val message: String,
     val causeCode: String? = null,
     val causeMessage: String? = null,
-)
+) {
+    init {
+        require(causeCode == null || causeCode.isStableDiagnosticCode()) {
+            "causeCode must be a stable one-line diagnostic code."
+        }
+    }
+
+    /**
+     * Serializes the diagnostic as one stable line for route and provenance evidence.
+     *
+     * @return Dumpable diagnostic text without retaining platform exception identity.
+     */
+    fun dump(): String = buildString {
+        append(causeCode ?: "font.source.diagnostic")
+        append(" sourceId=")
+        append(sourceId.value.toHexDashString())
+        append(" message=")
+        append(message.evidenceQuoted())
+        causeMessage?.let {
+            append(" causeMessage=")
+            append(it.evidenceQuoted())
+        }
+    }
+}
+
+/**
+ * Deterministic provenance and parser-supplied evidence for one font source.
+ *
+ * `font/core` does not parse SFNT/OpenType data here. Callers provide face
+ * counts, table tags, and diagnostics after bounded parsing or explicit
+ * refusal; this value object only makes those facts stable and dumpable.
+ *
+ * @property sourceId Stable identity of the source.
+ * @property kind Provenance classification for the source.
+ * @property displayName Human-readable source name for diagnostics.
+ * @property contentSha256 SHA-256 digest of captured source bytes.
+ * @property hostDependent True when the source came from host system scanning.
+ * @property faceCount Number of faces reported by the caller.
+ * @property tableTags Supported SFNT/OpenType table tags, sorted and deduplicated.
+ * @property diagnostics Stable diagnostics associated with the source.
+ */
+data class FontSourceEvidence(
+    val sourceId: FontSourceID,
+    val kind: FontSourceKind,
+    val displayName: String,
+    val contentSha256: String,
+    val hostDependent: Boolean,
+    val faceCount: Int,
+    val tableTags: List<String> = emptyList(),
+    val diagnostics: List<FontSourceDiagnostic> = emptyList(),
+) {
+    init {
+        require(faceCount >= 0) { "faceCount must be non-negative." }
+        require(contentSha256.isLowercaseSha256Hex()) {
+            "contentSha256 must be a lowercase hexadecimal SHA-256 digest."
+        }
+        require(tableTags == tableTags.normalizedTableTags()) {
+            "tableTags must be four-character printable ASCII SFNT tags, sorted and deduplicated."
+        }
+    }
+
+    /**
+     * Serializes provenance and parser-supplied facts as one stable line.
+     *
+     * @return Deterministic evidence suitable for tests and PM dumps.
+     */
+    fun dump(): String = buildString {
+        append("sourceId=")
+        append(sourceId.value.toHexDashString())
+        append(" kind=")
+        append(kind.name)
+        append(" displayName=")
+        append(displayName.evidenceQuoted())
+        append(" contentSha256=")
+        append(contentSha256)
+        append(" hostDependent=")
+        append(hostDependent)
+        append(" faceCount=")
+        append(faceCount)
+        append(" tableTags=")
+        append(tableTags.joinToString(prefix = "[", postfix = "]", separator = ","))
+        append(" diagnostics=")
+        append(diagnostics.joinToString(prefix = "[", postfix = "]", separator = ";") { it.dump() })
+    }
+
+    companion object {
+        /**
+         * Builds evidence from captured source bytes and caller-provided parser facts.
+         *
+         * @param source Font source with captured bytes.
+         * @param faceCount Number of faces reported by parsing or explicit refusal.
+         * @param tableTags Table tags reported by parsing.
+         * @param diagnostics Source diagnostics to include in the dump.
+         * @return Normalized source evidence.
+         */
+        fun fromSource(
+            source: FontSource,
+            faceCount: Int,
+            tableTags: List<String> = emptyList(),
+            diagnostics: List<FontSourceDiagnostic> = emptyList(),
+        ): FontSourceEvidence =
+            FontSourceEvidence(
+                sourceId = source.id,
+                kind = source.kind,
+                displayName = source.displayName,
+                contentSha256 = source.bytes.sha256Hex(),
+                hostDependent = source.kind == FontSourceKind.SYSTEM,
+                faceCount = faceCount,
+                tableTags = tableTags.normalizedTableTags(),
+                diagnostics = diagnostics,
+            )
+    }
+}
+
+/**
+ * Builds deterministic provenance evidence for this captured font source.
+ *
+ * @param faceCount Number of faces reported by parsing or explicit refusal.
+ * @param tableTags Supported table tags reported by parsing.
+ * @param diagnostics Source diagnostics to include in the dump.
+ * @return Normalized source evidence without scanning paths or parsing font bytes.
+ */
+fun FontSource.provenanceEvidence(
+    faceCount: Int,
+    tableTags: List<String> = emptyList(),
+    diagnostics: List<FontSourceDiagnostic> = emptyList(),
+): FontSourceEvidence =
+    FontSourceEvidence.fromSource(
+        source = this,
+        faceCount = faceCount,
+        tableTags = tableTags,
+        diagnostics = diagnostics,
+    )
 
 /**
  * Parsed typeface metadata shared by resolvers, fallback catalogs, and scaler implementations.
@@ -902,6 +1035,52 @@ data class ResolvedFontRun(
 )
 
 private fun String.familyKey(): String = trim().lowercase()
+
+private fun List<String>.normalizedTableTags(): List<String> {
+    for (tag in this) {
+        require(tag.isStableSfntTableTag()) {
+            "tableTags must contain four-character printable ASCII SFNT tags."
+        }
+    }
+    return distinct().sorted()
+}
+
+private fun String.isStableSfntTableTag(): Boolean =
+    length == 4 && all { character -> character.code in 0x20..0x7E }
+
+private fun String.isStableDiagnosticCode(): Boolean =
+    isNotEmpty() && all { character -> character.code in 0x21..0x7E }
+
+private fun String.isLowercaseSha256Hex(): Boolean =
+    length == 64 && all { character -> character in '0'..'9' || character in 'a'..'f' }
+
+private fun ByteArray.sha256Hex(): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(this)
+    val chars = CharArray(digest.size * 2)
+    for (index in digest.indices) {
+        val value = digest[index].toInt() and 0xFF
+        chars[index * 2] = HexDigits[value ushr 4]
+        chars[index * 2 + 1] = HexDigits[value and 0x0F]
+    }
+    return chars.concatToString()
+}
+
+private fun String.evidenceQuoted(): String = buildString {
+    append('"')
+    for (character in this@evidenceQuoted) {
+        when (character) {
+            '\\' -> append("\\\\")
+            '"' -> append("\\\"")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            else -> append(character)
+        }
+    }
+    append('"')
+}
+
+private const val HexDigits: String = "0123456789abcdef"
 
 private fun String.toGenericFamilyKey(): String? =
     when (familyKey()) {
