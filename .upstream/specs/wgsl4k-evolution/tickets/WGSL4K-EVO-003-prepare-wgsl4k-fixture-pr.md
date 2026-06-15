@@ -77,9 +77,11 @@ after the submodule is available.
 ## Status Notes
 
 - `review`: wgsl4k branch `codex/kanvas-reflection-contract` was pushed with
-  commit `f52580b31e136976a553af6d5d41a5a9e27919c3` and draft PR
+  commit `e5b57786936b16e0e18ca35e46faa1846e0cdec9` and draft PR
   `https://github.com/ygdrasil-io/wgsl4k/pull/9`. Fresh wgsl4k validation:
-  `rtk ./gradlew --no-daemon :wgsl:wgsl-core:check :wgsl:wgsl-parser:check`.
+  `rtk ./gradlew --no-daemon :wgsl:wgsl-core:check :wgsl:wgsl-parser:check`,
+  the GitHub JVM-fast-path equivalent command, `rtk git diff --check`, and a
+  no-match scan for `Kanvas|kanvas` across the wgsl4k source/API paths.
   Kanvas must not consume this SHA for report evidence until the PR is reviewed
   and either merged or explicitly approved by the user.
 
