@@ -137,6 +137,131 @@ Remaining gate: this is architecture and boundary audit infrastructure only.
 It does not add rendering behavior, complete target fixtures, CPU/GPU oracle
 evidence, or GPU text route support.
 
+### KFONT-M0-001/M0-002: Pure Kotlin Font CI Foundation
+
+Status: review.
+
+Files:
+
+- `.github/workflows/test.yml`
+- `scripts/validate_pure_kotlin_text_ci.py`
+- `scripts/test_validate_pure_kotlin_text_ci.py`
+- `reports/pure-kotlin-text/font-ci-lane.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m0-001-002-ci-foundation.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M0-claims-ci-diagnostics/KFONT-M0-001-wire-pure-kotlin-font-modules-into-ci.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M0-claims-ci-diagnostics/KFONT-M0-002-add-pure-kotlin-text-specs-to-ci-trigger-paths.md`
+
+Evidence:
+
+- Workflow job `pure_kotlin_font_foundation` names the
+  `pure-kotlin-font-foundation` lane and runs on `ubuntu-latest`.
+- The lane resolves an explicit PR, push, or default-branch merge-base before
+  running `git diff --check` on `.upstream/specs/pure-kotlin-text` and
+  `reports/pure-kotlin-text`.
+- The lane validates `font-ci-lane.json`, runs the boundary validator, and
+  invokes `:font:core:test`, `:font:sfnt:test`, `:font:scaler:test`,
+  `:font:text:test`, `:font:glyph:test`, and `:font:gpu-api:test`.
+- `scripts/test_validate_pure_kotlin_text_ci.py` rejects removed, disabled, or
+  comment-only diff hygiene, CI validator, and boundary validator steps.
+- Path filters include `.upstream/specs/pure-kotlin-text/**`, `font/**`,
+  `reports/pure-kotlin-text/**`, and the pure Kotlin text CI/boundary
+  validator scripts.
+- Trigger samples cover one target spec file, one ticket file, and one
+  archived-only migration path that remains inactive.
+- Missing module policy emits `font.ci.module-missing` as `tracked-gap` with
+  `claimPromotionAllowed=false`.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_ci.py
+rtk python3 scripts/validate_pure_kotlin_text_ci.py
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_boundary_contracts.py
+rtk python3 scripts/validate_pure_kotlin_text_boundary_contracts.py
+```
+
+Remaining gate: this is validation infrastructure only. It does not claim
+parser, scaler, shaping, paragraph, glyph artifact, fallback, rendering, native
+font engine, or GPU text support.
+
+### KFONT-M0-003: Module And Package Boundary Validation
+
+Status: review.
+
+Files:
+
+- `reports/pure-kotlin-text/boundary-contracts.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m0-003-boundary-diagnostics.md`
+- `scripts/validate_pure_kotlin_text_boundary_contracts.py`
+- `scripts/test_validate_pure_kotlin_text_boundary_contracts.py`
+- `.github/workflows/test.yml`
+- `.upstream/specs/pure-kotlin-text/tickets/M0-claims-ci-diagnostics/KFONT-M0-003-freeze-module-package-layout-for-the-pure-kotlin-font-core.md`
+
+Evidence:
+
+- `boundary-contracts.json` records the owner package roots for font core,
+  scaler, shaping, paragraph, glyph artifacts, GPU handoff, and renderer text
+  command/route consumers.
+- Boundary validation rejects pure Kotlin font/text/glyph imports of renderer,
+  Skia-like, platform, native, HarfBuzz, FreeType, Fontations, CoreText,
+  DirectWrite, or fontconfig APIs.
+- Boundary diagnostics now use stable `font.architecture.*` codes. The
+  synthetic snapshot asserts `font.architecture.skia-api-leak` for a `SkFont`
+  import and `font.architecture.gpu-backedge` for a pure Kotlin import of
+  `org.graphiks.kanvas.gpu.renderer.text.GPUTextRouteDiagnostics`.
+- GPU renderer text boundary validation rejects Skia-like, parser/scaler,
+  shaping, paragraph, or native font-engine imports.
+- The M0 CI lane now invokes the boundary validator before the six font module
+  test tasks.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_boundary_contracts.py
+rtk python3 scripts/validate_pure_kotlin_text_boundary_contracts.py
+```
+
+Remaining gate: this is package-boundary and architecture evidence only. It
+does not add font behavior, rendering behavior, or GPU text route support.
+
+### KFONT-M0-004: Stable Diagnostic Taxonomy
+
+Status: review.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontDiagnosticTaxonomyTest.kt`
+- `reports/pure-kotlin-text/font-diagnostic-taxonomy.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m0-004-diagnostic-taxonomy.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M0-claims-ci-diagnostics/KFONT-M0-004-introduce-stable-diagnostic-taxonomy.md`
+
+Evidence:
+
+- `FontDiagnosticTaxonomy` defines accepted namespace families, stable
+  diagnostic rows, required fields, severity, route, and claim impact facts.
+- `font-diagnostic-taxonomy.json` includes sample diagnostics for source,
+  SFNT, scaler, shaping, and GPU/text route refusal cases.
+- Legacy diagnostics `font.native-engine-unavailable`,
+  `font.bitmap-strike-unavailable`, and
+  `font.emoji-sequence-shaping-unsupported` map to target classifications while
+  keeping gates open.
+- Generic `font missing` is rejected as `tracked-gap` with reason
+  `generic-or-unknown-diagnostic`.
+- Every row keeps `claimPromotionAllowed=false`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon --rerun-tasks :font:core:test --tests '*DiagnosticTaxonomy*'
+rtk ./gradlew --no-daemon :font:core:test
+```
+
+Remaining gate: this is taxonomy evidence only. It does not implement parser,
+scaler, shaping, paragraph, glyph artifact, renderer, GPU, fixture, CPU oracle,
+or GPU evidence support. Legacy gates remain open until later evidence retires
+them explicitly.
+
 ### KFONT-M1-003: Deterministic Source/Typeface Identity Dumps
 
 Status: review.
