@@ -5,10 +5,14 @@ import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 import org.graphiks.kanvas.gpu.renderer.scenes.reports.json
 
+enum class OffscreenRunStatus(val wireName: String) {
+    NotYetRendered("not-yet-rendered"),
+    RenderFailed("render-failed"),
+}
+
 data class OffscreenRunReport(
     val sceneId: String,
-    val status: String,
-    val productRefusal: Boolean,
+    val runStatus: OffscreenRunStatus,
     val backend: String,
     val imagePath: String?,
     val width: Int?,
@@ -17,6 +21,14 @@ data class OffscreenRunReport(
     val nonTransparentPixels: Int?,
     val diagnostics: List<String>,
 ) {
+    val status: String get() = runStatus.wireName
+    val productRefusal: Boolean get() = false
+
+    init {
+        require(diagnostics.isNotEmpty()) { "diagnostics must not be empty" }
+        require(diagnostics.all { it.isNotBlank() }) { "diagnostics must not contain blank entries" }
+    }
+
     fun toJson(): String = buildString {
         appendLine("{")
         appendLine("  \"schemaVersion\": 1,")
@@ -46,29 +58,32 @@ data class OffscreenRunReport(
         fun notYetRendered(sceneId: String, reason: String): OffscreenRunReport =
             OffscreenRunReport(
                 sceneId = sceneId,
-                status = "not-yet-rendered",
-                productRefusal = false,
+                runStatus = OffscreenRunStatus.NotYetRendered,
                 backend = "webgpu-offscreen",
                 imagePath = null,
                 width = null,
                 height = null,
                 byteCount = null,
                 nonTransparentPixels = null,
-                diagnostics = listOf(reason),
+                diagnostics = singleDiagnostic(reason),
             )
 
         fun failed(sceneId: String, reason: String, backend: String = "webgpu-offscreen"): OffscreenRunReport =
             OffscreenRunReport(
                 sceneId = sceneId,
-                status = "render-failed",
-                productRefusal = false,
+                runStatus = OffscreenRunStatus.RenderFailed,
                 backend = backend,
                 imagePath = null,
                 width = null,
                 height = null,
                 byteCount = null,
                 nonTransparentPixels = null,
-                diagnostics = listOf(reason),
+                diagnostics = singleDiagnostic(reason),
             )
+
+        private fun singleDiagnostic(reason: String): List<String> {
+            require(reason.isNotBlank()) { "reason must not be blank" }
+            return listOf(reason)
+        }
     }
 }

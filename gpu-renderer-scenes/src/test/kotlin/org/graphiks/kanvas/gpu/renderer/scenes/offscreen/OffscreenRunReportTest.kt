@@ -5,6 +5,8 @@ import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 class OffscreenRunReportTest {
     @Test
@@ -22,5 +24,66 @@ class OffscreenRunReportTest {
         report.writeTo(root)
         assertContains(root.resolve("run.json").readText(), "\"sceneId\": \"mesh-ribbon\"")
         assertContains(root.resolve("diagnostics.txt").readText(), "runner-subset")
+    }
+
+    @Test
+    fun `render failed is a runner status not a product refusal`() {
+        val report = OffscreenRunReport.failed(
+            sceneId = "mesh-ribbon",
+            reason = "surface unavailable",
+            backend = "test-backend",
+        )
+
+        assertEquals("render-failed", report.status)
+        assertEquals(false, report.productRefusal)
+        assertEquals("test-backend", report.backend)
+        assertNull(report.imagePath)
+        assertNull(report.width)
+        assertNull(report.height)
+        assertNull(report.byteCount)
+        assertNull(report.nonTransparentPixels)
+        assertContains(report.toJson(), "\"status\": \"render-failed\"")
+        assertContains(report.toJson(), "\"productRefusal\": false")
+        assertContains(report.toJson(), "surface unavailable")
+    }
+
+    @Test
+    fun `factories reject blank reasons`() {
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport.notYetRendered(sceneId = "rounded-panel-gradient", reason = " ")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport.failed(sceneId = "mesh-ribbon", reason = "\t")
+        }
+    }
+
+    @Test
+    fun `constructor rejects empty or blank diagnostics`() {
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport(
+                sceneId = "empty-diagnostics",
+                runStatus = OffscreenRunStatus.NotYetRendered,
+                backend = "webgpu-offscreen",
+                imagePath = null,
+                width = null,
+                height = null,
+                byteCount = null,
+                nonTransparentPixels = null,
+                diagnostics = emptyList(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport(
+                sceneId = "blank-diagnostic",
+                runStatus = OffscreenRunStatus.RenderFailed,
+                backend = "webgpu-offscreen",
+                imagePath = null,
+                width = null,
+                height = null,
+                byteCount = null,
+                nonTransparentPixels = null,
+                diagnostics = listOf("surface unavailable", " "),
+            )
+        }
     }
 }
