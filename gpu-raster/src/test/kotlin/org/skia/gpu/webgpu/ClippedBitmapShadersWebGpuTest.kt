@@ -19,12 +19,12 @@ import org.skia.tests.ClippedBitmapShadersGM
  * isAxisAligned`. The clipRect+drawRect on the same rect is the
  * natural G5.2 fast path.
  *
- * The `-hq` (Mitchell bicubic) variants are out of scope (cubic
- * resampler not yet wired on the GPU side) — only the 3 default
- * (nearest sampling) variants are cross-tested here.
+ * The `-hq` (Mitchell bicubic) variants exercise the cubic sampler path
+ * against the existing `clipped-bitmap-shaders-*-hq.png` references.
  *
- * All 3 variants land at 100.00 % byte-exact ; floor 99.95 % absorbs
- * scoring drift.
+ * The 3 default-sampling variants land at 100.00 % byte-exact ; floor
+ * 99.95 % absorbs scoring drift. The HQ floors mirror the raster GM
+ * coverage while sampler support is promoted on the GPU path.
  */
 class ClippedBitmapShadersWebGpuTest {
 
@@ -41,5 +41,20 @@ class ClippedBitmapShadersWebGpuTest {
     @Test
     fun `ClippedBitmapShadersGM kMirror renders close to reference PNG on the GPU backend`() {
         runGpuCrossTest(ClippedBitmapShadersGM(SkTileMode.kMirror), floor = 99.95)
+    }
+
+    @Test
+    fun `ClippedBitmapShadersGM kClamp hq renders close to reference PNG on the GPU backend`() {
+        runGpuCrossTest(ClippedBitmapShadersGM(SkTileMode.kClamp, hq = true), floor = 90.0)
+    }
+
+    @Test
+    fun `ClippedBitmapShadersGM kRepeat hq renders close to reference PNG on the GPU backend`() {
+        runGpuCrossTest(ClippedBitmapShadersGM(SkTileMode.kRepeat, hq = true), floor = 60.0)
+    }
+
+    @Test
+    fun `ClippedBitmapShadersGM kMirror hq renders close to reference PNG on the GPU backend`() {
+        runGpuCrossTest(ClippedBitmapShadersGM(SkTileMode.kMirror, hq = true), floor = 60.0)
     }
 }

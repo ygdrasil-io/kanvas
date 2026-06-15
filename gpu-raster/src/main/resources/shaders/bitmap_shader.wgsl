@@ -215,12 +215,14 @@ struct Uniforms {
     // colorspace layout stays contiguous (G2.x sits at offsets 160/176).
     clipShapeBounds:    vec4f, // offset 160 : (l, t, r, b) device-px
     clipShapeRadiiKind: vec4f, // offset 176 : (rx, ry, clipKind, _)
-    // G5.2.2 -- 2x3 device-to-image affine `M^-1 = (ctm * localMatrix)^-1`.
-    // Each row stored as (sx, kx, tx, _) / (ky, sy, ty, _). The shader
-    // applies it directly to the fragment center to derive image-space
-    // coords, replacing the legacy `srcRect / dstRect` rect-affine.
+    // G5.2.2 / sampler widening -- device-to-image inverse. Row 2 is
+    // (0, 0, 1) for affine callers and carries perspective otherwise.
     devToImageRow0:     vec4f, // offset 192 : (sx, kx, tx, _)
     devToImageRow1:     vec4f, // offset 208 : (ky, sy, ty, _)
+    devToImageRow2:     vec4f, // offset 224 : (p0, p1, p2, _)
+    // (sampleMode, cubicB, cubicC, _). 0 = sampler nearest/linear,
+    // 1 = 16-tap bicubic using B/C coefficients.
+    sampleOptions:      vec4f, // offset 240 : (mode, B, C, _)
     // Phase H2 paint-colorFilter -- 6 trailing vec4f carrying an
     // optional `SkColorFilter` (same packing as `solid_color.wgsl` /
     // `layer_composite.wgsl`). The host-side packer
@@ -230,16 +232,18 @@ struct Uniforms {
     //                                  src colour, kindMode.y = mode).
     //   colorFilterKindMode.x == 2 -> SkMatrixFilter (param0..3 = rows,
     //                                  bias = additive 5th column).
-    colorFilterKindMode: vec4f, // offset 224 : (kind, blendMode, _, _)
-    colorFilterParam0:   vec4f, // offset 240
-    colorFilterParam1:   vec4f, // offset 256
-    colorFilterParam2:   vec4f, // offset 272
-    colorFilterParam3:   vec4f, // offset 288
-    colorFilterBias:     vec4f, // offset 304
+    colorFilterKindMode: vec4f, // offset 256 : (kind, blendMode, _, _)
+    colorFilterParam0:   vec4f, // offset 272
+    colorFilterParam1:   vec4f, // offset 288
+    colorFilterParam2:   vec4f, // offset 304
+    colorFilterParam3:   vec4f, // offset 320
+    colorFilterBias:     vec4f, // offset 336
 };
 
 // Tile-mode constants -- mirror `SkTileMode` ordinals.
 const TILE_DECAL: u32 = 3u;
+const SAMPLE_MODE_CUBIC: u32 = 1u;
+const SAMPLE_MODE_IMPLICIT_SAMPLER: u32 = 2u;
 
 // G5.3 / G5.3.x / G5.3.y -- color-space transform mode sentinel.
 //   0 = no-op (sRGB source or any source whose pipeline reduces to
@@ -465,6 +469,111 @@ fn rrect_cov(p: vec2f, bounds: vec4f, rx_in: f32, ry_in: f32) -> f32 {
     return clamp(0.5 - final_sdf, 0.0, 1.0);
 }
 
+fn cubic_weight(t: f32, B: f32, C: f32) -> f32 {
+    let x = abs(t);
+    if (x >= 2.0) {
+        return 0.0;
+    }
+    let x2 = x * x;
+    let x3 = x2 * x;
+    if (x < 1.0) {
+        return ((12.0 - 9.0 * B - 6.0 * C) * x3 +
+                (-18.0 + 12.0 * B + 6.0 * C) * x2 +
+                (6.0 - 2.0 * B)) / 6.0;
+    }
+    return ((-B - 6.0 * C) * x3 +
+            (6.0 * B + 30.0 * C) * x2 +
+            (-12.0 * B - 48.0 * C) * x +
+            (8.0 * B + 24.0 * C)) / 6.0;
+}
+
+fn wrap_index(i: i32, size: i32, tile: u32) -> i32 {
+    if (tile == 1u) {
+        let m = ((i % size) + size) % size;
+        return m;
+    }
+    if (tile == 2u) {
+        let period = max(size * 2, 1);
+        let m = ((i % period) + period) % period;
+        if (m < size) {
+            return m;
+        }
+        return period - 1 - m;
+    }
+    return clamp(i, 0, size - 1);
+}
+
+fn cubic_tap(ix: i32, iy: i32, x_min: i32, x_max: i32, y_min: i32, y_max: i32,
+             strict_constraint: bool, tile_x: u32, tile_y: u32) -> vec4f {
+    let width = i32(uniforms.imageSize.x);
+    let height = i32(uniforms.imageSize.y);
+    var tx = ix;
+    var ty = iy;
+    if (strict_constraint) {
+        tx = clamp(tx, x_min, x_max);
+        ty = clamp(ty, y_min, y_max);
+    } else {
+        if (tile_x == TILE_DECAL && (tx < 0 || tx >= width)) {
+            return vec4f(0.0);
+        }
+        if (tile_y == TILE_DECAL && (ty < 0 || ty >= height)) {
+            return vec4f(0.0);
+        }
+        tx = wrap_index(tx, width, tile_x);
+        ty = wrap_index(ty, height, tile_y);
+    }
+    return textureLoad(image_texture, vec2i(tx, ty), 0);
+}
+
+fn cubic_sample(sx: f32, sy: f32, strict_constraint: bool, tile_x: u32, tile_y: u32) -> vec4f {
+    let B = uniforms.sampleOptions.y;
+    let C = uniforms.sampleOptions.z;
+    let xf = sx - 0.5;
+    let yf = sy - 0.5;
+    let ix_base = i32(floor(xf));
+    let iy_base = i32(floor(yf));
+    let fx = xf - f32(ix_base);
+    let fy = yf - f32(iy_base);
+    let max_x = i32(uniforms.imageSize.x) - 1;
+    let max_y = i32(uniforms.imageSize.y) - 1;
+    let min_x_f = clamp(ceil(uniforms.srcRect.x - 0.5), 0.0, f32(max_x));
+    let min_y_f = clamp(ceil(uniforms.srcRect.y - 0.5), 0.0, f32(max_y));
+    let max_x_f = clamp(floor(uniforms.srcRect.z - 0.5), min_x_f, f32(max_x));
+    let max_y_f = clamp(floor(uniforms.srcRect.w - 0.5), min_y_f, f32(max_y));
+    let x_min = i32(min_x_f);
+    let y_min = i32(min_y_f);
+    let x_max = i32(max_x_f);
+    let y_max = i32(max_y_f);
+    var sum = vec4f(0.0);
+    var sum_w = 0.0;
+    for (var j: i32 = 0; j < 4; j = j + 1) {
+        let dy = select(2.0 - fy, select(1.0 - fy, select(fy, 1.0 + fy, j == 0), j == 1), j == 2);
+        let wy = cubic_weight(dy, B, C);
+        for (var i: i32 = 0; i < 4; i = i + 1) {
+            let dx = select(2.0 - fx, select(1.0 - fx, select(fx, 1.0 + fx, i == 0), i == 1), i == 2);
+            let wx = cubic_weight(dx, B, C);
+            let wt = wx * wy;
+            let tap = cubic_tap(
+                ix_base + i - 1,
+                iy_base + j - 1,
+                x_min,
+                x_max,
+                y_min,
+                y_max,
+                strict_constraint,
+                tile_x,
+                tile_y,
+            );
+            sum = sum + tap * wt;
+            sum_w = sum_w + wt;
+        }
+    }
+    if (abs(sum_w) <= 1.0e-6) {
+        return vec4f(0.0);
+    }
+    return clamp(sum / sum_w, vec4f(0.0), vec4f(1.0));
+}
+
 @vertex
 fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
     let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
@@ -474,19 +583,20 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
 
 @fragment
 fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-    // G5.2.2 -- map the fragment center back to image-pixel coords
-    // through the 2x3 device-to-image affine. The host computes
-    // `M^-1 = (ctm * localMatrix)^-1` (invertible affine ; non-singular
-    // factors are gated at the dispatch site, so the inverse always
-    // exists at the shader). The axis-aligned subset reduces to the
-    // legacy `srcRect / dstRect` rect-affine ; the rotated / skewed
-    // case slots in here without a branch.
-    let sx_raw = uniforms.devToImageRow0.x * pos.x
-               + uniforms.devToImageRow0.y * pos.y
-               + uniforms.devToImageRow0.z;
-    let sy_raw = uniforms.devToImageRow1.x * pos.x
-               + uniforms.devToImageRow1.y * pos.y
-               + uniforms.devToImageRow1.z;
+    let hx = uniforms.devToImageRow0.x * pos.x
+           + uniforms.devToImageRow0.y * pos.y
+           + uniforms.devToImageRow0.z;
+    let hy = uniforms.devToImageRow1.x * pos.x
+           + uniforms.devToImageRow1.y * pos.y
+           + uniforms.devToImageRow1.z;
+    let hw = uniforms.devToImageRow2.x * pos.x
+           + uniforms.devToImageRow2.y * pos.y
+           + uniforms.devToImageRow2.z;
+    if (abs(hw) <= 1.0e-6) {
+        return vec4f(0.0);
+    }
+    let sx_raw = hx / hw;
+    let sy_raw = hy / hw;
 
     // SrcRectConstraint parity: strict linear keeps filter taps inside
     // the requested src subset by clamping to texel-center bounds. Strict
@@ -529,7 +639,10 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     // textureLoad so half-pixel source subsets keep their border texels
     // instead of snapping to the center-only bilinear clamp.
     var sampled: vec4f;
-    if (strict_nearest) {
+    let sample_mode = u32(uniforms.sampleOptions.x + 0.5);
+    if (sample_mode == SAMPLE_MODE_CUBIC) {
+        sampled = cubic_sample(sx_raw, sy_raw, strict_constraint, tile_x, tile_y);
+    } else if (strict_nearest) {
         let max_x = uniforms.imageSize.x - 1.0;
         let max_y = uniforms.imageSize.y - 1.0;
         let min_x = clamp(ceil(uniforms.srcRect.x - 0.5), 0.0, max_x);
@@ -539,6 +652,8 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         let ix = i32(clamp(floor(sx_raw), min_x, strict_max_x));
         let iy = i32(clamp(floor(sy_raw), min_y, strict_max_y));
         sampled = textureLoad(image_texture, vec2i(ix, iy), 0);
+    } else if (sample_mode == SAMPLE_MODE_IMPLICIT_SAMPLER) {
+        sampled = textureSample(image_texture, image_sampler, vec2f(u, v));
     } else {
         sampled = textureSampleLevel(image_texture, image_sampler, vec2f(u, v), 0.0);
     }

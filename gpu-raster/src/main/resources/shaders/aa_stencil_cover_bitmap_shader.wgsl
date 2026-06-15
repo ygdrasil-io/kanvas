@@ -93,25 +93,23 @@ struct Uniforms {
     // G2.x -- analytical clip-shape payload, mirrors `bitmap_shader.wgsl`.
     clipShapeBounds:    vec4f,                // offset  192 : (l, t, r, b) device-px
     clipShapeRadiiKind: vec4f,                // offset  208 : (rx, ry, clipKind, _)
-    // G5.2.2 -- 2x3 device-to-image affine (`M^-1 = (ctm * localMatrix)^-1`).
-    // Replaces the srcRect/dstRect rect-affine in the fragment math ;
-    // mirrors `bitmap_shader.wgsl`'s offsets 192/208 (but here those
-    // offsets are already taken by the clip slots, so the affine sits
-    // immediately after).
+    // G5.2.2 / sampler widening -- homogeneous device-to-image inverse.
     devToImageRow0:     vec4f,                // offset  224 : (sx, kx, tx, _)
     devToImageRow1:     vec4f,                // offset  240 : (ky, sy, ty, _)
+    devToImageRow2:     vec4f,                // offset  256 : (p0, p1, p2, _)
+    sampleOptions:      vec4f,                // offset  272 : (mode, B, C, _)
     // Phase H2 paint-colorFilter -- 6 trailing vec4f mirroring
     // `bitmap_shader.wgsl`'s tail. Same packing, same fast-path semantics
     // (kind == 0 -> no-op). Slots sit between the G5.2.2 affine and
     // `edgeCountPad` ; the edge tail shifts forward by 96 bytes.
-    colorFilterKindMode: vec4f,               // offset  256 : (kind, blendMode, _, _)
-    colorFilterParam0:   vec4f,               // offset  272
-    colorFilterParam1:   vec4f,               // offset  288
-    colorFilterParam2:   vec4f,               // offset  304
-    colorFilterParam3:   vec4f,               // offset  320
-    colorFilterBias:     vec4f,               // offset  336
-    edgeCountPad:       vec4f,                // offset  352 : .x = edgeCount as bit-reinterp f32
-    edges:              array<vec4f, 256>,    // offset  368 : (Ax, Ay, Bx, By) per edge
+    colorFilterKindMode: vec4f,               // offset  288 : (kind, blendMode, _, _)
+    colorFilterParam0:   vec4f,               // offset  304
+    colorFilterParam1:   vec4f,               // offset  320
+    colorFilterParam2:   vec4f,               // offset  336
+    colorFilterParam3:   vec4f,               // offset  352
+    colorFilterBias:     vec4f,               // offset  368
+    edgeCountPad:       vec4f,                // offset  384 : .x = edgeCount as bit-reinterp f32
+    edges:              array<vec4f, 256>,    // offset  400 : (Ax, Ay, Bx, By) per edge
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -121,6 +119,8 @@ struct Uniforms {
 // Tile-mode constants -- mirror `SkTileMode` ordinals (same as
 // `bitmap_shader.wgsl`).
 const TILE_DECAL: u32 = 3u;
+const SAMPLE_MODE_CUBIC: u32 = 1u;
+const SAMPLE_MODE_IMPLICIT_SAMPLER: u32 = 2u;
 
 // G5.3 / G5.3.x / G5.3.y -- color-space transform mode sentinel (same
 // as bitmap_shader.wgsl). Modes 3 / 4 cover Rec.2020 PQ and HLG HDR
@@ -347,19 +347,103 @@ fn clipShapeCoverage(p: vec2f) -> f32 {
     return 1.0;
 }
 
+fn cubic_weight(t: f32, B: f32, C: f32) -> f32 {
+    let x = abs(t);
+    if (x >= 2.0) {
+        return 0.0;
+    }
+    let x2 = x * x;
+    let x3 = x2 * x;
+    if (x < 1.0) {
+        return ((12.0 - 9.0 * B - 6.0 * C) * x3 +
+                (-18.0 + 12.0 * B + 6.0 * C) * x2 +
+                (6.0 - 2.0 * B)) / 6.0;
+    }
+    return ((-B - 6.0 * C) * x3 +
+            (6.0 * B + 30.0 * C) * x2 +
+            (-12.0 * B - 48.0 * C) * x +
+            (8.0 * B + 24.0 * C)) / 6.0;
+}
+
+fn wrap_index(i: i32, size: i32, tile: u32) -> i32 {
+    if (tile == 1u) {
+        return ((i % size) + size) % size;
+    }
+    if (tile == 2u) {
+        let period = max(size * 2, 1);
+        let m = ((i % period) + period) % period;
+        if (m < size) {
+            return m;
+        }
+        return period - 1 - m;
+    }
+    return clamp(i, 0, size - 1);
+}
+
+fn cubic_tap(ix: i32, iy: i32, tile_x: u32, tile_y: u32) -> vec4f {
+    let width = i32(uniforms.imageSize.x);
+    let height = i32(uniforms.imageSize.y);
+    var tx = ix;
+    var ty = iy;
+    if (tile_x == TILE_DECAL && (tx < 0 || tx >= width)) {
+        return vec4f(0.0);
+    }
+    if (tile_y == TILE_DECAL && (ty < 0 || ty >= height)) {
+        return vec4f(0.0);
+    }
+    tx = wrap_index(tx, width, tile_x);
+    ty = wrap_index(ty, height, tile_y);
+    return textureLoad(image_texture, vec2i(tx, ty), 0);
+}
+
+fn cubic_sample(sx: f32, sy: f32, tile_x: u32, tile_y: u32) -> vec4f {
+    let B = uniforms.sampleOptions.y;
+    let C = uniforms.sampleOptions.z;
+    let xf = sx - 0.5;
+    let yf = sy - 0.5;
+    let ix_base = i32(floor(xf));
+    let iy_base = i32(floor(yf));
+    let fx = xf - f32(ix_base);
+    let fy = yf - f32(iy_base);
+    var sum = vec4f(0.0);
+    var sum_w = 0.0;
+    for (var j: i32 = 0; j < 4; j = j + 1) {
+        let dy = select(2.0 - fy, select(1.0 - fy, select(fy, 1.0 + fy, j == 0), j == 1), j == 2);
+        let wy = cubic_weight(dy, B, C);
+        for (var i: i32 = 0; i < 4; i = i + 1) {
+            let dx = select(2.0 - fx, select(1.0 - fx, select(fx, 1.0 + fx, i == 0), i == 1), i == 2);
+            let wx = cubic_weight(dx, B, C);
+            let wt = wx * wy;
+            let tap = cubic_tap(ix_base + i - 1, iy_base + j - 1, tile_x, tile_y);
+            sum = sum + tap * wt;
+            sum_w = sum_w + wt;
+        }
+    }
+    if (abs(sum_w) <= 1.0e-6) {
+        return vec4f(0.0);
+    }
+    return clamp(sum / sum_w, vec4f(0.0), vec4f(1.0));
+}
+
 // Sample the bitmap pattern at device-pixel position `p`. Mirrors the
 // fragment body of `bitmap_shader.wgsl` (same affine map, same per-axis
 // decal check, same csMode transform, same premul + paint modulation).
 // Returns premul RGBA in the sRGB-coded working space.
 fn sampleBitmap(p: vec2f) -> vec4f {
-    // G5.2.2 -- 2x3 device-to-image affine. See bitmap_shader.wgsl for
-    // the derivation comment ; same semantics here.
-    let sx = uniforms.devToImageRow0.x * p.x
+    let hx = uniforms.devToImageRow0.x * p.x
            + uniforms.devToImageRow0.y * p.y
            + uniforms.devToImageRow0.z;
-    let sy = uniforms.devToImageRow1.x * p.x
+    let hy = uniforms.devToImageRow1.x * p.x
            + uniforms.devToImageRow1.y * p.y
            + uniforms.devToImageRow1.z;
+    let hw = uniforms.devToImageRow2.x * p.x
+           + uniforms.devToImageRow2.y * p.y
+           + uniforms.devToImageRow2.z;
+    if (abs(hw) <= 1.0e-6) {
+        return vec4f(0.0);
+    }
+    let sx = hx / hw;
+    let sy = hy / hw;
 
     let u = sx / uniforms.imageSize.x;
     let v = sy / uniforms.imageSize.y;
@@ -373,7 +457,15 @@ fn sampleBitmap(p: vec2f) -> vec4f {
         return vec4f(0.0, 0.0, 0.0, 0.0);
     }
 
-    let sampled = textureSampleLevel(image_texture, image_sampler, vec2f(u, v), 0.0);
+    var sampled: vec4f;
+    let sample_mode = u32(uniforms.sampleOptions.x + 0.5);
+    if (sample_mode == SAMPLE_MODE_CUBIC) {
+        sampled = cubic_sample(sx, sy, tile_x, tile_y);
+    } else if (sample_mode == SAMPLE_MODE_IMPLICIT_SAMPLER) {
+        sampled = textureSample(image_texture, image_sampler, vec2f(u, v));
+    } else {
+        sampled = textureSampleLevel(image_texture, image_sampler, vec2f(u, v), 0.0);
+    }
 
     var src_rgb = vec3f(sampled.r, sampled.g, sampled.b);
     let cs_mode = bitcast<u32>(uniforms.csFlags.x);

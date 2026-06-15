@@ -21,6 +21,7 @@ import io.ygdrasil.webgpu.GPUCompareFunction
 import io.ygdrasil.webgpu.GPUComputePipeline
 import io.ygdrasil.webgpu.GPUFilterMode
 import io.ygdrasil.webgpu.GPUMapMode
+import io.ygdrasil.webgpu.GPUMipmapFilterMode
 import io.ygdrasil.webgpu.GPUSampler
 import io.ygdrasil.webgpu.GPUSamplerBindingType
 import io.ygdrasil.webgpu.GPUStencilOperation
@@ -108,6 +109,7 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathFillType
 import org.skia.foundation.SkFilterMode
+import org.skia.foundation.SkMipmapMode
 import org.skia.foundation.SkSamplingOptions
 import org.skia.foundation.SkStroker
 import org.skia.foundation.SkTileMode
@@ -5258,6 +5260,8 @@ public class SkWebGpuDevice(
         val scissor: IntArray,
         val paintR: Float, val paintG: Float, val paintB: Float, val paintA: Float,
         val filter: SkFilterMode,
+        val mipmap: SkMipmapMode,
+        val maxAniso: Int,
         // G5.1 drawImageRect always uses the same tile on both axes ; G5.2
         // (paint.shader is SkBitmapShader) carries the per-axis tileX /
         // tileY pair that the shader was constructed with. The sampler
@@ -5284,10 +5288,9 @@ public class SkWebGpuDevice(
         val clipShapeRx: Float = 0f,
         val clipShapeRy: Float = 0f,
         /**
-         * G5.2.2 -- 2x3 device-to-image affine `M^-1 = (ctm * localMatrix)^-1`.
-         * Row 0 = `(sx, kx, tx)` ; row 1 = `(ky, sy, ty)`. The fragment shader
-         * uses this directly to derive image-pixel coords from the fragment
-         * center, replacing the legacy `srcRect/dstRect` rect-affine.
+         * G5.2.2 / sampler widening -- 3x3 device-to-image homogeneous
+         * inverse `M^-1 = (ctm * localMatrix)^-1`. Row 2 is `(0, 0, 1)`
+         * for affine callers and the real perspective row otherwise.
          *
          * For [drawImageRect] callers (no shader rotation) the affine is
          * built from the axis-aligned src/dst ratio so the byte output stays
@@ -5296,6 +5299,8 @@ public class SkWebGpuDevice(
          */
         val devToImageRow0: FloatArray,
         val devToImageRow1: FloatArray,
+        val devToImageRow2: FloatArray,
+        val sampleOptions: FloatArray,
         /**
          * Phase H2 paint-colorFilter -- optional packed `SkColorFilter`
          * payload (6 vec4f = 24 floats) consumed by `bitmap_shader.wgsl`'s
@@ -5964,6 +5969,8 @@ public class SkWebGpuDevice(
         val dstL: Float, val dstT: Float, val dstR: Float, val dstB: Float,
         val paintR: Float, val paintG: Float, val paintB: Float, val paintA: Float,
         val filter: SkFilterMode,
+        val mipmap: SkMipmapMode,
+        val maxAniso: Int,
         val tileX: SkTileMode,
         val tileY: SkTileMode,
         val csMode: Int,
@@ -5988,6 +5995,8 @@ public class SkWebGpuDevice(
          */
         val devToImageRow0: FloatArray = FloatArray(3),
         val devToImageRow1: FloatArray = FloatArray(3),
+        val devToImageRow2: FloatArray = floatArrayOf(0f, 0f, 1f),
+        val sampleOptions: FloatArray = ZERO_SAMPLE_OPTIONS_4,
         /**
          * Phase H2 paint-colorFilter -- optional packed `SkColorFilter`
          * payload (6 vec4f = 24 floats) consumed by
@@ -6077,23 +6086,35 @@ public class SkWebGpuDevice(
         val dstL: Float, val dstT: Float, val dstR: Float, val dstB: Float,
         val paintR: Float, val paintG: Float, val paintB: Float, val paintA: Float,
         val filter: SkFilterMode,
+        val mipmap: SkMipmapMode,
+        val maxAniso: Int,
         val tileX: SkTileMode,
         val tileY: SkTileMode,
         val csMode: Int,
         val csMatrix: FloatArray,
         val csTfParams: FloatArray,
-        // G5.2.2 -- 2x3 device-to-image affine `M^-1 = (ctm * localMatrix)^-1`.
-        // Row 0 = `(sx, kx, tx)` ; row 1 = `(ky, sy, ty)`. The shader applies
-        // this directly to the fragment center to derive image-pixel coords,
-        // unifying axis-aligned and rotated / skewed paths.
+        // G5.2.2 / sampler widening -- 3x3 homogeneous device-to-image inverse.
         val devToImageRow0: FloatArray,
         val devToImageRow1: FloatArray,
+        val devToImageRow2: FloatArray,
+        // (sampleMode, cubicB, cubicC, _). sampleMode 0 = sampler, 1 = bicubic.
+        val sampleOptions: FloatArray,
         // Phase H2 paint-colorFilter -- captured from `paint.colorFilter`
         // at payload-build time so each branch of [drawPath] reuses the
         // same packed buffer. [ZERO_COLOR_FILTER_24] sentinel for the
         // no-filter fast path.
         val colorFilterPacked: FloatArray,
     )
+
+    private fun bitmapSampleOptionsFor(sampling: SkSamplingOptions): FloatArray {
+        val cubic = sampling.cubic
+        return when {
+            cubic != null -> floatArrayOf(SAMPLE_MODE_CUBIC, cubic.B, cubic.C, 0f)
+            sampling.useAniso || sampling.mipmap != SkMipmapMode.kNone ->
+                floatArrayOf(SAMPLE_MODE_IMPLICIT_SAMPLER, 0f, 0f, 0f)
+            else -> ZERO_SAMPLE_OPTIONS_4
+        }
+    }
 
     private fun buildBitmapShaderPayload(
         shader: SkBitmapShader,
@@ -6102,14 +6123,10 @@ public class SkWebGpuDevice(
     ): BitmapShaderPayload? {
         val image = shader.getImage()
         if (image.width <= 0 || image.height <= 0) return null
-        // G5.2.2 -- arbitrary affine CTM + localMatrix. Compose
-        // `M = ctm * localMatrix` (the shader-local -> device affine)
-        // and invert it once to derive the device -> image-pixel map
-        // that the shader applies per fragment. Bail honestly when the
-        // combined affine is singular (degenerate scale / perspective) ;
-        // the caller falls through to the solid-colour fill.
+        // G5.2.2 / sampler widening -- compose `M = ctm * localMatrix`
+        // and invert it once. Perspective is represented by row 2 and
+        // divided in WGSL; singular matrices still refuse.
         val combined = ctm.preConcat(shader.localMatrix)
-        if (combined.hasPerspective()) return null
         val inv = combined.invert() ?: return null
         // Diagnostic `srcRect / dstRect` pair -- the device-AABB of the
         // image footprint under `M`. The fragment shader ignores these
@@ -6132,6 +6149,8 @@ public class SkWebGpuDevice(
         val cf = paint.colorFilter
         val colorFilterPacked: FloatArray = if (cf == null) ZERO_COLOR_FILTER_24
         else packLayerCompositeColorFilter(cf)
+        val sampling = shader.getSampling()
+        val sampleOptions = bitmapSampleOptionsFor(sampling)
         return BitmapShaderPayload(
             texture = texture,
             imageWidth = image.width,
@@ -6141,7 +6160,9 @@ public class SkWebGpuDevice(
             dstL = dstL, dstT = dstT, dstR = dstR, dstB = dstB,
             paintR = paintAlpha, paintG = paintAlpha,
             paintB = paintAlpha, paintA = paintAlpha,
-            filter = shader.getSampling().filter,
+            filter = sampling.filter,
+            mipmap = sampling.mipmap,
+            maxAniso = sampling.maxAniso,
             tileX = shader.getTileX(),
             tileY = shader.getTileY(),
             csMode = csMode,
@@ -6149,6 +6170,8 @@ public class SkWebGpuDevice(
             csTfParams = csTfParams,
             devToImageRow0 = floatArrayOf(inv.sx, inv.kx, inv.tx),
             devToImageRow1 = floatArrayOf(inv.ky, inv.sy, inv.ty),
+            devToImageRow2 = floatArrayOf(inv.persp0, inv.persp1, inv.persp2),
+            sampleOptions = sampleOptions,
             colorFilterPacked = colorFilterPacked,
         )
     }
@@ -6184,6 +6207,8 @@ public class SkWebGpuDevice(
         dstL = dstL, dstT = dstT, dstR = dstR, dstB = dstB,
         paintR = paintR, paintG = paintG, paintB = paintB, paintA = paintA,
         filter = filter,
+        mipmap = mipmap,
+        maxAniso = maxAniso,
         tileX = tileX, tileY = tileY,
         csMode = csMode,
         csMatrix = csMatrix,
@@ -6196,6 +6221,8 @@ public class SkWebGpuDevice(
         clipShapeRy = clipShapeRy,
         devToImageRow0 = devToImageRow0,
         devToImageRow1 = devToImageRow1,
+        devToImageRow2 = devToImageRow2,
+        sampleOptions = sampleOptions,
         colorFilterPacked = colorFilterPacked,
     )
 
@@ -8706,32 +8733,46 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         }.also { bitmapPipelineCache[mode to filter] = it }
 
     /**
-     * Sampler cache keyed by `(filter, tileX, tileY)`. Per-axis tile mode
+     * Sampler cache keyed by `(filter, mipmap, maxAniso, tileX, tileY)`. Per-axis tile mode
      * (G5.2 : SkBitmapShader carries independent `tileX`/`tileY`) ->
      * sampler `addressModeU` / `addressModeV` are set independently. The
      * `kDecal` mode is emulated in-shader (sampler stays ClampToEdge) ;
      * the per-axis decal check lives in `bitmap_shader.wgsl`.
-     *
-     * Mipmap filter is left at Nearest (no mip pyramid yet ; future
-     * slices wire `image.mipLevels` through to a multi-level texture).
      */
+    private data class BitmapSamplerKey(
+        val filter: SkFilterMode,
+        val mipmap: SkMipmapMode,
+        val maxAniso: Int,
+        val tileX: SkTileMode,
+        val tileY: SkTileMode,
+    )
+
     private val bitmapSamplerCache:
-        MutableMap<Triple<SkFilterMode, SkTileMode, SkTileMode>, GPUSampler> = mutableMapOf()
+        MutableMap<BitmapSamplerKey, GPUSampler> = mutableMapOf()
 
     private fun bitmapSamplerFor(
         filter: SkFilterMode,
+        mipmap: SkMipmapMode,
+        maxAniso: Int,
         tileX: SkTileMode,
         tileY: SkTileMode,
     ): GPUSampler =
-        bitmapSamplerCache[Triple(filter, tileX, tileY)]?.also {
+        bitmapSamplerCache[BitmapSamplerKey(filter, mipmap, maxAniso.coerceAtLeast(0), tileX, tileY)]?.also {
             cacheCounters.resourceHits += 1
             return it
         } ?: run {
             cacheCounters.resourceMisses += 1
-            val magMin = when (filter) {
+            val effectiveFilter = if (maxAniso > 1) SkFilterMode.kLinear else filter
+            val magMin = when (effectiveFilter) {
                 SkFilterMode.kNearest -> GPUFilterMode.Nearest
                 SkFilterMode.kLinear -> GPUFilterMode.Linear
             }
+            val mipFilter = when (mipmap) {
+                SkMipmapMode.kNone,
+                SkMipmapMode.kNearest -> GPUMipmapFilterMode.Nearest
+                SkMipmapMode.kLinear -> GPUMipmapFilterMode.Linear
+            }
+            val samplerMaxAniso = maxAniso.coerceAtLeast(1).coerceAtMost(16)
             val addressFor = { tile: SkTileMode -> when (tile) {
                 SkTileMode.kClamp -> GPUAddressMode.ClampToEdge
                 SkTileMode.kRepeat -> GPUAddressMode.Repeat
@@ -8744,10 +8785,14 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                     addressModeV = addressFor(tileY),
                     magFilter = magMin,
                     minFilter = magMin,
-                    label = "SkWebGpuDevice.bitmapSampler($filter,$tileX,$tileY)",
+                    mipmapFilter = mipFilter,
+                    maxAnisotropy = samplerMaxAniso.toUShort(),
+                    label = "SkWebGpuDevice.bitmapSampler($filter,$mipmap,aniso=$maxAniso,$tileX,$tileY)",
                 ),
             )
-        }.also { bitmapSamplerCache[Triple(filter, tileX, tileY)] = it }
+        }.also {
+            bitmapSamplerCache[BitmapSamplerKey(filter, mipmap, maxAniso.coerceAtLeast(0), tileX, tileY)] = it
+        }
 
     // ─── Layer composite (Phase G-saveLayer-fast) ────────────────────────
     /**
@@ -9522,37 +9567,50 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             return it
         } ?: run {
             cacheCounters.resourceMisses += 1
+            val levels = image.mipLevels
             val w = image.width
             val h = image.height
+            val levelCount = levels?.size ?: 1
             val tex = context.device.createTexture(
                 TextureDescriptor(
                     size = Extent3D(width = w.toUInt(), height = h.toUInt()),
+                    mipLevelCount = levelCount.toUInt(),
                     format = GPUTextureFormat.RGBA8Unorm,
                     usage = GPUTextureUsage.TextureBinding or GPUTextureUsage.CopyDst,
                     label = "SkWebGpuDevice.image(${w}x${h})",
                 ),
             )
-            // Unpack ARGB ints to RGBA bytes for the texture upload.
-            val bytes = ByteArray(w * h * 4)
-            val src = image.pixels
-            for (i in 0 until w * h) {
-                val c = src[i]
-                bytes[i * 4]     = SkColorGetR(c).toByte()
-                bytes[i * 4 + 1] = SkColorGetG(c).toByte()
-                bytes[i * 4 + 2] = SkColorGetB(c).toByte()
-                bytes[i * 4 + 3] = SkColorGetA(c).toByte()
+            fun rgbaBytes(pixels: IntArray, levelW: Int, levelH: Int): ByteArray {
+                val bytes = ByteArray(levelW * levelH * 4)
+                for (i in 0 until levelW * levelH) {
+                    val c = pixels[i]
+                    bytes[i * 4]     = SkColorGetR(c).toByte()
+                    bytes[i * 4 + 1] = SkColorGetG(c).toByte()
+                    bytes[i * 4 + 2] = SkColorGetB(c).toByte()
+                    bytes[i * 4 + 3] = SkColorGetA(c).toByte()
+                }
+                return bytes
             }
-            recordRawRgba8TextureUpload(w, h, bytes)
-            context.queue.writeTexture(
-                destination = TexelCopyTextureInfo(texture = tex),
-                data = ArrayBuffer.of(bytes),
-                dataLayout = TexelCopyBufferLayout(
-                    offset = 0uL,
-                    bytesPerRow = (w * 4).toUInt(),
-                    rowsPerImage = h.toUInt(),
-                ),
-                size = Extent3D(width = w.toUInt(), height = h.toUInt()),
-            )
+            for (levelIndex in 0 until levelCount) {
+                val level = levels?.get(levelIndex)
+                val levelW = level?.width ?: w
+                val levelH = level?.height ?: h
+                val src = level?.pixels ?: image.pixels
+                val bytes = rgbaBytes(src, levelW, levelH)
+                if (levelIndex == 0) {
+                    recordRawRgba8TextureUpload(levelW, levelH, bytes)
+                }
+                context.queue.writeTexture(
+                    destination = TexelCopyTextureInfo(texture = tex, mipLevel = levelIndex.toUInt()),
+                    data = ArrayBuffer.of(bytes),
+                    dataLayout = TexelCopyBufferLayout(
+                        offset = 0uL,
+                        bytesPerRow = (levelW * 4).toUInt(),
+                        rowsPerImage = levelH.toUInt(),
+                    ),
+                    size = Extent3D(width = levelW.toUInt(), height = levelH.toUInt()),
+                )
+            }
             tex
         }.also { imageTextureCache[image] = it }
 
@@ -14508,7 +14566,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         paint: SkPaint,
     ): Boolean {
         val shader = paint.shader as? SkBitmapShader ?: return false
-        if (shader.localMatrix.hasPerspective() || ctm.hasPerspective()) return false
+        if (ctm.preConcat(shader.localMatrix).invert() == null) return false
         val isRect = path.isRect() != null
         // Rect branch (G5.2) -- axis-aligned-CTM rect fast path.
         if (isRect && paint.style == SkPaint.Style.kFill_Style && ctm.isAxisAligned) return true
@@ -17969,7 +18027,9 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
      *
      * In scope :
      *  - filter = `SkFilterMode.kLinear` or `SkFilterMode.kNearest`
-     *  - mipmap = `SkMipmapMode.kNone` ; no bicubic ; no anisotropic.
+     *  - mipmap = `SkMipmapMode.kNone` / `kNearest` / `kLinear`.
+     *  - bicubic and anisotropic sampling when the source image carries
+     *    the required mip pyramid for minification.
      *  - tile mode = `SkTileMode.kClamp` / `kRepeat` / `kMirror` /
      *                `kDecal` (latter handled in-shader ; sampler stays
      *                ClampToEdge because WebGPU has no `BorderColor`
@@ -17994,6 +18054,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         // `ctm * localMatrix` for rotated / skewed bitmap shaders.
         affineOverrideRow0: FloatArray? = null,
         affineOverrideRow1: FloatArray? = null,
+        affineOverrideRow2: FloatArray? = null,
     ) {
         if (image.width <= 0 || image.height <= 0) return
         if (src.right <= src.left || src.bottom <= src.top) return
@@ -18004,16 +18065,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         if (!blendPlan.isFixedFunction) {
             error("SkWebGpuDevice.drawImageRect refuses $mode: ${blendPlan.reason}")
         }
-        if (sampling.cubic != null || sampling.useAniso) {
-            error(
-                "SkWebGpuDevice.drawImageRect : cubic / anisotropic sampling not supported in G5.1 " +
-                    "(only SkFilterMode.kLinear / kNearest with kNone mipmap routed ; G5.x widens).",
-            )
-        }
         // sampling.filter ∈ {kLinear, kNearest} -- both supported (G5.1.1).
-        // The mipmap mode is ignored at this slice (no mip pyramid in the
-        // texture upload) ; this matches the gate enforced above and is
-        // also how kanvas-skia's CPU path treats kNone-only images.
 
         // Non-AA pixelEdge rounding -- matches SkBitmapDevice.drawImageRect.
         val ix0 = pixelEdge(devDst.left).coerceAtLeast(clip.left).coerceAtLeast(0)
@@ -18060,9 +18112,11 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         // to this axis-aligned derivation.
         val row0: FloatArray
         val row1: FloatArray
+        val row2: FloatArray
         if (affineOverrideRow0 != null && affineOverrideRow1 != null) {
             row0 = affineOverrideRow0
             row1 = affineOverrideRow1
+            row2 = affineOverrideRow2 ?: floatArrayOf(0f, 0f, 1f)
         } else {
             val srcW = src.right - src.left
             val srcH = src.bottom - src.top
@@ -18074,7 +18128,9 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             val tyRow1 = src.top - devDst.top * syRow1
             row0 = floatArrayOf(sxRow0, 0f, txRow0)
             row1 = floatArrayOf(0f, syRow1, tyRow1)
+            row2 = floatArrayOf(0f, 0f, 1f)
         }
+        val sampleOptions = bitmapSampleOptionsFor(sampling)
 
         pending.add(
             ImageRectDraw(
@@ -18086,6 +18142,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                 scissor = intArrayOf(ix0, iy0, ix1 - ix0, iy1 - iy0),
                 paintR = paintAlpha, paintG = paintAlpha, paintB = paintAlpha, paintA = paintAlpha,
                 filter = sampling.filter,
+                mipmap = sampling.mipmap,
+                maxAniso = sampling.maxAniso,
                 tileX = tileX,
                 tileY = tileY,
                 csMode = csMode,
@@ -18096,6 +18154,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                 clipKind = clipKind,
                 strictConstraint = when {
                     !strictConstraint -> 0f
+                    sampling.cubic != null -> 1f
                     sampling.filter == SkFilterMode.kNearest -> 2f
                     else -> 1f
                 },
@@ -18104,6 +18163,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                 clipShapeRy = clipRy,
                 devToImageRow0 = row0,
                 devToImageRow1 = row1,
+                devToImageRow2 = row2,
+                sampleOptions = sampleOptions,
                 colorFilterPacked = colorFilterPacked,
             ),
         )
@@ -18171,12 +18232,10 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
     ): Boolean {
         val image = shader.getImage()
         if (image.width <= 0 || image.height <= 0) return false
-        // G5.2.2 -- combined matrix `M = ctm * localMatrix` may be any
-        // invertible affine (rotated / skewed allowed). Perspective and
-        // singular factors bail to the solid-colour fallback ; the
-        // gradient helpers handle degenerate matrices the same way.
+        // G5.2.2 / sampler widening -- combined matrix `M = ctm *
+        // localMatrix` may be any invertible homogeneous 3x3. Singular
+        // factors bail to the solid-colour fallback.
         val combined = ctm.preConcat(shader.localMatrix)
-        if (combined.hasPerspective()) return false
         val inv = combined.invert() ?: return false
 
         // Cover quad : the device-AABB of the rotated source-rect
@@ -18227,6 +18286,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             // lossy axis-aligned approximation).
             affineOverrideRow0 = floatArrayOf(inv.sx, inv.kx, inv.tx),
             affineOverrideRow1 = floatArrayOf(inv.ky, inv.sy, inv.ty),
+            affineOverrideRow2 = floatArrayOf(inv.persp0, inv.persp1, inv.persp2),
         )
         return true
     }
@@ -22151,13 +22211,15 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         //   offset 176 : clipShapeRadiiKind  (vec4f -- rx, ry, clipKind, strict mode ; G2.x/GRA-95)
         //   offset 192 : devToImageRow0      (vec4f -- (sx, kx, tx, _) ; G5.2.2)
         //   offset 208 : devToImageRow1      (vec4f -- (ky, sy, ty, _) ; G5.2.2)
-        //   offset 224 : colorFilterKindMode (vec4f -- (kind, mode, _, _) ; Phase H2)
-        //   offset 240 : colorFilterParam0   (vec4f -- premul colour OR matrix row 0)
-        //   offset 256 : colorFilterParam1   (vec4f -- matrix row 1)
-        //   offset 272 : colorFilterParam2   (vec4f -- matrix row 2)
-        //   offset 288 : colorFilterParam3   (vec4f -- matrix row 3)
-        //   offset 304 : colorFilterBias     (vec4f -- per-row bias)
-        // Total = 320 bytes.
+        //   offset 224 : devToImageRow2      (vec4f -- (p0, p1, p2, _) ; perspective)
+        //   offset 240 : sampleOptions       (vec4f -- (mode, cubicB, cubicC, _))
+        //   offset 256 : colorFilterKindMode (vec4f -- (kind, mode, _, _) ; Phase H2)
+        //   offset 272 : colorFilterParam0   (vec4f -- premul colour OR matrix row 0)
+        //   offset 288 : colorFilterParam1   (vec4f -- matrix row 1)
+        //   offset 304 : colorFilterParam2   (vec4f -- matrix row 2)
+        //   offset 320 : colorFilterParam3   (vec4f -- matrix row 3)
+        //   offset 336 : colorFilterBias     (vec4f -- per-row bias)
+        // Total = 352 bytes.
         //
         // G5.1.1 -- `imageSize.z` carries the tile-mode ordinal as a
         // bit-reinterpreted f32 (same trick the gradient shaders use for
@@ -22209,7 +22271,9 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         val cb = d.clipShapeBounds
         val r0 = d.devToImageRow0
         val r1 = d.devToImageRow1
-        val packed = FloatArray(80) // 320 bytes / 4 bytes per float.
+        val r2 = d.devToImageRow2
+        val so = d.sampleOptions
+        val packed = FloatArray(88) // 352 bytes / 4 bytes per float.
         packed[0] = d.srcL; packed[1] = d.srcT; packed[2] = d.srcR; packed[3] = d.srcB
         packed[4] = d.dstL; packed[5] = d.dstT; packed[6] = d.dstR; packed[7] = d.dstB
         packed[8] = d.imageWidth.toFloat(); packed[9] = d.imageHeight.toFloat()
@@ -22226,12 +22290,14 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         packed[46] = d.clipKind; packed[47] = d.strictConstraint
         packed[48] = r0[0]; packed[49] = r0[1]; packed[50] = r0[2]; packed[51] = 0f
         packed[52] = r1[0]; packed[53] = r1[1]; packed[54] = r1[2]; packed[55] = 0f
+        packed[56] = r2[0]; packed[57] = r2[1]; packed[58] = r2[2]; packed[59] = 0f
+        packed[60] = so[0]; packed[61] = so[1]; packed[62] = so[2]; packed[63] = so[3]
         // Phase H2 paint-colorFilter -- 6 contiguous vec4f starting at
-        // float index 56 (offset 224 bytes).
-        System.arraycopy(d.colorFilterPacked, 0, packed, 56, 24)
+        // float index 64 (offset 256 bytes).
+        System.arraycopy(d.colorFilterPacked, 0, packed, 64, 24)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val view = d.texture.createView()
-        val sampler = bitmapSamplerFor(d.filter, d.tileX, d.tileY)
+        val sampler = bitmapSamplerFor(d.filter, d.mipmap, d.maxAniso, d.tileX, d.tileY)
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
                 layout = bitmapBindGroupLayout,
@@ -24555,17 +24621,18 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         //   offset  208 : clipShapeRadiiKind  (vec4f -- rx, ry, clipKind, _ ; G2.x)
         //   offset  224 : devToImageRow0      (vec4f -- (sx, kx, tx, _) ; G5.2.2)
         //   offset  240 : devToImageRow1      (vec4f -- (ky, sy, ty, _) ; G5.2.2)
-        //   offset  256 : colorFilterKindMode (vec4f -- (kind, mode, _, _) ; Phase H2)
-        //   offset  272 : colorFilterParam0   (vec4f -- premul colour OR matrix row 0)
-        //   offset  288 : colorFilterParam1   (vec4f -- matrix row 1)
-        //   offset  304 : colorFilterParam2   (vec4f -- matrix row 2)
-        //   offset  320 : colorFilterParam3   (vec4f -- matrix row 3)
-        //   offset  336 : colorFilterBias     (vec4f -- per-row bias)
-        //   offset  352 : edgeCountPad        (.x = edgeCount as bit-reinterp f32)
-        //   offset  368 : edges[MAX_AA_EDGES] (vec4 each)
-        // Total = 4464 bytes (was 4368 before Phase H2 ; +96 for the
-        // colorFilter payload, edge tail shifts forward by 96 bytes).
-        val packed = FloatArray(92 + MAX_AA_EDGES * 4)
+        //   offset  256 : devToImageRow2      (vec4f -- (p0, p1, p2, _) ; perspective)
+        //   offset  272 : sampleOptions       (vec4f -- (mode, cubicB, cubicC, _))
+        //   offset  288 : colorFilterKindMode (vec4f -- (kind, mode, _, _) ; Phase H2)
+        //   offset  304 : colorFilterParam0   (vec4f -- premul colour OR matrix row 0)
+        //   offset  320 : colorFilterParam1   (vec4f -- matrix row 1)
+        //   offset  336 : colorFilterParam2   (vec4f -- matrix row 2)
+        //   offset  352 : colorFilterParam3   (vec4f -- matrix row 3)
+        //   offset  368 : colorFilterBias     (vec4f -- per-row bias)
+        //   offset  384 : edgeCountPad        (.x = edgeCount as bit-reinterp f32)
+        //   offset  400 : edges[MAX_AA_EDGES] (vec4 each)
+        // Total = 4496 bytes.
+        val packed = FloatArray(100 + MAX_AA_EDGES * 4)
         // color (unused ; left at zero)
         packed[0] = 0f; packed[1] = 0f; packed[2] = 0f; packed[3] = 0f
         // viewport
@@ -24601,21 +24668,24 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         // G5.2.2 -- 2x3 device-to-image affine (mirrors bitmap_shader.wgsl).
         val r0 = d.devToImageRow0
         val r1 = d.devToImageRow1
+        val r2 = d.devToImageRow2
+        val so = d.sampleOptions
         packed[56] = r0[0]; packed[57] = r0[1]; packed[58] = r0[2]; packed[59] = 0f
         packed[60] = r1[0]; packed[61] = r1[1]; packed[62] = r1[2]; packed[63] = 0f
+        packed[64] = r2[0]; packed[65] = r2[1]; packed[66] = r2[2]; packed[67] = 0f
+        packed[68] = so[0]; packed[69] = so[1]; packed[70] = so[2]; packed[71] = so[3]
         // Phase H2 paint-colorFilter -- 6 contiguous vec4f at float
-        // index 64 (offset 256 bytes). [ZERO_COLOR_FILTER_24] is the
+        // index 72 (offset 288 bytes). [ZERO_COLOR_FILTER_24] is the
         // shared sentinel when no filter is set ; the shader's `kind
         // == 0` fast path keeps the bytes bit-iso.
-        System.arraycopy(d.colorFilterPacked, 0, packed, 64, 24)
-        // edgeCountPad (shifted forward by 24 floats = 96 bytes for the H2 payload).
-        packed[88] = Float.fromBits(d.edgeCount)
-        packed[89] = 0f; packed[90] = 0f; packed[91] = 0f
+        System.arraycopy(d.colorFilterPacked, 0, packed, 72, 24)
+        packed[96] = Float.fromBits(d.edgeCount)
+        packed[97] = 0f; packed[98] = 0f; packed[99] = 0f
         // edges
-        System.arraycopy(d.edges, 0, packed, 92, d.edges.size)
+        System.arraycopy(d.edges, 0, packed, 100, d.edges.size)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val view = d.texture.createView()
-        val sampler = bitmapSamplerFor(d.filter, d.tileX, d.tileY)
+        val sampler = bitmapSamplerFor(d.filter, d.mipmap, d.maxAniso, d.tileX, d.tileY)
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
                 layout = aaStencilCoverBitmapShaderBindGroupLayout,
@@ -25236,10 +25306,12 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
          *   csTfParams0 (16) + csTfParams1 (16) +
          *   clipShapeBounds (16) + clipShapeRadiiKind (16) +
          *   devToImageRow0 (16) + devToImageRow1 (16) +
-         *   colorFilter (6 * 16 = 96) = 320 bytes.
+         *   devToImageRow2 (16) + sampleOptions (16) +
+         *   colorFilter (6 * 16 = 96) = 352 bytes.
          * Matches `Uniforms { srcRect, dstRect, imageSize, paintColor,
          * csFlags, csMatrix, csTfParams0, csTfParams1, clipShapeBounds,
          * clipShapeRadiiKind, devToImageRow0, devToImageRow1,
+         * devToImageRow2, sampleOptions,
          * colorFilterKindMode, colorFilterParam0..3, colorFilterBias }`
          * in `bitmap_shader.wgsl`. WGSL std140 stores each `mat3x3<f32>`
          * column padded to 16 bytes, hence the 48 bytes for the 9 floats
@@ -25254,7 +25326,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
          * device-to-image affine (rotated / skewed bitmap shader) ;
          * the legacy srcRect/dstRect slots stay in the layout for
          * host-side scissor reuse but the fragment math now reads the
-         * affine instead.
+         * inverse matrix instead. Sampler widening adds 32 bytes for
+         * row 2 and cubic B/C coefficients.
          *
          * Phase H2 paint-colorFilter -- 96 trailing bytes (6 vec4f)
          * carry the optional `SkColorFilter` payload (kind + Blend
@@ -25262,7 +25335,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
          * fast path makes the no-filter case bit-iso with the
          * pre-slice output.
          */
-        const val IMAGE_RECT_UNIFORM_SIZE: ULong = 320uL
+        const val IMAGE_RECT_UNIFORM_SIZE: ULong = 352uL
         /**
          * Phase G-saveLayer-fast / Phase G-saveLayer-colorFilter -- size
          * of the layer-composite per-draw uniform. Layout (matches
@@ -25431,6 +25504,9 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
          */
         val IDENTITY_CS_TF_PARAMS: FloatArray =
             floatArrayOf(1f, 1f, 0f, 0f, 0f, 0f, 0f)
+        const val SAMPLE_MODE_CUBIC: Float = 1f
+        const val SAMPLE_MODE_IMPLICIT_SAMPLER: Float = 2f
+        val ZERO_SAMPLE_OPTIONS_4: FloatArray = floatArrayOf(0f, 0f, 0f, 0f)
         /**
          * G5.3.y -- peak luminance constant (nits) used by the PQ /
          * HLG shader branches (`csMode == 3` / `csMode == 4`) to tone-
@@ -25480,9 +25556,10 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
          *   csTfParams0 (16) + csTfParams1 (16) +
          *   clipShapeBounds (16) + clipShapeRadiiKind (16) +
          *   devToImageRow0 (16) + devToImageRow1 (16) +
+         *   devToImageRow2 (16) + sampleOptions (16) +
          *   colorFilter (6 * 16 = 96) +
-         *   edgeCountPad (16) + edges (256 * 16) = 4464 bytes.
-         * Mirror of [IMAGE_RECT_UNIFORM_SIZE] (320 bytes) extended with the
+         *   edgeCountPad (16) + edges (256 * 16) = 4496 bytes.
+         * Mirror of [IMAGE_RECT_UNIFORM_SIZE] (352 bytes) extended with the
          * stencil-cover machinery's `color` / `viewport` / `edgeCountPad`
          * + `edges[256]` tail. The leading `color` slot matches the polygon
          * shader's layout so the bitmap-shader stencil-write pass can share
@@ -25493,9 +25570,9 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
          * G2.x added 32 more bytes for the analytical clip-shape slots
          * sitting after the G5.3 colorspace block (so the colorspace
          * block stays contiguous). G5.2.2 added 32 more bytes for the
-         * 2x3 device-to-image affine (rotated / skewed bitmap shader),
-         * inserted between `clipShapeRadiiKind` and `edgeCountPad` ;
-         * the edge tail shifts forward by 32 bytes.
+         * device-to-image inverse (rotated / skewed / perspective bitmap
+         * shader), inserted between `clipShapeRadiiKind` and
+         * `edgeCountPad`; the sampler options add cubic B/C coefficients.
          *
          * Phase H2 paint-colorFilter -- 96 more bytes (6 vec4f) for the
          * optional `SkColorFilter` payload, inserted between the
@@ -25504,7 +25581,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
          * path keeps the no-filter case bit-iso with the pre-slice
          * output.
          */
-        const val AA_STENCIL_COVER_BITMAP_SHADER_UNIFORM_SIZE: ULong = 4464uL
+        const val AA_STENCIL_COVER_BITMAP_SHADER_UNIFORM_SIZE: ULong = 4496uL
         const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
 
         /**

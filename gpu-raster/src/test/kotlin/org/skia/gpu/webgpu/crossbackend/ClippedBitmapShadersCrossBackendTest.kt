@@ -18,9 +18,10 @@ import org.skia.tests.ClippedBitmapShadersGM
  * the equivalent CPU sampler on raster.
  *
  * Only the 3 nearest-sampling variants (Clamp / Repeat / Mirror) are
- * cross-tested here ; the `-hq` (Mitchell bicubic) variants are raster-
- * only (cubic resampler not yet wired on the GPU side) and stay covered
- * by `ClippedBitmapShadersTest`.
+ * cross-tested here. The `-hq` (Mitchell bicubic) variants are covered
+ * by `ClippedBitmapShadersTest` and the WebGPU-only
+ * `ClippedBitmapShadersWebGpuTest`; they should be promoted here only
+ * after both backend floors are verified together.
  *
  * Floors mirror the existing per-backend tests :
  *  - raster (`ClippedBitmapShadersTest`, tol=1) : 99.0 % per variant ;
