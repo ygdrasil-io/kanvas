@@ -1,7 +1,7 @@
 ---
 id: KGPU-M7-004
 title: "Add SDR color plan and HDR profile refusal gates"
-status: proposed
+status: done
 milestone: M7
 priority: P1
 owner_area: color
@@ -82,7 +82,13 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: SDR boundary first.
+- `done`: Added bounded `GPUSDRColorBoundaryPlanner` evidence for finite sRGB
+  value/store planning and terminal refusals for HDR, gainmap, ICC/CICP,
+  untagged policy, and extended range. Independent review
+  `019ec850-9390-7240-9313-1f9af4b9a77d` accepted the evidence with no
+  findings. Evidence remains contract/refusal-only: no product activation,
+  GPU-native color route, broad color management, profile conversion, HDR,
+  gainmap, untagged policy, or platform color conversion is implied.
 
 ## Linear Labels
 
