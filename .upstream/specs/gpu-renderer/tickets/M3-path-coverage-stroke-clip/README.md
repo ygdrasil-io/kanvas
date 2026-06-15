@@ -27,7 +27,7 @@ or coverage artifact routes must cite `19-path-coverage-atlas-strategy.md`,
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M3-001 - Add basic path fill prepared route](KGPU-M3-001-add-basic-path-fill-prepared-route.md) | `done` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `geometry-artifacts` | `KGPU-M2-003` | `path fill legacy` |
 | [KGPU-M3-002 - Add stencil-cover path route candidate](KGPU-M3-002-add-stencil-cover-path-route-candidate.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry-passes` | `KGPU-M3-001` | `path fill legacy` |
-| [KGPU-M3-003 - Add simple stroke route candidate](KGPU-M3-003-add-simple-stroke-route-candidate.md) | `proposed` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `geometry-stroke` | `KGPU-M3-001` | `stroke legacy` |
+| [KGPU-M3-003 - Add simple stroke route candidate](KGPU-M3-003-add-simple-stroke-route-candidate.md) | `done` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `geometry-stroke` | `KGPU-M3-001` | `stroke legacy` |
 | [KGPU-M3-004 - Add bounded clip rrect and path route candidate](KGPU-M3-004-add-bounded-clip-rrect-and-path-route-candidate.md) | `proposed` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `clips-atlas` | `KGPU-M3-001` | `clip legacy` |
 | [KGPU-M3-005 - Add path and coverage atlas refusal policy gates](KGPU-M3-005-add-path-and-coverage-atlas-refusal-policy-gates.md) | `done` | `P1` | `RefuseRequired` | `RefuseDiagnostic` | `false` | `false` | `atlas-policy` | `KGPU-M3-001` | - |
 
@@ -37,6 +37,7 @@ or coverage artifact routes must cite `19-path-coverage-atlas-strategy.md`,
 rtk git diff --check
 rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.geometry.BasicPathFillPreparedRouteTest
 rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.geometry.AtlasPolicyRefusalGateTest
+rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.geometry.SimpleStrokePreparedRouteTest
 rtk ./gradlew --no-daemon :gpu-renderer:check
 rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Coverage*' --tests '*Path*'
 ```
@@ -63,6 +64,15 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Coverage*' --tests '*Path*'
   explicit non-claims against atlas generation or atlas-backed support.
 - Independent review `019ec7d2-85bf-7d90-977d-8c7ee86f2710` accepted KGPU-M3-005
   for `done` with no findings.
+- `SimpleStrokePreparedRouteTest` records one bounded simple stroke
+  `CPUPreparedGPU` contract route and stable refusals for unsupported width,
+  hairline, cap, join, miter, dash, path-effect, transform, expansion-budget,
+  key, and bounds cases. It also proves accepted miter values derive distinct
+  prepared artifact keys. The evidence is contract/planning only; no adapter
+  execution, broad stroke parity, hairline, dash, path-effect, or round cap/join
+  support is claimed.
+- Independent review `019ec7e4-77c7-7ec3-ae53-571b6086fbcd` accepted KGPU-M3-003
+  after miter-key and path-effect refusal remediation.
 
 ## Non-Claims
 
@@ -72,6 +82,8 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Coverage*' --tests '*Path*'
   route.
 - Selector-only atlas evidence, cache/atlas hits, and refusal diagnostics do
   not count as path or coverage atlas support.
+- Simple stroke prepared artifacts are not broad stroke support and do not
+  imply hairline, dash, path-effect, or round cap/join parity.
 
 ## Status Update Rule
 
