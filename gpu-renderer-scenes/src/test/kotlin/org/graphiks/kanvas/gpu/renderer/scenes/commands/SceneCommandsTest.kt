@@ -64,6 +64,15 @@ class SceneCommandsTest {
                 ),
             ).family,
         )
+        assertEquals(
+            "filter-node",
+            SceneCommand.FilterNode(
+                label = "luma-filter",
+                inputLabel = "bitmap",
+                kind = SceneFilterKind.LumaTint,
+                strength = 0.65f,
+            ).family,
+        )
         assertEquals("runtime-effect", SceneCommand.RuntimeEffectTile("simple-rt").family)
         assertEquals("vertices", SceneCommand.MeshRibbon("mesh").family)
     }
@@ -83,8 +92,41 @@ class SceneCommandsTest {
         }
         assertFailsWith<IllegalArgumentException> { SceneCommand.Clip("", SceneRect(0f, 0f, 8f, 8f)) }
         assertFailsWith<IllegalArgumentException> { SceneCommand.BitmapRect(" ") }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.FilterNode(
+                label = "filter",
+                inputLabel = " ",
+                kind = SceneFilterKind.LumaTint,
+            )
+        }
         assertFailsWith<IllegalArgumentException> { SceneCommand.RuntimeEffectTile("") }
         assertFailsWith<IllegalArgumentException> { SceneCommand.MeshRibbon("\t") }
+    }
+
+    @Test
+    fun `filter node fixture payload requires an input kind and normalized strength`() {
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.FilterNode(label = "filter", inputLabel = "photo")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.FilterNode(label = "filter", kind = SceneFilterKind.LumaTint)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.FilterNode(
+                label = "filter",
+                inputLabel = "photo",
+                kind = SceneFilterKind.LumaTint,
+                strength = -0.01f,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.FilterNode(
+                label = "filter",
+                inputLabel = "photo",
+                kind = SceneFilterKind.LumaTint,
+                strength = 1.01f,
+            )
+        }
     }
 
     @Test

@@ -5,6 +5,7 @@ import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSampling
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneFilterKind
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
 
 object WindowedRectOnlySceneShader {
@@ -60,7 +61,9 @@ object WindowedRectOnlySceneShader {
                             ${draw.bottomRightColor.b.wgslFloat()},
                             ${draw.bottomRightColor.a.wgslFloat()}
                         ),
-                        ${draw.paintKind.wgslFloat()}
+                        ${draw.paintKind.wgslFloat()},
+                        ${draw.filterKind.wgslFloat()},
+                        ${draw.filterStrength.wgslFloat()}
                     );
                     color = src_over_coverage(color, ${draw.colorName()}, ${draw.coverageName()});
                 }
@@ -102,7 +105,9 @@ object WindowedRectOnlySceneShader {
                 end_color: vec4<f32>,
                 bottom_left_color: vec4<f32>,
                 bottom_right_color: vec4<f32>,
-                paint_kind: f32
+                paint_kind: f32,
+                filter_kind: f32,
+                filter_strength: f32
             ) -> vec4<f32> {
                 var color = start_color;
                 if (paint_kind >= 2.5) {
@@ -124,6 +129,11 @@ object WindowedRectOnlySceneShader {
                 } else if (paint_kind >= 0.5) {
                     let t = clamp((pixel.y - rect.y) / max(rect.w - rect.y, 0.0001), 0.0, 1.0);
                     color = mix(start_color, end_color, t);
+                }
+                if (filter_kind >= 0.5) {
+                    let luma = dot(color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+                    let luma_tint = clamp(vec3<f32>(luma * 1.08, luma * 0.78, luma * 0.42), vec3<f32>(0.0), vec3<f32>(1.0));
+                    color = vec4<f32>(mix(color.rgb, luma_tint, clamp(filter_strength, 0.0, 1.0)), color.a);
                 }
                 return color;
             }
@@ -160,6 +170,8 @@ private data class WindowedDraw(
     val bottomLeftColor: SceneColor,
     val bottomRightColor: SceneColor,
     val paintKind: Float,
+    val filterKind: Float,
+    val filterStrength: Float,
     val clip: SceneRect?,
 )
 
@@ -170,6 +182,9 @@ private data class IndexedWindowedDraw(
 )
 
 private fun GPURendererScene<*>.draws(): List<WindowedDraw> {
+    val filtersByInput = commands.filterIsInstance<SceneCommand.FilterNode>()
+        .filter { it.hasFixturePayload }
+        .associateBy { it.inputLabel }
     var activeClip: SceneRect? = null
     val indexedDraws = buildList {
         commands.withIndex().forEach { (index, command) ->
@@ -192,6 +207,7 @@ private fun GPURendererScene<*>.draws(): List<WindowedDraw> {
                 .thenBy { it.index },
         )
         .map { (_, command, clip) ->
+            val filter = if (command is SceneCommand.BitmapRect) filtersByInput[command.label] else null
             when (command) {
                 is SceneCommand.FillRect -> WindowedDraw(
                     label = command.label,
@@ -202,6 +218,8 @@ private fun GPURendererScene<*>.draws(): List<WindowedDraw> {
                     bottomLeftColor = command.color,
                     bottomRightColor = command.color,
                     paintKind = 0f,
+                    filterKind = 0f,
+                    filterStrength = 0f,
                     clip = clip,
                 )
                 is SceneCommand.FillRRect -> WindowedDraw(
@@ -213,6 +231,8 @@ private fun GPURendererScene<*>.draws(): List<WindowedDraw> {
                     bottomLeftColor = command.color,
                     bottomRightColor = command.color,
                     paintKind = 0f,
+                    filterKind = 0f,
+                    filterStrength = 0f,
                     clip = clip,
                 )
                 is SceneCommand.LinearGradientRect -> WindowedDraw(
@@ -224,6 +244,8 @@ private fun GPURendererScene<*>.draws(): List<WindowedDraw> {
                     bottomLeftColor = command.startColor,
                     bottomRightColor = command.endColor,
                     paintKind = 1f,
+                    filterKind = 0f,
+                    filterStrength = 0f,
                     clip = clip,
                 )
                 is SceneCommand.BitmapRect -> WindowedDraw(
@@ -239,6 +261,8 @@ private fun GPURendererScene<*>.draws(): List<WindowedDraw> {
                         SceneBitmapSampling.Nearest -> 2f
                         SceneBitmapSampling.Linear -> 3f
                     },
+                    filterKind = filter?.kind?.filterPaintKind() ?: 0f,
+                    filterStrength = filter?.strength ?: 0f,
                     clip = clip,
                 )
                 else -> error("Unsupported windowed fill command")
@@ -253,6 +277,11 @@ private fun SceneCommand.paintOrder(): Int =
         is SceneCommand.LinearGradientRect -> paintOrder
         is SceneCommand.BitmapRect -> paintOrder
         else -> 0
+    }
+
+private fun SceneFilterKind.filterPaintKind(): Float =
+    when (this) {
+        SceneFilterKind.LumaTint -> 1f
     }
 
 private fun WindowedDraw.shapeCoverageName(): String = "shape_coverage_" + safeName()

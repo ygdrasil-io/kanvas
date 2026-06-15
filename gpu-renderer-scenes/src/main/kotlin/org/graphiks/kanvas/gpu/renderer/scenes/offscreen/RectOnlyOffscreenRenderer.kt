@@ -42,6 +42,7 @@ import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSampling
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSource
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneFilterKind
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
 import org.skia.gpu.webgpu.HeadlessTarget
 import org.skia.gpu.webgpu.WebGpuContext
@@ -88,6 +89,7 @@ class RectOnlyOffscreenRenderer {
                         linearGradientRectCount = drawPlan.linearGradientRectCount,
                         clipCount = drawPlan.clipCount,
                         bitmapRectCount = drawPlan.bitmapRectCount,
+                        filters = drawPlan.filters,
                     ),
                 )
             }
@@ -342,6 +344,14 @@ class RectOnlyOffscreenRenderer {
                     );
                     color = mix(uniforms.color0, uniforms.color1, t);
                 }
+                if (uniforms.radius_and_kind.z >= 0.5) {
+                    let luma = dot(color.rgb, vec3f(0.2126, 0.7152, 0.0722));
+                    let luma_tint = clamp(vec3f(luma * 1.08, luma * 0.78, luma * 0.42), vec3f(0.0), vec3f(1.0));
+                    color = vec4f(
+                        mix(color.rgb, luma_tint, clamp(uniforms.radius_and_kind.w, 0.0, 1.0)),
+                        color.a
+                    );
+                }
                 let alpha = color.a * coverage;
                 return vec4f(color.rgb * alpha, alpha);
             }
@@ -383,8 +393,8 @@ class RectOnlyOffscreenRenderer {
                 bottom,
                 radius,
                 paintKind,
-                0f,
-                0f,
+                filterKind,
+                filterStrength,
             )
 
         fun ByteArray.countNonTransparentPixels(): Int {
@@ -403,12 +413,21 @@ internal data class RectOnlyDrawPlan(
     val clearColor: SceneColor,
     val fills: List<RectOnlyFillDraw>,
     val clipCount: Int = 0,
+    val filters: List<RectOnlyFilterNode> = emptyList(),
 ) {
     val fillRectCount: Int = fills.count { it.family == "fill-rect" }
     val fillRRectCount: Int = fills.count { it.family == "fill-rrect" }
     val linearGradientRectCount: Int = fills.count { it.family == "linear-gradient-rect" }
     val bitmapRectCount: Int = fills.count { it.family == "bitmap-rect" }
+    val filterNodeCount: Int = filters.size
 }
+
+internal data class RectOnlyFilterNode(
+    val label: String,
+    val inputLabel: String,
+    val kind: SceneFilterKind,
+    val strength: Float,
+)
 
 internal data class RectOnlyFillDraw(
     val label: String,
@@ -423,6 +442,8 @@ internal data class RectOnlyFillDraw(
     val bottom: Float,
     val radius: Float,
     val paintKind: Float,
+    val filterKind: Float,
+    val filterStrength: Float,
     val scissorX: Int,
     val scissorY: Int,
     val scissorWidth: Int,
@@ -457,6 +478,18 @@ internal fun prepareRectOnlyDrawPlan(
     val unsupportedReason = rectOnlyCommandSequenceUnsupportedReason(commands)
     require(unsupportedReason == null) { "$sceneId $unsupportedReason" }
 
+    val filters = commands.filterIsInstance<SceneCommand.FilterNode>()
+        .filter { it.hasFixturePayload }
+        .map { filter ->
+            RectOnlyFilterNode(
+                label = filter.label,
+                inputLabel = filter.inputLabel ?: error("FilterNode requires input fixture payload: ${filter.label}"),
+                kind = filter.kind ?: error("FilterNode requires kind fixture payload: ${filter.label}"),
+                strength = filter.strength,
+            )
+        }
+    val filtersByInput = filters.associateBy { it.inputLabel }
+
     var activeClip: SceneCommand.Clip? = null
     val indexedDraws = buildList {
         commands.withIndex().forEach { (index, command) ->
@@ -481,6 +514,7 @@ internal fun prepareRectOnlyDrawPlan(
         )
         .map { (_, command, clip) ->
             val rect = command.shapeRect()
+            val filter = if (command is SceneCommand.BitmapRect) filtersByInput[command.label] else null
             requireInsideTarget(sceneId, command.label, rect, width, height, "fill shape")
             clip?.let { requireInsideTarget(sceneId, it.label, it.rect, width, height, "clip") }
             val scissorRect = rect.intersect(clip?.rect)
@@ -506,6 +540,8 @@ internal fun prepareRectOnlyDrawPlan(
                 bottom = rect.bottom,
                 radius = minOf(command.shapeRadius(), widthPx * 0.5f, heightPx * 0.5f),
                 paintKind = command.shapePaintKind(),
+                filterKind = filter?.kind?.filterPaintKind() ?: 0f,
+                filterStrength = filter?.strength ?: 0f,
                 scissorX = left,
                 scissorY = top,
                 scissorWidth = right - left,
@@ -522,6 +558,7 @@ internal fun prepareRectOnlyDrawPlan(
             ?: SceneColor(0f, 0f, 0f, 0f),
         fills = fills,
         clipCount = commands.count { it is SceneCommand.Clip },
+        filters = filters,
     )
 }
 
@@ -534,7 +571,8 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
                 command is SceneCommand.FillRRect ||
                 command is SceneCommand.LinearGradientRect ||
                 command is SceneCommand.Clip ||
-                command is SceneCommand.BitmapRect
+                command is SceneCommand.BitmapRect ||
+                command is SceneCommand.FilterNode
             ) {
                 null
             } else {
@@ -543,7 +581,7 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, and fixture-backed bitmap-rect command families: " +
+        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, and fixture-backed filter-node command families: " +
             unsupportedFamilies.joinToString()
     }
 
@@ -553,6 +591,39 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
     if (bitmapMarkers.isNotEmpty()) {
         return "rect-only offscreen render requires fixture-backed BitmapRect payloads: " +
             bitmapMarkers.joinToString()
+    }
+
+    val filterMarkers = commands.filterIsInstance<SceneCommand.FilterNode>()
+        .filterNot { it.hasFixturePayload }
+        .map { it.label }
+    if (filterMarkers.isNotEmpty()) {
+        return "rect-only offscreen render requires fixture-backed FilterNode payloads: " +
+            filterMarkers.joinToString()
+    }
+
+    val fixtureBitmapLabels = commands.filterIsInstance<SceneCommand.BitmapRect>()
+        .filter { it.hasFixturePayload }
+        .map { it.label }
+        .toSet()
+    val filters = commands.filterIsInstance<SceneCommand.FilterNode>()
+        .filter { it.hasFixturePayload }
+    val invalidFilterInputs = filters
+        .filter { it.inputLabel !in fixtureBitmapLabels }
+        .map { "${it.label}->${it.inputLabel}" }
+    if (invalidFilterInputs.isNotEmpty()) {
+        return "rect-only offscreen render requires FilterNode inputs to reference fixture-backed BitmapRect labels: " +
+            invalidFilterInputs.joinToString()
+    }
+
+    val duplicateFilterInputs = filters
+        .mapNotNull { it.inputLabel }
+        .groupingBy { it }
+        .eachCount()
+        .filterValues { it > 1 }
+        .keys
+    if (duplicateFilterInputs.isNotEmpty()) {
+        return "rect-only offscreen render supports at most one FilterNode per BitmapRect input: " +
+            duplicateFilterInputs.joinToString()
     }
 
     if (commands.none {
@@ -583,20 +654,26 @@ internal fun rectOnlyRenderedDiagnostics(
     linearGradientRectCount: Int = 0,
     clipCount: Int = 0,
     bitmapRectCount: Int = 0,
+    filters: List<RectOnlyFilterNode> = emptyList(),
 ): List<String> {
     require(sceneId.isNotBlank()) { "rect-only sceneId must not be blank" }
     require(fillRectCount + fillRRectCount + linearGradientRectCount + bitmapRectCount > 0) {
         "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, LinearGradientRect, or BitmapRect command"
     }
-    return listOf(
-        "rendered $sceneId via WebGPU offscreen",
-        "adapter=${adapterInfo ?: "unknown-adapter"}",
-        "fillRectCommands=$fillRectCount",
-        "fillRRectCommands=$fillRRectCount",
-        "linearGradientRectCommands=$linearGradientRectCount",
-        "clipCommands=$clipCount",
-        "bitmapRectCommands=$bitmapRectCount",
-    )
+    return buildList {
+        add("rendered $sceneId via WebGPU offscreen")
+        add("adapter=${adapterInfo ?: "unknown-adapter"}")
+        add("fillRectCommands=$fillRectCount")
+        add("fillRRectCommands=$fillRRectCount")
+        add("linearGradientRectCommands=$linearGradientRectCount")
+        add("clipCommands=$clipCount")
+        add("bitmapRectCommands=$bitmapRectCount")
+        if (filters.isNotEmpty()) {
+            add("filterNodeCommands=${filters.size}")
+            add("filterKinds=${filters.joinToString { it.kind.wireName }}")
+            add("filterInputs=${filters.joinToString { it.inputLabel }}")
+        }
+    }
 }
 
 private fun SceneCommand.paintOrder(): Int =
@@ -670,6 +747,11 @@ private fun SceneCommand.shapePaintKind(): Float =
             SceneBitmapSampling.Linear -> 3f
         }
         else -> 0f
+    }
+
+private fun SceneFilterKind.filterPaintKind(): Float =
+    when (this) {
+        SceneFilterKind.LumaTint -> 1f
     }
 
 private fun SceneCommand.BitmapRect.fixtureRect(): SceneRect =

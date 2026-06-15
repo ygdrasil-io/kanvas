@@ -15,6 +15,7 @@ import org.graphiks.kanvas.gpu.renderer.scenes.catalog.SceneExpectation
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.SceneId
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.SceneTag
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSource
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
@@ -61,6 +62,7 @@ class RunGpuRendererSceneKadreMainTest {
             "rounded-panel-gradient" to 21,
             "texture-swatch-board" to 22,
             "clipped-avatar-grid" to 23,
+            "filtered-photo-chip" to 24,
         )
         val invocations = mutableListOf<RunnerInvocation>()
 
@@ -132,6 +134,13 @@ class RunGpuRendererSceneKadreMainTest {
             ),
             UnsupportedRectOnlyCase(
                 scene = windowedTestScene(
+                    sceneId = "windowed-filter-marker",
+                    commands = listOf(testBitmapRect(), SceneCommand.FilterNode("marker")),
+                ),
+                reason = "rect-only windowed render requires fixture-backed FilterNode payloads: marker",
+            ),
+            UnsupportedRectOnlyCase(
+                scene = windowedTestScene(
                     sceneId = "windowed-late-clear",
                     commands = listOf(
                         testFillRect(),
@@ -178,7 +187,7 @@ class RunGpuRendererSceneKadreMainTest {
         assertContains(sessionJson, "\"status\": \"not-yet-rendered\"")
         assertContains(
             sessionJson,
-            "\"reason\": \"rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, and fixture-backed bitmap-rect command families: vertices\"",
+            "\"reason\": \"rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, and fixture-backed filter-node command families: vertices\"",
         )
         assertContains(sessionJson, "\"requestedFrames\": 60")
         assertContains(sessionJson, "\"presentedFrames\": 0")
@@ -367,6 +376,18 @@ class RunGpuRendererSceneKadreMainTest {
             label = "test-fill",
             rect = SceneRect(0f, 0f, 8f, 8f),
             color = SceneColor.green(),
+        )
+
+    private fun testBitmapRect(): SceneCommand.BitmapRect =
+        SceneCommand.BitmapRect(
+            label = "photo",
+            rect = SceneRect(0f, 0f, 16f, 16f),
+            source = SceneBitmapSource(
+                topLeft = SceneColor.red(),
+                topRight = SceneColor.blue(),
+                bottomLeft = SceneColor.green(),
+                bottomRight = SceneColor.amber(),
+            ),
         )
 
     private fun withKadreWindowedSceneRunnerLauncher(

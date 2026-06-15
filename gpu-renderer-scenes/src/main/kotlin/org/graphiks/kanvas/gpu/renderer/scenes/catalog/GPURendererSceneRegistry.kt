@@ -4,6 +4,7 @@ import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSampling
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSource
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneFilterKind
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
 
 object GPURendererSceneRegistry {
@@ -173,8 +174,23 @@ object GPURendererSceneRegistry {
             tags = setOf(SceneTag.Filter, SceneTag.Image),
             links = listOf(SceneRoadmapLink.milestone("M5")),
             commands = listOf(
-                SceneCommand.BitmapRect("photo"),
-                SceneCommand.FilterNode("chip-filter"),
+                SceneCommand.BitmapRect(
+                    label = "photo",
+                    rect = SceneRect(48f, 34f, 272f, 166f),
+                    source = SceneBitmapSource(
+                        topLeft = SceneColor.red(),
+                        topRight = SceneColor.blue(0.92f),
+                        bottomLeft = SceneColor.green(0.90f),
+                        bottomRight = SceneColor.amber(),
+                    ),
+                    sampling = SceneBitmapSampling.Linear,
+                ),
+                SceneCommand.FilterNode(
+                    label = "chip-filter",
+                    inputLabel = "photo",
+                    kind = SceneFilterKind.LumaTint,
+                    strength = 0.72f,
+                ),
             ),
         ),
         scene(

@@ -395,14 +395,15 @@ private fun GPURendererScene<*>.kadreRunnerRectOnlyUnsupportedReason(): String? 
                 is SceneCommand.FillRRect,
                 is SceneCommand.LinearGradientRect,
                 is SceneCommand.Clip,
-                is SceneCommand.BitmapRect -> null
+                is SceneCommand.BitmapRect,
+                is SceneCommand.FilterNode -> null
                 is SceneCommand -> command.family
                 else -> command::class.simpleName ?: "unknown-command"
             }
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, and fixture-backed bitmap-rect command families: " +
+        return "rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, and fixture-backed filter-node command families: " +
             unsupportedFamilies.joinToString()
     }
 
@@ -412,6 +413,39 @@ private fun GPURendererScene<*>.kadreRunnerRectOnlyUnsupportedReason(): String? 
     if (bitmapMarkers.isNotEmpty()) {
         return "rect-only windowed render requires fixture-backed BitmapRect payloads: " +
             bitmapMarkers.joinToString()
+    }
+
+    val filterMarkers = commands.filterIsInstance<SceneCommand.FilterNode>()
+        .filterNot { it.hasFixturePayload }
+        .map { it.label }
+    if (filterMarkers.isNotEmpty()) {
+        return "rect-only windowed render requires fixture-backed FilterNode payloads: " +
+            filterMarkers.joinToString()
+    }
+
+    val fixtureBitmapLabels = commands.filterIsInstance<SceneCommand.BitmapRect>()
+        .filter { it.hasFixturePayload }
+        .map { it.label }
+        .toSet()
+    val filters = commands.filterIsInstance<SceneCommand.FilterNode>()
+        .filter { it.hasFixturePayload }
+    val invalidFilterInputs = filters
+        .filter { it.inputLabel !in fixtureBitmapLabels }
+        .map { "${it.label}->${it.inputLabel}" }
+    if (invalidFilterInputs.isNotEmpty()) {
+        return "rect-only windowed render requires FilterNode inputs to reference fixture-backed BitmapRect labels: " +
+            invalidFilterInputs.joinToString()
+    }
+
+    val duplicateFilterInputs = filters
+        .mapNotNull { it.inputLabel }
+        .groupingBy { it }
+        .eachCount()
+        .filterValues { it > 1 }
+        .keys
+    if (duplicateFilterInputs.isNotEmpty()) {
+        return "rect-only windowed render supports at most one FilterNode per BitmapRect input: " +
+            duplicateFilterInputs.joinToString()
     }
 
     if (commands.none {

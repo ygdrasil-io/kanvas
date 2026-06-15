@@ -67,6 +67,10 @@ enum class SceneBitmapSampling {
     Linear,
 }
 
+enum class SceneFilterKind(val wireName: String) {
+    LumaTint("luma-tint"),
+}
+
 sealed interface SceneCommand {
     val label: String
     val family: String
@@ -172,11 +176,27 @@ sealed interface SceneCommand {
         }
     }
 
-    data class FilterNode(override val label: String) : SceneCommand {
+    data class FilterNode(
+        override val label: String,
+        val inputLabel: String? = null,
+        val kind: SceneFilterKind? = null,
+        val strength: Float = 1f,
+    ) : SceneCommand {
         override val family: String = "filter-node"
+        val hasFixturePayload: Boolean = inputLabel != null && kind != null
 
         init {
             requireSceneCommandLabel(label)
+            require((inputLabel == null) == (kind == null)) {
+                "SceneCommand.FilterNode fixture payload requires both inputLabel and kind"
+            }
+            inputLabel?.let(::requireSceneCommandLabel)
+            require(!strength.isNaN() && !strength.isInfinite() && strength in 0f..1f) {
+                "SceneCommand.FilterNode.strength must be finite and normalized in 0..1"
+            }
+            require(hasFixturePayload || strength == 1f) {
+                "SceneCommand.FilterNode.strength requires fixture payload"
+            }
         }
     }
 

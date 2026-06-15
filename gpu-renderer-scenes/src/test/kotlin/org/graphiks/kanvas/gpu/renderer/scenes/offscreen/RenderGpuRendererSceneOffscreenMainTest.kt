@@ -14,6 +14,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSource
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
@@ -75,6 +76,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 clipCount = 1,
                 bitmapRectCount = 1,
             ),
+            RenderedShapeExpectation(
+                sceneId = "filtered-photo-chip",
+                fillRectCount = 0,
+                bitmapRectCount = 1,
+                filterNodeCount = 1,
+            ),
         )
 
         rectOnlyScenes.forEach { expectation ->
@@ -132,6 +139,20 @@ class RenderGpuRendererSceneOffscreenMainTest {
         }
 
         assertContains(failure.message ?: "", "fixture-backed BitmapRect payloads: marker")
+    }
+
+    @Test
+    fun `rect only command preparation rejects filter markers without fixture payloads`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            prepareRectOnlyDrawPlan(
+                sceneId = "filter-marker-only",
+                commands = listOf(testBitmapRect(), SceneCommand.FilterNode("marker")),
+                width = 320,
+                height = 200,
+            )
+        }
+
+        assertContains(failure.message ?: "", "fixture-backed FilterNode payloads: marker")
     }
 
     @Test
@@ -237,6 +258,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
         val linearGradientRectCount: Int? = null,
         val clipCount: Int? = null,
         val bitmapRectCount: Int? = null,
+        val filterNodeCount: Int? = null,
     )
 
     private fun assertRenderedShapeScene(root: Path, expectation: RenderedShapeExpectation) {
@@ -271,6 +293,11 @@ class RenderGpuRendererSceneOffscreenMainTest {
         expectation.bitmapRectCount?.let { count ->
             assertContains(runJson, "bitmapRectCommands=$count")
         }
+        expectation.filterNodeCount?.let { count ->
+            assertContains(runJson, "filterNodeCommands=$count")
+            assertContains(runJson, "filterKinds=luma-tint")
+            assertContains(runJson, "filterInputs=photo")
+        }
         assertFalse(runJson.contains("runner-subset:$sceneId"), sceneId)
     }
 
@@ -299,6 +326,18 @@ class RenderGpuRendererSceneOffscreenMainTest {
         val exitCode = process.waitFor()
         assertEquals(0, exitCode, output)
     }
+
+    private fun testBitmapRect(): SceneCommand.BitmapRect =
+        SceneCommand.BitmapRect(
+            label = "photo",
+            rect = SceneRect(24f, 24f, 120f, 120f),
+            source = SceneBitmapSource(
+                topLeft = SceneColor.red(),
+                topRight = SceneColor.blue(),
+                bottomLeft = SceneColor.green(),
+                bottomRight = SceneColor.amber(),
+            ),
+        )
 
     private fun absoluteJavaClasspath(): String =
         System.getProperty("java.class.path")
