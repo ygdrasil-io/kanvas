@@ -22,7 +22,7 @@ nodes depend on M7 descriptor work.
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M5-001 - Add saveLayer isolated target route](KGPU-M5-001-add-savelayer-isolated-target-route.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `layers-resources` | `KGPU-M2-003`, `KGPU-M4-002` | `saveLayer legacy` |
+| [KGPU-M5-001 - Add saveLayer isolated target route](KGPU-M5-001-add-savelayer-isolated-target-route.md) | `blocked` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `layers-resources` | `KGPU-M2-003`, `KGPU-M4-002` | `saveLayer legacy` |
 | [KGPU-M5-002 - Add destination-read copy and intermediate strategy](KGPU-M5-002-add-destination-read-copy-and-intermediate-strategy.md) | `blocked` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `destination-read` | `KGPU-M5-001` | `blend legacy` |
 | [KGPU-M5-003 - Add simple filter render node route](KGPU-M5-003-add-simple-filter-render-node-route.md) | `blocked` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `filters` | `KGPU-M5-001` | `filter legacy` |
 | [KGPU-M5-004 - Add filter DAG refusal matrix](KGPU-M5-004-add-filter-dag-refusal-matrix.md) | `done` | `P1` | `RefuseRequired` | `RefuseDiagnostic` | `false` | `false` | `filters-validation` | `KGPU-M5-003` | - |
@@ -46,6 +46,18 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Layer*' --tests '*Filter*'
   native WebGPU/adapter evidence.
 - The M5-004 filter DAG matrix is refusal-only evidence; it does not promote
   KGPU-M5-003 simple filter node support.
+
+## Current Evidence
+
+- KGPU-M5-001 is `blocked` on native WebGPU/adapter evidence for provider-owned
+  offscreen targets, clear/load/store policy, child draw isolation, restore
+  composite, active-attachment separation, resource generation, and
+  CPU/GPU/reference comparison.
+- KGPU-M5-002 remains `blocked` on KGPU-M5-001 and native destination-read copy
+  or intermediate strategy evidence.
+- KGPU-M5-003 remains `blocked` on KGPU-M5-001 and simple filter render-node
+  evidence.
+- KGPU-M5-004 remains `done` as refusal-only evidence.
 
 ## Status Update Rule
 

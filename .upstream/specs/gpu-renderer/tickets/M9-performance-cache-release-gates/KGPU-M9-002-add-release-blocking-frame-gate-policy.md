@@ -1,7 +1,7 @@
 ---
 id: KGPU-M9-002
 title: "Add release-blocking frame gate policy"
-status: proposed
+status: blocked
 milestone: M9
 priority: P0
 owner_area: performance
@@ -82,7 +82,12 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Policy only.
+- `blocked`: Policy-only release gate work remains gated on raw frame sample
+  provenance from an owned adapter lane, warmup and variance policy,
+  quarantine and rebaseline rules, negative threshold fixtures, and
+  skipped-lane diagnostics. Current M9-001 source-map evidence separates
+  observed from derived counters but does not provide denominator evidence,
+  frame timings, or release-blocking authority.
 
 ## Linear Labels
 

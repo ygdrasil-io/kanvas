@@ -26,8 +26,8 @@ will be measured. Cache and telemetry contracts must cite
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M9-001 - Add observed cache telemetry source map](KGPU-M9-001-add-observed-cache-telemetry-source-map.md) | `done` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `telemetry-cache` | `KGPU-M1-001` | `cache reporting-only` |
-| [KGPU-M9-002 - Add release-blocking frame gate policy](KGPU-M9-002-add-release-blocking-frame-gate-policy.md) | `proposed` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `performance` | `KGPU-M9-001` | `frame reporting-only` |
-| [KGPU-M9-003 - Add PM readiness dashboard integration for GPU renderer](KGPU-M9-003-add-pm-readiness-dashboard-integration-for-gpu-renderer.md) | `proposed` | `P1` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `pm-evidence` | `KGPU-M9-001`, `KGPU-M9-002` | `pipelinePmBundle` |
+| [KGPU-M9-002 - Add release-blocking frame gate policy](KGPU-M9-002-add-release-blocking-frame-gate-policy.md) | `blocked` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `performance` | `KGPU-M9-001` | `frame reporting-only` |
+| [KGPU-M9-003 - Add PM readiness dashboard integration for GPU renderer](KGPU-M9-003-add-pm-readiness-dashboard-integration-for-gpu-renderer.md) | `blocked` | `P1` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `pm-evidence` | `KGPU-M9-001`, `KGPU-M9-002` | `pipelinePmBundle` |
 
 ## Validation Bundle
 
@@ -53,10 +53,10 @@ rtk python3 scripts/validate_gpu_renderer_r6_promotion_readiness_boundary.py .
   no-derived-as-observed no-synthetic-comment-counters`.
 - Independent review `019ec866-9980-7fe1-bc04-a9806b1d30c3` accepted
   KGPU-M9-001 for `done` with no blocking findings.
-- KGPU-M9-002 remains `proposed` until this source-map evidence is accepted and
-  raw frame sample provenance, warmup/variance, quarantine, and rebaseline
-  policy evidence are provided. KGPU-M9-003 remains `proposed` until KGPU-M9-002
-  is accepted.
+- KGPU-M9-002 is `blocked` until raw frame sample provenance,
+  warmup/variance, quarantine, rebaseline policy, negative fixture, and
+  skipped-lane diagnostics are provided. KGPU-M9-003 is `blocked` until
+  KGPU-M9-002 is accepted.
 
 ## Non-Claims
 

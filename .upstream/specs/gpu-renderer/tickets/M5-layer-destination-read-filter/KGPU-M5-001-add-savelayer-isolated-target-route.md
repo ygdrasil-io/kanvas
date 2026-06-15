@@ -1,7 +1,7 @@
 ---
 id: KGPU-M5-001
 title: "Add saveLayer isolated target route"
-status: proposed
+status: blocked
 milestone: M5
 priority: P0
 owner_area: layers-resources
@@ -83,11 +83,11 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: First isolated layer route. Remaining execution gate is native
-  WebGPU/adapter evidence for provider-owned offscreen target allocation,
-  clear/load/store policy, child draw isolation, restore composite,
-  active-attachment separation, resource generation, and CPU/GPU/reference
-  comparison before any `GPUNative` route claim.
+- `blocked`: First isolated layer route is gated on native WebGPU/adapter
+  evidence for provider-owned offscreen target allocation, clear/load/store
+  policy, child draw isolation, restore composite, active-attachment
+  separation, resource generation, and CPU/GPU/reference comparison before any
+  `GPUNative` route claim.
 
 ## Linear Labels
 
