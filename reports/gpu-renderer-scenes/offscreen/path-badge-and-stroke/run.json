@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sceneId": "path-badge-and-stroke",
+  "status": "rendered",
+  "productRefusal": false,
+  "backend": "webgpu-offscreen",
+  "imagePath": "render.png",
+  "width": 320,
+  "height": 200,
+  "byteCount": 256000,
+  "nonTransparentPixels": 14564,
+  "diagnostics": ["rendered path-badge-and-stroke via WebGPU offscreen","adapter=Apple M2 Max","fillRectCommands=1","fillRRectCommands=1"]
+}
