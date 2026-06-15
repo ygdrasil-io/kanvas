@@ -72,39 +72,85 @@ class DrawTextRunPayload(
 
     fun noSkLeakageReport(): TextPayloadLeakReport = validateGPUTextNoSkLeakage(
         payloadKind = "DrawTextRunPayload",
-        fields = listOf(
-            TextPayloadField("commandId", "String"),
-            TextPayloadField("layoutResultID", "GPUTextLayoutResultID?"),
-            TextPayloadField("glyphRunID", "GPUGlyphRunID?"),
-            TextPayloadField("glyphRuns[].runID", "GPUGlyphRunID"),
-            TextPayloadField("glyphRuns[].layoutResultID", "GPUTextLayoutResultID?"),
-            TextPayloadField("glyphRuns[].typefaceID", "TypefaceID?"),
-            TextPayloadField("glyphRuns[].glyphIDs", "List<Int>"),
-            TextPayloadField("glyphRuns[].advances", "List<Float>"),
-            TextPayloadField("glyphRuns[].offsets", "List<Float>"),
-            TextPayloadField("glyphRuns[].textRangeStart", "Int"),
-            TextPayloadField("glyphRuns[].textRangeEnd", "Int"),
-            TextPayloadField("glyphRuns[].script", "String"),
-            TextPayloadField("glyphRuns[].bidiLevel", "Int"),
-            TextPayloadField("artifacts[].artifactName", "String"),
-            TextPayloadField("artifacts[].artifactID", "GPUTextArtifactID"),
-            TextPayloadField("artifacts[].generation", "GPUTextArtifactGeneration"),
-            TextPayloadField("artifacts[].contentFingerprint", "String"),
-            TextPayloadField("artifacts[].sourceLabel", "String"),
-            TextPayloadField("transform", "TextTransformFacts"),
-            TextPayloadField("clip", "TextClipFacts"),
-            TextPayloadField("layer", "TextLayerFacts"),
-            TextPayloadField("material", "TextMaterialDescriptor"),
-            TextPayloadField("blendColor", "TextBlendColorFacts"),
-            TextPayloadField("artifactKeyHashes", "List<String>"),
-            TextPayloadField("atlasGenerations", "List<GPUTextArtifactGeneration>"),
-            TextPayloadField("uploadDependencyIds", "List<String>"),
-            TextPayloadField("diagnostics", "List<String>"),
-            TextPayloadField("provenance", "TextEvidenceProvenance"),
-            TextPayloadField("routePromotion", "String"),
-            TextPayloadField("productActivation", "Boolean"),
-        ),
+        fields = textPayloadLeakageFields(),
     )
+
+    private fun textPayloadLeakageFields(): List<TextPayloadField> {
+        val fields = mutableListOf<TextPayloadField>()
+        fields += TextPayloadField("commandId", "String", commandId)
+        fields += TextPayloadField("layoutResultID", "GPUTextLayoutResultID?", layoutResultID?.value?.toString())
+        fields += TextPayloadField("glyphRunID", "GPUGlyphRunID?", glyphRunID?.value?.toString())
+        fields += TextPayloadField("glyphRuns", "List<GPUGlyphRunDescriptor>")
+        glyphRuns.forEachIndexed { index, glyphRun ->
+            fields += TextPayloadField("glyphRuns[$index].runID", "GPUGlyphRunID", glyphRun.runID.value.toString())
+            fields += TextPayloadField(
+                "glyphRuns[$index].layoutResultID",
+                "GPUTextLayoutResultID?",
+                glyphRun.layoutResultID?.value?.toString(),
+            )
+            fields += TextPayloadField(
+                "glyphRuns[$index].typefaceID",
+                "TypefaceID?",
+                glyphRun.typefaceID?.value?.toString(),
+            )
+            fields += TextPayloadField("glyphRuns[$index].glyphIDs", "List<Int>", glyphRun.glyphIDs.toLeakageListValue())
+            fields += TextPayloadField("glyphRuns[$index].advances", "List<Float>", glyphRun.advances.toLeakageListValue())
+            fields += TextPayloadField("glyphRuns[$index].offsets", "List<Float>", glyphRun.offsets.toLeakageListValue())
+            fields += TextPayloadField("glyphRuns[$index].textRangeStart", "Int", glyphRun.textRangeStart.toString())
+            fields += TextPayloadField("glyphRuns[$index].textRangeEnd", "Int", glyphRun.textRangeEnd.toString())
+            fields += TextPayloadField("glyphRuns[$index].script", "String", glyphRun.script)
+            fields += TextPayloadField("glyphRuns[$index].bidiLevel", "Int", glyphRun.bidiLevel.toString())
+        }
+        fields += TextPayloadField("artifacts", "List<GPUTextArtifactReference>")
+        artifacts.forEachIndexed { index, artifact ->
+            fields += TextPayloadField("artifacts[$index].artifactName", "String", artifact.artifactName)
+            fields += TextPayloadField("artifacts[$index].artifactID", "GPUTextArtifactID", artifact.artifactID.value.toString())
+            fields += TextPayloadField(
+                "artifacts[$index].generation",
+                "GPUTextArtifactGeneration",
+                artifact.generation.value.toString(),
+            )
+            fields += TextPayloadField("artifacts[$index].contentFingerprint", "String", artifact.contentFingerprint)
+            fields += TextPayloadField("artifacts[$index].sourceLabel", "String", artifact.sourceLabel)
+        }
+        fields += TextPayloadField("transform", "TextTransformFacts")
+        fields += TextPayloadField("transform.transformClass", "String", transform.transformClass)
+        fields += TextPayloadField("transform.matrixLabel", "String", transform.matrixLabel)
+        fields += TextPayloadField("clip", "TextClipFacts")
+        fields += TextPayloadField("clip.clipKind", "String", clip.clipKind)
+        fields += TextPayloadField("clip.boundsLabel", "String", clip.boundsLabel)
+        fields += TextPayloadField("layer", "TextLayerFacts")
+        fields += TextPayloadField("layer.layerKind", "String", layer.layerKind)
+        fields += TextPayloadField("layer.layerLabel", "String", layer.layerLabel)
+        fields += TextPayloadField("material", "TextMaterialDescriptor")
+        fields += TextPayloadField("material.materialKind", "String", material.materialKind)
+        fields += TextPayloadField("material.materialKey", "String", material.materialKey)
+        fields += TextPayloadField("blendColor", "TextBlendColorFacts")
+        fields += TextPayloadField("blendColor.blendMode", "String", blendColor.blendMode)
+        fields += TextPayloadField("blendColor.colorSpace", "String", blendColor.colorSpace)
+        fields += TextPayloadField("artifactKeyHashes", "List<String>")
+        artifactKeyHashes.forEachIndexed { index, hash ->
+            fields += TextPayloadField("artifactKeyHashes[$index]", "String", hash)
+        }
+        fields += TextPayloadField("atlasGenerations", "List<GPUTextArtifactGeneration>")
+        atlasGenerations.forEachIndexed { index, generation ->
+            fields += TextPayloadField("atlasGenerations[$index]", "GPUTextArtifactGeneration", generation.value.toString())
+        }
+        fields += TextPayloadField("uploadDependencyIds", "List<String>")
+        uploadDependencyIds.forEachIndexed { index, dependencyID ->
+            fields += TextPayloadField("uploadDependencyIds[$index]", "String", dependencyID)
+        }
+        fields += TextPayloadField("diagnostics", "List<String>")
+        diagnostics.forEachIndexed { index, diagnostic ->
+            fields += TextPayloadField("diagnostics[$index]", "String", diagnostic)
+        }
+        fields += TextPayloadField("provenance", "TextEvidenceProvenance")
+        fields += TextPayloadField("provenance.source", "String", provenance.source)
+        fields += TextPayloadField("provenance.ticket", "String", provenance.ticket)
+        fields += TextPayloadField("routePromotion", "String", routePromotion)
+        fields += TextPayloadField("productActivation", "Boolean", productActivation.toString())
+        return fields
+    }
 
     fun toCanonicalJson(): String = buildString {
         append("{")
@@ -145,6 +191,9 @@ class DrawTextRunPayload(
 private const val DRAW_TEXT_RUN_PAYLOAD_SCHEMA =
     "org.graphiks.kanvas.glyph.gpu.DrawTextRunPayload.v1"
 private const val DRAW_TEXT_RUN_NOT_PROMOTED = "not-promoted"
+
+private fun <T> List<T>.toLeakageListValue(): String =
+    joinToString(separator = ",", prefix = "[", postfix = "]") { entry -> entry.toString() }
 
 private fun GPUGlyphRunDescriptor.snapshotForDrawPayload(): GPUGlyphRunDescriptor = copy(
     glyphIDs = glyphIDs.toList(),

@@ -31,9 +31,83 @@ class DrawTextRunPayloadTest {
         val leakReport = payload.noSkLeakageReport()
         assertEquals("pass", leakReport.status)
         assertContains(leakReport.toCanonicalJson(), """"payloadKind":"DrawTextRunPayload"""")
+        assertContains(leakReport.toCanonicalJson(), """"fieldPath":"artifacts[0].sourceLabel"""")
         listOf("SkFont", "SkTypeface", "SkTextBlob", "SkPaint", "fontBytes", "GPUHandle").forEach { token ->
             assertFalse(json.contains(token), "Payload dump leaked forbidden token $token: $json")
         }
+    }
+
+    @Test
+    fun `draw text run leakage report rejects forbidden payload values`() {
+        val payload = fixtureDrawTextRunPayload(
+            artifactKeyHashes = listOf("fontBytes:sha256:bad"),
+            uploadDependencyIds = listOf("GPUHandle:webgpu-texture-7"),
+            diagnostics = listOf(
+                "SkFont(opaque-stringified-wrapper)",
+                "NativeFontHandle(platform-font-ref)",
+            ),
+        )
+
+        val report = payload.noSkLeakageReport()
+
+        assertEquals("fail", report.status)
+        assertEquals(
+            listOf("artifactKeyHashes[0]", "uploadDependencyIds[0]", "diagnostics[0]", "diagnostics[1]"),
+            report.findings.map { finding -> finding.fieldPath },
+        )
+        assertEquals(
+            listOf(
+                "unsupported.text.sk_type_leaked",
+                "unsupported.text.sk_type_leaked",
+                "unsupported.text.sk_type_leaked",
+                "unsupported.text.sk_type_leaked",
+            ),
+            report.findings.map { finding -> finding.rendererDiagnostic },
+        )
+    }
+
+    @Test
+    fun `draw text run leakage report rejects CPU rendered texture payload values`() {
+        val payload = fixtureDrawTextRunPayload(
+            artifacts = listOf(
+                GPUTextArtifactReference(
+                    artifactName = "GlyphAtlasArtifact",
+                    artifactID = GPUTextArtifactID(Uuid.parse("550e8400-e29b-41d4-a716-446655441102")),
+                    generation = GPUTextArtifactGeneration(3),
+                    contentFingerprint = "sha256:a8-atlas",
+                    sourceLabel = "CPURenderedTextTexture(full-text-fallback)",
+                ),
+            ),
+        )
+
+        val report = payload.noSkLeakageReport()
+
+        assertEquals("fail", report.status)
+        assertEquals(listOf("artifacts[0].sourceLabel"), report.findings.map { finding -> finding.fieldPath })
+        assertEquals(
+            listOf("unsupported.text.cpu_rendered_texture_forbidden"),
+            report.findings.map { finding -> finding.rendererDiagnostic },
+        )
+    }
+
+    @Test
+    fun `draw text run leakage report rejects nondumpable payload markers`() {
+        val payload = fixtureDrawTextRunPayload(
+            diagnostics = listOf("payload_nondumpable: NonDumpableDrawTextRun"),
+        )
+
+        val report = payload.noSkLeakageReport()
+
+        assertEquals("fail", report.status)
+        assertEquals(listOf("diagnostics[0]"), report.findings.map { finding -> finding.fieldPath })
+        assertEquals(
+            listOf("text.gpu.payload-nondumpable"),
+            report.findings.map { finding -> finding.handoffDiagnostic },
+        )
+        assertEquals(
+            listOf("unsupported.text.payload_nondumpable"),
+            report.findings.map { finding -> finding.rendererDiagnostic },
+        )
     }
 
     @Test

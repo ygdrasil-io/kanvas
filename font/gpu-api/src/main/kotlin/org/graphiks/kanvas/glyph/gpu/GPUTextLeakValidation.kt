@@ -10,6 +10,7 @@ package org.graphiks.kanvas.glyph.gpu
 data class TextPayloadField(
     val fieldPath: String,
     val typeName: String,
+    val value: String? = null,
 ) {
     init {
         require(fieldPath.isNotBlank()) { "fieldPath must not be blank." }
@@ -19,7 +20,10 @@ data class TextPayloadField(
     fun toCanonicalJson(): String = buildString {
         append("{")
         appendTextPayloadLeakJsonField("fieldPath", fieldPath, comma = true)
-        appendTextPayloadLeakJsonField("typeName", typeName, comma = false)
+        appendTextPayloadLeakJsonField("typeName", typeName, comma = value != null)
+        value?.let { payloadValue ->
+            appendTextPayloadLeakJsonField("value", payloadValue, comma = false)
+        }
         append("}")
     }
 }
@@ -113,6 +117,12 @@ fun validateGPUTextNoSkLeakage(
                 handoffDiagnostic = TEXT_GPU_CPU_RENDERED_TEXTURE_HANDOFF_DIAGNOSTIC,
                 rendererDiagnostic = TEXT_GPU_CPU_RENDERED_TEXTURE_RENDERER_DIAGNOSTIC,
             )
+            field.hasNondumpablePayloadMarker() -> field.toLeakFinding(
+                payloadKind = payloadKind,
+                forbiddenKind = "nondumpable-payload",
+                handoffDiagnostic = TEXT_GPU_PAYLOAD_NONDUMPABLE_HANDOFF_DIAGNOSTIC,
+                rendererDiagnostic = TEXT_GPU_PAYLOAD_NONDUMPABLE_RENDERER_DIAGNOSTIC,
+            )
             field.hasSkTypeLeak() || field.hasForbiddenPayloadMarker() -> field.toLeakFinding(
                 payloadKind = payloadKind,
                 forbiddenKind = "sk-type-or-handle",
@@ -140,6 +150,10 @@ private const val TEXT_GPU_CPU_RENDERED_TEXTURE_HANDOFF_DIAGNOSTIC =
     "text.gpu.CPU-rendered-texture-forbidden"
 private const val TEXT_GPU_CPU_RENDERED_TEXTURE_RENDERER_DIAGNOSTIC =
     "unsupported.text.cpu_rendered_texture_forbidden"
+private const val TEXT_GPU_PAYLOAD_NONDUMPABLE_HANDOFF_DIAGNOSTIC =
+    "text.gpu.payload-nondumpable"
+private const val TEXT_GPU_PAYLOAD_NONDUMPABLE_RENDERER_DIAGNOSTIC =
+    "unsupported.text.payload_nondumpable"
 
 private fun TextPayloadField.toLeakFinding(
     payloadKind: String,
@@ -156,28 +170,48 @@ private fun TextPayloadField.toLeakFinding(
 )
 
 private fun TextPayloadField.hasSkTypeLeak(): Boolean =
-    typeName.startsWith("Sk") || typeName.contains(".Sk")
+    typeName.startsWith("Sk") ||
+        typeName.contains(".Sk") ||
+        normalizedScanValues().any { normalizedValue ->
+            SK_TEXT_PAYLOAD_MARKERS.any { marker -> normalizedValue.contains(marker) }
+        }
 
 private fun TextPayloadField.hasCPURenderedTextTextureMarker(): Boolean {
-    val normalizedType = typeName.normalizedTextPayloadMarker()
-    val normalizedPath = fieldPath.normalizedTextPayloadMarker()
-    return normalizedType.contains("cpurenderedtexttexture") ||
-        normalizedPath.contains("cpurenderedtexttexture")
+    return normalizedScanValues().any { normalizedValue ->
+        normalizedValue.contains("cpurenderedtexttexture")
+    }
+}
+
+private fun TextPayloadField.hasNondumpablePayloadMarker(): Boolean {
+    return normalizedScanValues().any { normalizedValue ->
+        normalizedValue.contains("nondumpable")
+    }
 }
 
 private fun TextPayloadField.hasForbiddenPayloadMarker(): Boolean {
-    val normalizedType = typeName.normalizedTextPayloadMarker()
-    val normalizedPath = fieldPath.normalizedTextPayloadMarker()
-    return FORBIDDEN_TEXT_PAYLOAD_MARKERS.any { marker ->
-        normalizedType.contains(marker) || normalizedPath.contains(marker)
+    return normalizedScanValues().any { normalizedValue ->
+        FORBIDDEN_TEXT_PAYLOAD_MARKERS.any { marker -> normalizedValue.contains(marker) }
     }
 }
+
+private val SK_TEXT_PAYLOAD_MARKERS = listOf(
+    "skfont",
+    "sktypeface",
+    "sktextblob",
+    "skpaint",
+    "skshaper",
+)
 
 private val FORBIDDEN_TEXT_PAYLOAD_MARKERS = listOf(
     "fontbytes",
     "nativefonthandle",
     "gpuhandle",
 )
+
+private fun TextPayloadField.normalizedScanValues(): List<String> =
+    listOfNotNull(fieldPath, typeName, value).map { scanValue ->
+        scanValue.normalizedTextPayloadMarker()
+    }
 
 private fun String.normalizedTextPayloadMarker(): String =
     filter { char -> char.isLetterOrDigit() }.lowercase()

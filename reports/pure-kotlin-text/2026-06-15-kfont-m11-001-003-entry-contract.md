@@ -22,13 +22,22 @@ Date: 2026-06-15
 - `font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextNoSkLeakageValidationTest.kt`
 - `font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/DrawTextRunPayloadTest.kt`
 
+Fixture naming note: evidence names such as `text-gpu-no-sk-leakage-report.json`
+and `draw-text-run-payload.json` refer to canonical JSON fixtures asserted
+inline in the tests above. This PR A evidence update does not add standalone
+generated JSON files under `reports/`; future route or PM packaging tickets may
+promote those inline fixtures into checked-in generated artifacts.
+
 The tests cover:
 
 - deterministic artifact registry order;
 - `GlyphAtlasArtifact` as the only descriptor exposing `AtlasMaskSample`;
 - unregistered artifact diagnostics;
 - no-`Sk*` positive and negative fixtures;
+- value-level payload scans for stringified or opaque `Sk*`, `fontBytes`,
+  `NativeFontHandle`, and `GPUHandle` markers;
 - full CPU-rendered text texture refusal;
+- nondumpable payload refusal with `unsupported.text.payload_nondumpable`;
 - report and payload mutation snapshots;
 - exact canonical JSON escaping/order fixtures;
 - `DrawTextRunPayload` non-claim guards.

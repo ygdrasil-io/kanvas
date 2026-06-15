@@ -156,4 +156,76 @@ class GPUTextNoSkLeakageValidationTest {
             report.toCanonicalJson(),
         )
     }
+
+    @Test
+    fun `canonical json fixture preserves value evidence order and escaping`() {
+        val report = validateGPUTextNoSkLeakage(
+            payloadKind = "ValuePayload",
+            fields = listOf(
+                TextPayloadField("diagnostics[0]", "String", "SkTypeface(\"quote\\slash\nline\")"),
+                TextPayloadField("material.materialKey", "String", "payload_nondumpable"),
+                TextPayloadField("artifacts[0].sourceLabel", "String", "CPURenderedTextTexture(full-text)"),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                "unsupported.text.sk_type_leaked",
+                "unsupported.text.payload_nondumpable",
+                "unsupported.text.cpu_rendered_texture_forbidden",
+            ),
+            report.findings.map { finding -> finding.rendererDiagnostic },
+        )
+        assertEquals(
+            "{" +
+                "\"schema\":\"org.graphiks.kanvas.glyph.gpu.TextPayloadLeakReport.v1\"," +
+                "\"payloadKind\":\"ValuePayload\"," +
+                "\"status\":\"fail\"," +
+                "\"fields\":[" +
+                "{" +
+                "\"fieldPath\":\"diagnostics[0]\"," +
+                "\"typeName\":\"String\"," +
+                "\"value\":\"SkTypeface(\\\"quote\\\\slash\\nline\\\")\"" +
+                "}," +
+                "{" +
+                "\"fieldPath\":\"material.materialKey\"," +
+                "\"typeName\":\"String\"," +
+                "\"value\":\"payload_nondumpable\"" +
+                "}," +
+                "{" +
+                "\"fieldPath\":\"artifacts[0].sourceLabel\"," +
+                "\"typeName\":\"String\"," +
+                "\"value\":\"CPURenderedTextTexture(full-text)\"" +
+                "}" +
+                "]," +
+                "\"findings\":[" +
+                "{" +
+                "\"payloadKind\":\"ValuePayload\"," +
+                "\"fieldPath\":\"diagnostics[0]\"," +
+                "\"typeName\":\"String\"," +
+                "\"forbiddenKind\":\"sk-type-or-handle\"," +
+                "\"handoffDiagnostic\":\"text.gpu.sk-type-leaked\"," +
+                "\"rendererDiagnostic\":\"unsupported.text.sk_type_leaked\"" +
+                "}," +
+                "{" +
+                "\"payloadKind\":\"ValuePayload\"," +
+                "\"fieldPath\":\"material.materialKey\"," +
+                "\"typeName\":\"String\"," +
+                "\"forbiddenKind\":\"nondumpable-payload\"," +
+                "\"handoffDiagnostic\":\"text.gpu.payload-nondumpable\"," +
+                "\"rendererDiagnostic\":\"unsupported.text.payload_nondumpable\"" +
+                "}," +
+                "{" +
+                "\"payloadKind\":\"ValuePayload\"," +
+                "\"fieldPath\":\"artifacts[0].sourceLabel\"," +
+                "\"typeName\":\"String\"," +
+                "\"forbiddenKind\":\"cpu-rendered-texture\"," +
+                "\"handoffDiagnostic\":\"text.gpu.CPU-rendered-texture-forbidden\"," +
+                "\"rendererDiagnostic\":\"unsupported.text.cpu_rendered_texture_forbidden\"" +
+                "}" +
+                "]" +
+                "}",
+            report.toCanonicalJson(),
+        )
+    }
 }
