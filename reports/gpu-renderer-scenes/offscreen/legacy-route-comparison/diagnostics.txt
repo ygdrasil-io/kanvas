@@ -1,0 +1,3 @@
+rendered legacy-route-comparison via WebGPU offscreen
+adapter=Apple M2 Max
+fillRectCommands=1

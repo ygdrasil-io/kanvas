@@ -42,14 +42,11 @@ import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 
-private const val SOLID_CARD_STACK_SCENE_ID = "solid-card-stack"
-
 class KadreWindowedSceneRunner(private val scene: GPURendererScene<*>) {
     fun run(frames: Int, output: Path) {
         require(frames > 0) { "Kadre windowed runner requires frames > 0" }
-        require(scene.sceneId.value == SOLID_CARD_STACK_SCENE_ID) {
-            "Kadre windowed runner only supports $SOLID_CARD_STACK_SCENE_ID"
-        }
+        val unsupportedReason = scene.kadreRunnerRectOnlyUnsupportedReason()
+        require(unsupportedReason == null) { "${scene.sceneId.value} $unsupportedReason" }
 
         val osName = System.getProperty("os.name", "").lowercase(Locale.US)
         if (!osName.contains("mac")) {
@@ -65,7 +62,7 @@ class KadreWindowedSceneRunner(private val scene: GPURendererScene<*>) {
         var completed = false
         runCatching {
             EventLoop().runApp(
-                SolidCardStackKadreApp(scene, frames, output) {
+                RectOnlyKadreApp(scene, frames, output) {
                     completed = true
                 },
             )
@@ -93,7 +90,7 @@ class KadreWindowedSceneRunner(private val scene: GPURendererScene<*>) {
 }
 
 @OptIn(WGPULowLevelApi::class)
-private class SolidCardStackKadreApp(
+private class RectOnlyKadreApp(
     private val scene: GPURendererScene<*>,
     private val requestedFrames: Int,
     private val output: Path,
@@ -113,7 +110,7 @@ private class SolidCardStackKadreApp(
         runCatching {
             val win = eventLoop.createWindow(
                 WindowAttributes(
-                    title = "Kanvas GPU Renderer - Solid Card Stack",
+                    title = "Kanvas GPU Renderer - ${scene.title}",
                     size = PhysicalSize(scene.dimensions.width, scene.dimensions.height),
                     visible = true,
                     resizable = true,
@@ -257,7 +254,7 @@ private class SolidCardStackKadreApp(
                             view = textureView,
                             loadOp = GPULoadOp.Clear,
                             storeOp = GPUStoreOp.Store,
-                            clearValue = scene.clearColor().toWebGpuColor(),
+                            clearValue = WindowedRectOnlySceneShader.clearColor(scene).toWebGpuColor(),
                         ),
                     ),
                 ),
@@ -285,7 +282,7 @@ private class SolidCardStackKadreApp(
 
     private fun createScenePipeline(gpuDevice: GPUDevice, format: GPUTextureFormat): GPURenderPipeline {
         val shader = gpuDevice.createShaderModule(
-            ShaderModuleDescriptor(code = solidCardStackWgsl(scene)),
+            ShaderModuleDescriptor(code = WindowedRectOnlySceneShader.wgsl(scene)),
         )
         return try {
             gpuDevice.createRenderPipeline(
@@ -386,66 +383,35 @@ private class SolidCardStackKadreApp(
     }
 }
 
-private fun GPURendererScene<*>.clearColor(): SceneColor =
-    commands.filterIsInstance<SceneCommand.Clear>().firstOrNull()?.color
-        ?: SceneColor(0.035f, 0.04f, 0.05f, 1f)
-
-private fun GPURendererScene<*>.fills(): List<SceneCommand.FillRect> =
-    commands.withIndex()
-        .filter { (_, command) -> command is SceneCommand.FillRect }
-        .sortedWith(
-            compareBy<IndexedValue<Any?>> { (_, command) ->
-                (command as SceneCommand.FillRect).paintOrder
-            }.thenBy { it.index },
-        )
-        .map { (_, command) -> command as SceneCommand.FillRect }
-
-private fun solidCardStackWgsl(scene: GPURendererScene<*>): String {
-    val clear = scene.clearColor()
-    val fillBranches = scene.fills().joinToString(separator = "\n") { fill ->
-        """
-            if (pixel.x >= ${fill.rect.left.wgslFloat()} && pixel.x < ${fill.rect.right.wgslFloat()} &&
-                pixel.y >= ${fill.rect.top.wgslFloat()} && pixel.y < ${fill.rect.bottom.wgslFloat()}) {
-                color = src_over(color, vec4<f32>(
-                    ${fill.color.r.wgslFloat()},
-                    ${fill.color.g.wgslFloat()},
-                    ${fill.color.b.wgslFloat()},
-                    ${fill.color.a.wgslFloat()}
-                ));
-            }
-        """.trimIndent()
-    }
-
-    return """
-        @vertex
-        fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4<f32> {
-            let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
-            let y = f32(idx & 2u) * 2.0 - 1.0;
-            return vec4<f32>(x, y, 0.0, 1.0);
-        }
-
-        fn src_over(dst: vec4<f32>, src: vec4<f32>) -> vec4<f32> {
-            let out_alpha = src.a + dst.a * (1.0 - src.a);
-            let out_rgb = (src.rgb * src.a + dst.rgb * dst.a * (1.0 - src.a)) / max(out_alpha, 0.0001);
-            return vec4<f32>(out_rgb, out_alpha);
-        }
-
-        @fragment
-        fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
-            let pixel = position.xy;
-            var color = vec4<f32>(
-                ${clear.r.wgslFloat()},
-                ${clear.g.wgslFloat()},
-                ${clear.b.wgslFloat()},
-                ${clear.a.wgslFloat()}
-            );
-        ${fillBranches.prependIndent("    ")}
-            return color;
-        }
-    """.trimIndent()
-}
-
-private fun Float.wgslFloat(): String = String.format(Locale.US, "%.6f", this)
-
 private fun SceneColor.toWebGpuColor(): Color =
     Color(r.toDouble() * a.toDouble(), g.toDouble() * a.toDouble(), b.toDouble() * a.toDouble(), a.toDouble())
+
+private fun GPURendererScene<*>.kadreRunnerRectOnlyUnsupportedReason(): String? {
+    val unsupportedFamilies = commands
+        .mapNotNull { command ->
+            when (command) {
+                is SceneCommand.Clear,
+                is SceneCommand.FillRect -> null
+                is SceneCommand -> command.family
+                else -> command::class.simpleName ?: "unknown-command"
+            }
+        }
+        .distinct()
+    if (unsupportedFamilies.isNotEmpty()) {
+        return "rect-only windowed render supports only clear and fill-rect command families: " +
+            unsupportedFamilies.joinToString()
+    }
+
+    if (commands.none { it is SceneCommand.FillRect }) {
+        return "rect-only windowed render requires at least one FillRect command"
+    }
+
+    val clearIndices = commands.withIndex()
+        .filter { (_, command) -> command is SceneCommand.Clear }
+        .map { it.index }
+    if (clearIndices.size > 1 || clearIndices.any { it != 0 }) {
+        return "rect-only windowed render supports zero or one initial Clear before FillRect commands"
+    }
+
+    return null
+}

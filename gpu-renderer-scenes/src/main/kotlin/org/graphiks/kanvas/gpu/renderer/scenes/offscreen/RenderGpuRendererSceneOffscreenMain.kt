@@ -1,7 +1,9 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 
 import java.nio.file.Path
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 
 fun main(args: Array<String>) {
     renderGpuRendererSceneOffscreen(args)
@@ -17,9 +19,9 @@ fun renderGpuRendererSceneOffscreen(args: Array<String>): OffscreenRunReport {
     val scene = GPURendererSceneRegistry.registry.requireScene(sceneId)
     val sceneOutput = outputRoot.resolve(sceneId)
 
-    val report = if (scene.sceneId.value == "solid-card-stack") {
+    val report = if (scene.supportsRectOnlyOffscreen()) {
         runCatching {
-            SolidCardStackOffscreenRenderer().render(scene, sceneOutput)
+            RectOnlyOffscreenRenderer().render(scene, sceneOutput)
         }.getOrElse { failure ->
             OffscreenRunReport.failed(
                 sceneId = scene.sceneId.value,
@@ -40,6 +42,9 @@ fun renderGpuRendererSceneOffscreen(args: Array<String>): OffscreenRunReport {
     )
     return report
 }
+
+private fun GPURendererScene<SceneCommand>.supportsRectOnlyOffscreen(): Boolean =
+    rectOnlyCommandSequenceUnsupportedReason(commands) == null
 
 private fun Throwable.toReportReason(): String {
     val className = this::class.qualifiedName ?: this::class.simpleName ?: "Throwable"
