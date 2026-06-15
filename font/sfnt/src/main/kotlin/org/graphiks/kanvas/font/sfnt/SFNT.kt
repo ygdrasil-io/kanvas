@@ -139,7 +139,7 @@ object SFNTTableDirectoryValidator {
             val records = recordsByTag[required].orEmpty()
             if (records.isEmpty()) {
                 diagnostics += diagnostic(
-                    code = "font.required-table-missing",
+                    code = "font.sfnt.required-table-missing",
                     tag = required,
                     sourceLength = sourceLength,
                     message = "Required table is not present.",
@@ -147,7 +147,7 @@ object SFNTTableDirectoryValidator {
             } else if (records.any { it.length == 0u }) {
                 val record = records.first { it.length == 0u }
                 diagnostics += diagnostic(
-                    code = "font.required-table-missing",
+                    code = "font.sfnt.required-table-missing",
                     record = record,
                     sourceLength = sourceLength,
                     message = "Required table is present with zero length.",
@@ -413,6 +413,7 @@ enum class SFNTContainerKind {
  * @property bytes Bounded byte range to parse.
  * @property collectionIndex Requested zero-based face index, or `0` when absent.
  * @property parserGeneration Parser contract generation recorded in evidence.
+ * @property requiredTables Required table tags for bounded directory diagnostics.
  */
 data class SFNTParseRequest(
     val sourceId: FontSourceID,
@@ -421,10 +422,14 @@ data class SFNTParseRequest(
     val bytes: BoundedFontBytes,
     val collectionIndex: Int? = 0,
     val parserGeneration: Int,
+    val requiredTables: Set<SFNTTableTag> = emptySet(),
 ) {
     init {
         require(displayName.isNotBlank()) { "SFNT parse request displayName must be non-blank." }
         require(parserGeneration >= 0) { "SFNT parse request parserGeneration must be non-negative." }
+        require(requiredTables.all { it.value.isStableSFNTTableTag() }) {
+            "SFNT parse request requiredTables must contain stable SFNT tags."
+        }
     }
 }
 
@@ -646,7 +651,7 @@ class DefaultSFNTParser(
                     val directoryDiagnostics = SFNTTableDirectoryValidator.validate(
                         directory = selectedFace.directory,
                         sourceLength = boundedBytes.size.toLong(),
-                        requiredTables = emptySet(),
+                        requiredTables = request.requiredTables,
                     )
                     val containerKind = detectedKind.refineCollectionKind(selectedFace.directory)
                     val directoryFacts = SFNTDirectoryFacts(
@@ -723,12 +728,14 @@ data class SFNTDirectoryReportEntry(
     val parserGeneration: Int,
     val sourceByteOffset: Int,
     val sourceByteLength: Int,
+    val sourceSha256: String? = null,
     val containerKind: SFNTContainerKind,
     val requestedCollectionIndex: Int,
     val selectedFaceIndex: Int?,
     val faceCount: Int?,
     val tableRecords: List<SFNTTableEvidence>,
     val directoryDiagnostics: List<SFNTTableDirectoryDiagnostic>,
+    val faceDiagnostics: List<OpenTypeParseDiagnosticEvidence> = emptyList(),
     val diagnostics: List<SFNTParseDiagnostic>,
     val dashboardClassification: String,
     val claimPromotionAllowed: Boolean,
@@ -737,11 +744,17 @@ data class SFNTDirectoryReportEntry(
         require(entryId.isNotBlank()) { "SFNT directory report entryId must be non-blank." }
         require(fixtureId.isNotBlank()) { "SFNT directory report fixtureId must be non-blank." }
         require(fixtureKind.isNotBlank()) { "SFNT directory report fixtureKind must be non-blank." }
+        require(sourceSha256 == null || sourceSha256.matches(SFNT_SHA256_PATTERN)) {
+            "SFNT directory report sourceSha256 must be lowercase SHA-256 when present."
+        }
         require(tableRecords == tableRecords.sortedWith(SFNT_TABLE_EVIDENCE_ORDER)) {
             "SFNT directory report tableRecords must be sorted."
         }
         require(directoryDiagnostics == directoryDiagnostics.sortedWith(SFNT_TABLE_DIRECTORY_DIAGNOSTIC_EVIDENCE_ORDER)) {
             "SFNT directory report directoryDiagnostics must be sorted."
+        }
+        require(faceDiagnostics == faceDiagnostics.sortedWith(SFNT_DIAGNOSTIC_EVIDENCE_ORDER)) {
+            "SFNT directory report faceDiagnostics must be sorted."
         }
         require(dashboardClassification == "tracked-gap") {
             "SFNT directory report entries must remain tracked-gap."
@@ -762,6 +775,7 @@ data class SFNTDirectoryReportEntry(
         appendSFNTJsonField("parserGeneration", parserGeneration, indent = "  ", comma = true)
         appendSFNTJsonField("sourceByteOffset", sourceByteOffset, indent = "  ", comma = true)
         appendSFNTJsonField("sourceByteLength", sourceByteLength, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("sourceSha256", sourceSha256, indent = "  ", comma = true)
         appendSFNTJsonField("containerKind", containerKind.name, indent = "  ", comma = true)
         appendSFNTJsonField("requestedCollectionIndex", requestedCollectionIndex, indent = "  ", comma = true)
         appendSFNTJsonNullableField("selectedFaceIndex", selectedFaceIndex, indent = "  ", comma = true)
@@ -779,6 +793,13 @@ data class SFNTDirectoryReportEntry(
         if (directoryDiagnostics.isNotEmpty()) {
             append("\n")
             append(directoryDiagnostics.joinToString(",\n") { diagnostic -> diagnostic.toCanonicalJson().prependIndent("    ") })
+            append("\n  ")
+        }
+        append("],\n")
+        append("  \"faceDiagnostics\": [")
+        if (faceDiagnostics.isNotEmpty()) {
+            append("\n")
+            append(faceDiagnostics.joinToString(",\n") { diagnostic -> diagnostic.toCanonicalJson().prependIndent("    ") })
             append("\n  ")
         }
         append("],\n")
@@ -812,32 +833,71 @@ data class SFNTDirectoryReportEntry(
                 parserGeneration = result.parserGeneration,
                 sourceByteOffset = result.sourceByteOffset,
                 sourceByteLength = result.sourceByteLength,
+                sourceSha256 = null,
                 containerKind = result.containerKind,
                 requestedCollectionIndex = result.requestedCollectionIndex,
                 selectedFaceIndex = result.selectedFaceIndex,
                 faceCount = result.faceCount,
                 tableRecords = result.tableSlices,
                 directoryDiagnostics = result.directoryFacts?.directoryDiagnostics.orEmpty(),
+                faceDiagnostics = emptyList(),
                 diagnostics = result.diagnostics,
                 dashboardClassification = result.dashboardClassification,
                 claimPromotionAllowed = result.claimPromotionAllowed,
             )
+
+        /**
+         * Builds a report entry from already parsed face data without changing
+         * the directory-only [DefaultSFNTParser] route.
+         */
+        fun fromFaceData(
+            entryId: String,
+            fixtureId: String,
+            fixtureKind: String,
+            face: OpenTypeFaceData,
+        ): SFNTDirectoryReportEntry {
+            val evidence = face.faceEvidence()
+            return SFNTDirectoryReportEntry(
+                entryId = entryId,
+                fixtureId = fixtureId,
+                fixtureKind = fixtureKind,
+                sourceId = face.source.id,
+                sourceKind = face.source.kind,
+                displayName = face.source.displayName,
+                parserGeneration = 1,
+                sourceByteOffset = 0,
+                sourceByteLength = face.source.bytes.size,
+                sourceSha256 = face.source.bytes.sfntSha256Hex(),
+                containerKind = SFNTContainerKind.SINGLE_FACE,
+                requestedCollectionIndex = face.faceIndex,
+                selectedFaceIndex = face.faceIndex,
+                faceCount = 1,
+                tableRecords = evidence.tableRecords,
+                directoryDiagnostics = evidence.directoryDiagnostics,
+                faceDiagnostics = evidence.diagnostics,
+                diagnostics = emptyList(),
+                dashboardClassification = "tracked-gap",
+                claimPromotionAllowed = false,
+            )
+        }
     }
 }
 
 /**
- * Deterministic directory report for KFONT-M2-001 evidence.
+ * Deterministic directory report for M2 SFNT parser and diagnostic evidence.
  */
 data class SFNTDirectoryReport(
     val entries: List<SFNTDirectoryReportEntry>,
     val schemaVersion: Int = 1,
-    val ticketId: String = "KFONT-M2-001",
+    val ticketIds: List<String> = listOf("KFONT-M2-001", "KFONT-M2-002"),
     val dashboardClassification: String = "tracked-gap",
     val claimPromotionAllowed: Boolean = false,
 ) {
     init {
         require(schemaVersion == 1) { "SFNT directory report schemaVersion must be 1." }
-        require(ticketId == "KFONT-M2-001") { "SFNT directory report ticketId must be KFONT-M2-001." }
+        require(ticketIds == listOf("KFONT-M2-001", "KFONT-M2-002")) {
+            "SFNT directory report ticketIds must be KFONT-M2-001 and KFONT-M2-002."
+        }
         require(dashboardClassification == "tracked-gap") {
             "SFNT directory report must remain tracked-gap."
         }
@@ -855,7 +915,7 @@ object SFNTDirectoryReportWriter {
         append("{\n")
         appendSFNTJsonField("schema", "org.graphiks.kanvas.font.sfnt.SFNTDirectoryReport.v1", indent = "  ", comma = true)
         appendSFNTJsonField("schemaVersion", report.schemaVersion, indent = "  ", comma = true)
-        appendSFNTJsonField("ticketId", report.ticketId, indent = "  ", comma = true)
+        appendStringArrayField("ticketIds", report.ticketIds, indent = "  ", comma = true)
         appendSFNTJsonField("dashboardClassification", report.dashboardClassification, indent = "  ", comma = true)
         appendSFNTJsonField("claimPromotionAllowed", report.claimPromotionAllowed, indent = "  ", comma = true)
         append("  \"entries\": [")
@@ -1075,15 +1135,15 @@ class DefaultOpenTypeFaceParser(
         val kern = rawTableBytes[KERN_TABLE_TAG]?.let { table ->
             runCatching { OpenTypeKernTableParser.parse(table) }
                 .getOrElse { error ->
-                    diagnostics += tableDiagnostic(
-                        source = source,
-                        table = KERN_TABLE_TAG,
-                        message = "Unable to parse OpenType table ${KERN_TABLE_TAG.value}.",
-                        causeCode = "INVALID_TABLE",
-                        cause = error,
-                    )
-                    null
-                }
+                diagnostics += tableDiagnostic(
+                    source = source,
+                    table = KERN_TABLE_TAG,
+                    message = "Unable to parse OpenType table ${KERN_TABLE_TAG.value}.",
+                    causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
+                    cause = error,
+                )
+                null
+            }
         }
         val gposPairs = rawTableBytes[GPOS_TABLE_TAG]?.let { table ->
             runCatching {
@@ -1096,7 +1156,7 @@ class DefaultOpenTypeFaceParser(
                     source = source,
                     table = GPOS_TABLE_TAG,
                     message = "Unable to parse OpenType table ${GPOS_TABLE_TAG.value}.",
-                    causeCode = "INVALID_TABLE",
+                    causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
                     cause = error,
                 )
                 null
@@ -1122,15 +1182,15 @@ class DefaultOpenTypeFaceParser(
         val svg = rawTableBytes[SVG_TABLE_TAG]?.let { table ->
             runCatching { parseSvgTable(table) }
                 .getOrElse { error ->
-                    diagnostics += tableDiagnostic(
-                        source = source,
-                        table = SVG_TABLE_TAG,
-                        message = "Unable to parse OpenType table ${SVG_TABLE_TAG.value}.",
-                        causeCode = "INVALID_TABLE",
-                        cause = error,
-                    )
-                    null
-                }
+                diagnostics += tableDiagnostic(
+                    source = source,
+                    table = SVG_TABLE_TAG,
+                    message = "Unable to parse OpenType table ${SVG_TABLE_TAG.value}.",
+                    causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
+                    cause = error,
+                )
+                null
+            }
         }
         val bitmap = parseBitmapFont(
             source = source,
@@ -1242,7 +1302,7 @@ class DefaultOpenTypeFaceParser(
                 sourceId = source.id,
                 message = "Unable to parse OpenType bitmap tables without a parsed maxp numGlyphs value.",
                 table = CBDT_TABLE_TAG.takeIf { it in rawTableBytes } ?: SBIX_TABLE_TAG,
-                causeCode = "INVALID_TABLE",
+                causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
                 causeMessage = "OpenType bitmap parsing requires maxp numGlyphs.",
             )
             return null
@@ -1261,7 +1321,7 @@ class DefaultOpenTypeFaceParser(
                     source = source,
                     table = CBDT_TABLE_TAG,
                     message = "Unable to parse OpenType bitmap tables ${CBDT_TABLE_TAG.value}/${CBLC_TABLE_TAG.value}.",
-                    causeCode = "INVALID_TABLE",
+                    causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
                     cause = error,
                 )
                 emptyMap()
@@ -1277,7 +1337,7 @@ class DefaultOpenTypeFaceParser(
                         source = source,
                         table = SBIX_TABLE_TAG,
                         message = "Unable to parse OpenType table ${SBIX_TABLE_TAG.value}.",
-                        causeCode = "INVALID_TABLE",
+                        causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
                         cause = error,
                     )
                     emptyMap()
@@ -1614,7 +1674,7 @@ class DefaultOpenTypeFaceParser(
                     source = source,
                     table = FVAR_TABLE_TAG,
                     message = "Unable to parse OpenType table ${FVAR_TABLE_TAG.value}.",
-                    causeCode = "INVALID_TABLE",
+                    causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
                     cause = error,
                 )
                 return VariationTables()
@@ -1633,7 +1693,7 @@ class DefaultOpenTypeFaceParser(
                 source = source,
                 table = AVAR_TABLE_TAG,
                 message = "Unable to parse OpenType table ${AVAR_TABLE_TAG.value}.",
-                causeCode = "INVALID_TABLE",
+                causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
                 cause = error,
             )
             fvarTables
@@ -3034,6 +3094,18 @@ private fun StringBuilder.appendSFNTJsonField(
     append("\n")
 }
 
+private fun StringBuilder.appendStringArrayField(
+    name: String,
+    values: List<String>,
+    indent: String,
+    comma: Boolean,
+) {
+    append(indent).append(sfntJsonString(name)).append(": ")
+    append(values.joinToString(prefix = "[", postfix = "]", separator = ", ") { value -> sfntJsonString(value) })
+    if (comma) append(",")
+    append("\n")
+}
+
 private fun StringBuilder.appendSFNTJsonNullableField(
     name: String,
     value: String?,
@@ -3527,6 +3599,7 @@ private val SVG_TABLE_TAG = SFNTTableTag("SVG ")
 private val METRIC_TABLE_TAGS = listOf(HEAD_TABLE_TAG, HHEA_TABLE_TAG, MAXP_TABLE_TAG, HMTX_TABLE_TAG)
 private val LAYOUT_TABLE_TAGS = setOf(KERN_TABLE_TAG, GPOS_TABLE_TAG)
 private val COLOR_FONT_TABLE_TAGS = setOf(COLR_TABLE_TAG, CPAL_TABLE_TAG, CBDT_TABLE_TAG, CBLC_TABLE_TAG, SBIX_TABLE_TAG, SVG_TABLE_TAG)
+private const val OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC = "font.sfnt.optional-table-malformed"
 private const val CMAP_HEADER_SIZE = 4
 private const val CMAP_ENCODING_RECORD_SIZE = 8
 private const val FORMAT0_HEADER_SIZE = 6

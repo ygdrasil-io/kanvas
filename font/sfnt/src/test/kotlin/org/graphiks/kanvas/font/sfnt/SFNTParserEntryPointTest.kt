@@ -2,8 +2,10 @@ package org.graphiks.kanvas.font.sfnt
 
 import org.graphiks.kanvas.font.FontSourceID
 import org.graphiks.kanvas.font.FontSourceKind
+import org.graphiks.kanvas.font.FontSource
 import java.nio.file.Files
 import java.nio.file.Path
+import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -25,9 +27,22 @@ class SFNTParserEntryPointTest {
 
         assertEquals(Files.readString(expectedPath), actual)
         assertEquals(actual, SFNTDirectoryReportWriter.write(sfntDirectoryReport()))
+        assertTrue(actual.contains("\"ticketIds\": ["))
+        assertTrue(actual.contains("\"KFONT-M2-001\""))
+        assertTrue(actual.contains("\"KFONT-M2-002\""))
         assertTrue(actual.contains("\"containerKind\": \"SINGLE_FACE\""))
         assertTrue(actual.contains("\"containerKind\": \"TTC_COLLECTION\""))
         assertTrue(actual.contains("\"code\": \"font.collection-index-invalid\""))
+        assertTrue(actual.contains("\"entryId\": \"generated-directory-diagnostics\""))
+        assertTrue(actual.contains("\"code\": \"font.sfnt.required-table-missing\""))
+        assertTrue(actual.contains("\"code\": \"font.sfnt.table-out-of-bounds\""))
+        assertTrue(actual.contains("\"code\": \"font.sfnt.table-duplicate\""))
+        assertTrue(actual.contains("\"code\": \"font.sfnt.table-overlap\""))
+        assertTrue(actual.contains("\"entryId\": \"generated-optional-table-malformed\""))
+        assertTrue(actual.contains("\"sourceSha256\": \"${optionalMalformedFaceFixture().sha256HexForTest()}\""))
+        assertTrue(actual.contains("\"faceDiagnostics\": ["))
+        assertTrue(actual.contains("\"table\": \"fvar\""))
+        assertTrue(actual.contains("\"causeCode\": \"font.sfnt.optional-table-malformed\""))
         assertTrue(actual.contains("\"dashboardClassification\": \"tracked-gap\""))
         assertTrue(actual.contains("\"claimPromotionAllowed\": false"))
         listOf("GPU", "Skia", "HarfBuzz", "FreeType", "Fontations", "CoreText", "DirectWrite").forEach { token ->
@@ -121,6 +136,29 @@ class SFNTParserEntryPointTest {
         assertEquals(listOf("cmap", "head", "hhea", "hmtx", "maxp", "name"), result.tableSlices.map { it.tag })
     }
 
+    @Test
+    fun requiredTablesFlowIntoSfntParserDirectoryDiagnostics() {
+        val result = DefaultSFNTParser().parse(
+            SFNTParseRequest(
+                sourceId = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655449104")),
+                sourceKind = FontSourceKind.MEMORY,
+                displayName = "missing-outline-required-tables",
+                bytes = BoundedFontBytes(rawBytes = minimalFace("Missing Outline Tables", glyphId = 13)),
+                collectionIndex = 0,
+                parserGeneration = 1,
+                requiredTables = setOf(SFNTTableTag("cmap"), SFNTTableTag("glyf"), SFNTTableTag("loca")),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                "font.sfnt.required-table-missing tag=\"glyf\" offset=none length=none sourceLength=314 message=\"Required table is not present.\"",
+                "font.sfnt.required-table-missing tag=\"loca\" offset=none length=none sourceLength=314 message=\"Required table is not present.\"",
+            ),
+            result.directoryFacts?.directoryDiagnostics?.map { it.dump() },
+        )
+    }
+
     private fun sfntDirectoryReport(): SFNTDirectoryReport {
         val parser = DefaultSFNTParser()
         val liberationPath = projectRoot().resolve("reports/font/fixtures/fonts/liberation/LiberationSans-Regular.ttf")
@@ -155,6 +193,26 @@ class SFNTParserEntryPointTest {
                 parserGeneration = 1,
             ),
         )
+        val directoryDiagnostics = parser.parse(
+            SFNTParseRequest(
+                sourceId = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655449105")),
+                sourceKind = FontSourceKind.MEMORY,
+                displayName = "generated-directory-diagnostics",
+                bytes = BoundedFontBytes(rawBytes = directoryDiagnosticsFixture()),
+                collectionIndex = 0,
+                parserGeneration = 1,
+                requiredTables = setOf(SFNTTableTag("cmap"), SFNTTableTag("glyf"), SFNTTableTag("head")),
+            ),
+        )
+        val optionalMalformedBytes = optionalMalformedFaceFixture()
+        val optionalMalformed = DefaultOpenTypeFaceParser().parse(
+            FontSource(
+                id = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655449106")),
+                kind = FontSourceKind.MEMORY,
+                displayName = "generated-optional-table-malformed",
+                bytes = optionalMalformedBytes,
+            ),
+        )
 
         return SFNTDirectoryReport(
             entries = listOf(
@@ -176,6 +234,18 @@ class SFNTParserEntryPointTest {
                     fixtureKind = "GeneratedFixtureFontSource",
                     result = invalidIndex,
                 ),
+                SFNTDirectoryReportEntry.fromResult(
+                    entryId = "generated-directory-diagnostics",
+                    fixtureId = "sfnt-directory-diagnostics-generated",
+                    fixtureKind = "GeneratedFixtureFontSource",
+                    result = directoryDiagnostics,
+                ),
+                SFNTDirectoryReportEntry.fromFaceData(
+                    entryId = "generated-optional-table-malformed",
+                    fixtureId = "font-source-sfnt-malformed-optional-table-diagnostic",
+                    fixtureKind = "GeneratedFixtureFontSource",
+                    face = optionalMalformed,
+                ),
             ),
         )
     }
@@ -185,6 +255,32 @@ class SFNTParserEntryPointTest {
             minimalFace("Generated TTC One", glyphId = 7, unitsPerEm = 1000, advanceWidth = 500),
             minimalFace("Generated TTC Two", glyphId = 11, unitsPerEm = 1200, advanceWidth = 610),
         )
+
+    private fun directoryDiagnosticsFixture(): ByteArray {
+        val font = ByteArray(96)
+        font.writeUInt32(0, 0x00010000)
+        font.writeUInt16(4, 4)
+        writeDirectoryRecord(font, index = 0, tag = "name", checksum = 0, offset = 80, length = 8)
+        writeDirectoryRecord(font, index = 1, tag = "name", checksum = 1, offset = 88, length = 4)
+        writeDirectoryRecord(font, index = 2, tag = "cmap", checksum = 2, offset = 90, length = 6)
+        writeDirectoryRecord(font, index = 3, tag = "post", checksum = 3, offset = 92, length = 12)
+        return font
+    }
+
+    private fun writeDirectoryRecord(
+        font: ByteArray,
+        index: Int,
+        tag: String,
+        checksum: Int,
+        offset: Int,
+        length: Int,
+    ) {
+        val recordOffset = 12 + index * 16
+        tag.toByteArray(Charsets.ISO_8859_1).copyInto(font, recordOffset)
+        font.writeUInt32(recordOffset + 4, checksum)
+        font.writeUInt32(recordOffset + 8, offset)
+        font.writeUInt32(recordOffset + 12, length)
+    }
 
     private fun minimalFace(
         family: String,
@@ -218,6 +314,46 @@ class SFNTParserEntryPointTest {
             "maxp" to maxpTable(numGlyphs = 1),
             "hmtx" to hmtxTable(advanceWidth = advanceWidth, leftSideBearing = 0),
         )
+
+    private fun optionalMalformedFaceFixture(): ByteArray =
+        sfntFont(
+            "name" to nameTable(
+                testNameRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    languageId = 0x0409,
+                    nameId = 1,
+                    bytes = "Optional Malformed".toByteArray(Charsets.UTF_16BE),
+                ),
+            ),
+            "cmap" to cmapTable(
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    subtable = format4Subtable(
+                        testFormat4Segment(
+                            startCode = 0x0041,
+                            endCode = 0x0041,
+                            startGlyphId = 17,
+                        ),
+                    ),
+                ),
+            ),
+            "head" to headTable(
+                unitsPerEm = 1000,
+                bounds = OpenTypeFontBounds(xMin = 0, yMin = -200, xMax = 1000, yMax = 820),
+                indexToLocFormat = 0,
+            ),
+            "hhea" to hheaTable(ascender = 820, descender = -180, lineGap = 40, numberOfHMetrics = 1),
+            "maxp" to maxpTable(numGlyphs = 1),
+            "hmtx" to hmtxTable(advanceWidth = 500, leftSideBearing = 0),
+            "fvar" to ByteArray(8),
+        )
+
+    private fun ByteArray.sha256HexForTest(): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(this)
+        return digest.joinToString("") { byte -> "%02x".format(byte) }
+    }
 
     private fun projectRoot(): Path {
         var current = Path.of("").toAbsolutePath().normalize()
