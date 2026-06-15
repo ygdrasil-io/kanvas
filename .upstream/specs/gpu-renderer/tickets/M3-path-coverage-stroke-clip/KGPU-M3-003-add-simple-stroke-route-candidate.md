@@ -1,7 +1,7 @@
 ---
 id: KGPU-M3-003
 title: "Add simple stroke route candidate"
-status: proposed
+status: done
 milestone: M3
 priority: P0
 owner_area: geometry-stroke
@@ -81,7 +81,21 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Simple stroke only.
+- `done`: Added `GPUSimpleStrokePreparedPlanner` contract evidence for one
+  bounded simple stroke as `CPUPreparedGPU`, deterministic stroke artifact keys
+  including accepted miter values, descriptor dumps, `GPUStrokeExpansionPlan`
+  output bounds, stable refusal diagnostics for unsupported width, hairline,
+  cap, join, miter, dash, path-effect, transform, expansion budget, path key,
+  and path bounds cases, plus explicit non-claims for product activation,
+  adapter-backed execution, hidden CPU texture fallback, broad stroke parity,
+  hairline, dash, path-effect, and round cap/join. Independent review
+  `019ec7dd-5430-7551-8720-f602d65a4415` found miter key collision and missing
+  path-effect evidence; both were remediated with targeted RED/GREEN coverage.
+  Post-remediation independent review `019ec7e4-77c7-7ec3-ae53-571b6086fbcd`
+  accepted the evidence and confirmed no broad stroke support, product route
+  activation, hidden CPU texture fallback, or adapter-backed execution is
+  implied. Remaining gate: future stroke promotion still needs real execution
+  and visual/reference evidence before any broader support claim.
 
 ## Linear Labels
 
