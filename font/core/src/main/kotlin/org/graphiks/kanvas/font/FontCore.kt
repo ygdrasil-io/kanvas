@@ -1018,11 +1018,223 @@ fun defaultTypefaceIdentityReport(): TypefaceIdentityReport {
     )
 }
 
+@JvmInline
+value class CanonicalFontIdentityJson(
+    val value: String,
+) {
+    init {
+        require(value.isNotBlank()) { "canonical font identity JSON must not be blank." }
+        require(value.isSingleJsonObjectWithOptionalTerminalNewline()) {
+            "canonical font identity JSON must be one complete JSON object with at most one terminal newline."
+        }
+    }
+}
+
+class FontIdentityDumpSchema(
+    val schemaVersion: Int = SchemaVersion,
+    val schema: String = SchemaName,
+    outputFiles: List<String> = OutputFiles,
+    requiredFields: List<String> = RequiredFields,
+    orderingRules: List<String> = OrderingRules,
+    val claimPromotionAllowed: Boolean = false,
+) {
+    val outputFiles: List<String> = outputFiles.toList()
+    val requiredFields: List<String> = requiredFields.toList()
+    val orderingRules: List<String> = orderingRules.toList()
+
+    init {
+        require(schemaVersion == SchemaVersion) { "unsupported font identity dump schema version." }
+        require(schema.isNotBlank()) { "schema must not be blank." }
+        require(this.outputFiles == OutputFiles) { "font identity dump output file order is fixed by the schema." }
+        require(this.requiredFields == RequiredFields) { "font identity dump required fields are fixed by the schema." }
+        require(this.orderingRules == OrderingRules) { "font identity dump ordering rules are fixed by the schema." }
+        require(!claimPromotionAllowed) {
+            "Font identity dumps are evidence plumbing only and cannot promote support claims."
+        }
+    }
+
+    fun toCanonicalJson(): CanonicalFontIdentityJson = CanonicalFontIdentityJson(
+        buildString {
+            append("{")
+            appendFontCompactJsonField("schema", schema, comma = true)
+            append("schemaVersion".evidenceQuoted()).append(":").append(schemaVersion).append(",")
+            appendStringArrayField("outputFiles", outputFiles, comma = true)
+            appendStringArrayField("requiredFields", requiredFields, comma = true)
+            appendStringArrayField("orderingRules", orderingRules, comma = true)
+            appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+            append("}")
+        },
+    )
+
+    companion object {
+        const val SchemaVersion: Int = 1
+        const val SchemaName: String = "org.graphiks.kanvas.font.FontIdentityDumpSchema.v1"
+
+        val OutputFiles: List<String> = listOf(
+            "font-source.json",
+            "typeface-id.json",
+            "identity-dump-schema.json",
+        )
+
+        val RequiredFields: List<String> = listOf(
+            "font source kind",
+            "font source face count",
+            "font source table tags",
+            "typeface collection index",
+            "typeface selected cmap",
+            "typeface variation coordinates",
+            "typeface palette identity",
+            "host-dependent marker",
+            "diagnostics",
+            "claimPromotionAllowed",
+        )
+
+        val OrderingRules: List<String> = listOf(
+            "reports preserve explicit fixture row order",
+            "sorted table tags",
+            "sorted variation coordinates",
+            "sorted palette overrides",
+            "diagnostics sorted by code and detail",
+            "byte-for-byte UTF-8 comparison includes schema description",
+        )
+
+        val Default: FontIdentityDumpSchema = FontIdentityDumpSchema()
+    }
+}
+
+data class FontIdentityDumpBundle(
+    val fontSourceJson: CanonicalFontIdentityJson,
+    val typefaceIdJson: CanonicalFontIdentityJson,
+    val schemaDescriptionJson: CanonicalFontIdentityJson = FontIdentityDumpSchema.Default.toCanonicalJson(),
+    val claimPromotionAllowed: Boolean = false,
+) {
+    init {
+        require(!claimPromotionAllowed) {
+            "Font identity dump bundles cannot promote support claims."
+        }
+    }
+
+    fun toCanonicalJson(): CanonicalFontIdentityJson = CanonicalFontIdentityJson(
+        buildString {
+            append("{")
+            appendFontCompactJsonField("schema", FONT_IDENTITY_DUMP_BUNDLE_SCHEMA, comma = true)
+            append("schemaVersion".evidenceQuoted()).append(":")
+            append(FontIdentityDumpSchema.SchemaVersion)
+            append(",")
+            appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = true)
+            append("files".evidenceQuoted()).append(":[")
+            append(dumpFiles().joinToString(separator = ",") { (label, json) ->
+                buildString {
+                    append("{")
+                    appendFontCompactJsonField("label", label, comma = true)
+                    append("json".evidenceQuoted()).append(":").append(json.value)
+                    append("}")
+                }
+            })
+            append("]")
+            append("}")
+        },
+    )
+
+    internal fun dumpFiles(): List<Pair<String, CanonicalFontIdentityJson>> = listOf(
+        "font-source.json" to fontSourceJson,
+        "typeface-id.json" to typefaceIdJson,
+        "identity-dump-schema.json" to schemaDescriptionJson,
+    )
+}
+
+class FontIdentityDumpDeterminismResult(
+    val matches: Boolean,
+    val firstSha256: String,
+    val secondSha256: String,
+    differingFiles: List<String>,
+) {
+    val differingFiles: List<String> = differingFiles.toList()
+
+    init {
+        require(firstSha256.isLowercaseSha256Hex()) { "firstSha256 must be a lowercase SHA-256 digest." }
+        require(secondSha256.isLowercaseSha256Hex()) { "secondSha256 must be a lowercase SHA-256 digest." }
+        require(this.differingFiles == this.differingFiles.distinct()) { "differing files must be unique." }
+        require(matches == (firstSha256 == secondSha256 && this.differingFiles.isEmpty())) {
+            "determinism result must agree with hashes and differing files."
+        }
+    }
+
+    fun toCanonicalJson(): CanonicalFontIdentityJson = CanonicalFontIdentityJson(
+        buildString {
+            append("{")
+            appendFontCompactJsonField("schema", FONT_IDENTITY_DUMP_DETERMINISM_SCHEMA, comma = true)
+            appendFontCompactJsonField("matches", matches, comma = true)
+            appendFontCompactJsonField("firstSha256", firstSha256, comma = true)
+            appendFontCompactJsonField("secondSha256", secondSha256, comma = true)
+            appendStringArrayField("differingFiles", differingFiles, comma = false)
+            append("}")
+        },
+    )
+}
+
+object FontIdentityDumpWriter {
+    fun writeFontSourceJson(
+        report: FontSourceIdentityReport = defaultFontSourceIdentityReport(),
+    ): CanonicalFontIdentityJson = CanonicalFontIdentityJson("${report.toCanonicalJson()}\n")
+
+    fun writeTypefaceIdJson(
+        report: TypefaceIdentityReport = defaultTypefaceIdentityReport(),
+    ): CanonicalFontIdentityJson = CanonicalFontIdentityJson("${report.toCanonicalJson()}\n")
+
+    fun writeBundle(
+        fontSourceReport: FontSourceIdentityReport = defaultFontSourceIdentityReport(),
+        typefaceReport: TypefaceIdentityReport = defaultTypefaceIdentityReport(),
+        schema: FontIdentityDumpSchema = FontIdentityDumpSchema.Default,
+    ): FontIdentityDumpBundle = FontIdentityDumpBundle(
+        fontSourceJson = writeFontSourceJson(fontSourceReport),
+        typefaceIdJson = writeTypefaceIdJson(typefaceReport),
+        schemaDescriptionJson = schema.toCanonicalJson(),
+        claimPromotionAllowed = false,
+    )
+
+    fun assertDeterministicDump(
+        run: () -> FontIdentityDumpBundle,
+    ): FontIdentityDumpDeterminismResult = verifyDeterministicRuns(
+        first = run(),
+        second = run(),
+    )
+
+    fun verifyDeterministicRuns(
+        first: FontIdentityDumpBundle,
+        second: FontIdentityDumpBundle,
+    ): FontIdentityDumpDeterminismResult {
+        val firstFiles = first.dumpFiles()
+        val secondFiles = second.dumpFiles()
+        val differingFiles = firstFiles.zip(secondFiles)
+            .filter { (firstFile, secondFile) ->
+                firstFile.first != secondFile.first || firstFile.second.value != secondFile.second.value
+            }
+            .map { (firstFile, secondFile) ->
+                if (firstFile.first == secondFile.first) firstFile.first else "${firstFile.first}|${secondFile.first}"
+            }
+        val firstSha256 = firstFiles.toDumpBytePreimage().toByteArray(Charsets.UTF_8).sha256Hex()
+        val secondSha256 = secondFiles.toDumpBytePreimage().toByteArray(Charsets.UTF_8).sha256Hex()
+        return FontIdentityDumpDeterminismResult(
+            matches = firstSha256 == secondSha256 && differingFiles.isEmpty(),
+            firstSha256 = firstSha256,
+            secondSha256 = secondSha256,
+            differingFiles = differingFiles,
+        )
+    }
+}
+
 private const val FONT_SOURCE_IDENTITY_REPORT_SCHEMA =
     "org.graphiks.kanvas.font.FontSourceIdentityReport.v1"
 
 private const val TYPEFACE_IDENTITY_REPORT_SCHEMA =
     "org.graphiks.kanvas.font.TypefaceIdentityReport.v1"
+
+private const val FONT_IDENTITY_DUMP_BUNDLE_SCHEMA =
+    "org.graphiks.kanvas.font.FontIdentityDumpBundle.v1"
+
+private const val FONT_IDENTITY_DUMP_DETERMINISM_SCHEMA =
+    "org.graphiks.kanvas.font.FontIdentityDumpDeterminismResult.v1"
 
 /**
  * Slant axis used by portable font style matching.
@@ -2339,6 +2551,54 @@ private fun StringBuilder.appendFontCompactJsonField(
     append(":")
     append(value)
     if (comma) append(",")
+}
+
+private fun StringBuilder.appendStringArrayField(
+    name: String,
+    values: List<String>,
+    comma: Boolean,
+) {
+    append(name.evidenceQuoted())
+    append(":")
+    append(values.joinToString(prefix = "[", postfix = "]", separator = ",") { value -> value.evidenceQuoted() })
+    if (comma) append(",")
+}
+
+private fun List<Pair<String, CanonicalFontIdentityJson>>.toDumpBytePreimage(): String =
+    joinToString(separator = "\n") { (label, json) ->
+        "$label\n${json.value}"
+    }
+
+private fun String.isSingleJsonObjectWithOptionalTerminalNewline(): Boolean {
+    if (isEmpty() || first() != '{') return false
+    val endExclusive = if (last() == '\n') length - 1 else length
+    if (endExclusive <= 0 || this[endExclusive - 1] != '}') return false
+
+    var depth = 0
+    var inString = false
+    var escaping = false
+    for (index in 0 until endExclusive) {
+        val character = this[index]
+        if (inString) {
+            when {
+                escaping -> escaping = false
+                character == '\\' -> escaping = true
+                character == '"' -> inString = false
+            }
+            continue
+        }
+
+        when (character) {
+            '"' -> inString = true
+            '{' -> depth += 1
+            '}' -> {
+                depth -= 1
+                if (depth < 0) return false
+                if (depth == 0 && index != endExclusive - 1) return false
+            }
+        }
+    }
+    return depth == 0 && !inString && !escaping
 }
 
 private fun String.evidenceQuoted(): String = buildString {
