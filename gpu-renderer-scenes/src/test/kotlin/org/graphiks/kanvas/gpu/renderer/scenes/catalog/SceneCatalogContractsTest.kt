@@ -63,6 +63,14 @@ class SceneCatalogContractsTest {
     fun `product refusals require final product reason`() {
         assertEquals(
             listOf(
+                ProductRefusalReason.BudgetExceeded,
+                ProductRefusalReason.UnsupportedTargetFormat,
+                ProductRefusalReason.ArbitrarySkSLSource,
+            ),
+            ProductRefusalReason.entries,
+        )
+        assertEquals(
+            listOf(
                 "budget-exceeded",
                 "unsupported-target-format",
                 "arbitrary-sksl-source",
