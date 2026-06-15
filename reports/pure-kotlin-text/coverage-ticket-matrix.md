@@ -2300,3 +2300,49 @@ Remaining gate: this is fixture provenance and evidence linkage only. It does
 not claim SFNT parser behavior, CFF support, variable font support, TTC
 support, malformed parser support, fallback behavior, glyph scaling/cache
 support, rendering support, or GPU support.
+
+### KFONT-M2-001: SFNT/TTC Parser Entry Points
+
+Status: review.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTParserEntryPointTest.kt`
+- `reports/pure-kotlin-text/sfnt-directory.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m2-001-sfnt-entry-points.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M2-sfnt-opentype-parser/KFONT-M2-001-normalize-sfnt-ttc-parser-entry-points.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M2-sfnt-opentype-parser/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `SFNTParseRequest` carries `FontSourceID`, source kind, display name,
+  bounded byte range, requested collection index, and parser generation for
+  both single-face SFNT and TTC requests.
+- `DefaultSFNTParser` returns one `SFNTParseResult` surface separating
+  directory facts, intentionally empty parsed face facts, table slices, and
+  container diagnostics.
+- `DefaultSFNTParser` is directory-only for this ticket and does not delegate to
+  `DefaultOpenTypeFaceParser` or typed layout/color table payload parsers.
+- Invalid TTC collection index returns `font.collection-index-invalid` with no
+  selected face and no delegated parse of another face.
+- Unknown wrappers return stable non-promoting SFNT diagnostics without
+  platform APIs or external parsers.
+- `sfnt-directory.json` records one Liberation Sans single TTF, one generated
+  TTC selected face, and one invalid TTC index diagnostic with
+  `dashboardClassification=tracked-gap` and `claimPromotionAllowed=false`.
+- Report construction is byte-for-byte deterministic across repeated parses of
+  the same fixtures.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test --tests '*SFNTParser*' --tests '*TTC*'
+rtk git diff --check
+```
+
+Remaining gate: this is parser entry-point and directory evidence only. It
+does not claim complete SFNT conformance, table payload semantics, glyph
+outlines, CFF/CFF2 scaler support, GSUB/GPOS shaping behavior, fallback,
+paragraph layout, rendering, or broad text support.
