@@ -46,12 +46,19 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
-    fun `catalogued rect and rrect scenes route to WebGPU offscreen instead of runner subset`() {
+    fun `catalogued rect rrect gradient and clip scenes route to WebGPU offscreen instead of runner subset`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
         val rectOnlyScenes = listOf(
             RenderedShapeExpectation("blend-mode-strip", fillRectCount = 1),
             RenderedShapeExpectation("cache-pressure-deck", fillRectCount = 2),
             RenderedShapeExpectation("legacy-route-comparison", fillRectCount = 1),
+            RenderedShapeExpectation(
+                sceneId = "rounded-panel-gradient",
+                fillRectCount = 0,
+                fillRRectCount = 1,
+                linearGradientRectCount = 1,
+                clipCount = 1,
+            ),
             RenderedShapeExpectation(
                 sceneId = "path-badge-and-stroke",
                 fillRectCount = 1,
@@ -202,6 +209,8 @@ class RenderGpuRendererSceneOffscreenMainTest {
         val sceneId: String,
         val fillRectCount: Int,
         val fillRRectCount: Int = 0,
+        val linearGradientRectCount: Int? = null,
+        val clipCount: Int? = null,
     )
 
     private fun assertRenderedShapeScene(root: Path, expectation: RenderedShapeExpectation) {
@@ -227,6 +236,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
         assertContains(runJson, "rendered $sceneId via WebGPU offscreen")
         assertContains(runJson, "fillRectCommands=${expectation.fillRectCount}")
         assertContains(runJson, "fillRRectCommands=${expectation.fillRRectCount}")
+        expectation.linearGradientRectCount?.let { count ->
+            assertContains(runJson, "linearGradientRectCommands=$count")
+        }
+        expectation.clipCount?.let { count ->
+            assertContains(runJson, "clipCommands=$count")
+        }
         assertFalse(runJson.contains("runner-subset:$sceneId"), sceneId)
     }
 

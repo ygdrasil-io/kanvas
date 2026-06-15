@@ -91,7 +91,7 @@ class GPURendererSceneRegistryTest {
             SceneExpectationRow(
                 sceneId = "rounded-panel-gradient",
                 tags = setOf(SceneTag.RRect, SceneTag.Gradient, SceneTag.Clip),
-                commandFamilies = listOf("fill-rrect", "linear-gradient-rect", "clip"),
+                commandFamilies = listOf("fill-rrect", "clip", "linear-gradient-rect"),
                 roadmapLinks = listOf(
                     RoadmapExpectation("M2", RStage.R1),
                     RoadmapExpectation("M2", RStage.R2),

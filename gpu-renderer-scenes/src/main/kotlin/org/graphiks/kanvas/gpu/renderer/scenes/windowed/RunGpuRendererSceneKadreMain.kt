@@ -299,26 +299,28 @@ internal fun GPURendererScene<*>.kadreWindowedRectOnlyUnsupportedReason(): Strin
             when (command) {
                 is SceneCommand.Clear,
                 is SceneCommand.FillRect,
-                is SceneCommand.FillRRect -> null
+                is SceneCommand.FillRRect,
+                is SceneCommand.LinearGradientRect,
+                is SceneCommand.Clip -> null
                 is SceneCommand -> command.family
                 else -> command::class.simpleName ?: "unknown-command"
             }
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only windowed render supports only clear, fill-rect, and fill-rrect command families: " +
+        return "rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families: " +
             unsupportedFamilies.joinToString()
     }
 
-    if (commands.none { it is SceneCommand.FillRect || it is SceneCommand.FillRRect }) {
-        return "rect-only windowed render requires at least one FillRect or FillRRect command"
+    if (commands.none { it is SceneCommand.FillRect || it is SceneCommand.FillRRect || it is SceneCommand.LinearGradientRect }) {
+        return "rect-only windowed render requires at least one FillRect, FillRRect, or LinearGradientRect command"
     }
 
     val clearIndices = commands.withIndex()
         .filter { (_, command) -> command is SceneCommand.Clear }
         .map { it.index }
     if (clearIndices.size > 1 || clearIndices.any { it != 0 }) {
-        return "rect-only windowed render supports zero or one initial Clear before FillRect commands"
+        return "rect-only windowed render supports zero or one initial Clear before drawable commands"
     }
 
     return null

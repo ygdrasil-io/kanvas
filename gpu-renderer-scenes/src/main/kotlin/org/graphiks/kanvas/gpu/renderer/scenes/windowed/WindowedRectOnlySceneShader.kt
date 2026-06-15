@@ -4,6 +4,7 @@ import java.util.Locale
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
 
 object WindowedRectOnlySceneShader {
     fun clearColor(scene: GPURendererScene<*>): SceneColor =
@@ -12,25 +13,43 @@ object WindowedRectOnlySceneShader {
 
     fun wgsl(scene: GPURendererScene<*>): String {
         val clear = clearColor(scene)
-        val fillBranches = scene.fills().joinToString(separator = "\n") { fill ->
+        val drawBranches = scene.draws().joinToString(separator = "\n") { draw ->
             """
-                let ${fill.coverageName()} = rounded_rect_coverage(
+                let ${draw.shapeCoverageName()} = rounded_rect_coverage(
                     pixel,
                     vec4<f32>(
-                        ${fill.rect.left.wgslFloat()},
-                        ${fill.rect.top.wgslFloat()},
-                        ${fill.rect.right.wgslFloat()},
-                        ${fill.rect.bottom.wgslFloat()}
+                        ${draw.rect.left.wgslFloat()},
+                        ${draw.rect.top.wgslFloat()},
+                        ${draw.rect.right.wgslFloat()},
+                        ${draw.rect.bottom.wgslFloat()}
                     ),
-                    ${fill.radius.wgslFloat()}
+                    ${draw.radius.wgslFloat()}
                 );
-                if (${fill.coverageName()} > 0.0) {
-                    color = src_over_coverage(color, vec4<f32>(
-                        ${fill.color.r.wgslFloat()},
-                        ${fill.color.g.wgslFloat()},
-                        ${fill.color.b.wgslFloat()},
-                        ${fill.color.a.wgslFloat()}
-                    ), ${fill.coverageName()});
+                let ${draw.coverageName()} = ${draw.shapeCoverageName()} * ${draw.clipCoverageExpression()};
+                if (${draw.coverageName()} > 0.0) {
+                    let ${draw.colorName()} = draw_color(
+                        pixel,
+                        vec4<f32>(
+                            ${draw.rect.left.wgslFloat()},
+                            ${draw.rect.top.wgslFloat()},
+                            ${draw.rect.right.wgslFloat()},
+                            ${draw.rect.bottom.wgslFloat()}
+                        ),
+                        vec4<f32>(
+                            ${draw.startColor.r.wgslFloat()},
+                            ${draw.startColor.g.wgslFloat()},
+                            ${draw.startColor.b.wgslFloat()},
+                            ${draw.startColor.a.wgslFloat()}
+                        ),
+                        vec4<f32>(
+                            ${draw.endColor.r.wgslFloat()},
+                            ${draw.endColor.g.wgslFloat()},
+                            ${draw.endColor.b.wgslFloat()},
+                            ${draw.endColor.a.wgslFloat()}
+                        ),
+                        ${draw.paintKind.wgslFloat()}
+                    );
+                    color = src_over_coverage(color, ${draw.colorName()}, ${draw.coverageName()});
                 }
             """.trimIndent()
         }
@@ -56,6 +75,22 @@ object WindowedRectOnlySceneShader {
                 return clamp(0.5 - edge_distance, 0.0, 1.0);
             }
 
+            fn rect_coverage(pixel: vec2<f32>, rect: vec4<f32>) -> f32 {
+                if (pixel.x < rect.x || pixel.x >= rect.z || pixel.y < rect.y || pixel.y >= rect.w) {
+                    return 0.0;
+                }
+                return 1.0;
+            }
+
+            fn draw_color(pixel: vec2<f32>, rect: vec4<f32>, start_color: vec4<f32>, end_color: vec4<f32>, paint_kind: f32) -> vec4<f32> {
+                var color = start_color;
+                if (paint_kind >= 0.5) {
+                    let t = clamp((pixel.y - rect.y) / max(rect.w - rect.y, 0.0001), 0.0, 1.0);
+                    color = mix(start_color, end_color, t);
+                }
+                return color;
+            }
+
             fn src_over_coverage(dst: vec4<f32>, src: vec4<f32>, coverage: f32) -> vec4<f32> {
                 let src_alpha = src.a * coverage;
                 let out_alpha = src_alpha + dst.a * (1.0 - src_alpha);
@@ -72,51 +107,111 @@ object WindowedRectOnlySceneShader {
                     ${clear.b.wgslFloat()},
                     ${clear.a.wgslFloat()}
                 );
-            ${fillBranches.prependIndent("    ")}
+            ${drawBranches.prependIndent("    ")}
                 return color;
             }
         """.trimIndent()
     }
 }
 
-private data class WindowedFill(
+private data class WindowedDraw(
     val label: String,
     val rect: org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect,
     val radius: Float,
-    val color: SceneColor,
+    val startColor: SceneColor,
+    val endColor: SceneColor,
+    val paintKind: Float,
+    val clip: SceneRect?,
 )
 
-private fun GPURendererScene<*>.fills(): List<WindowedFill> =
-    commands.withIndex()
-        .filter { (_, command) -> command is SceneCommand.FillRect || command is SceneCommand.FillRRect }
-        .sortedWith(
-            compareBy<IndexedValue<Any?>> { (_, command) ->
-                when (command) {
-                    is SceneCommand.FillRect -> command.paintOrder
-                    is SceneCommand.FillRRect -> command.paintOrder
-                    else -> 0
-                }
-            }.thenBy { it.index },
-        )
-        .map { (_, command) ->
+private data class IndexedWindowedDraw(
+    val index: Int,
+    val command: SceneCommand,
+    val clip: SceneRect?,
+)
+
+private fun GPURendererScene<*>.draws(): List<WindowedDraw> {
+    var activeClip: SceneRect? = null
+    val indexedDraws = buildList {
+        commands.withIndex().forEach { (index, command) ->
             when (command) {
-                is SceneCommand.FillRect -> WindowedFill(
+                is SceneCommand.Clip -> activeClip = command.rect
+                is SceneCommand.FillRect,
+                is SceneCommand.FillRRect,
+                is SceneCommand.LinearGradientRect -> add(IndexedWindowedDraw(index, command, activeClip))
+                else -> Unit
+            }
+        }
+    }
+
+    return indexedDraws
+        .sortedWith(
+            compareBy<IndexedWindowedDraw> { (_, command) -> command.paintOrder() }
+                .thenBy { it.index },
+        )
+        .map { (_, command, clip) ->
+            when (command) {
+                is SceneCommand.FillRect -> WindowedDraw(
                     label = command.label,
                     rect = command.rect,
                     radius = 0f,
-                    color = command.color,
+                    startColor = command.color,
+                    endColor = command.color,
+                    paintKind = 0f,
+                    clip = clip,
                 )
-                is SceneCommand.FillRRect -> WindowedFill(
+                is SceneCommand.FillRRect -> WindowedDraw(
                     label = command.label,
                     rect = command.rect,
                     radius = command.radius,
-                    color = command.color,
+                    startColor = command.color,
+                    endColor = command.color,
+                    paintKind = 0f,
+                    clip = clip,
+                )
+                is SceneCommand.LinearGradientRect -> WindowedDraw(
+                    label = command.label,
+                    rect = command.rect,
+                    radius = 0f,
+                    startColor = command.startColor,
+                    endColor = command.endColor,
+                    paintKind = 1f,
+                    clip = clip,
                 )
                 else -> error("Unsupported windowed fill command")
             }
         }
+}
 
-private fun WindowedFill.coverageName(): String =
-    "coverage_" + label.replace(Regex("[^A-Za-z0-9_]"), "_")
+private fun SceneCommand.paintOrder(): Int =
+    when (this) {
+        is SceneCommand.FillRect -> paintOrder
+        is SceneCommand.FillRRect -> paintOrder
+        is SceneCommand.LinearGradientRect -> paintOrder
+        else -> 0
+    }
+
+private fun WindowedDraw.shapeCoverageName(): String = "shape_coverage_" + safeName()
+
+private fun WindowedDraw.coverageName(): String = "coverage_" + safeName()
+
+private fun WindowedDraw.colorName(): String = "draw_color_" + safeName()
+
+private fun WindowedDraw.safeName(): String = label.replace(Regex("[^A-Za-z0-9_]"), "_")
+
+private fun WindowedDraw.clipCoverageExpression(): String =
+    clip?.let { clipRect ->
+        """
+            rect_coverage(
+                pixel,
+                vec4<f32>(
+                    ${clipRect.left.wgslFloat()},
+                    ${clipRect.top.wgslFloat()},
+                    ${clipRect.right.wgslFloat()},
+                    ${clipRect.bottom.wgslFloat()}
+                )
+            )
+        """.trimIndent()
+    } ?: "1.0"
 
 private fun Float.wgslFloat(): String = String.format(Locale.US, "%.6f", this)

@@ -59,8 +59,17 @@ object GPURendererSceneRegistry {
                     radius = 24f,
                     color = SceneColor.blue(0.70f),
                 ),
-                SceneCommand.LinearGradientRect("panel-gradient"),
-                SceneCommand.Clip("panel-scissor"),
+                SceneCommand.Clip(
+                    label = "panel-scissor",
+                    rect = SceneRect(64f, 46f, 256f, 154f),
+                ),
+                SceneCommand.LinearGradientRect(
+                    label = "panel-gradient",
+                    rect = SceneRect(40f, 30f, 280f, 170f),
+                    startColor = SceneColor.amber(0.92f),
+                    endColor = SceneColor.green(0.72f),
+                    paintOrder = 1,
+                ),
             ),
         ),
         scene(
@@ -94,7 +103,10 @@ object GPURendererSceneRegistry {
                 SceneRoadmapLink.milestone("M5"),
             ),
             commands = listOf(
-                SceneCommand.Clip("avatar-rrect-clip"),
+                SceneCommand.Clip(
+                    label = "avatar-rrect-clip",
+                    rect = SceneRect(36f, 28f, 284f, 172f),
+                ),
                 SceneCommand.BitmapRect("avatar-cell"),
             ),
         ),
