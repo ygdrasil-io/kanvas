@@ -90,8 +90,16 @@ class SceneCatalogContractsTest {
     @Test
     fun `roadmap links accept active suffixed milestones`() {
         assertEquals("M70-A", SceneRoadmapLink.milestone("M70-A", RStage.R1).milestone)
+        assertEquals("M70-B", SceneRoadmapLink.milestone("M70-B", RStage.R2).milestone)
         assertEquals("M70-C", SceneRoadmapLink("M70-C", null, null).milestone)
         assertEquals("M2", SceneRoadmapLink.ticket("KGPU-M2-001", RStage.R2).milestone)
+    }
+
+    @Test
+    fun `roadmap links reject malformed optional ticket ids`() {
+        assertFailsWith<IllegalArgumentException> {
+            SceneRoadmapLink("M1", "KGPU-M1-01", null)
+        }
     }
 
     @Test
