@@ -42,6 +42,7 @@ Text render steps need WGSL modules and reflected binding layouts that match Kot
 - `.upstream/specs/gpu-renderer/21-text-glyph-pipeline.md`
 - `.upstream/target/high-performance-wgsl-pipeline-target.md`
 - `.upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md`
+- `.upstream/specs/wgsl4k-evolution/01-validation-reflection-contract.md`
 
 ## Design Sketch
 
@@ -95,6 +96,7 @@ rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*TextWgsl
 
 - `proposed`: Ties M11 text routes to the WGSL parser/reflection architecture target.
 - Move to `ready` only after reflection report fields and WGSL module registration rules are reviewed.
+- wgsl4k dependency evolution is tracked by `.upstream/specs/wgsl4k-evolution/`.
 
 ## Linear Labels
 

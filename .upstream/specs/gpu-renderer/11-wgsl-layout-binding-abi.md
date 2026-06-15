@@ -230,6 +230,11 @@ unpromoted or capability-gated. The minimized WGSL input and expected behavior
 must be captured for a `wgsl4k` issue rather than hidden behind a local
 workaround.
 
+The active repo-native contribution packet for missing wgsl4k validation and
+reflection facts lives in `.upstream/specs/wgsl4k-evolution/`. Consuming that
+packet still requires route-specific CPU, GPU, reference, diagnostic, and ABI
+evidence before a renderer route can be promoted.
+
 ## Render Module ABI
 
 Render `WGSLModule` ABI includes:
