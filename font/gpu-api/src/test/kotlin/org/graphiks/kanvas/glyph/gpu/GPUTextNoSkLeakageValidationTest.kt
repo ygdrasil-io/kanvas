@@ -247,11 +247,13 @@ class GPUTextNoSkLeakageValidationTest {
     }
 
     @Test
-    fun `non Skia sk words do not fail leakage validation`() {
+    fun `non Skia sk words and mask fields do not fail leakage validation`() {
         val report = validateGPUTextNoSkLeakage(
             payloadKind = "ValuePayload",
             fields = listOf(
                 TextPayloadField("transform", "SkewTransformFacts", "sketch diagnostics"),
+                TextPayloadField("clip.maskPath", "String", "maskPath"),
+                TextPayloadField("material.maskFont", "String", "maskFont"),
             ),
         )
 
