@@ -45,11 +45,12 @@ import org.skia.gpu.webgpu.WebGpuContext
 
 private const val BYTES_PER_PIXEL: Int = 4
 
-class SolidCardStackOffscreenRenderer {
+class RectOnlyOffscreenRenderer {
     fun render(scene: GPURendererScene<SceneCommand>, outputDir: Path): OffscreenRunReport {
         val sceneId = scene.sceneId.value
         outputDir.createDirectories()
-        val drawPlan = prepareSolidCardStackDrawPlan(
+        val drawPlan = prepareRectOnlyDrawPlan(
+            sceneId = sceneId,
             commands = scene.commands,
             width = scene.dimensions.width,
             height = scene.dimensions.height,
@@ -74,12 +75,12 @@ class SolidCardStackOffscreenRenderer {
                     imagePath = RENDER_FILE_NAME,
                     width = target.width,
                     height = target.height,
-                    byteCount = solidCardStackRawRgbaByteCount(pixels, target.width, target.height),
+                    byteCount = rectOnlyRawRgbaByteCount(pixels, target.width, target.height),
                     nonTransparentPixels = nonTransparentPixels,
-                    diagnostics = listOf(
-                        "rendered solid-card-stack via WebGPU offscreen",
-                        "adapter=${ctx.adapterInfo ?: "unknown-adapter"}",
-                        "fillRectCommands=${scene.commands.count { it is SceneCommand.FillRect }}",
+                    diagnostics = rectOnlyRenderedDiagnostics(
+                        sceneId = sceneId,
+                        adapterInfo = ctx.adapterInfo,
+                        fillRectCount = drawPlan.fills.size,
                     ),
                 )
             }
@@ -89,7 +90,7 @@ class SolidCardStackOffscreenRenderer {
     private fun renderToPixels(
         context: WebGpuContext,
         target: HeadlessTarget,
-        drawPlan: SolidCardStackDrawPlan,
+        drawPlan: RectOnlyDrawPlan,
     ): ByteArray {
         GpuResourceScope().use { gpuResources ->
             val bindGroupLayout = gpuResources.track(
@@ -172,14 +173,14 @@ class SolidCardStackOffscreenRenderer {
         context: WebGpuContext,
         layout: GPUBindGroupLayout,
         gpuResources: GpuResourceScope,
-        fill: SolidCardStackFillDraw,
+        fill: RectOnlyFillDraw,
     ): DrawResource {
         val uniform = gpuResources.track(
             context.device.createBuffer(
                 BufferDescriptor(
                     size = COLOR_UNIFORM_SIZE_BYTES,
                     usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
-                    label = "SolidCardStackOffscreenRenderer.color",
+                    label = "RectOnlyOffscreenRenderer.color",
                 ),
             ),
         ) { it.close() }
@@ -217,7 +218,7 @@ class SolidCardStackOffscreenRenderer {
             image.setRGB(pixelIndex % width, pixelIndex / width, (a shl 24) or (r shl 16) or (g shl 8) or b)
         }
         require(ImageIO.write(image, "png", path.toFile())) {
-            "No PNG writer available for ${path.toAbsolutePath()}"
+            "No PNG writer available for $RENDER_FILE_NAME"
         }
     }
 
@@ -311,12 +312,13 @@ class SolidCardStackOffscreenRenderer {
     }
 }
 
-internal data class SolidCardStackDrawPlan(
+internal data class RectOnlyDrawPlan(
+    val sceneId: String,
     val clearColor: SceneColor,
-    val fills: List<SolidCardStackFillDraw>,
+    val fills: List<RectOnlyFillDraw>,
 )
 
-internal data class SolidCardStackFillDraw(
+internal data class RectOnlyFillDraw(
     val label: String,
     val color: SceneColor,
     val scissorX: Int,
@@ -325,9 +327,9 @@ internal data class SolidCardStackFillDraw(
     val scissorHeight: Int,
 )
 
-internal fun solidCardStackRawRgbaByteCount(pixels: ByteArray, width: Int, height: Int): Long {
-    require(width > 0) { "solid-card-stack raw byte count width must be positive" }
-    require(height > 0) { "solid-card-stack raw byte count height must be positive" }
+internal fun rectOnlyRawRgbaByteCount(pixels: ByteArray, width: Int, height: Int): Long {
+    require(width > 0) { "rect-only raw byte count width must be positive" }
+    require(height > 0) { "rect-only raw byte count height must be positive" }
     val expectedByteCount = width.toLong() * height.toLong() * BYTES_PER_PIXEL.toLong()
     require(pixels.size.toLong() == expectedByteCount) {
         "RGBA buffer size mismatch: expected $expectedByteCount, got ${pixels.size}"
@@ -335,13 +337,17 @@ internal fun solidCardStackRawRgbaByteCount(pixels: ByteArray, width: Int, heigh
     return pixels.size.toLong()
 }
 
-internal fun prepareSolidCardStackDrawPlan(
+internal fun prepareRectOnlyDrawPlan(
+    sceneId: String,
     commands: List<SceneCommand>,
     width: Int,
     height: Int,
-): SolidCardStackDrawPlan {
-    require(width > 0) { "solid-card-stack target width must be positive" }
-    require(height > 0) { "solid-card-stack target height must be positive" }
+): RectOnlyDrawPlan {
+    require(sceneId.isNotBlank()) { "rect-only sceneId must not be blank" }
+    require(width > 0) { "$sceneId rect-only target width must be positive" }
+    require(height > 0) { "$sceneId rect-only target height must be positive" }
+    val unsupportedReason = rectOnlyCommandSequenceUnsupportedReason(commands)
+    require(unsupportedReason == null) { "$sceneId $unsupportedReason" }
 
     val fills = commands.withIndex()
         .filter { (_, command) -> command is SceneCommand.FillRect }
@@ -364,9 +370,9 @@ internal fun prepareSolidCardStackDrawPlan(
                     right > left &&
                     bottom > top,
             ) {
-                "solid-card-stack fill rect must be inside positive bounds: ${fill.label}"
+                "$sceneId rect-only fill rect must be inside positive bounds: ${fill.label}"
             }
-            SolidCardStackFillDraw(
+            RectOnlyFillDraw(
                 label = fill.label,
                 color = fill.color,
                 scissorX = left,
@@ -376,12 +382,52 @@ internal fun prepareSolidCardStackDrawPlan(
             )
         }
     require(fills.isNotEmpty()) {
-        "solid-card-stack offscreen render requires at least one FillRect command"
+        "$sceneId rect-only offscreen render requires at least one FillRect command"
     }
 
-    return SolidCardStackDrawPlan(
+    return RectOnlyDrawPlan(
+        sceneId = sceneId,
         clearColor = commands.filterIsInstance<SceneCommand.Clear>().firstOrNull()?.color
             ?: SceneColor(0f, 0f, 0f, 0f),
         fills = fills,
+    )
+}
+
+internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneCommand>): String? {
+    val unsupportedFamilies = commands
+        .mapNotNull { command ->
+            if (command is SceneCommand.Clear || command is SceneCommand.FillRect) null else command.family
+        }
+        .distinct()
+    if (unsupportedFamilies.isNotEmpty()) {
+        return "rect-only offscreen render supports only clear and fill-rect command families: " +
+            unsupportedFamilies.joinToString()
+    }
+
+    if (commands.none { it is SceneCommand.FillRect }) {
+        return "rect-only offscreen render requires at least one FillRect command"
+    }
+
+    val clearIndices = commands.withIndex()
+        .filter { (_, command) -> command is SceneCommand.Clear }
+        .map { it.index }
+    if (clearIndices.size > 1 || clearIndices.any { it != 0 }) {
+        return "rect-only offscreen render supports zero or one initial Clear before FillRect commands"
+    }
+
+    return null
+}
+
+internal fun rectOnlyRenderedDiagnostics(
+    sceneId: String,
+    adapterInfo: String?,
+    fillRectCount: Int,
+): List<String> {
+    require(sceneId.isNotBlank()) { "rect-only sceneId must not be blank" }
+    require(fillRectCount > 0) { "$sceneId rect-only diagnostics require at least one FillRect command" }
+    return listOf(
+        "rendered $sceneId via WebGPU offscreen",
+        "adapter=${adapterInfo ?: "unknown-adapter"}",
+        "fillRectCommands=$fillRectCount",
     )
 }
