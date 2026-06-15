@@ -5,6 +5,7 @@ import kotlin.io.path.exists
 import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
@@ -85,5 +86,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
         }
 
         assertContains(failure.message ?: "", "inside positive bounds: oversize")
+    }
+
+    @Test
+    fun `solid card stack rendered byte count uses raw rgba readback bytes`() {
+        val pixels = ByteArray(320 * 200 * 4)
+
+        assertEquals(256000L, solidCardStackRawRgbaByteCount(pixels, width = 320, height = 200))
     }
 }

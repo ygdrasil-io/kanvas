@@ -31,7 +31,6 @@ import io.ygdrasil.webgpu.ShaderModuleDescriptor
 import io.ygdrasil.webgpu.VertexState
 import io.ygdrasil.webgpu.beginRenderPass
 import java.awt.image.BufferedImage
-import java.nio.file.Files
 import java.nio.file.Path
 import javax.imageio.ImageIO
 import kotlin.io.path.createDirectories
@@ -44,13 +43,21 @@ import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.skia.gpu.webgpu.HeadlessTarget
 import org.skia.gpu.webgpu.WebGpuContext
 
+private const val BYTES_PER_PIXEL: Int = 4
+
 class SolidCardStackOffscreenRenderer {
     fun render(scene: GPURendererScene<SceneCommand>, outputDir: Path): OffscreenRunReport {
         val sceneId = scene.sceneId.value
+        outputDir.createDirectories()
+        val drawPlan = prepareSolidCardStackDrawPlan(
+            commands = scene.commands,
+            width = scene.dimensions.width,
+            height = scene.dimensions.height,
+        )
+
         val context = WebGpuContext.createOrNull()
             ?: return OffscreenRunReport.failed(sceneId, "webgpu-context-unavailable")
 
-        outputDir.createDirectories()
         context.use { ctx ->
             HeadlessTarget(
                 context = ctx,
@@ -58,7 +65,7 @@ class SolidCardStackOffscreenRenderer {
                 height = scene.dimensions.height,
                 format = GPUTextureFormat.RGBA8Unorm,
             ).use { target ->
-                val pixels = renderToPixels(ctx, target, scene.commands)
+                val pixels = renderToPixels(ctx, target, drawPlan)
                 val nonTransparentPixels = pixels.countNonTransparentPixels()
                 val imagePath = outputDir.resolve(RENDER_FILE_NAME)
                 writePng(pixels, target.width, target.height, imagePath)
@@ -67,7 +74,7 @@ class SolidCardStackOffscreenRenderer {
                     imagePath = RENDER_FILE_NAME,
                     width = target.width,
                     height = target.height,
-                    byteCount = Files.size(imagePath),
+                    byteCount = solidCardStackRawRgbaByteCount(pixels, target.width, target.height),
                     nonTransparentPixels = nonTransparentPixels,
                     diagnostics = listOf(
                         "rendered solid-card-stack via WebGPU offscreen",
@@ -82,10 +89,8 @@ class SolidCardStackOffscreenRenderer {
     private fun renderToPixels(
         context: WebGpuContext,
         target: HeadlessTarget,
-        commands: List<SceneCommand>,
+        drawPlan: SolidCardStackDrawPlan,
     ): ByteArray {
-        val drawPlan = prepareSolidCardStackDrawPlan(commands, target.width, target.height)
-
         GpuResourceScope().use { gpuResources ->
             val bindGroupLayout = gpuResources.track(
                 context.device.createBindGroupLayout(
@@ -258,7 +263,6 @@ class SolidCardStackOffscreenRenderer {
 
     private companion object {
         const val RENDER_FILE_NAME: String = "render.png"
-        const val BYTES_PER_PIXEL: Int = 4
         const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
         const val COLOR_UNIFORM_SIZE_BYTES: ULong = 16uL
 
@@ -320,6 +324,16 @@ internal data class SolidCardStackFillDraw(
     val scissorWidth: Int,
     val scissorHeight: Int,
 )
+
+internal fun solidCardStackRawRgbaByteCount(pixels: ByteArray, width: Int, height: Int): Long {
+    require(width > 0) { "solid-card-stack raw byte count width must be positive" }
+    require(height > 0) { "solid-card-stack raw byte count height must be positive" }
+    val expectedByteCount = width.toLong() * height.toLong() * BYTES_PER_PIXEL.toLong()
+    require(pixels.size.toLong() == expectedByteCount) {
+        "RGBA buffer size mismatch: expected $expectedByteCount, got ${pixels.size}"
+    }
+    return pixels.size.toLong()
+}
 
 internal fun prepareSolidCardStackDrawPlan(
     commands: List<SceneCommand>,
