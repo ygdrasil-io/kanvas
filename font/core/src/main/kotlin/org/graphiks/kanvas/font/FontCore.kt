@@ -1624,6 +1624,525 @@ object FontIdentityDumpWriter {
     }
 }
 
+enum class FontDiagnosticClaimImpact(
+    val serializedName: String,
+) {
+    TARGET_SUPPORTED("target-supported"),
+    CURRENT_SUPPORTED("current-supported"),
+    TRACKED_GAP("tracked-gap"),
+    DEPENDENCY_GATED("DependencyGated"),
+    FIXTURE_GATED("fixture-gated"),
+    GPU_GATED("GPU-gated"),
+    EXPECTED_UNSUPPORTED("expected-unsupported"),
+    DRIFT_ONLY("drift-only"),
+}
+
+enum class FontDiagnosticSeverity(
+    val serializedName: String,
+) {
+    INFO("info"),
+    WARNING("warning"),
+    ERROR("error"),
+}
+
+class FontDiagnosticCode(
+    val code: String,
+    val namespace: String,
+    val claimImpact: FontDiagnosticClaimImpact,
+    val severity: FontDiagnosticSeverity,
+    val route: String,
+    requiredFields: List<String>,
+    val claimPromotionAllowed: Boolean = false,
+) {
+    val requiredFields: List<String> =
+        (FontDiagnosticCommonRequiredFields + requiredFields).normalizedDiagnosticFieldNames()
+
+    init {
+        require(code.isStableDiagnosticCode()) { "diagnostic code must be a stable one-line token." }
+        require(namespace in FontDiagnosticAcceptedNamespaces) {
+            "diagnostic namespace must be one of the accepted font taxonomy namespaces."
+        }
+        require(code.startsWith("$namespace.")) {
+            "diagnostic code must belong to its declared namespace."
+        }
+        require(route.isStableDiagnosticCode()) { "diagnostic route must be a stable one-line token." }
+        require(claimImpact.isNonClaimImpact()) {
+            "KFONT M0 diagnostic taxonomy rows cannot promote support claims."
+        }
+        require(!claimPromotionAllowed) {
+            "Font diagnostic taxonomy rows cannot promote support claims."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("code", code, comma = true)
+        appendFontCompactJsonField("namespace", namespace, comma = true)
+        appendFontCompactJsonField("claimImpact", claimImpact.serializedName, comma = true)
+        appendFontCompactJsonField("severity", severity.serializedName, comma = true)
+        appendFontCompactJsonField("route", route, comma = true)
+        appendStringArrayField("requiredFields", requiredFields, comma = true)
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+        append("}")
+    }
+}
+
+class LegacyFontDiagnosticMapping(
+    val legacyCode: String,
+    val targetCode: String,
+    val classification: FontDiagnosticClaimImpact,
+    val gateStatus: String = "open",
+    val claimPromotionAllowed: Boolean = false,
+) {
+    init {
+        require(legacyCode.isStableDiagnosticCode()) { "legacy diagnostic code must be stable." }
+        require(targetCode.isStableDiagnosticCode()) { "target diagnostic code must be stable." }
+        require(classification.isNonClaimImpact()) {
+            "Legacy diagnostic mappings cannot promote support claims."
+        }
+        require(gateStatus == "open") { "KFONT M0 legacy diagnostic gates must remain open." }
+        require(!claimPromotionAllowed) {
+            "Legacy diagnostic mappings cannot promote support claims."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("legacyCode", legacyCode, comma = true)
+        appendFontCompactJsonField("targetCode", targetCode, comma = true)
+        appendFontCompactJsonField("classification", classification.serializedName, comma = true)
+        appendFontCompactJsonField("gateStatus", gateStatus, comma = true)
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+        append("}")
+    }
+}
+
+class FontDiagnosticClassification(
+    val inputCode: String,
+    val accepted: Boolean,
+    val targetCode: String?,
+    val namespace: String?,
+    val classification: FontDiagnosticClaimImpact,
+    val reason: String,
+    val claimPromotionAllowed: Boolean = false,
+) {
+    init {
+        require(inputCode.isNotBlank()) { "input diagnostic code must not be blank." }
+        require(targetCode == null || targetCode.isStableDiagnosticCode()) {
+            "target diagnostic code must be stable when present."
+        }
+        require(namespace == null || namespace in FontDiagnosticAcceptedNamespaces) {
+            "classified namespace must be accepted when present."
+        }
+        require(classification.isNonClaimImpact()) {
+            "Diagnostic classifications cannot promote support claims."
+        }
+        require(reason.isStableDiagnosticCode()) { "classification reason must be stable." }
+        require(!claimPromotionAllowed) {
+            "Diagnostic classifications cannot promote support claims."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("inputCode", inputCode, comma = true)
+        appendFontCompactJsonField("accepted", accepted, comma = true)
+        append("targetCode".evidenceQuoted()).append(":")
+        append(targetCode.toFontJsonNullableString())
+        append(",")
+        append("namespace".evidenceQuoted()).append(":")
+        append(namespace.toFontJsonNullableString())
+        append(",")
+        appendFontCompactJsonField("classification", classification.serializedName, comma = true)
+        appendFontCompactJsonField("reason", reason, comma = true)
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+        append("}")
+    }
+}
+
+class FontDiagnosticSample(
+    val label: String,
+    val code: String,
+    val subject: String,
+    val route: String,
+    val severity: FontDiagnosticSeverity,
+    val classification: FontDiagnosticClaimImpact,
+    fields: Map<String, String>,
+    val claimPromotionAllowed: Boolean = false,
+) {
+    val fields: Map<String, String> = normalizedDiagnosticFieldMap(
+        mapOf(
+            "subject" to subject,
+            "route" to route,
+            "severity" to severity.serializedName,
+            "claimImpact" to classification.serializedName,
+        ) + fields,
+    )
+
+    init {
+        require(label.isStableManifestToken()) { "sample diagnostic label must be stable." }
+        require(code.isStableDiagnosticCode()) { "sample diagnostic code must be stable." }
+        require(subject.isStableManifestString()) { "sample diagnostic subject must be stable." }
+        require(route.isStableDiagnosticCode()) { "sample diagnostic route must be stable." }
+        require(classification.isNonClaimImpact()) {
+            "Sample diagnostics cannot promote support claims."
+        }
+        require(!claimPromotionAllowed) {
+            "Sample diagnostics cannot promote support claims."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("label", label, comma = true)
+        appendFontCompactJsonField("code", code, comma = true)
+        appendFontCompactJsonField("subject", subject, comma = true)
+        appendFontCompactJsonField("route", route, comma = true)
+        appendFontCompactJsonField("severity", severity.serializedName, comma = true)
+        appendFontCompactJsonField("classification", classification.serializedName, comma = true)
+        append("fields".evidenceQuoted()).append(":{")
+        append(fields.entries.joinToString(separator = ",") { (name, value) ->
+            "${name.evidenceQuoted()}:${value.evidenceQuoted()}"
+        })
+        append("},")
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+        append("}")
+    }
+}
+
+class FontDiagnosticTaxonomy(
+    val acceptedNamespaces: List<String>,
+    codes: List<FontDiagnosticCode>,
+    legacyMappings: List<LegacyFontDiagnosticMapping>,
+    sampleDiagnostics: List<FontDiagnosticSample>,
+    rejectedDiagnostics: List<FontDiagnosticClassification>,
+    val dashboardClassification: String = "tracked-gap",
+    val claimPromotionAllowed: Boolean = false,
+) {
+    val codes: List<FontDiagnosticCode> = codes.sortedBy { code -> code.code }
+    val legacyMappings: List<LegacyFontDiagnosticMapping> = legacyMappings.sortedBy { mapping -> mapping.legacyCode }
+    val sampleDiagnostics: List<FontDiagnosticSample> = sampleDiagnostics.sortedBy { sample -> sample.label }
+    val rejectedDiagnostics: List<FontDiagnosticClassification> =
+        rejectedDiagnostics.sortedBy { classification -> classification.inputCode }
+    private val codesByCode: Map<String, FontDiagnosticCode> = this.codes.associateBy { code -> code.code }
+    private val legacyByCode: Map<String, LegacyFontDiagnosticMapping> =
+        this.legacyMappings.associateBy { mapping -> mapping.legacyCode }
+
+    init {
+        require(acceptedNamespaces == FontDiagnosticAcceptedNamespaces) {
+            "accepted font diagnostic namespaces are fixed by KFONT M0."
+        }
+        require(this.codes.isNotEmpty()) { "font diagnostic taxonomy must define at least one code." }
+        require(this.codes.size == codesByCode.size) { "font diagnostic codes must be unique." }
+        require(this.codes.all { code -> code.namespace in acceptedNamespaces }) {
+            "all font diagnostic codes must belong to accepted namespaces."
+        }
+        require(this.legacyMappings.size == legacyByCode.size) {
+            "legacy diagnostic mappings must have unique legacy codes."
+        }
+        require(this.legacyMappings.all { mapping -> mapping.targetCode in codesByCode }) {
+            "legacy diagnostic mappings must target accepted taxonomy codes."
+        }
+        require(this.sampleDiagnostics.map { sample -> sample.label }.distinct().size == this.sampleDiagnostics.size) {
+            "sample diagnostic labels must be unique."
+        }
+        require(this.sampleDiagnostics.all { sample -> sample.code in codesByCode }) {
+            "sample diagnostics must use accepted taxonomy codes."
+        }
+        require(dashboardClassification == "tracked-gap") {
+            "KFONT M0 diagnostic taxonomy evidence must remain tracked-gap."
+        }
+        require(!claimPromotionAllowed) {
+            "Font diagnostic taxonomy cannot promote support claims."
+        }
+    }
+
+    fun code(code: String): FontDiagnosticCode =
+        codesByCode[code] ?: error("unknown font diagnostic taxonomy code: $code")
+
+    fun legacyMapping(legacyCode: String): LegacyFontDiagnosticMapping =
+        legacyByCode[legacyCode] ?: error("unknown legacy font diagnostic code: $legacyCode")
+
+    fun classify(inputCode: String): FontDiagnosticClassification {
+        val direct = codesByCode[inputCode]
+        if (direct != null) {
+            return FontDiagnosticClassification(
+                inputCode = inputCode,
+                accepted = true,
+                targetCode = direct.code,
+                namespace = direct.namespace,
+                classification = direct.claimImpact,
+                reason = "accepted-taxonomy-code",
+            )
+        }
+
+        val legacy = legacyByCode[inputCode]
+        if (legacy != null) {
+            val target = code(legacy.targetCode)
+            return FontDiagnosticClassification(
+                inputCode = inputCode,
+                accepted = false,
+                targetCode = legacy.targetCode,
+                namespace = target.namespace,
+                classification = legacy.classification,
+                reason = "legacy-diagnostic-mapped",
+            )
+        }
+
+        return FontDiagnosticClassification(
+            inputCode = inputCode,
+            accepted = false,
+            targetCode = null,
+            namespace = null,
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+            reason = "generic-or-unknown-diagnostic",
+        )
+    }
+
+    fun toCanonicalJson(): CanonicalFontIdentityJson = CanonicalFontIdentityJson(
+        buildString {
+            append("{")
+            appendFontCompactJsonField("schema", FONT_DIAGNOSTIC_TAXONOMY_SCHEMA, comma = true)
+            append("schemaVersion".evidenceQuoted()).append(":1,")
+            append("dashboardRow".evidenceQuoted()).append(":{")
+            appendFontCompactJsonField("name", "pure-kotlin-font diagnostic taxonomy", comma = true)
+            appendFontCompactJsonField("classification", dashboardClassification, comma = true)
+            appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+            append("},")
+            appendStringArrayField("acceptedNamespaces", acceptedNamespaces, comma = true)
+            append("codes".evidenceQuoted()).append(":")
+            append(codes.joinToString(prefix = "[", postfix = "]", separator = ",") { code -> code.toCanonicalJson() })
+            append(",")
+            append("legacyMappings".evidenceQuoted()).append(":")
+            append(legacyMappings.joinToString(prefix = "[", postfix = "]", separator = ",") { mapping ->
+                mapping.toCanonicalJson()
+            })
+            append(",")
+            append("sampleDiagnostics".evidenceQuoted()).append(":")
+            append(sampleDiagnostics.joinToString(prefix = "[", postfix = "]", separator = ",") { sample ->
+                sample.toCanonicalJson()
+            })
+            append(",")
+            append("rejectedDiagnostics".evidenceQuoted()).append(":")
+            append(rejectedDiagnostics.joinToString(prefix = "[", postfix = "]", separator = ",") { classification ->
+                classification.toCanonicalJson()
+            })
+            append(",")
+            appendStringArrayField("nonClaims", FontDiagnosticTaxonomyNonClaims, comma = true)
+            appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+            append("}")
+        },
+    )
+}
+
+fun defaultFontDiagnosticTaxonomy(): FontDiagnosticTaxonomy = FontDiagnosticTaxonomy(
+    acceptedNamespaces = FontDiagnosticAcceptedNamespaces,
+    codes = listOf(
+        fontDiagnosticCode(
+            code = "font.source.bytes-unavailable",
+            namespace = "font.source",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.ERROR,
+            route = "font-source",
+            requiredFields = listOf("sourceId", "sourceKind"),
+        ),
+        fontDiagnosticCode(
+            code = "font.source.native-engine-request-unsupported",
+            namespace = "font.source",
+            claimImpact = FontDiagnosticClaimImpact.EXPECTED_UNSUPPORTED,
+            severity = FontDiagnosticSeverity.INFO,
+            route = "external-drift",
+            requiredFields = listOf("externalEngine", "requestedBehavior"),
+        ),
+        fontDiagnosticCode(
+            code = "font.sfnt.required-table-missing",
+            namespace = "font.sfnt",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.ERROR,
+            route = "sfnt-directory",
+            requiredFields = listOf("sourceId", "tableTag"),
+        ),
+        fontDiagnosticCode(
+            code = "font.scaler.outline-unavailable",
+            namespace = "font.scaler",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.ERROR,
+            route = "scaler-outline",
+            requiredFields = listOf("sourceId", "typefaceId", "glyphId"),
+        ),
+        fontDiagnosticCode(
+            code = "text.shaping.emoji-sequence-unsupported",
+            namespace = "text.shaping",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.WARNING,
+            route = "shaping-emoji",
+            requiredFields = listOf("textRange", "script"),
+        ),
+        fontDiagnosticCode(
+            code = "text.paragraph.line-breaker-dependency-gated",
+            namespace = "text.paragraph",
+            claimImpact = FontDiagnosticClaimImpact.DEPENDENCY_GATED,
+            severity = FontDiagnosticSeverity.WARNING,
+            route = "paragraph-layout",
+            requiredFields = listOf("textRange", "paragraphRoute"),
+        ),
+        fontDiagnosticCode(
+            code = "glyph.artifact.bitmap-strike-unavailable",
+            namespace = "glyph.artifact",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.WARNING,
+            route = "bitmap-glyph-artifact",
+            requiredFields = listOf("typefaceId", "glyphId", "strikeKey"),
+        ),
+        fontDiagnosticCode(
+            code = "text.gpu.artifact-unregistered",
+            namespace = "text.gpu",
+            claimImpact = FontDiagnosticClaimImpact.GPU_GATED,
+            severity = FontDiagnosticSeverity.ERROR,
+            route = "gpu-text-handoff",
+            requiredFields = listOf("artifactId", "generation"),
+        ),
+        fontDiagnosticCode(
+            code = "unsupported.text.artifact_unregistered",
+            namespace = "unsupported.text",
+            claimImpact = FontDiagnosticClaimImpact.GPU_GATED,
+            severity = FontDiagnosticSeverity.ERROR,
+            route = "gpu-renderer-text",
+            requiredFields = listOf("rendererRoute", "artifactId"),
+        ),
+    ),
+    legacyMappings = listOf(
+        LegacyFontDiagnosticMapping(
+            legacyCode = "font.native-engine-unavailable",
+            targetCode = "font.source.native-engine-request-unsupported",
+            classification = FontDiagnosticClaimImpact.EXPECTED_UNSUPPORTED,
+        ),
+        LegacyFontDiagnosticMapping(
+            legacyCode = "font.bitmap-strike-unavailable",
+            targetCode = "glyph.artifact.bitmap-strike-unavailable",
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+        ),
+        LegacyFontDiagnosticMapping(
+            legacyCode = "font.emoji-sequence-shaping-unsupported",
+            targetCode = "text.shaping.emoji-sequence-unsupported",
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+        ),
+    ),
+    sampleDiagnostics = listOf(
+        fontDiagnosticSample(
+            label = "source-failure",
+            code = "font.source.bytes-unavailable",
+            subject = "source:generated-malformed-directory",
+            route = "font-source",
+            severity = FontDiagnosticSeverity.ERROR,
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+            fields = mapOf(
+                "sourceId" to "550e8400-e29b-41d4-a716-446655440200",
+                "sourceKind" to FontSourceKind.GENERATED_FIXTURE.serializedName,
+            ),
+        ),
+        fontDiagnosticSample(
+            label = "sfnt-failure",
+            code = "font.sfnt.required-table-missing",
+            subject = "sfnt:missing-head",
+            route = "sfnt-directory",
+            severity = FontDiagnosticSeverity.ERROR,
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+            fields = mapOf(
+                "sourceId" to "550e8400-e29b-41d4-a716-446655440201",
+                "tableTag" to "head",
+            ),
+        ),
+        fontDiagnosticSample(
+            label = "scaler-failure",
+            code = "font.scaler.outline-unavailable",
+            subject = "glyph:42",
+            route = "scaler-outline",
+            severity = FontDiagnosticSeverity.ERROR,
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+            fields = mapOf(
+                "sourceId" to "550e8400-e29b-41d4-a716-446655440202",
+                "typefaceId" to "550e8400-e29b-41d4-a716-446655440302",
+                "glyphId" to "42",
+            ),
+        ),
+        fontDiagnosticSample(
+            label = "shaping-refusal",
+            code = "text.shaping.emoji-sequence-unsupported",
+            subject = "text-range:0..7",
+            route = "shaping-emoji",
+            severity = FontDiagnosticSeverity.WARNING,
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+            fields = mapOf(
+                "script" to "Emoji",
+                "textRange" to "0..7",
+            ),
+        ),
+        fontDiagnosticSample(
+            label = "gpu-text-route-refusal",
+            code = "unsupported.text.artifact_unregistered",
+            subject = "artifact:text-a8-atlas",
+            route = "gpu-renderer-text",
+            severity = FontDiagnosticSeverity.ERROR,
+            classification = FontDiagnosticClaimImpact.GPU_GATED,
+            fields = mapOf(
+                "artifactId" to "text-a8-atlas",
+                "rendererRoute" to "a8-atlas",
+            ),
+        ),
+    ),
+    rejectedDiagnostics = listOf(
+        FontDiagnosticClassification(
+            inputCode = "font missing",
+            accepted = false,
+            targetCode = null,
+            namespace = null,
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+            reason = "generic-or-unknown-diagnostic",
+        ),
+    ),
+)
+
+object FontDiagnosticTaxonomyWriter {
+    fun writeTaxonomyJson(
+        taxonomy: FontDiagnosticTaxonomy = defaultFontDiagnosticTaxonomy(),
+    ): CanonicalFontIdentityJson = CanonicalFontIdentityJson("${taxonomy.toCanonicalJson().value}\n")
+}
+
+private fun fontDiagnosticCode(
+    code: String,
+    namespace: String,
+    claimImpact: FontDiagnosticClaimImpact,
+    severity: FontDiagnosticSeverity,
+    route: String,
+    requiredFields: List<String>,
+): FontDiagnosticCode = FontDiagnosticCode(
+    code = code,
+    namespace = namespace,
+    claimImpact = claimImpact,
+    severity = severity,
+    route = route,
+    requiredFields = requiredFields,
+)
+
+private fun fontDiagnosticSample(
+    label: String,
+    code: String,
+    subject: String,
+    route: String,
+    severity: FontDiagnosticSeverity,
+    classification: FontDiagnosticClaimImpact,
+    fields: Map<String, String>,
+): FontDiagnosticSample = FontDiagnosticSample(
+    label = label,
+    code = code,
+    subject = subject,
+    route = route,
+    severity = severity,
+    classification = classification,
+    fields = fields,
+)
+
 private const val FONT_SOURCE_IDENTITY_REPORT_SCHEMA =
     "org.graphiks.kanvas.font.FontSourceIdentityReport.v1"
 
@@ -1639,6 +2158,9 @@ private const val FONT_IDENTITY_DUMP_DETERMINISM_SCHEMA =
 private const val FONT_FIXTURE_MANIFEST_SCHEMA =
     "org.graphiks.kanvas.font.FontFixtureManifest.v1"
 
+private const val FONT_DIAGNOSTIC_TAXONOMY_SCHEMA =
+    "org.graphiks.kanvas.font.FontDiagnosticTaxonomy.v1"
+
 private val FontFixtureManifestNonClaims: List<String> = listOf(
     "no-fallback-support-claim",
     "no-glyph-support-claim",
@@ -1647,6 +2169,33 @@ private val FontFixtureManifestNonClaims: List<String> = listOf(
     "no-rendering-support-claim",
     "no-scaler-support-claim",
     "no-shaping-support-claim",
+)
+
+private val FontDiagnosticAcceptedNamespaces: List<String> = listOf(
+    "font.source",
+    "font.sfnt",
+    "font.scaler",
+    "text.shaping",
+    "text.paragraph",
+    "glyph.artifact",
+    "text.gpu",
+    "unsupported.text",
+)
+
+private val FontDiagnosticCommonRequiredFields: List<String> = listOf(
+    "subject",
+    "route",
+    "severity",
+    "claimImpact",
+)
+
+private val FontDiagnosticTaxonomyNonClaims: List<String> = listOf(
+    "legacy-gates-remain-open",
+    "no-external-engine-product-dependency",
+    "no-gpu-route-support-claim",
+    "no-rendering-support-claim",
+    "no-shaping-support-claim",
+    "taxonomy-only-tracked-gap",
 )
 
 /**
@@ -2819,6 +3368,39 @@ data class FallbackDecisionTrace(
         append(diagnosticCode ?: "none")
     }
 }
+
+private fun List<String>.normalizedDiagnosticFieldNames(): List<String> {
+    for (fieldName in this) {
+        require(fieldName.isStableDiagnosticFieldName()) {
+            "diagnostic field names must be stable one-line field identifiers."
+        }
+    }
+    return distinct().sorted()
+}
+
+private fun normalizedDiagnosticFieldMap(fields: Map<String, String>): Map<String, String> {
+    for ((fieldName, value) in fields) {
+        require(fieldName.isStableDiagnosticFieldName()) {
+            "diagnostic field names must be stable one-line field identifiers."
+        }
+        require(value.isStableManifestString()) {
+            "diagnostic field values must be stable one-line strings."
+        }
+    }
+    return fields.toSortedMap()
+}
+
+private fun String.isStableDiagnosticFieldName(): Boolean =
+    isNotBlank() && all { character ->
+        character in 'A'..'Z' ||
+            character in 'a'..'z' ||
+            character in '0'..'9' ||
+            character == '-'
+    }
+
+private fun FontDiagnosticClaimImpact.isNonClaimImpact(): Boolean =
+    this != FontDiagnosticClaimImpact.TARGET_SUPPORTED &&
+        this != FontDiagnosticClaimImpact.CURRENT_SUPPORTED
 
 private fun String.familyKey(): String = trim().lowercase()
 

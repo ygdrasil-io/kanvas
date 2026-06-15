@@ -25,6 +25,66 @@ def load_validator():
 
 
 class PureKotlinTextBoundaryContractsTest(unittest.TestCase):
+    def boundary_error_for(self, validator, relative_file: str, source_lines: list[str]) -> str:
+        with tempfile.TemporaryDirectory(prefix="pkt_boundary_contracts_") as temp_root:
+            root = Path(temp_root)
+            source = root / relative_file
+            source.parent.mkdir(parents=True)
+            source.write_text("\n".join(source_lines), encoding="utf-8")
+
+            with self.assertRaises(validator.ValidationError) as rejected:
+                validator.validate_import_boundaries(root)
+        return str(rejected.exception)
+
+    def test_boundary_diagnostic_snapshot_uses_stable_architecture_codes(self) -> None:
+        validator = load_validator()
+
+        skia_api_leak = self.boundary_error_for(
+            validator,
+            "font/core/src/main/kotlin/org/graphiks/kanvas/font/SkLeak.kt",
+            [
+                "package org.graphiks.kanvas.font",
+                "",
+                "import org.skia.foundation.SkFont",
+                "",
+                "class SkLeak(val font: SkFont)",
+                "",
+            ],
+        )
+        gpu_backedge = self.boundary_error_for(
+            validator,
+            "font/core/src/main/kotlin/org/graphiks/kanvas/font/GpuBackedge.kt",
+            [
+                "package org.graphiks.kanvas.font",
+                "",
+                "import org.graphiks.kanvas.gpu.renderer.text.GPUTextRouteDiagnostics",
+                "",
+                "class GpuBackedge",
+                "",
+            ],
+        )
+
+        self.assertEqual(
+            {
+                "skia_api_leak": (
+                    "pure Kotlin text boundary contract validation failed: "
+                    "font.architecture.skia-api-leak: pure Kotlin text boundary import violation "
+                    "in font/core/src/main/kotlin/org/graphiks/kanvas/font/SkLeak.kt:3: "
+                    "import org.skia.foundation.SkFont (Skia facade)"
+                ),
+                "gpu_backedge": (
+                    "pure Kotlin text boundary contract validation failed: "
+                    "font.architecture.gpu-backedge: pure Kotlin text boundary import violation "
+                    "in font/core/src/main/kotlin/org/graphiks/kanvas/font/GpuBackedge.kt:3: "
+                    "import org.graphiks.kanvas.gpu.renderer.text.GPUTextRouteDiagnostics (gpu renderer)"
+                ),
+            },
+            {
+                "skia_api_leak": skia_api_leak,
+                "gpu_backedge": gpu_backedge,
+            },
+        )
+
     def test_manifest_covers_spec_00_boundaries_without_support_claims(self) -> None:
         validator = load_validator()
         manifest = validator.load_manifest(PROJECT_ROOT)

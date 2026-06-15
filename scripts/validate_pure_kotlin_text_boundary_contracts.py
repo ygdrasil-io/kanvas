@@ -153,6 +153,33 @@ FORBIDDEN_SUPPORT_CLAIM_PATTERNS = [
     re.compile(r"\brendering\s+support\b", re.IGNORECASE),
 ]
 
+FONT_ARCHITECTURE_SKIA_API_LEAK = "font.architecture.skia-api-leak"
+FONT_ARCHITECTURE_GPU_BACKEDGE = "font.architecture.gpu-backedge"
+FONT_ARCHITECTURE_GPU_FONT_DEPENDENCY = "font.architecture.gpu-font-dependency"
+FONT_ARCHITECTURE_NATIVE_FONT_DEPENDENCY = "font.architecture.native-font-dependency"
+FONT_ARCHITECTURE_FORBIDDEN_IMPORT = "font.architecture.forbidden-import"
+
+SKIA_FORBIDDEN_REASONS = {"Skia facade", "Skia binding", "Skia package"}
+GPU_RENDERER_TEXT_FONT_REASONS = {"font parser", "font scaler", "text shaping", "paragraph layout"}
+NATIVE_FONT_FORBIDDEN_REASONS = {
+    "AWT",
+    "Swing",
+    "JNI/native wrapper",
+    "native interop",
+    "JNA",
+    "JNI wrapper",
+    "JNA/JNI wrapper",
+    "FreeType",
+    "HarfBuzz",
+    "Fontations",
+    "CoreText",
+    "DirectWrite",
+    "fontconfig",
+    "platform font engine",
+    "platform shaper",
+    "native text engine",
+}
+
 
 class ValidationError(RuntimeError):
     pass
@@ -484,6 +511,18 @@ def target_matches_prefix(target: str, prefix: str) -> bool:
     return target == prefix or target.startswith(f"{prefix}.") or target.startswith(f"{prefix}.*")
 
 
+def boundary_diagnostic_code(label: str, prefix: str, reason: str) -> str:
+    if reason in SKIA_FORBIDDEN_REASONS:
+        return FONT_ARCHITECTURE_SKIA_API_LEAK
+    if label == "pure Kotlin text boundary" and prefix == "org.graphiks.kanvas.gpu.renderer":
+        return FONT_ARCHITECTURE_GPU_BACKEDGE
+    if label == "GPU renderer text boundary" and reason in GPU_RENDERER_TEXT_FONT_REASONS:
+        return FONT_ARCHITECTURE_GPU_FONT_DEPENDENCY
+    if reason in NATIVE_FONT_FORBIDDEN_REASONS:
+        return FONT_ARCHITECTURE_NATIVE_FONT_DEPENDENCY
+    return FONT_ARCHITECTURE_FORBIDDEN_IMPORT
+
+
 def scan_kotlin_import_targets(root: Path, relative_root: str) -> Iterable[tuple[Path, int, str, str]]:
     source_root = root / relative_root
     if not source_root.is_dir():
@@ -509,7 +548,8 @@ def validate_targets_against_prefixes(
             for prefix, reason in forbidden_prefixes:
                 if target_matches_prefix(target, prefix):
                     relative_file = source_file.relative_to(root)
-                    fail(f"{label} import violation in {relative_file}:{line_number}: {kind} {target} ({reason})")
+                    code = boundary_diagnostic_code(label, prefix, reason)
+                    fail(f"{code}: {label} import violation in {relative_file}:{line_number}: {kind} {target} ({reason})")
 
 
 def validate_import_boundaries(root: Path) -> None:

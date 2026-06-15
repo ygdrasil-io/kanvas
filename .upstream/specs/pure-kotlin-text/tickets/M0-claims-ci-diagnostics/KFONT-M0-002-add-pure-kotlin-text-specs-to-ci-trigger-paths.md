@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M0-002"
 title: "Add pure-kotlin-text specs to CI trigger paths"
-status: "proposed"
+status: "review"
 milestone: "M0"
 priority: "P0"
 owner_area: "ci"
@@ -69,11 +69,11 @@ fun classifySpecChange(path: String): TriggerDecision =
 
 ## Acceptance Criteria
 
-- [ ] A diff touching `.upstream/specs/pure-kotlin-text/README.md` schedules the font validation lane.
-- [ ] A diff touching any M0-M13 ticket schedules the same claim/dashboard validation used for spec changes.
-- [ ] A diff touching unrelated archived specs does not accidentally become active pure Kotlin font backlog.
-- [ ] CI logs include the matched glob and lane names for auditability.
-- [ ] The path filter behavior is covered by a config test, dry-run output, or equivalent CI evidence.
+- [x] A diff touching `.upstream/specs/pure-kotlin-text/README.md` schedules the font validation lane.
+- [x] A diff touching any M0-M13 ticket schedules the same claim/dashboard validation used for spec changes.
+- [x] A diff touching unrelated archived specs does not accidentally become active pure Kotlin font backlog.
+- [x] CI logs include the matched glob and lane names for auditability.
+- [x] The path filter behavior is covered by a config test, dry-run output, or equivalent CI evidence.
 
 ## Required Evidence
 
@@ -102,8 +102,16 @@ rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePerformanceTrendWar
 
 ## Status Notes
 
-- `proposed`: Trigger paths are specified, but no CI path-filter evidence is attached yet.
-- Move to `ready` after KFONT-M0-001 defines the font CI lane name and required tasks.
+- `review`: `.github/workflows/test.yml` now includes
+  `.upstream/specs/pure-kotlin-text/**`, `font/**`,
+  `reports/pure-kotlin-text/**`, and the pure Kotlin text CI/boundary
+  validator scripts in PR and push path filters. `font-ci-lane.json` records
+  positive spec/ticket trigger samples and an archived-only negative sample.
+- Spec/reports changes now run an executed CI `git diff --check` gate scoped to
+  `.upstream/specs/pure-kotlin-text` and `reports/pure-kotlin-text` after
+  resolving an explicit PR, push, or default-branch merge-base. The validator
+  rejects the workflow if the diff hygiene, CI validator, or boundary validator
+  steps are removed, disabled, or reduced to comment-only commands.
 
 ## Linear Labels
 
