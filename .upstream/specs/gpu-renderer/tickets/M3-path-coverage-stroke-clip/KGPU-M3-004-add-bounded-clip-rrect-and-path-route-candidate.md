@@ -1,7 +1,7 @@
 ---
 id: KGPU-M3-004
 title: "Add bounded clip rrect and path route candidate"
-status: proposed
+status: done
 milestone: M3
 priority: P0
 owner_area: clips-atlas
@@ -85,7 +85,29 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Bounded candidate only.
+- `done`: Added `GPUBoundedClipPreparedPlanner` contract evidence for one
+  bounded rrect+path intersect stack as `CPUPreparedGPU` with a typed
+  `CoverageMaskArtifact`, stable `GPUClipOrderingToken`, deterministic artifact
+  key `coverage.clip.*` including content-changing element facts, ordered
+  element descriptor dumps, `NoAtlas` mask strategy evidence, and stable
+  refusals for difference operation, inverse fill, unregistered shader clip,
+  mask budget overflow, nondeterministic rrect and path keys, shape/key
+  mismatch, and unbounded stack bounds. Independent review
+  `019ec7f0-a288-76f0-b573-a31d94fe8ca7` found insufficient artifact key
+  content and missing shape/key prefix validation; both were remediated with
+  targeted RED/GREEN coverage. Post-remediation review
+  `019ec7f6-e111-7a32-9883-06d8e174c429` then found missing `fillRule` in the
+  artifact key and lossy key sanitation; both were remediated by hex-encoding
+  accepted stack/element content facts and adding RED/GREEN coverage for
+  `NonZero` vs `EvenOdd`, separator-preserving shape keys, and stack bounds.
+  Final independent review `019ec7fe-3b8a-77b1-bc93-e9f75f6965b7` accepted the
+  evidence and confirmed the key remediation, stable non-claims, and
+  contract-only scope. The slice does not activate product clipping, atlas
+  generation, stencil
+  coverage, shader clips, arbitrary clip stacks, adapter-backed execution, or
+  CPU-rendered clipped layer fallback. Remaining gate: future clip promotion
+  still needs real execution, atlas/stencil/shader route evidence, and
+  visual/reference evidence before any broader support claim.
 
 ## Linear Labels
 

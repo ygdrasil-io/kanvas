@@ -28,7 +28,7 @@ or coverage artifact routes must cite `19-path-coverage-atlas-strategy.md`,
 | [KGPU-M3-001 - Add basic path fill prepared route](KGPU-M3-001-add-basic-path-fill-prepared-route.md) | `done` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `geometry-artifacts` | `KGPU-M2-003` | `path fill legacy` |
 | [KGPU-M3-002 - Add stencil-cover path route candidate](KGPU-M3-002-add-stencil-cover-path-route-candidate.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry-passes` | `KGPU-M3-001` | `path fill legacy` |
 | [KGPU-M3-003 - Add simple stroke route candidate](KGPU-M3-003-add-simple-stroke-route-candidate.md) | `done` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `geometry-stroke` | `KGPU-M3-001` | `stroke legacy` |
-| [KGPU-M3-004 - Add bounded clip rrect and path route candidate](KGPU-M3-004-add-bounded-clip-rrect-and-path-route-candidate.md) | `proposed` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `clips-atlas` | `KGPU-M3-001` | `clip legacy` |
+| [KGPU-M3-004 - Add bounded clip rrect and path route candidate](KGPU-M3-004-add-bounded-clip-rrect-and-path-route-candidate.md) | `done` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `clips-atlas` | `KGPU-M3-001` | `clip legacy` |
 | [KGPU-M3-005 - Add path and coverage atlas refusal policy gates](KGPU-M3-005-add-path-and-coverage-atlas-refusal-policy-gates.md) | `done` | `P1` | `RefuseRequired` | `RefuseDiagnostic` | `false` | `false` | `atlas-policy` | `KGPU-M3-001` | - |
 
 ## Validation Bundle
@@ -38,6 +38,7 @@ rtk git diff --check
 rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.geometry.BasicPathFillPreparedRouteTest
 rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.geometry.AtlasPolicyRefusalGateTest
 rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.geometry.SimpleStrokePreparedRouteTest
+rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.clips.BoundedClipPreparedRouteTest
 rtk ./gradlew --no-daemon :gpu-renderer:check
 rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Coverage*' --tests '*Path*'
 ```
@@ -58,6 +59,11 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Coverage*' --tests '*Path*'
   gate, not as KGPU-M3-001 route evidence.
 - Independent review `019ec7c5-ae98-7382-b5e2-865bd4734a59` accepted KGPU-M3-001
   for `done` with no findings.
+- KGPU-M3-002 remains `proposed` because it is a `GPUNative` stencil-cover
+  candidate. Its remaining gate is native/adapter evidence for depth/stencil
+  capability, stencil producer before cover consumer ordering, pass/resource
+  and readback artifacts, and explicit skipped-lane or refusal diagnostics. The
+  prepared-path evidence from KGPU-M3-001 does not promote this native route.
 - `AtlasPolicyRefusalGateTest` records path/coverage atlas refusal policy gates
   for selector-only evidence, missing budget/generation/synchronization facts,
   nondeterministic content keys, `RefuseRequired` dashboard classification, and
@@ -73,6 +79,19 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Coverage*' --tests '*Path*'
   support is claimed.
 - Independent review `019ec7e4-77c7-7ec3-ae53-571b6086fbcd` accepted KGPU-M3-003
   after miter-key and path-effect refusal remediation.
+- `BoundedClipPreparedRouteTest` records one bounded rrect+path intersect clip
+  stack as a `CPUPreparedGPU` contract route with a typed `CoverageMaskArtifact`,
+  stable ordering token, deterministic hex-encoded content-specific artifact
+  key excluding handles, ordered element dumps, `NoAtlas` mask strategy
+  evidence, and stable refusals for difference, inverse, shader, over-budget,
+  nondeterministic key, shape/key mismatch, and unbounded stack cases. It also
+  proves distinct keys for changed path content, fill rule, separator-preserving
+  shape keys, and stack bounds. The evidence is contract/planning only; no
+  product clipping, atlas generation, stencil coverage, shader clip, arbitrary
+  clip stack, adapter execution, or CPU-rendered clipped layer fallback is
+  claimed.
+- Independent review `019ec7fe-3b8a-77b1-bc93-e9f75f6965b7` accepted KGPU-M3-004
+  after content-key and shape/key remediation.
 
 ## Non-Claims
 
@@ -84,6 +103,8 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Coverage*' --tests '*Path*'
   not count as path or coverage atlas support.
 - Simple stroke prepared artifacts are not broad stroke support and do not
   imply hairline, dash, path-effect, or round cap/join parity.
+- Bounded clip prepared artifacts are not arbitrary clip-stack support and do
+  not imply atlas, stencil, shader-clip, or CPU-rendered clipped layer support.
 
 ## Status Update Rule
 

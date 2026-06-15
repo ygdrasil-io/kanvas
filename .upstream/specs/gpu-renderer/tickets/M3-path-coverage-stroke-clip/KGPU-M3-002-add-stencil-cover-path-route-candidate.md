@@ -89,7 +89,12 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Candidate route only.
+- `proposed`: Candidate route only. This is a `GPUNative` stencil-cover ticket,
+  so promotion requires native/adapter evidence for depth/stencil capability,
+  producer-before-cover ordering, pass/resource/readback artifacts, and stable
+  skipped-lane or refusal diagnostics. Descriptor-only planning,
+  `CPUPreparedGPU` continuation from KGPU-M3-001, or a refusal-only selector
+  cannot count as stencil-cover support for this ticket.
 
 ## Linear Labels
 
