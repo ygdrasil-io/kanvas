@@ -39,6 +39,15 @@ data class SceneRect(val left: Float, val top: Float, val right: Float, val bott
     }
 
     fun toGpuRect(): GPURect = GPURect(left = left, top = top, right = right, bottom = bottom)
+
+    fun offset(dx: Float, dy: Float): SceneRect =
+        SceneRect(left = left + dx, top = top + dy, right = right + dx, bottom = bottom + dy)
+
+    fun contains(other: SceneRect): Boolean =
+        other.left >= left &&
+            other.top >= top &&
+            other.right <= right &&
+            other.bottom <= bottom
 }
 
 data class SceneColor(val r: Float, val g: Float, val b: Float, val a: Float = 1f) {
@@ -73,6 +82,7 @@ enum class SceneBitmapSampling {
 
 enum class SceneFilterKind(val wireName: String) {
     LumaTint("luma-tint"),
+    DropShadow("drop-shadow"),
 }
 
 sealed interface SceneCommand {
@@ -172,11 +182,51 @@ sealed interface SceneCommand {
         }
     }
 
-    data class SaveLayer(override val label: String) : SceneCommand {
+    data class SaveLayer(
+        override val label: String,
+        val bounds: SceneRect? = null,
+        val contentRect: SceneRect? = null,
+        val radius: Float = 0f,
+        val contentColor: SceneColor? = null,
+        val shadowColor: SceneColor? = null,
+        val shadowOffsetX: Float = 8f,
+        val shadowOffsetY: Float = 10f,
+        val paintOrder: Int = 0,
+    ) : SceneCommand {
         override val family: String = "save-layer"
+        val layerKind: String = "bounded-shadow-card"
+        val hasFixturePayload: Boolean =
+            bounds != null && contentRect != null && contentColor != null && shadowColor != null
+        val shadowRect: SceneRect? = contentRect?.offset(shadowOffsetX, shadowOffsetY)
 
         init {
             requireSceneCommandLabel(label)
+            val payloadFieldCount = listOf(bounds, contentRect, contentColor, shadowColor).count { it != null }
+            require(payloadFieldCount == 0 || payloadFieldCount == 4) {
+                "SceneCommand.SaveLayer fixture payload requires bounds, contentRect, contentColor, and shadowColor"
+            }
+            require(!radius.isNaN() && !radius.isInfinite()) {
+                "SceneCommand.SaveLayer.radius must be finite"
+            }
+            require(radius >= 0f) { "SceneCommand.SaveLayer.radius must be non-negative" }
+            require(!shadowOffsetX.isNaN() && !shadowOffsetX.isInfinite()) {
+                "SceneCommand.SaveLayer.shadowOffsetX must be finite"
+            }
+            require(!shadowOffsetY.isNaN() && !shadowOffsetY.isInfinite()) {
+                "SceneCommand.SaveLayer.shadowOffsetY must be finite"
+            }
+            require(paintOrder >= 0) { "SceneCommand.SaveLayer.paintOrder must be non-negative" }
+            if (hasFixturePayload) {
+                val layerBounds = bounds ?: error("SaveLayer requires bounds fixture payload: $label")
+                val content = contentRect ?: error("SaveLayer requires contentRect fixture payload: $label")
+                val shadow = shadowRect ?: error("SaveLayer requires shadowRect fixture payload: $label")
+                require(layerBounds.contains(content)) {
+                    "SceneCommand.SaveLayer.contentRect must be inside bounds: $label"
+                }
+                require(layerBounds.contains(shadow)) {
+                    "SceneCommand.SaveLayer.shadowRect must be inside bounds: $label"
+                }
+            }
         }
     }
 

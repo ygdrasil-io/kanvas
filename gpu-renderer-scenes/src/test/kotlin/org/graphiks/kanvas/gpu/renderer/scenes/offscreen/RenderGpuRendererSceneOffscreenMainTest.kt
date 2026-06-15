@@ -83,6 +83,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 filterNodeCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "layered-shadow-card",
+                fillRectCount = 0,
+                saveLayerCount = 1,
+                filterNodeCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "runtime-effect-color-tile",
                 fillRectCount = 0,
                 runtimeEffectCount = 1,
@@ -158,6 +164,20 @@ class RenderGpuRendererSceneOffscreenMainTest {
         }
 
         assertContains(failure.message ?: "", "fixture-backed FilterNode payloads: marker")
+    }
+
+    @Test
+    fun `rect only command preparation rejects save layer markers without fixture payloads`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            prepareRectOnlyDrawPlan(
+                sceneId = "save-layer-marker-only",
+                commands = listOf(SceneCommand.SaveLayer("marker")),
+                width = 320,
+                height = 200,
+            )
+        }
+
+        assertContains(failure.message ?: "", "fixture-backed SaveLayer payloads: marker")
     }
 
     @Test
@@ -300,6 +320,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
         val clipCount: Int? = null,
         val bitmapRectCount: Int? = null,
         val filterNodeCount: Int? = null,
+        val saveLayerCount: Int? = null,
         val runtimeEffectCount: Int? = null,
     )
 
@@ -335,10 +356,25 @@ class RenderGpuRendererSceneOffscreenMainTest {
         expectation.bitmapRectCount?.let { count ->
             assertContains(runJson, "bitmapRectCommands=$count")
         }
+        expectation.saveLayerCount?.let { count ->
+            assertContains(runJson, "saveLayerCommands=$count")
+            assertContains(runJson, "saveLayerKinds=bounded-shadow-card")
+            assertContains(runJson, "saveLayerRoute=scene-fixture.bounded-shadow-card")
+            assertContains(runJson, "saveLayerMaterializedDraws=2")
+            assertContains(runJson, "saveLayerFallbackReason=none")
+            assertContains(runJson, "filterRoutes=scene-fixture.bounded-drop-shadow")
+            assertContains(runJson, "generalSaveLayerSupport=false")
+            assertContains(runJson, "imageFilterDagSupport=false")
+        }
         expectation.filterNodeCount?.let { count ->
             assertContains(runJson, "filterNodeCommands=$count")
-            assertContains(runJson, "filterKinds=luma-tint")
-            assertContains(runJson, "filterInputs=photo")
+            if (expectation.sceneId == "layered-shadow-card") {
+                assertContains(runJson, "filterKinds=drop-shadow")
+                assertContains(runJson, "filterInputs=shadow-card-layer")
+            } else {
+                assertContains(runJson, "filterKinds=luma-tint")
+                assertContains(runJson, "filterInputs=photo")
+            }
         }
         expectation.runtimeEffectCount?.let { count ->
             assertContains(runJson, "runtimeEffectCommands=$count")

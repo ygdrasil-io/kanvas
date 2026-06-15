@@ -74,6 +74,20 @@ class GPURendererSceneRegistryTest {
         assertEquals(16, command.uniformSize)
     }
 
+    @Test
+    fun `layered shadow card is backed by bounded shadow layer and drop shadow payloads`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("layered-shadow-card")
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        val layer = assertIs<SceneCommand.SaveLayer>(scene.commands[1])
+        val filter = assertIs<SceneCommand.FilterNode>(scene.commands[2])
+
+        assertTrue(layer.hasFixturePayload)
+        assertEquals("bounded-shadow-card", layer.layerKind)
+        assertEquals("shadow-card-layer", filter.inputLabel)
+        assertEquals("drop-shadow", filter.kind?.wireName)
+        assertEquals(0.72f, filter.strength)
+    }
+
     private data class SceneExpectationRow(
         val sceneId: String,
         val tags: Set<SceneTag>,
@@ -134,7 +148,7 @@ class GPURendererSceneRegistryTest {
             SceneExpectationRow(
                 sceneId = "layered-shadow-card",
                 tags = setOf(SceneTag.Layer, SceneTag.Filter),
-                commandFamilies = listOf("save-layer", "filter-node"),
+                commandFamilies = listOf("clear", "save-layer", "filter-node"),
                 roadmapLinks = listOf(RoadmapExpectation("M5")),
             ),
             SceneExpectationRow(

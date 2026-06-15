@@ -20,6 +20,7 @@ object WindowedRectOnlySceneShader {
         val clear = clearColor(scene)
         val drawBranches = scene.draws().joinToString(separator = "\n") { draw ->
             """
+                let drop_shadow_strength_${draw.safeName()} = ${draw.dropShadowStrength.wgslFloat()};
                 let ${draw.shapeCoverageName()} = rounded_rect_coverage(
                     pixel,
                     vec4<f32>(
@@ -181,6 +182,7 @@ private data class WindowedDraw(
     val paintKind: Float,
     val filterKind: Float,
     val filterStrength: Float,
+    val dropShadowStrength: Float,
     val clip: SceneRect?,
 )
 
@@ -202,6 +204,7 @@ private fun GPURendererScene<*>.draws(): List<WindowedDraw> {
                 is SceneCommand.FillRect,
                 is SceneCommand.FillRRect,
                 is SceneCommand.LinearGradientRect,
+                is SceneCommand.SaveLayer,
                 is SceneCommand.RuntimeEffectTile -> add(IndexedWindowedDraw(index, command, activeClip))
                 is SceneCommand.BitmapRect -> if (command.hasFixturePayload) {
                     add(IndexedWindowedDraw(index, command, activeClip))
@@ -216,80 +219,132 @@ private fun GPURendererScene<*>.draws(): List<WindowedDraw> {
             compareBy<IndexedWindowedDraw> { (_, command) -> command.paintOrder() }
                 .thenBy { it.index },
         )
-        .map { (_, command, clip) ->
+        .flatMap { (_, command, clip) ->
             val filter = if (command is SceneCommand.BitmapRect) filtersByInput[command.label] else null
             when (command) {
-                is SceneCommand.FillRect -> WindowedDraw(
-                    label = command.label,
-                    rect = command.rect,
-                    radius = 0f,
-                    startColor = command.color,
-                    endColor = command.color,
-                    bottomLeftColor = command.color,
-                    bottomRightColor = command.color,
-                    paintKind = 0f,
-                    filterKind = 0f,
-                    filterStrength = 0f,
-                    clip = clip,
+                is SceneCommand.FillRect -> listOf(
+                    WindowedDraw(
+                        label = command.label,
+                        rect = command.rect,
+                        radius = 0f,
+                        startColor = command.color,
+                        endColor = command.color,
+                        bottomLeftColor = command.color,
+                        bottomRightColor = command.color,
+                        paintKind = 0f,
+                        filterKind = 0f,
+                        filterStrength = 0f,
+                        dropShadowStrength = 0f,
+                        clip = clip,
+                    ),
                 )
-                is SceneCommand.FillRRect -> WindowedDraw(
-                    label = command.label,
-                    rect = command.rect,
-                    radius = command.radius,
-                    startColor = command.color,
-                    endColor = command.color,
-                    bottomLeftColor = command.color,
-                    bottomRightColor = command.color,
-                    paintKind = 0f,
-                    filterKind = 0f,
-                    filterStrength = 0f,
-                    clip = clip,
+                is SceneCommand.FillRRect -> listOf(
+                    WindowedDraw(
+                        label = command.label,
+                        rect = command.rect,
+                        radius = command.radius,
+                        startColor = command.color,
+                        endColor = command.color,
+                        bottomLeftColor = command.color,
+                        bottomRightColor = command.color,
+                        paintKind = 0f,
+                        filterKind = 0f,
+                        filterStrength = 0f,
+                        dropShadowStrength = 0f,
+                        clip = clip,
+                    ),
                 )
-                is SceneCommand.LinearGradientRect -> WindowedDraw(
-                    label = command.label,
-                    rect = command.rect,
-                    radius = 0f,
-                    startColor = command.startColor,
-                    endColor = command.endColor,
-                    bottomLeftColor = command.startColor,
-                    bottomRightColor = command.endColor,
-                    paintKind = 1f,
-                    filterKind = 0f,
-                    filterStrength = 0f,
-                    clip = clip,
+                is SceneCommand.LinearGradientRect -> listOf(
+                    WindowedDraw(
+                        label = command.label,
+                        rect = command.rect,
+                        radius = 0f,
+                        startColor = command.startColor,
+                        endColor = command.endColor,
+                        bottomLeftColor = command.startColor,
+                        bottomRightColor = command.endColor,
+                        paintKind = 1f,
+                        filterKind = 0f,
+                        filterStrength = 0f,
+                        dropShadowStrength = 0f,
+                        clip = clip,
+                    ),
                 )
-                is SceneCommand.BitmapRect -> WindowedDraw(
-                    label = command.label,
-                    rect = command.rect ?: error("BitmapRect requires rect fixture payload: ${command.label}"),
-                    radius = 0f,
-                    startColor = command.source?.topLeft
-                        ?: error("BitmapRect requires source fixture payload: ${command.label}"),
-                    endColor = command.source.topRight,
-                    bottomLeftColor = command.source.bottomLeft,
-                    bottomRightColor = command.source.bottomRight,
-                    paintKind = when (command.sampling) {
-                        SceneBitmapSampling.Nearest -> 2f
-                        SceneBitmapSampling.Linear -> 3f
-                    },
-                    filterKind = filter?.kind?.filterPaintKind() ?: 0f,
-                    filterStrength = filter?.strength ?: 0f,
-                    clip = clip,
+                is SceneCommand.BitmapRect -> listOf(
+                    WindowedDraw(
+                        label = command.label,
+                        rect = command.rect ?: error("BitmapRect requires rect fixture payload: ${command.label}"),
+                        radius = 0f,
+                        startColor = command.source?.topLeft
+                            ?: error("BitmapRect requires source fixture payload: ${command.label}"),
+                        endColor = command.source.topRight,
+                        bottomLeftColor = command.source.bottomLeft,
+                        bottomRightColor = command.source.bottomRight,
+                        paintKind = when (command.sampling) {
+                            SceneBitmapSampling.Nearest -> 2f
+                            SceneBitmapSampling.Linear -> 3f
+                        },
+                        filterKind = filter?.kind?.filterPaintKind() ?: 0f,
+                        filterStrength = filter?.strength ?: 0f,
+                        dropShadowStrength = 0f,
+                        clip = clip,
+                    ),
                 )
+                is SceneCommand.SaveLayer -> {
+                    val layerFilter = filtersByInput[command.label]
+                        ?: error("SaveLayer requires DropShadow FilterNode fixture payload: ${command.label}")
+                    val shadowColor = command.fixtureShadowColor().withAlpha(
+                        command.fixtureShadowColor().a * layerFilter.strength,
+                    )
+                    listOf(
+                        WindowedDraw(
+                            label = "${command.label}-shadow",
+                            rect = command.fixtureShadowRect(),
+                            radius = command.radius,
+                            startColor = shadowColor,
+                            endColor = shadowColor,
+                            bottomLeftColor = shadowColor,
+                            bottomRightColor = shadowColor,
+                            paintKind = 0f,
+                            filterKind = 0f,
+                            filterStrength = 0f,
+                            dropShadowStrength = layerFilter.strength,
+                            clip = clip,
+                        ),
+                        WindowedDraw(
+                            label = "${command.label}-content",
+                            rect = command.fixtureContentRect(),
+                            radius = command.radius,
+                            startColor = command.fixtureContentColor(),
+                            endColor = command.fixtureContentColor(),
+                            bottomLeftColor = command.fixtureContentColor(),
+                            bottomRightColor = command.fixtureContentColor(),
+                            paintKind = 0f,
+                            filterKind = 0f,
+                            filterStrength = 0f,
+                            dropShadowStrength = 0f,
+                            clip = clip,
+                        ),
+                    )
+                }
                 is SceneCommand.RuntimeEffectTile -> {
                     val uniformColor = command.uniformColor
                         ?: error("RuntimeEffectTile requires uniform color fixture payload: ${command.label}")
-                    WindowedDraw(
-                        label = command.label,
-                        rect = command.rect ?: error("RuntimeEffectTile requires rect fixture payload: ${command.label}"),
-                        radius = 0f,
-                        startColor = uniformColor,
-                        endColor = uniformColor,
-                        bottomLeftColor = uniformColor,
-                        bottomRightColor = uniformColor,
-                        paintKind = 4f,
-                        filterKind = 0f,
-                        filterStrength = 0f,
-                        clip = clip,
+                    listOf(
+                        WindowedDraw(
+                            label = command.label,
+                            rect = command.rect ?: error("RuntimeEffectTile requires rect fixture payload: ${command.label}"),
+                            radius = 0f,
+                            startColor = uniformColor,
+                            endColor = uniformColor,
+                            bottomLeftColor = uniformColor,
+                            bottomRightColor = uniformColor,
+                            paintKind = 4f,
+                            filterKind = 0f,
+                            filterStrength = 0f,
+                            dropShadowStrength = 0f,
+                            clip = clip,
+                        ),
                     )
                 }
                 else -> error("Unsupported windowed fill command")
@@ -303,6 +358,7 @@ private fun SceneCommand.paintOrder(): Int =
         is SceneCommand.FillRRect -> paintOrder
         is SceneCommand.LinearGradientRect -> paintOrder
         is SceneCommand.BitmapRect -> paintOrder
+        is SceneCommand.SaveLayer -> paintOrder
         is SceneCommand.RuntimeEffectTile -> paintOrder
         else -> 0
     }
@@ -310,7 +366,23 @@ private fun SceneCommand.paintOrder(): Int =
 private fun SceneFilterKind.filterPaintKind(): Float =
     when (this) {
         SceneFilterKind.LumaTint -> 1f
+        SceneFilterKind.DropShadow -> 0f
     }
+
+private fun SceneCommand.SaveLayer.fixtureContentRect(): SceneRect =
+    contentRect ?: error("SaveLayer requires contentRect fixture payload: $label")
+
+private fun SceneCommand.SaveLayer.fixtureShadowRect(): SceneRect =
+    shadowRect ?: error("SaveLayer requires shadowRect fixture payload: $label")
+
+private fun SceneCommand.SaveLayer.fixtureContentColor(): SceneColor =
+    contentColor ?: error("SaveLayer requires contentColor fixture payload: $label")
+
+private fun SceneCommand.SaveLayer.fixtureShadowColor(): SceneColor =
+    shadowColor ?: error("SaveLayer requires shadowColor fixture payload: $label")
+
+private fun SceneColor.withAlpha(alpha: Float): SceneColor =
+    SceneColor(r = r, g = g, b = b, a = alpha.coerceIn(0f, 1f))
 
 private fun WindowedDraw.shapeCoverageName(): String = "shape_coverage_" + safeName()
 

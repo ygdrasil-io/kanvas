@@ -18,6 +18,7 @@ import org.graphiks.kanvas.gpu.renderer.scenes.catalog.SceneTag
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSource
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneFilterKind
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
 
 class RunGpuRendererSceneKadreMainTest {
@@ -63,7 +64,8 @@ class RunGpuRendererSceneKadreMainTest {
             "texture-swatch-board" to 22,
             "clipped-avatar-grid" to 23,
             "filtered-photo-chip" to 24,
-            "runtime-effect-color-tile" to 25,
+            "layered-shadow-card" to 25,
+            "runtime-effect-color-tile" to 26,
         )
         val invocations = mutableListOf<RunnerInvocation>()
 
@@ -88,6 +90,12 @@ class RunGpuRendererSceneKadreMainTest {
                 assertContains(sessionJson, "\"status\": \"presented\"")
                 assertContains(sessionJson, "\"requestedFrames\": $frames")
                 assertContains(sessionJson, "\"presentedFrames\": $frames")
+                if (sceneId == "layered-shadow-card") {
+                    assertContains(sessionJson, "saveLayerRoute=scene-fixture.bounded-shadow-card")
+                    assertContains(sessionJson, "filterRoutes=scene-fixture.bounded-drop-shadow")
+                    assertContains(sessionJson, "generalSaveLayerSupport=false")
+                    assertContains(sessionJson, "imageFilterDagSupport=false")
+                }
                 assertFalse(sessionJson.contains("\"status\": \"not-yet-rendered\""), sceneId)
             }
         }
@@ -129,6 +137,18 @@ class RunGpuRendererSceneKadreMainTest {
     }
 
     @Test
+    fun `windowed WGSL materializes bounded shadow card layer without general saveLayer claims`() {
+        val wgsl = WindowedRectOnlySceneShader.wgsl(
+            GPURendererSceneRegistry.registry.requireScene("layered-shadow-card"),
+        )
+
+        assertContains(wgsl, "shadow_card_layer_shadow")
+        assertContains(wgsl, "shadow_card_layer_content")
+        assertContains(wgsl, "drop_shadow_strength")
+        assertFalse(wgsl.contains("saveLayer stack"))
+    }
+
+    @Test
     fun `windowed WGSL refuses runtime effects outside the registered SimpleRT contract when called directly`() {
         val scene = windowedTestScene(
             sceneId = "windowed-runtime-effect-wrong-descriptor",
@@ -161,7 +181,7 @@ class RunGpuRendererSceneKadreMainTest {
                     sceneId = "windowed-no-fill",
                     commands = listOf(SceneCommand.Clear(SceneColor(0f, 0f, 0f, 1f))),
                 ),
-                reason = "rect-only windowed render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, or RuntimeEffectTile command",
+                reason = "rect-only windowed render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, or RuntimeEffectTile command",
             ),
             UnsupportedRectOnlyCase(
                 scene = windowedTestScene(
@@ -176,6 +196,34 @@ class RunGpuRendererSceneKadreMainTest {
                     commands = listOf(testBitmapRect(), SceneCommand.FilterNode("marker")),
                 ),
                 reason = "rect-only windowed render requires fixture-backed FilterNode payloads: marker",
+            ),
+            UnsupportedRectOnlyCase(
+                scene = windowedTestScene(
+                    sceneId = "windowed-save-layer-marker",
+                    commands = listOf(SceneCommand.SaveLayer("marker")),
+                ),
+                reason = "rect-only windowed render requires fixture-backed SaveLayer payloads: marker",
+            ),
+            UnsupportedRectOnlyCase(
+                scene = windowedTestScene(
+                    sceneId = "windowed-save-layer-out-of-bounds",
+                    commands = listOf(
+                        SceneCommand.SaveLayer(
+                            label = "shadow-card-layer",
+                            bounds = SceneRect(0f, 0f, 64f, 64f),
+                            contentRect = SceneRect(8f, 8f, 48f, 48f),
+                            radius = 4f,
+                            contentColor = SceneColor.green(),
+                            shadowColor = SceneColor(0f, 0f, 0f, 0.25f),
+                        ),
+                        SceneCommand.FilterNode(
+                            label = "shadow-blur",
+                            inputLabel = "shadow-card-layer",
+                            kind = SceneFilterKind.DropShadow,
+                        ),
+                    ),
+                ),
+                reason = "rect-only windowed render requires SaveLayer materialized draws inside positive bounds: shadow-card-layer-shadow, shadow-card-layer-content",
             ),
             UnsupportedRectOnlyCase(
                 scene = windowedTestScene(
@@ -247,7 +295,7 @@ class RunGpuRendererSceneKadreMainTest {
         assertContains(sessionJson, "\"status\": \"not-yet-rendered\"")
         assertContains(
             sessionJson,
-            "\"reason\": \"rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed filter-node, and fixture-backed runtime-effect command families: vertices\"",
+            "\"reason\": \"rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed save-layer, fixture-backed filter-node, and fixture-backed runtime-effect command families: vertices\"",
         )
         assertContains(sessionJson, "\"requestedFrames\": 60")
         assertContains(sessionJson, "\"presentedFrames\": 0")

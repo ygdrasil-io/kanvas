@@ -159,12 +159,27 @@ object GPURendererSceneRegistry {
         scene(
             id = "layered-shadow-card",
             title = "Layered Shadow Card",
-            description = "Layer and filter command markers for bounded route observation.",
+            description = "Bounded shadow-card layer fixture with explicit drop-shadow filter route.",
             tags = setOf(SceneTag.Layer, SceneTag.Filter),
             links = listOf(SceneRoadmapLink.milestone("M5")),
             commands = listOf(
-                SceneCommand.SaveLayer("card-layer"),
-                SceneCommand.FilterNode("shadow-blur"),
+                SceneCommand.Clear(SceneColor(0.16f, 0.17f, 0.18f, 1f)),
+                SceneCommand.SaveLayer(
+                    label = "shadow-card-layer",
+                    bounds = SceneRect(32f, 28f, 288f, 172f),
+                    contentRect = SceneRect(48f, 44f, 270f, 154f),
+                    radius = 20f,
+                    contentColor = SceneColor(0.98f, 0.98f, 0.94f, 1f),
+                    shadowColor = SceneColor(0.02f, 0.04f, 0.07f, 0.44f),
+                    shadowOffsetX = 10f,
+                    shadowOffsetY = 12f,
+                ),
+                SceneCommand.FilterNode(
+                    label = "shadow-blur",
+                    inputLabel = "shadow-card-layer",
+                    kind = SceneFilterKind.DropShadow,
+                    strength = 0.72f,
+                ),
             ),
         ),
         scene(

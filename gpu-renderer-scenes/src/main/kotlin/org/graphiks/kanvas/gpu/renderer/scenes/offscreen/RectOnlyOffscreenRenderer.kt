@@ -90,6 +90,7 @@ class RectOnlyOffscreenRenderer {
                         clipCount = drawPlan.clipCount,
                         bitmapRectCount = drawPlan.bitmapRectCount,
                         filters = drawPlan.filters,
+                        saveLayers = drawPlan.saveLayers,
                         runtimeEffects = drawPlan.runtimeEffects,
                     ),
                 )
@@ -422,6 +423,7 @@ internal data class RectOnlyDrawPlan(
     val fills: List<RectOnlyFillDraw>,
     val clipCount: Int = 0,
     val filters: List<RectOnlyFilterNode> = emptyList(),
+    val saveLayers: List<RectOnlySaveLayer> = emptyList(),
 ) {
     val fillRectCount: Int = fills.count { it.family == "fill-rect" }
     val fillRRectCount: Int = fills.count { it.family == "fill-rrect" }
@@ -459,6 +461,14 @@ internal data class RectOnlyRuntimeEffectTile(
     val wgslImplementationId: String,
     val uniformLayout: String,
     val pipelineKey: String,
+)
+
+internal data class RectOnlySaveLayer(
+    val label: String,
+    val layerKind: String,
+    val filterLabel: String,
+    val filterKind: SceneFilterKind,
+    val filterStrength: Float,
 )
 
 internal data class RectOnlyFillDraw(
@@ -525,6 +535,19 @@ internal fun prepareRectOnlyDrawPlan(
             )
         }
     val filtersByInput = filters.associateBy { it.inputLabel }
+    val saveLayers = commands.filterIsInstance<SceneCommand.SaveLayer>()
+        .filter { it.hasFixturePayload }
+        .map { layer ->
+            val filter = filtersByInput[layer.label]
+                ?: error("SaveLayer requires DropShadow FilterNode fixture payload: ${layer.label}")
+            RectOnlySaveLayer(
+                label = layer.label,
+                layerKind = layer.layerKind,
+                filterLabel = filter.label,
+                filterKind = filter.kind,
+                filterStrength = filter.strength,
+            )
+        }
 
     var activeClip: SceneCommand.Clip? = null
     val indexedDraws = buildList {
@@ -534,6 +557,7 @@ internal fun prepareRectOnlyDrawPlan(
                 is SceneCommand.FillRect,
                 is SceneCommand.FillRRect,
                 is SceneCommand.LinearGradientRect,
+                is SceneCommand.SaveLayer,
                 is SceneCommand.RuntimeEffectTile -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.BitmapRect -> if (command.hasFixturePayload) {
                     add(RectOnlyIndexedDraw(index, command, activeClip))
@@ -549,48 +573,77 @@ internal fun prepareRectOnlyDrawPlan(
                 command.paintOrder()
             }.thenBy { it.index },
         )
-        .map { (_, command, clip) ->
+        .flatMap { (_, command, clip) ->
             val rect = command.shapeRect()
             val filter = if (command is SceneCommand.BitmapRect) filtersByInput[command.label] else null
-            requireInsideTarget(sceneId, command.label, rect, width, height, "fill shape")
-            clip?.let { requireInsideTarget(sceneId, it.label, it.rect, width, height, "clip") }
-            val scissorRect = rect.intersect(clip?.rect)
-            require(scissorRect != null) {
-                "$sceneId rect-only fill shape must intersect active clip: ${command.label}"
+            if (command is SceneCommand.SaveLayer) {
+                val layer = saveLayers.singleOrNull { it.label == command.label }
+                    ?: error("SaveLayer requires bounded shadow layer contract: ${command.label}")
+                listOf(
+                    rectOnlyFillDraw(
+                        sceneId = sceneId,
+                        label = "${command.label}-shadow",
+                        family = command.family,
+                        rect = command.fixtureShadowRect(),
+                        radius = command.radius,
+                        startColor = command.fixtureShadowColor().withAlpha(command.fixtureShadowColor().a * layer.filterStrength),
+                        endColor = command.fixtureShadowColor().withAlpha(command.fixtureShadowColor().a * layer.filterStrength),
+                        bottomLeftColor = command.fixtureShadowColor().withAlpha(command.fixtureShadowColor().a * layer.filterStrength),
+                        bottomRightColor = command.fixtureShadowColor().withAlpha(command.fixtureShadowColor().a * layer.filterStrength),
+                        paintKind = 0f,
+                        filterKind = 0f,
+                        filterStrength = 0f,
+                        clip = clip,
+                        width = width,
+                        height = height,
+                    ),
+                    rectOnlyFillDraw(
+                        sceneId = sceneId,
+                        label = "${command.label}-content",
+                        family = command.family,
+                        rect = rect,
+                        radius = command.radius,
+                        startColor = command.fixtureContentColor(),
+                        endColor = command.fixtureContentColor(),
+                        bottomLeftColor = command.fixtureContentColor(),
+                        bottomRightColor = command.fixtureContentColor(),
+                        paintKind = 0f,
+                        filterKind = 0f,
+                        filterStrength = 0f,
+                        clip = clip,
+                        width = width,
+                        height = height,
+                    ),
+                )
+            } else {
+                listOf(
+                    rectOnlyFillDraw(
+                        sceneId = sceneId,
+                        label = command.label,
+                        family = command.family,
+                        rect = rect,
+                        radius = command.shapeRadius(),
+                        startColor = command.shapeStartColor(),
+                        endColor = command.shapeEndColor(),
+                        bottomLeftColor = command.shapeBottomLeftColor(),
+                        bottomRightColor = command.shapeBottomRightColor(),
+                        paintKind = command.shapePaintKind(),
+                        filterKind = filter?.kind?.filterPaintKind() ?: 0f,
+                        filterStrength = filter?.strength ?: 0f,
+                        clip = clip,
+                        width = width,
+                        height = height,
+                        runtimeEffectStableId = (command as? SceneCommand.RuntimeEffectTile)?.stableId,
+                        runtimeEffectWgslImplementationId =
+                            (command as? SceneCommand.RuntimeEffectTile)?.wgslImplementationId,
+                        runtimeEffectUniformLayout = (command as? SceneCommand.RuntimeEffectTile)?.uniformLayout,
+                        runtimeEffectPipelineKey = (command as? SceneCommand.RuntimeEffectTile)?.pipelineKey,
+                    ),
+                )
             }
-            val left = floor(scissorRect.left).toInt()
-            val top = floor(scissorRect.top).toInt()
-            val right = ceil(scissorRect.right).toInt()
-            val bottom = ceil(scissorRect.bottom).toInt()
-            val widthPx = rect.right - rect.left
-            val heightPx = rect.bottom - rect.top
-            RectOnlyFillDraw(
-                label = command.label,
-                family = command.family,
-                startColor = command.shapeStartColor(),
-                endColor = command.shapeEndColor(),
-                bottomLeftColor = command.shapeBottomLeftColor(),
-                bottomRightColor = command.shapeBottomRightColor(),
-                left = rect.left,
-                top = rect.top,
-                right = rect.right,
-                bottom = rect.bottom,
-                radius = minOf(command.shapeRadius(), widthPx * 0.5f, heightPx * 0.5f),
-                paintKind = command.shapePaintKind(),
-                filterKind = filter?.kind?.filterPaintKind() ?: 0f,
-                filterStrength = filter?.strength ?: 0f,
-                scissorX = left,
-                scissorY = top,
-                scissorWidth = right - left,
-                scissorHeight = bottom - top,
-                runtimeEffectStableId = (command as? SceneCommand.RuntimeEffectTile)?.stableId,
-                runtimeEffectWgslImplementationId = (command as? SceneCommand.RuntimeEffectTile)?.wgslImplementationId,
-                runtimeEffectUniformLayout = (command as? SceneCommand.RuntimeEffectTile)?.uniformLayout,
-                runtimeEffectPipelineKey = (command as? SceneCommand.RuntimeEffectTile)?.pipelineKey,
-            )
     }
     require(fills.isNotEmpty()) {
-        "$sceneId rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, or RuntimeEffectTile command"
+        "$sceneId rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, or RuntimeEffectTile command"
     }
 
     return RectOnlyDrawPlan(
@@ -600,6 +653,66 @@ internal fun prepareRectOnlyDrawPlan(
         fills = fills,
         clipCount = commands.count { it is SceneCommand.Clip },
         filters = filters,
+        saveLayers = saveLayers,
+    )
+}
+
+private fun rectOnlyFillDraw(
+    sceneId: String,
+    label: String,
+    family: String,
+    rect: SceneRect,
+    radius: Float,
+    startColor: SceneColor,
+    endColor: SceneColor,
+    bottomLeftColor: SceneColor,
+    bottomRightColor: SceneColor,
+    paintKind: Float,
+    filterKind: Float,
+    filterStrength: Float,
+    clip: SceneCommand.Clip?,
+    width: Int,
+    height: Int,
+    runtimeEffectStableId: String? = null,
+    runtimeEffectWgslImplementationId: String? = null,
+    runtimeEffectUniformLayout: String? = null,
+    runtimeEffectPipelineKey: String? = null,
+): RectOnlyFillDraw {
+    requireInsideTarget(sceneId, label, rect, width, height, "fill shape")
+    clip?.let { requireInsideTarget(sceneId, it.label, it.rect, width, height, "clip") }
+    val scissorRect = rect.intersect(clip?.rect)
+    require(scissorRect != null) {
+        "$sceneId rect-only fill shape must intersect active clip: $label"
+    }
+    val left = floor(scissorRect.left).toInt()
+    val top = floor(scissorRect.top).toInt()
+    val right = ceil(scissorRect.right).toInt()
+    val bottom = ceil(scissorRect.bottom).toInt()
+    val widthPx = rect.right - rect.left
+    val heightPx = rect.bottom - rect.top
+    return RectOnlyFillDraw(
+        label = label,
+        family = family,
+        startColor = startColor,
+        endColor = endColor,
+        bottomLeftColor = bottomLeftColor,
+        bottomRightColor = bottomRightColor,
+        left = rect.left,
+        top = rect.top,
+        right = rect.right,
+        bottom = rect.bottom,
+        radius = minOf(radius, widthPx * 0.5f, heightPx * 0.5f),
+        paintKind = paintKind,
+        filterKind = filterKind,
+        filterStrength = filterStrength,
+        scissorX = left,
+        scissorY = top,
+        scissorWidth = right - left,
+        scissorHeight = bottom - top,
+        runtimeEffectStableId = runtimeEffectStableId,
+        runtimeEffectWgslImplementationId = runtimeEffectWgslImplementationId,
+        runtimeEffectUniformLayout = runtimeEffectUniformLayout,
+        runtimeEffectPipelineKey = runtimeEffectPipelineKey,
     )
 }
 
@@ -613,6 +726,7 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
                 command is SceneCommand.LinearGradientRect ||
                 command is SceneCommand.Clip ||
                 command is SceneCommand.BitmapRect ||
+                command is SceneCommand.SaveLayer ||
                 command is SceneCommand.FilterNode ||
                 command is SceneCommand.RuntimeEffectTile
             ) {
@@ -623,7 +737,7 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed filter-node, and fixture-backed runtime-effect command families: " +
+        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed save-layer, fixture-backed filter-node, and fixture-backed runtime-effect command families: " +
             unsupportedFamilies.joinToString()
     }
 
@@ -633,6 +747,14 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
     if (bitmapMarkers.isNotEmpty()) {
         return "rect-only offscreen render requires fixture-backed BitmapRect payloads: " +
             bitmapMarkers.joinToString()
+    }
+
+    val saveLayerMarkers = commands.filterIsInstance<SceneCommand.SaveLayer>()
+        .filterNot { it.hasFixturePayload }
+        .map { it.label }
+    if (saveLayerMarkers.isNotEmpty()) {
+        return "rect-only offscreen render requires fixture-backed SaveLayer payloads: " +
+            saveLayerMarkers.joinToString()
     }
 
     val filterMarkers = commands.filterIsInstance<SceneCommand.FilterNode>()
@@ -663,14 +785,41 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
         .filter { it.hasFixturePayload }
         .map { it.label }
         .toSet()
+    val fixtureSaveLayerLabels = commands.filterIsInstance<SceneCommand.SaveLayer>()
+        .filter { it.hasFixturePayload }
+        .map { it.label }
+        .toSet()
     val filters = commands.filterIsInstance<SceneCommand.FilterNode>()
         .filter { it.hasFixturePayload }
     val invalidFilterInputs = filters
-        .filter { it.inputLabel !in fixtureBitmapLabels }
-        .map { "${it.label}->${it.inputLabel}" }
+        .mapNotNull { filter ->
+            val inputLabel = filter.inputLabel
+            when (filter.kind) {
+                SceneFilterKind.LumaTint -> if (inputLabel !in fixtureBitmapLabels) {
+                    "${filter.label}->${filter.inputLabel}:luma-tint requires BitmapRect"
+                } else {
+                    null
+                }
+                SceneFilterKind.DropShadow -> if (inputLabel !in fixtureSaveLayerLabels) {
+                    "${filter.label}->${filter.inputLabel}:drop-shadow requires SaveLayer"
+                } else {
+                    null
+                }
+                null -> null
+            }
+        }
     if (invalidFilterInputs.isNotEmpty()) {
-        return "rect-only offscreen render requires FilterNode inputs to reference fixture-backed BitmapRect labels: " +
+        return "rect-only offscreen render requires FilterNode inputs to reference compatible fixture-backed labels: " +
             invalidFilterInputs.joinToString()
+    }
+
+    val missingDropShadowLayers = fixtureSaveLayerLabels
+        .filter { label ->
+            filters.none { filter -> filter.inputLabel == label && filter.kind == SceneFilterKind.DropShadow }
+        }
+    if (missingDropShadowLayers.isNotEmpty()) {
+        return "rect-only offscreen render requires fixture-backed SaveLayer inputs to have one DropShadow FilterNode: " +
+            missingDropShadowLayers.joinToString()
     }
 
     val duplicateFilterInputs = filters
@@ -680,7 +829,7 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
         .filterValues { it > 1 }
         .keys
     if (duplicateFilterInputs.isNotEmpty()) {
-        return "rect-only offscreen render supports at most one FilterNode per BitmapRect input: " +
+        return "rect-only offscreen render supports at most one FilterNode per fixture input: " +
             duplicateFilterInputs.joinToString()
     }
 
@@ -689,10 +838,11 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
                 it is SceneCommand.FillRRect ||
                 it is SceneCommand.LinearGradientRect ||
                 it is SceneCommand.BitmapRect ||
+                it is SceneCommand.SaveLayer ||
                 it is SceneCommand.RuntimeEffectTile
         }
     ) {
-        return "rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, or RuntimeEffectTile command"
+        return "rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, or RuntimeEffectTile command"
     }
 
     val clearIndices = commands.withIndex()
@@ -714,11 +864,12 @@ internal fun rectOnlyRenderedDiagnostics(
     clipCount: Int = 0,
     bitmapRectCount: Int = 0,
     filters: List<RectOnlyFilterNode> = emptyList(),
+    saveLayers: List<RectOnlySaveLayer> = emptyList(),
     runtimeEffects: List<RectOnlyRuntimeEffectTile> = emptyList(),
 ): List<String> {
     require(sceneId.isNotBlank()) { "rect-only sceneId must not be blank" }
-    require(fillRectCount + fillRRectCount + linearGradientRectCount + bitmapRectCount + runtimeEffects.size > 0) {
-        "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, or RuntimeEffectTile command"
+    require(fillRectCount + fillRRectCount + linearGradientRectCount + bitmapRectCount + saveLayers.size + runtimeEffects.size > 0) {
+        "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, or RuntimeEffectTile command"
     }
     return buildList {
         add("rendered $sceneId via WebGPU offscreen")
@@ -728,6 +879,17 @@ internal fun rectOnlyRenderedDiagnostics(
         add("linearGradientRectCommands=$linearGradientRectCount")
         add("clipCommands=$clipCount")
         add("bitmapRectCommands=$bitmapRectCount")
+        if (saveLayers.isNotEmpty()) {
+            add("saveLayerCommands=${saveLayers.size}")
+            add("saveLayerKinds=${saveLayers.joinToString { it.layerKind }}")
+            add("saveLayerRoute=scene-fixture.bounded-shadow-card")
+            add("saveLayerMaterializedDraws=${saveLayers.size * 2}")
+            add("saveLayerFilterKinds=${saveLayers.joinToString { it.filterKind.wireName }}")
+            add("saveLayerFallbackReason=none")
+            add("filterRoutes=scene-fixture.bounded-drop-shadow")
+            add("generalSaveLayerSupport=false")
+            add("imageFilterDagSupport=false")
+        }
         if (filters.isNotEmpty()) {
             add("filterNodeCommands=${filters.size}")
             add("filterKinds=${filters.joinToString { it.kind.wireName }}")
@@ -755,6 +917,7 @@ private fun SceneCommand.paintOrder(): Int =
         is SceneCommand.FillRRect -> paintOrder
         is SceneCommand.LinearGradientRect -> paintOrder
         is SceneCommand.BitmapRect -> paintOrder
+        is SceneCommand.SaveLayer -> paintOrder
         is SceneCommand.RuntimeEffectTile -> paintOrder
         else -> 0
     }
@@ -765,6 +928,7 @@ private fun SceneCommand.shapeRect() =
         is SceneCommand.FillRRect -> rect
         is SceneCommand.LinearGradientRect -> rect
         is SceneCommand.BitmapRect -> fixtureRect()
+        is SceneCommand.SaveLayer -> fixtureContentRect()
         is SceneCommand.RuntimeEffectTile -> fixtureRect()
         else -> error("Unsupported shape command: $family")
     }
@@ -775,6 +939,7 @@ private fun SceneCommand.shapeStartColor() =
         is SceneCommand.FillRRect -> color
         is SceneCommand.LinearGradientRect -> startColor
         is SceneCommand.BitmapRect -> fixtureSource().topLeft
+        is SceneCommand.SaveLayer -> fixtureContentColor()
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
         else -> error("Unsupported shape command: $family")
     }
@@ -785,6 +950,7 @@ private fun SceneCommand.shapeEndColor() =
         is SceneCommand.FillRRect -> color
         is SceneCommand.LinearGradientRect -> endColor
         is SceneCommand.BitmapRect -> fixtureSource().topRight
+        is SceneCommand.SaveLayer -> fixtureContentColor()
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
         else -> error("Unsupported shape command: $family")
     }
@@ -795,6 +961,7 @@ private fun SceneCommand.shapeBottomLeftColor() =
         is SceneCommand.FillRRect -> color
         is SceneCommand.LinearGradientRect -> startColor
         is SceneCommand.BitmapRect -> fixtureSource().bottomLeft
+        is SceneCommand.SaveLayer -> fixtureContentColor()
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
         else -> error("Unsupported shape command: $family")
     }
@@ -805,6 +972,7 @@ private fun SceneCommand.shapeBottomRightColor() =
         is SceneCommand.FillRRect -> color
         is SceneCommand.LinearGradientRect -> endColor
         is SceneCommand.BitmapRect -> fixtureSource().bottomRight
+        is SceneCommand.SaveLayer -> fixtureContentColor()
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
         else -> error("Unsupported shape command: $family")
     }
@@ -815,6 +983,7 @@ private fun SceneCommand.shapeRadius(): Float =
         is SceneCommand.FillRRect -> radius
         is SceneCommand.LinearGradientRect -> 0f
         is SceneCommand.BitmapRect -> 0f
+        is SceneCommand.SaveLayer -> radius
         is SceneCommand.RuntimeEffectTile -> 0f
         else -> error("Unsupported shape command: $family")
     }
@@ -833,6 +1002,7 @@ private fun SceneCommand.shapePaintKind(): Float =
 private fun SceneFilterKind.filterPaintKind(): Float =
     when (this) {
         SceneFilterKind.LumaTint -> 1f
+        SceneFilterKind.DropShadow -> 0f
     }
 
 private fun SceneCommand.BitmapRect.fixtureRect(): SceneRect =
@@ -841,11 +1011,26 @@ private fun SceneCommand.BitmapRect.fixtureRect(): SceneRect =
 private fun SceneCommand.BitmapRect.fixtureSource(): SceneBitmapSource =
     source ?: error("BitmapRect requires source fixture payload: $label")
 
+private fun SceneCommand.SaveLayer.fixtureContentRect(): SceneRect =
+    contentRect ?: error("SaveLayer requires contentRect fixture payload: $label")
+
+private fun SceneCommand.SaveLayer.fixtureShadowRect(): SceneRect =
+    shadowRect ?: error("SaveLayer requires shadowRect fixture payload: $label")
+
+private fun SceneCommand.SaveLayer.fixtureContentColor(): SceneColor =
+    contentColor ?: error("SaveLayer requires contentColor fixture payload: $label")
+
+private fun SceneCommand.SaveLayer.fixtureShadowColor(): SceneColor =
+    shadowColor ?: error("SaveLayer requires shadowColor fixture payload: $label")
+
 private fun SceneCommand.RuntimeEffectTile.fixtureRect(): SceneRect =
     rect ?: error("RuntimeEffectTile requires rect fixture payload: $label")
 
 private fun SceneCommand.RuntimeEffectTile.fixtureUniformColor(): SceneColor =
     uniformColor ?: error("RuntimeEffectTile requires uniform color fixture payload: $label")
+
+private fun SceneColor.withAlpha(alpha: Float): SceneColor =
+    SceneColor(r = r, g = g, b = b, a = alpha.coerceIn(0f, 1f))
 
 private fun requireInsideTarget(
     sceneId: String,

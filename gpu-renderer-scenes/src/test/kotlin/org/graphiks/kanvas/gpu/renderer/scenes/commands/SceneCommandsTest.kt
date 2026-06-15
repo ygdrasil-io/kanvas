@@ -73,8 +73,42 @@ class SceneCommandsTest {
                 strength = 0.65f,
             ).family,
         )
+        assertEquals(
+            "save-layer",
+            SceneCommand.SaveLayer(
+                label = "shadow-card-layer",
+                bounds = SceneRect(32f, 28f, 288f, 172f),
+                contentRect = SceneRect(48f, 44f, 270f, 154f),
+                radius = 20f,
+                contentColor = SceneColor(0.98f, 0.98f, 0.94f, 1f),
+                shadowColor = SceneColor(0.02f, 0.04f, 0.07f, 0.44f),
+            ).family,
+        )
         assertEquals("runtime-effect", SceneCommand.RuntimeEffectTile("simple-rt").family)
         assertEquals("vertices", SceneCommand.MeshRibbon("mesh").family)
+    }
+
+    @Test
+    fun `save layer fixture payload names the bounded shadow card contract`() {
+        val command = SceneCommand.SaveLayer(
+            label = "shadow-card-layer",
+            bounds = SceneRect(32f, 28f, 288f, 172f),
+            contentRect = SceneRect(48f, 44f, 270f, 154f),
+            radius = 20f,
+            contentColor = SceneColor(0.98f, 0.98f, 0.94f, 1f),
+            shadowColor = SceneColor(0.02f, 0.04f, 0.07f, 0.44f),
+            shadowOffsetX = 10f,
+            shadowOffsetY = 12f,
+            paintOrder = 2,
+        )
+
+        assertTrue(command.hasFixturePayload)
+        assertEquals("bounded-shadow-card", command.layerKind)
+        assertEquals(SceneRect(32f, 28f, 288f, 172f), command.bounds)
+        assertEquals(SceneRect(48f, 44f, 270f, 154f), command.contentRect)
+        assertEquals(SceneRect(58f, 56f, 280f, 166f), command.shadowRect)
+        assertEquals(20f, command.radius)
+        assertEquals(2, command.paintOrder)
     }
 
     @Test
@@ -113,15 +147,52 @@ class SceneCommandsTest {
         }
         assertFailsWith<IllegalArgumentException> { SceneCommand.Clip("", SceneRect(0f, 0f, 8f, 8f)) }
         assertFailsWith<IllegalArgumentException> { SceneCommand.BitmapRect(" ") }
+        assertFailsWith<IllegalArgumentException> { SceneCommand.SaveLayer(" ") }
         assertFailsWith<IllegalArgumentException> {
             SceneCommand.FilterNode(
                 label = "filter",
                 inputLabel = " ",
-                kind = SceneFilterKind.LumaTint,
+                kind = SceneFilterKind.DropShadow,
             )
         }
         assertFailsWith<IllegalArgumentException> { SceneCommand.RuntimeEffectTile("") }
         assertFailsWith<IllegalArgumentException> { SceneCommand.MeshRibbon("\t") }
+    }
+
+    @Test
+    fun `save layer fixture payload requires bounds content and shadow together`() {
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.SaveLayer(
+                label = "shadow-card-layer",
+                contentRect = SceneRect(48f, 44f, 270f, 154f),
+                contentColor = SceneColor(0.98f, 0.98f, 0.94f, 1f),
+                shadowColor = SceneColor(0.02f, 0.04f, 0.07f, 0.44f),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.SaveLayer(
+                label = "shadow-card-layer",
+                bounds = SceneRect(32f, 28f, 288f, 172f),
+                contentColor = SceneColor(0.98f, 0.98f, 0.94f, 1f),
+                shadowColor = SceneColor(0.02f, 0.04f, 0.07f, 0.44f),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.SaveLayer(
+                label = "shadow-card-layer",
+                bounds = SceneRect(32f, 28f, 288f, 172f),
+                contentRect = SceneRect(48f, 44f, 270f, 154f),
+                shadowColor = SceneColor(0.02f, 0.04f, 0.07f, 0.44f),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.SaveLayer(
+                label = "shadow-card-layer",
+                bounds = SceneRect(32f, 28f, 288f, 172f),
+                contentRect = SceneRect(48f, 44f, 270f, 154f),
+                contentColor = SceneColor(0.98f, 0.98f, 0.94f, 1f),
+            )
+        }
     }
 
     @Test
@@ -210,6 +281,16 @@ class SceneCommandsTest {
                     bottomLeft = SceneColor.green(),
                     bottomRight = SceneColor.amber(),
                 ),
+                paintOrder = -1,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.SaveLayer(
+                label = "shadow-card-layer",
+                bounds = SceneRect(0f, 0f, 16f, 16f),
+                contentRect = SceneRect(2f, 2f, 12f, 12f),
+                contentColor = SceneColor.green(),
+                shadowColor = SceneColor(0f, 0f, 0f, 0.25f),
                 paintOrder = -1,
             )
         }
