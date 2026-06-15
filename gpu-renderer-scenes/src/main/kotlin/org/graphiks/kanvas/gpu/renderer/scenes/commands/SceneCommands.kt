@@ -8,6 +8,10 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 
+private fun requireSceneCommandLabel(label: String) {
+    require(label.isNotBlank()) { "SceneCommand.label must not be blank" }
+}
+
 data class SceneTarget(val width: Int, val height: Int, val colorFormat: String = "rgba8unorm") {
     init {
         require(width > 0) { "SceneTarget.width must be positive" }
@@ -21,6 +25,11 @@ data class SceneTarget(val width: Int, val height: Int, val colorFormat: String 
 
 data class SceneRect(val left: Float, val top: Float, val right: Float, val bottom: Float) {
     init {
+        listOf(left, top, right, bottom).forEach { value ->
+            require(!value.isNaN() && !value.isInfinite()) {
+                "SceneRect coordinates must be finite: $this"
+            }
+        }
         require(right > left) { "SceneRect.right must be greater than left" }
         require(bottom > top) { "SceneRect.bottom must be greater than top" }
     }
@@ -63,6 +72,11 @@ sealed interface SceneCommand {
     ) : SceneCommand {
         override val family: String = "fill-rect"
 
+        init {
+            requireSceneCommandLabel(label)
+            require(paintOrder >= 0) { "SceneCommand.FillRect.paintOrder must be non-negative" }
+        }
+
         fun toNormalizedFillRect(commandIndex: Int, target: SceneTarget): NormalizedDrawCommand.FillRect =
             GPUFillRectCommandBuilder.build(
                 commandId = GPUDrawCommandID(commandIndex),
@@ -76,37 +90,73 @@ sealed interface SceneCommand {
 
     data class FillRRect(override val label: String) : SceneCommand {
         override val family: String = "fill-rrect"
+
+        init {
+            requireSceneCommandLabel(label)
+        }
     }
 
     data class LinearGradientRect(override val label: String) : SceneCommand {
         override val family: String = "linear-gradient-rect"
+
+        init {
+            requireSceneCommandLabel(label)
+        }
     }
 
     data class Clip(override val label: String) : SceneCommand {
         override val family: String = "clip"
+
+        init {
+            requireSceneCommandLabel(label)
+        }
     }
 
     data class BitmapRect(override val label: String) : SceneCommand {
         override val family: String = "bitmap-rect"
+
+        init {
+            requireSceneCommandLabel(label)
+        }
     }
 
     data class SaveLayer(override val label: String) : SceneCommand {
         override val family: String = "save-layer"
+
+        init {
+            requireSceneCommandLabel(label)
+        }
     }
 
     data class FilterNode(override val label: String) : SceneCommand {
         override val family: String = "filter-node"
+
+        init {
+            requireSceneCommandLabel(label)
+        }
     }
 
     data class TextRun(override val label: String) : SceneCommand {
         override val family: String = "text-run"
+
+        init {
+            requireSceneCommandLabel(label)
+        }
     }
 
     data class RuntimeEffectTile(override val label: String) : SceneCommand {
         override val family: String = "runtime-effect"
+
+        init {
+            requireSceneCommandLabel(label)
+        }
     }
 
     data class MeshRibbon(override val label: String) : SceneCommand {
         override val family: String = "vertices"
+
+        init {
+            requireSceneCommandLabel(label)
+        }
     }
 }
