@@ -70,6 +70,10 @@ class PureKotlinTextCiValidationTest(unittest.TestCase):
             "python3 scripts/validate_pure_kotlin_text_boundary_contracts.py",
             evidence["workflow"]["invokesBoundaryValidator"],
         )
+        self.assertEqual(
+            "python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+            evidence["workflow"]["invokesClaimDashboardValidator"],
+        )
         self.assertEqual("git diff --check", evidence["workflow"]["invokesDiffCheck"])
         self.assertEqual(
             [".upstream/specs/pure-kotlin-text", "reports/pure-kotlin-text"],
@@ -77,6 +81,10 @@ class PureKotlinTextCiValidationTest(unittest.TestCase):
         )
         self.assertIn(
             "python3 scripts/validate_pure_kotlin_text_boundary_contracts.py",
+            workflow_text,
+        )
+        self.assertIn(
+            "python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
             workflow_text,
         )
 
@@ -134,7 +142,7 @@ class PureKotlinTextCiValidationTest(unittest.TestCase):
 
         with self.assertRaises(validator.ValidationError) as disabled:
             validator.validate_workflow_text(modified)
-        self.assertIn("diff hygiene step must run unconditionally", str(disabled.exception))
+        self.assertIn("must run unconditionally", str(disabled.exception))
 
     def test_validator_rejects_comment_only_diff_check_command(self) -> None:
         validator = load_validator()
@@ -181,6 +189,7 @@ class PureKotlinTextCiValidationTest(unittest.TestCase):
         for step_name in (
             "Validate pure Kotlin font CI lane",
             "Validate pure Kotlin text boundaries",
+            "Validate pure Kotlin text claim dashboard",
         ):
             with self.subTest(step_name=step_name):
                 modified = workflow_text.replace(
@@ -193,6 +202,26 @@ class PureKotlinTextCiValidationTest(unittest.TestCase):
                     validator.validate_workflow_text(modified)
                 self.assertIn("must run unconditionally", str(disabled.exception))
 
+    def test_validator_rejects_fail_open_validator_steps(self) -> None:
+        validator = load_validator()
+        workflow_text = validator.load_workflow_text(PROJECT_ROOT)
+
+        for step_name in (
+            "Validate pure Kotlin font CI lane",
+            "Validate pure Kotlin text boundaries",
+            "Validate pure Kotlin text claim dashboard",
+        ):
+            with self.subTest(step_name=step_name):
+                modified = workflow_text.replace(
+                    f"      - name: {step_name}\n",
+                    f"      - name: {step_name}\n"
+                    "        continue-on-error: true\n",
+                )
+
+                with self.assertRaises(validator.ValidationError) as fail_open:
+                    validator.validate_workflow_text(modified)
+                self.assertIn("must not continue on error", str(fail_open.exception))
+
     def test_validator_rejects_comment_only_validator_steps(self) -> None:
         validator = load_validator()
         workflow_text = validator.load_workflow_text(PROJECT_ROOT)
@@ -200,6 +229,7 @@ class PureKotlinTextCiValidationTest(unittest.TestCase):
         for command in (
             "python3 scripts/validate_pure_kotlin_text_ci.py",
             "python3 scripts/validate_pure_kotlin_text_boundary_contracts.py",
+            "python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
         ):
             with self.subTest(command=command):
                 modified = workflow_text.replace(

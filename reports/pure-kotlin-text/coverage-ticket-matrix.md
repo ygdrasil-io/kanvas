@@ -262,6 +262,59 @@ scaler, shaping, paragraph, glyph artifact, renderer, GPU, fixture, CPU oracle,
 or GPU evidence support. Legacy gates remain open until later evidence retires
 them explicitly.
 
+### KFONT-M0-005: Dashboard Claim Classification
+
+Status: review.
+
+Files:
+
+- `build.gradle.kts`
+- `.github/workflows/test.yml`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `reports/pure-kotlin-text/font-ci-lane.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m0-005-dashboard-claim-classification.md`
+- `scripts/validate_pure_kotlin_text_claim_dashboard.py`
+- `scripts/test_validate_pure_kotlin_text_claim_dashboard.py`
+- `scripts/validate_pure_kotlin_text_ci.py`
+- `scripts/test_validate_pure_kotlin_text_ci.py`
+- `.upstream/specs/pure-kotlin-text/tickets/M0-claims-ci-diagnostics/KFONT-M0-005-harden-dashboard-claim-classification.md`
+
+Evidence:
+
+- `font-claim-dashboard.json` records the eight claim classifications,
+  classification rules, required evidence kinds, split surface rows for
+  `outline/path`, `simple-latin atlas`, `complex shaping`, `fallback`,
+  `emoji/color`, `SDF`, and `LCD`, and keeps `claimPromotionAllowed=false`.
+- Negative generic labels `font missing`, `text works`, and `emoji supported`
+  have stable `font.claim.*` or `text.claim.*` diagnostics and remain
+  `tracked-gap`.
+- Legacy gates `coloremoji_blendmodes`, `scaledemoji`,
+  `scaledemoji_rendering`, `dftext`, `fontations`,
+  `fontations_ft_compare`, and `pdf_never_embed` remain visible, open, and
+  non-promotable.
+- The validator rejects missing taxonomy values, generic labels in claim rows,
+  GPU claims without GPU artifacts, missing legacy gates, and missing Gradle
+  wiring.
+- `validatePureKotlinTextClaimDashboard` is wired into
+  `pipelineSceneDashboardGate` and `pipelinePmBundle`; CI path filters and the
+  pure Kotlin font foundation job invoke the new dashboard validator.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_claim_dashboard.py
+rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_ci.py
+rtk python3 scripts/validate_pure_kotlin_text_ci.py
+rtk ./gradlew --no-daemon validatePureKotlinTextClaimDashboard
+rtk git diff --check
+```
+
+Remaining gate: this is claim-dashboard validation infrastructure only. It
+does not add rendering, shaping, fallback, SDF, color, emoji, LCD, or GPU text
+support. All KFONT-M0-005 legacy gates remain open until later target evidence
+retires them explicitly.
+
 ### KFONT-M1-003: Deterministic Source/Typeface Identity Dumps
 
 Status: review.
