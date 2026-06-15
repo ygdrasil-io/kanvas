@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M1-002"
 title: "Complete `TypefaceID` glyph-affecting identity"
-status: "proposed"
+status: "review"
 milestone: "M1"
 priority: "P0"
 owner_area: "font-core"
@@ -67,11 +67,11 @@ value class TypefaceID(val uuid: kotlin.uuid.Uuid)
 
 ## Acceptance Criteria
 
-- [ ] Different collection indices produce different `TypefaceID` values.
-- [ ] Different variation coordinates or palette selections produce different `TypefaceID` values.
-- [ ] The same face selected twice from the same fixture source produces identical IDs and sorted preimage output.
-- [ ] Missing or invalid collection index emits `font.collection-index-invalid`.
-- [ ] The `typeface` legacy gate remains visible until evidence links this identity contract to the facade migration.
+- [x] Different collection indices produce different `TypefaceID` values.
+- [x] Different variation coordinates or palette selections produce different `TypefaceID` values.
+- [x] The same face selected twice from the same fixture source produces identical IDs and sorted preimage output.
+- [x] Missing or invalid collection index emits `font.collection-index-invalid`.
+- [x] The `typeface` legacy gate remains visible until evidence links this identity contract to the facade migration.
 
 ## Required Evidence
 
@@ -102,6 +102,30 @@ rtk ./gradlew --no-daemon :font:core:test --tests '*Typeface*'
 
 - `proposed`: Typeface identity fields are specified, but no `typeface-id.json` evidence is attached yet.
 - Move to `ready` after KFONT-M1-001 lands the source identity model.
+- `review` 2026-06-15: `TypefaceIdentityPreimage` now records source ID,
+  collection index, PostScript name, family/style metadata, outline format,
+  selected Unicode `cmap`, scaler mode, variation coordinates, palette facts,
+  fallback catalog generation, table tags, and stable diagnostics.
+- `review` 2026-06-15: `reports/pure-kotlin-text/typeface-id.json` is asserted
+  against `defaultTypefaceIdentityReport().toCanonicalJson()` and includes
+  single-face, TTC index, variation, palette, invalid collection-index, and
+  no-usable-Unicode-`cmap` rows using `font.sfnt.cmap-unusable`.
+- Validation run:
+  `rtk ./gradlew --no-daemon :font:core:test --tests '*Typeface*'` failed
+  first at `:font:core:compileTestKotlin` for missing `TypefaceIdentity*`
+  contract symbols.
+- Validation run:
+  `rtk ./gradlew --no-daemon --rerun-tasks :font:core:test --tests '*Typeface*'`
+  passed after implementation and checked-in evidence alignment, including
+  `-0.0` variation-coordinate normalization.
+- Validation run:
+  `rtk ./gradlew --no-daemon --rerun-tasks :font:core:test` passed 31
+  `font/core` tests.
+- Review run: spec compliance and code quality reviews both approved after
+  remediation of the `font.sfnt.cmap-unusable` taxonomy and variation
+  zero-normalization findings.
+- Non-claim: this remains identity/evidence only and does not close the
+  `typeface` legacy gate.
 
 ## Linear Labels
 
