@@ -1,7 +1,7 @@
 ---
 id: WGSL4K-EVO-005
 title: "Re-evaluate blocked GPU/Text tickets after wgsl4k evidence"
-status: proposed
+status: blocked
 priority: P0
 owner_area: wgsl4k-evolution
 claim_impact: DependencyGated
@@ -79,7 +79,9 @@ or evidence changes.
 
 ## Status Notes
 
-- `proposed`: Requires Kanvas reports generated from a reviewed wgsl4k SHA.
+- `blocked`: Requires `WGSL4K-EVO-004` Kanvas report fixtures generated from a
+  reviewed or explicitly approved wgsl4k SHA. No GPU/Text tickets were reopened
+  or promoted in this ticket wave.
 
 ## Labels
 

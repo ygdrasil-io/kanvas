@@ -1,7 +1,7 @@
 ---
 id: WGSL4K-EVO-003
 title: "Prepare wgsl4k fixture PR"
-status: proposed
+status: review
 priority: P0
 owner_area: wgsl4k-evolution
 claim_impact: DependencyGated
@@ -46,11 +46,11 @@ ambiguous to unblock Kanvas tickets.
 
 ## Acceptance Criteria
 
-- [ ] Positive fixtures validate and reflect expected facts.
-- [ ] Negative fixtures produce deterministic diagnostics.
-- [ ] Unsupported valid WGSL forms produce explicit unsupported-feature output.
-- [ ] PR URL is recorded.
-- [ ] User review gate is recorded before Kanvas consumes the SHA.
+- [x] Positive fixtures validate and reflect expected facts.
+- [x] Negative fixtures produce deterministic diagnostics.
+- [x] Unsupported valid WGSL forms produce explicit unsupported-feature output.
+- [x] PR URL is recorded.
+- [x] User review gate is recorded before Kanvas consumes the SHA.
 
 ## Required Evidence
 
@@ -76,7 +76,12 @@ after the submodule is available.
 
 ## Status Notes
 
-- `proposed`: Requires imported submodule and implementation plan.
+- `review`: wgsl4k branch `codex/kanvas-reflection-contract` was pushed with
+  commit `f52580b31e136976a553af6d5d41a5a9e27919c3` and draft PR
+  `https://github.com/ygdrasil-io/wgsl4k/pull/9`. Fresh wgsl4k validation:
+  `rtk ./gradlew --no-daemon :wgsl:wgsl-core:check :wgsl:wgsl-parser:check`.
+  Kanvas must not consume this SHA for report evidence until the PR is reviewed
+  and either merged or explicitly approved by the user.
 
 ## Labels
 

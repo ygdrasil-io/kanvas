@@ -5,7 +5,7 @@ not alter GPU renderer support status.
 
 | Proposed | Ready | In Progress | Blocked | Review | Done |
 |---:|---:|---:|---:|---:|---:|
-| 4 | 0 | 0 | 0 | 1 | 0 |
+| 0 | 0 | 0 | 2 | 1 | 2 |
 
 ## Status Update Rule
 

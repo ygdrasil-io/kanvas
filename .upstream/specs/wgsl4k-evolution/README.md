@@ -1,6 +1,6 @@
 # wgsl4k Evolution Spec Pack
 
-Status: Draft
+Status: Active dependency packet
 Date: 2026-06-15
 Repository: `https://github.com/ygdrasil-io/wgsl4k.git`
 
@@ -51,6 +51,21 @@ after one of these gates is satisfied:
 
 Until then, routes depending on the missing reflection behavior remain
 `blocked`, `proposed`, or `not-promoted`.
+
+## Current Evidence
+
+2026-06-15 execution evidence:
+
+- Kanvas spec PR: `https://github.com/ygdrasil-io/kanvas/pull/1650`
+- wgsl4k submodule path: `external/wgsl4k`
+- wgsl4k import SHA: `96410250916ac91f79269ac64bace0a9272826b9`
+- wgsl4k contribution branch: `codex/kanvas-reflection-contract`
+- wgsl4k contribution commit: `f52580b31e136976a553af6d5d41a5a9e27919c3`
+- wgsl4k draft PR: `https://github.com/ygdrasil-io/wgsl4k/pull/9`
+
+Kanvas remains gated from consuming the contribution commit for report evidence
+until the wgsl4k PR is reviewed and either merged or explicitly approved by the
+user as a consumable SHA.
 
 ## Spec Index
 
