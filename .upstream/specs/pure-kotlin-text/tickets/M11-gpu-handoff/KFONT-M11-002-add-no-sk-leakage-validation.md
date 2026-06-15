@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-002"
 title: "Add no-`Sk*` leakage validation"
-status: "proposed"
+status: "review"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -97,6 +97,10 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*NoSkLeakage*'
 
 - `proposed`: Boundary validation for all later normalized text command and route tickets.
 - Move to `ready` only after forbidden field kinds and report schema are reviewed.
+- `review`: 2026-06-15 entry-contract evidence is in
+  `reports/pure-kotlin-text/2026-06-15-kfont-m11-001-003-entry-contract.md`.
+  This proves the no-`Sk*` validation contract and diagnostic mapping only; it
+  does not promote renderer execution or text route support.
 
 ## Linear Labels
 

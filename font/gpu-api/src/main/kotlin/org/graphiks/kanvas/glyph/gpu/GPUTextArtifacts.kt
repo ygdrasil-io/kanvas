@@ -154,6 +154,14 @@ data class GPUTextArtifactKey(
  * @property contentFingerprint Dumpable content fingerprint or compact key
  * hash for the artifact content.
  * @property sourceLabel Bundle or plan field that produced the reference.
+ * @property artifactType Route-facing artifact kind. This currently matches
+ * [artifactName] for registered text artifact plans.
+ * @property artifactKeyHash Stable compact hash used by route diagnostics. In
+ * this contract slice it is the local [contentFingerprint].
+ * @property invalidationFacts Stable facts that make the reference stale when
+ * changed.
+ * @property diagnostics Stable diagnostic facts scoped to this artifact
+ * reference.
  */
 data class GPUTextArtifactReference(
     val artifactName: String,
@@ -161,7 +169,21 @@ data class GPUTextArtifactReference(
     val generation: GPUTextArtifactGeneration,
     val contentFingerprint: String,
     val sourceLabel: String,
-)
+    val artifactType: String = artifactName,
+    val artifactKeyHash: String = contentFingerprint,
+    val invalidationFacts: List<String> = artifactReferenceInvalidationFacts(artifactName),
+    val diagnostics: List<String> = emptyList(),
+) {
+    init {
+        require(artifactType.isNotBlank()) { "artifactType must not be blank." }
+        require(invalidationFacts.all { fact -> fact.isNotBlank() }) {
+            "invalidationFacts must not contain blank entries."
+        }
+        require(diagnostics.all { diagnostic -> diagnostic.isNotBlank() }) {
+            "diagnostics must not contain blank entries."
+        }
+    }
+}
 
 /**
  * Byte range that should be uploaded for a text artifact payload.
@@ -433,9 +455,11 @@ data class SVGGlyphPlan(
  */
 fun GlyphAtlasArtifact.artifactReference(
     sourceLabel: String = "GlyphAtlasArtifact",
+    diagnostics: List<String> = emptyList(),
 ): GPUTextArtifactReference = artifactKey.toArtifactReference(
     artifactName = "GlyphAtlasArtifact",
     sourceLabel = sourceLabel,
+    diagnostics = diagnostics,
 )
 
 /**
@@ -443,9 +467,11 @@ fun GlyphAtlasArtifact.artifactReference(
  */
 fun SDFGlyphAtlasArtifact.artifactReference(
     sourceLabel: String = "SDFGlyphAtlasArtifact",
+    diagnostics: List<String> = emptyList(),
 ): GPUTextArtifactReference = atlas.artifactKey.toArtifactReference(
     artifactName = "SDFGlyphAtlasArtifact",
     sourceLabel = sourceLabel,
+    diagnostics = diagnostics,
 )
 
 /**
@@ -453,9 +479,11 @@ fun SDFGlyphAtlasArtifact.artifactReference(
  */
 fun GlyphUploadPlan.artifactReference(
     sourceLabel: String = "GlyphUploadPlan",
+    diagnostics: List<String> = emptyList(),
 ): GPUTextArtifactReference = artifactKey.toArtifactReference(
     artifactName = "GlyphUploadPlan",
     sourceLabel = sourceLabel,
+    diagnostics = diagnostics,
 )
 
 /**
@@ -463,9 +491,11 @@ fun GlyphUploadPlan.artifactReference(
  */
 fun OutlineGlyphPlan.artifactReference(
     sourceLabel: String = "OutlineGlyphPlan",
+    diagnostics: List<String> = emptyList(),
 ): GPUTextArtifactReference = artifactKey.toArtifactReference(
     artifactName = "OutlineGlyphPlan",
     sourceLabel = sourceLabel,
+    diagnostics = diagnostics,
 )
 
 /**
@@ -473,9 +503,11 @@ fun OutlineGlyphPlan.artifactReference(
  */
 fun ColorGlyphPlan.artifactReference(
     sourceLabel: String = "ColorGlyphPlan",
+    diagnostics: List<String> = emptyList(),
 ): GPUTextArtifactReference = artifactKey.toArtifactReference(
     artifactName = "ColorGlyphPlan",
     sourceLabel = sourceLabel,
+    diagnostics = diagnostics,
 )
 
 /**
@@ -483,9 +515,11 @@ fun ColorGlyphPlan.artifactReference(
  */
 fun BitmapGlyphPlan.artifactReference(
     sourceLabel: String = "BitmapGlyphPlan",
+    diagnostics: List<String> = emptyList(),
 ): GPUTextArtifactReference = artifactKey.toArtifactReference(
     artifactName = "BitmapGlyphPlan",
     sourceLabel = sourceLabel,
+    diagnostics = diagnostics,
 )
 
 /**
@@ -493,9 +527,11 @@ fun BitmapGlyphPlan.artifactReference(
  */
 fun SVGGlyphPlan.artifactReference(
     sourceLabel: String = "SVGGlyphPlan",
+    diagnostics: List<String> = emptyList(),
 ): GPUTextArtifactReference = artifactKey.toArtifactReference(
     artifactName = "SVGGlyphPlan",
     sourceLabel = sourceLabel,
+    diagnostics = diagnostics,
 )
 
 /**
@@ -542,36 +578,230 @@ data class TextGPUArtifactBundle(
 fun TextGPUArtifactBundle.artifactReferences(): List<GPUTextArtifactReference> {
     val references = mutableListOf<GPUTextArtifactReference>()
     atlases.mapTo(references) {
-        it.artifactReference(sourceLabel = "TextGPUArtifactBundle.atlases")
+        it.artifactReference(
+            sourceLabel = "TextGPUArtifactBundle.atlases",
+            diagnostics = diagnostics.referenceDiagnosticsFor(it.artifactKey),
+        )
     }
     sdfAtlases.mapTo(references) {
-        it.artifactReference(sourceLabel = "TextGPUArtifactBundle.sdfAtlases")
+        it.artifactReference(
+            sourceLabel = "TextGPUArtifactBundle.sdfAtlases",
+            diagnostics = diagnostics.referenceDiagnosticsFor(it.atlas.artifactKey),
+        )
     }
     glyphUploadPlans.mapTo(references) {
-        it.artifactReference(sourceLabel = "TextGPUArtifactBundle.glyphUploadPlans")
+        it.artifactReference(
+            sourceLabel = "TextGPUArtifactBundle.glyphUploadPlans",
+            diagnostics = diagnostics.referenceDiagnosticsFor(it.artifactKey),
+        )
     }
     outlineGlyphPlans.mapTo(references) {
-        it.artifactReference(sourceLabel = "TextGPUArtifactBundle.outlineGlyphPlans")
+        it.artifactReference(
+            sourceLabel = "TextGPUArtifactBundle.outlineGlyphPlans",
+            diagnostics = diagnostics.referenceDiagnosticsFor(it.artifactKey),
+        )
     }
     colorGlyphPlans.mapTo(references) {
-        it.artifactReference(sourceLabel = "TextGPUArtifactBundle.colorGlyphPlans")
+        it.artifactReference(
+            sourceLabel = "TextGPUArtifactBundle.colorGlyphPlans",
+            diagnostics = diagnostics.referenceDiagnosticsFor(it.artifactKey),
+        )
     }
     bitmapGlyphPlans.mapTo(references) {
-        it.artifactReference(sourceLabel = "TextGPUArtifactBundle.bitmapGlyphPlans")
+        it.artifactReference(
+            sourceLabel = "TextGPUArtifactBundle.bitmapGlyphPlans",
+            diagnostics = diagnostics.referenceDiagnosticsFor(it.artifactKey),
+        )
     }
     svgGlyphPlans.mapTo(references) {
-        it.artifactReference(sourceLabel = "TextGPUArtifactBundle.svgGlyphPlans")
+        it.artifactReference(
+            sourceLabel = "TextGPUArtifactBundle.svgGlyphPlans",
+            diagnostics = diagnostics.referenceDiagnosticsFor(it.artifactKey),
+        )
     }
     return references
 }
 
+/**
+ * Validates the concrete artifact bundle surface against the no-Sk handoff
+ * rule using explicit real-field facts instead of a hand-written fixture list.
+ */
+fun TextGPUArtifactBundle.noSkLeakageReport(): TextPayloadLeakReport = validateGPUTextNoSkLeakage(
+    payloadKind = "TextGPUArtifactBundle",
+    fields = textPayloadLeakageFields(),
+)
+
 private fun GPUTextArtifactKey.toArtifactReference(
     artifactName: String,
     sourceLabel: String,
+    diagnostics: List<String>,
 ): GPUTextArtifactReference = GPUTextArtifactReference(
     artifactName = artifactName,
     artifactID = artifactID,
     generation = generation,
     contentFingerprint = contentFingerprint,
     sourceLabel = sourceLabel,
+    artifactType = artifactName,
+    artifactKeyHash = contentFingerprint,
+    invalidationFacts = artifactReferenceInvalidationFacts(artifactName),
+    diagnostics = diagnostics.toList(),
 )
+
+private fun artifactReferenceInvalidationFacts(artifactName: String): List<String> =
+    defaultTextGPUArtifactRegistry()
+        .descriptor(artifactName)
+        ?.invalidationFacts
+        ?.toList()
+        ?: listOf("generation", "contentFingerprint")
+
+private fun GPUTextRouteDiagnostics.referenceDiagnosticsFor(
+    artifactKey: GPUTextArtifactKey,
+): List<String> =
+    diagnostics
+        .filter { diagnostic -> diagnostic.artifactKey == artifactKey }
+        .map { diagnostic -> diagnostic.toArtifactReferenceDiagnostic() }
+
+private fun GPUTextArtifactDiagnostic.toArtifactReferenceDiagnostic(): String =
+    "${code.name}:$message"
+
+private fun TextGPUArtifactBundle.textPayloadLeakageFields(): List<TextPayloadField> = buildList {
+    addArtifactKeyFields("artifactKey", artifactKey)
+    add(TextPayloadField("uploadPlans", "List<GPUTextUploadPlan>"))
+    uploadPlans.forEachIndexed { index, uploadPlan ->
+        addUploadPlanFields("uploadPlans[$index]", uploadPlan)
+    }
+    add(TextPayloadField("glyphUploadPlans", "List<GlyphUploadPlan>"))
+    glyphUploadPlans.forEachIndexed { index, glyphUploadPlan ->
+        addGlyphUploadPlanFields("glyphUploadPlans[$index]", glyphUploadPlan)
+    }
+    add(TextPayloadField("outlineGlyphPlans", "List<OutlineGlyphPlan>"))
+    outlineGlyphPlans.forEachIndexed { index, outlineGlyphPlan ->
+        addArtifactKeyFields("outlineGlyphPlans[$index].artifactKey", outlineGlyphPlan.artifactKey)
+        addUIntListFields("outlineGlyphPlans[$index].glyphIDs", outlineGlyphPlan.glyphIDs)
+        add(TextPayloadField("outlineGlyphPlans[$index].windingRule", "String", outlineGlyphPlan.windingRule))
+    }
+    add(TextPayloadField("colorGlyphPlans", "List<ColorGlyphPlan>"))
+    colorGlyphPlans.forEachIndexed { index, colorGlyphPlan ->
+        addArtifactKeyFields("colorGlyphPlans[$index].artifactKey", colorGlyphPlan.artifactKey)
+        addUIntListFields("colorGlyphPlans[$index].glyphIDs", colorGlyphPlan.glyphIDs)
+        add(TextPayloadField("colorGlyphPlans[$index].layerCount", "Int", colorGlyphPlan.layerCount.toString()))
+    }
+    add(TextPayloadField("bitmapGlyphPlans", "List<BitmapGlyphPlan>"))
+    bitmapGlyphPlans.forEachIndexed { index, bitmapGlyphPlan ->
+        addArtifactKeyFields("bitmapGlyphPlans[$index].artifactKey", bitmapGlyphPlan.artifactKey)
+        addUIntListFields("bitmapGlyphPlans[$index].glyphIDs", bitmapGlyphPlan.glyphIDs)
+        add(TextPayloadField("bitmapGlyphPlans[$index].colorFormat", "String", bitmapGlyphPlan.colorFormat))
+    }
+    add(TextPayloadField("svgGlyphPlans", "List<SVGGlyphPlan>"))
+    svgGlyphPlans.forEachIndexed { index, svgGlyphPlan ->
+        addArtifactKeyFields("svgGlyphPlans[$index].artifactKey", svgGlyphPlan.artifactKey)
+        addUIntListFields("svgGlyphPlans[$index].glyphIDs", svgGlyphPlan.glyphIDs)
+        add(TextPayloadField("svgGlyphPlans[$index].documentCount", "Int", svgGlyphPlan.documentCount.toString()))
+    }
+    add(TextPayloadField("atlases", "List<GlyphAtlasArtifact>"))
+    atlases.forEachIndexed { index, atlas ->
+        addGlyphAtlasFields("atlases[$index]", atlas)
+    }
+    add(TextPayloadField("sdfAtlases", "List<SDFGlyphAtlasArtifact>"))
+    sdfAtlases.forEachIndexed { index, sdfAtlas ->
+        addGlyphAtlasFields("sdfAtlases[$index].atlas", sdfAtlas.atlas)
+        add(TextPayloadField("sdfAtlases[$index].distanceRange", "Float", sdfAtlas.distanceRange.toString()))
+    }
+    addRouteDiagnosticsFields("diagnostics", diagnostics)
+    add(TextPayloadField("artifactReferences", "List<GPUTextArtifactReference>"))
+    artifactReferences().forEachIndexed { index, reference ->
+        addArtifactReferenceFields("artifactReferences[$index]", reference)
+    }
+}
+
+private fun MutableList<TextPayloadField>.addArtifactKeyFields(
+    fieldPrefix: String,
+    artifactKey: GPUTextArtifactKey,
+) {
+    add(TextPayloadField("$fieldPrefix.artifactID", "GPUTextArtifactID", artifactKey.artifactID.value.toString()))
+    add(TextPayloadField("$fieldPrefix.generation", "GPUTextArtifactGeneration", artifactKey.generation.value.toString()))
+    add(TextPayloadField("$fieldPrefix.contentFingerprint", "String", artifactKey.contentFingerprint))
+}
+
+private fun MutableList<TextPayloadField>.addUploadPlanFields(
+    fieldPrefix: String,
+    uploadPlan: GPUTextUploadPlan,
+) {
+    addArtifactKeyFields("$fieldPrefix.artifactKey", uploadPlan.artifactKey)
+    add(TextPayloadField("$fieldPrefix.ranges", "List<GPUTextUploadRange>"))
+    uploadPlan.ranges.forEachIndexed { index, range ->
+        add(TextPayloadField("$fieldPrefix.ranges[$index].offset", "Int", range.offset.toString()))
+        add(TextPayloadField("$fieldPrefix.ranges[$index].size", "Int", range.size.toString()))
+        add(TextPayloadField("$fieldPrefix.ranges[$index].label", "String", range.label))
+    }
+    add(TextPayloadField("$fieldPrefix.byteSize", "Int", uploadPlan.byteSize.toString()))
+}
+
+private fun MutableList<TextPayloadField>.addGlyphUploadPlanFields(
+    fieldPrefix: String,
+    glyphUploadPlan: GlyphUploadPlan,
+) {
+    addArtifactKeyFields("$fieldPrefix.artifactKey", glyphUploadPlan.artifactKey)
+    addUploadPlanFields("$fieldPrefix.uploadPlan", glyphUploadPlan.uploadPlan)
+    addUIntListFields("$fieldPrefix.glyphIDs", glyphUploadPlan.glyphIDs)
+}
+
+private fun MutableList<TextPayloadField>.addGlyphAtlasFields(
+    fieldPrefix: String,
+    atlas: GlyphAtlasArtifact,
+) {
+    addArtifactKeyFields("$fieldPrefix.artifactKey", atlas.artifactKey)
+    add(TextPayloadField("$fieldPrefix.width", "Int", atlas.width.toString()))
+    add(TextPayloadField("$fieldPrefix.height", "Int", atlas.height.toString()))
+    add(TextPayloadField("$fieldPrefix.format", "String", atlas.format))
+}
+
+private fun MutableList<TextPayloadField>.addRouteDiagnosticsFields(
+    fieldPrefix: String,
+    routeDiagnostics: GPUTextRouteDiagnostics,
+) {
+    add(TextPayloadField("$fieldPrefix.diagnostics", "List<GPUTextArtifactDiagnostic>"))
+    routeDiagnostics.diagnostics.forEachIndexed { index, diagnostic ->
+        add(TextPayloadField("$fieldPrefix.diagnostics[$index].code", "GPUTextArtifactDiagnosticCode", diagnostic.code.name))
+        add(TextPayloadField("$fieldPrefix.diagnostics[$index].message", "String", diagnostic.message))
+        diagnostic.artifactKey?.let { artifactKey ->
+            addArtifactKeyFields("$fieldPrefix.diagnostics[$index].artifactKey", artifactKey)
+        }
+    }
+    add(TextPayloadField("$fieldPrefix.refusalRequired", "Boolean", routeDiagnostics.refusalRequired.toString()))
+}
+
+private fun MutableList<TextPayloadField>.addArtifactReferenceFields(
+    fieldPrefix: String,
+    reference: GPUTextArtifactReference,
+) {
+    add(TextPayloadField("$fieldPrefix.artifactName", "String", reference.artifactName))
+    add(TextPayloadField("$fieldPrefix.artifactType", "String", reference.artifactType))
+    add(TextPayloadField("$fieldPrefix.artifactID", "GPUTextArtifactID", reference.artifactID.value.toString()))
+    add(TextPayloadField("$fieldPrefix.generation", "GPUTextArtifactGeneration", reference.generation.value.toString()))
+    add(TextPayloadField("$fieldPrefix.contentFingerprint", "String", reference.contentFingerprint))
+    add(TextPayloadField("$fieldPrefix.artifactKeyHash", "String", reference.artifactKeyHash))
+    addStringListFields("$fieldPrefix.invalidationFacts", reference.invalidationFacts)
+    addStringListFields("$fieldPrefix.diagnostics", reference.diagnostics)
+    add(TextPayloadField("$fieldPrefix.sourceLabel", "String", reference.sourceLabel))
+}
+
+private fun MutableList<TextPayloadField>.addUIntListFields(
+    fieldPrefix: String,
+    values: List<UInt>,
+) {
+    add(TextPayloadField(fieldPrefix, "List<UInt>"))
+    values.forEachIndexed { index, value ->
+        add(TextPayloadField("$fieldPrefix[$index]", "UInt", value.toString()))
+    }
+}
+
+private fun MutableList<TextPayloadField>.addStringListFields(
+    fieldPrefix: String,
+    values: List<String>,
+) {
+    add(TextPayloadField(fieldPrefix, "List<String>"))
+    values.forEachIndexed { index, value ->
+        add(TextPayloadField("$fieldPrefix[$index]", "String", value))
+    }
+}
