@@ -1,7 +1,7 @@
 ---
 id: KGPU-M3-005
 title: "Add path and coverage atlas refusal policy gates"
-status: proposed
+status: done
 milestone: M3
 priority: P1
 owner_area: atlas-policy
@@ -84,7 +84,17 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Refusal policy ticket.
+- `done`: Added `GPUAtlasPolicyRefusalGate` refusal-only contract evidence
+  for path and coverage atlas routes. The gate emits deterministic
+  `GPUAtlasDiagnostic` reason codes, required/missing policy fact dumps,
+  `RefuseRequired` dashboard classification, and non-claims that selector-only
+  evidence, atlas generation, path atlas support, coverage atlas support, and
+  hidden CPU texture fallback are not accepted. Independent review
+  `019ec7d2-85bf-7d90-977d-8c7ee86f2710` accepted the evidence and confirmed
+  that no atlas-backed route support or product activation is implied.
+  Remaining gate: future path/coverage atlas promotion still requires real key,
+  budget, generation, eviction, synchronization, upload-before-sample, GPU
+  sampling, and visual evidence.
 
 ## Linear Labels
 
