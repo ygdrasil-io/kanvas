@@ -1,17 +1,24 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.catalog
 
-private val sceneIdPattern = Regex("[a-z][a-z0-9-]{2,63}")
+private val sceneIdPattern = Regex("[a-z][a-z0-9]*(?:-[a-z0-9]+)+")
 private val roadmapLikeSceneIdPattern = Regex("m[0-9]+(?:-[a-z])?(?:-[0-9]{3})?")
-private val milestonePattern = Regex("M[0-9]+(?:-[A-Z])?")
+private val plainMilestonePattern = Regex("M(?:[0-9]|10)")
+private val activeRuntimeMilestonePattern = Regex("M70-[ABC]")
 private val ticketIdPattern = Regex("KGPU-(M[0-9]+)-[0-9]{3}")
 
 private fun extractTicketMilestone(ticketId: String): String? =
     ticketIdPattern.matchEntire(ticketId)?.groupValues?.get(1)
 
+private fun isValidMilestone(milestone: String): Boolean =
+    milestone.matches(plainMilestonePattern) || milestone.matches(activeRuntimeMilestonePattern)
+
+private fun List<*>.containsNullElement(): Boolean =
+    any { it == null }
+
 @JvmInline
 value class SceneId(val value: String) {
     init {
-        require(value.matches(sceneIdPattern)) {
+        require(value.length in 3..64 && value.matches(sceneIdPattern)) {
             "SceneId must be a readable lowercase business identifier: $value"
         }
         require(!value.startsWith("kgpu-")) { "SceneId must not be a roadmap ticket id: $value" }
@@ -55,8 +62,8 @@ data class SceneRoadmapLink(
     val rStage: RStage?,
 ) {
     init {
-        require(milestone.matches(milestonePattern)) {
-            "milestone must look like M0..M10 or M70-A: $milestone"
+        require(isValidMilestone(milestone)) {
+            "milestone must be M0..M10 or one of M70-A, M70-B, M70-C: $milestone"
         }
         ticketId?.let {
             val ticketMilestone = extractTicketMilestone(it)
@@ -72,8 +79,9 @@ data class SceneRoadmapLink(
             SceneRoadmapLink(milestone = milestone, ticketId = null, rStage = rStage)
 
         fun ticket(ticketId: String, rStage: RStage? = null): SceneRoadmapLink {
-            val milestone = extractTicketMilestone(ticketId)
-                ?: error("Invalid KGPU ticket id: $ticketId")
+            val milestone = requireNotNull(extractTicketMilestone(ticketId)) {
+                "Invalid KGPU ticket id: $ticketId"
+            }
             return SceneRoadmapLink(milestone = milestone, ticketId = ticketId, rStage = rStage)
         }
     }
@@ -90,7 +98,7 @@ sealed interface SceneExpectation {
     data class ProductRefusal(val reason: ProductRefusalReason) : SceneExpectation
 }
 
-data class GPURendererScene<TCommand>(
+data class GPURendererScene<TCommand : Any>(
     val sceneId: SceneId,
     val title: String,
     val description: String,
@@ -105,10 +113,11 @@ data class GPURendererScene<TCommand>(
         require(description.isNotBlank()) { "scene ${sceneId.value} description must not be blank" }
         require(tags.isNotEmpty()) { "scene ${sceneId.value} tags must not be empty" }
         require(commands.isNotEmpty()) { "scene ${sceneId.value} commands must not be empty" }
+        require(!commands.containsNullElement()) { "scene ${sceneId.value} commands must not contain null" }
     }
 }
 
-class SceneRegistry<TCommand>(val scenes: List<GPURendererScene<TCommand>>) {
+class SceneRegistry<TCommand : Any>(val scenes: List<GPURendererScene<TCommand>>) {
     fun requireScene(sceneId: String): GPURendererScene<TCommand> {
         val matches = scenes.filter { it.sceneId.value == sceneId }
         return when (matches.size) {

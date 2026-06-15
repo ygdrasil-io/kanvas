@@ -13,8 +13,11 @@ class SceneCatalogContractsTest {
         assertFailsWith<IllegalArgumentException> { SceneId("kgpu-m1-001") }
         assertFailsWith<IllegalArgumentException> { SceneId("solid_card_stack") }
         assertFailsWith<IllegalArgumentException> { SceneId("solidcardstack") }
+        assertFailsWith<IllegalArgumentException> { SceneId("solid-") }
+        assertFailsWith<IllegalArgumentException> { SceneId("solid--card") }
         assertFailsWith<IllegalArgumentException> { SceneId("m1-001") }
         assertFailsWith<IllegalArgumentException> { SceneId("m70-a") }
+        assertFailsWith<IllegalArgumentException> { SceneId("a--") }
         assertFailsWith<IllegalArgumentException> { SceneId("a") }
     }
 
@@ -93,6 +96,11 @@ class SceneCatalogContractsTest {
         assertFailsWith<IllegalArgumentException> { sampleScene(description = "   ") }
         assertFailsWith<IllegalArgumentException> { sampleScene(tags = emptySet()) }
         assertFailsWith<IllegalArgumentException> { sampleScene(commands = emptyList()) }
+        assertFailsWith<IllegalArgumentException> {
+            @Suppress("UNCHECKED_CAST")
+            val nullableCommands = listOf(null) as List<String>
+            sampleScene(commands = nullableCommands)
+        }
     }
 
     @Test
@@ -108,6 +116,16 @@ class SceneCatalogContractsTest {
         assertFailsWith<IllegalArgumentException> {
             SceneRoadmapLink("M1", "KGPU-M1-01", null)
         }
+        assertFailsWith<IllegalArgumentException> {
+            SceneRoadmapLink.ticket("KGPU-M1-01")
+        }
+    }
+
+    @Test
+    fun `roadmap links reject malformed milestones`() {
+        assertFailsWith<IllegalArgumentException> { SceneRoadmapLink.milestone("M01") }
+        assertFailsWith<IllegalArgumentException> { SceneRoadmapLink.milestone("M999") }
+        assertFailsWith<IllegalArgumentException> { SceneRoadmapLink.milestone("M70-D") }
     }
 
     @Test
