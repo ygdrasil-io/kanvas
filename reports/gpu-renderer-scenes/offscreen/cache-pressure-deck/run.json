@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sceneId": "cache-pressure-deck",
+  "status": "rendered",
+  "productRefusal": false,
+  "backend": "webgpu-offscreen",
+  "imagePath": "render.png",
+  "width": 320,
+  "height": 200,
+  "byteCount": 256000,
+  "nonTransparentPixels": 24616,
+  "diagnostics": ["rendered cache-pressure-deck via WebGPU offscreen","adapter=Apple M2 Max","fillRectCommands=2"]
+}

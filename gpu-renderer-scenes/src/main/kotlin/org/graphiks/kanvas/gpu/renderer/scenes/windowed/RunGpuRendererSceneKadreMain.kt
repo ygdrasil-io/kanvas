@@ -8,9 +8,9 @@ import java.nio.file.StandardCopyOption
 import kotlin.io.path.createDirectories
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.reports.json
 
-private const val SOLID_CARD_STACK_SCENE_ID = "solid-card-stack"
 private const val KADRE_RUNNER_CLASS =
     "org.graphiks.kanvas.gpu.renderer.scenes.windowed.KadreWindowedSceneRunner"
 
@@ -39,8 +39,9 @@ fun runGpuRendererSceneKadre(args: Array<String>) {
         return
     }
 
-    if (scene.sceneId.value != SOLID_CARD_STACK_SCENE_ID) {
-        WindowedSceneSessionReport.notYetRendered(scene, frames).writeTo(output)
+    val unsupportedReason = scene.kadreWindowedRectOnlyUnsupportedReason()
+    if (unsupportedReason != null) {
+        WindowedSceneSessionReport.notYetRendered(scene, frames, unsupportedReason).writeTo(output)
         println(windowedCompletionMessage(scene.sceneId.value, "not-yet-rendered", output))
         return
     }
@@ -230,11 +231,15 @@ data class WindowedSceneSessionReport(
                 error = null,
             )
 
-        fun notYetRendered(scene: GPURendererScene<*>, requestedFrames: Int): WindowedSceneSessionReport =
+        fun notYetRendered(
+            scene: GPURendererScene<*>,
+            requestedFrames: Int,
+            reason: String = "scene-renderer-not-yet-implemented",
+        ): WindowedSceneSessionReport =
             WindowedSceneSessionReport(
                 sceneId = scene.sceneId.value,
                 runStatus = WindowedSceneSessionStatus.NotYetRendered,
-                reason = "scene-renderer-not-yet-implemented",
+                reason = reason,
                 requestedFrames = requestedFrames,
                 presentedFrames = 0,
                 surface = scene.surface(format = null),
@@ -287,3 +292,33 @@ private fun GPURendererScene<*>.surface(format: String?): WindowedSceneSurface =
         height = dimensions.height,
         format = format,
     )
+
+internal fun GPURendererScene<*>.kadreWindowedRectOnlyUnsupportedReason(): String? {
+    val unsupportedFamilies = commands
+        .mapNotNull { command ->
+            when (command) {
+                is SceneCommand.Clear,
+                is SceneCommand.FillRect -> null
+                is SceneCommand -> command.family
+                else -> command::class.simpleName ?: "unknown-command"
+            }
+        }
+        .distinct()
+    if (unsupportedFamilies.isNotEmpty()) {
+        return "rect-only windowed render supports only clear and fill-rect command families: " +
+            unsupportedFamilies.joinToString()
+    }
+
+    if (commands.none { it is SceneCommand.FillRect }) {
+        return "rect-only windowed render requires at least one FillRect command"
+    }
+
+    val clearIndices = commands.withIndex()
+        .filter { (_, command) -> command is SceneCommand.Clear }
+        .map { it.index }
+    if (clearIndices.size > 1 || clearIndices.any { it != 0 }) {
+        return "rect-only windowed render supports zero or one initial Clear before FillRect commands"
+    }
+
+    return null
+}

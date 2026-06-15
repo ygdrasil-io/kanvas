@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sceneId": "legacy-route-comparison",
+  "status": "rendered",
+  "productRefusal": false,
+  "backend": "webgpu-offscreen",
+  "imagePath": "render.png",
+  "width": 320,
+  "height": 200,
+  "byteCount": 256000,
+  "nonTransparentPixels": 23296,
+  "diagnostics": ["rendered legacy-route-comparison via WebGPU offscreen","adapter=Apple M2 Max","fillRectCommands=1"]
+}
