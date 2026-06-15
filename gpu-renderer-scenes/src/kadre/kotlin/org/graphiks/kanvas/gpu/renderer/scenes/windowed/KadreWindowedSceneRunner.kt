@@ -391,19 +391,20 @@ private fun GPURendererScene<*>.kadreRunnerRectOnlyUnsupportedReason(): String? 
         .mapNotNull { command ->
             when (command) {
                 is SceneCommand.Clear,
-                is SceneCommand.FillRect -> null
+                is SceneCommand.FillRect,
+                is SceneCommand.FillRRect -> null
                 is SceneCommand -> command.family
                 else -> command::class.simpleName ?: "unknown-command"
             }
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only windowed render supports only clear and fill-rect command families: " +
+        return "rect-only windowed render supports only clear, fill-rect, and fill-rrect command families: " +
             unsupportedFamilies.joinToString()
     }
 
-    if (commands.none { it is SceneCommand.FillRect }) {
-        return "rect-only windowed render requires at least one FillRect command"
+    if (commands.none { it is SceneCommand.FillRect || it is SceneCommand.FillRRect }) {
+        return "rect-only windowed render requires at least one FillRect or FillRRect command"
     }
 
     val clearIndices = commands.withIndex()

@@ -80,7 +80,8 @@ class RectOnlyOffscreenRenderer {
                     diagnostics = rectOnlyRenderedDiagnostics(
                         sceneId = sceneId,
                         adapterInfo = ctx.adapterInfo,
-                        fillRectCount = drawPlan.fills.size,
+                        fillRectCount = drawPlan.fillRectCount,
+                        fillRRectCount = drawPlan.fillRRectCount,
                     ),
                 )
             }
@@ -180,11 +181,11 @@ class RectOnlyOffscreenRenderer {
                 BufferDescriptor(
                     size = COLOR_UNIFORM_SIZE_BYTES,
                     usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
-                    label = "RectOnlyOffscreenRenderer.color",
+                    label = "RectOnlyOffscreenRenderer.shape",
                 ),
             ),
         ) { it.close() }
-        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(fill.color.toFloatArray()))
+        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(fill.toUniformFloatArray()))
         val bindGroup = gpuResources.track(
             context.device.createBindGroup(
                 BindGroupDescriptor(
@@ -265,11 +266,13 @@ class RectOnlyOffscreenRenderer {
     private companion object {
         const val RENDER_FILE_NAME: String = "render.png"
         const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
-        const val COLOR_UNIFORM_SIZE_BYTES: ULong = 16uL
+        const val COLOR_UNIFORM_SIZE_BYTES: ULong = 48uL
 
         val SOLID_RECT_WGSL: String = """
             struct Uniforms {
                 color: vec4f,
+                rect: vec4f,
+                radius: vec4f,
             };
 
             @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -281,9 +284,24 @@ class RectOnlyOffscreenRenderer {
                 return vec4f(x, y, 0.0, 1.0);
             }
 
+            fn rounded_rect_coverage(pixel: vec2f, rect: vec4f, radius: f32) -> f32 {
+                if (pixel.x < rect.x || pixel.x >= rect.z || pixel.y < rect.y || pixel.y >= rect.w) {
+                    return 0.0;
+                }
+                if (radius <= 0.0) {
+                    return 1.0;
+                }
+                let clamped_radius = min(radius, min((rect.z - rect.x) * 0.5, (rect.w - rect.y) * 0.5));
+                let center = clamp(pixel, rect.xy + vec2f(clamped_radius), rect.zw - vec2f(clamped_radius));
+                let edge_distance = length(pixel - center) - clamped_radius;
+                return clamp(0.5 - edge_distance, 0.0, 1.0);
+            }
+
             @fragment
-            fn fs_main() -> @location(0) vec4f {
-                return vec4f(uniforms.color.rgb * uniforms.color.a, uniforms.color.a);
+            fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
+                let coverage = rounded_rect_coverage(position.xy, uniforms.rect, uniforms.radius.x);
+                let alpha = uniforms.color.a * coverage;
+                return vec4f(uniforms.color.rgb * alpha, alpha);
             }
         """.trimIndent()
 
@@ -296,10 +314,24 @@ class RectOnlyOffscreenRenderer {
             return BlendState(color = component, alpha = component)
         }
 
-        fun SceneColor.toFloatArray(): FloatArray = floatArrayOf(r, g, b, a)
-
         fun SceneColor.toWebGpuColor(): Color =
             Color(r.toDouble() * a.toDouble(), g.toDouble() * a.toDouble(), b.toDouble() * a.toDouble(), a.toDouble())
+
+        fun RectOnlyFillDraw.toUniformFloatArray(): FloatArray =
+            floatArrayOf(
+                color.r,
+                color.g,
+                color.b,
+                color.a,
+                left,
+                top,
+                right,
+                bottom,
+                radius,
+                0f,
+                0f,
+                0f,
+            )
 
         fun ByteArray.countNonTransparentPixels(): Int {
             require(size % BYTES_PER_PIXEL == 0) { "RGBA buffer size must be a multiple of $BYTES_PER_PIXEL" }
@@ -316,11 +348,20 @@ internal data class RectOnlyDrawPlan(
     val sceneId: String,
     val clearColor: SceneColor,
     val fills: List<RectOnlyFillDraw>,
-)
+) {
+    val fillRectCount: Int = fills.count { it.family == "fill-rect" }
+    val fillRRectCount: Int = fills.count { it.family == "fill-rrect" }
+}
 
 internal data class RectOnlyFillDraw(
     val label: String,
+    val family: String,
     val color: SceneColor,
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+    val radius: Float,
     val scissorX: Int,
     val scissorY: Int,
     val scissorWidth: Int,
@@ -350,18 +391,18 @@ internal fun prepareRectOnlyDrawPlan(
     require(unsupportedReason == null) { "$sceneId $unsupportedReason" }
 
     val fills = commands.withIndex()
-        .filter { (_, command) -> command is SceneCommand.FillRect }
+        .filter { (_, command) -> command is SceneCommand.FillRect || command is SceneCommand.FillRRect }
         .sortedWith(
             compareBy<IndexedValue<SceneCommand>> { (_, command) ->
-                (command as SceneCommand.FillRect).paintOrder
+                command.paintOrder()
             }.thenBy { it.index },
         )
         .map { (_, command) ->
-            val fill = command as SceneCommand.FillRect
-            val left = floor(fill.rect.left).toInt()
-            val top = floor(fill.rect.top).toInt()
-            val right = ceil(fill.rect.right).toInt()
-            val bottom = ceil(fill.rect.bottom).toInt()
+            val rect = command.shapeRect()
+            val left = floor(rect.left).toInt()
+            val top = floor(rect.top).toInt()
+            val right = ceil(rect.right).toInt()
+            val bottom = ceil(rect.bottom).toInt()
             require(
                 left >= 0 &&
                     top >= 0 &&
@@ -370,19 +411,27 @@ internal fun prepareRectOnlyDrawPlan(
                     right > left &&
                     bottom > top,
             ) {
-                "$sceneId rect-only fill rect must be inside positive bounds: ${fill.label}"
+                "$sceneId rect-only fill shape must be inside positive bounds: ${command.label}"
             }
+            val widthPx = rect.right - rect.left
+            val heightPx = rect.bottom - rect.top
             RectOnlyFillDraw(
-                label = fill.label,
-                color = fill.color,
+                label = command.label,
+                family = command.family,
+                color = command.shapeColor(),
+                left = rect.left,
+                top = rect.top,
+                right = rect.right,
+                bottom = rect.bottom,
+                radius = minOf(command.shapeRadius(), widthPx * 0.5f, heightPx * 0.5f),
                 scissorX = left,
                 scissorY = top,
                 scissorWidth = right - left,
                 scissorHeight = bottom - top,
             )
-        }
+    }
     require(fills.isNotEmpty()) {
-        "$sceneId rect-only offscreen render requires at least one FillRect command"
+        "$sceneId rect-only offscreen render requires at least one FillRect or FillRRect command"
     }
 
     return RectOnlyDrawPlan(
@@ -396,16 +445,24 @@ internal fun prepareRectOnlyDrawPlan(
 internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneCommand>): String? {
     val unsupportedFamilies = commands
         .mapNotNull { command ->
-            if (command is SceneCommand.Clear || command is SceneCommand.FillRect) null else command.family
+            if (
+                command is SceneCommand.Clear ||
+                command is SceneCommand.FillRect ||
+                command is SceneCommand.FillRRect
+            ) {
+                null
+            } else {
+                command.family
+            }
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only offscreen render supports only clear and fill-rect command families: " +
+        return "rect-only offscreen render supports only clear, fill-rect, and fill-rrect command families: " +
             unsupportedFamilies.joinToString()
     }
 
-    if (commands.none { it is SceneCommand.FillRect }) {
-        return "rect-only offscreen render requires at least one FillRect command"
+    if (commands.none { it is SceneCommand.FillRect || it is SceneCommand.FillRRect }) {
+        return "rect-only offscreen render requires at least one FillRect or FillRRect command"
     }
 
     val clearIndices = commands.withIndex()
@@ -422,12 +479,44 @@ internal fun rectOnlyRenderedDiagnostics(
     sceneId: String,
     adapterInfo: String?,
     fillRectCount: Int,
+    fillRRectCount: Int,
 ): List<String> {
     require(sceneId.isNotBlank()) { "rect-only sceneId must not be blank" }
-    require(fillRectCount > 0) { "$sceneId rect-only diagnostics require at least one FillRect command" }
+    require(fillRectCount + fillRRectCount > 0) {
+        "$sceneId rect-only diagnostics require at least one FillRect or FillRRect command"
+    }
     return listOf(
         "rendered $sceneId via WebGPU offscreen",
         "adapter=${adapterInfo ?: "unknown-adapter"}",
         "fillRectCommands=$fillRectCount",
+        "fillRRectCommands=$fillRRectCount",
     )
 }
+
+private fun SceneCommand.paintOrder(): Int =
+    when (this) {
+        is SceneCommand.FillRect -> paintOrder
+        is SceneCommand.FillRRect -> paintOrder
+        else -> 0
+    }
+
+private fun SceneCommand.shapeRect() =
+    when (this) {
+        is SceneCommand.FillRect -> rect
+        is SceneCommand.FillRRect -> rect
+        else -> error("Unsupported shape command: $family")
+    }
+
+private fun SceneCommand.shapeColor() =
+    when (this) {
+        is SceneCommand.FillRect -> color
+        is SceneCommand.FillRRect -> color
+        else -> error("Unsupported shape command: $family")
+    }
+
+private fun SceneCommand.shapeRadius(): Float =
+    when (this) {
+        is SceneCommand.FillRect -> 0f
+        is SceneCommand.FillRRect -> radius
+        else -> error("Unsupported shape command: $family")
+    }

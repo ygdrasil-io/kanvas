@@ -88,11 +88,22 @@ sealed interface SceneCommand {
             )
     }
 
-    data class FillRRect(override val label: String) : SceneCommand {
+    data class FillRRect(
+        override val label: String,
+        val rect: SceneRect,
+        val radius: Float,
+        val color: SceneColor,
+        val paintOrder: Int = 0,
+    ) : SceneCommand {
         override val family: String = "fill-rrect"
 
         init {
             requireSceneCommandLabel(label)
+            require(!radius.isNaN() && !radius.isInfinite()) {
+                "SceneCommand.FillRRect.radius must be finite"
+            }
+            require(radius >= 0f) { "SceneCommand.FillRRect.radius must be non-negative" }
+            require(paintOrder >= 0) { "SceneCommand.FillRRect.paintOrder must be non-negative" }
         }
     }
 

@@ -46,16 +46,21 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
-    fun `catalogued rect only scenes route to WebGPU offscreen instead of runner subset`() {
+    fun `catalogued rect and rrect scenes route to WebGPU offscreen instead of runner subset`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
         val rectOnlyScenes = listOf(
-            "blend-mode-strip" to 1,
-            "cache-pressure-deck" to 2,
-            "legacy-route-comparison" to 1,
+            RenderedShapeExpectation("blend-mode-strip", fillRectCount = 1),
+            RenderedShapeExpectation("cache-pressure-deck", fillRectCount = 2),
+            RenderedShapeExpectation("legacy-route-comparison", fillRectCount = 1),
+            RenderedShapeExpectation(
+                sceneId = "path-badge-and-stroke",
+                fillRectCount = 1,
+                fillRRectCount = 1,
+            ),
         )
 
-        rectOnlyScenes.forEach { (sceneId, fillRectCount) ->
-            assertRenderedRectOnlyScene(root, sceneId, fillRectCount)
+        rectOnlyScenes.forEach { expectation ->
+            assertRenderedShapeScene(root, expectation)
         }
     }
 
@@ -63,7 +68,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
     fun `solid card stack renders through rect only WebGPU offscreen path`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
 
-        assertRenderedRectOnlyScene(root, sceneId = "solid-card-stack", fillRectCount = 3)
+        assertRenderedShapeScene(root, RenderedShapeExpectation(sceneId = "solid-card-stack", fillRectCount = 3))
     }
 
     @Test
@@ -193,7 +198,14 @@ class RenderGpuRendererSceneOffscreenMainTest {
         }
     }
 
-    private fun assertRenderedRectOnlyScene(root: Path, sceneId: String, fillRectCount: Int) {
+    private data class RenderedShapeExpectation(
+        val sceneId: String,
+        val fillRectCount: Int,
+        val fillRRectCount: Int = 0,
+    )
+
+    private fun assertRenderedShapeScene(root: Path, expectation: RenderedShapeExpectation) {
+        val sceneId = expectation.sceneId
         renderSceneInWebGpuCapableProcess(root, sceneId)
         val sceneOutput = root.resolve(sceneId)
         val runJson = sceneOutput.resolve("run.json").readText()
@@ -213,7 +225,8 @@ class RenderGpuRendererSceneOffscreenMainTest {
             ?.toInt()
         assertTrue((nonTransparentPixels ?: 0) > 0, sceneId)
         assertContains(runJson, "rendered $sceneId via WebGPU offscreen")
-        assertContains(runJson, "fillRectCommands=$fillRectCount")
+        assertContains(runJson, "fillRectCommands=${expectation.fillRectCount}")
+        assertContains(runJson, "fillRRectCommands=${expectation.fillRRectCount}")
         assertFalse(runJson.contains("runner-subset:$sceneId"), sceneId)
     }
 

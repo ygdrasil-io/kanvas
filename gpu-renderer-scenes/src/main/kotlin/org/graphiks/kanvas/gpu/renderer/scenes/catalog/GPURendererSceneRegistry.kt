@@ -53,7 +53,12 @@ object GPURendererSceneRegistry {
                 SceneRoadmapLink.milestone("M2", RStage.R3),
             ),
             commands = listOf(
-                SceneCommand.FillRRect("rounded-panel"),
+                SceneCommand.FillRRect(
+                    label = "rounded-panel",
+                    rect = SceneRect(40f, 30f, 280f, 170f),
+                    radius = 24f,
+                    color = SceneColor.blue(0.70f),
+                ),
                 SceneCommand.LinearGradientRect("panel-gradient"),
                 SceneCommand.Clip("panel-scissor"),
             ),
@@ -65,11 +70,17 @@ object GPURendererSceneRegistry {
             tags = setOf(SceneTag.RRect, SceneTag.Rect),
             links = listOf(SceneRoadmapLink.milestone("M3")),
             commands = listOf(
-                SceneCommand.FillRRect("badge-fill"),
+                SceneCommand.FillRRect(
+                    label = "badge-fill",
+                    rect = SceneRect(56f, 52f, 248f, 132f),
+                    radius = 32f,
+                    color = SceneColor.green(0.86f),
+                ),
                 SceneCommand.FillRect(
                     "stroke-proxy",
                     SceneRect(72f, 72f, 220f, 84f),
                     SceneColor.red(),
+                    paintOrder = 1,
                 ),
             ),
         ),
