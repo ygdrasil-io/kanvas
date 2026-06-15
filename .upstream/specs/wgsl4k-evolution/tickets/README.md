@@ -40,11 +40,11 @@ Tickets use this body order:
 
 | Ticket | Status | Purpose |
 |---|---|---|
-| `WGSL4K-EVO-001` | `review` | Define the validation/reflection contract and contribution packet. |
-| `WGSL4K-EVO-002` | `proposed` | Import wgsl4k as a tracked submodule. |
-| `WGSL4K-EVO-003` | `proposed` | Prepare the wgsl4k fixture branch and PR. |
-| `WGSL4K-EVO-004` | `proposed` | Consume wgsl4k reflection in Kanvas reports. |
-| `WGSL4K-EVO-005` | `proposed` | Re-evaluate blocked GPU/Text tickets after fresh dependency evidence. |
+| `WGSL4K-EVO-001` | `done` | Define the validation/reflection contract and contribution packet. |
+| `WGSL4K-EVO-002` | `done` | Import wgsl4k as a tracked submodule. |
+| `WGSL4K-EVO-003` | `done` | Prepare the wgsl4k fixture branch and PR. |
+| `WGSL4K-EVO-004` | `review` | Consume wgsl4k reflection in Kanvas reports. |
+| `WGSL4K-EVO-005` | `review` | Re-evaluate blocked GPU/Text tickets after fresh dependency evidence. |
 
 ## Status
 

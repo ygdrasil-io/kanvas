@@ -1,7 +1,7 @@
 ---
 id: WGSL4K-EVO-002
 title: "Import wgsl4k as tracked submodule"
-status: proposed
+status: done
 priority: P0
 owner_area: wgsl4k-evolution
 claim_impact: DependencyGated
@@ -47,10 +47,10 @@ of relying on undocumented local state.
 
 ## Acceptance Criteria
 
-- [ ] `.gitmodules` records the wgsl4k URL and path.
-- [ ] The submodule is pinned to a specific commit SHA.
-- [ ] Documentation records how Kanvas chooses a reviewed wgsl4k SHA.
-- [ ] No Kanvas product support claim changes.
+- [x] `.gitmodules` records the wgsl4k URL and path.
+- [x] The submodule is pinned to a specific commit SHA.
+- [x] Documentation records how Kanvas chooses a reviewed wgsl4k SHA.
+- [x] No Kanvas product support claim changes.
 
 ## Required Evidence
 
@@ -72,7 +72,10 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Requires accepted execution plan and clean submodule import.
+- `done`: `external/wgsl4k` is imported from
+  `https://github.com/ygdrasil-io/wgsl4k.git` and pinned to
+  `96410250916ac91f79269ac64bace0a9272826b9`. Kanvas does not wire this
+  submodule into build/report consumption in this ticket.
 
 ## Labels
 
