@@ -1971,6 +1971,22 @@ fun defaultFontDiagnosticTaxonomy(): FontDiagnosticTaxonomy = FontDiagnosticTaxo
             requiredFields = listOf("sourceId", "tableTag"),
         ),
         fontDiagnosticCode(
+            code = "font.sfnt.cmap-format-unsupported",
+            namespace = "font.sfnt",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.ERROR,
+            route = "sfnt-cmap",
+            requiredFields = listOf("sourceId", "format", "platformId", "encodingId"),
+        ),
+        fontDiagnosticCode(
+            code = "font.sfnt.cmap-unusable",
+            namespace = "font.sfnt",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.ERROR,
+            route = "sfnt-cmap",
+            requiredFields = listOf("sourceId"),
+        ),
+        fontDiagnosticCode(
             code = "font.sfnt.table-duplicate",
             namespace = "font.sfnt",
             claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
@@ -2083,6 +2099,20 @@ fun defaultFontDiagnosticTaxonomy(): FontDiagnosticTaxonomy = FontDiagnosticTaxo
             fields = mapOf(
                 "sourceId" to "550e8400-e29b-41d4-a716-446655440201",
                 "tableTag" to "head",
+            ),
+        ),
+        fontDiagnosticSample(
+            label = "sfnt-cmap-refusal",
+            code = "font.sfnt.cmap-format-unsupported",
+            subject = "sfnt:cmap-format-13",
+            route = "sfnt-cmap",
+            severity = FontDiagnosticSeverity.ERROR,
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+            fields = mapOf(
+                "sourceId" to "550e8400-e29b-41d4-a716-446655440203",
+                "format" to "13",
+                "platformId" to "3",
+                "encodingId" to "10",
             ),
         ),
         fontDiagnosticSample(

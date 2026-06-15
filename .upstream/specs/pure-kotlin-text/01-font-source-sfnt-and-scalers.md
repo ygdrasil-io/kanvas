@@ -279,7 +279,7 @@ Stable reason-code families:
 - `font.sfnt.required-table-missing`;
 - `font.sfnt.optional-table-malformed`;
 - `font.collection-index-invalid`;
-- `font.cmap-format-unsupported`;
+- `font.sfnt.cmap-format-unsupported`;
 - `font.outline-format-unsupported`;
 - `font.cff-operator-unsupported`;
 - `font.variation-data-malformed`;

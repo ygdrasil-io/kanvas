@@ -2162,6 +2162,8 @@ fun OpenTypeFaceData.faceEvidence(
  * @property encodingRecords Encoding records in table order.
  * @property mappings Parsed format-specific mappings in table order.
  * @property preferredSubtable Preferred Unicode subtable used for lookups.
+ * @property variationSubtable Parsed format 14 variation-selector subtable, when present.
+ * @property diagnostics Non-fatal `cmap` support/refusal diagnostics.
  */
 data class CMapTable(
     val subtables: Map<String, List<Int>> = emptyMap(),
@@ -2169,17 +2171,39 @@ data class CMapTable(
     val encodingRecords: List<CMapEncodingRecord> = emptyList(),
     val mappings: List<CMapSubtable> = emptyList(),
     val preferredSubtable: CMapSubtable? = mappings.preferredUnicodeCMapSubtable(),
+    val variationSubtable: CMapSubtable? = mappings.firstOrNull { it.mapping is CMapFormat14Mapping },
+    val diagnostics: List<CMapDiagnostic> = emptyList(),
 ) {
     /**
      * Returns the glyph ID for [codePoint] from the preferred Unicode subtable.
      *
+     * Missing code points return stable glyph ID `0`. When [variationSelector]
+     * is supplied and a format 14 subtable contains a non-default mapping, the
+     * explicit variation glyph ID wins; default variation ranges preserve the
+     * base mapping semantics.
+     *
      * @throws IllegalArgumentException when [codePoint] is outside the Unicode scalar range.
      */
-    fun lookupGlyphId(codePoint: Int): Int? {
+    fun lookupGlyphId(codePoint: Int, variationSelector: Int? = null): Int? {
         require(codePoint in UNICODE_CODE_POINT_RANGE) {
             "Unicode code point $codePoint is outside range 0..0x10ffff."
         }
-        return preferredSubtable?.lookupGlyphId(codePoint)
+        require(variationSelector == null || variationSelector in UNICODE_CODE_POINT_RANGE) {
+            "Unicode variation selector $variationSelector is outside range 0..0x10ffff."
+        }
+
+        val baseGlyphId = preferredSubtable?.lookupGlyphId(codePoint) ?: 0
+        if (variationSelector == null) {
+            return baseGlyphId
+        }
+
+        val variationGlyphId = variationSubtable
+            ?.lookupVariationGlyphId(
+                codePoint = codePoint,
+                variationSelector = variationSelector,
+                baseGlyphId = baseGlyphId,
+            )
+        return variationGlyphId ?: baseGlyphId
     }
 }
 
@@ -2197,6 +2221,52 @@ data class CMapEncodingRecord(
     val offset: Int,
     val format: Int? = null,
 )
+
+/**
+ * Non-fatal diagnostic produced while parsing an OpenType `cmap` table.
+ *
+ * @property code Stable diagnostic code from the pure Kotlin text taxonomy.
+ * @property format `cmap` format associated with the diagnostic, when known.
+ * @property platformId Encoding record platform ID associated with the diagnostic.
+ * @property encodingId Encoding record encoding ID associated with the diagnostic.
+ * @property offset Byte offset of the subtable from the start of the `cmap` table.
+ * @property message Deterministic human-readable detail.
+ */
+data class CMapDiagnostic(
+    val code: String,
+    val format: Int?,
+    val platformId: Int?,
+    val encodingId: Int?,
+    val offset: Int?,
+    val message: String,
+) {
+    init {
+        require(code.startsWith("font.") && code.isStableSFNTDiagnosticToken()) {
+            "OpenType cmap diagnostic code must be a stable font.* diagnostic token."
+        }
+        require(format == null || format >= 0) { "OpenType cmap diagnostic format must be non-negative." }
+        require(platformId == null || platformId >= 0) { "OpenType cmap diagnostic platformId must be non-negative." }
+        require(encodingId == null || encodingId >= 0) { "OpenType cmap diagnostic encodingId must be non-negative." }
+        require(offset == null || offset >= 0) { "OpenType cmap diagnostic offset must be non-negative." }
+    }
+
+    /**
+     * Serializes the diagnostic as one stable line for `cmap` evidence.
+     */
+    fun dump(): String = buildString {
+        append(code)
+        append(" format=")
+        append(format ?: "none")
+        append(" platformId=")
+        append(platformId ?: "none")
+        append(" encodingId=")
+        append(encodingId ?: "none")
+        append(" offset=")
+        append(offset ?: "none")
+        append(" message=")
+        append(message.sfntEvidenceQuoted())
+    }
+}
 
 /**
  * Parsed OpenType `cmap` subtable with its platform metadata and mapping body.
@@ -2416,13 +2486,69 @@ data class CMapFormat12Group(
 )
 
 /**
+ * Parsed OpenType `cmap` format 14 variation-selector mapping.
+ *
+ * @property records Variation selector records in subtable order.
+ */
+data class CMapFormat14Mapping(
+    val records: List<CMapVariationSelectorRecord>,
+) : CMapMapping {
+    override fun lookupGlyphId(codePoint: Int): Int? = null
+
+    /**
+     * Returns the variation glyph ID for a Unicode variation sequence.
+     *
+     * Non-default mappings return their explicit glyph ID. Default variation
+     * ranges return the supplied base glyph ID, preserving base cmap semantics.
+     * A missing variation sequence returns `null` so callers can apply their
+     * fallback policy.
+     */
+    fun lookupGlyphId(
+        codePoint: Int,
+        variationSelector: Int,
+        baseGlyphId: Int,
+    ): Int? {
+        val record = records.firstOrNull { it.variationSelector == variationSelector } ?: return null
+        val explicitGlyphId = record.nonDefaultMappings[codePoint]
+        if (explicitGlyphId != null) {
+            return explicitGlyphId.takeIf { it != 0 } ?: 0
+        }
+        if (record.defaultRanges.any { codePoint in it.startCodePoint..it.endCodePoint }) {
+            return baseGlyphId
+        }
+        return null
+    }
+}
+
+/**
+ * One format 14 variation selector record.
+ *
+ * @property variationSelector Unicode variation selector scalar value.
+ * @property defaultRanges Code point ranges that keep the base `cmap` glyph.
+ * @property nonDefaultMappings Explicit Unicode variation sequence glyph IDs.
+ */
+data class CMapVariationSelectorRecord(
+    val variationSelector: Int,
+    val defaultRanges: List<CMapUnicodeRange> = emptyList(),
+    val nonDefaultMappings: Map<Int, Int> = emptyMap(),
+)
+
+/**
+ * Inclusive Unicode range from a format 14 default UVS table.
+ */
+data class CMapUnicodeRange(
+    val startCodePoint: Int,
+    val endCodePoint: Int,
+)
+
+/**
  * Parser for raw OpenType `cmap` table bytes.
  */
 object OpenTypeCMapTableParser {
     /**
      * Parses raw OpenType `cmap` bytes into a typed [CMapTable].
      *
-     * Supported mapping bodies are format 4 and format 12. Unsupported formats
+     * Supported mapping bodies are formats 0, 4, 6, 12, and 14. Unsupported formats
      * remain visible through [CMapTable.encodingRecords] but are not added to
      * [CMapTable.mappings].
      *
@@ -2457,12 +2583,29 @@ object OpenTypeCMapTableParser {
             )
         }
 
+        val diagnostics = mutableListOf<CMapDiagnostic>()
         val mappings = encodingRecords.mapIndexedNotNull { index, record ->
-            parseSubtable(table = table, recordIndex = index, record = record)
+            parseSubtable(
+                table = table,
+                recordIndex = index,
+                record = record,
+                diagnostics = diagnostics,
+            )
         }
         val legacySubtables = mappings.associate { subtable ->
             "${subtable.platformId}:${subtable.encodingId}:${subtable.format}" to
                 table.unsignedBytes(subtable.offset, subtable.offset + subtable.length)
+        }
+        val preferredSubtable = mappings.preferredUnicodeCMapSubtable()
+        if (preferredSubtable == null) {
+            diagnostics += CMapDiagnostic(
+                code = "font.sfnt.cmap-unusable",
+                format = null,
+                platformId = null,
+                encodingId = null,
+                offset = null,
+                message = "No usable Unicode cmap subtable was parsed.",
+            )
         }
 
         return CMapTable(
@@ -2470,7 +2613,9 @@ object OpenTypeCMapTableParser {
             version = version,
             encodingRecords = encodingRecords,
             mappings = mappings,
-            preferredSubtable = mappings.preferredUnicodeCMapSubtable(),
+            preferredSubtable = preferredSubtable,
+            variationSubtable = mappings.firstOrNull { it.mapping is CMapFormat14Mapping },
+            diagnostics = diagnostics,
         )
     }
 
@@ -2478,13 +2623,25 @@ object OpenTypeCMapTableParser {
         table: ByteArray,
         recordIndex: Int,
         record: CMapEncodingRecord,
+        diagnostics: MutableList<CMapDiagnostic>,
     ): CMapSubtable? =
         when (record.format) {
             0 -> parseFormat0(table, recordIndex, record)
             6 -> parseFormat6(table, recordIndex, record)
             4 -> parseFormat4(table, recordIndex, record)
             12 -> parseFormat12(table, recordIndex, record)
-            else -> null
+            14 -> parseFormat14(table, recordIndex, record)
+            else -> {
+                diagnostics += CMapDiagnostic(
+                    code = "font.sfnt.cmap-format-unsupported",
+                    format = record.format,
+                    platformId = record.platformId,
+                    encodingId = record.encodingId,
+                    offset = record.offset,
+                    message = "Unsupported cmap format ${record.format} is not selected for Unicode lookup.",
+                )
+                null
+            }
         }
 
     private fun parseFormat0(
@@ -2707,6 +2864,180 @@ object OpenTypeCMapTableParser {
             format = 12,
             mapping = CMapFormat12Mapping(groups),
         )
+    }
+
+    private fun parseFormat14(
+        table: ByteArray,
+        recordIndex: Int,
+        record: CMapEncodingRecord,
+    ): CMapSubtable {
+        val offset = record.offset
+        table.requireRange(offset, FORMAT14_HEADER_SIZE, "OpenType cmap format 14 header for record $recordIndex")
+        val length = table.readUInt32BE(offset + 2, "OpenType cmap format 14 length for record $recordIndex")
+        require(length <= Int.MAX_VALUE && length >= FORMAT14_HEADER_SIZE) {
+            "OpenType cmap format 14 record $recordIndex length $length must be between $FORMAT14_HEADER_SIZE and ${Int.MAX_VALUE}."
+        }
+        table.requireRange(offset, length.toInt(), "OpenType cmap format 14 subtable for record $recordIndex")
+
+        val recordCount = table.readUInt32BE(offset + 6, "OpenType cmap format 14 numVarSelectorRecords for record $recordIndex")
+        require(recordCount <= Int.MAX_VALUE) {
+            "OpenType cmap format 14 record $recordIndex selector count $recordCount exceeds ${Int.MAX_VALUE}."
+        }
+        val recordsEnd = FORMAT14_HEADER_SIZE.toLong() + recordCount * FORMAT14_SELECTOR_RECORD_SIZE
+        require(recordsEnd <= length) {
+            "OpenType cmap format 14 selector records for record $recordIndex end at $recordsEnd but declared length is $length."
+        }
+
+        val records = List(recordCount.toInt()) { selectorIndex ->
+            val selectorOffset = offset + FORMAT14_HEADER_SIZE + selectorIndex * FORMAT14_SELECTOR_RECORD_SIZE
+            val variationSelector = table.readUInt24BE(
+                selectorOffset,
+                "OpenType cmap format 14 varSelector[$selectorIndex] for record $recordIndex",
+            )
+            require(variationSelector in UNICODE_CODE_POINT_RANGE) {
+                "OpenType cmap format 14 varSelector[$selectorIndex] $variationSelector exceeds 0x10ffff."
+            }
+            val defaultUVSOffset = table.readUInt32BE(
+                selectorOffset + FORMAT14_UINT24_BYTE_LENGTH,
+                "OpenType cmap format 14 defaultUVSOffset[$selectorIndex] for record $recordIndex",
+            )
+            val nonDefaultUVSOffset = table.readUInt32BE(
+                selectorOffset + FORMAT14_UINT24_BYTE_LENGTH + UINT32_BYTE_LENGTH,
+                "OpenType cmap format 14 nonDefaultUVSOffset[$selectorIndex] for record $recordIndex",
+            )
+            CMapVariationSelectorRecord(
+                variationSelector = variationSelector,
+                defaultRanges = parseFormat14DefaultRanges(
+                    table = table,
+                    subtableOffset = offset,
+                    subtableLength = length.toInt(),
+                    defaultUVSOffset = defaultUVSOffset,
+                    recordIndex = recordIndex,
+                    selectorIndex = selectorIndex,
+                ),
+                nonDefaultMappings = parseFormat14NonDefaultMappings(
+                    table = table,
+                    subtableOffset = offset,
+                    subtableLength = length.toInt(),
+                    nonDefaultUVSOffset = nonDefaultUVSOffset,
+                    recordIndex = recordIndex,
+                    selectorIndex = selectorIndex,
+                ),
+            )
+        }
+
+        return CMapSubtable(
+            platformId = record.platformId,
+            encodingId = record.encodingId,
+            offset = offset,
+            length = length.toInt(),
+            format = 14,
+            mapping = CMapFormat14Mapping(records),
+        )
+    }
+
+    private fun parseFormat14DefaultRanges(
+        table: ByteArray,
+        subtableOffset: Int,
+        subtableLength: Int,
+        defaultUVSOffset: Long,
+        recordIndex: Int,
+        selectorIndex: Int,
+    ): List<CMapUnicodeRange> {
+        if (defaultUVSOffset == 0L) {
+            return emptyList()
+        }
+        val tableOffset = table.cmapSubtableRelativeOffset(
+            subtableOffset = subtableOffset,
+            subtableLength = subtableLength,
+            relativeOffset = defaultUVSOffset,
+            requiredLength = UINT32_BYTE_LENGTH.toLong(),
+            label = "OpenType cmap format 14 default UVS table for record $recordIndex selector $selectorIndex",
+        )
+        val rangeCount = table.readUInt32BE(
+            tableOffset,
+            "OpenType cmap format 14 default UVS count for record $recordIndex selector $selectorIndex",
+        )
+        require(rangeCount <= Int.MAX_VALUE) {
+            "OpenType cmap format 14 default UVS count $rangeCount exceeds ${Int.MAX_VALUE}."
+        }
+        table.cmapSubtableRelativeOffset(
+            subtableOffset = subtableOffset,
+            subtableLength = subtableLength,
+            relativeOffset = defaultUVSOffset,
+            requiredLength = UINT32_BYTE_LENGTH.toLong() + rangeCount * FORMAT14_DEFAULT_RANGE_RECORD_SIZE.toLong(),
+            label = "OpenType cmap format 14 default UVS ranges for record $recordIndex selector $selectorIndex",
+        )
+
+        return List(rangeCount.toInt()) { rangeIndex ->
+            val rangeOffset = tableOffset + UINT32_BYTE_LENGTH + rangeIndex * FORMAT14_DEFAULT_RANGE_RECORD_SIZE
+            val startUnicodeValue = table.readUInt24BE(
+                rangeOffset,
+                "OpenType cmap format 14 default UVS startUnicodeValue[$rangeIndex]",
+            )
+            val additionalCount = table.readUInt8(
+                rangeOffset + FORMAT14_UINT24_BYTE_LENGTH,
+                "OpenType cmap format 14 default UVS additionalCount[$rangeIndex]",
+            )
+            val endUnicodeValue = startUnicodeValue + additionalCount
+            require(endUnicodeValue <= UNICODE_CODE_POINT_MAX) {
+                "OpenType cmap format 14 default UVS range $rangeIndex ending at $endUnicodeValue exceeds 0x10ffff."
+            }
+            CMapUnicodeRange(
+                startCodePoint = startUnicodeValue,
+                endCodePoint = endUnicodeValue,
+            )
+        }
+    }
+
+    private fun parseFormat14NonDefaultMappings(
+        table: ByteArray,
+        subtableOffset: Int,
+        subtableLength: Int,
+        nonDefaultUVSOffset: Long,
+        recordIndex: Int,
+        selectorIndex: Int,
+    ): Map<Int, Int> {
+        if (nonDefaultUVSOffset == 0L) {
+            return emptyMap()
+        }
+        val tableOffset = table.cmapSubtableRelativeOffset(
+            subtableOffset = subtableOffset,
+            subtableLength = subtableLength,
+            relativeOffset = nonDefaultUVSOffset,
+            requiredLength = UINT32_BYTE_LENGTH.toLong(),
+            label = "OpenType cmap format 14 non-default UVS table for record $recordIndex selector $selectorIndex",
+        )
+        val mappingCount = table.readUInt32BE(
+            tableOffset,
+            "OpenType cmap format 14 non-default UVS count for record $recordIndex selector $selectorIndex",
+        )
+        require(mappingCount <= Int.MAX_VALUE) {
+            "OpenType cmap format 14 non-default UVS count $mappingCount exceeds ${Int.MAX_VALUE}."
+        }
+        table.cmapSubtableRelativeOffset(
+            subtableOffset = subtableOffset,
+            subtableLength = subtableLength,
+            relativeOffset = nonDefaultUVSOffset,
+            requiredLength = UINT32_BYTE_LENGTH.toLong() + mappingCount * FORMAT14_NON_DEFAULT_RECORD_SIZE.toLong(),
+            label = "OpenType cmap format 14 non-default UVS mappings for record $recordIndex selector $selectorIndex",
+        )
+
+        return List(mappingCount.toInt()) { mappingIndex ->
+            val mappingOffset = tableOffset + UINT32_BYTE_LENGTH + mappingIndex * FORMAT14_NON_DEFAULT_RECORD_SIZE
+            val unicodeValue = table.readUInt24BE(
+                mappingOffset,
+                "OpenType cmap format 14 non-default UVS unicodeValue[$mappingIndex]",
+            )
+            val glyphId = table.readUInt16BE(
+                mappingOffset + FORMAT14_UINT24_BYTE_LENGTH,
+                "OpenType cmap format 14 non-default UVS glyphID[$mappingIndex]",
+            )
+            require(unicodeValue in UNICODE_CODE_POINT_RANGE) {
+                "OpenType cmap format 14 non-default UVS unicodeValue[$mappingIndex] $unicodeValue exceeds 0x10ffff."
+            }
+            unicodeValue to glyphId
+        }.toMap()
     }
 }
 
@@ -2981,6 +3312,7 @@ private fun CMapMapping.evidenceKind(): String =
         is CMapFormat6Mapping -> "format6-trimmed-array"
         is CMapFormat4Mapping -> "format4-segments"
         is CMapFormat12Mapping -> "format12-segmented-coverage"
+        is CMapFormat14Mapping -> "format14-variation-sequences"
     }
 
 private fun CMapMapping.evidenceEntryCount(): Int =
@@ -2989,6 +3321,7 @@ private fun CMapMapping.evidenceEntryCount(): Int =
         is CMapFormat6Mapping -> glyphIds.size
         is CMapFormat4Mapping -> segments.size
         is CMapFormat12Mapping -> groups.size
+        is CMapFormat14Mapping -> records.size
     }
 
 private fun MetricsTables.toEvidence(): OpenTypeMetricsEvidence =
@@ -3609,6 +3942,11 @@ private const val FORMAT6_HEADER_SIZE = 10
 private const val FORMAT4_HEADER_SIZE = 14
 private const val FORMAT12_HEADER_SIZE = 16
 private const val FORMAT12_GROUP_SIZE = 12
+private const val FORMAT14_HEADER_SIZE = 10
+private const val FORMAT14_SELECTOR_RECORD_SIZE = 11
+private const val FORMAT14_UINT24_BYTE_LENGTH = 3
+private const val FORMAT14_DEFAULT_RANGE_RECORD_SIZE = 4
+private const val FORMAT14_NON_DEFAULT_RECORD_SIZE = 5
 private const val SVG_TABLE_HEADER_SIZE = 10
 private const val SVG_DOCUMENT_RECORD_SIZE = 12
 private const val MAX_SVG_DOCUMENT_RECORDS = 8192
@@ -3899,6 +4237,17 @@ private fun CMapSubtable.unicodePreferencePriority(): Int =
         else -> Int.MAX_VALUE
     }
 
+private fun CMapSubtable.lookupVariationGlyphId(
+    codePoint: Int,
+    variationSelector: Int,
+    baseGlyphId: Int,
+): Int? =
+    (mapping as? CMapFormat14Mapping)?.lookupGlyphId(
+        codePoint = codePoint,
+        variationSelector = variationSelector,
+        baseGlyphId = baseGlyphId,
+    )
+
 private fun CMapEncodingRecord.characterEncoding(): CMapCharacterEncoding =
     if (platformId == MACINTOSH_PLATFORM_ID && encodingId == MACINTOSH_ROMAN_ENCODING_ID) {
         CMapCharacterEncoding.MAC_ROMAN
@@ -4016,9 +4365,40 @@ private fun ByteArray.readUInt32BE(offset: Int, label: String): Long {
         (this[offset + 3].toLong() and 0xff)
 }
 
+private fun ByteArray.readUInt24BE(offset: Int, label: String): Int {
+    requireRange(offset, FORMAT14_UINT24_BYTE_LENGTH, label)
+    return ((this[offset].toInt() and 0xff) shl 16) or
+        ((this[offset + 1].toInt() and 0xff) shl 8) or
+        (this[offset + 2].toInt() and 0xff)
+}
+
 private fun ByteArray.unsignedBytes(start: Int, end: Int): List<Int> {
     requireRange(start, end - start, "OpenType cmap compatibility subtable bytes")
     return copyOfRange(start, end).map { it.toInt() and 0xff }
+}
+
+private fun ByteArray.cmapSubtableRelativeOffset(
+    subtableOffset: Int,
+    subtableLength: Int,
+    relativeOffset: Long,
+    requiredLength: Long,
+    label: String,
+): Int {
+    val relativeEnd = relativeOffset + requiredLength
+    require(
+        subtableLength >= 0 &&
+            relativeOffset >= 0 &&
+            requiredLength >= 0 &&
+            relativeEnd <= subtableLength.toLong(),
+    ) {
+        "$label relative range [$relativeOffset, $relativeEnd) exceeds cmap subtable length $subtableLength."
+    }
+    val absoluteOffset = subtableOffset.toLong() + relativeOffset
+    require(absoluteOffset <= Int.MAX_VALUE && requiredLength <= Int.MAX_VALUE) {
+        "$label absolute range [$absoluteOffset, ${absoluteOffset + requiredLength}) exceeds addressable Int range."
+    }
+    requireRange(absoluteOffset.toInt(), requiredLength.toInt(), label)
+    return absoluteOffset.toInt()
 }
 
 private fun ByteArray.requireRange(offset: Int, length: Int, label: String) {

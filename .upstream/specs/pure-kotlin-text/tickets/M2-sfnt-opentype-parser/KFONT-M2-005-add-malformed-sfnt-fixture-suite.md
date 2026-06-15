@@ -71,7 +71,7 @@ data class MalformedSFNTFixture(
 - [ ] Each malformed fixture has one primary expected diagnostic and a stable source hash.
 - [ ] Required-table malformed fixtures reject the face instead of producing partial support claims.
 - [ ] Optional-table malformed fixtures preserve ordinary outline parsing only when the target spec allows fallback.
-- [ ] Unsupported `cmap` fixture emits `font.cmap-format-unsupported`.
+- [ ] Unsupported `cmap` fixture emits `font.sfnt.cmap-format-unsupported`.
 - [ ] Fixture generation is deterministic and does not depend on external font engines.
 
 ## Required Evidence
