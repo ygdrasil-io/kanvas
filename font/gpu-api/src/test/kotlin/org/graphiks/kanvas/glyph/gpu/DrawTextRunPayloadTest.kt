@@ -7,7 +7,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.uuid.Uuid
 
-class GPUTextDrawPayloadTest {
+class DrawTextRunPayloadTest {
     @Test
     fun `draw text run payload is deterministic and passes no Sk leakage`() {
         val payload = fixtureDrawTextRunPayload()
