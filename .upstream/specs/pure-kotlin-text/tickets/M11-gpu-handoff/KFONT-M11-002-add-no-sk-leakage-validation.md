@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-002"
 title: "Add no-`Sk*` leakage validation"
-status: "review"
+status: "done"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -95,6 +95,7 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*NoSkLeakage*'
 
 ## Status Notes
 
+- `done`: Merged into `master` by PR #1653 (`7e74ee77`) and revalidated on 2026-06-15 in `reports/pure-kotlin-text/2026-06-15-kfont-review-closeout.md`. This remains contract evidence only; no GPU text route or legacy gate is promoted.
 - `proposed`: Boundary validation for all later normalized text command and route tickets.
 - Move to `ready` only after forbidden field kinds and report schema are reviewed.
 - `review`: 2026-06-15 entry-contract evidence is in

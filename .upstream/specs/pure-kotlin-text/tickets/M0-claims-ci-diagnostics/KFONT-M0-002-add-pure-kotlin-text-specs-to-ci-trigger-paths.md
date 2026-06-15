@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M0-002"
 title: "Add pure-kotlin-text specs to CI trigger paths"
-status: "review"
+status: "done"
 milestone: "M0"
 priority: "P0"
 owner_area: "ci"
@@ -102,6 +102,7 @@ rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePerformanceTrendWar
 
 ## Status Notes
 
+- `done`: Merged into `master` by PR #1661 (`3fb53af78`) and revalidated on 2026-06-15 in `reports/pure-kotlin-text/2026-06-15-kfont-review-closeout.md`. Remaining non-claims and later gates stay active.
 - `review`: `.github/workflows/test.yml` now includes
   `.upstream/specs/pure-kotlin-text/**`, `font/**`,
   `reports/pure-kotlin-text/**`, and the pure Kotlin text CI/boundary

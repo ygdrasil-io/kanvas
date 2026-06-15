@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M0-005"
 title: "Harden dashboard claim classification"
-status: "review"
+status: "done"
 milestone: "M0"
 priority: "P0"
 owner_area: "validation-dashboard"
@@ -102,6 +102,7 @@ rtk git diff --check
 
 ## Status Notes
 
+- `done`: Merged into `master` by PR #1662 (`edfbe9c47`) and revalidated on 2026-06-15 in `reports/pure-kotlin-text/2026-06-15-kfont-review-closeout.md`. Remaining non-claims and legacy gates stay active.
 - `proposed`: Dashboard rules are specified, but no report or negative fixture is attached yet.
 - `review`: `font-claim-dashboard.json` and
   `validate_pure_kotlin_text_claim_dashboard.py` enforce stable
