@@ -137,6 +137,49 @@ Remaining gate: this is architecture and boundary audit infrastructure only.
 It does not add rendering behavior, complete target fixtures, CPU/GPU oracle
 evidence, or GPU text route support.
 
+### KFONT-M1-003: Deterministic Source/Typeface Identity Dumps
+
+Status: review.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontIdentityDumpTest.kt`
+- `reports/pure-kotlin-text/font-source.json`
+- `reports/pure-kotlin-text/typeface-id.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m1-003-identity-dumps.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M1-font-identity-sources/KFONT-M1-003-add-deterministic-source-typeface-dumps.md`
+
+Evidence:
+
+- `FontIdentityDumpWriter` emits the checked-in `font-source.json` and
+  `typeface-id.json` goldens through canonical JSON wrappers.
+- `FontIdentityDumpBundle` compares `font-source.json`, `typeface-id.json`,
+  and `identity-dump-schema.json` byte-for-byte as UTF-8 strings.
+- `FontIdentityDumpDeterminismResult` records matching state, both SHA-256
+  digests, and exact differing file labels.
+- `FontIdentityDumpSchema` records schema version `1`, required fields, output
+  file order, sorted table tags, sorted variation coordinates, sorted palette
+  overrides, host-dependent markers, diagnostics, and
+  `claimPromotionAllowed=false`.
+- The host-dependent source row remains visible through
+  `system-scanned-host-dependent`, `hostDependent`, and
+  `font.source.host-dependent` without host temp paths.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*IdentityDump*'
+rtk ./gradlew --no-daemon --rerun-tasks :font:core:test --tests '*IdentityDump*'
+rtk ./gradlew --no-daemon :font:core:test
+rtk git diff --check
+```
+
+Remaining gate: this is deterministic dump evidence only. It does not add font
+fixture bytes, glyph outlines, shaping, glyph scaling/cache, fallback
+completion, renderer backend behavior, GPU evidence, or support-claim
+promotion.
+
 ### PKT-02A: Font Source Provenance Evidence Dumps
 
 Status: implemented and independently reviewed.

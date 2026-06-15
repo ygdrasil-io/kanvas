@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M1-003"
 title: "Add deterministic source/typeface dumps"
-status: "proposed"
+status: "review"
 milestone: "M1"
 priority: "P0"
 owner_area: "validation"
@@ -62,11 +62,11 @@ fun assertDeterministicDump(fixture: FontFixtureRef): DumpDiffResult
 
 ## Acceptance Criteria
 
-- [ ] `font-source.json` uses sorted table tags and stable provenance fields.
-- [ ] `typeface-id.json` uses sorted variation coordinates and deterministic typeface ordering.
-- [ ] Re-running the dump command on the same fixture produces byte-identical output.
-- [ ] Host-dependent sources are visible in dumps and cannot be used as normative fixture evidence.
-- [ ] Dump schema version changes are explicit and reviewable.
+- [x] `font-source.json` uses sorted table tags and stable provenance fields.
+- [x] `typeface-id.json` uses sorted variation coordinates and deterministic typeface ordering.
+- [x] Re-running the dump command on the same fixture produces byte-identical output.
+- [x] Host-dependent sources are visible in dumps and cannot be used as normative fixture evidence.
+- [x] Dump schema version changes are explicit and reviewable.
 
 ## Required Evidence
 
@@ -95,8 +95,17 @@ rtk ./gradlew --no-daemon :font:core:test --tests '*IdentityDump*'
 
 ## Status Notes
 
-- `proposed`: Dump formats are specified, but no golden dump evidence is attached yet.
-- Move to `ready` after KFONT-M1-001 and KFONT-M1-002 define their preimages.
+- `review`: `FontIdentityDumpWriter` emits the checked-in `font-source.json`
+  and `typeface-id.json` goldens through canonical wrappers, records explicit
+  schema version/order rules, and verifies repeated dump bundles byte-for-byte.
+  Evidence report: `reports/pure-kotlin-text/2026-06-15-kfont-m1-003-identity-dumps.md`.
+- `review` validation: `rtk ./gradlew --no-daemon --rerun-tasks :font:core:test --tests '*IdentityDump*'`
+  passed 7 focused tests, and
+  `rtk ./gradlew --no-daemon --rerun-tasks :font:core:test` passed 38
+  `font/core` tests.
+- Independent reviews: spec compliance and code quality approved after
+  remediation of raw golden comparison, defensive-copy, and canonical JSON
+  validation findings.
 
 ## Linear Labels
 
