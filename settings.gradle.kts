@@ -99,6 +99,7 @@ include(":cpu-raster")
 // restored here so :gpu-raster:test (ClearRedTest) actually runs.
 include(":gpu-raster")
 include(":gpu-renderer")
+include(":gpu-renderer-scenes")
 include(":render-pipeline")
 include(":kadre-runtime")
 include(":skia-integration-tests")

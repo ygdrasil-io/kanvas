@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "sceneId": "solid-card-stack",
+  "status": "dry-session",
+  "productRefusal": false,
+  "reason": "frames-zero-dry-session",
+  "requestedFrames": 0,
+  "presentedFrames": 0,
+  "manualValidation": true,
+  "surface": {
+    "width": 320,
+    "height": 200,
+    "format": null
+  },
+  "adapterInfo": null,
+  "error": null
+}

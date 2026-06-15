@@ -1,0 +1,83 @@
+plugins {
+    id("buildsrc.convention.kotlin-jvm")
+}
+
+val mainSourceSet = sourceSets.main.get()
+val kadreSourceSet = sourceSets.create("kadre") {
+    compileClasspath += mainSourceSet.output + mainSourceSet.compileClasspath
+    runtimeClasspath += mainSourceSet.runtimeClasspath
+}
+
+dependencies {
+    implementation(kotlin("stdlib"))
+    implementation(project(":gpu-renderer"))
+    implementation(project(":gpu-raster"))
+    implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+
+    "kadreImplementation"("org.graphiks.kadre:kadre:1.0.0")
+    "kadreImplementation"("org.graphiks.kadre:kadre-win32:1.0.0")
+    "kadreImplementation"("org.graphiks.kadre:kadre-x11:1.0.0")
+    "kadreImplementation"("org.graphiks.kadre:kadre-wayland:1.0.0")
+
+    testImplementation(kotlin("test"))
+}
+
+tasks.register<JavaExec>("gpuRendererScenesCatalogReport") {
+    group = "verification"
+    description = "Writes the GPU renderer scenes catalog report without WebGPU or Kadre execution."
+
+    val outputDir = rootProject.layout.projectDirectory.dir("reports/gpu-renderer-scenes/catalog")
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.gpu.renderer.scenes.reports.GPURendererScenesCatalogReportMainKt")
+    args(outputDir.asFile.absolutePath)
+    outputs.dir(outputDir)
+}
+
+tasks.register<JavaExec>("renderGpuRendererSceneOffscreen") {
+    group = "verification"
+    description = "Renders one GPU renderer scene through the opt-in WebGPU offscreen runner."
+
+    val sceneId = providers.gradleProperty("sceneId").orElse("solid-card-stack")
+    val outputDir = providers.gradleProperty("sceneOutput")
+        .map { value -> rootProject.layout.projectDirectory.file(value).asFile }
+        .orElse(rootProject.layout.projectDirectory.dir("reports/gpu-renderer-scenes/offscreen").asFile)
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.gpu.renderer.scenes.offscreen.RenderGpuRendererSceneOffscreenMainKt")
+    args(sceneId.get(), outputDir.get().absolutePath)
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+    jvmArgs(buildList {
+        add("--add-opens=java.base/java.lang=ALL-UNNAMED")
+        add("--enable-native-access=ALL-UNNAMED")
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+    })
+}
+
+tasks.register<JavaExec>("runGpuRendererSceneKadre") {
+    group = "verification"
+    description = "Opens one GPU renderer scene in the opt-in Kadre windowed runner."
+
+    val sceneId = providers.gradleProperty("sceneId").orElse("solid-card-stack")
+    val frames = providers.gradleProperty("frames").orElse("180")
+    val outputFile = providers.gradleProperty("sceneSessionOutput")
+        .map { value -> rootProject.layout.projectDirectory.file(value).asFile }
+        .orElse(rootProject.layout.projectDirectory.file("reports/gpu-renderer-scenes/windowed/session.json").asFile)
+
+    classpath = kadreSourceSet.runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.gpu.renderer.scenes.windowed.RunGpuRendererSceneKadreMainKt")
+    args(sceneId.get(), frames.get(), outputFile.get().absolutePath)
+    outputs.file(outputFile)
+    outputs.upToDateWhen { false }
+    jvmArgs(buildList {
+        add("--add-opens=java.base/java.lang=ALL-UNNAMED")
+        add("--enable-native-access=ALL-UNNAMED")
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+    })
+}
