@@ -1,7 +1,7 @@
 ---
 id: KGPU-M8-002
 title: "Add vertex index buffer payload and resource plans"
-status: proposed
+status: blocked
 milestone: M8
 priority: P1
 owner_area: vertices-resources
@@ -83,7 +83,11 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Resource plan for vertices.
+- `blocked`: Depends on KGPU-M8-001. Remaining gate is adapter-backed
+  vertex/index buffer ownership, upload-before-draw ordering,
+  resource-generation, budget, layout/WGSL ABI, invalid/stale buffer refusals,
+  and proof that resource facts stay out of material keys. No CPU-rasterized
+  mesh texture fallback is allowed.
 
 ## Linear Labels
 
