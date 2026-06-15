@@ -429,7 +429,7 @@ public interface GlyphMapper {
  * the matching table from [cmapsByTypefaceId] because glyph ids are specific to
  * that resolved face. [defaultCMap] is used only for null typeface requests.
  * The mapper returns `null` when no eligible table is available or when the
- * selected table does not map the code point.
+ * selected table resolves the code point to `.notdef` glyph ID `0`.
  *
  * @param cmapsByTypefaceId Parsed `cmap` tables keyed by resolved typeface identifier.
  * @param defaultCMap Optional `cmap` table used only when no typeface id is supplied.
@@ -447,7 +447,8 @@ public class CMapGlyphMapper(
         } else {
             cmapsByTypefaceId[typefaceId]
         } ?: return null
-        return cmap.lookupGlyphId(codePoint)
+        val glyphId = cmap.lookupGlyphId(codePoint) ?: return null
+        return glyphId.takeIf { it != 0 }
     }
 }
 

@@ -467,7 +467,7 @@ SFNT parsing, scaler support, shaping fallback support, or platform/native
 font API behavior.
 ### PKT-02D: Deterministic System Scan Fixture Goldens
 
-Status: implemented; independent review pending.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -2538,3 +2538,67 @@ Remaining gate: this is parser entry-point and directory evidence only. It
 does not claim complete SFNT conformance, table payload semantics, glyph
 outlines, CFF/CFF2 scaler support, GSUB/GPOS shaping behavior, fallback,
 paragraph layout, rendering, or broad text support.
+
+### KFONT-M2-003: Complete CMap Format Coverage
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontDiagnosticTaxonomyTest.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt`
+- `reports/pure-kotlin-text/cmap-map.json`
+- `reports/pure-kotlin-text/font-diagnostic-taxonomy.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m2-003-cmap-format-coverage.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M2-sfnt-opentype-parser/KFONT-M2-003-complete-cmap-format-coverage.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M2-sfnt-opentype-parser/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `OpenTypeCMapTableParser` covers generated fixtures for formats 12, 4, 14,
+  6, and 0 with deterministic selection priority: Windows format 12 wins over
+  format 4 and legacy 6/0 fallback subtables; format 4 wins over legacy 6/0
+  when no usable format 12 subtable is present.
+- `CMapTable.lookupGlyphId(codePoint, variationSelector: Int? = null)`
+  preserves source compatibility while returning stable glyph ID `0` for
+  missing code points.
+- Format 14 variation selector parsing covers deterministic default and
+  non-default UVS fixture rows: default ranges preserve base mapping semantics,
+  and non-default mappings return the explicit glyph ID for the requested
+  `(codePoint, variationSelector)` pair.
+- `CMapDiagnostic.dump()` and `cmap-map.json` record
+  `font.sfnt.cmap-format-unsupported` for format 13 and
+  `font.sfnt.cmap-unusable` when no usable Unicode `cmap` is selected.
+- `font-diagnostic-taxonomy.json` records both `font.sfnt.cmap-*` taxonomy
+  rows and the `sfnt-cmap-refusal` sample diagnostic, keeping the M0 namespace
+  policy intact.
+- `CMapGlyphMapper` continues to expose `.notdef` parser glyph ID `0` as
+  `null` at the shaping boundary, preserving existing missing-glyph diagnostics
+  and fallback behavior without adding shaping support.
+- `cmap-map.json` records selected subtable facts, platform/encoding IDs,
+  mapped ranges or compact facts, missing-codepoint behavior, variation
+  selector facts, source face identities, and `claimPromotionAllowed=false`.
+- Independent spec re-review verdict: `ACCEPT`.
+- Independent code-quality re-review verdict: `Ready to merge: Yes`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*DiagnosticTaxonomy*'
+rtk ./gradlew --no-daemon :font:sfnt:test --tests 'org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.cmapTableParserReportsUnsupportedAndUnusableCMapDiagnostics' --tests 'org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.cmapTableParserPrefersFormat4OverLegacyFallbackSubtables' --tests 'org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.cmapMapReportCoversKfontM2CMapEvidence'
+rtk ./gradlew --no-daemon :font:text:test --tests 'org.graphiks.kanvas.text.TextStackSurfaceTest.cmapGlyphMapperUsesSfntCMapLookupForBasicShapingAndTypefaceRouting'
+rtk ./gradlew --no-daemon :font:sfnt:test --tests 'org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.cmapTableParser*'
+rtk ./gradlew --no-daemon :font:sfnt:test --tests 'org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.cmapMapReportCoversKfontM2CMapEvidence'
+rtk ./gradlew --no-daemon :font:sfnt:test --tests '*CMap*'
+rtk ./gradlew --no-daemon :font:text:test
+rtk git diff --check
+```
+
+Remaining gate: this is parser-only `cmap` evidence. Format 13 remains
+fixture-gated/refused, and this checkpoint does not claim shaping, GSUB/GPOS,
+bidi, segmentation, fallback runs, paragraph layout, scaler, rendering, native
+font-engine parity, or GPU text-route support.
