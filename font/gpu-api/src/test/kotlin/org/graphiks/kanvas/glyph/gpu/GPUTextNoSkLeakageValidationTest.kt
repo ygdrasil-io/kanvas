@@ -5,7 +5,7 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-class GPUTextLeakValidationTest {
+class GPUTextNoSkLeakageValidationTest {
     @Test
     fun `value object payload passes leakage validation`() {
         val report = validateGPUTextNoSkLeakage(
