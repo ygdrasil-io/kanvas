@@ -524,6 +524,43 @@
       ]
     },
     {
+      "dumpId": "sfnt-table-facts",
+      "ownerTicket": "KFONT-M2-004",
+      "classification": "producer-only",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "Required SFNT/OpenType Tables"
+      },
+      "producerPaths": [
+        "font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt",
+        "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTTableFactDumpTest.kt",
+        "reports/pure-kotlin-text/sfnt-tables.json"
+      ],
+      "expectedFields": [
+        "claimPromotionAllowed",
+        "cmapMapLink",
+        "dashboardClassification",
+        "entries",
+        "nonClaims",
+        "schema",
+        "schemaVersion",
+        "ticketIds"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:sfnt:test --tests '*TableFactDump*' --tests '*CMap*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "SFNT table fact dump changes require deterministic table-order tests, missing-required and malformed-optional diagnostics, and matrix checkpoint updates without parser payload or support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-shaping-support-claim",
+        "no-scaler-support-claim",
+        "no-color-glyph-rendering-claim",
+        "no-external-engine-oracle-claim",
+        "no-gpu-support-claim"
+      ]
+    },
+    {
       "dumpId": "svg-glyph-document",
       "ownerTicket": "PKT-11B",
       "classification": "producer-only",
