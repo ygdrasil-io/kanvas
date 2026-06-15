@@ -1,7 +1,7 @@
 ---
 id: WGSL4K-EVO-003
 title: "Prepare wgsl4k fixture PR"
-status: proposed
+status: done
 priority: P0
 owner_area: wgsl4k-evolution
 claim_impact: DependencyGated
@@ -46,11 +46,11 @@ ambiguous to unblock Kanvas tickets.
 
 ## Acceptance Criteria
 
-- [ ] Positive fixtures validate and reflect expected facts.
-- [ ] Negative fixtures produce deterministic diagnostics.
-- [ ] Unsupported valid WGSL forms produce explicit unsupported-feature output.
-- [ ] PR URL is recorded.
-- [ ] User review gate is recorded before Kanvas consumes the SHA.
+- [x] Positive fixtures validate and reflect expected facts.
+- [x] Negative fixtures produce deterministic diagnostics.
+- [x] Unsupported valid WGSL forms produce explicit unsupported-feature output.
+- [x] PR URL is recorded.
+- [x] User review gate is recorded before Kanvas consumes the SHA.
 
 ## Required Evidence
 
@@ -76,7 +76,12 @@ after the submodule is available.
 
 ## Status Notes
 
-- `proposed`: Requires imported submodule and implementation plan.
+- `done`: wgsl4k PR `https://github.com/ygdrasil-io/wgsl4k/pull/9` merged as
+  `72a35b58758f241756d984a84768ae77308730da`. Fresh wgsl4k validation from the
+  PR wave included `rtk ./gradlew --no-daemon :wgsl:wgsl-core:check
+  :wgsl:wgsl-parser:check`, the GitHub JVM-fast-path equivalent command,
+  `rtk git diff --check`, and a no-match scan for `Kanvas|kanvas` across the
+  wgsl4k source/API paths.
 
 ## Labels
 

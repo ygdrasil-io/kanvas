@@ -97,6 +97,14 @@ rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*TextWgsl
 - `proposed`: Ties M11 text routes to the WGSL parser/reflection architecture target.
 - Move to `ready` only after reflection report fields and WGSL module registration rules are reviewed.
 - wgsl4k dependency evolution is tracked by `.upstream/specs/wgsl4k-evolution/`.
+- 2026-06-15 re-evaluation: merged wgsl4k SHA
+  `72a35b58758f241756d984a84768ae77308730da` produced Kanvas dependency
+  fixtures under `reports/wgsl4k-evolution/generated/`, including
+  `text-wgsl-reflection.json` and `text-wgsl-validation-report.json`. The
+  ticket remains `proposed` because its owning dependencies, real text route
+  WGSL modules/snippets, A8 route evidence, SDF refusal evidence, and
+  CPU/GPU/reference route evidence are not completed by dependency fixtures
+  alone.
 
 ## Linear Labels
 

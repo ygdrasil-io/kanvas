@@ -1,3 +1,6 @@
 [submodule "external/poc-koreos"]
 	path = external/poc-koreos
 	url = https://github.com/ygdrasil-io/poc-koreos.git
+[submodule "external/wgsl4k"]
+	path = external/wgsl4k
+	url = https://github.com/ygdrasil-io/wgsl4k.git

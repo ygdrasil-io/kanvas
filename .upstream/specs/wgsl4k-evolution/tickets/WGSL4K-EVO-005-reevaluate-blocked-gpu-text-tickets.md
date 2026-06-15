@@ -1,7 +1,7 @@
 ---
 id: WGSL4K-EVO-005
 title: "Re-evaluate blocked GPU/Text tickets after wgsl4k evidence"
-status: proposed
+status: review
 priority: P0
 owner_area: wgsl4k-evolution
 claim_impact: DependencyGated
@@ -49,10 +49,10 @@ against its own acceptance criteria instead of being promoted automatically.
 
 ## Acceptance Criteria
 
-- [ ] Each re-evaluated ticket links the exact wgsl4k SHA and Kanvas reports.
-- [ ] Tickets move status only when all owning acceptance criteria are met.
-- [ ] Tickets that remain blocked name the precise remaining gate.
-- [ ] No support claim is expanded without CPU/GPU/reference evidence and route
+- [x] Each re-evaluated ticket links the exact wgsl4k SHA and Kanvas reports.
+- [x] Tickets move status only when all owning acceptance criteria are met.
+- [x] Tickets that remain blocked name the precise remaining gate.
+- [x] No support claim is expanded without CPU/GPU/reference evidence and route
   diagnostics.
 
 ## Required Evidence
@@ -79,7 +79,11 @@ or evidence changes.
 
 ## Status Notes
 
-- `proposed`: Requires Kanvas reports generated from a reviewed wgsl4k SHA.
+- `review`: Re-evaluated `KFONT-M11-009` and `KGPU-M7-001` against generated
+  Kanvas report fixtures from merged wgsl4k SHA
+  `72a35b58758f241756d984a84768ae77308730da`. `KFONT-M11-009` remains
+  `proposed`; `KGPU-M7-001` remains `blocked`. No GPU/Text route was reopened
+  or promoted.
 
 ## Labels
 

@@ -88,6 +88,14 @@ rtk git diff --check
   `wgsl4k`, route integration, adapter-backed execution/readback evidence, and
   explicit unregistered-descriptor refusals.
 - wgsl4k dependency evolution is tracked by `.upstream/specs/wgsl4k-evolution/`.
+- 2026-06-15 re-evaluation: merged wgsl4k SHA
+  `72a35b58758f241756d984a84768ae77308730da` produced Kanvas dependency
+  fixtures under `reports/wgsl4k-evolution/generated/`, including
+  `runtime-effect-wgsl-reflection.json` and
+  `runtime-effect-wgsl-validation-report.json`. The ticket remains `blocked`
+  because descriptor route integration, Kotlin/CPU oracle linkage,
+  adapter-backed execution/readback evidence, and unregistered-descriptor route
+  refusals are still not complete.
 
 ## Linear Labels
 

@@ -1,7 +1,7 @@
 ---
 id: WGSL4K-EVO-001
 title: "Define wgsl4k validation/reflection contract"
-status: review
+status: done
 priority: P0
 owner_area: wgsl4k-evolution
 claim_impact: DependencyGated
@@ -48,12 +48,12 @@ one place.
 
 ## Acceptance Criteria
 
-- [ ] The spec pack names the accepted wgsl4k repository URL.
-- [ ] The validation/reflection contract lists required facts and diagnostics.
-- [ ] The contribution packet defines positive and negative fixtures.
-- [ ] Follow-up tickets keep submodule import, wgsl4k PR work, Kanvas
+- [x] The spec pack names the accepted wgsl4k repository URL.
+- [x] The validation/reflection contract lists required facts and diagnostics.
+- [x] The contribution packet defines positive and negative fixtures.
+- [x] Follow-up tickets keep submodule import, wgsl4k PR work, Kanvas
   consumption, and blocked-ticket re-evaluation separate.
-- [ ] No product support claim is added.
+- [x] No product support claim is added.
 
 ## Required Evidence
 
@@ -75,8 +75,10 @@ rtk git diff --check
 
 ## Status Notes
 
-- `review`: The spec pack exists and requires user review before execution
-  tickets move to `ready`.
+- `done`: The user accepted the wgsl4k evolution spec packet for dependency
+  execution on 2026-06-15. The packet is committed on Kanvas draft PR
+  `https://github.com/ygdrasil-io/kanvas/pull/1650` and keeps all product
+  route support claims gated.
 
 ## Labels
 
