@@ -55,7 +55,7 @@ class OffscreenRunReportTest {
             imagePath = "render.png",
             width = 320,
             height = 200,
-            byteCount = 1834,
+            byteCount = 256000,
             nonTransparentPixels = 64000,
             diagnostics = listOf("rendered solid-card-stack via WebGPU offscreen"),
         )
@@ -65,7 +65,7 @@ class OffscreenRunReportTest {
         assertEquals("render.png", report.imagePath)
         assertEquals(320, report.width)
         assertEquals(200, report.height)
-        assertEquals(1834, report.byteCount)
+        assertEquals(256000L, report.byteCount)
         assertEquals(64000, report.nonTransparentPixels)
         assertContains(report.toJson(), "\"status\": \"rendered\"")
         assertContains(report.toJson(), "\"productRefusal\": false")
@@ -151,6 +151,40 @@ class OffscreenRunReportTest {
                 diagnostics = listOf(" "),
             )
         }
+    }
+
+    @Test
+    fun `rendered reports reject byte counts that do not match raw rgba dimensions`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport.rendered(
+                sceneId = "solid-card-stack",
+                imagePath = "render.png",
+                width = 2,
+                height = 2,
+                byteCount = 15,
+                nonTransparentPixels = 1,
+                diagnostics = listOf("rendered"),
+            )
+        }
+
+        assertContains(failure.message ?: "", "raw RGBA byteCount")
+    }
+
+    @Test
+    fun `rendered reports reject non transparent pixels beyond pixel count`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport.rendered(
+                sceneId = "solid-card-stack",
+                imagePath = "render.png",
+                width = 2,
+                height = 2,
+                byteCount = 16,
+                nonTransparentPixels = 5,
+                diagnostics = listOf("rendered"),
+            )
+        }
+
+        assertContains(failure.message ?: "", "nonTransparentPixels")
     }
 
     @Test

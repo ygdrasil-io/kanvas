@@ -62,6 +62,14 @@ class OffscreenRunReport(
         require(nonTransparentPixels != null && nonTransparentPixels > 0) {
             "rendered reports must include nonTransparentPixels > 0"
         }
+        val pixelCount = width.toLong() * height.toLong()
+        val expectedByteCount = pixelCount * RAW_RGBA_BYTES_PER_PIXEL
+        require(byteCount == expectedByteCount) {
+            "rendered reports raw RGBA byteCount must equal width * height * 4: expected $expectedByteCount, got $byteCount"
+        }
+        require(nonTransparentPixels.toLong() <= pixelCount) {
+            "rendered reports nonTransparentPixels must be in 1..$pixelCount"
+        }
     }
 
     fun toJson(): String = buildString {
@@ -90,6 +98,8 @@ class OffscreenRunReport(
     }
 
     companion object {
+        private const val RAW_RGBA_BYTES_PER_PIXEL: Long = 4L
+
         fun notYetRendered(sceneId: String, reason: String): OffscreenRunReport =
             OffscreenRunReport(
                 sceneId = sceneId,
