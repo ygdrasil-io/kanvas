@@ -60,6 +60,7 @@ class RunGpuRendererSceneKadreMainTest {
             "path-badge-and-stroke" to 20,
             "rounded-panel-gradient" to 21,
             "texture-swatch-board" to 22,
+            "clipped-avatar-grid" to 23,
         )
         val invocations = mutableListOf<RunnerInvocation>()
 

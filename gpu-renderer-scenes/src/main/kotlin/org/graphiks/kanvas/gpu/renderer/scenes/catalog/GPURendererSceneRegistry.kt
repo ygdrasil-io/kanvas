@@ -109,7 +109,18 @@ object GPURendererSceneRegistry {
                     label = "avatar-rrect-clip",
                     rect = SceneRect(36f, 28f, 284f, 172f),
                 ),
-                SceneCommand.BitmapRect("avatar-cell"),
+                SceneCommand.BitmapRect(
+                    label = "avatar-cell",
+                    rect = SceneRect(24f, 20f, 296f, 180f),
+                    source = SceneBitmapSource(
+                        topLeft = SceneColor.blue(0.95f),
+                        topRight = SceneColor.green(0.88f),
+                        bottomLeft = SceneColor.amber(0.92f),
+                        bottomRight = SceneColor.red(),
+                    ),
+                    sampling = SceneBitmapSampling.Linear,
+                    paintOrder = 1,
+                ),
             ),
         ),
         scene(
