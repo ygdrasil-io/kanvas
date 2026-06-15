@@ -32,19 +32,43 @@ class DrawTextRunPayloadTest {
         assertEquals("pass", leakReport.status)
         assertContains(leakReport.toCanonicalJson(), """"payloadKind":"DrawTextRunPayload"""")
         assertContains(leakReport.toCanonicalJson(), """"fieldPath":"artifacts[0].sourceLabel"""")
+        assertContains(leakReport.toCanonicalJson(), """"fieldPath":"uploadDependencyIds","typeName":"List<GPUTextUploadDependencyID>"""")
+        assertContains(leakReport.toCanonicalJson(), """"fieldPath":"uploadDependencyIds[0]","typeName":"GPUTextUploadDependencyID","value":"upload-a8-page-0"""")
+        assertContains(leakReport.toCanonicalJson(), """"fieldPath":"diagnostics","typeName":"List<GPUTextRouteDiagnosticID>"""")
         listOf("SkFont", "SkTypeface", "SkTextBlob", "SkPaint", "fontBytes", "GPUHandle").forEach { token ->
             assertFalse(json.contains(token), "Payload dump leaked forbidden token $token: $json")
         }
     }
 
     @Test
+    fun `draw text run leakage report scans upload and diagnostic wrappers by value`() {
+        val payload = fixtureDrawTextRunPayload(
+            uploadDependencyIds = listOf(GPUTextUploadDependencyID("upload-before-sample:a8-page-0")),
+            diagnostics = listOf(GPUTextRouteDiagnosticID("text.gpu.upload-plan-missing")),
+        )
+
+        val report = payload.noSkLeakageReport()
+        val reportJson = report.toCanonicalJson()
+
+        assertEquals("pass", report.status)
+        assertContains(
+            reportJson,
+            """"fieldPath":"uploadDependencyIds[0]","typeName":"GPUTextUploadDependencyID","value":"upload-before-sample:a8-page-0"""",
+        )
+        assertContains(
+            reportJson,
+            """"fieldPath":"diagnostics[0]","typeName":"GPUTextRouteDiagnosticID","value":"text.gpu.upload-plan-missing"""",
+        )
+    }
+
+    @Test
     fun `draw text run leakage report rejects forbidden payload values`() {
         val payload = fixtureDrawTextRunPayload(
             artifactKeyHashes = listOf("fontBytes:sha256:bad"),
-            uploadDependencyIds = listOf("GPUHandle:webgpu-texture-7"),
+            uploadDependencyIds = listOf(GPUTextUploadDependencyID("GPUHandle:webgpu-texture-7")),
             diagnostics = listOf(
-                "SkFont(opaque-stringified-wrapper)",
-                "NativeFontHandle(platform-font-ref)",
+                GPUTextRouteDiagnosticID("SkFont(opaque-stringified-wrapper)"),
+                GPUTextRouteDiagnosticID("NativeFontHandle(platform-font-ref)"),
             ),
         )
 
@@ -54,6 +78,10 @@ class DrawTextRunPayloadTest {
         assertEquals(
             listOf("artifactKeyHashes[0]", "uploadDependencyIds[0]", "diagnostics[0]", "diagnostics[1]"),
             report.findings.map { finding -> finding.fieldPath },
+        )
+        assertEquals(
+            listOf("String", "GPUTextUploadDependencyID", "GPUTextRouteDiagnosticID", "GPUTextRouteDiagnosticID"),
+            report.findings.map { finding -> finding.typeName },
         )
         assertEquals(
             listOf(
@@ -69,7 +97,7 @@ class DrawTextRunPayloadTest {
     @Test
     fun `draw text run leakage report rejects generic SkPath diagnostics`() {
         val payload = fixtureDrawTextRunPayload(
-            diagnostics = listOf("SkPath(...)"),
+            diagnostics = listOf(GPUTextRouteDiagnosticID("SkPath(...)")),
         )
 
         val report = payload.noSkLeakageReport()
@@ -109,7 +137,7 @@ class DrawTextRunPayloadTest {
     @Test
     fun `draw text run leakage report rejects nondumpable payload markers`() {
         val payload = fixtureDrawTextRunPayload(
-            diagnostics = listOf("payload_nondumpable: NonDumpableDrawTextRun"),
+            diagnostics = listOf(GPUTextRouteDiagnosticID("payload_nondumpable: NonDumpableDrawTextRun")),
         )
 
         val report = payload.noSkLeakageReport()
@@ -155,8 +183,8 @@ class DrawTextRunPayloadTest {
         )
         val artifactKeyHashes = mutableListOf("sha256:a8-atlas")
         val atlasGenerations = mutableListOf(GPUTextArtifactGeneration(3))
-        val uploadDependencyIds = mutableListOf("upload-a8-page-0")
-        val diagnostics = mutableListOf("text.gpu.fixture\"quote\\slash\nline")
+        val uploadDependencyIds = mutableListOf(GPUTextUploadDependencyID("upload-a8-page-0"))
+        val diagnostics = mutableListOf(GPUTextRouteDiagnosticID("text.gpu.fixture\"quote\\slash\nline"))
         val payload = fixtureDrawTextRunPayload(
             glyphRuns = glyphRuns,
             artifacts = artifacts,
@@ -174,8 +202,8 @@ class DrawTextRunPayloadTest {
         artifacts[0] = artifacts[0].copy(artifactName = "InjectedArtifact", contentFingerprint = "fontBytes")
         artifactKeyHashes += "fontBytes"
         atlasGenerations[0] = GPUTextArtifactGeneration(99)
-        uploadDependencyIds += "GPUHandle"
-        diagnostics += "SkFont"
+        uploadDependencyIds += GPUTextUploadDependencyID("GPUHandle")
+        diagnostics += GPUTextRouteDiagnosticID("SkFont")
 
         assertEquals(json, payload.toCanonicalJson())
         assertContains(json, """"glyphIDs":[42,43]""")
@@ -194,6 +222,16 @@ class DrawTextRunPayloadTest {
         }
         assertFailsWith<IllegalArgumentException> {
             fixtureDrawTextRunPayload(productActivation = true)
+        }
+    }
+
+    @Test
+    fun `draw text run upload and diagnostic IDs reject blank values`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUTextUploadDependencyID(" ")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUTextRouteDiagnosticID("")
         }
     }
 
@@ -221,8 +259,8 @@ class DrawTextRunPayloadTest {
         ),
         artifactKeyHashes: List<String> = listOf("sha256:a8-atlas"),
         atlasGenerations: List<GPUTextArtifactGeneration> = listOf(GPUTextArtifactGeneration(3)),
-        uploadDependencyIds: List<String> = listOf("upload-a8-page-0"),
-        diagnostics: List<String> = emptyList(),
+        uploadDependencyIds: List<GPUTextUploadDependencyID> = listOf(GPUTextUploadDependencyID("upload-a8-page-0")),
+        diagnostics: List<GPUTextRouteDiagnosticID> = emptyList(),
         routePromotion: String = "not-promoted",
         productActivation: Boolean = false,
     ): DrawTextRunPayload =
