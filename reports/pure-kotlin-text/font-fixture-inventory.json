@@ -1,0 +1,1004 @@
+{
+  "schemaVersion": 1,
+  "inventoryId": "pure-kotlin-text-font-fixture-inventory",
+  "scope": "font-only-no-gpu-handoff",
+  "sourceManifest": {
+    "path": "reports/pure-kotlin-text/fixture-evidence-manifest.json",
+    "section": "Font fixture families only"
+  },
+  "oraclePolicy": {
+    "normative": "Kanvas-owned generated inputs, checked-in expected dumps, stable hashes, and route diagnostics define pass or fail behavior.",
+    "nonNormative": "Outside comparisons may explain drift, but they do not define fixture pass or fail results."
+  },
+  "families": [
+    {
+      "familyId": "a8-sdf-artifacts",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        "section": "Glyph artifact tests"
+      },
+      "fixtures": [
+        {
+          "fixtureId": "a8-sdf-artifacts-a8-atlas-pack",
+          "targetGate": "a8-atlas-pack",
+          "status": "current-positive-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Use synthetic A8 masks with fixed bounds, padding, row stride, atlas size, placement order, and atlas byte hash.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "glyph-atlas placement dump",
+            "source mask hashes",
+            "atlas upload byte hash"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-gpu-text-route-claim",
+            "no-lcd-mask-claim"
+          ]
+        },
+        {
+          "fixtureId": "a8-sdf-artifacts-atlas-capacity-refusal",
+          "targetGate": "atlas-capacity-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use a bounded atlas request that exceeds capacity before placement and records the stable refusal.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.glyph.atlas-capacity-exceeded diagnostic",
+            "empty placement list",
+            "capacity facts"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-split-atlas-planning-claim",
+            "no-gpu-text-route-claim"
+          ]
+        },
+        {
+          "fixtureId": "a8-sdf-artifacts-sdf-normalization",
+          "targetGate": "sdf-normalization",
+          "status": "current-positive-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Use a closed rectangle outline with fixed spread and assert inside, edge, outside, and mask hash facts.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "sdf mask sample grid",
+            "distance range facts",
+            "sdf mask hash"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-perspective-sdf-claim",
+            "no-gpu-text-route-claim"
+          ]
+        },
+        {
+          "fixtureId": "a8-sdf-artifacts-sdf-transform-refusal",
+          "targetGate": "sdf-transform-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use a perspective transform bucket and assert the stable SDF refusal plus fallback route.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.glyph.SDF-transform-unsupported diagnostic",
+            "fallback route fact"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-perspective-sdf-claim",
+            "no-gpu-text-route-claim"
+          ]
+        },
+        {
+          "fixtureId": "a8-sdf-artifacts-stale-generation-refusal",
+          "targetGate": "stale-generation-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use mismatched artifact/current generation values and assert stable invalidation-token evidence.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.glyph.atlas-generation-stale diagnostic",
+            "generation facts",
+            "invalidation token"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-live-cache-invalidation-claim",
+            "no-gpu-text-route-claim"
+          ]
+        }
+      ]
+    },
+    {
+      "familyId": "cff-cff2-scaler",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "CFF and CFF2 scaler coverage"
+      },
+      "fixtures": [
+        {
+          "fixtureId": "cff-cff2-scaler-cff-local-global-subroutines",
+          "targetGate": "cff-local-global-subroutines",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate compact CFF INDEX and charstring data that calls one local and one global subroutine with bounded recursion.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "CFF subroutine fixture bytes",
+            "outline command dump",
+            "subroutine call trace"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-cff-rendering-support-claim",
+            "no-complete-cff2-variation-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "cff-cff2-scaler-cff-malformed-stack-refusal",
+          "targetGate": "cff-malformed-stack-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Generate a charstring with a malformed operand stack and assert a stable stack diagnostic.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "font.cff-stack-malformed diagnostic",
+            "glyph id",
+            "operator offset"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-cff-rendering-support-claim",
+            "no-complete-cff2-variation-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "cff-cff2-scaler-cff-type2-line-curve-flex",
+          "targetGate": "cff-type2-line-curve-flex",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate one Type 2 charstring with moveto, line, curve, flex, width, and end glyph operations.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "CFF Type 2 fixture bytes",
+            "outline command dump",
+            "bounds and path hash"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-cff-rendering-support-claim",
+            "no-complete-cff2-variation-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "cff-cff2-scaler-cff-unsupported-operator-refusal",
+          "targetGate": "cff-unsupported-operator-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Generate a charstring containing one unsupported escaped operator and assert the precise refusal.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "font.cff-operator-unsupported diagnostic",
+            "glyph id",
+            "operator offset"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-cff-rendering-support-claim",
+            "no-complete-cff2-variation-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "cff-cff2-scaler-cff2-blend-vsindex",
+          "targetGate": "cff2-blend-vsindex",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate a compact CFF2 charstring with vsindex and blend plus one deterministic variation position.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "CFF2 fixture bytes",
+            "variation input dump",
+            "blended outline dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-cff-rendering-support-claim",
+            "no-complete-cff2-variation-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "cff-cff2-scaler-cff2-variation-store-region",
+          "targetGate": "cff2-variation-store-region",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate a compact CFF2 table with a top-dict VariationStore offset, one VariationRegionList region, one ItemVariationData region index, and a charstring blend whose scalar differs from the raw axis coordinate.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "CFF2 VariationStore fixture bytes",
+            "variation-region scalar evidence",
+            "variation-adjusted outline and metrics bounds"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-cff-rendering-support-claim",
+            "no-complete-cff2-variation-support-claim",
+            "no-native-scaler-oracle-claim"
+          ]
+        },
+        {
+          "fixtureId": "cff-cff2-scaler-malformed-index-dict-refusal",
+          "targetGate": "cff-cff2-malformed-index-dict-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Generate malformed CFF INDEX bytes and a top dict missing CharStrings, then assert stable table-level refusal diagnostics.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "font.cff-table-malformed diagnostic",
+            "cff.table-malformed detail",
+            "table operation fact"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-cff-rendering-support-claim",
+            "no-complete-cff2-variation-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "cff-cff2-scaler-selected-table-provenance",
+          "targetGate": "selected-face-cff-cff2-provenance-dump",
+          "status": "current-positive-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Generate compact CFF and CFF2 table bytes through the public scalers and assert stable tableEvidence dumps for format, charstring count, subroutine counts, private-dict presence, top-dict operators, and CFF2 variation-axis tags.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "CFF tableEvidence canonical dump",
+            "CFF2 tableEvidence canonical dump",
+            "selected top-dict operator facts"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-cff-rendering-support-claim",
+            "no-complete-cff2-variation-support-claim"
+          ]
+        }
+      ]
+    },
+    {
+      "familyId": "color-glyphs",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
+        "section": "Color glyph tests"
+      },
+      "fixtures": [
+        {
+          "fixtureId": "color-glyphs-colrv0-layer",
+          "targetGate": "colrv0-layer",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate a COLRv0 table with one base glyph and two layer glyphs plus a deterministic CPAL palette.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "COLRv0 table bytes",
+            "CPAL table bytes",
+            "paint graph dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-colrv1-rendering-claim",
+            "no-gpu-color-glyph-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "color-glyphs-colrv1-budget-refusal",
+          "targetGate": "colrv1-budget-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use a synthetic expanded paint count over the configured limit and assert stable budget refusal.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.color.COLRv1-budget-exceeded diagnostic",
+            "budget name",
+            "observed and limit values"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-colrv1-rendering-claim",
+            "no-gpu-color-glyph-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "color-glyphs-colrv1-composite-clip",
+          "targetGate": "colrv1-composite-clip",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate COLRv1 paint data with composite paint, PaintColrGlyph reference, and a clip box.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "COLRv1 table bytes",
+            "clip box dump",
+            "paint graph dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-colrv1-rendering-claim",
+            "no-gpu-color-glyph-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "color-glyphs-colrv1-cycle-refusal",
+          "targetGate": "colrv1-cycle-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use already-parsed PaintColrGlyph records that refer back to the starting glyph and assert the cycle path.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.color.COLRv1-cycle-detected diagnostic",
+            "cycle glyph path"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-colrv1-rendering-claim",
+            "no-gpu-color-glyph-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "color-glyphs-colrv1-solid-gradient-transform",
+          "targetGate": "colrv1-solid-gradient-transform",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate COLRv1 paint data with solid paint, gradient paint, and transform or translate paint records.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "COLRv1 table bytes",
+            "color line dump",
+            "paint graph dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-colrv1-rendering-claim",
+            "no-gpu-color-glyph-support-claim"
+          ]
+        }
+      ]
+    },
+    {
+      "familyId": "emoji",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
+        "section": "Emoji dispatch"
+      },
+      "fixtures": [
+        {
+          "fixtureId": "emoji-color-glyph-unavailable-refusal",
+          "targetGate": "emoji-color-glyph-unavailable-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use a glyph with no available color glyph route and assert stable unavailable-route diagnostics.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.emoji.color-glyph-unavailable diagnostic",
+            "route candidate dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-emoji-zwj-shaping-claim",
+            "no-color-glyph-fallback-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "emoji-emoji-fallback-unavailable-refusal",
+          "targetGate": "emoji-fallback-unavailable-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use an emoji dispatch request with no fallback family and assert stable fallback refusal.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.emoji.fallback-unavailable diagnostic",
+            "fallback policy dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-emoji-zwj-shaping-claim",
+            "no-color-glyph-fallback-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "emoji-emoji-skin-tone",
+          "targetGate": "emoji-skin-tone",
+          "status": "current-positive-evidence",
+          "fixtureKind": "generated-test-data",
+          "generationPolicy": "Use a base emoji plus one skin-tone modifier and record the expected sequence facts and dispatch route.",
+          "evidencePaths": [
+            "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+            "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "emoji sequence input",
+            "sequence fact dump",
+            "dispatch expectation"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-emoji-zwj-shaping-claim",
+            "no-color-glyph-fallback-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "emoji-emoji-vs15-vs16",
+          "targetGate": "emoji-vs15-vs16",
+          "status": "current-positive-evidence",
+          "fixtureKind": "generated-test-data",
+          "generationPolicy": "Use one code point with text and emoji variation selectors and record distinct sequence facts.",
+          "evidencePaths": [
+            "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+            "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "VS15 sequence dump",
+            "VS16 sequence dump",
+            "dispatch expectation"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-emoji-zwj-shaping-claim",
+            "no-color-glyph-fallback-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "emoji-emoji-zwj-family",
+          "targetGate": "emoji-zwj-family",
+          "status": "current-positive-evidence",
+          "fixtureKind": "generated-test-data",
+          "generationPolicy": "Use a bounded family sequence joined by ZWJ and record the expected cluster and dispatch facts.",
+          "evidencePaths": [
+            "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+            "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "ZWJ sequence input",
+            "cluster fact dump",
+            "dispatch expectation"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-emoji-zwj-shaping-claim",
+            "no-color-glyph-fallback-support-claim"
+          ]
+        }
+      ]
+    },
+    {
+      "familyId": "font-source-sfnt",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "Font sources, SFNT/OpenType parsing, and collections"
+      },
+      "fixtures": [
+        {
+          "fixtureId": "font-source-sfnt-malformed-optional-table-diagnostic",
+          "targetGate": "malformed-optional-table-diagnostic",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Generate a face with a malformed optional table and preserve ordinary parsed face evidence plus diagnostics.",
+          "evidencePaths": [
+            "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "face evidence dump",
+            "optional table diagnostic",
+            "raw table hash"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-sfnt-conformance-claim",
+            "no-complete-ttc-otc-claim"
+          ]
+        },
+        {
+          "fixtureId": "font-source-sfnt-malformed-required-table-diagnostic",
+          "targetGate": "malformed-required-table-diagnostic",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Generate a face missing or zeroing a required table and assert bounded directory diagnostics.",
+          "evidencePaths": [
+            "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "font.required-table-missing diagnostic",
+            "directory diagnostic dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-sfnt-conformance-claim",
+            "no-complete-ttc-otc-claim"
+          ]
+        },
+        {
+          "fixtureId": "font-source-sfnt-single-ttf-provenance",
+          "targetGate": "single-ttf-provenance",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-font-bytes",
+          "generationPolicy": "Use generated single-face SFNT bytes with fixed source id, content hash, table tags, and face evidence.",
+          "evidencePaths": [
+            "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt",
+            "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "source provenance dump",
+            "face evidence dump",
+            "content hash"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-sfnt-conformance-claim",
+            "no-complete-ttc-otc-claim"
+          ]
+        },
+        {
+          "fixtureId": "font-source-sfnt-system-scan-skipped-file-diagnostic",
+          "targetGate": "system-scan-skipped-file-diagnostic",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use explicit scan roots only and include a generated unsupported or unreadable file case with a stable skipped-file diagnostic.",
+          "evidencePaths": [
+            "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
+            "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "scan diagnostic dump",
+            "skipped file path fact",
+            "host-dependent marker"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-source-discovery-claim",
+            "no-implicit-system-font-scan-claim"
+          ]
+        },
+        {
+          "fixtureId": "font-source-sfnt-ttc-face-index-provenance",
+          "targetGate": "ttc-face-index-provenance",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-font-bytes",
+          "generationPolicy": "Use generated TTC bytes with two deterministic faces and assert selected face index in face evidence.",
+          "evidencePaths": [
+            "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "TTC fixture bytes",
+            "selected face evidence dump",
+            "face index fact"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-sfnt-conformance-claim",
+            "no-complete-ttc-otc-claim"
+          ]
+        }
+      ]
+    },
+    {
+      "familyId": "png-bitmap-glyphs",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
+        "section": "PNG bitmap glyphs"
+      },
+      "fixtures": [
+        {
+          "fixtureId": "png-bitmap-glyphs-cbdt-cblc-png",
+          "targetGate": "cbdt-cblc-png",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate CBDT/CBLC strike records with a tiny PNG payload and assert selected glyph image metadata.",
+          "evidencePaths": [
+            "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "CBDT table bytes",
+            "CBLC table bytes",
+            "bitmap glyph plan dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-png-bitmap-glyph-routing-claim",
+            "no-gpu-bitmap-glyph-route-claim"
+          ]
+        },
+        {
+          "fixtureId": "png-bitmap-glyphs-malformed-png-refusal",
+          "targetGate": "malformed-png-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use a malformed PNG payload and assert decode-failed diagnostics with payload hash.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.bitmap.PNG-decode-failed diagnostic",
+            "payload hash",
+            "failure class"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-png-bitmap-glyph-routing-claim",
+            "no-gpu-bitmap-glyph-route-claim"
+          ]
+        },
+        {
+          "fixtureId": "png-bitmap-glyphs-non-png-payload-refusal",
+          "targetGate": "non-png-payload-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use a non-PNG bitmap payload label and assert stable unsupported-format diagnostics.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.bitmap.payload-format-unsupported diagnostic",
+            "source format",
+            "table family"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-non-png-bitmap-payload-support-claim",
+            "no-gpu-bitmap-glyph-route-claim"
+          ]
+        },
+        {
+          "fixtureId": "png-bitmap-glyphs-sbix-png",
+          "targetGate": "sbix-png",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate an sbix strike with a tiny PNG payload and assert glyph origin and payload metadata.",
+          "evidencePaths": [
+            "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "sbix table bytes",
+            "PNG payload hash",
+            "bitmap glyph plan dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-png-bitmap-glyph-routing-claim",
+            "no-gpu-bitmap-glyph-route-claim"
+          ]
+        },
+        {
+          "fixtureId": "png-bitmap-glyphs-unavailable-strike-refusal",
+          "targetGate": "unavailable-strike-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use a requested glyph size with no matching bitmap strike and assert stable strike-unavailable diagnostics.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.bitmap.strike-unavailable diagnostic",
+            "requested size",
+            "available strike list"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-png-bitmap-glyph-routing-claim",
+            "no-gpu-bitmap-glyph-route-claim"
+          ]
+        }
+      ]
+    },
+    {
+      "familyId": "svg-glyphs",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
+        "section": "SVG glyphs"
+      },
+      "fixtures": [
+        {
+          "fixtureId": "svg-glyphs-svg-external-resource-refusal",
+          "targetGate": "svg-external-resource-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use an SVG image/link reference and assert stable external-resource refusal with hashed reference facts.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.SVG.external-resource-refused diagnostic",
+            "element name",
+            "attribute name"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-svg-in-opentype-rendering-claim",
+            "no-external-svg-resource-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "svg-glyphs-svg-gradient-transform-clip",
+          "targetGate": "svg-gradient-transform-clip",
+          "status": "current-positive-evidence",
+          "fixtureKind": "generated-test-data",
+          "generationPolicy": "Use one glyph-scoped SVG document containing a gradient, transform, and clip path, with bounded element summaries.",
+          "evidencePaths": [
+            "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "SVG document text",
+            "element summary dump",
+            "route expectation"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-svg-in-opentype-rendering-claim",
+            "no-external-svg-resource-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "svg-glyphs-svg-static-path",
+          "targetGate": "svg-static-path",
+          "status": "current-positive-evidence",
+          "fixtureKind": "generated-test-data",
+          "generationPolicy": "Use a small SVG document with one path, fixed viewBox, and deterministic element summary.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "SVG document text",
+            "viewBox dump",
+            "path summary"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-svg-in-opentype-rendering-claim",
+            "no-external-svg-resource-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "svg-glyphs-svg-unsupported-feature-refusal",
+          "targetGate": "svg-unsupported-feature-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use an unsupported glyph-scoped SVG feature and assert stable feature refusal.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.SVG.feature-unsupported diagnostic",
+            "feature name",
+            "element name"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-svg-in-opentype-rendering-claim",
+            "no-external-svg-resource-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "svg-glyphs-svg-use-recursion-refusal",
+          "targetGate": "svg-use-recursion-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use a bounded use-reference loop and assert recursion budget diagnostics.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.SVG.budget-exceeded diagnostic",
+            "referenced element id",
+            "depth and max depth"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-svg-in-opentype-rendering-claim",
+            "no-external-svg-resource-support-claim"
+          ]
+        }
+      ]
+    },
+    {
+      "familyId": "truetype-scaler",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "TrueType glyf and variations"
+      },
+      "fixtures": [
+        {
+          "fixtureId": "truetype-scaler-truetype-avar-coordinate-mapping",
+          "targetGate": "truetype-avar-coordinate-mapping",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate fvar and avar tables with one mapped axis and assert applied normalized coordinates once avar application lands.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "fvar table bytes",
+            "avar table bytes",
+            "normalized coordinate dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-variable-font-support-claim",
+            "no-complete-hinting-vm-claim"
+          ]
+        },
+        {
+          "fixtureId": "truetype-scaler-truetype-composite-glyph-transform",
+          "targetGate": "truetype-composite-glyph-transform",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate composite glyf data with component transform records and assert transformed outline and component trace evidence.",
+          "evidencePaths": [
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "glyf table bytes",
+            "component trace dump",
+            "transformed outline dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-variable-font-support-claim",
+            "no-complete-hinting-vm-claim"
+          ]
+        },
+        {
+          "fixtureId": "truetype-scaler-truetype-gvar-composite-delta",
+          "targetGate": "truetype-gvar-composite-delta",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate composite glyph data plus gvar deltas and assert composite variation evidence after composite gvar support lands.",
+          "evidencePaths": [
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "glyf table bytes",
+            "gvar table bytes",
+            "composite delta dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-variable-font-support-claim",
+            "no-complete-hinting-vm-claim"
+          ]
+        },
+        {
+          "fixtureId": "truetype-scaler-truetype-gvar-simple-delta",
+          "targetGate": "truetype-gvar-simple-delta",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate one simple glyph and one gvar tuple that moves all points at a deterministic variation position.",
+          "evidencePaths": [
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "glyf table bytes",
+            "gvar table bytes",
+            "varied outline dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-variable-font-support-claim",
+            "no-complete-hinting-vm-claim"
+          ]
+        },
+        {
+          "fixtureId": "truetype-scaler-truetype-simple-glyph",
+          "targetGate": "truetype-simple-glyph",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate one simple square glyf fixture with fixed loca, metrics, contour commands, bounds, and path hash.",
+          "evidencePaths": [
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "glyf table bytes",
+            "loca table bytes",
+            "outline evidence dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-variable-font-support-claim",
+            "no-complete-hinting-vm-claim"
+          ]
+        }
+      ]
+    }
+  ]
+}

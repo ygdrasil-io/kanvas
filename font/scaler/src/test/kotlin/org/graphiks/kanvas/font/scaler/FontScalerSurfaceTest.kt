@@ -778,7 +778,7 @@ class FontScalerSurfaceTest {
     }
 
     @Test
-    fun trueTypeGlyfEvidenceReportsAvarRemappingNotApplied() {
+    fun trueTypeGlyfEvidenceAppliesAvarCoordinateMappingFixture() {
         val simpleSquare = simpleSquareGlyphData().withTrueTypePadding()
         val scaler = variableTrueTypeGlyfScaler(
             simpleSquare = simpleSquare,
@@ -803,13 +803,8 @@ class FontScalerSurfaceTest {
             position = VariationPosition(axes = mapOf("wght" to 900.0)),
         )
 
-        assertEquals(listOf(VariationCoordinateEvidence(tag = "wght", value = 1.0)), evidence.normalizedVariationPosition)
-        assertTrue(evidence.diagnostics.any { diagnostic ->
-            diagnostic.code == FontScalerDiagnosticCodes.VARIATION_AXIS_UNSUPPORTED &&
-                diagnostic.detail == "truetype.avar-unapplied" &&
-                diagnostic.severity == "warning"
-        })
-        assertTrue(evidence.toCanonicalJson().contains("\"detail\": \"truetype.avar-unapplied\""))
+        assertEquals(listOf(VariationCoordinateEvidence(tag = "wght", value = 0.75)), evidence.normalizedVariationPosition)
+        assertTrue(evidence.diagnostics.none { diagnostic -> diagnostic.detail == "truetype.avar-unapplied" })
     }
 
     @Test
@@ -880,6 +875,48 @@ class FontScalerSurfaceTest {
             ),
             scaler.outline(glyphId = 0u).commands,
         )
+        assertEquals(
+            listOf(
+                moveTo(0.0, 0.0),
+                lineTo(100.0, 0.0),
+                lineTo(120.0, 90.0),
+                lineTo(0.0, 100.0),
+                close(),
+            ),
+            scaler.outline(
+                glyphId = 0u,
+                position = VariationPosition(axes = mapOf("wght" to 1.0)),
+            ).commands,
+        )
+    }
+
+    @Test
+    fun parsedTrueTypeGlyphScalerAppliesGvarDeltasToCompositeComponents() {
+        val compositeGlyph = compositeGlyphData(
+            *componentRecord(
+                flags = 0x0003,
+                glyphId = 1,
+                arg1 = 0,
+                arg2 = 0,
+            ),
+        )
+        val simpleSquare = simpleSquareGlyphData()
+        val glyfTable = compositeGlyph + simpleSquare
+        val scaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = glyfTable,
+            loca = TrueTypeLocaTable(offsets = listOf(0, compositeGlyph.size, glyfTable.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+                1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+            ),
+            gvar = TrueTypeGvarTable.parse(
+                data = singleAxisGvarWithGlyphOneAllPointDelta(),
+                axisCount = 1,
+                glyphCount = 2,
+            ),
+            normalizedAxisOrder = listOf("wght"),
+        )
+
         assertEquals(
             listOf(
                 moveTo(0.0, 0.0),
@@ -1028,6 +1065,108 @@ class FontScalerSurfaceTest {
             ),
             scaler.outline(glyphId = 0u),
         )
+    }
+
+    @Test
+    fun parsedTrueTypeGlyphEvidenceIncludesCompositeComponentTrace() {
+        val compositeGlyph = compositeGlyphData(
+            *componentRecord(
+                flags = 0x002b,
+                glyphId = 1,
+                arg1 = 10,
+                arg2 = 20,
+                transformWords = intArrayOf(0x2000),
+            ),
+            *componentRecord(
+                flags = 0x0003,
+                glyphId = 2,
+                arg1 = 30,
+                arg2 = 40,
+            ),
+        )
+        val nestedComposite = compositeGlyphData(
+            *componentRecord(
+                flags = 0x0003,
+                glyphId = 1,
+                arg1 = 5,
+                arg2 = 6,
+            ),
+        )
+        val simpleSquare = simpleSquareGlyphData()
+        val glyfTable = compositeGlyph + simpleSquare + nestedComposite
+        val scaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = glyfTable,
+            loca = TrueTypeLocaTable(
+                offsets = listOf(
+                    0,
+                    compositeGlyph.size,
+                    compositeGlyph.size + simpleSquare.size,
+                    glyfTable.size,
+                ),
+            ),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+                1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+                2u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+            ),
+        )
+
+        val evidence = scaler.scaledGlyphEvidence(glyphId = 0u)
+
+        assertEquals(
+            listOf(
+                TrueTypeCompositeComponentEvidence(
+                    depth = 0,
+                    parentGlyphId = 0u,
+                    componentIndex = 0,
+                    componentGlyphId = 1u,
+                    flags = "0x002b",
+                    argumentKind = "xy",
+                    argument1 = 10,
+                    argument2 = 20,
+                    xx = 0.5,
+                    xy = 0.0,
+                    yx = 0.0,
+                    yy = 0.5,
+                    dx = 10.0,
+                    dy = 20.0,
+                ),
+                TrueTypeCompositeComponentEvidence(
+                    depth = 0,
+                    parentGlyphId = 0u,
+                    componentIndex = 1,
+                    componentGlyphId = 2u,
+                    flags = "0x0003",
+                    argumentKind = "xy",
+                    argument1 = 30,
+                    argument2 = 40,
+                    xx = 1.0,
+                    xy = 0.0,
+                    yx = 0.0,
+                    yy = 1.0,
+                    dx = 30.0,
+                    dy = 40.0,
+                ),
+                TrueTypeCompositeComponentEvidence(
+                    depth = 1,
+                    parentGlyphId = 2u,
+                    componentIndex = 0,
+                    componentGlyphId = 1u,
+                    flags = "0x0003",
+                    argumentKind = "xy",
+                    argument1 = 5,
+                    argument2 = 6,
+                    xx = 1.0,
+                    xy = 0.0,
+                    yx = 0.0,
+                    yy = 1.0,
+                    dx = 5.0,
+                    dy = 6.0,
+                ),
+            ),
+            evidence.compositeComponents,
+        )
+        assertTrue(evidence.toCanonicalJson().contains("\"compositeComponents\""))
     }
 
     @Test
@@ -1364,7 +1503,673 @@ class FontScalerSurfaceTest {
     }
 
     @Test
-    fun cffScalersRefuseUntilType2CharstringsAreImplemented() {
+    fun cffType2FixtureInterpreterBuildsLineCurveAndFlexEvidence() {
+        val interpreter = CFFType2CharStringInterpreter()
+        val charString = type2CharString(
+            type2Number(100),
+            type2Number(200),
+            type2Operator(21),
+            type2Number(50),
+            type2Number(0),
+            type2Number(0),
+            type2Number(50),
+            type2Operator(5),
+            type2Number(10),
+            type2Number(0),
+            type2Number(20),
+            type2Number(30),
+            type2Number(40),
+            type2Number(30),
+            type2Operator(8),
+            type2Number(5),
+            type2Number(0),
+            type2Number(10),
+            type2Number(10),
+            type2Number(15),
+            type2Number(0),
+            type2Number(15),
+            type2Number(0),
+            type2Number(10),
+            type2Number(-10),
+            type2Number(5),
+            type2Number(0),
+            type2Number(50),
+            type2EscapedOperator(35),
+            type2Operator(14),
+        )
+
+        val evidence = interpreter.interpretEvidence(
+            charString = charString,
+            glyphId = 3u,
+            format = "cff",
+        )
+
+        assertEquals("cff", evidence.format)
+        assertEquals(3u, evidence.glyphId)
+        assertEquals(
+            listOf(
+                "M 100.0 200.0",
+                "L 150.0 200.0",
+                "L 150.0 250.0",
+                "C 160.0 250.0 180.0 280.0 220.0 310.0",
+                "C 225.0 310.0 235.0 320.0 250.0 320.0",
+                "C 265.0 320.0 275.0 310.0 280.0 310.0",
+                "Z",
+            ),
+            evidence.outlineCommands,
+        )
+        assertEquals(evidence.outlineCommands.joinToString("\n"), evidence.outlineCommandDump)
+        assertEquals(evidence.outlineCommandDump.sha256Hex(), evidence.outlineCommandDumpSha256)
+        assertEquals(emptyList(), evidence.callTrace)
+        assertEquals(emptyList(), evidence.diagnostics)
+        assertTrue(evidence.toCanonicalJson().contains("\"outlineCommandDumpSha256\""))
+        assertTrue(!Regex("""\bSk[A-Za-z0-9_]*""").containsMatchIn(evidence.toCanonicalJson()))
+    }
+
+    @Test
+    fun cffType2FixtureInterpreterTracesLocalAndGlobalSubroutines() {
+        val interpreter = CFFType2CharStringInterpreter(
+            localSubroutines = listOf(
+                type2CharString(
+                    type2Number(25),
+                    type2Number(0),
+                    type2Operator(5),
+                    type2Operator(11),
+                ),
+            ),
+            globalSubroutines = listOf(
+                type2CharString(
+                    type2Number(0),
+                    type2Number(25),
+                    type2Operator(5),
+                    type2Operator(11),
+                ),
+            ),
+        )
+        val charString = type2CharString(
+            type2Number(0),
+            type2Number(0),
+            type2Operator(21),
+            type2Number(-107),
+            type2Operator(10),
+            type2Number(-107),
+            type2Operator(29),
+            type2Operator(14),
+        )
+
+        val evidence = interpreter.interpretEvidence(
+            charString = charString,
+            glyphId = 4u,
+            format = "cff",
+        )
+
+        assertEquals(
+            listOf(
+                "M 0.0 0.0",
+                "L 25.0 0.0",
+                "L 25.0 25.0",
+                "Z",
+            ),
+            evidence.outlineCommands,
+        )
+        assertEquals(
+            listOf(
+                CFFCharStringCallTrace(
+                    depth = 0,
+                    scope = "local",
+                    encodedIndex = -107,
+                    resolvedIndex = 0,
+                ),
+                CFFCharStringCallTrace(
+                    depth = 0,
+                    scope = "global",
+                    encodedIndex = -107,
+                    resolvedIndex = 0,
+                ),
+            ),
+            evidence.callTrace,
+        )
+        assertTrue(evidence.toCanonicalJson().contains("\"callTrace\""))
+    }
+
+    @Test
+    fun cff2FixtureInterpreterAppliesVsindexBlendEvidence() {
+        val interpreter = CFFType2CharStringInterpreter(
+            blendAxisTagsByVsIndex = mapOf(0 to listOf("wght")),
+        )
+        val charString = type2CharString(
+            type2Number(0),
+            type2Number(0),
+            type2Operator(21),
+            type2Number(0),
+            type2Operator(15),
+            type2Number(50),
+            type2Number(10),
+            type2Number(1),
+            type2Operator(16),
+            type2Number(0),
+            type2Operator(5),
+            type2Operator(14),
+        )
+
+        val evidence = interpreter.interpretEvidence(
+            charString = charString,
+            glyphId = 5u,
+            format = "cff2",
+            position = VariationPosition(axes = mapOf("wght" to 0.5)),
+        )
+
+        assertEquals(0, evidence.cff2VsIndex)
+        assertEquals(listOf(VariationCoordinateEvidence(tag = "wght", value = 0.5)), evidence.variationPosition)
+        assertEquals(
+            listOf(
+                "M 0.0 0.0",
+                "L 55.0 0.0",
+                "Z",
+            ),
+            evidence.outlineCommands,
+        )
+        assertTrue(evidence.toCanonicalJson().contains("\"format\": \"cff2\""))
+        assertTrue(evidence.toCanonicalJson().contains("\"variationPosition\""))
+    }
+
+    @Test
+    fun cffType2FixtureInterpreterReportsStackAndOperatorRefusals() {
+        val interpreter = CFFType2CharStringInterpreter()
+
+        val stackFailure = assertFailsWith<FontScalerRefusalException> {
+            interpreter.interpretEvidence(
+                charString = type2CharString(
+                    type2Number(50),
+                    type2Operator(21),
+                ),
+                glyphId = 6u,
+                format = "cff",
+            )
+        }
+        assertEquals(FontScalerDiagnosticCodes.CFF_STACK_MALFORMED, stackFailure.diagnostic.code)
+        assertEquals("cff.stack-underflow", stackFailure.diagnostic.detail)
+        assertEquals("charstring", stackFailure.diagnostic.operation)
+        assertEquals(6u, stackFailure.diagnostic.glyphId)
+        assertTrue(stackFailure.message.orEmpty().contains("operator offset"))
+
+        val operatorFailure = assertFailsWith<FontScalerRefusalException> {
+            interpreter.interpretEvidence(
+                charString = type2CharString(type2EscapedOperator(0)),
+                glyphId = 7u,
+                format = "cff",
+            )
+        }
+        assertEquals(FontScalerDiagnosticCodes.CFF_OPERATOR_UNSUPPORTED, operatorFailure.diagnostic.code)
+        assertEquals("cff.escaped-operator-0", operatorFailure.diagnostic.detail)
+        assertEquals("charstring", operatorFailure.diagnostic.operation)
+        assertEquals(7u, operatorFailure.diagnostic.glyphId)
+        assertTrue(operatorFailure.message.orEmpty().contains("operator offset"))
+    }
+
+    @Test
+    fun cffType2FixtureInterpreterCoversRemainingCurveAndFlexOperators() {
+        val interpreter = CFFType2CharStringInterpreter()
+
+        assertEquals(
+            listOf("M 0.0 0.0", "C 10.0 0.0 30.0 5.0 60.0 5.0", "Z"),
+            interpreter.interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(10),
+                    type2Number(20),
+                    type2Number(5),
+                    type2Number(30),
+                    type2Operator(27),
+                    type2Operator(14),
+                ),
+                glyphId = 8u,
+            ).outlineCommands,
+        )
+        assertEquals(
+            listOf("M 0.0 0.0", "C 0.0 10.0 20.0 15.0 20.0 45.0", "Z"),
+            interpreter.interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(10),
+                    type2Number(20),
+                    type2Number(5),
+                    type2Number(30),
+                    type2Operator(26),
+                    type2Operator(14),
+                ),
+                glyphId = 9u,
+            ).outlineCommands,
+        )
+        assertEquals(
+            listOf("M 0.0 0.0", "C 10.0 0.0 30.0 5.0 30.0 35.0", "Z"),
+            interpreter.interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(10),
+                    type2Number(20),
+                    type2Number(5),
+                    type2Number(30),
+                    type2Operator(31),
+                    type2Operator(14),
+                ),
+                glyphId = 10u,
+            ).outlineCommands,
+        )
+        assertEquals(
+            listOf("M 0.0 0.0", "C 0.0 10.0 20.0 15.0 50.0 15.0", "Z"),
+            interpreter.interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(10),
+                    type2Number(20),
+                    type2Number(5),
+                    type2Number(30),
+                    type2Operator(30),
+                    type2Operator(14),
+                ),
+                glyphId = 11u,
+            ).outlineCommands,
+        )
+        assertEquals(
+            listOf(
+                "M 0.0 0.0",
+                "C 10.0 0.0 30.0 5.0 60.0 5.0",
+                "C 100.0 5.0 150.0 0.0 210.0 0.0",
+                "Z",
+            ),
+            interpreter.interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(10),
+                    type2Number(20),
+                    type2Number(5),
+                    type2Number(30),
+                    type2Number(40),
+                    type2Number(50),
+                    type2Number(60),
+                    type2EscapedOperator(34),
+                    type2Operator(14),
+                ),
+                glyphId = 12u,
+            ).outlineCommands,
+        )
+        assertEquals(
+            listOf(
+                "M 0.0 0.0",
+                "C 10.0 2.0 30.0 7.0 60.0 7.0",
+                "C 100.0 7.0 150.0 4.0 210.0 0.0",
+                "Z",
+            ),
+            interpreter.interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(10),
+                    type2Number(2),
+                    type2Number(20),
+                    type2Number(5),
+                    type2Number(30),
+                    type2Number(40),
+                    type2Number(50),
+                    type2Number(-3),
+                    type2Number(60),
+                    type2EscapedOperator(36),
+                    type2Operator(14),
+                ),
+                glyphId = 13u,
+            ).outlineCommands,
+        )
+        assertEquals(
+            listOf(
+                "M 0.0 0.0",
+                "C 10.0 1.0 30.0 3.0 60.0 6.0",
+                "C 100.0 10.0 150.0 15.0 210.0 0.0",
+                "Z",
+            ),
+            interpreter.interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(10),
+                    type2Number(1),
+                    type2Number(20),
+                    type2Number(2),
+                    type2Number(30),
+                    type2Number(3),
+                    type2Number(40),
+                    type2Number(4),
+                    type2Number(50),
+                    type2Number(5),
+                    type2Number(60),
+                    type2EscapedOperator(37),
+                    type2Operator(14),
+                ),
+                glyphId = 14u,
+            ).outlineCommands,
+        )
+    }
+
+    @Test
+    fun cffType2FixtureInterpreterRecordsWidthAndHintMaskMetadata() {
+        val interpreter = CFFType2CharStringInterpreter()
+
+        val evidence = interpreter.interpretEvidence(
+            charString = type2CharString(
+                type2Number(450),
+                type2Number(10),
+                type2Number(5),
+                type2Operator(1),
+                type2Number(20),
+                type2Number(5),
+                type2Operator(23),
+                type2Operator(19),
+                intArrayOf(0xff),
+                type2Number(0),
+                type2Number(0),
+                type2Operator(21),
+                type2Operator(14),
+            ),
+            glyphId = 15u,
+        )
+
+        assertEquals(450.0, evidence.width)
+        assertEquals(2, evidence.stemHintCount)
+        assertEquals(1, evidence.hintMaskByteCount)
+        assertEquals(listOf("M 0.0 0.0", "Z"), evidence.outlineCommands)
+        assertTrue(evidence.toCanonicalJson().contains("\"width\": 450.0"))
+        assertTrue(evidence.toCanonicalJson().contains("\"hintMaskByteCount\": 1"))
+    }
+
+    @Test
+    fun cffScalerUsesGeneratedCffTableCharstringsSubrsAndMetrics() {
+        val cffTable = generatedCFFTable(
+            charStrings = listOf(
+                type2CharString(type2Number(0), type2Number(0), type2Operator(21), type2Operator(14)),
+                type2CharString(
+                    type2Number(475),
+                    type2Number(100),
+                    type2Number(200),
+                    type2Operator(21),
+                    type2Number(-107),
+                    type2Operator(10),
+                    type2Number(-107),
+                    type2Operator(29),
+                    type2Number(10),
+                    type2Number(0),
+                    type2Number(20),
+                    type2Number(30),
+                    type2Number(40),
+                    type2Number(30),
+                    type2Operator(8),
+                    type2Operator(14),
+                ),
+            ),
+            localSubroutines = listOf(
+                type2CharString(
+                    type2Number(50),
+                    type2Number(0),
+                    type2Number(0),
+                    type2Number(50),
+                    type2Operator(5),
+                    type2Operator(11),
+                ),
+            ),
+            globalSubroutines = listOf(
+                type2CharString(
+                    type2Number(0),
+                    type2Number(-25),
+                    type2Operator(5),
+                    type2Operator(11),
+                ),
+            ),
+        )
+        val scaler = CFFScaler(
+            face = syntheticCFFFace(
+                scalerType = 0x4f54544fu,
+                tableTag = "CFF ",
+                tableBytes = cffTable,
+            ),
+        )
+
+        val outline = scaler.outline(glyphId = 1u)
+        val metrics = scaler.metrics(glyphId = 1u)
+
+        assertEquals(
+            listOf(
+                moveTo(100.0, 200.0),
+                lineTo(150.0, 200.0),
+                lineTo(150.0, 250.0),
+                lineTo(150.0, 225.0),
+                cubicTo(160.0, 225.0, 180.0, 255.0, 220.0, 285.0),
+                close(),
+            ),
+            outline.commands,
+        )
+        assertEquals(
+            GlyphMetrics(
+                advanceX = 475.0,
+                advanceY = 0.0,
+                bounds = GlyphBounds(left = 100.0, top = 200.0, right = 220.0, bottom = 285.0),
+            ),
+            metrics,
+        )
+    }
+
+    @Test
+    fun cff2ScalerUsesGeneratedCff2TableAndVariationBlend() {
+        val cff2Table = generatedCFF2Table(
+            charStrings = listOf(
+                type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(0),
+                    type2Operator(15),
+                    type2Number(50),
+                    type2Number(10),
+                    type2Number(1),
+                    type2Operator(16),
+                    type2Number(0),
+                    type2Operator(5),
+                    type2Operator(14),
+                ),
+            ),
+        )
+        val scaler = CFF2Scaler(
+            face = syntheticCFFFace(
+                scalerType = 0x43464632u,
+                tableTag = "CFF2",
+                tableBytes = cff2Table,
+                variations = VariationTables(
+                    axes = listOf(
+                        variationAxis(tag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+                    ),
+                ),
+            ),
+        )
+
+        val outline = scaler.outline(glyphId = 0u, position = VariationPosition(axes = mapOf("wght" to 0.5)))
+        val metrics = scaler.metrics(glyphId = 0u, position = VariationPosition(axes = mapOf("wght" to 0.5)))
+
+        assertEquals(
+            GlyphOutline(
+                glyphId = 0u,
+                commands = listOf(
+                    moveTo(0.0, 0.0),
+                    lineTo(55.0, 0.0),
+                    close(),
+                ),
+            ),
+            outline,
+        )
+        assertEquals(
+            GlyphMetrics(
+                advanceX = 600.0,
+                advanceY = 0.0,
+                bounds = GlyphBounds(left = 0.0, top = 0.0, right = 55.0, bottom = 0.0),
+            ),
+            metrics,
+        )
+    }
+
+    @Test
+    fun cff2ScalerUsesVariationStoreRegionScalarsForBlendAndMetricsBounds() {
+        val cff2Table = generatedCFF2Table(
+            charStrings = listOf(
+                type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(0),
+                    type2Operator(15),
+                    type2Number(50),
+                    type2Number(20),
+                    type2Number(1),
+                    type2Operator(16),
+                    type2Number(0),
+                    type2Operator(5),
+                    type2Operator(14),
+                ),
+            ),
+            variationStore = generatedCFF2VariationStoreOneAxis(start = 0.0, peak = 0.5, end = 1.0),
+        )
+        val scaler = CFF2Scaler(
+            face = syntheticCFFFace(
+                scalerType = 0x43464632u,
+                tableTag = "CFF2",
+                tableBytes = cff2Table,
+                variations = VariationTables(
+                    axes = listOf(
+                        variationAxis(tag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+                    ),
+                ),
+            ),
+        )
+
+        val defaultOutline = scaler.outline(glyphId = 0u, position = VariationPosition(axes = mapOf("wght" to 0.0)))
+        val variedOutline = scaler.outline(glyphId = 0u, position = VariationPosition(axes = mapOf("wght" to 0.25)))
+        val variedMetrics = scaler.metrics(glyphId = 0u, position = VariationPosition(axes = mapOf("wght" to 0.25)))
+        val tableEvidence = scaler.tableEvidence()
+
+        assertEquals(listOf(moveTo(0.0, 0.0), lineTo(50.0, 0.0), close()), defaultOutline.commands)
+        assertEquals(listOf(moveTo(0.0, 0.0), lineTo(60.0, 0.0), close()), variedOutline.commands)
+        assertEquals(GlyphBounds(left = 0.0, top = 0.0, right = 60.0, bottom = 0.0), variedMetrics.bounds)
+        assertTrue("cff.dict.variation-store" in tableEvidence.topDictOperators)
+    }
+
+    @Test
+    fun cffScalersExposeDeterministicTableEvidenceDumps() {
+        val cffScaler = CFFScaler(
+            face = syntheticCFFFace(
+                scalerType = 0x4f54544fu,
+                tableTag = "CFF ",
+                tableBytes = generatedCFFTable(
+                    charStrings = listOf(
+                        type2CharString(type2Number(0), type2Number(0), type2Operator(21), type2Operator(14)),
+                    ),
+                    localSubroutines = listOf(type2CharString(type2Operator(11))),
+                    globalSubroutines = listOf(type2CharString(type2Operator(11))),
+                ),
+            ),
+        )
+        val cff2Scaler = CFF2Scaler(
+            face = syntheticCFFFace(
+                scalerType = 0x43464632u,
+                tableTag = "CFF2",
+                tableBytes = generatedCFF2Table(
+                    charStrings = listOf(
+                        type2CharString(type2Number(0), type2Number(0), type2Operator(21), type2Operator(14)),
+                    ),
+                ),
+                variations = VariationTables(
+                    axes = listOf(
+                        variationAxis(tag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+                    ),
+                ),
+            ),
+        )
+
+        val cffEvidence = cffScaler.tableEvidence()
+        val cff2Evidence = cff2Scaler.tableEvidence()
+
+        assertEquals("cff", cffEvidence.format)
+        assertEquals(1, cffEvidence.charStringCount)
+        assertEquals(1, cffEvidence.localSubroutineCount)
+        assertEquals(1, cffEvidence.globalSubroutineCount)
+        assertEquals(true, cffEvidence.hasPrivateDict)
+        assertTrue("cff.dict.charstrings" in cffEvidence.topDictOperators)
+        assertTrue("cff.dict.private" in cffEvidence.topDictOperators)
+        assertEquals(emptyList(), cffEvidence.variationAxisTags)
+        assertTrue(cffEvidence.toCanonicalJson().contains("\"format\": \"cff\""))
+
+        assertEquals("cff2", cff2Evidence.format)
+        assertEquals(1, cff2Evidence.charStringCount)
+        assertEquals(0, cff2Evidence.localSubroutineCount)
+        assertEquals(0, cff2Evidence.globalSubroutineCount)
+        assertEquals(false, cff2Evidence.hasPrivateDict)
+        assertEquals(listOf("wght"), cff2Evidence.variationAxisTags)
+        assertTrue(cff2Evidence.toCanonicalJson().contains("\"variationAxisTags\": [\"wght\"]"))
+    }
+
+    @Test
+    fun cffTableEvidenceRefusesMalformedIndexAndDictDeterministically() {
+        val malformedIndex = bytes(
+            0x01,
+            0x00,
+            0x04,
+            0x01,
+            0x00,
+            0x01,
+            0x00,
+        )
+        val missingCharStrings = bytes(0x01, 0x00, 0x04, 0x01) +
+            cffIndex(listOf("Broken".toByteArray(Charsets.US_ASCII))) +
+            cffIndex(listOf(byteArrayOf())) +
+            cffIndex(emptyList()) +
+            cffIndex(emptyList())
+
+        val malformedIndexFailure = assertFailsWith<FontScalerRefusalException> {
+            CFFScaler(
+                face = syntheticCFFFace(
+                    scalerType = 0x4f54544fu,
+                    tableTag = "CFF ",
+                    tableBytes = malformedIndex,
+                ),
+            ).tableEvidence()
+        }
+        val missingDictFailure = assertFailsWith<FontScalerRefusalException> {
+            CFFScaler(
+                face = syntheticCFFFace(
+                    scalerType = 0x4f54544fu,
+                    tableTag = "CFF ",
+                    tableBytes = missingCharStrings,
+                ),
+            ).tableEvidence()
+        }
+
+        listOf(malformedIndexFailure, missingDictFailure).forEach { failure ->
+            assertEquals(FontScalerDiagnosticCodes.CFF_TABLE_MALFORMED, failure.diagnostic.code)
+            assertEquals("cff.table-malformed", failure.diagnostic.detail)
+            assertEquals("table", failure.diagnostic.operation)
+            assertTrue(failure.message.orEmpty().contains("CFF table malformed"))
+        }
+    }
+
+    @Test
+    fun cffScalersRefuseWhenRequiredRawTablesAreMissing() {
         val cffOutlineFailure = assertFailsWith<UnsupportedOperationException> {
             CFFScaler(syntheticTrueTypeFace(rawTables = emptyMap())).outline(glyphId = 1u)
         }
@@ -1379,7 +2184,7 @@ class FontScalerSurfaceTest {
         }
 
         listOf(cffOutlineFailure, cffMetricsFailure, cff2OutlineFailure, cff2MetricsFailure).forEach { failure ->
-            assertTrue(failure.message.orEmpty().contains("Type 2 charstring"))
+            assertTrue(failure.message.orEmpty().contains("table bytes"))
             assertTrue(failure.message.orEmpty().contains("glyphId 1"))
         }
     }
@@ -1514,6 +2319,29 @@ class FontScalerSurfaceTest {
         0x00, 0x00, 0xf6, 0x00, 0x00, 0x00, 0x00, 0x00,
     )
 
+    private fun singleAxisGvarWithGlyphOneAllPointDelta(): ByteArray = bytes(
+        0x00, 0x01,
+        0x00, 0x00,
+        0x00, 0x01,
+        0x00, 0x00,
+        0x00, 0x00, 0x00, 0x14,
+        0x00, 0x02,
+        0x00, 0x01,
+        0x00, 0x00, 0x00, 0x20,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x1c,
+        0x00, 0x01,
+        0x00, 0x0a,
+        0x00, 0x12,
+        0x80, 0x00,
+        0x40, 0x00,
+        0x07,
+        0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x07,
+        0x00, 0x00, 0xf6, 0x00, 0x00, 0x00, 0x00, 0x00,
+    )
+
     private fun compositeGlyphData(vararg componentBytes: Int): ByteArray = bytes(
         0xff, 0xff,
         0x00, 0x00,
@@ -1542,6 +2370,146 @@ class FontScalerSurfaceTest {
         transformWords.forEach(::addWord)
         return values.toIntArray()
     }
+
+    private fun type2CharString(vararg chunks: IntArray): ByteArray =
+        bytes(*chunks.flatMap { chunk -> chunk.toList() }.toIntArray())
+
+    private fun type2Operator(value: Int): IntArray = intArrayOf(value)
+
+    private fun type2EscapedOperator(value: Int): IntArray = intArrayOf(12, value)
+
+    private fun type2Number(value: Int): IntArray =
+        when (value) {
+            in -107..107 -> intArrayOf(value + 139)
+            in 108..1131 -> {
+                val encoded = value - 108
+                intArrayOf(247 + encoded / 256, encoded % 256)
+            }
+            in -1131..-108 -> {
+                val encoded = -value - 108
+                intArrayOf(251 + encoded / 256, encoded % 256)
+            }
+            in Short.MIN_VALUE..Short.MAX_VALUE -> intArrayOf(28, (value ushr 8) and 0xff, value and 0xff)
+            else -> intArrayOf(
+                29,
+                (value ushr 24) and 0xff,
+                (value ushr 16) and 0xff,
+                (value ushr 8) and 0xff,
+                value and 0xff,
+            )
+        }
+
+    private fun generatedCFFTable(
+        charStrings: List<ByteArray>,
+        localSubroutines: List<ByteArray> = emptyList(),
+        globalSubroutines: List<ByteArray> = emptyList(),
+    ): ByteArray {
+        val header = bytes(0x01, 0x00, 0x04, 0x01)
+        val nameIndex = cffIndex(listOf("KanvasCFF".toByteArray(Charsets.US_ASCII)))
+        val stringIndex = cffIndex(emptyList())
+        val globalSubrIndex = cffIndex(globalSubroutines)
+        val localSubrIndex = cffIndex(localSubroutines)
+
+        var privateDict = cffDictNumber(0) + intArrayOf(19)
+        repeat(4) {
+            privateDict = cffDictNumber(privateDict.size) + intArrayOf(19)
+        }
+
+        var topDict = byteArrayOf()
+        repeat(6) {
+            val topDictIndex = cffIndex(listOf(topDict))
+            val beforePrivateSize = header.size + nameIndex.size + topDictIndex.size + stringIndex.size + globalSubrIndex.size
+            val privateOffset = beforePrivateSize
+            val charStringsOffset = beforePrivateSize + privateDict.size + localSubrIndex.size
+            topDict = bytes(
+                *(cffDictNumber(charStringsOffset) + intArrayOf(17) +
+                    cffDictNumber(privateDict.size) + cffDictNumber(privateOffset) + intArrayOf(18)),
+            )
+        }
+
+        return header +
+            nameIndex +
+            cffIndex(listOf(topDict)) +
+            stringIndex +
+            globalSubrIndex +
+            bytes(*privateDict) +
+            localSubrIndex +
+            cffIndex(charStrings)
+    }
+
+    private fun generatedCFF2Table(
+        charStrings: List<ByteArray>,
+        globalSubroutines: List<ByteArray> = emptyList(),
+        variationStore: ByteArray? = null,
+    ): ByteArray {
+        val globalSubrIndex = cffIndex(globalSubroutines)
+        var topDict = byteArrayOf()
+        repeat(6) {
+            val variationStoreOffset = variationStore?.let { 5 + topDict.size + globalSubrIndex.size }
+            val charStringsOffset = 5 + topDict.size + globalSubrIndex.size + (variationStore?.size ?: 0)
+            topDict = bytes(
+                *(cffDictNumber(charStringsOffset) + intArrayOf(17) +
+                    (variationStoreOffset?.let { cffDictNumber(it) + intArrayOf(24) } ?: intArrayOf())),
+            )
+        }
+        return bytes(
+            0x02,
+            0x00,
+            0x05,
+            (topDict.size ushr 8) and 0xff,
+            topDict.size and 0xff,
+        ) + topDict + globalSubrIndex + (variationStore ?: byteArrayOf()) + cffIndex(charStrings)
+    }
+
+    private fun generatedCFF2VariationStoreOneAxis(
+        start: Double,
+        peak: Double,
+        end: Double,
+    ): ByteArray =
+        bytes(
+            0x00, 0x01,
+            0x00, 0x00, 0x00, 0x0c,
+            0x00, 0x01,
+            0x00, 0x00, 0x00, 0x16,
+            0x00, 0x01,
+            0x00, 0x01,
+            *f2Dot14(start),
+            *f2Dot14(peak),
+            *f2Dot14(end),
+            0x00, 0x01,
+            0x00, 0x00,
+            0x00, 0x01,
+            0x00, 0x00,
+            0x00,
+        )
+
+    private fun f2Dot14(value: Double): IntArray {
+        val encoded = kotlin.math.round(value * 16384.0).toInt()
+        return intArrayOf((encoded ushr 8) and 0xff, encoded and 0xff)
+    }
+
+    private fun cffIndex(objects: List<ByteArray>): ByteArray {
+        if (objects.isEmpty()) return bytes(0x00, 0x00)
+        val offsets = mutableListOf(1)
+        objects.forEach { item -> offsets += offsets.last() + item.size }
+        val offSize = when {
+            offsets.last() <= 0xff -> 1
+            offsets.last() <= 0xffff -> 2
+            offsets.last() <= 0xffffff -> 3
+            else -> 4
+        }
+        val values = mutableListOf((objects.size ushr 8) and 0xff, objects.size and 0xff, offSize)
+        offsets.forEach { offset -> values += cffOffset(offset, offSize).toList() }
+        objects.forEach { item -> values += item.toUnsignedByteList() }
+        return bytes(*values.toIntArray())
+    }
+
+    private fun cffOffset(value: Int, offSize: Int): IntArray =
+        (offSize - 1 downTo 0)
+            .map { shiftIndex -> (value ushr (shiftIndex * 8)) and 0xff }
+            .toIntArray()
+
+    private fun cffDictNumber(value: Int): IntArray = type2Number(value)
 
     private fun ByteArray.withTrueTypePadding(): ByteArray =
         if (size % 2 == 0) this else this + 0x00.toByte()
@@ -1576,6 +2544,26 @@ class FontScalerSurfaceTest {
         metrics = metrics,
         variations = variations,
         rawTables = rawTables,
+    )
+
+    private fun syntheticCFFFace(
+        scalerType: UInt,
+        tableTag: String,
+        tableBytes: ByteArray,
+        metrics: MetricsTables = sfntMetricsForFactory(),
+        variations: VariationTables = VariationTables(),
+    ): OpenTypeFaceData = OpenTypeFaceData(
+        id = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440211")),
+        source = FontSource(
+            id = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440210")),
+            kind = FontSourceKind.MEMORY,
+            displayName = "Synthetic CFF",
+            bytes = ByteArray(0),
+        ),
+        directory = SFNTTableDirectory(scalerType = scalerType),
+        metrics = metrics,
+        variations = variations,
+        rawTables = mapOf(SFNTTableTag(tableTag) to tableBytes.toUnsignedByteList()),
     )
 
     private fun variableTrueTypeGlyfScaler(

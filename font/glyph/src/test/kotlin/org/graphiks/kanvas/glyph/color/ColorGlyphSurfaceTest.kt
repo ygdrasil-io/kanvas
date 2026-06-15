@@ -38,6 +38,7 @@ class ColorGlyphSurfaceTest {
             CPALPaletteSelection::class.simpleName,
             CPALPaletteOverride::class.simpleName,
             BitmapStrikeSelector::class.simpleName,
+            BitmapGlyphPlan::class.simpleName,
             PNGGlyphDecoder::class.simpleName,
             SVGGlyphRenderer::class.simpleName,
             SVGGlyphParser::class.simpleName,
@@ -55,6 +56,7 @@ class ColorGlyphSurfaceTest {
                 "CPALPaletteSelection",
                 "CPALPaletteOverride",
                 "BitmapStrikeSelector",
+                "BitmapGlyphPlan",
                 "PNGGlyphDecoder",
                 "SVGGlyphRenderer",
                 "SVGGlyphParser",
@@ -380,6 +382,64 @@ class ColorGlyphSurfaceTest {
     }
 
     @Test
+    fun buildsCOLRV1BudgetExceededRefusalDiagnostic() {
+        val diagnostic = COLRV1Parser.budgetExceededDiagnostic(
+            glyphId = 150,
+            limitName = "expandedPaintCount",
+            limit = 65_536,
+            observed = 65_537,
+        )
+
+        assertEquals(150, diagnostic.glyphId)
+        assertEquals("colr", diagnostic.route)
+        assertEquals(ColorGlyphDiagnosticCodes.COLRV1BudgetExceeded, diagnostic.code)
+        assertEquals("warning", diagnostic.severity)
+        assertTrue(diagnostic.detail.contains("limitName=expandedPaintCount"))
+        assertTrue(diagnostic.detail.contains("limit=65536"))
+        assertTrue(diagnostic.detail.contains("observed=65537"))
+        assertEquals(
+            """
+            {"glyphId": 150, "route": "colr", "code": "text.color.COLRv1-budget-exceeded", "detail": "${diagnostic.detail}", "severity": "warning", "message": "COLRv1 paint graph budget expandedPaintCount exceeded for glyph 150: observed 65537, limit 65536."}
+            """.trimIndent(),
+            diagnostic.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun detectsCOLRV1PaintColrGlyphCyclesWithStableDiagnostic() {
+        val table = COLRV1Table(
+            baseGlyphPaintRecords = listOf(
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 160,
+                    paint = COLRV1Paint.ColrGlyph(glyphId = 161),
+                ),
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 161,
+                    paint = COLRV1Paint.Glyph(
+                        glyphId = 162,
+                        paint = COLRV1Paint.ColrGlyph(glyphId = 160),
+                    ),
+                ),
+            ),
+        )
+
+        val diagnostic = assertNotNull(table.paintColrGlyphCycleDiagnostic(glyphId = 160))
+
+        assertEquals(160, diagnostic.glyphId)
+        assertEquals("colr", diagnostic.route)
+        assertEquals(ColorGlyphDiagnosticCodes.COLRV1CycleDetected, diagnostic.code)
+        assertEquals("warning", diagnostic.severity)
+        assertTrue(diagnostic.detail.contains("cyclePath=160>161>160"))
+        assertTrue(diagnostic.detail.contains("cycleLength=2"))
+        assertEquals(
+            """
+            {"glyphId": 160, "route": "colr", "code": "text.color.COLRv1-cycle-detected", "detail": "${diagnostic.detail}", "severity": "warning", "message": "COLRv1 PaintColrGlyph cycle detected for glyph 160: 160>161>160."}
+            """.trimIndent(),
+            diagnostic.toCanonicalJson(),
+        )
+    }
+
+    @Test
     fun dispatchesEmojiGlyphsByRoutePreference() {
         val dispatcher = SimpleEmojiGlyphDispatcher(
             EmojiGlyphRouteAvailability(
@@ -667,6 +727,39 @@ class ColorGlyphSurfaceTest {
     }
 
     @Test
+    fun parsesBasicSVGGradientTransformAndClipFixture() {
+        val svg = """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+              <defs>
+                <linearGradient id="g" x1="0" y1="0" x2="16" y2="0" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stop-color="#000000"/>
+                  <stop offset="1" stop-color="#ffffff"/>
+                </linearGradient>
+                <clipPath id="c">
+                  <rect x="1" y="1" width="14" height="14"/>
+                </clipPath>
+              </defs>
+              <path d="M0 0 L16 0 L16 16 Z" fill="url(#g)" clip-path="url(#c)" transform="translate(2 3)"/>
+            </svg>
+        """.trimIndent()
+
+        val document = BasicSVGGlyphParser.parse(glyphId = 83, text = svg)
+
+        assertEquals(listOf(0f, 0f, 16f, 16f), document.viewBox)
+        assertEquals(
+            listOf(
+                "lineargradient{gradientunits=userSpaceOnUse,id=g,x1=0,x2=16,y1=0,y2=0}",
+                "stop{offset=0,stop-color=#000000}",
+                "stop{offset=1,stop-color=#ffffff}",
+                "clippath{id=c}",
+                "rect{height=14,width=14,x=1,y=1}",
+                "path{clip-path=url(#c),d=M0 0 L16 0 L16 16 Z,fill=url(#g),transform=translate(2 3)}",
+            ),
+            document.elements,
+        )
+    }
+
+    @Test
     fun rejectsOversizedBasicSVGGlyphPayloadsBeforeParsing() {
         val oversizedSvg = "<svg viewBox=\"0 0 1 1\">" + " ".repeat(70_000) + "</svg>"
 
@@ -675,6 +768,77 @@ class ColorGlyphSurfaceTest {
         }
 
         assertTrue(failure.message.orEmpty().contains("exceeds"))
+    }
+
+    @Test
+    fun buildsSVGExternalResourceRefusalDiagnostic() {
+        val diagnostic = BasicSVGGlyphParser.externalResourceRefusedDiagnostic(
+            glyphId = 80,
+            elementName = "image",
+            attributeName = "href",
+            reference = "https://example.invalid/glyph.png",
+        )
+
+        assertEquals(80, diagnostic.glyphId)
+        assertEquals("svg", diagnostic.route)
+        assertEquals(ColorGlyphDiagnosticCodes.SVGExternalResourceRefused, diagnostic.code)
+        assertEquals("warning", diagnostic.severity)
+        assertTrue(diagnostic.detail.contains("elementName=image"))
+        assertTrue(diagnostic.detail.contains("attributeName=href"))
+        assertTrue(diagnostic.detail.contains("referenceSha256="))
+        assertTrue(!diagnostic.detail.contains("example.invalid"))
+        assertEquals(
+            """
+            {"glyphId": 80, "route": "svg", "code": "text.SVG.external-resource-refused", "detail": "${diagnostic.detail}", "severity": "warning", "message": "SVG glyph external resource refused for glyph 80: image href."}
+            """.trimIndent(),
+            diagnostic.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun buildsSVGUnsupportedFeatureRefusalDiagnostic() {
+        val diagnostic = BasicSVGGlyphParser.unsupportedFeatureDiagnostic(
+            glyphId = 81,
+            elementName = "foreignObject",
+            featureName = "embedded-text-layout",
+        )
+
+        assertEquals(81, diagnostic.glyphId)
+        assertEquals("svg", diagnostic.route)
+        assertEquals(ColorGlyphDiagnosticCodes.SVGFeatureUnsupported, diagnostic.code)
+        assertEquals("warning", diagnostic.severity)
+        assertTrue(diagnostic.detail.contains("elementName=foreignObject"))
+        assertTrue(diagnostic.detail.contains("featureName=embedded-text-layout"))
+        assertEquals(
+            """
+            {"glyphId": 81, "route": "svg", "code": "text.SVG.feature-unsupported", "detail": "${diagnostic.detail}", "severity": "warning", "message": "SVG glyph feature embedded-text-layout is unsupported for glyph 81 in foreignObject."}
+            """.trimIndent(),
+            diagnostic.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun buildsSVGUseRecursionRefusalDiagnostic() {
+        val diagnostic = BasicSVGGlyphParser.useRecursionRefusedDiagnostic(
+            glyphId = 82,
+            referenceId = "glyph-loop",
+            depth = 9,
+            maxDepth = 8,
+        )
+
+        assertEquals(82, diagnostic.glyphId)
+        assertEquals("svg", diagnostic.route)
+        assertEquals(ColorGlyphDiagnosticCodes.SVGBudgetExceeded, diagnostic.code)
+        assertEquals("warning", diagnostic.severity)
+        assertTrue(diagnostic.detail.contains("referenceId=glyph-loop"))
+        assertTrue(diagnostic.detail.contains("depth=9"))
+        assertTrue(diagnostic.detail.contains("maxDepth=8"))
+        assertEquals(
+            """
+            {"glyphId": 82, "route": "svg", "code": "text.SVG.budget-exceeded", "detail": "${diagnostic.detail}", "severity": "warning", "message": "SVG glyph use recursion exceeded for glyph 82 at glyph-loop: depth 9, max 8."}
+            """.trimIndent(),
+            diagnostic.toCanonicalJson(),
+        )
     }
 
     @Test
@@ -712,6 +876,115 @@ class ColorGlyphSurfaceTest {
                 argb(alpha = 0x88, red = 0x55, green = 0x66, blue = 0x77),
             ),
             image.pixels,
+        )
+    }
+
+    @Test
+    fun bitmapGlyphPlanDumpsPngStrikeAndPixelHashes() {
+        val payload = syntheticRgbaPng(
+            width = 2,
+            height = 1,
+            pixels = intArrayOf(
+                argb(alpha = 0x44, red = 0x11, green = 0x22, blue = 0x33),
+                argb(alpha = 0x88, red = 0x55, green = 0x66, blue = 0x77),
+            ),
+        )
+        val image = BasicPNGGlyphDecoder.decode(glyphId = 85, bytes = payload)
+        val plan = BitmapGlyphPlan.fromPNG(
+            strike = BitmapStrikeSelection(
+                glyphId = 85,
+                width = 2,
+                height = 1,
+                format = "png",
+                ppem = 16,
+            ),
+            requestedSizePx = 18f,
+            tableFamily = "CBDT/CBLC",
+            sourcePayload = payload,
+            image = image,
+        )
+
+        assertEquals(85, plan.glyphId)
+        assertEquals("CBDT/CBLC", plan.tableFamily)
+        assertEquals("scale-to-requested-size", plan.scalingPolicy)
+        assertEquals("premultiplied-argb", plan.alphaPolicy)
+        assertEquals(64, plan.sourcePayloadSha256.length)
+        assertEquals(64, plan.decodedPixelSha256.length)
+        assertEquals(64, plan.dumpSha256.length)
+        assertEvidenceDumpClean(plan.toCanonicalJson())
+        assertEquals(
+            """
+            {
+              "schema": "org.graphiks.kanvas.glyph.color.BitmapGlyphPlan.v1",
+              "glyphId": 85,
+              "tableFamily": "CBDT/CBLC",
+              "requestedSizePx": 18,
+              "selectedStrikePpem": 16,
+              "sourceFormat": "png",
+              "bounds": {"left": 0, "top": 0, "width": 2, "height": 1},
+              "origin": {"x": 0, "y": 0},
+              "scalingPolicy": "scale-to-requested-size",
+              "alphaPolicy": "premultiplied-argb",
+              "sourcePayloadSha256": "${plan.sourcePayloadSha256}",
+              "decodedPixelSha256": "${plan.decodedPixelSha256}",
+              "diagnostics": [],
+              "dumpSha256": "${plan.dumpSha256}"
+            }
+            """.trimIndent() + "\n",
+            plan.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun bitmapGlyphPlanBuildsNonPngPayloadRefusalDiagnostic() {
+        val diagnostic = BitmapGlyphPlan.unsupportedPayloadDiagnostic(
+            glyphId = 86,
+            tableFamily = "sbix",
+            sourceFormat = "jpeg",
+            sourcePayload = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x00),
+        )
+
+        assertEquals(86, diagnostic.glyphId)
+        assertEquals("bitmap", diagnostic.route)
+        assertEquals(ColorGlyphDiagnosticCodes.BitmapPayloadFormatUnsupported, diagnostic.code)
+        assertEquals("warning", diagnostic.severity)
+        assertTrue(diagnostic.detail.contains("sourceFormat=jpeg"))
+        assertTrue(diagnostic.detail.contains("sourcePayloadSha256="))
+        assertEquals(
+            """
+            {"glyphId": 86, "route": "bitmap", "code": "text.bitmap.payload-format-unsupported", "detail": "${diagnostic.detail}", "severity": "warning", "message": "Bitmap glyph payload format jpeg is unsupported for glyph 86 from sbix."}
+            """.trimIndent(),
+            diagnostic.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun bitmapGlyphPlanBuildsMalformedPngRefusalDiagnostic() {
+        val payload = ByteArray(33)
+        val failure = assertFailsWith<IllegalArgumentException> {
+            BasicPNGGlyphDecoder.decode(glyphId = 87, bytes = payload)
+        }
+
+        val diagnostic = BitmapGlyphPlan.pngDecodeFailedDiagnostic(
+            glyphId = 87,
+            tableFamily = "CBDT/CBLC",
+            sourcePayload = payload,
+            failure = failure,
+        )
+
+        assertEquals(87, diagnostic.glyphId)
+        assertEquals("bitmap", diagnostic.route)
+        assertEquals(ColorGlyphDiagnosticCodes.PNGDecodeFailed, diagnostic.code)
+        assertEquals("warning", diagnostic.severity)
+        assertTrue(diagnostic.detail.contains("sourceFormat=png"))
+        assertTrue(diagnostic.detail.contains("sourcePayloadSha256="))
+        assertTrue(diagnostic.detail.contains("failureClass=IllegalArgumentException"))
+        assertTrue(diagnostic.detail.contains("failureMessage=PNG glyph payload must start with the PNG signature."))
+        assertEquals(
+            """
+            {"glyphId": 87, "route": "bitmap", "code": "text.bitmap.PNG-decode-failed", "detail": "${diagnostic.detail}", "severity": "warning", "message": "Bitmap glyph PNG decode failed for glyph 87 from CBDT/CBLC: PNG glyph payload must start with the PNG signature."}
+            """.trimIndent(),
+            diagnostic.toCanonicalJson(),
         )
     }
 

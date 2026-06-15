@@ -217,12 +217,98 @@ interface GlyphArtifactPlanner {
  * @property strikeKey strike key used for generation and cache lookup.
  * @property representations per-glyph representations selected by the planner.
  * @property diagnostics non-fatal routing decisions and unsupported-route notes.
+ * @property decisions one selected or explicitly unsupported route decision per glyph position.
  */
 data class GlyphArtifactPlan(
     val run: GPUGlyphRunDescriptor,
     val strikeKey: GlyphStrikeKey,
     val representations: List<GlyphRepresentation>,
     val diagnostics: List<GlyphRouteDiagnostic> = emptyList(),
+    val decisions: List<GlyphArtifactPlanDecision> = emptyList(),
+) {
+    /**
+     * SHA-256 digest of [toCanonicalGlyphArtifactPlanJson] content with `dumpSha256` omitted.
+     */
+    val dumpSha256: String by lazy {
+        glyphSha256(canonicalArtifactPlanJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+    }
+
+    /**
+     * Serializes selected routes, rejected alternatives, fallback policy, and diagnostics.
+     *
+     * @return stable `glyph-artifact-plan.json` content ending with a newline.
+     */
+    fun toCanonicalGlyphArtifactPlanJson(): String =
+        canonicalArtifactPlanJson(includeDumpSha256 = true)
+
+    /**
+     * Serializes this plan with optional dump hash inclusion.
+     */
+    private fun canonicalArtifactPlanJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("schema", GlyphArtifactPlanSchema, comma = true)
+        appendGlyphJsonField("runId", run.runID.value.toString(), comma = true)
+        appendGlyphJsonField("glyphCount", run.glyphIDs.size, comma = true)
+        appendGlyphJsonField("representationCount", representations.size, comma = true)
+        appendGlyphJsonField("diagnosticCount", diagnostics.size, comma = true)
+        append("  \"decisions\": [")
+        if (decisions.isNotEmpty()) {
+            append("\n")
+            append(decisions.joinToString(",\n") { decision -> decision.toCanonicalJson().prependIndent("    ") })
+            append("\n")
+        }
+        append("  ],\n")
+        append("  \"diagnostics\": [")
+        if (diagnostics.isNotEmpty()) {
+            append("\n")
+            append(diagnostics.joinToString(",\n") { diagnostic -> diagnostic.toCanonicalJson().prependIndent("    ") })
+            append("\n")
+        }
+        append("  ]")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+}
+
+/**
+ * Records the route selected or explicitly refused for one glyph position.
+ *
+ * @property index zero-based glyph position inside the source run.
+ * @property glyphId font-specific glyph identifier.
+ * @property selectedRoute canonical `text.glyph.*` route selected for this position.
+ * @property representation short representation label, or null for unsupported routes.
+ * @property source selected representation source, such as `request` or `cache`.
+ * @property keySha256 route-specific strike-key hash for deterministic cache evidence.
+ * @property fallbackPolicy stable fallback/refusal policy label for this decision.
+ * @property rejectedAlternatives routes considered and rejected before the selected route.
+ * @property diagnostic optional unsupported-route diagnostic attached to this decision.
+ */
+data class GlyphArtifactPlanDecision(
+    val index: Int,
+    val glyphId: Int,
+    val selectedRoute: String,
+    val representation: String?,
+    val source: String?,
+    val keySha256: String,
+    val fallbackPolicy: String,
+    val rejectedAlternatives: List<GlyphArtifactRouteRejection> = emptyList(),
+    val diagnostic: GlyphRouteDiagnostic? = null,
+)
+
+/**
+ * Describes one rejected route alternative in a glyph artifact decision trace.
+ *
+ * @property route canonical `text.glyph.*` route that was considered.
+ * @property reason stable reason why the route was not selected.
+ */
+data class GlyphArtifactRouteRejection(
+    val route: String,
+    val reason: String,
 )
 
 /**
@@ -274,6 +360,114 @@ data class A8GlyphMask(
     val rowBytes: Int = width,
     val pixels: List<Int> = List(rowBytes * height) { 0 },
 ) : GlyphRepresentation
+
+/**
+ * Deterministic evidence for one CPU-prepared A8 glyph mask.
+ *
+ * @property glyphId glyph identifier represented by this mask.
+ * @property strikeKeySha256 route-specific strike-key hash for this glyph and A8 route.
+ * @property left horizontal mask origin relative to glyph origin.
+ * @property top vertical mask origin relative to glyph origin.
+ * @property width addressable mask width in pixels.
+ * @property height addressable mask height in pixels.
+ * @property rowBytes source row stride in samples.
+ * @property addressablePixelCount number of samples included in [coverageSha256].
+ * @property nonZeroPixels count of non-zero addressable samples.
+ * @property coverageSha256 SHA-256 digest of addressable samples in row-major order.
+ * @property diagnostics stable diagnostics attached to this evidence.
+ */
+data class A8GlyphMaskArtifactEvidence(
+    val glyphId: Int,
+    val strikeKeySha256: String,
+    val left: Int,
+    val top: Int,
+    val width: Int,
+    val height: Int,
+    val rowBytes: Int,
+    val addressablePixelCount: Int,
+    val nonZeroPixels: Int,
+    val coverageSha256: String,
+    val diagnostics: List<GlyphRouteDiagnostic> = emptyList(),
+) {
+    /**
+     * SHA-256 digest of [toCanonicalJson] content with `dumpSha256` omitted.
+     */
+    val dumpSha256: String by lazy {
+        glyphSha256(canonicalA8GlyphMaskJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+    }
+
+    /**
+     * Serializes this A8 mask evidence into stable JSON.
+     *
+     * @return canonical JSON ending with a newline.
+     */
+    fun toCanonicalJson(): String =
+        canonicalA8GlyphMaskJson(includeDumpSha256 = true)
+
+    /**
+     * Shared constructors for A8 mask evidence.
+     */
+    companion object {
+        /**
+         * Builds deterministic evidence from an in-memory A8 mask and strike key.
+         */
+        fun from(mask: A8GlyphMask, strikeKey: GlyphStrikeKey): A8GlyphMaskArtifactEvidence {
+            mask.requireValidA8Pixels()
+            val summary = GlyphMaskSummary.fromA8Mask(mask)
+            val addressablePixelCount = mask.width.nonNegativeProduct(
+                other = mask.height,
+                glyphId = mask.glyphId,
+                label = "A8 mask",
+            )
+            require(addressablePixelCount <= Int.MAX_VALUE.toLong()) {
+                "A8 mask addressable pixel count $addressablePixelCount exceeds Int.MAX_VALUE for glyph ${mask.glyphId}."
+            }
+
+            return A8GlyphMaskArtifactEvidence(
+                glyphId = mask.glyphId,
+                strikeKeySha256 = strikeKey.artifactPlanKeySha256(mask.glyphId, "text.glyph.mask.A8"),
+                left = mask.left,
+                top = mask.top,
+                width = mask.width,
+                height = mask.height,
+                rowBytes = mask.rowBytes,
+                addressablePixelCount = addressablePixelCount.toInt(),
+                nonZeroPixels = summary.nonZeroPixels,
+                coverageSha256 = summary.sha256,
+                diagnostics = emptyList(),
+            )
+        }
+    }
+
+    /**
+     * Serializes this evidence with optional dump hash inclusion.
+     */
+    private fun canonicalA8GlyphMaskJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("schema", A8GlyphMaskArtifactEvidenceSchema, comma = true)
+        appendGlyphJsonField("glyphId", glyphId, comma = true)
+        appendGlyphJsonField("strikeKeySha256", strikeKeySha256, comma = true)
+        append("  \"bounds\": {")
+        append(glyphJsonString("left")).append(": ").append(left).append(", ")
+        append(glyphJsonString("top")).append(": ").append(top).append(", ")
+        append(glyphJsonString("width")).append(": ").append(width).append(", ")
+        append(glyphJsonString("height")).append(": ").append(height)
+        append("},\n")
+        appendGlyphJsonField("rowBytes", rowBytes, comma = true)
+        appendGlyphJsonField("addressablePixelCount", addressablePixelCount, comma = true)
+        appendGlyphJsonField("nonZeroPixels", nonZeroPixels, comma = true)
+        appendGlyphJsonField("coverageSha256", coverageSha256, comma = true)
+        append("  \"diagnostics\": ")
+        append(appendGlyphRouteDiagnosticsInlineJson(diagnostics))
+        if (includeDumpSha256) {
+            append(",\n")
+            appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+}
 
 /**
  * Generates signed-distance-field glyph masks for scalable text rendering.
@@ -336,18 +530,47 @@ class GlyphArtifactRoutePlanner(
     override fun plan(run: GPUGlyphRunDescriptor, strikeKey: GlyphStrikeKey): GlyphArtifactPlan {
         val representations = mutableListOf<GlyphRepresentation>()
         val diagnostics = mutableListOf<GlyphRouteDiagnostic>()
+        val decisions = mutableListOf<GlyphArtifactPlanDecision>()
 
-        run.glyphIDs.forEach { glyphId ->
-            val selected = request.selectRepresentation(glyphId, cache?.get(strikeKey, glyphId))
+        run.glyphIDs.forEachIndexed { index, glyphId ->
+            val selection = request.selectRoute(glyphId, cache?.get(strikeKey, glyphId))
 
-            if (selected == null) {
-                diagnostics += request.unsupportedDiagnostic(
+            if (selection.representation == null) {
+                val diagnostic = request.unsupportedDiagnostic(
                     glyphId = glyphId,
                     availableRepresentations = request.availableRepresentations[glyphId].orEmpty(),
                 )
+                diagnostics += diagnostic
+                decisions += GlyphArtifactPlanDecision(
+                    index = index,
+                    glyphId = glyphId,
+                    selectedRoute = UnsupportedGlyphArtifactRoute,
+                    representation = null,
+                    source = null,
+                    keySha256 = strikeKey.artifactPlanKeySha256(glyphId, UnsupportedGlyphArtifactRoute),
+                    fallbackPolicy = FallbackPolicyRefuseNoRequestedRepresentation,
+                    rejectedAlternatives = selection.rejectedAlternatives,
+                    diagnostic = diagnostic,
+                )
             } else {
-                representations += selected
-                cache?.put(strikeKey, selected)
+                val selectedRoute = selection.representation.artifactPlanRouteName()
+                representations += selection.representation
+                cache?.put(strikeKey, selection.representation)
+                decisions += GlyphArtifactPlanDecision(
+                    index = index,
+                    glyphId = glyphId,
+                    selectedRoute = selectedRoute,
+                    representation = selection.representation.diagnosticRouteName(),
+                    source = selection.source,
+                    keySha256 = strikeKey.artifactPlanKeySha256(glyphId, selectedRoute),
+                    fallbackPolicy = if (selection.rejectedAlternatives.isEmpty()) {
+                        FallbackPolicySelectedFirstRequestedRoute
+                    } else {
+                        FallbackPolicyFallbackSelectedAfterRejections
+                    },
+                    rejectedAlternatives = selection.rejectedAlternatives,
+                    diagnostic = null,
+                )
             }
         }
 
@@ -356,6 +579,7 @@ class GlyphArtifactRoutePlanner(
             strikeKey = strikeKey,
             representations = representations.toList(),
             diagnostics = diagnostics.toList(),
+            decisions = decisions.toList(),
         )
     }
 }
@@ -406,6 +630,45 @@ class RowGlyphAtlasPacker(
             atlasWidth = atlasWidth,
             padding = padding,
         )
+
+    /**
+     * Packs A8 masks while returning stable diagnostics for plan-level atlas refusals.
+     *
+     * When any mask cannot fit in the configured atlas row width, the whole pack is refused and no
+     * partial placements are returned. This keeps callers from silently dropping glyphs.
+     *
+     * @param masks masks to place in input order.
+     * @return placements or capacity diagnostics for the complete pack request.
+     */
+    fun packWithDiagnostics(masks: List<A8GlyphMask>): GlyphAtlasPackingResult {
+        val diagnostics = masks.mapNotNull { mask ->
+            mask.requireValidA8Pixels()
+            val paddedWidth = mask.width.toLong() + padding.toLong() * 2L
+            if (paddedWidth > atlasWidth.toLong()) {
+                GlyphRouteDiagnostic(
+                    glyphId = mask.glyphId,
+                    route = GlyphAtlasCapacityExceededDiagnosticRoute,
+                    severity = "warning",
+                    message = "Glyph ${mask.glyphId} width plus padding ($paddedWidth) exceeds atlas width $atlasWidth; " +
+                        "refusing atlas pack without partial placements.",
+                )
+            } else {
+                null
+            }
+        }
+
+        return if (diagnostics.isNotEmpty()) {
+            GlyphAtlasPackingResult(
+                placements = emptyList(),
+                diagnostics = diagnostics,
+            )
+        } else {
+            GlyphAtlasPackingResult(
+                placements = pack(masks),
+                diagnostics = emptyList(),
+            )
+        }
+    }
 }
 
 /**
@@ -424,6 +687,59 @@ data class GlyphAtlasPlacement(
     val width: Int,
     val height: Int,
 )
+
+/**
+ * Records a diagnostic-aware atlas packing attempt without allocating GPU resources.
+ *
+ * @property placements assigned atlas rectangles when the complete pack request succeeds.
+ * @property diagnostics stable refusal diagnostics when packing cannot preserve every glyph.
+ */
+data class GlyphAtlasPackingResult(
+    val placements: List<GlyphAtlasPlacement>,
+    val diagnostics: List<GlyphRouteDiagnostic> = emptyList(),
+) {
+    /**
+     * SHA-256 digest of [toCanonicalGlyphAtlasPackingJson] content with `dumpSha256` omitted.
+     */
+    val dumpSha256: String by lazy {
+        glyphSha256(canonicalAtlasPackingJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+    }
+
+    /**
+     * Serializes placements and diagnostics into a stable atlas packing evidence dump.
+     *
+     * @return canonical JSON ending with a newline.
+     */
+    fun toCanonicalGlyphAtlasPackingJson(): String =
+        canonicalAtlasPackingJson(includeDumpSha256 = true)
+
+    /**
+     * Serializes this result with optional dump hash inclusion.
+     */
+    private fun canonicalAtlasPackingJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("schema", GlyphAtlasPackingResultSchema, comma = true)
+        appendGlyphJsonField("placementCount", placements.size, comma = true)
+        appendGlyphJsonField("diagnosticCount", diagnostics.size, comma = true)
+        append("  \"placements\": ")
+        append(appendGlyphAtlasPlacementsJson(placements))
+        append(",\n")
+        append("  \"diagnostics\": [")
+        if (diagnostics.isNotEmpty()) {
+            append("\n")
+            append(diagnostics.joinToString(",\n") { diagnostic -> diagnostic.toCanonicalJson().prependIndent("    ") })
+            append("\n")
+        }
+        append("  ]")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+}
 
 /**
  * Internal builder for A8 atlas upload inputs before the public GPU handoff artifact is produced
@@ -1021,6 +1337,66 @@ data class GlyphRouteDiagnostic(
     val severity: String = "info",
 ) {
     /**
+     * Shared constructors for stable glyph route diagnostics.
+     */
+    companion object {
+        /**
+         * Builds a stale atlas generation refusal diagnostic.
+         *
+         * @param glyphId glyph identifier whose atlas artifact was stale, or null when the refusal
+         * applies to the whole atlas.
+         * @param artifactGeneration generation recorded by the artifact being consumed.
+         * @param currentGeneration generation currently required by the cache/invalidation source.
+         * @param invalidationToken stable invalidation token that made the artifact stale.
+         * @return warning diagnostic with the stable `text.glyph.atlas-generation-stale` route.
+         */
+        fun atlasGenerationStale(
+            glyphId: Int?,
+            artifactGeneration: Long,
+            currentGeneration: Long,
+            invalidationToken: String,
+        ): GlyphRouteDiagnostic {
+            require(artifactGeneration >= 0L && currentGeneration >= 0L) {
+                "Atlas generation values must be non-negative."
+            }
+            val normalizedToken = invalidationToken.trim().ifEmpty { "unknown" }
+            val glyphLabel = glyphId?.toString() ?: "atlas"
+            return GlyphRouteDiagnostic(
+                glyphId = glyphId,
+                route = GlyphAtlasGenerationStaleDiagnosticRoute,
+                message = "Glyph atlas generation is stale for glyph $glyphLabel: " +
+                    "artifactGeneration=$artifactGeneration, currentGeneration=$currentGeneration, " +
+                    "invalidationToken=$normalizedToken.",
+                severity = "warning",
+            )
+        }
+
+        /**
+         * Builds an SDF transform refusal diagnostic.
+         *
+         * @param glyphId glyph identifier whose SDF route was refused.
+         * @param transformBucket stable transform classification from [GlyphStrikeKey].
+         * @param fallbackRoute stable fallback route label, or `none` when no fallback exists.
+         * @return warning diagnostic with the stable `text.glyph.SDF-transform-unsupported` route.
+         */
+        fun sdfTransformUnsupported(
+            glyphId: Int,
+            transformBucket: String,
+            fallbackRoute: String,
+        ): GlyphRouteDiagnostic {
+            val normalizedTransform = transformBucket.trim().ifEmpty { "unknown" }
+            val normalizedFallback = fallbackRoute.trim().ifEmpty { "none" }
+            return GlyphRouteDiagnostic(
+                glyphId = glyphId,
+                route = GlyphSDFTransformUnsupportedDiagnosticRoute,
+                message = "SDF transform is unsupported for glyph $glyphId: " +
+                    "transformBucket=$normalizedTransform, fallbackRoute=$normalizedFallback.",
+                severity = "warning",
+            )
+        }
+    }
+
+    /**
      * SHA-256 digest of [toCanonicalJson] for compact route evidence.
      */
     val dumpSha256: String by lazy {
@@ -1061,6 +1437,19 @@ fun List<GlyphRouteDiagnostic>.toCanonicalGlyphRouteDiagnosticsJson(): String = 
 }
 
 /**
+ * Serializes diagnostics as an inline field value for embedding in larger evidence objects.
+ */
+private fun appendGlyphRouteDiagnosticsInlineJson(diagnostics: List<GlyphRouteDiagnostic>): String = buildString {
+    append("[")
+    if (diagnostics.isNotEmpty()) {
+        append("\n")
+        append(diagnostics.joinToString(",\n") { diagnostic -> diagnostic.toCanonicalJson().prependIndent("    ") })
+        append("\n  ")
+    }
+    append("]")
+}
+
+/**
  * Computes a compact hash for [toCanonicalGlyphRouteDiagnosticsJson].
  *
  * @return lowercase hexadecimal SHA-256 digest of the canonical diagnostics dump.
@@ -1072,6 +1461,19 @@ private const val MaxGlyphPathCommands = 4_096
 private const val MaxGeneratedA8MaskPixels = 16_777_216L
 private const val MaxGeneratedSDFMaskPixels = 16_777_216L
 private const val DefaultSDFDistanceRange = 4f
+private const val A8GlyphMaskArtifactEvidenceSchema = "org.graphiks.kanvas.glyph.A8GlyphMaskArtifactEvidence.v1"
+private const val GlyphArtifactPlanSchema = "org.graphiks.kanvas.glyph.GlyphArtifactPlan.v1"
+private const val GlyphAtlasPackingResultSchema = "org.graphiks.kanvas.glyph.GlyphAtlasPackingResult.v1"
+private const val UnsupportedGlyphArtifactRoute = "text.glyph.unsupported"
+private const val GlyphAtlasCapacityExceededDiagnosticRoute = "text.glyph.atlas-capacity-exceeded"
+private const val GlyphAtlasGenerationStaleDiagnosticRoute = "text.glyph.atlas-generation-stale"
+private const val GlyphSDFTransformUnsupportedDiagnosticRoute = "text.glyph.SDF-transform-unsupported"
+private const val FallbackPolicySelectedFirstRequestedRoute = "selected-first-requested-route"
+private const val FallbackPolicyFallbackSelectedAfterRejections = "fallback-selected-after-rejections"
+private const val FallbackPolicyRefuseNoRequestedRepresentation = "refuse-no-requested-representation"
+private const val RouteRejectionUnavailable = "route-unavailable"
+private const val GlyphPlanSourceRequest = "request"
+private const val GlyphPlanSourceCache = "cache"
 
 /**
  * Mutable accumulator for one cache record while building a run inventory.
@@ -1225,6 +1627,19 @@ private data class GlyphVariationCoordinate(
 private data class GlyphCacheEntry(
     val representation: GlyphRepresentation,
     val byteSize: Long,
+)
+
+/**
+ * Internal route selection result before public decision serialization.
+ *
+ * @property representation selected representation, or null when every requested route failed.
+ * @property source selected representation source when present.
+ * @property rejectedAlternatives requested routes rejected before the selected/refused route.
+ */
+private data class GlyphArtifactRouteSelection(
+    val representation: GlyphRepresentation?,
+    val source: String?,
+    val rejectedAlternatives: List<GlyphArtifactRouteRejection>,
 )
 
 /**
@@ -1551,7 +1966,7 @@ private fun packAtlasItems(
     items.forEach { item ->
         require(item.width >= 0) { "Glyph ${item.glyphId} width must be non-negative." }
         require(item.height >= 0) { "Glyph ${item.glyphId} height must be non-negative." }
-        require(item.width + padding * 2 <= atlasWidth) {
+        require(item.width.toLong() + padding.toLong() * 2L <= atlasWidth.toLong()) {
             "Glyph ${item.glyphId} width plus padding exceeds atlas width."
         }
 
@@ -1755,22 +2170,41 @@ private fun copySDFMask(
  * Selects the first available representation that satisfies the request's route order.
  *
  * @param glyphId glyph identifier being planned.
- * @return selected representation, or null when no requested route exists for the glyph.
+ * @return selected representation plus rejected route alternatives.
  */
-private fun GlyphArtifactRouteRequest.selectRepresentation(
+private fun GlyphArtifactRouteRequest.selectRoute(
     glyphId: Int,
     cached: GlyphRepresentation?,
-): GlyphRepresentation? {
+): GlyphArtifactRouteSelection {
     val candidates = availableRepresentations[glyphId].orEmpty()
+    val rejectedAlternatives = mutableListOf<GlyphArtifactRouteRejection>()
+
     preferredRoutes.forEach { route ->
         candidates.firstOrNull { representation -> route.matches(representation) }?.let { representation ->
-            return representation
+            return GlyphArtifactRouteSelection(
+                representation = representation,
+                source = GlyphPlanSourceRequest,
+                rejectedAlternatives = rejectedAlternatives.toList(),
+            )
         }
         if (cached != null && route.matches(cached)) {
-            return cached
+            return GlyphArtifactRouteSelection(
+                representation = cached,
+                source = GlyphPlanSourceCache,
+                rejectedAlternatives = rejectedAlternatives.toList(),
+            )
         }
+        rejectedAlternatives += GlyphArtifactRouteRejection(
+            route = route.artifactPlanRouteName(),
+            reason = RouteRejectionUnavailable,
+        )
     }
-    return null
+
+    return GlyphArtifactRouteSelection(
+        representation = null,
+        source = null,
+        rejectedAlternatives = rejectedAlternatives.toList(),
+    )
 }
 
 /**
@@ -1822,6 +2256,16 @@ private fun GlyphArtifactRoute.matches(representation: GlyphRepresentation): Boo
     }
 
 /**
+ * Returns the canonical route label used by glyph artifact plan dumps.
+ */
+private fun GlyphArtifactRoute.artifactPlanRouteName(): String =
+    when (this) {
+        GlyphArtifactRoute.OUTLINE -> "text.glyph.outline"
+        GlyphArtifactRoute.A8 -> "text.glyph.mask.A8"
+        GlyphArtifactRoute.SDF -> "text.glyph.mask.SDF"
+    }
+
+/**
  * Returns the diagnostic route represented by a concrete glyph representation.
  *
  * @return stable lowercase route label for known glyph representations.
@@ -1836,6 +2280,30 @@ private fun GlyphRepresentation.diagnosticRouteName(): String =
             ?.lowercase()
             ?.ifEmpty { "unknown" } ?: "unknown"
     }
+
+/**
+ * Returns the canonical glyph artifact route for a concrete representation.
+ */
+private fun GlyphRepresentation.artifactPlanRouteName(): String =
+    when (this) {
+        is OutlineGlyphRepresentation -> GlyphArtifactRoute.OUTLINE.artifactPlanRouteName()
+        is A8GlyphMask -> GlyphArtifactRoute.A8.artifactPlanRouteName()
+        is SDFGlyphMask -> GlyphArtifactRoute.SDF.artifactPlanRouteName()
+        else -> UnsupportedGlyphArtifactRoute
+    }
+
+/**
+ * Builds a route-specific strike-key hash for glyph artifact plan evidence.
+ */
+private fun GlyphStrikeKey.artifactPlanKeySha256(glyphId: Int, route: String): String =
+    copy(
+        representationRoute = route,
+        maskFormat = when (route) {
+            "text.glyph.mask.A8" -> "A8"
+            "text.glyph.mask.SDF" -> "R8Unorm"
+            else -> GlyphStrikeKey.NoMaskFormat
+        },
+    ).preimageSha256(glyphId)
 
 /**
  * Estimates cache memory for a representation without depending on JVM object layout.
@@ -1865,6 +2333,72 @@ private fun Int.nonNegativeProduct(other: Int, glyphId: Int, label: String): Lon
     require(this >= 0) { "$label dimension must be non-negative for glyph $glyphId." }
     require(other >= 0) { "$label dimension must be non-negative for glyph $glyphId." }
     return toLong() * other.toLong()
+}
+
+/**
+ * Serializes one glyph artifact route decision into stable JSON.
+ */
+private fun GlyphArtifactPlanDecision.toCanonicalJson(): String = buildString {
+    append("{\n")
+    appendGlyphJsonField("index", index, comma = true)
+    appendGlyphJsonField("glyphId", glyphId, comma = true)
+    appendGlyphJsonField("selectedRoute", selectedRoute, comma = true)
+    append("  \"representation\": ")
+    append(glyphJsonNullableString(representation))
+    append(",\n")
+    append("  \"source\": ")
+    append(glyphJsonNullableString(source))
+    append(",\n")
+    appendGlyphJsonField("keySha256", keySha256, comma = true)
+    appendGlyphJsonField("fallbackPolicy", fallbackPolicy, comma = true)
+    append("  \"rejectedAlternatives\": [")
+    if (rejectedAlternatives.isEmpty()) {
+        append("],\n")
+    } else {
+        append("\n")
+        append(rejectedAlternatives.joinToString(",\n") { rejection -> rejection.toCanonicalJson().prependIndent("    ") })
+        append("\n")
+        append("  ],\n")
+    }
+    append("  \"diagnostic\": ")
+    append(diagnostic?.toCanonicalJson()?.indentJsonContinuation("  ") ?: "null")
+    append("\n}")
+}
+
+/**
+ * Serializes one rejected route alternative as a compact stable JSON object.
+ */
+private fun GlyphArtifactRouteRejection.toCanonicalJson(): String = buildString {
+    append("{")
+    append(glyphJsonString("route")).append(": ").append(glyphJsonString(route)).append(", ")
+    append(glyphJsonString("reason")).append(": ").append(glyphJsonString(reason))
+    append("}")
+}
+
+/**
+ * Serializes atlas placements into a stable JSON array.
+ */
+private fun appendGlyphAtlasPlacementsJson(placements: List<GlyphAtlasPlacement>): String = buildString {
+    append("[")
+    if (placements.isNotEmpty()) {
+        append("\n")
+        append(placements.joinToString(",\n") { placement -> placement.toCanonicalJson().prependIndent("    ") })
+        append("\n  ")
+    }
+    append("]")
+}
+
+/**
+ * Serializes one atlas placement into stable JSON.
+ */
+private fun GlyphAtlasPlacement.toCanonicalJson(): String = buildString {
+    append("{\n")
+    appendGlyphJsonField("glyphId", glyphId, comma = true)
+    appendGlyphJsonField("x", x, comma = true)
+    appendGlyphJsonField("y", y, comma = true)
+    appendGlyphJsonField("width", width, comma = true)
+    appendGlyphJsonField("height", height, comma = false)
+    append("}")
 }
 
 /**
@@ -2058,6 +2592,14 @@ private fun glyphNullableFloatToken(value: Float?): String =
  */
 private fun glyphJsonNullableString(value: String?): String =
     value?.let { glyphJsonString(it) } ?: "null"
+
+/**
+ * Indents all lines after the first one when embedding a JSON object after a field prefix.
+ */
+private fun String.indentJsonContinuation(indent: String): String =
+    split("\n").mapIndexed { index, line ->
+        if (index == 0) line else indent + line
+    }.joinToString("\n")
 
 /**
  * Computes a lowercase SHA-256 digest for deterministic evidence identifiers.

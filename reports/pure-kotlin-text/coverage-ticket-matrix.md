@@ -48,7 +48,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | PKT-02 font source catalog and fallback facts | Implementable now | Source provenance, explicit root scans, duplicate/skipped diagnostics, fallback plan dumps. | `font/core/src/main`, `font/core/src/test`. | Scan fixtures, host-dependent markers, fallback ordering tests. |
 | PKT-03 SFNT face and `cmap` contract | Implementable now | Required table diagnostics, TTC index, `cmap` format coverage/refusals. | `font/sfnt/src/main`, `font/sfnt/src/test`. | Malformed required/optional table fixtures and selected face dumps. |
 | PKT-04 TrueType `glyf` and variation evidence | Implementable now | Simple/composite outlines, component transforms, variation metadata and metrics dumps. | `font/scaler/src/main`, `font/scaler/src/test`. | Path hashes, bounds, variation delta fixtures. |
-| PKT-05 CFF/CFF2 vertical | Dependency-gated | CFF INDEX/dicts/Type 2 operators/CFF2 variation. | `font/scaler/src/main`, `font/scaler/src/test`. | Needs CFF/CFF2 generated fixtures before support claims. |
+| PKT-05 CFF/CFF2 vertical | Tracked-gap; generated fixture parser/scaler/operator/table/variation-store slices implemented | CFF INDEX/dicts/Type 2 operators/CFF2 variation. | `font/scaler/src/main`, `font/scaler/src/test`. | Generated CFF/CFF2 tables now reach public scalers with deterministic table evidence, malformed-table refusals, and minimal CFF2 VariationStore region lookup; complete support still needs broader real-font corpus coverage. |
 | PKT-06 Unicode data and script matrix seed | Implementable now | Pinned Unicode version surface, basic segmentation/bidi/script dumps. | `font/text/src/main/.../shaping`, `font/text/src/test`. | Script/bidi/grapheme tests and explicit unsupported-script diagnostics. |
 | PKT-07 GSUB/GPOS simple script shaping | Dependency-gated | Latin/Greek/Cyrillic/Hebrew defaults, features, clusters, fallback runs. | `font/text`, `font/sfnt`. | Requires parsed layout table fixtures and feature ordering evidence. |
 | PKT-08 complex shaping rows | Dependency-gated | Arabic, Devanagari, Thai, CJK, emoji shaping support/refusals. | `font/text`. | Requires PKT-07 and per-row positive/refusal fixtures. |
@@ -171,6 +171,44 @@ Remaining gate: this is source evidence and fallback-catalog hardening only. It
 does not claim complete SFNT parsing, TTC/OTC support, scaler coverage, or
 complete source-discovery behavior.
 
+### PKT-02B: Fallback Decision Trace Dumps
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `CatalogFontResolver.trace(...)` records one deterministic
+  `FallbackDecisionTrace` per Unicode code point while reusing the same
+  catalog, style-distance, policy ordering, and coverage decisions as
+  `resolve(...)`.
+- Trace dumps include UTF-16 offsets, stable `U+` code point evidence,
+  requested families, actual candidate family order, selected family,
+  selected `TypefaceID`, coverage state, and stable refusal diagnostics without
+  object identity, `Sk*` tokens, platform font APIs, or GPU handles.
+- Tests cover a covered fallback selection, candidate-family ordering,
+  `.notdef` routing with `font.fallback-glyph-unavailable`, empty-catalog
+  refusal with `font.fallback-family-unavailable`, and preservation of existing
+  `resolve(...)` behavior.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontCoreSurfaceTest.tracesFallbackDecisionWithStableCandidateOrderAndSelectedFace
+rtk ./gradlew --no-daemon :font:core:test
+```
+
+Remaining gate: this is catalog-level fallback trace evidence only. It does
+not claim a complete bundled fallback catalog, implicit system font scanning,
+host font normative behavior, variable-axis-aware fallback, cluster-safe
+fallback segmentation, complete shaping fallback, parser-backed glyph coverage,
+or GPU text-route support.
 ### PKT-02C: System-Scan Refusal And Provenance Fixture Plan
 
 Status: implemented with local diff review.
@@ -206,78 +244,6 @@ Remaining gate: this is fixture/provenance planning only. It does not claim
 complete system font discovery, host fallback parity, implicit root scanning,
 SFNT parsing, scaler support, shaping fallback support, or platform/native
 font API behavior.
-
-### PKT-03A: SFNT/OpenType Face Evidence Dumps
-
-Status: implemented and independently reviewed.
-
-Files:
-
-- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
-- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
-
-Evidence:
-
-- `OpenTypeFaceData.faceEvidence()` emits deterministic face evidence for
-  already-parsed SFNT/OpenType data: selected face index, source/typeface IDs,
-  source kind, raw scaler type, sorted table records, raw table byte sizes and
-  SHA-256 hashes, preferred `cmap` facts, metric summaries, and parse
-  diagnostics.
-- `OpenTypeFaceData.faceIndex` is preserved at the end of the public data-class
-  constructor so existing positional construction order remains source
-  compatible.
-- Public evidence constructors validate table tags, hashes, diagnostic tokens,
-  sorted table records, and sorted diagnostics so `toCanonicalJson()` remains
-  deterministic even for direct construction.
-- Tests cover TTC face index evidence, deterministic table ordering, raw table
-  hashes, preferred `cmap` facts, metrics, parse diagnostics, constructor-order
-  compatibility, and evidence constructor invariants.
-- Independent review verdict: `ACCEPT`.
-
-Validation:
-
-```bash
-rtk ./gradlew --no-daemon :font:sfnt:test
-```
-
-Remaining gate: this is parser evidence hardening only. It does not claim
-complete SFNT conformance, TrueType scaler support, CFF/CFF2 support, or
-complete font-source coverage.
-
-### PKT-03C: Malformed Table And Format-14 Fixture Plan
-
-Status: implemented with local diff review.
-
-Files:
-
-- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
-- `scripts/validate_pure_kotlin_text_fixture_manifest.py`
-- `scripts/test_validate_pure_kotlin_text_fixture_manifest.py`
-- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
-
-Evidence:
-
-- `fixture-evidence-manifest.json` now records the required
-  `sfnt-malformed-tables` fixture family as `fixture-gated`.
-- The row makes missing required table diagnostics, malformed optional table
-  diagnostics, TTC face-index positive/refusal rows, and `cmap` format 14
-  positive/refusal expectations explicit before parser promotion.
-- The fixture manifest validator now treats the malformed SFNT row as
-  required, preserving the actionable fixture plan.
-- Tests assert the row remains present and keeps the format 14
-  variation-selector gate visible.
-
-Validation:
-
-```bash
-rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_fixture_manifest.py
-rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
-```
-
-Remaining gate: this is fixture planning only. It does not claim complete SFNT
-conformance, complete required-table validation, `cmap` format 14 support,
-CFF/CFF2 support, scaler support, shaping support, or platform font behavior.
-
 ### PKT-02D: Deterministic System Scan Fixture Goldens
 
 Status: implemented; independent review pending.
@@ -319,7 +285,150 @@ Remaining gate: this is deterministic fixture and golden evidence only. It does
 not claim complete system font discovery, host fallback parity, implicit root
 scanning, SFNT parsing coverage, scaler support, shaping fallback support, or
 platform/native font API behavior.
+### PKT-02E: Font Scan Skipped-File Diagnostic Fixture
 
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `scripts/validate_pure_kotlin_text_font_fixtures.py`
+- `scripts/test_validate_pure_kotlin_text_font_fixtures.py`
+
+Evidence:
+
+- `FontFileScanner.scanRoots(...)` now accepts `reportSkippedFiles = true`
+  for explicit fixture scans that need skipped-file diagnostics without making
+  default scans noisy.
+- Unsupported regular files under explicit roots emit stable
+  `font.scan.file-skipped` diagnostics with normalized root/path facts and a
+  quoted deterministic message.
+- Tests cover a generated unsupported file fixture and assert deterministic
+  diagnostic code, root/path facts, and dump text.
+- The font fixture inventory marks `system-scan-skipped-file-diagnostic` as
+  current refusal evidence, and the manifest removes that remaining
+  font-source/SFNT fixture gate.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontCoreSurfaceTest.scanRootsCanReportSkippedUnsupportedFilesDeterministically
+```
+
+Remaining gate: this is explicit scan skipped-file evidence only. It does not
+claim implicit system font scanning, bundled fallback catalog completeness,
+parser-backed glyph coverage, shaping fallback completeness, or GPU text-route
+support.
+### PKT-03A: SFNT/OpenType Face Evidence Dumps
+
+Status: implemented and independently reviewed.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+
+Evidence:
+
+- `OpenTypeFaceData.faceEvidence()` emits deterministic face evidence for
+  already-parsed SFNT/OpenType data: selected face index, source/typeface IDs,
+  source kind, raw scaler type, sorted table records, raw table byte sizes and
+  SHA-256 hashes, preferred `cmap` facts, metric summaries, and parse
+  diagnostics.
+- `OpenTypeFaceData.faceIndex` is preserved at the end of the public data-class
+  constructor so existing positional construction order remains source
+  compatible.
+- Public evidence constructors validate table tags, hashes, diagnostic tokens,
+  sorted table records, and sorted diagnostics so `toCanonicalJson()` remains
+  deterministic even for direct construction.
+- Tests cover TTC face index evidence, deterministic table ordering, raw table
+  hashes, preferred `cmap` facts, metrics, parse diagnostics, constructor-order
+  compatibility, and evidence constructor invariants.
+- Independent review verdict: `ACCEPT`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test
+```
+
+Remaining gate: this is parser evidence hardening only. It does not claim
+complete SFNT conformance, TrueType scaler support, CFF/CFF2 support, or
+complete font-source coverage.
+### PKT-03B: Bounded SFNT Table Directory Diagnostics
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `SFNTTableDirectoryValidator.validate(...)` inspects already-read directory
+  records against an explicit bounded `sourceLength` and caller-provided
+  required table set without parsing payloads, repairing offsets, or invoking
+  host/native font engines.
+- `SFNTTableDirectoryDiagnostic.dump()` emits stable single-line evidence with
+  diagnostic code, table tag, offset, length, source length, and message.
+- Tests cover deterministic diagnostics for duplicate tags, overlapping
+  ranges, out-of-bounds ranges, missing required tables, and zero-length
+  required tables using stable reason-code families such as
+  `font.sfnt.table-out-of-bounds`, `font.sfnt.table-duplicate`,
+  `font.sfnt.table-overlap`, and `font.required-table-missing`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.tableDirectoryValidatorReportsBoundedDiagnosticsDeterministically
+rtk ./gradlew --no-daemon :font:sfnt:test --rerun-tasks
+```
+
+Remaining gate: this is bounded directory diagnostic evidence only. It does not
+claim full SFNT parser conformance, malformed fixture manifest completion,
+automatic parser refusal policy integration, complete `cmap` coverage, scaler
+support, shaping support, color glyph support, or GPU text-route support.
+### PKT-03C: Malformed Table And Format-14 Fixture Plan
+
+Status: implemented with local diff review.
+
+Files:
+
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_pure_kotlin_text_fixture_manifest.py`
+- `scripts/test_validate_pure_kotlin_text_fixture_manifest.py`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `fixture-evidence-manifest.json` now records the required
+  `sfnt-malformed-tables` fixture family as `fixture-gated`.
+- The row makes missing required table diagnostics, malformed optional table
+  diagnostics, TTC face-index positive/refusal rows, and `cmap` format 14
+  positive/refusal expectations explicit before parser promotion.
+- The fixture manifest validator now treats the malformed SFNT row as
+  required, preserving the actionable fixture plan.
+- Tests assert the row remains present and keeps the format 14
+  variation-selector gate visible.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+```
+
+Remaining gate: this is fixture planning only. It does not claim complete SFNT
+conformance, complete required-table validation, `cmap` format 14 support,
+CFF/CFF2 support, scaler support, shaping support, or platform font behavior.
 ### PKT-03D: Malformed SFNT And CMap Format 14 Fixture Pack
 
 Status: implemented; independent review pending.
@@ -363,7 +472,41 @@ It does not claim complete SFNT conformance, complete required-table
 validation, complete `cmap` format 14 support, CFF/CFF2, scaler support,
 shaping support, platform font behavior, native oracle behavior, or GPU route
 support.
+### PKT-03E: SFNT Directory Diagnostics In Face Evidence
 
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `OpenTypeFaceData.faceEvidence(requiredTables = ...)` now threads bounded
+  `SFNTTableDirectoryValidator` diagnostics into canonical face evidence under
+  `directoryDiagnostics`.
+- `SFNTTableDirectoryDiagnostic.toCanonicalJson()` preserves stable code, tag,
+  offset, length, source length, and message facts for selected face dumps.
+- Tests cover missing required table, zero-length required table, duplicate
+  table tag, out-of-bounds table range, stable dump text, and the canonical
+  `directoryDiagnostics` JSON field.
+- Existing deterministic face-evidence JSON snapshots now include an empty
+  `directoryDiagnostics` list when no bounded directory issue is supplied.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.openTypeFaceEvidenceIncludesBoundedDirectoryDiagnostics
+rtk ./gradlew --no-daemon :font:sfnt:test --rerun-tasks
+```
+
+Remaining gate: this is selected-face directory diagnostic evidence only. It
+does not claim full malformed SFNT fixture manifest completion, automatic parse
+refusal policy, complete `cmap` coverage, complete TTC/OTC conformance, scaler
+support, shaping support, color glyph support, or GPU text-route support.
 ### PKT-04A: TrueType Scaler Evidence Dumps
 
 Status: implemented and independently reviewed.
@@ -385,15 +528,14 @@ Evidence:
   coordinates, SHA-256 hashes, bounded `loca` ranges, and deterministic
   diagnostic ordering.
 - Current variation gaps are visible instead of silent: partial `gvar` point
-  sets that require IUP emit `truetype.gvar-iup-unavailable`, invalid
-  requested axes/non-finite coordinates emit stable variation diagnostics, and
-  parsed-but-unapplied `avar` maps emit `truetype.avar-unapplied`.
+  sets that require IUP emit `truetype.gvar-iup-unavailable`, and invalid
+  requested axes/non-finite coordinates emit stable variation diagnostics.
 - Composite point-matching and recursion-depth refusals now carry stable
   `font.outline-format-unsupported` diagnostics in the evidence path.
 - Tests cover deterministic dumps and hashes, sorted requested axes, normalized
   `gvar` facts, IUP-gap diagnostics, invalid requested axis diagnostics,
-  non-finite requested coordinate diagnostics, `avar` unapplied diagnostics,
-  and absence of object-identity/`Sk*` tokens in dumps.
+  non-finite requested coordinate diagnostics, and absence of object-identity/
+  `Sk*` tokens in dumps.
 - Independent spec review verdict: `ACCEPT`.
 - Independent code-quality review verdict: `ACCEPT`.
 
@@ -405,10 +547,44 @@ rtk ./gradlew --no-daemon :font:scaler:test
 
 Remaining gate: this is current TrueType `glyf` evidence hardening only. It
 does not claim complete CFF/CFF2 support, full IUP interpolation, phantom-point
-metrics, `avar` application, HVAR/VVAR/MVAR support, complete variable-font
-support, native engine parity, or pixel-perfect hinting.
+metrics, HVAR/VVAR/MVAR support, complete variable-font support, native engine
+parity, or pixel-perfect hinting.
+### PKT-04B: TrueType Composite Component Trace Evidence
 
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
 
+Files:
+
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `ScaledTrueTypeGlyphEvidence` now includes deterministic
+  `compositeComponents` facts for decoded TrueType composite glyph component
+  edges: recursion depth, parent glyph, component index, referenced glyph,
+  raw flags, argument kind/values, and affine transform coefficients.
+- Component trace collection reuses the already-decoded pure Kotlin `glyf`
+  component records and the existing composite recursion depth cap; it does
+  not parse CFF/CFF2, execute TrueType instructions, perform point matching, or
+  add native/font-engine oracle behavior.
+- Tests cover root and nested composite component trace ordering and assert the
+  canonical evidence JSON exposes `compositeComponents`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.parsedTrueTypeGlyphEvidenceIncludesCompositeComponentTrace
+rtk ./gradlew --no-daemon :font:scaler:test --rerun-tasks
+```
+
+Remaining gate: this is composite trace evidence only. It does not claim full
+composite transform fixture coverage, complete point-matching support, full IUP
+interpolation, phantom-point or advance-delta support, vertical metric
+coverage, malformed glyph isolation suite completion, CFF/CFF2 support, A8/SDF
+artifact support, or GPU glyph route support.
 ### PKT-04C: TrueType Variation Fixture Goldens
 
 Status: implemented; independent review pending.
@@ -459,7 +635,114 @@ Remaining gate: this is fixture readiness and refusal/golden evidence only. It
 claims no full variable-font support, no complete target support, no native
 scaler oracle, no hinting VM, no HVAR/VVAR/MVAR implementation support, and no
 GPU text route support.
+### PKT-04D: TrueType Avar Coordinate Mapping Fixture
 
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `TrueTypeGlyfScaler` now applies parsed `avar` segment maps after ordinary
+  `fvar` normalization and before `gvar` deltas are requested.
+- The remap is deterministic, uses the axis order from parsed variation axes,
+  linearly interpolates between declared `avar` segments, and clamps remapped
+  coordinates to the normalized variation interval.
+- Tests cover a generated one-axis fixture where requested `wght=900.0`
+  normalizes to `1.0` and remaps through `avar` to `0.75` without emitting the
+  prior `truetype.avar-unapplied` diagnostic.
+- The font fixture inventory marks `truetype-avar-coordinate-mapping` as
+  current positive evidence; the manifest now leaves only the `gvar` composite
+  delta fixture gate for the current TrueType scaler row.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.trueTypeGlyfEvidenceAppliesAvarCoordinateMappingFixture
+```
+
+Remaining gate: this is `avar` coordinate mapping evidence only. It does not
+claim full IUP interpolation, phantom-point metrics, CFF/CFF2 support, hinting
+VM parity, or GPU glyph route support.
+### PKT-04E: TrueType Composite Gvar Delta Fixture
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- Tests add a generated composite glyph fixture whose root glyph references a
+  simple component glyph with a `gvar` all-point delta record.
+- Existing recursive composite outline resolution already passes normalized
+  variation coordinates into component glyph resolution, so the component
+  point delta is visible in the composite outline commands.
+- The fixture inventory marks `truetype-gvar-composite-delta` as current
+  positive evidence, and the fixture manifest removes the remaining TrueType
+  scaler fixture gate.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.parsedTrueTypeGlyphScalerAppliesGvarDeltasToCompositeComponents
+```
+
+Remaining gate: this proves composite component `gvar` delta evidence only. It
+does not claim composite glyph-specific variation records, full IUP
+interpolation, phantom-point metrics, CFF/CFF2 support, hinting VM parity, or
+GPU glyph route support.
+### PKT-05A: CFF/CFF2 CharString Fixture Evidence
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `CFFType2CharStringInterpreter` provides a narrow generated-fixture
+  interpreter for Type 2/CFF2 charstrings without claiming full CFF table
+  parsing or public CFF scaler support.
+- Tests generate deterministic charstring bytes for CFF move/line/curve/flex
+  evidence, local and global subroutine calls with bounded bias resolution and
+  call traces, CFF2 `vsindex`/`blend` variation input, malformed stack refusal,
+  and unsupported escaped-operator refusal.
+- Stable refusal diagnostics now include `font.cff-stack-malformed` and
+  `font.cff-operator-unsupported` evidence with glyph IDs and operator-offset
+  messages.
+- The font-only fixture inventory marks all five CFF/CFF2 fixture gates as
+  current evidence, and the fixture manifest changes the family blocker from
+  missing fixtures to tracked parser/scaler integration work.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterBuildsLineCurveAndFlexEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterTracesLocalAndGlobalSubroutines --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2FixtureInterpreterAppliesVsindexBlendEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterReportsStackAndOperatorRefusals
+```
+
+Remaining gate at this slice closeout: generated charstring evidence had not
+yet been routed through CFF INDEX/top-dict/private-dict parsing or public
+`CFFScaler`/`CFF2Scaler` support. `PKT-05C` below closes that routing gap for
+generated fixtures only; complete CFF/CFF2 target support remains tracked.
 ### PKT-05B: CFF INDEX/DICT Fixture Pack And Refusal Goldens
 
 Status: implemented; independent review pending.
@@ -511,7 +794,169 @@ Remaining gate: this is fixture readiness and refusal/golden evidence only. It
 claims no CFF rendering support, no CFF2 variation support, no Type 2
 interpreter support, no complete target support, no native scaler oracle, and no
 GPU text route support.
+### PKT-05C: CFF/CFF2 Parser And Public Scaler Fixture Routing
 
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `CFFScaler` now consumes generated `CFF ` table bytes through a bounded parser
+  covering header, Name INDEX, Top DICT INDEX, String INDEX, Global Subr INDEX,
+  CharStrings INDEX, Private DICT, and local Subr INDEX routing.
+- `CFF2Scaler` now consumes generated `CFF2` table bytes through a bounded
+  header/top-dict/global-subr/charstrings parser and routes `vsindex`/`blend`
+  through the fixture interpreter using face variation-axis tags.
+- Public scaler tests prove that generated CFF tables reach outlines, local and
+  global subroutines, conservative bounds, and horizontal metrics through
+  `CFFScaler`, and that generated CFF2 tables reach blended outlines and
+  metrics through `CFF2Scaler`.
+- Missing CFF/CFF2 raw table paths keep stable refusals without falling back to
+  native engines or hiding unsupported behavior.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffScalerUsesGeneratedCffTableCharstringsSubrsAndMetrics --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScalerUsesGeneratedCff2TableAndVariationBlend
+rtk ./gradlew --no-daemon :font:scaler:test --rerun-tasks
+```
+
+Remaining gate: this is generated CFF/CFF2 fixture routing only. It does not
+claim complete Type 2 operator coverage, real-world CFF font coverage, width
+extraction from charstrings, CFF hint-mask metadata policy completion, CFF2
+variation-store lookup, variation-adjusted metrics, selected-face CFF/CFF2
+provenance dumps, malformed INDEX/dict refusal suite completion, or GPU glyph
+route support.
+### PKT-05D: CFF Type 2 Operator Width And Hint Metadata Fixtures
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `CFFType2CharStringInterpreter` now covers the remaining generated-fixture
+  curve/flex operators: `hhcurveto`, `vvcurveto`, `hvcurveto`, `vhcurveto`,
+  `hflex`, `hflex1`, and `flex1`.
+- CFF fixture evidence now records optional charstring width, stem hint count,
+  and consumed hint-mask byte count in stable canonical dumps.
+- `hstem`, `vstem`, `hstemhm`, `vstemhm`, `hintmask`, and `cntrmask` paths
+  consume deterministic metadata without affecting normative outline geometry.
+- Public `CFFScaler.metrics(...)` now uses the generated charstring width when
+  present and falls back to horizontal metrics otherwise.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterCoversRemainingCurveAndFlexOperators --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterRecordsWidthAndHintMaskMetadata --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffScalerUsesGeneratedCffTableCharstringsSubrsAndMetrics
+```
+
+Remaining gate: this still covers generated fixtures only. It does not claim
+complete real-world CFF font coverage, CFF2 variation-store lookup,
+variation-adjusted metrics, selected-face CFF/CFF2 provenance dumps, malformed
+INDEX/dict refusal suite completion, broader corpus evidence, or GPU glyph
+route support.
+### PKT-05E: CFF/CFF2 Table Evidence And Malformed Refusals
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `CFFScaler.tableEvidence()` and `CFF2Scaler.tableEvidence()` expose stable
+  selected-table facts for generated fixtures: format, charstring count,
+  local/global subroutine counts, private-dict presence, top-dict operator
+  names, and CFF2 variation-axis tags.
+- `CFFTableEvidence.toCanonicalJson()` serializes those facts in deterministic
+  order without object identity, native-engine facts, or host font choices.
+- Malformed CFF INDEX bytes and a top dict missing `CharStrings` refuse through
+  `FontScalerRefusalException` with stable `font.cff-table-malformed`,
+  `cff.table-malformed`, and `table` evidence.
+- The font fixture inventory now records positive selected-table provenance
+  evidence and malformed INDEX/dict refusal evidence; the fixture manifest
+  removes the corresponding CFF/CFF2 remaining gate.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffScalersExposeDeterministicTableEvidenceDumps --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffTableEvidenceRefusesMalformedIndexAndDictDeterministically
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_font_fixtures.py
+rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk ./gradlew --no-daemon :font:scaler:test --rerun-tasks
+rtk ./gradlew --no-daemon :font:core:test :font:sfnt:test :font:scaler:test :font:text:test :font:glyph:test --rerun-tasks
+```
+
+Remaining gate: this still covers generated fixtures only. It does not claim
+complete real-world CFF font coverage, CFF2 variation-store lookup,
+variation-adjusted metrics beyond the current single-vsindex face-axis blend
+fixture, broader real-font corpus evidence, or GPU glyph route support.
+### PKT-05F: CFF2 VariationStore Region Fixture
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `scripts/validate_pure_kotlin_text_font_fixtures.py`
+- `scripts/test_validate_pure_kotlin_text_font_fixtures.py`
+
+Evidence:
+
+- `CFF2Scaler` now parses a generated CFF2 top-dict `VariationStore` offset and
+  a bounded minimal ItemVariationStore containing one `VariationRegionList`,
+  one ItemVariationData region-index list, and F2DOT14 region coordinates.
+- `CFFType2CharStringInterpreter` can receive a CFF2 scalar provider so
+  `blend` uses variation-region scalars instead of treating face-axis
+  coordinates as direct deltas whenever a CFF2 VariationStore is present.
+- The focused test proves a generated region with start `0.0`, peak `0.5`,
+  and end `1.0` maps requested coordinate `0.25` to scalar `0.5`, producing a
+  different outline and `GlyphMetrics.bounds` than the default coordinate.
+- Table provenance names the top-dict operator as `cff.dict.variation-store`,
+  and the font fixture inventory records `cff2-variation-store-region` as
+  current positive evidence.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScalerUsesVariationStoreRegionScalarsForBlendAndMetricsBounds
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_font_fixtures.py
+rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk ./gradlew --no-daemon :font:scaler:test --rerun-tasks
+rtk ./gradlew --no-daemon :font:core:test :font:sfnt:test :font:scaler:test :font:text:test :font:glyph:test --rerun-tasks
+```
+
+Remaining gate: this is generated CFF2 VariationStore fixture evidence only.
+It does not claim complete CFF2 variation support, HVAR/VVAR/MVAR advance
+deltas, CID-keyed CFF/CFF2 coverage, broader real-font corpus evidence,
+native-scaler parity, or GPU glyph route support.
 ### PKT-06A: Stable Shaping Diagnostic Families
 
 Status: implemented and independently reviewed.
@@ -544,7 +989,6 @@ rtk ./gradlew --no-daemon :font:text:test
 Remaining gate: this is diagnostic-family hardening only. It does not claim
 complete GSUB/GPOS coverage, full required script matrix support, or complete
 pure Kotlin shaping conformance.
-
 ### PKT-06C: Pinned Unicode-Data Generation Contract
 
 Status: implemented with local diff review.
@@ -581,7 +1025,6 @@ Remaining gate: this is generation-contract planning only. It does not claim a
 complete Unicode Character Database, UAX #9 bidi conformance, UAX #14 line
 breaking, UAX #29 segmentation, emoji property coverage, or full script matrix
 support.
-
 ### PKT-06D: Unicode 16.0 Metadata
 
 Status: implemented; independent review pending.
@@ -627,7 +1070,6 @@ runtime mismatch diagnostics, claim a complete Unicode Character Database,
 claim UAX #9 bidi conformance, claim UAX #14 line breaking, claim UAX #29
 segmentation, claim emoji property coverage, or claim full script matrix
 support.
-
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 
 Status: implemented with local diff review.
@@ -663,7 +1105,6 @@ rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 Remaining gate: this is fixture-contract and dump-golden setup only. It does
 not claim complete GSUB/GPOS support, Greek/Cyrillic/Hebrew promotion, complex
 script shaping, native shaper parity, or complete shaping conformance.
-
 ### PKT-07B: Latin GSUB/GPOS Fixture Goldens
 
 Status: implemented; independent review pending.
@@ -703,7 +1144,6 @@ Remaining gate: this is Latin fixture-golden readiness only. It does not claim
 complete GSUB/GPOS support, Greek/Cyrillic/Hebrew promotion, complex script
 shaping, native shaper oracle status, CPU oracle evidence, or GPU text
 evidence.
-
 ### PKT-08A: Complex-Script Readiness Matrix
 
 Status: implemented with local diff review.
@@ -737,7 +1177,6 @@ rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 Remaining gate: this is readiness-matrix evidence only. It does not claim
 Arabic, Indic, Thai, CJK, emoji, complete GSUB/GPOS, complex shaping, or native
 shaper parity support.
-
 ### PKT-08B: Arabic Fixture Row Seed
 
 Status: implemented; independent review pending.
@@ -779,7 +1218,6 @@ Remaining gate: this is Arabic fixture-row seed evidence only. It does not
 claim Arabic shaping support, Indic/Thai/CJK/emoji shaping support, complete
 complex shaping, native shaper oracle status, CPU oracle evidence, or GPU text
 evidence.
-
 ### PKT-09A: Paragraph Semantic Layout Dumps And Refusals
 
 Status: implemented and independently reviewed.
@@ -816,7 +1254,6 @@ rtk ./gradlew --no-daemon :font:text:test
 Remaining gate: this is current-state semantic dump and refusal hardening only.
 It does not claim full rich text, full bidi visual ordering, complete
 selection/hit testing, complete ellipsis insertion, or Skia Paragraph parity.
-
 ### PKT-09B: Paragraph Fixture And Golden Matrix
 
 Status: implemented with local diff review.
@@ -851,7 +1288,6 @@ Remaining gate: this is fixture/golden matrix evidence only. It does not claim
 complete paragraph layout, full bidi visual ordering, rich text parity,
 complete hit testing/selection, complete ellipsis insertion, or Skia Paragraph
 parity.
-
 ### PKT-09C: ParagraphInput Contract And Golden Schema
 
 Status: implemented; independent review pending.
@@ -892,7 +1328,6 @@ Remaining gate: this is paragraph input golden-schema evidence only. It does
 not claim complete paragraph layout, full bidi visual ordering, rich text
 parity, complete selection/hit testing, ellipsis insertion, Skia Paragraph
 parity, CPU oracle evidence, or GPU text evidence.
-
 ### PKT-10A: Glyph Strike-Key Preimage And Route Diagnostic Dumps
 
 Status: implemented and independently reviewed.
@@ -929,7 +1364,77 @@ rtk ./gradlew --no-daemon :font:glyph:test
 Remaining gate: this is key/dump hardening only. It does not claim complete
 A8/SDF artifact generation, atlas lifecycle support, color glyph support, or
 GPU text-route promotion.
+### PKT-10B: Glyph Artifact Plan Decision Trace Dump
 
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+
+Evidence:
+
+- `GlyphArtifactPlanDecision` records one selected or explicitly unsupported
+  route per glyph position, including `text.glyph.*` selected route, source,
+  route-specific strike-key hash, fallback policy, rejected alternatives, and
+  optional diagnostic.
+- `GlyphArtifactRoutePlanner` now emits decisions in glyph-run order while
+  preserving the existing `representations` and `diagnostics` surfaces.
+- `GlyphArtifactPlan.toCanonicalGlyphArtifactPlanJson()` emits deterministic
+  `glyph-artifact-plan.json`-style evidence with decisions, rejected
+  alternatives, diagnostics, and `dumpSha256`.
+- Tests cover outline fallback after SDF/A8 rejection, A8 fallback after SDF
+  rejection, first-choice SDF selection, explicit unsupported route refusal,
+  stable `text.glyph.*` route labels, decision key hashes, diagnostic linkage,
+  canonical JSON field order, and dump hash shape.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.glyphArtifactPlanRecordsDecisionTraceAndCanonicalDump
+```
+
+Remaining gate: this is route-plan decision trace evidence only. It does not
+claim complete COLR/bitmap/SVG plan refs, complete A8/SDF production coverage,
+atlas capacity/stale-generation policy, GPU text handoff promotion, LCD
+support, native/font-engine oracle behavior, or complete `glyph-artifact-plan`
+fixture generation.
+### PKT-10C: Atlas Capacity Refusal Diagnostic Dump
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+
+Evidence:
+
+- `RowGlyphAtlasPacker.packWithDiagnostics(...)` returns a
+  `GlyphAtlasPackingResult` instead of throwing when a complete A8 pack request
+  cannot fit the configured atlas width.
+- Capacity overflow emits stable `text.glyph.atlas-capacity-exceeded`
+  diagnostics with glyph ID, atlas width, padded width, warning severity, and a
+  no-partial-placement refusal message.
+- `GlyphAtlasPackingResult.toCanonicalGlyphAtlasPackingJson()` emits
+  deterministic placement/diagnostic counts, placement arrays, diagnostics,
+  and `dumpSha256`.
+- Tests cover complete-plan refusal with no partial placements, stable
+  capacity diagnostic content, canonical JSON field order, and dump hash shape.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.rowPackerReportsCapacityDiagnosticWithoutPartialPlacements
+```
+
+Remaining gate: this is A8 row-packer capacity refusal evidence only. It does
+not claim atlas eviction, stale-generation detection, split-atlas planning, SDF
+atlas capacity policy, upload byte hashing, invalidation tokens, GPU text
+sampling, or complete `glyph-atlas.json` fixture coverage.
 ### PKT-10D: A8/SDF Atlas Lifecycle Fixture Contract
 
 Status: implemented; independent review pending.
@@ -978,7 +1483,105 @@ Remaining gate: this is fixture-contract evidence only. It does not claim
 complete A8 atlas support, complete SDF production, complete atlas lifecycle
 support, GPU upload execution, renderer resource ownership, or GPU text-route
 promotion.
+### PKT-10E: A8 Mask Artifact Evidence Dump
 
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+
+Evidence:
+
+- `A8GlyphMaskArtifactEvidence.from(...)` builds deterministic evidence for
+  current pure Kotlin A8 masks, including glyph bounds, row stride, addressable
+  pixel count, non-zero sample count, route-specific strike-key hash, and
+  coverage SHA-256 over addressable samples only.
+- `A8GlyphMaskArtifactEvidence.toCanonicalJson()` emits stable
+  `a8-glyph-mask.json`-style evidence with diagnostics and `dumpSha256`.
+- Tests cover row-padding exclusion from the coverage hash, bounds/origin facts,
+  row stride, addressable-pixel count, non-zero count, stable coverage hash,
+  route-specific key hash shape, canonical JSON field order, and dump hash
+  shape.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.a8GlyphMaskArtifactEvidenceRecordsBoundsAndCoverageHash
+```
+
+Remaining gate: this is current A8 mask evidence only. It does not claim
+quadratic/cubic outline rasterization, complete malformed-contour diagnostics,
+LCD support, SDF generation, atlas eviction/stale-generation support, GPU
+upload/sampling, external rasterizer oracle parity, or complete
+`a8-glyph-mask.json` fixture coverage.
+### PKT-10F: Atlas Stale Generation Refusal Diagnostic
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `GlyphRouteDiagnostic.atlasGenerationStale(...)` emits stable
+  `text.glyph.atlas-generation-stale` refusal diagnostics for stale atlas
+  generation tokens.
+- Diagnostics record glyph ID when known, artifact generation, current
+  generation, invalidation token, warning severity, canonical JSON, and a
+  stable diagnostic hash through the existing `GlyphRouteDiagnostic` evidence
+  surface.
+- Tests cover diagnostic route, generation facts, invalidation token, severity,
+  hash shape, and canonical JSON field order.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.routeDiagnosticRecordsStaleAtlasGenerationRefusal
+```
+
+Remaining gate: this is stale-generation refusal evidence only. It does not
+claim live atlas invalidation, atlas eviction policy changes, regenerated
+artifact production, upload byte hashing, GPU resource lifecycle support, or
+complete `glyph-atlas.json` fixture coverage.
+### PKT-10G: SDF Transform Refusal Diagnostic
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `GlyphRouteDiagnostic.sdfTransformUnsupported(...)` emits stable
+  `text.glyph.SDF-transform-unsupported` refusal diagnostics for transforms
+  outside the current SDF eligibility policy.
+- Diagnostics record glyph ID, transform bucket, fallback route, warning
+  severity, and canonical JSON through the existing `GlyphRouteDiagnostic`
+  surface.
+- Tests cover diagnostic route, transform bucket, fallback route, severity, and
+  canonical JSON field order.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.routeDiagnosticRecordsSDFTransformUnsupportedRefusal
+```
+
+Remaining gate: this is SDF transform refusal evidence only. It does not claim
+complete SDF eligibility policy, SDF generation fixture coverage, perspective
+or non-affine transform support, A8 fallback production, atlas upload/sampling,
+or GPU text-route promotion.
 ### PKT-11A: Color Glyph Planning Evidence Dumps
 
 Status: implemented and independently reviewed.
@@ -1024,7 +1627,75 @@ Remaining gate: this is planning and diagnostic evidence only. It does not
 claim complete COLRv1 rendering, complete PNG bitmap glyph routing, complete
 SVG-in-OpenType rendering, complete emoji sequence shaping, GPU color glyph
 support, or native/platform fallback behavior.
+### PKT-11B: Bitmap Glyph PNG Plan Evidence Dump
 
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `BitmapGlyphPlan.fromPNG(...)` records deterministic plan-only evidence for
+  a selected PNG bitmap strike: glyph ID, source table family, requested size,
+  selected strike ppem, source format, origin, decoded bounds, scaling policy,
+  alpha policy, source payload SHA-256, decoded pixel SHA-256, diagnostics, and
+  dump hash.
+- `BitmapGlyphPlan.toCanonicalJson()` emits stable `bitmap-glyph-plan.json`
+  style evidence without renderer handles, platform codec facts, native font
+  APIs, or GPU resources.
+- Tests cover pure Kotlin PNG decode input, plan field order, source/decoded
+  hash shape, scaling policy, alpha policy, dump hash shape, and forbidden
+  token/object-identity absence in the dump.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.bitmapGlyphPlanDumpsPngStrikeAndPixelHashes
+```
+
+Remaining gate: this is PNG bitmap glyph plan evidence only. It does not claim
+complete CBDT/CBLC or sbix fixture coverage, non-PNG payload refusal coverage,
+malformed PNG diagnostic wrapping, strike-origin table parsing, GPU texture
+upload/sampling, emoji sequence support, or complete `bitmap-glyph-plan.json`
+fixture generation.
+### PKT-11C: Bitmap Non-PNG Payload Refusal Diagnostic
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `BitmapGlyphPlan.unsupportedPayloadDiagnostic(...)` emits stable
+  `text.bitmap.payload-format-unsupported` diagnostics for non-PNG embedded
+  bitmap payloads with glyph ID, table family, normalized source format, and
+  source payload SHA-256.
+- The diagnostic uses route `bitmap`, warning severity, and canonical JSON
+  through `ColorGlyphDiagnostic.toCanonicalJson()` without decoding the payload
+  or invoking platform/native codecs.
+- Tests cover source format normalization, payload hash presence, stable code,
+  severity, route, message, and canonical JSON field order.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.bitmapGlyphPlanBuildsNonPngPayloadRefusalDiagnostic
+```
+
+Remaining gate: this is non-PNG bitmap payload refusal diagnostics only. It does
+not claim CBDT/CBLC or sbix table parsing, complete bitmap strike selection,
+malformed PNG diagnostic wrapping, decoded pixel oracle coverage, GPU upload or
+sampling, emoji sequence routing, or complete bitmap fixture coverage.
 ### PKT-11D: Color Glyph Fixture Family Split
 
 Status: implemented; independent review pending.
@@ -1071,7 +1742,274 @@ Remaining gate: this is fixture-family split and refusal-contract evidence
 only. It does not claim complete COLRv1 rendering, PNG bitmap glyph routing,
 SVG-in-OpenType rendering, emoji sequence shaping, GPU color glyph support,
 platform fallback behavior, or CPU oracle hash coverage.
+### PKT-11E: Bitmap Malformed PNG Refusal Diagnostic
 
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `BitmapGlyphPlan.pngDecodeFailedDiagnostic(...)` emits stable
+  `text.bitmap.PNG-decode-failed` diagnostics for malformed PNG embedded bitmap
+  payloads after the pure Kotlin PNG decoder reports a failure.
+- The diagnostic records glyph ID, table family, `sourceFormat=png`, source
+  payload SHA-256, failure class, and failure message with route `bitmap` and
+  warning severity.
+- Tests cover malformed PNG refusal via the existing pure Kotlin decoder,
+  stable diagnostic code, route, severity, source payload hash evidence,
+  failure facts, and canonical JSON field order.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.bitmapGlyphPlanBuildsMalformedPngRefusalDiagnostic
+```
+
+Remaining gate: this is malformed PNG refusal diagnostics only. It does not
+claim CBDT/CBLC or sbix table parsing, complete bitmap strike selection, PNG
+fixture coverage, decoded pixel oracle coverage, GPU upload or sampling, emoji
+sequence routing, native/platform codec behavior, or complete bitmap glyph
+support.
+### PKT-11F: COLRv1 Budget Refusal Diagnostic
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `COLRV1Parser.budgetExceededDiagnostic(...)` emits stable
+  `text.color.COLRv1-budget-exceeded` diagnostics for COLRv1 paint graph budget
+  refusals without changing `COLRV1Parser.parse(...)` behavior.
+- Diagnostics record glyph ID when known, route `colr`, table family `COLR`,
+  COLRv1 version, stable budget name, configured limit, observed value, and
+  warning severity.
+- Tests cover the budget diagnostic code, route, severity, detail facts, and
+  canonical JSON field order.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsCOLRV1BudgetExceededRefusalDiagnostic
+```
+
+Remaining gate: this is COLRv1 budget refusal evidence only. It does not claim
+complete COLRv0/COLRv1 fixture coverage, cycle detection evidence, complete
+COLRv1 rendering, paint-operation-specific support, GPU color glyph support, or
+native/platform fallback behavior.
+### PKT-11G: COLRv1 PaintColrGlyph Cycle Refusal Diagnostic
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `COLRV1Table.paintColrGlyphCycleDiagnostic(...)` traverses already-parsed
+  COLRv1 paint data reachable through `PaintColrGlyph` links and emits stable
+  `text.color.COLRv1-cycle-detected` diagnostics for the first detected cycle.
+- Diagnostics record glyph ID, route `colr`, table family `COLR`, COLRv1
+  version, cycle path, cycle length, warning severity, and canonical JSON.
+- Tests cover a two-glyph `PaintColrGlyph` cycle through a nested `PaintGlyph`
+  child, stable diagnostic code, route, severity, cycle facts, and canonical
+  JSON field order.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.detectsCOLRV1PaintColrGlyphCyclesWithStableDiagnostic
+```
+
+Remaining gate: this is parsed-model cycle refusal evidence only. It does not
+claim complete COLRv0/COLRv1 fixture coverage, complete PaintColrGlyph graph
+expansion, bounds computation, palette resolution, COLRv1 rendering, GPU color
+glyph support, or native/platform fallback behavior.
+### PKT-11H: SVG External Resource Refusal Diagnostic
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `BasicSVGGlyphParser.externalResourceRefusedDiagnostic(...)` emits stable
+  `text.SVG.external-resource-refused` diagnostics for SVG glyph external
+  resource references without fetching or resolving the resource.
+- Diagnostics record glyph ID, route `svg`, element name, attribute name, and a
+  SHA-256 hash of the refused reference instead of storing the external URL as
+  normative evidence.
+- Tests cover diagnostic code, route, severity, element/attribute facts,
+  reference hash evidence, URL omission from detail, and canonical JSON field
+  order.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsSVGExternalResourceRefusalDiagnostic
+```
+
+Remaining gate: this is SVG external-resource refusal evidence only. It does
+not claim complete SVG-in-OpenType fixture coverage, static path/gradient/clip
+support, `use` recursion refusal, unsupported feature refusal, SVG rendering,
+external resource support, GPU SVG glyph support, or native/platform SVG
+fallback behavior.
+### PKT-11I: SVG Unsupported Feature Refusal Diagnostic
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `BasicSVGGlyphParser.unsupportedFeatureDiagnostic(...)` emits stable
+  `text.SVG.feature-unsupported` diagnostics for SVG glyph features that the
+  pure Kotlin glyph-scoped subset refuses.
+- Diagnostics record glyph ID, route `svg`, element name, feature name, warning
+  severity, and canonical JSON without invoking a native SVG engine or
+  renderer fallback.
+- Tests cover diagnostic code, route, severity, element/feature facts, message,
+  and canonical JSON field order.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsSVGUnsupportedFeatureRefusalDiagnostic
+```
+
+Remaining gate: this is SVG unsupported-feature refusal evidence only. It does
+not claim complete SVG-in-OpenType fixture coverage, static path/gradient/clip
+support, `use` recursion refusal, SVG rendering, external resource support, GPU
+SVG glyph support, or native/platform SVG fallback behavior.
+### PKT-11J: SVG Use Recursion Refusal Diagnostic
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `BasicSVGGlyphParser.useRecursionRefusedDiagnostic(...)` emits stable
+  `text.SVG.budget-exceeded` diagnostics for bounded SVG `<use>` recursion
+  refusal.
+- Diagnostics record glyph ID, route `svg`, referenced symbol/element ID,
+  observed recursion depth, configured maximum depth, warning severity, and
+  canonical JSON without resolving or expanding SVG references.
+- Tests cover diagnostic code, route, severity, reference ID, depth facts,
+  message, and canonical JSON field order.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsSVGUseRecursionRefusalDiagnostic
+```
+
+Remaining gate: this is SVG `<use>` recursion refusal evidence only. It does not
+claim complete SVG-in-OpenType fixture coverage, actual `use` graph expansion,
+static path/gradient/clip support, SVG rendering, external resource support,
+GPU SVG glyph support, or native/platform SVG fallback behavior.
+### PKT-11K: SVG Gradient Transform Clip Fixture
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `BasicSVGGlyphParser` now includes bounded deterministic summaries for the
+  SVG glyph fixture elements and attributes needed by gradient, transform, and
+  clip evidence: `linearGradient`, `stop`, `clipPath`, `clip-path`, gradient
+  coordinate facts, IDs, and stop colors.
+- Tests cover a generated glyph-scoped SVG fixture with one gradient, one clip
+  path, one transformed path using `fill=url(...)` and `clip-path=url(...)`,
+  and stable element summary ordering.
+- The font fixture inventory marks `svg-gradient-transform-clip` as current
+  positive evidence, and the fixture manifest removes the remaining SVG glyph
+  fixture gate.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.parsesBasicSVGGradientTransformAndClipFixture
+```
+
+Remaining gate: this is SVG fixture-summary evidence only. It does not claim a
+complete SVG renderer, `use` expansion support, external resource support,
+filter support, text layout inside SVG glyphs, or GPU SVG glyph support.
+### PKT-11L: Emoji VS Skin-Tone ZWJ Fixture Evidence
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `EmojiSequenceShaper` now consumes Unicode emoji skin-tone modifiers as part
+  of one emoji component and excludes those modifiers from standalone emoji
+  bases.
+- Tests cover one fixture string containing VS15 text-style emoji, a base emoji
+  plus skin-tone modifier, and a ZWJ family sequence, with deterministic UTF-16
+  text ranges and glyph-cluster ranges.
+- The font fixture inventory marks `emoji-vs15-vs16`, `emoji-skin-tone`, and
+  `emoji-zwj-family` as current positive evidence; existing fallback and color
+  glyph unavailable diagnostics continue to cover the refusal gates.
+- The fixture manifest removes the remaining emoji fixture gates while keeping
+  complete emoji shaping and color fallback non-claims.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperDumpsVS15SkinToneAndZwjFamilyFixtures
+```
+
+Remaining gate: this is bounded emoji sequence fixture evidence only. It does
+not claim full font-specific emoji substitution, complete required-script
+shaping, complete color glyph fallback support, platform emoji parity, or GPU
+text-route support.
 ### PKT-12A: GPU Renderer `DrawTextRun` Handoff Surface
 
 Status: implemented and independently reviewed.
@@ -1102,7 +2040,6 @@ rtk ./gradlew --no-daemon :gpu-renderer:test
 
 Remaining gate: no GPU text route is promoted. Artifact registry, route
 selection, WGSL/binding evidence, and GPU evidence remain dependency-gated.
-
 ### PKT-12B: Text-Stack Typed Artifact References
 
 Status: implemented by implementation agent and independently reviewed.
@@ -1135,7 +2072,6 @@ Remaining gate: target specs still separate `contentFingerprint` from compact
 artifact key/hash facts more explicitly than the current value object. This is
 tracked as future hardening before GPU route promotion, not a current support
 claim.
-
 ### PKT-13A: Validation Fixture And Evidence Manifest
 
 Status: implemented and independently reviewed.
@@ -1179,7 +2115,49 @@ Remaining gate: this is validation infrastructure and fixture-inventory
 coordination only. It does not add new text implementation behavior, generate
 complete target fixtures, provide CPU oracle artifacts, promote external drift
 comparisons to normative status, or claim GPU text support.
+### PKT-13B: Font-Only Fixture Inventory
 
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_pure_kotlin_text_font_fixtures.py`
+- `scripts/test_validate_pure_kotlin_text_font_fixtures.py`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `font-fixture-inventory.json` records the font-only fixture set requested for
+  PKT font closeout while explicitly excluding GPU handoff, paragraph, and
+  shaping-script rows from this slice.
+- The inventory covers 8 font families and 40 target fixture gates:
+  A8/SDF artifacts, CFF/CFF2 scaler, color glyphs, emoji, font source/SFNT,
+  PNG bitmap glyphs, SVG glyphs, and TrueType scaler.
+- Each fixture records a stable fixture ID, target gate, status, fixture kind,
+  generation policy, existing evidence paths, expected artifacts, and
+  non-claims. Status values separate current positive evidence, current refusal
+  evidence, specified fixtures, and implementation-gated fixtures.
+- `validate_pure_kotlin_text_font_fixtures.py` rejects non-font rows, missing
+  font gates, unsorted or duplicate fixtures, hidden `target-supported`
+  statuses, missing evidence paths, and normative external-engine terms.
+- `fixture-evidence-manifest.json` now references the font-only inventory and
+  its validation command from every font fixture family while leaving GPU,
+  paragraph, and shaping rows untouched.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_font_fixtures.py
+rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+```
+
+Remaining gate: this is font-fixture inventory and validation evidence only.
+It does not itself claim complete CFF/CFF2 target support, complete
+variable-font support, complete SVG rendering, complete emoji sequence shaping,
+complete target font support, or any GPU text route.
 ### PKT-14A: Text Artifact Telemetry Snapshot
 
 Status: implemented and independently reviewed.
