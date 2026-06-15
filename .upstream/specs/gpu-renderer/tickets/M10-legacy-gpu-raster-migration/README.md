@@ -14,20 +14,20 @@ boundaries.
 
 ## Exit Criteria
 
-- [ ] Legacy route ownership and replacement status are inventoried per family.
+- [x] Legacy route ownership and replacement status are inventoried per family.
 - [ ] Shadow parity evidence exists before any default route change.
 - [ ] Retirement gates are scoped to promoted replacement slices only.
-- [ ] Root PM packaging states whether evidence is adapter-independent or
+- [x] Root PM packaging states whether evidence is adapter-independent or
       adapter-backed opt-in.
 
 ## Tickets
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M10-001 - Inventory legacy `gpu-raster` route ownership](KGPU-M10-001-inventory-legacy-gpu-raster-route-ownership.md) | `proposed` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `false` | `legacy-adapter` | `KGPU-M1-001` | `gpu-raster legacy` |
-| [KGPU-M10-002 - Add per-family shadow parity migration gates](KGPU-M10-002-add-per-family-shadow-parity-migration-gates.md) | `proposed` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `migration-validation` | `KGPU-M10-001` | `gpu-raster legacy` |
-| [KGPU-M10-003 - Retire legacy routes after promoted replacements](KGPU-M10-003-retire-legacy-routes-after-promoted-replacements.md) | `proposed` | `P1` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `legacy-cleanup` | `KGPU-M10-002`, `KGPU-M1-004` | `gpu-raster legacy` |
-| [KGPU-M10-004 - Add archived evidence hygiene for migrated routes](KGPU-M10-004-add-archived-evidence-hygiene-for-migrated-routes.md) | `proposed` | `P1` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `docs-evidence` | `KGPU-M10-001` | `archives` |
+| [KGPU-M10-001 - Inventory legacy `gpu-raster` route ownership](KGPU-M10-001-inventory-legacy-gpu-raster-route-ownership.md) | `done` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `false` | `legacy-adapter` | `KGPU-M1-001` | `gpu-raster legacy` |
+| [KGPU-M10-002 - Add per-family shadow parity migration gates](KGPU-M10-002-add-per-family-shadow-parity-migration-gates.md) | `blocked` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `migration-validation` | `KGPU-M10-001` | `gpu-raster legacy` |
+| [KGPU-M10-003 - Retire legacy routes after promoted replacements](KGPU-M10-003-retire-legacy-routes-after-promoted-replacements.md) | `blocked` | `P1` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `legacy-cleanup` | `KGPU-M10-002`, `KGPU-M1-004` | `gpu-raster legacy` |
+| [KGPU-M10-004 - Add archived evidence hygiene for migrated routes](KGPU-M10-004-add-archived-evidence-hygiene-for-migrated-routes.md) | `done` | `P1` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `docs-evidence` | `KGPU-M10-001` | `archives` |
 
 ## Validation Bundle
 
@@ -42,6 +42,26 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*GpuRendererShadow*'
 - This milestone does not delete or change default legacy routes by itself.
 - Migration evidence is per-family and cannot imply broad renderer parity.
 - Archived plans remain historical evidence only.
+
+## Current Evidence
+
+- `reports/gpu-renderer/2026-06-15-m10-legacy-inventory-hygiene.md`
+  inventories legacy `gpu-raster` ownership per family and links each row to
+  current `:gpu-renderer` tickets, blockers, or refusal gates.
+- The inventory keeps the legacy default active for every family and records no
+  route retirement.
+- Root PM packaging is classified as adapter-independent for the root activation
+  candidate, while executed R6 PM evidence remains adapter-backed opt-in and is
+  not a root `pipelinePmBundle` dependency.
+- KGPU-M10-002 is blocked until per-family adapter-backed shadow parity tests,
+  before/after dumps, PM rows, rollback labels, and raw evidence exist.
+- KGPU-M10-003 is blocked until KGPU-M10-002 and route-specific promoted
+  replacement evidence exist.
+- Archive hygiene remains explicit: archived plans and root upstream snapshots
+  are historical evidence only, not active backlog or acceptance criteria.
+- Independent review `019ec878-7c64-7e42-ab70-bb80043e53d1` accepted
+  KGPU-M10-001 and KGPU-M10-004 for `done` after remediation added explicit
+  material/paint, rect/rrect stroke, and clear/discard inventory rows.
 
 ## Status Update Rule
 

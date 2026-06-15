@@ -1,7 +1,7 @@
 ---
 id: KGPU-M10-001
 title: "Inventory legacy `gpu-raster` route ownership"
-status: proposed
+status: done
 milestone: M10
 priority: P0
 owner_area: legacy-adapter
@@ -81,7 +81,14 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Inventory before migration.
+- `done`: `reports/gpu-renderer/2026-06-15-m10-legacy-inventory-hygiene.md`
+  inventories legacy `gpu-raster` ownership per route family and links each
+  family to the current `:gpu-renderer` replacement ticket, refusal, blocker,
+  or remaining gate. The report keeps all legacy routes non-retired and does
+  not change default behavior. Independent review
+  `019ec878-7c64-7e42-ab70-bb80043e53d1` accepted the remediated inventory
+  after explicit material/paint, rect/rrect stroke, and clear/discard rows were
+  added.
 
 ## Linear Labels
 

@@ -1,7 +1,7 @@
 ---
 id: KGPU-M10-002
 title: "Add per-family shadow parity migration gates"
-status: proposed
+status: blocked
 milestone: M10
 priority: P0
 owner_area: migration-validation
@@ -83,7 +83,11 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Migration gate definition.
+- `blocked`: Per-family shadow parity gates require accepted M10-001 inventory
+  plus adapter-backed shadow route tests, before/after dumps, PM rows, rollback
+  labels, and family-specific evidence. Current evidence covers only selected
+  first-route shadow/rollback lanes and cannot be generalized to all legacy
+  families without new adapter-backed runs.
 
 ## Linear Labels
 
