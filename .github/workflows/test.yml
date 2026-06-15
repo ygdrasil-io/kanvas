@@ -49,6 +49,8 @@ on:
       - 'scripts/test_validate_pure_kotlin_text_ci.py'
       - 'scripts/validate_pure_kotlin_text_boundary_contracts.py'
       - 'scripts/test_validate_pure_kotlin_text_boundary_contracts.py'
+      - 'scripts/validate_pure_kotlin_text_claim_dashboard.py'
+      - 'scripts/test_validate_pure_kotlin_text_claim_dashboard.py'
   push:
     branches: [master]
     paths:
@@ -80,6 +82,8 @@ on:
       - 'scripts/test_validate_pure_kotlin_text_ci.py'
       - 'scripts/validate_pure_kotlin_text_boundary_contracts.py'
       - 'scripts/test_validate_pure_kotlin_text_boundary_contracts.py'
+      - 'scripts/validate_pure_kotlin_text_claim_dashboard.py'
+      - 'scripts/test_validate_pure_kotlin_text_claim_dashboard.py'
   workflow_dispatch:
 
 permissions:
@@ -131,6 +135,9 @@ jobs:
 
       - name: Validate pure Kotlin text boundaries
         run: python3 scripts/validate_pure_kotlin_text_boundary_contracts.py
+
+      - name: Validate pure Kotlin text claim dashboard
+        run: python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 
       - name: Run pure Kotlin font foundation Gradle tests
         run: |

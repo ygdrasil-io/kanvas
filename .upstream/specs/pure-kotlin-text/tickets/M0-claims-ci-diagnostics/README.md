@@ -13,7 +13,7 @@ None.
 - [x] The pure Kotlin font CI lane names all candidate `:font:*` validation tasks.
 - [x] Pure Kotlin text spec and ticket edits trigger claim/dashboard validation.
 - [x] Package boundaries prevent `Sk*` facade leakage and GPU renderer back edges.
-- [ ] Diagnostic taxonomy and dashboard rows reject generic text/font claims.
+- [x] Diagnostic taxonomy and dashboard rows reject generic text/font claims.
 
 ## Tickets
 
@@ -23,7 +23,7 @@ None.
 | [KFONT-M0-002 - Add pure-kotlin-text specs to CI trigger paths](KFONT-M0-002-add-pure-kotlin-text-specs-to-ci-trigger-paths.md) | `review` | `P0` | `tracked-gap` | `ci` | `KFONT-M0-001` | - |
 | [KFONT-M0-003 - Freeze module/package layout for the pure Kotlin font core](KFONT-M0-003-freeze-module-package-layout-for-the-pure-kotlin-font-core.md) | `review` | `P0` | `tracked-gap` | `font-architecture` | `KFONT-M0-001` | - |
 | [KFONT-M0-004 - Introduce stable diagnostic taxonomy](KFONT-M0-004-introduce-stable-diagnostic-taxonomy.md) | `review` | `P0` | `tracked-gap` | `diagnostics` | `KFONT-M0-003` | `font.native-engine-unavailable`, `font.bitmap-strike-unavailable`, `font.emoji-sequence-shaping-unsupported` |
-| [KFONT-M0-005 - Harden dashboard claim classification](KFONT-M0-005-harden-dashboard-claim-classification.md) | `proposed` | `P0` | `tracked-gap` | `validation-dashboard` | `KFONT-M0-004` | `coloremoji_blendmodes`, `scaledemoji`, `scaledemoji_rendering`, `dftext`, `fontations`, `fontations_ft_compare`, `pdf_never_embed` |
+| [KFONT-M0-005 - Harden dashboard claim classification](KFONT-M0-005-harden-dashboard-claim-classification.md) | `review` | `P0` | `tracked-gap` | `validation-dashboard` | `KFONT-M0-004` | `coloremoji_blendmodes`, `scaledemoji`, `scaledemoji_rendering`, `dftext`, `fontations`, `fontations_ft_compare`, `pdf_never_embed` |
 
 ## Validation Bundle
 

@@ -27,6 +27,8 @@ REQUIRED_PATH_FILTERS = [
     "reports/pure-kotlin-text/**",
     "scripts/validate_pure_kotlin_text_boundary_contracts.py",
     "scripts/test_validate_pure_kotlin_text_boundary_contracts.py",
+    "scripts/validate_pure_kotlin_text_claim_dashboard.py",
+    "scripts/test_validate_pure_kotlin_text_claim_dashboard.py",
 ]
 DIFF_CHECK_COMMAND = "git diff --check"
 DIFF_CHECK_STEP_NAME = "Check pure Kotlin text diff hygiene"
@@ -40,6 +42,8 @@ CI_VALIDATOR_STEP_NAME = "Validate pure Kotlin font CI lane"
 CI_VALIDATOR_COMMAND = "python3 scripts/validate_pure_kotlin_text_ci.py"
 BOUNDARY_VALIDATOR_STEP_NAME = "Validate pure Kotlin text boundaries"
 BOUNDARY_VALIDATOR_COMMAND = "python3 scripts/validate_pure_kotlin_text_boundary_contracts.py"
+CLAIM_DASHBOARD_VALIDATOR_STEP_NAME = "Validate pure Kotlin text claim dashboard"
+CLAIM_DASHBOARD_VALIDATOR_COMMAND = "python3 scripts/validate_pure_kotlin_text_claim_dashboard.py"
 DIFF_CHECK_PATHS = [
     ".upstream/specs/pure-kotlin-text",
     "reports/pure-kotlin-text",
@@ -265,12 +269,20 @@ def workflow_step_command_lines(step_block: str, step_name: str) -> list[str]:
     fail(f"workflow step must define run command: {step_name}")
 
 
-def validate_unconditional_command_step(job_block: str, step_name: str, command: str) -> None:
-    step = workflow_step_block(job_block, step_name)
+def validate_required_step(step: str, step_name: str) -> None:
     require(
         not any(re.match(r"^        if\s*:", line) for line in step.splitlines()),
         f"workflow step must run unconditionally: {step_name}",
     )
+    require(
+        not any(re.match(r"^        continue-on-error\s*:", line) for line in step.splitlines()),
+        f"workflow step must not continue on error: {step_name}",
+    )
+
+
+def validate_unconditional_command_step(job_block: str, step_name: str, command: str) -> None:
+    step = workflow_step_block(job_block, step_name)
+    validate_required_step(step, step_name)
     executable = executable_shell_lines(workflow_step_command_lines(step, step_name))
     require(
         command in executable,
@@ -280,10 +292,7 @@ def validate_unconditional_command_step(job_block: str, step_name: str, command:
 
 def validate_diff_check_step(job_block: str) -> None:
     step = workflow_step_block(job_block, DIFF_CHECK_STEP_NAME)
-    require(
-        not any(re.match(r"^        if\s*:", line) for line in step.splitlines()),
-        "diff hygiene step must run unconditionally",
-    )
+    validate_required_step(step, DIFF_CHECK_STEP_NAME)
     require(
         DIFF_CHECK_DEFAULT_BRANCH_ENV in step,
         "workflow diff check must expose the default-branch merge base fallback",
@@ -331,6 +340,7 @@ def validate_workflow_text(workflow_text: str) -> None:
     validate_diff_check_step(job_block)
     validate_unconditional_command_step(job_block, CI_VALIDATOR_STEP_NAME, CI_VALIDATOR_COMMAND)
     validate_unconditional_command_step(job_block, BOUNDARY_VALIDATOR_STEP_NAME, BOUNDARY_VALIDATOR_COMMAND)
+    validate_unconditional_command_step(job_block, CLAIM_DASHBOARD_VALIDATOR_STEP_NAME, CLAIM_DASHBOARD_VALIDATOR_COMMAND)
     require("./gradlew --no-daemon" in job_block, "workflow must invoke Gradle headlessly")
     for task in EXPECTED_TASKS:
         require(task in job_block, f"workflow missing Gradle task: {task}")
@@ -430,6 +440,7 @@ def validate_workflow_evidence(workflow: Any) -> None:
             "requiredPathFilters",
             "invokesValidator",
             "invokesBoundaryValidator",
+            "invokesClaimDashboardValidator",
             "invokesDiffCheck",
             "diffCheckPaths",
         ],
@@ -445,6 +456,10 @@ def validate_workflow_evidence(workflow: Any) -> None:
     require(
         workflow["invokesBoundaryValidator"] == "python3 scripts/validate_pure_kotlin_text_boundary_contracts.py",
         "workflow.invokesBoundaryValidator changed",
+    )
+    require(
+        workflow["invokesClaimDashboardValidator"] == "python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "workflow.invokesClaimDashboardValidator changed",
     )
     require(workflow["invokesDiffCheck"] == DIFF_CHECK_COMMAND, "workflow.invokesDiffCheck changed")
     require(workflow["diffCheckPaths"] == DIFF_CHECK_PATHS, "workflow.diffCheckPaths changed")
@@ -545,6 +560,8 @@ def validate_evidence(root: Path, evidence: dict[str, Any]) -> None:
             "rtk python3 scripts/validate_pure_kotlin_text_ci.py",
             "rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_boundary_contracts.py",
             "rtk python3 scripts/validate_pure_kotlin_text_boundary_contracts.py",
+            "rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_claim_dashboard.py",
+            "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
             "rtk git diff --check",
         ],
         "validationCommands changed",

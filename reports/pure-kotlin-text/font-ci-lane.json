@@ -81,10 +81,13 @@
       "font/**",
       "reports/pure-kotlin-text/**",
       "scripts/validate_pure_kotlin_text_boundary_contracts.py",
-      "scripts/test_validate_pure_kotlin_text_boundary_contracts.py"
+      "scripts/test_validate_pure_kotlin_text_boundary_contracts.py",
+      "scripts/validate_pure_kotlin_text_claim_dashboard.py",
+      "scripts/test_validate_pure_kotlin_text_claim_dashboard.py"
     ],
     "invokesValidator": "python3 scripts/validate_pure_kotlin_text_ci.py",
     "invokesBoundaryValidator": "python3 scripts/validate_pure_kotlin_text_boundary_contracts.py",
+    "invokesClaimDashboardValidator": "python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
     "invokesDiffCheck": "git diff --check",
     "diffCheckPaths": [
       ".upstream/specs/pure-kotlin-text",
@@ -154,6 +157,8 @@
     "rtk python3 scripts/validate_pure_kotlin_text_ci.py",
     "rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_boundary_contracts.py",
     "rtk python3 scripts/validate_pure_kotlin_text_boundary_contracts.py",
+    "rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_claim_dashboard.py",
+    "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
     "rtk git diff --check"
   ]
 }

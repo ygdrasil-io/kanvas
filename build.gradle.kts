@@ -3508,10 +3508,25 @@ tasks.register("checkCodecImageComplete") {
     )
 }
 
+tasks.register<Exec>("validatePureKotlinTextClaimDashboard") {
+    group = "verification"
+    description = "Validates the pure Kotlin text claim dashboard classifications and legacy gate visibility."
+    commandLine("python3", "scripts/validate_pure_kotlin_text_claim_dashboard.py", rootDir.absolutePath)
+    inputs.file(layout.projectDirectory.file("scripts/validate_pure_kotlin_text_claim_dashboard.py"))
+    inputs.file(layout.projectDirectory.file("scripts/test_validate_pure_kotlin_text_claim_dashboard.py"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-claim-dashboard.json"))
+    inputs.file(layout.projectDirectory.file("build.gradle.kts"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/pure-kotlin-text/ROADMAP.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register("pipelineSceneDashboardGate") {
     group = "verification"
     description = "Runs the M50 release gate validation for the generated scene dashboard."
 
+    dependsOn("validatePureKotlinTextClaimDashboard")
     dependsOn("pipelineSceneDashboard")
 
     val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
@@ -6000,6 +6015,7 @@ tasks.register("pipelinePmBundle") {
     mustRunAfter(":kadre-runtime:pipelineM88ReleaseCandidate2")
 
     dependsOn(
+        "validatePureKotlinTextClaimDashboard",
         "pipelineM65RuntimeSmoke",
         "pipelineM86FidelityBurndown",
         "validateM88ReleaseCandidate2",

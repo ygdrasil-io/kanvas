@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M0-005"
 title: "Harden dashboard claim classification"
-status: "proposed"
+status: "review"
 milestone: "M0"
 priority: "P0"
 owner_area: "validation-dashboard"
@@ -65,11 +65,11 @@ fun classifyFontClaim(rule: FontDashboardClaimRule, evidence: FontEvidenceSet): 
 
 ## Acceptance Criteria
 
-- [ ] Rows without fixture provenance and deterministic dumps cannot become `target-supported`.
-- [ ] CPU-only evidence cannot imply GPU renderer support; those rows stay `GPU-gated` when GPU is claimed without GPU artifacts.
-- [ ] External FreeType, Fontations, or HarfBuzz comparisons classify as `drift-only` unless Kanvas-owned normative evidence exists.
-- [ ] Legacy rows for `coloremoji_blendmodes`, `scaledemoji`, `scaledemoji_rendering`, `dftext`, `fontations`, `fontations_ft_compare`, and `pdf_never_embed` remain visible.
-- [ ] `pipelinePmBundle` or the dashboard gate fails on generic text/font labels that do not name route and evidence.
+- [x] Rows without fixture provenance and deterministic dumps cannot become `target-supported`.
+- [x] CPU-only evidence cannot imply GPU renderer support; those rows stay `GPU-gated` when GPU is claimed without GPU artifacts.
+- [x] External FreeType, Fontations, or HarfBuzz comparisons classify as `drift-only` unless Kanvas-owned normative evidence exists.
+- [x] Legacy rows for `coloremoji_blendmodes`, `scaledemoji`, `scaledemoji_rendering`, `dftext`, `fontations`, `fontations_ft_compare`, and `pdf_never_embed` remain visible.
+- [x] `pipelinePmBundle` or the dashboard gate fails on generic text/font labels that do not name route and evidence.
 
 ## Required Evidence
 
@@ -92,14 +92,22 @@ fun classifyFontClaim(rule: FontDashboardClaimRule, evidence: FontEvidenceSet): 
 ## Validation
 
 ```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_claim_dashboard.py
+rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_ci.py
+rtk python3 scripts/validate_pure_kotlin_text_ci.py
+rtk ./gradlew --no-daemon validatePureKotlinTextClaimDashboard
 rtk git diff --check
-rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePerformanceTrendWarnings pipelinePmBundle
 ```
 
 ## Status Notes
 
 - `proposed`: Dashboard rules are specified, but no report or negative fixture is attached yet.
-- Move to `ready` after KFONT-M0-004 provides the accepted diagnostic taxonomy.
+- `review`: `font-claim-dashboard.json` and
+  `validate_pure_kotlin_text_claim_dashboard.py` enforce stable
+  classifications, negative generic-label refusals, GPU artifact gating,
+  legacy gate visibility, and Gradle dashboard/PM bundle wiring. This is
+  validation infrastructure only; no legacy gate is closed.
 
 ## Linear Labels
 
