@@ -21,7 +21,7 @@ M0 module boundaries, CI coverage, and diagnostic taxonomy.
 |---|---|---|---|---|---|---|
 | [KFONT-M1-001 - Complete `FontSourceID` provenance model](KFONT-M1-001-complete-fontsourceid-provenance-model.md) | `review` | `P0` | `tracked-gap` | `font-core` | `KFONT-M0-003`, `KFONT-M0-004` | - |
 | [KFONT-M1-002 - Complete `TypefaceID` glyph-affecting identity](KFONT-M1-002-complete-typefaceid-glyph-affecting-identity.md) | `review` | `P0` | `tracked-gap` | `font-core` | `KFONT-M1-001` | `typeface` |
-| [KFONT-M1-003 - Add deterministic source/typeface dumps](KFONT-M1-003-add-deterministic-source-typeface-dumps.md) | `proposed` | `P0` | `tracked-gap` | `validation` | `KFONT-M1-001`, `KFONT-M1-002` | - |
+| [KFONT-M1-003 - Add deterministic source/typeface dumps](KFONT-M1-003-add-deterministic-source-typeface-dumps.md) | `review` | `P0` | `tracked-gap` | `validation` | `KFONT-M1-001`, `KFONT-M1-002` | - |
 | [KFONT-M1-004 - Add bundled source fixture manifest](KFONT-M1-004-add-bundled-source-fixture-manifest.md) | `proposed` | `P1` | `fixture-gated` | `fixtures` | `KFONT-M1-001`, `KFONT-M1-003` | - |
 
 ## Validation Bundle
