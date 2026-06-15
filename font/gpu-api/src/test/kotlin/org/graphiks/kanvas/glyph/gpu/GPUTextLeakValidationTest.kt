@@ -92,19 +92,68 @@ class GPUTextLeakValidationTest {
     fun `report snapshots caller fields and keeps canonical json deterministic`() {
         val fields = mutableListOf(
             TextPayloadField("paint", "SkPaint"),
-            TextPayloadField("artifactID", "GPUTextArtifactID"),
+            TextPayloadField("texture", "CPURenderedTextTexture"),
         )
         val report = validateGPUTextNoSkLeakage(
             payloadKind = "DrawTextRunPayload",
             fields = fields,
         )
+        val fieldsSnapshot = report.fields
+        val findingsSnapshot = report.findings
         val json = report.toCanonicalJson()
 
-        fields += TextPayloadField("texture", "CPURenderedTextTexture")
+        fields[0] = TextPayloadField("artifactID", "GPUTextArtifactID")
+        fields += TextPayloadField("typeface", "SkTypeface")
 
+        assertEquals(fieldsSnapshot, report.fields)
+        assertEquals(findingsSnapshot, report.findings)
         assertEquals(json, report.toCanonicalJson())
         assertContains(json, """"schema":"org.graphiks.kanvas.glyph.gpu.TextPayloadLeakReport.v1"""")
         assertContains(json, """"fieldPath":"paint"""")
-        assertTrue(!report.toCanonicalJson().contains("CPURenderedTextTexture"))
+        assertTrue(!report.toCanonicalJson().contains("SkTypeface"))
+    }
+
+    @Test
+    fun `canonical json fixture preserves scan order and escapes special characters`() {
+        val escapedPath = "z\"quote\\slash\nline"
+        val report = validateGPUTextNoSkLeakage(
+            payloadKind = "EscapedPayload",
+            fields = listOf(
+                TextPayloadField(escapedPath, "SkFont"),
+                TextPayloadField("aTexture", "CPURenderedTextTexture"),
+            ),
+        )
+
+        assertEquals(listOf(escapedPath, "aTexture"), report.findings.map { finding -> finding.fieldPath })
+        assertEquals(
+            "{" +
+                "\"schema\":\"org.graphiks.kanvas.glyph.gpu.TextPayloadLeakReport.v1\"," +
+                "\"payloadKind\":\"EscapedPayload\"," +
+                "\"status\":\"fail\"," +
+                "\"fields\":[" +
+                "{\"fieldPath\":\"z\\\"quote\\\\slash\\nline\",\"typeName\":\"SkFont\"}," +
+                "{\"fieldPath\":\"aTexture\",\"typeName\":\"CPURenderedTextTexture\"}" +
+                "]," +
+                "\"findings\":[" +
+                "{" +
+                "\"payloadKind\":\"EscapedPayload\"," +
+                "\"fieldPath\":\"z\\\"quote\\\\slash\\nline\"," +
+                "\"typeName\":\"SkFont\"," +
+                "\"forbiddenKind\":\"sk-type-or-handle\"," +
+                "\"handoffDiagnostic\":\"text.gpu.sk-type-leaked\"," +
+                "\"rendererDiagnostic\":\"unsupported.text.sk_type_leaked\"" +
+                "}," +
+                "{" +
+                "\"payloadKind\":\"EscapedPayload\"," +
+                "\"fieldPath\":\"aTexture\"," +
+                "\"typeName\":\"CPURenderedTextTexture\"," +
+                "\"forbiddenKind\":\"cpu-rendered-texture\"," +
+                "\"handoffDiagnostic\":\"text.gpu.CPU-rendered-texture-forbidden\"," +
+                "\"rendererDiagnostic\":\"unsupported.text.cpu_rendered_texture_forbidden\"" +
+                "}" +
+                "]" +
+                "}",
+            report.toCanonicalJson(),
+        )
     }
 }

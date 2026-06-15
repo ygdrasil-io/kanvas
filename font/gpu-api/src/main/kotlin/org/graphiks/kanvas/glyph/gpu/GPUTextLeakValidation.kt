@@ -59,10 +59,10 @@ data class TextPayloadLeakFinding(
 /**
  * Deterministic no-Sk leakage report for one GPU text payload shape.
  */
-data class TextPayloadLeakReport(
+class TextPayloadLeakReport(
     val payloadKind: String,
-    private val scannedFields: List<TextPayloadField>,
-    private val leakFindings: List<TextPayloadLeakFinding>,
+    scannedFields: List<TextPayloadField>,
+    leakFindings: List<TextPayloadLeakFinding>,
 ) {
     val fields: List<TextPayloadField> = scannedFields.toList()
     val findings: List<TextPayloadLeakFinding> = leakFindings.toList()
@@ -80,7 +80,6 @@ data class TextPayloadLeakReport(
         append("\"fields\":")
         append(
             fields
-                .sortedWith(textPayloadFieldComparator)
                 .joinToString(separator = ",", prefix = "[", postfix = "]") { field ->
                     field.toCanonicalJson()
                 },
@@ -89,7 +88,6 @@ data class TextPayloadLeakReport(
         append("\"findings\":")
         append(
             findings
-                .sortedWith(textPayloadLeakFindingComparator)
                 .joinToString(separator = ",", prefix = "[", postfix = "]") { finding ->
                     finding.toCanonicalJson()
                 },
@@ -142,18 +140,6 @@ private const val TEXT_GPU_CPU_RENDERED_TEXTURE_HANDOFF_DIAGNOSTIC =
     "text.gpu.CPU-rendered-texture-forbidden"
 private const val TEXT_GPU_CPU_RENDERED_TEXTURE_RENDERER_DIAGNOSTIC =
     "unsupported.text.cpu_rendered_texture_forbidden"
-
-private val textPayloadFieldComparator = compareBy<TextPayloadField>(
-    { field -> field.fieldPath },
-    { field -> field.typeName },
-)
-
-private val textPayloadLeakFindingComparator = compareBy<TextPayloadLeakFinding>(
-    { finding -> finding.fieldPath },
-    { finding -> finding.typeName },
-    { finding -> finding.handoffDiagnostic },
-    { finding -> finding.rendererDiagnostic },
-)
 
 private fun TextPayloadField.toLeakFinding(
     payloadKind: String,
