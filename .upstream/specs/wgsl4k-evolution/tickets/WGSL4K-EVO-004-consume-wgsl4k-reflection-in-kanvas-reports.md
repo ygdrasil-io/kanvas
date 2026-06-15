@@ -1,7 +1,7 @@
 ---
 id: WGSL4K-EVO-004
 title: "Consume wgsl4k reflection in Kanvas reports"
-status: blocked
+status: review
 priority: P0
 owner_area: wgsl4k-evolution
 claim_impact: DependencyGated
@@ -49,15 +49,15 @@ checks are not enough.
 
 ## Acceptance Criteria
 
-- [ ] Kanvas records the wgsl4k SHA used for reports.
-- [ ] Text WGSL reflection reports include module hash, entry points, bindings,
+- [x] Kanvas records the wgsl4k SHA used for reports.
+- [x] Text WGSL reflection reports include module hash, entry points, bindings,
   layouts, comparison result, and diagnostics.
-- [ ] Runtime-effect WGSL reflection reports include descriptor id/version,
+- [x] Runtime-effect WGSL reflection reports include descriptor id/version,
   module hash, entry points, bindings, layouts, comparison result, and
   diagnostics.
-- [ ] Negative report fixtures cover parser failure, binding mismatch, layout
+- [x] Negative report fixtures cover parser failure, binding mismatch, layout
   mismatch, and unregistered module refusal.
-- [ ] No product route support claim changes.
+- [x] No product route support claim changes.
 
 ## Required Evidence
 
@@ -83,10 +83,11 @@ consuming modules are selected.
 
 ## Status Notes
 
-- `blocked`: Requires a reviewed wgsl4k SHA from
-  `https://github.com/ygdrasil-io/wgsl4k/pull/9` or an explicit user-approved
-  commit before Kanvas can generate/compare report fixtures. No Kanvas reports
-  were generated in this ticket wave.
+- `review`: Consumes merged wgsl4k SHA
+  `72a35b58758f241756d984a84768ae77308730da` through
+  `Wgsl4kReflectionReportConsumer` and generated fixtures under
+  `reports/wgsl4k-evolution/generated/`. This is dependency evidence only; no
+  text, runtime-effect, or GPU route support claim changed.
 
 ## Labels
 

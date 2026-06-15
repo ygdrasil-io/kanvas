@@ -25,3 +25,22 @@ tasks.register<JavaExec>("gpuRendererR6FirstRoutePmEvidenceBundle") {
         outputDir.get().asFile.deleteRecursively()
     }
 }
+
+tasks.register<JavaExec>("gpuRendererWgsl4kEvolutionReportFixtures") {
+    group = "verification"
+    description = "Writes WGSL4K-EVO-004 reflection and validation report fixtures without route promotion."
+
+    val outputDir = rootProject.layout.projectDirectory.dir("reports/wgsl4k-evolution/generated")
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.gpu.renderer.wgsl.Wgsl4kEvolutionReportFixturesKt")
+    outputs.dir(outputDir)
+    args(
+        outputDir.asFile.absolutePath,
+        "72a35b58758f241756d984a84768ae77308730da",
+    )
+
+    doFirst {
+        outputDir.asFile.deleteRecursively()
+    }
+}

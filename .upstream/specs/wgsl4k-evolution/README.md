@@ -61,13 +61,17 @@ Until then, routes depending on the missing reflection behavior remain
 - wgsl4k import SHA: `96410250916ac91f79269ac64bace0a9272826b9`
 - wgsl4k contribution branch: `codex/kanvas-reflection-contract`
 - wgsl4k contribution commit: `e5b57786936b16e0e18ca35e46faa1846e0cdec9`
-- wgsl4k draft PR: `https://github.com/ygdrasil-io/wgsl4k/pull/9`
+- wgsl4k merged PR: `https://github.com/ygdrasil-io/wgsl4k/pull/9`
+- wgsl4k consumed merge SHA:
+  `72a35b58758f241756d984a84768ae77308730da`
 - wgsl4k public API wording: generic `Wgsl*` reflection/validation names,
   with no Kanvas product wording in the wgsl4k code path.
+- Kanvas report fixtures:
+  `reports/wgsl4k-evolution/generated/`
 
-Kanvas remains gated from consuming the contribution commit for report evidence
-until the wgsl4k PR is reviewed and either merged or explicitly approved by the
-user as a consumable SHA.
+Kanvas may consume the merged wgsl4k SHA for report evidence. Route support
+claims remain gated by each owning GPU/Text ticket's CPU, GPU, reference,
+diagnostic, and route-specific evidence.
 
 ## Spec Index
 

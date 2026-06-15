@@ -1,7 +1,7 @@
 ---
 id: WGSL4K-EVO-003
 title: "Prepare wgsl4k fixture PR"
-status: review
+status: done
 priority: P0
 owner_area: wgsl4k-evolution
 claim_impact: DependencyGated
@@ -76,14 +76,12 @@ after the submodule is available.
 
 ## Status Notes
 
-- `review`: wgsl4k branch `codex/kanvas-reflection-contract` was pushed with
-  commit `e5b57786936b16e0e18ca35e46faa1846e0cdec9` and draft PR
-  `https://github.com/ygdrasil-io/wgsl4k/pull/9`. Fresh wgsl4k validation:
-  `rtk ./gradlew --no-daemon :wgsl:wgsl-core:check :wgsl:wgsl-parser:check`,
-  the GitHub JVM-fast-path equivalent command, `rtk git diff --check`, and a
-  no-match scan for `Kanvas|kanvas` across the wgsl4k source/API paths.
-  Kanvas must not consume this SHA for report evidence until the PR is reviewed
-  and either merged or explicitly approved by the user.
+- `done`: wgsl4k PR `https://github.com/ygdrasil-io/wgsl4k/pull/9` merged as
+  `72a35b58758f241756d984a84768ae77308730da`. Fresh wgsl4k validation from the
+  PR wave included `rtk ./gradlew --no-daemon :wgsl:wgsl-core:check
+  :wgsl:wgsl-parser:check`, the GitHub JVM-fast-path equivalent command,
+  `rtk git diff --check`, and a no-match scan for `Kanvas|kanvas` across the
+  wgsl4k source/API paths.
 
 ## Labels
 
