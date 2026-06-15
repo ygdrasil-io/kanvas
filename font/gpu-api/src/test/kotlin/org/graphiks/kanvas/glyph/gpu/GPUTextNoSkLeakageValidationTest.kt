@@ -228,4 +228,34 @@ class GPUTextNoSkLeakageValidationTest {
             report.toCanonicalJson(),
         )
     }
+
+    @Test
+    fun `value-level generic SkPath marker emits stable diagnostics`() {
+        val report = validateGPUTextNoSkLeakage(
+            payloadKind = "ValuePayload",
+            fields = listOf(
+                TextPayloadField("diagnostics[0]", "String", "SkPath(...)"),
+            ),
+        )
+
+        assertEquals("fail", report.status)
+        assertEquals(listOf("diagnostics[0]"), report.findings.map { finding -> finding.fieldPath })
+        assertEquals(
+            listOf("unsupported.text.sk_type_leaked"),
+            report.findings.map { finding -> finding.rendererDiagnostic },
+        )
+    }
+
+    @Test
+    fun `non Skia sk words do not fail leakage validation`() {
+        val report = validateGPUTextNoSkLeakage(
+            payloadKind = "ValuePayload",
+            fields = listOf(
+                TextPayloadField("transform", "SkewTransformFacts", "sketch diagnostics"),
+            ),
+        )
+
+        assertEquals("pass", report.status)
+        assertTrue(report.findings.isEmpty())
+    }
 }

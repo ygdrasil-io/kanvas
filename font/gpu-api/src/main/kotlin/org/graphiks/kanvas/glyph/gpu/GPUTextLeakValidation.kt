@@ -170,11 +170,10 @@ private fun TextPayloadField.toLeakFinding(
 )
 
 private fun TextPayloadField.hasSkTypeLeak(): Boolean =
-    typeName.startsWith("Sk") ||
-        typeName.contains(".Sk") ||
-        normalizedScanValues().any { normalizedValue ->
-            SK_TEXT_PAYLOAD_MARKERS.any { marker -> normalizedValue.contains(marker) }
-        }
+    scanValues().any { scanValue ->
+        scanValue.raw.containsGenericSkTypeMarker() ||
+            SK_TEXT_PAYLOAD_MARKERS.any { marker -> scanValue.normalized.contains(marker) }
+    }
 
 private fun TextPayloadField.hasCPURenderedTextTextureMarker(): Boolean {
     return normalizedScanValues().any { normalizedValue ->
@@ -199,6 +198,7 @@ private val SK_TEXT_PAYLOAD_MARKERS = listOf(
     "sktypeface",
     "sktextblob",
     "skpaint",
+    "skpath",
     "skshaper",
 )
 
@@ -208,13 +208,34 @@ private val FORBIDDEN_TEXT_PAYLOAD_MARKERS = listOf(
     "gpuhandle",
 )
 
-private fun TextPayloadField.normalizedScanValues(): List<String> =
+private data class TextPayloadScanValue(
+    val raw: String,
+    val normalized: String,
+)
+
+private fun TextPayloadField.scanValues(): List<TextPayloadScanValue> =
     listOfNotNull(fieldPath, typeName, value).map { scanValue ->
-        scanValue.normalizedTextPayloadMarker()
+        TextPayloadScanValue(
+            raw = scanValue,
+            normalized = scanValue.normalizedTextPayloadMarker(),
+        )
+    }
+
+private fun TextPayloadField.normalizedScanValues(): List<String> =
+    scanValues().map { scanValue ->
+        scanValue.normalized
     }
 
 private fun String.normalizedTextPayloadMarker(): String =
     filter { char -> char.isLetterOrDigit() }.lowercase()
+
+private fun String.containsGenericSkTypeMarker(): Boolean =
+    indices.any { index ->
+        index + 2 < length &&
+            this[index] == 'S' &&
+            this[index + 1] == 'k' &&
+            this[index + 2].isUpperCase()
+    }
 
 private fun StringBuilder.appendTextPayloadLeakJsonField(
     name: String,

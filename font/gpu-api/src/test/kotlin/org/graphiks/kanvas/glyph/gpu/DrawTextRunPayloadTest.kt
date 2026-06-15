@@ -67,6 +67,22 @@ class DrawTextRunPayloadTest {
     }
 
     @Test
+    fun `draw text run leakage report rejects generic SkPath diagnostics`() {
+        val payload = fixtureDrawTextRunPayload(
+            diagnostics = listOf("SkPath(...)"),
+        )
+
+        val report = payload.noSkLeakageReport()
+
+        assertEquals("fail", report.status)
+        assertEquals(listOf("diagnostics[0]"), report.findings.map { finding -> finding.fieldPath })
+        assertEquals(
+            listOf("unsupported.text.sk_type_leaked"),
+            report.findings.map { finding -> finding.rendererDiagnostic },
+        )
+    }
+
+    @Test
     fun `draw text run leakage report rejects CPU rendered texture payload values`() {
         val payload = fixtureDrawTextRunPayload(
             artifacts = listOf(
