@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.scenes.reports.json
 enum class OffscreenRunStatus(val wireName: String) {
     NotYetRendered("not-yet-rendered"),
     RenderFailed("render-failed"),
+    Rendered("rendered"),
 }
 
 class OffscreenRunReport(
@@ -40,6 +41,7 @@ class OffscreenRunReport(
         when (runStatus) {
             OffscreenRunStatus.NotYetRendered,
             OffscreenRunStatus.RenderFailed -> requireNoRenderedOutput()
+            OffscreenRunStatus.Rendered -> requireRenderedOutput()
         }
 
     private fun requireNoRenderedOutput() {
@@ -49,6 +51,16 @@ class OffscreenRunReport(
         require(byteCount == null) { "${runStatus.wireName} reports must not include byteCount" }
         require(nonTransparentPixels == null) {
             "${runStatus.wireName} reports must not include nonTransparentPixels"
+        }
+    }
+
+    private fun requireRenderedOutput() {
+        require(!imagePath.isNullOrBlank()) { "rendered reports must include nonblank imagePath" }
+        require(width != null && width > 0) { "rendered reports must include positive width" }
+        require(height != null && height > 0) { "rendered reports must include positive height" }
+        require(byteCount != null && byteCount > 0L) { "rendered reports must include positive byteCount" }
+        require(nonTransparentPixels != null && nonTransparentPixels > 0) {
+            "rendered reports must include nonTransparentPixels > 0"
         }
     }
 
@@ -102,6 +114,28 @@ class OffscreenRunReport(
                 byteCount = null,
                 nonTransparentPixels = null,
                 diagnostics = singleDiagnostic(reason),
+            )
+
+        fun rendered(
+            sceneId: String,
+            imagePath: String,
+            width: Int,
+            height: Int,
+            byteCount: Long,
+            nonTransparentPixels: Int,
+            diagnostics: List<String>,
+            backend: String = "webgpu-offscreen",
+        ): OffscreenRunReport =
+            OffscreenRunReport(
+                sceneId = sceneId,
+                runStatus = OffscreenRunStatus.Rendered,
+                backend = backend,
+                imagePath = imagePath,
+                width = width,
+                height = height,
+                byteCount = byteCount,
+                nonTransparentPixels = nonTransparentPixels,
+                diagnostics = diagnostics,
             )
 
         private fun singleDiagnostic(reason: String): List<String> {

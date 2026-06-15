@@ -49,12 +49,107 @@ class OffscreenRunReportTest {
     }
 
     @Test
+    fun `rendered is a runner status not a product refusal`() {
+        val report = OffscreenRunReport.rendered(
+            sceneId = "solid-card-stack",
+            imagePath = "render.png",
+            width = 320,
+            height = 200,
+            byteCount = 1834,
+            nonTransparentPixels = 64000,
+            diagnostics = listOf("rendered solid-card-stack via WebGPU offscreen"),
+        )
+
+        assertEquals("rendered", report.status)
+        assertEquals(false, report.productRefusal)
+        assertEquals("render.png", report.imagePath)
+        assertEquals(320, report.width)
+        assertEquals(200, report.height)
+        assertEquals(1834, report.byteCount)
+        assertEquals(64000, report.nonTransparentPixels)
+        assertContains(report.toJson(), "\"status\": \"rendered\"")
+        assertContains(report.toJson(), "\"productRefusal\": false")
+        assertContains(report.toJson(), "\"imagePath\": \"render.png\"")
+        assertContains(report.toJson(), "\"nonTransparentPixels\": 64000")
+    }
+
+    @Test
     fun `factories reject blank reasons`() {
         assertFailsWith<IllegalArgumentException> {
             OffscreenRunReport.notYetRendered(sceneId = "rounded-panel-gradient", reason = " ")
         }
         assertFailsWith<IllegalArgumentException> {
             OffscreenRunReport.failed(sceneId = "mesh-ribbon", reason = "\t")
+        }
+    }
+
+    @Test
+    fun `rendered reports reject invalid rendered metrics`() {
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport.rendered(
+                sceneId = "solid-card-stack",
+                imagePath = " ",
+                width = 320,
+                height = 200,
+                byteCount = 1834,
+                nonTransparentPixels = 64000,
+                diagnostics = listOf("rendered"),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport.rendered(
+                sceneId = "solid-card-stack",
+                imagePath = "render.png",
+                width = 0,
+                height = 200,
+                byteCount = 1834,
+                nonTransparentPixels = 64000,
+                diagnostics = listOf("rendered"),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport.rendered(
+                sceneId = "solid-card-stack",
+                imagePath = "render.png",
+                width = 320,
+                height = -1,
+                byteCount = 1834,
+                nonTransparentPixels = 64000,
+                diagnostics = listOf("rendered"),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport.rendered(
+                sceneId = "solid-card-stack",
+                imagePath = "render.png",
+                width = 320,
+                height = 200,
+                byteCount = 0,
+                nonTransparentPixels = 64000,
+                diagnostics = listOf("rendered"),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport.rendered(
+                sceneId = "solid-card-stack",
+                imagePath = "render.png",
+                width = 320,
+                height = 200,
+                byteCount = 1834,
+                nonTransparentPixels = 0,
+                diagnostics = listOf("rendered"),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport.rendered(
+                sceneId = "solid-card-stack",
+                imagePath = "render.png",
+                width = 320,
+                height = 200,
+                byteCount = 1834,
+                nonTransparentPixels = 64000,
+                diagnostics = listOf(" "),
+            )
         }
     }
 
