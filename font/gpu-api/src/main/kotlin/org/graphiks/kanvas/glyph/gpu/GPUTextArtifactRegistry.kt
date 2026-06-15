@@ -44,10 +44,19 @@ data class TextGPUArtifactDescriptor(
         }
     }
 
+    val descriptorCompactHash: String
+        get() = textGPUArtifactDescriptorCompactHash(this)
+
+    fun noSkLeakageReport(): TextPayloadLeakReport = validateGPUTextNoSkLeakage(
+        payloadKind = "TextGPUArtifactDescriptor",
+        fields = textPayloadLeakageFields(fieldPrefix = "descriptor"),
+    )
+
     fun toCanonicalJson(): String = buildString {
         append("{")
         appendTextArtifactJsonField("artifactName", artifactName, comma = true)
         appendTextArtifactJsonField("descriptorVersion", descriptorVersion, comma = true)
+        appendTextArtifactJsonField("descriptorCompactHash", descriptorCompactHash, comma = true)
         appendTextArtifactJsonField("ownerSubsystem", ownerSubsystem, comma = true)
         appendTextArtifactJsonField("keyPreimageFields", keyPreimageFields, comma = true)
         appendTextArtifactJsonField("lifetimeClass", lifetimeClass, comma = true)
@@ -115,6 +124,13 @@ class TextGPUArtifactRegistry(descriptors: List<TextGPUArtifactDescriptor>) {
     ): TextGPUArtifactUnregisteredRefusal = TextGPUArtifactUnregisteredRefusal(
         artifactName = typeName,
         artifactHash = artifactHash,
+    )
+
+    fun noSkLeakageReport(): TextPayloadLeakReport = validateGPUTextNoSkLeakage(
+        payloadKind = "TextGPUArtifactRegistry",
+        fields = descriptors.flatMapIndexed { index, descriptor ->
+            descriptor.textPayloadLeakageFields(fieldPrefix = "descriptors[$index]")
+        },
     )
 
     fun toCanonicalJson(): String = buildString {
@@ -240,6 +256,8 @@ fun defaultTextGPUArtifactRegistry(): TextGPUArtifactRegistry = TextGPUArtifactR
 
 private const val TEXT_GPU_ARTIFACT_REGISTRY_SCHEMA =
     "org.graphiks.kanvas.glyph.gpu.TextGPUArtifactRegistry.v1"
+private const val TEXT_GPU_ARTIFACT_DESCRIPTOR_HASH_SCHEMA =
+    "org.graphiks.kanvas.glyph.gpu.TextGPUArtifactDescriptorHash.v1"
 private const val TEXT_GPU_ARTIFACT_UNREGISTERED_HANDOFF_DIAGNOSTIC =
     "text.gpu.artifact-unregistered"
 private const val TEXT_GPU_ARTIFACT_UNREGISTERED_RENDERER_DIAGNOSTIC =
@@ -266,6 +284,63 @@ private fun textGPUArtifactDescriptor(
     missingDiagnostic = TEXT_GPU_ARTIFACT_UNREGISTERED_RENDERER_DIAGNOSTIC,
     productActivation = false,
 )
+
+private fun TextGPUArtifactDescriptor.textPayloadLeakageFields(fieldPrefix: String): List<TextPayloadField> =
+    buildList {
+        add(TextPayloadField("$fieldPrefix.artifactName", "String", artifactName))
+        add(TextPayloadField("$fieldPrefix.descriptorVersion", "Int", descriptorVersion.toString()))
+        add(TextPayloadField("$fieldPrefix.descriptorCompactHash", "String", descriptorCompactHash))
+        add(TextPayloadField("$fieldPrefix.ownerSubsystem", "String", ownerSubsystem))
+        add(TextPayloadField("$fieldPrefix.keyPreimageFields", "List<String>"))
+        keyPreimageFields.forEachIndexed { index, field ->
+            add(TextPayloadField("$fieldPrefix.keyPreimageFields[$index]", "String", field))
+        }
+        add(TextPayloadField("$fieldPrefix.lifetimeClass", "String", lifetimeClass))
+        add(TextPayloadField("$fieldPrefix.invalidationFacts", "List<String>"))
+        invalidationFacts.forEachIndexed { index, fact ->
+            add(TextPayloadField("$fieldPrefix.invalidationFacts[$index]", "String", fact))
+        }
+        add(TextPayloadField("$fieldPrefix.memoryBudgetClass", "String", memoryBudgetClass))
+        add(TextPayloadField("$fieldPrefix.uploadBudgetClass", "String?", uploadBudgetClass))
+        add(TextPayloadField("$fieldPrefix.supportedRoutes", "List<String>"))
+        supportedRoutes.forEachIndexed { index, route ->
+            add(TextPayloadField("$fieldPrefix.supportedRoutes[$index]", "String", route))
+        }
+        add(TextPayloadField("$fieldPrefix.missingDiagnostic", "String", missingDiagnostic))
+        add(TextPayloadField("$fieldPrefix.productActivation", "Boolean", productActivation.toString()))
+    }
+
+private fun textGPUArtifactDescriptorCompactHash(descriptor: TextGPUArtifactDescriptor): String =
+    "fnv1a64:${textArtifactFnv1a64Hex(descriptor.toDescriptorHashPreimage())}"
+
+private fun TextGPUArtifactDescriptor.toDescriptorHashPreimage(): String = buildString {
+    append("{")
+    appendTextArtifactJsonField("schema", TEXT_GPU_ARTIFACT_DESCRIPTOR_HASH_SCHEMA, comma = true)
+    appendTextArtifactJsonField("artifactName", artifactName, comma = true)
+    appendTextArtifactJsonField("descriptorVersion", descriptorVersion, comma = true)
+    appendTextArtifactJsonField("ownerSubsystem", ownerSubsystem, comma = true)
+    appendTextArtifactJsonField("keyPreimageFields", keyPreimageFields, comma = true)
+    appendTextArtifactJsonField("lifetimeClass", lifetimeClass, comma = true)
+    appendTextArtifactJsonField("invalidationFacts", invalidationFacts, comma = true)
+    appendTextArtifactJsonField("memoryBudgetClass", memoryBudgetClass, comma = true)
+    appendTextArtifactJsonNullableField("uploadBudgetClass", uploadBudgetClass, comma = true)
+    appendTextArtifactJsonField("supportedRoutes", supportedRoutes, comma = true)
+    appendTextArtifactJsonField("missingDiagnostic", missingDiagnostic, comma = true)
+    appendTextArtifactJsonField("productActivation", productActivation, comma = false)
+    append("}")
+}
+
+private fun textArtifactFnv1a64Hex(value: String): String {
+    var hash = FNV1A64_OFFSET_BASIS
+    value.toByteArray(Charsets.UTF_8).forEach { byte ->
+        hash = hash xor (byte.toLong() and 0xFFL)
+        hash *= FNV1A64_PRIME
+    }
+    return java.lang.Long.toUnsignedString(hash, 16).padStart(16, '0')
+}
+
+private const val FNV1A64_OFFSET_BASIS = -0x340d631b7bdddcdbL
+private const val FNV1A64_PRIME = 0x100000001b3L
 
 private fun StringBuilder.appendTextArtifactJsonField(
     name: String,

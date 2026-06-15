@@ -6,8 +6,8 @@ Date: 2026-06-15
 
 | Ticket | Status | Evidence |
 |---|---|---|
-| `KFONT-M11-001` | `review` | `TextGPUArtifactRegistry`, deterministic registry dump, default descriptor order, unregistered artifact refusal, and defensive descriptor snapshots. |
-| `KFONT-M11-002` | `review` | `TextPayloadLeakReport`, positive no-`Sk*` fixture, forbidden-field fixtures, stable diagnostics, scan-order JSON, and mutation-proof report snapshots. |
+| `KFONT-M11-001` | `review` | `TextGPUArtifactRegistry`, deterministic registry dump, default descriptor order, descriptor compact hashes, unregistered artifact refusal, and defensive descriptor snapshots. |
+| `KFONT-M11-002` | `review` | `TextPayloadLeakReport`, positive no-`Sk*` fixture, registry descriptor scans, forbidden-field fixtures, stable diagnostics, scan-order JSON, and mutation-proof report snapshots. |
 | `KFONT-M11-003` | `review` | `DrawTextRunPayload`, deterministic payload dump, no-leakage report integration, non-claim guards, nested glyph-run snapshots, and `*DrawTextRun*` validation coverage. |
 
 ## Implemented Contracts
@@ -30,12 +30,18 @@ promote those inline fixtures into checked-in generated artifacts.
 
 The tests cover:
 
-- deterministic artifact registry order;
+- deterministic artifact registry order and descriptor compact hashes;
 - `GlyphAtlasArtifact` as the only descriptor exposing `AtlasMaskSample`;
 - unregistered artifact diagnostics;
+- registry descriptor no-`Sk*` leakage reports, including a negative descriptor
+  fixture for `SkFont`, `fontBytes`, and raw GPU handle fields;
 - no-`Sk*` positive and negative fixtures;
 - value-level payload scans for stringified or opaque `Sk*`, `fontBytes`,
-  `NativeFontHandle`, and `GPUHandle` markers;
+  `NativeFontHandle`, `GPUHandle`, `GPUTexture`, `GPUBuffer`, `GPUDevice`,
+  `WGPUTexture`, `TextureView`, and `BindGroup` markers;
+- domain wrapper type names such as `GPUTextArtifactID`,
+  `GPUTextArtifactGeneration`, and `GPUTextLayoutResultID` are not raw GPU
+  handle leaks;
 - full CPU-rendered text texture refusal;
 - nondumpable payload refusal with `unsupported.text.payload_nondumpable`;
 - report and payload mutation snapshots;

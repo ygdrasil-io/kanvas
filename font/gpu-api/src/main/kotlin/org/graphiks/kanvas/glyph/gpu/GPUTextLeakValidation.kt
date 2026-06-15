@@ -197,6 +197,12 @@ private val FORBIDDEN_TEXT_PAYLOAD_MARKERS = listOf(
     "fontbytes",
     "nativefonthandle",
     "gpuhandle",
+    "gputexture",
+    "gpubuffer",
+    "gpudevice",
+    "wgputexture",
+    "textureview",
+    "bindgroup",
 )
 
 private val KNOWN_SK_PAYLOAD_TOKEN_REGEX =

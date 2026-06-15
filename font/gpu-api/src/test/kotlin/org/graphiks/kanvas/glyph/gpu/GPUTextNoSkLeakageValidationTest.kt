@@ -89,6 +89,50 @@ class GPUTextNoSkLeakageValidationTest {
     }
 
     @Test
+    fun `raw GPU handle values fail leakage validation`() {
+        val rawHandleTokens = listOf(
+            "GPUTexture",
+            "GPUBuffer",
+            "GPUDevice",
+            "WGPUTexture",
+            "TextureView",
+            "BindGroup",
+        )
+        val report = validateGPUTextNoSkLeakage(
+            payloadKind = "GPUTextRunPlan",
+            fields = rawHandleTokens.mapIndexed { index, token ->
+                TextPayloadField("diagnostics[$index]", "String", token)
+            },
+        )
+
+        assertEquals("fail", report.status)
+        assertEquals(rawHandleTokens.size, report.findings.size)
+        assertEquals(
+            List(rawHandleTokens.size) { "unsupported.text.sk_type_leaked" },
+            report.findings.map { finding -> finding.rendererDiagnostic },
+        )
+        assertEquals(
+            rawHandleTokens.indices.map { index -> "diagnostics[$index]" },
+            report.findings.map { finding -> finding.fieldPath },
+        )
+    }
+
+    @Test
+    fun `domain GPU text wrapper type names do not fail leakage validation`() {
+        val report = validateGPUTextNoSkLeakage(
+            payloadKind = "GPUTextRunPlan",
+            fields = listOf(
+                TextPayloadField("artifactID", "GPUTextArtifactID", "3f235f9f-a223-4d16-9f85-cb6a092d229f"),
+                TextPayloadField("generation", "GPUTextArtifactGeneration", "42"),
+                TextPayloadField("layoutResultID", "GPUTextLayoutResultID", "b8461787-f45c-4d66-874e-8b48abb20da2"),
+            ),
+        )
+
+        assertEquals("pass", report.status)
+        assertTrue(report.findings.isEmpty())
+    }
+
+    @Test
     fun `report snapshots caller fields and keeps canonical json deterministic`() {
         val fields = mutableListOf(
             TextPayloadField("paint", "SkPaint"),

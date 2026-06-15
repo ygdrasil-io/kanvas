@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class GPUTextArtifactRegistryTest {
     @Test
@@ -35,6 +36,7 @@ class GPUTextArtifactRegistryTest {
         assertEquals(json, defaultTextGPUArtifactRegistry().toCanonicalJson())
         assertContains(json, """"schema":"org.graphiks.kanvas.glyph.gpu.TextGPUArtifactRegistry.v1"""")
         assertContains(json, """"artifactName":"GlyphAtlasArtifact"""")
+        assertContains(json, """"descriptorCompactHash":"${registry.descriptors[0].descriptorCompactHash}"""")
         assertContains(json, """"supportedRoutes":["AtlasMaskSample"]""")
         assertContains(json, """"missingDiagnostic":"unsupported.text.artifact_unregistered"""")
         assertContains(json, """"productActivation":false""")
@@ -42,6 +44,77 @@ class GPUTextArtifactRegistryTest {
         listOf("SkFont", "SkTypeface", "SkTextBlob", "SkPaint", "fontBytes", "GPUHandle").forEach { token ->
             assertFalse(json.contains(token), "Registry dump leaked forbidden token $token: $json")
         }
+    }
+
+    @Test
+    fun `default registry descriptors pass no Sk leakage report deterministically`() {
+        val registry = defaultTextGPUArtifactRegistry()
+        val report = registry.noSkLeakageReport()
+        val json = report.toCanonicalJson()
+
+        assertEquals("pass", report.status)
+        assertTrue(report.findings.isEmpty())
+        assertEquals(json, defaultTextGPUArtifactRegistry().noSkLeakageReport().toCanonicalJson())
+        assertContains(json, """"payloadKind":"TextGPUArtifactRegistry"""")
+        assertContains(json, """"fieldPath":"descriptors[0].artifactName"""")
+        assertContains(json, """"fieldPath":"descriptors[0].descriptorCompactHash"""")
+    }
+
+    @Test
+    fun `registry leakage report fails forbidden descriptor values`() {
+        val descriptor = TextGPUArtifactDescriptor(
+            artifactName = "SkFontArtifact",
+            descriptorVersion = 1,
+            ownerSubsystem = "pure-kotlin-text",
+            keyPreimageFields = listOf("fontBytes"),
+            lifetimeClass = "test-lifetime",
+            invalidationFacts = listOf("generation"),
+            memoryBudgetClass = "GPUTexture",
+            uploadBudgetClass = "test-upload",
+            supportedRoutes = listOf("DependencyGated"),
+            missingDiagnostic = "unsupported.text.artifact_unregistered",
+        )
+        val report = TextGPUArtifactRegistry(listOf(descriptor)).noSkLeakageReport()
+
+        assertEquals("fail", report.status)
+        assertEquals(
+            listOf(
+                "descriptors[0].artifactName",
+                "descriptors[0].keyPreimageFields[0]",
+                "descriptors[0].memoryBudgetClass",
+            ),
+            report.findings.map { finding -> finding.fieldPath },
+        )
+        assertEquals(
+            listOf(
+                "unsupported.text.sk_type_leaked",
+                "unsupported.text.sk_type_leaked",
+                "unsupported.text.sk_type_leaked",
+            ),
+            report.findings.map { finding -> finding.rendererDiagnostic },
+        )
+    }
+
+    @Test
+    fun `registry json includes deterministic descriptor compact hashes`() {
+        val registry = defaultTextGPUArtifactRegistry()
+        val hashes = registry.descriptors.map { descriptor -> descriptor.descriptorCompactHash }
+        val json = registry.toCanonicalJson()
+
+        assertEquals(hashes, defaultTextGPUArtifactRegistry().descriptors.map { descriptor -> descriptor.descriptorCompactHash })
+        assertEquals(hashes.size, hashes.toSet().size)
+        hashes.forEach { hash ->
+            assertTrue(hash.startsWith("fnv1a64:"))
+            assertEquals("fnv1a64:".length + 16, hash.length)
+        }
+        assertEquals(
+            registry.descriptors.size,
+            Regex("\"descriptorCompactHash\":\"fnv1a64:[0-9a-f]{16}\"").findAll(json).count(),
+        )
+        registry.descriptors.forEach { descriptor ->
+            assertContains(json, """"descriptorCompactHash":"${descriptor.descriptorCompactHash}"""")
+        }
+        assertEquals(json, defaultTextGPUArtifactRegistry().toCanonicalJson())
     }
 
     @Test
