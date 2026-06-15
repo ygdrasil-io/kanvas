@@ -1,7 +1,7 @@
 ---
 id: KGPU-M5-003
 title: "Add simple filter render node route"
-status: proposed
+status: blocked
 milestone: M5
 priority: P0
 owner_area: filters
@@ -82,7 +82,13 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: First simple filter node only.
+- `blocked`: Depends on KGPU-M5-001 and requires accepted saveLayer/offscreen
+  target ownership plus native WebGPU/adapter evidence for a bounded filter
+  render node, provider-owned intermediate texture ownership, bounds/crop/tile
+  diagnostics, read/write aliasing refusal, WGSL/render-node binding
+  validation, and CPU/GPU/reference comparison before any simple filter
+  `GPUNative` route claim. Runtime-effect filters remain gated by M7
+  descriptors.
 
 ## Linear Labels
 

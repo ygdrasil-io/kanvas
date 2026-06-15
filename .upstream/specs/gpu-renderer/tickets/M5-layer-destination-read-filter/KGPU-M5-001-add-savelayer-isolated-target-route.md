@@ -83,7 +83,11 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: First isolated layer route.
+- `proposed`: First isolated layer route. Remaining execution gate is native
+  WebGPU/adapter evidence for provider-owned offscreen target allocation,
+  clear/load/store policy, child draw isolation, restore composite,
+  active-attachment separation, resource generation, and CPU/GPU/reference
+  comparison before any `GPUNative` route claim.
 
 ## Linear Labels
 
