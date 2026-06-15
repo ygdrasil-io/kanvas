@@ -452,8 +452,577 @@ fun defaultFontSourceIdentityReport(): FontSourceIdentityReport = FontSourceIden
     ),
 )
 
+/**
+ * Stable outline family facts included in [TypefaceIdentityPreimage].
+ */
+enum class TypefaceOutlineFormat(
+    val serializedName: String,
+) {
+    TRUE_TYPE_GLYF("TrueTypeGlyf"),
+    CFF("CFF"),
+    CFF2("CFF2"),
+    BITMAP_ONLY("BitmapOnly"),
+    UNKNOWN("Unknown"),
+}
+
+/**
+ * Stable scaler route facts included in [TypefaceIdentityPreimage].
+ */
+enum class TypefaceScalerMode(
+    val serializedName: String,
+) {
+    OUTLINE("Outline"),
+    A8("A8"),
+    SDF("SDF"),
+    DRIFT_ONLY("DriftOnly"),
+}
+
+/**
+ * Canonical facts for the selected character map used by a typeface.
+ */
+data class TypefaceCMapSelection(
+    val platformId: Int,
+    val encodingId: Int,
+    val format: Int,
+    val language: Int,
+    val unicode: Boolean,
+) {
+    init {
+        require(platformId >= 0) { "platformId must be non-negative." }
+        require(encodingId >= 0) { "encodingId must be non-negative." }
+        require(format >= 0) { "format must be non-negative." }
+        require(language >= 0) { "language must be non-negative." }
+    }
+
+    internal fun toCanonicalJson(indent: String): String = buildString {
+        append(indent).append("{\n")
+        appendFontJsonField("platformId", platformId, indent = "$indent  ", comma = true)
+        appendFontJsonField("encodingId", encodingId, indent = "$indent  ", comma = true)
+        appendFontJsonField("format", format, indent = "$indent  ", comma = true)
+        appendFontJsonField("language", language, indent = "$indent  ", comma = true)
+        appendFontJsonField("unicode", unicode, indent = "$indent  ", comma = false)
+        append(indent).append("}")
+    }
+}
+
+/**
+ * One normalized OpenType variation coordinate.
+ */
+class TypefaceVariationCoordinate(
+    val axisTag: String,
+    value: Double,
+) {
+    val value: Double = value.normalizedTypefaceVariationValue()
+
+    init {
+        require(axisTag.isStableSfntTableTag()) {
+            "axisTag must be a four-character printable ASCII OpenType tag."
+        }
+        require(!value.isNaN() && !value.isInfinite()) {
+            "variation coordinate value must be finite."
+        }
+    }
+
+    internal fun toCanonicalJson(indent: String): String = buildString {
+        append(indent).append("{\n")
+        appendFontJsonField("axisTag", axisTag, indent = "$indent  ", comma = true)
+        append(indent).append("  ").append("value".evidenceQuoted()).append(": ")
+        append(value.toTypefaceJsonNumber())
+        append("\n")
+        append(indent).append("}")
+    }
+
+    override fun equals(other: Any?): Boolean =
+        this === other || other is TypefaceVariationCoordinate &&
+            axisTag == other.axisTag &&
+            value == other.value
+
+    override fun hashCode(): Int {
+        var result = axisTag.hashCode()
+        result = 31 * result + value.hashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "TypefaceVariationCoordinate(axisTag=$axisTag, value=$value)"
+}
+
+/**
+ * Palette selection facts that can affect color glyph output.
+ */
+class TypefacePaletteSelection(
+    val index: Int,
+    overrides: List<String> = emptyList(),
+) {
+    val overrides: List<String> = overrides.distinct().sorted()
+
+    init {
+        require(index >= 0) { "palette index must be non-negative." }
+        require(this.overrides.all { override -> override.isNotBlank() && override.none { it < ' ' } }) {
+            "palette overrides must be stable one-line strings."
+        }
+    }
+
+    internal fun toCanonicalJson(indent: String): String = buildString {
+        append(indent).append("{\n")
+        appendFontJsonField("index", index, indent = "$indent  ", comma = true)
+        append(indent).append("  ").append("overrides".evidenceQuoted()).append(": ")
+        append(overrides.joinToString(prefix = "[", postfix = "]", separator = ", ") { it.evidenceQuoted() })
+        append("\n")
+        append(indent).append("}")
+    }
+
+    override fun equals(other: Any?): Boolean =
+        this === other || other is TypefacePaletteSelection &&
+            index == other.index &&
+            overrides == other.overrides
+
+    override fun hashCode(): Int {
+        var result = index
+        result = 31 * result + overrides.hashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "TypefacePaletteSelection(index=$index, overrides=$overrides)"
+}
+
+/**
+ * Stable diagnostic included in typeface identity evidence.
+ */
+data class TypefaceIdentityDiagnostic(
+    val code: String,
+    val detail: String? = null,
+) {
+    init {
+        require(code.isStableDiagnosticCode()) { "code must be a stable one-line diagnostic code." }
+    }
+
+    internal fun toCanonicalJson(indent: String): String = buildString {
+        append(indent).append("{\n")
+        appendFontJsonField("code", code, indent = "$indent  ", comma = true)
+        append(indent).append("  ").append("detail".evidenceQuoted()).append(": ")
+        append(detail.toFontJsonNullableString())
+        append("\n")
+        append(indent).append("}")
+    }
+}
+
+/**
+ * Canonical preimage for deriving and auditing [TypefaceID].
+ */
+class TypefaceIdentityPreimage(
+    val sourceId: FontSourceID,
+    val collectionIndex: Int,
+    val postScriptName: String?,
+    val familyName: String,
+    val styleName: String,
+    val style: FontStyle,
+    val outlineFormat: TypefaceOutlineFormat,
+    val selectedCMap: TypefaceCMapSelection,
+    val scalerMode: TypefaceScalerMode,
+    variationCoordinates: List<TypefaceVariationCoordinate> = emptyList(),
+    val palette: TypefacePaletteSelection? = null,
+    val fallbackCatalogGeneration: Int? = null,
+    tableTags: List<String> = emptyList(),
+    diagnostics: List<TypefaceIdentityDiagnostic> = emptyList(),
+) {
+    val variationCoordinates: List<TypefaceVariationCoordinate> = variationCoordinates.normalizedVariationCoordinates()
+    val tableTags: List<String> = tableTags.normalizedTableTags()
+    val diagnostics: List<TypefaceIdentityDiagnostic> =
+        diagnostics.sortedWith(compareBy<TypefaceIdentityDiagnostic> { it.code }.thenBy { it.detail.orEmpty() })
+
+    init {
+        require(collectionIndex >= 0) { "collectionIndex must be non-negative." }
+        require(postScriptName == null || postScriptName.isNotBlank()) {
+            "postScriptName must not be blank when present."
+        }
+        require(familyName.isNotBlank()) { "familyName must not be blank." }
+        require(styleName.isNotBlank()) { "styleName must not be blank." }
+        require(selectedCMap.unicode) { "selectedCMap must be a usable Unicode cmap." }
+        require(fallbackCatalogGeneration == null || fallbackCatalogGeneration >= 0) {
+            "fallbackCatalogGeneration must be non-negative when present."
+        }
+    }
+
+    /**
+     * Serializes every [TypefaceID]-affecting fact as canonical JSON.
+     */
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendFontJsonField("schema", PreimageSchema, indent = "  ", comma = true)
+        appendFontJsonField("sourceId", sourceId.value.toHexDashString(), indent = "  ", comma = true)
+        appendFontJsonField("collectionIndex", collectionIndex, indent = "  ", comma = true)
+        append("  ").append("postScriptName".evidenceQuoted()).append(": ")
+        append(postScriptName.toFontJsonNullableString())
+        append(",\n")
+        appendFontJsonField("familyName", familyName, indent = "  ", comma = true)
+        appendFontJsonField("styleName", styleName, indent = "  ", comma = true)
+        append("  ").append("style".evidenceQuoted()).append(": {\n")
+        appendFontJsonField("weight", style.weight, indent = "    ", comma = true)
+        appendFontJsonField("width", style.width, indent = "    ", comma = true)
+        appendFontJsonField("slant", style.slant.typefaceSerializedName, indent = "    ", comma = false)
+        append("  },\n")
+        appendFontJsonField("outlineFormat", outlineFormat.serializedName, indent = "  ", comma = true)
+        append("  ").append("selectedCMap".evidenceQuoted()).append(": ")
+        append(selectedCMap.toCanonicalJson(indent = "  ").trimStart())
+        append(",\n")
+        appendFontJsonField("scalerMode", scalerMode.serializedName, indent = "  ", comma = true)
+        append("  ").append("variationCoordinates".evidenceQuoted()).append(": ")
+        if (variationCoordinates.isEmpty()) {
+            append("[]")
+        } else {
+            append("[\n")
+            append(variationCoordinates.joinToString(",\n") { it.toCanonicalJson(indent = "    ") })
+            append("\n  ]")
+        }
+        append(",\n")
+        append("  ").append("palette".evidenceQuoted()).append(": ")
+        append(palette?.toCanonicalJson(indent = "  ")?.trimStart() ?: "null")
+        append(",\n")
+        append("  ").append("fallbackCatalogGeneration".evidenceQuoted()).append(": ")
+        append(fallbackCatalogGeneration?.toString() ?: "null")
+        append(",\n")
+        append("  ").append("tableTags".evidenceQuoted()).append(": ")
+        append(tableTags.joinToString(prefix = "[", postfix = "]", separator = ", ") { it.evidenceQuoted() })
+        append(",\n")
+        append("  ").append("diagnostics".evidenceQuoted()).append(": ")
+        if (diagnostics.isEmpty()) {
+            append("[]\n")
+        } else {
+            append("[\n")
+            append(diagnostics.joinToString(",\n") { it.toCanonicalJson(indent = "    ") })
+            append("\n  ]\n")
+        }
+        append("}\n")
+    }
+
+    /**
+     * Derives a deterministic UUID-backed typeface ID from [toCanonicalJson].
+     */
+    fun deriveTypefaceID(): TypefaceID =
+        TypefaceID(stableUuidFromSha256("kanvas-typeface-id-v1\n${toCanonicalJson()}"))
+
+    fun typefaceId(): TypefaceID = deriveTypefaceID()
+
+    override fun equals(other: Any?): Boolean =
+        this === other || other is TypefaceIdentityPreimage &&
+            sourceId == other.sourceId &&
+            collectionIndex == other.collectionIndex &&
+            postScriptName == other.postScriptName &&
+            familyName == other.familyName &&
+            styleName == other.styleName &&
+            style == other.style &&
+            outlineFormat == other.outlineFormat &&
+            selectedCMap == other.selectedCMap &&
+            scalerMode == other.scalerMode &&
+            variationCoordinates == other.variationCoordinates &&
+            palette == other.palette &&
+            fallbackCatalogGeneration == other.fallbackCatalogGeneration &&
+            tableTags == other.tableTags &&
+            diagnostics == other.diagnostics
+
+    override fun hashCode(): Int {
+        var result = sourceId.hashCode()
+        result = 31 * result + collectionIndex
+        result = 31 * result + (postScriptName?.hashCode() ?: 0)
+        result = 31 * result + familyName.hashCode()
+        result = 31 * result + styleName.hashCode()
+        result = 31 * result + style.hashCode()
+        result = 31 * result + outlineFormat.hashCode()
+        result = 31 * result + selectedCMap.hashCode()
+        result = 31 * result + scalerMode.hashCode()
+        result = 31 * result + variationCoordinates.hashCode()
+        result = 31 * result + (palette?.hashCode() ?: 0)
+        result = 31 * result + (fallbackCatalogGeneration ?: 0)
+        result = 31 * result + tableTags.hashCode()
+        result = 31 * result + diagnostics.hashCode()
+        return result
+    }
+
+    companion object {
+        const val PreimageSchema: String = "org.graphiks.kanvas.font.TypefaceIdentityPreimage.v1"
+    }
+}
+
+/**
+ * One deterministic row in [TypefaceIdentityReport].
+ */
+class TypefaceIdentityReportEntry(
+    val label: String,
+    val preimage: TypefaceIdentityPreimage?,
+    diagnostics: List<TypefaceIdentityDiagnostic> = preimage?.diagnostics ?: emptyList(),
+    val claimPromotionAllowed: Boolean = false,
+) {
+    val diagnostics: List<TypefaceIdentityDiagnostic> =
+        diagnostics.sortedWith(compareBy<TypefaceIdentityDiagnostic> { it.code }.thenBy { it.detail.orEmpty() })
+
+    init {
+        require(label.isNotBlank()) { "label must not be blank." }
+        require(preimage != null || this.diagnostics.isNotEmpty()) {
+            "diagnostic-only typeface identity rows must include diagnostics."
+        }
+        require(!claimPromotionAllowed) {
+            "Typeface identity evidence cannot promote rendering support claims."
+        }
+    }
+
+    fun typefaceId(): TypefaceID? = preimage?.typefaceId()
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("label", label, comma = true)
+        append("typefaceId".evidenceQuoted()).append(":")
+        val typefaceId = typefaceId()
+        append(typefaceId?.value?.toHexDashString()?.evidenceQuoted() ?: "null")
+        append(",")
+        append("preimage".evidenceQuoted()).append(":")
+        append(preimage?.toCanonicalJson()?.trim() ?: "null")
+        append(",")
+        append("diagnostics".evidenceQuoted()).append(":")
+        if (diagnostics.isEmpty()) {
+            append("[]")
+        } else {
+            append("[")
+            append(diagnostics.joinToString(",") { it.toCanonicalJson(indent = "    ").trim() })
+            append("]")
+        }
+        append(",")
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+        append("}")
+    }
+}
+
+/**
+ * Deterministic report for KFONT-M1-002 typeface identity evidence.
+ */
+class TypefaceIdentityReport(
+    val fixtureName: String,
+    entries: List<TypefaceIdentityReportEntry>,
+) {
+    val entries: List<TypefaceIdentityReportEntry> = entries.toList()
+    val legacyGate: String = "typeface"
+    val gateStatus: String = "open"
+    val claimPromotionAllowed: Boolean = false
+
+    init {
+        require(fixtureName.isNotBlank()) { "fixtureName must not be blank." }
+        require(this.entries.map { entry -> entry.label }.distinct().size == this.entries.size) {
+            "typeface identity report entries must have unique labels."
+        }
+        require(this.entries.all { entry -> !entry.claimPromotionAllowed }) {
+            "typeface identity report cannot contain claim-promoting rows."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("schema", TYPEFACE_IDENTITY_REPORT_SCHEMA, comma = true)
+        appendFontCompactJsonField("fixtureName", fixtureName, comma = true)
+        appendFontCompactJsonField("legacyGate", legacyGate, comma = true)
+        appendFontCompactJsonField("gateStatus", gateStatus, comma = true)
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = true)
+        append("dashboardRow".evidenceQuoted()).append(":{")
+        appendFontCompactJsonField("name", "TypefaceID glyph-affecting identity", comma = true)
+        appendFontCompactJsonField("classification", "tracked-gap", comma = true)
+        appendFontCompactJsonField("legacyGate", legacyGate, comma = true)
+        appendFontCompactJsonField("gateStatus", gateStatus, comma = true)
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+        append("},")
+        append("entries".evidenceQuoted()).append(":")
+        append(entries.joinToString(separator = ",", prefix = "[", postfix = "]") { entry ->
+            entry.toCanonicalJson()
+        })
+        append("}")
+    }
+}
+
+fun typefaceIdentityDiagnostic(
+    code: String,
+    message: String? = null,
+): TypefaceIdentityDiagnostic = TypefaceIdentityDiagnostic(
+    code = code,
+    detail = message,
+)
+
+fun typefaceIdentityPreimage(
+    sourceId: FontSourceID,
+    collectionIndex: Int,
+    postScriptName: String?,
+    familyName: String,
+    styleName: String,
+    style: FontStyle = FontStyle.fromStyleName(styleName),
+    outlineFormat: TypefaceOutlineFormat,
+    selectedCMap: TypefaceCMapSelection,
+    scalerMode: TypefaceScalerMode,
+    variationCoordinates: List<TypefaceVariationCoordinate> = emptyList(),
+    palette: TypefacePaletteSelection? = null,
+    fallbackCatalogGeneration: Int? = null,
+    tableTags: List<String> = emptyList(),
+    diagnostics: List<TypefaceIdentityDiagnostic> = emptyList(),
+): TypefaceIdentityPreimage = TypefaceIdentityPreimage(
+    sourceId = sourceId,
+    collectionIndex = collectionIndex,
+    postScriptName = postScriptName,
+    familyName = familyName,
+    styleName = styleName,
+    style = style,
+    outlineFormat = outlineFormat,
+    selectedCMap = selectedCMap,
+    scalerMode = scalerMode,
+    variationCoordinates = variationCoordinates,
+    palette = palette,
+    fallbackCatalogGeneration = fallbackCatalogGeneration,
+    tableTags = tableTags,
+    diagnostics = diagnostics,
+)
+
+fun defaultTypefaceIdentityReport(): TypefaceIdentityReport {
+    val singleFaceSourceId = fontSourceIdentityPreimage(
+        kind = FontSourceKind.BUNDLED_FIXTURE,
+        declaredName = "Fixture Sans TTF",
+        licenseId = "OFL-1.1",
+        contentBytes = byteArrayOf(1, 2, 3),
+        faceCount = 1,
+        tableTags = listOf("cmap", "glyf", "head", "name"),
+        parserGeneration = 1,
+    ).sourceId()
+    val collectionSourceId = fontSourceIdentityPreimage(
+        kind = FontSourceKind.GENERATED_FIXTURE,
+        declaredName = "Fixture Collection TTC",
+        contentBytes = byteArrayOf(10, 11, 12),
+        faceCount = 2,
+        tableTags = listOf("cmap", "glyf", "head", "name"),
+        parserGeneration = 1,
+    ).sourceId()
+    val variableSourceId = fontSourceIdentityPreimage(
+        kind = FontSourceKind.GENERATED_FIXTURE,
+        declaredName = "Fixture Variable Sans",
+        contentBytes = byteArrayOf(20, 21, 22),
+        faceCount = 1,
+        tableTags = listOf("cmap", "fvar", "gvar", "glyf", "head", "name"),
+        parserGeneration = 1,
+    ).sourceId()
+    val paletteSourceId = fontSourceIdentityPreimage(
+        kind = FontSourceKind.GENERATED_FIXTURE,
+        declaredName = "Fixture Color Palette",
+        contentBytes = byteArrayOf(30, 31, 32),
+        faceCount = 1,
+        tableTags = listOf("COLR", "CPAL", "cmap", "glyf", "head", "name"),
+        parserGeneration = 1,
+    ).sourceId()
+    val unicodeCMap = TypefaceCMapSelection(
+        platformId = 3,
+        encodingId = 10,
+        format = 12,
+        language = 0,
+        unicode = true,
+    )
+
+    return TypefaceIdentityReport(
+        fixtureName = "typeface-id.json",
+        entries = listOf(
+            TypefaceIdentityReportEntry(
+                label = "single-face-ttf",
+                preimage = typefaceIdentityPreimage(
+                    sourceId = singleFaceSourceId,
+                    collectionIndex = 0,
+                    postScriptName = "FixtureSans-Regular",
+                    familyName = "Fixture Sans",
+                    styleName = "Regular",
+                    outlineFormat = TypefaceOutlineFormat.TRUE_TYPE_GLYF,
+                    selectedCMap = unicodeCMap,
+                    scalerMode = TypefaceScalerMode.OUTLINE,
+                    tableTags = listOf("name", "cmap", "glyf", "head"),
+                ),
+            ),
+            TypefaceIdentityReportEntry(
+                label = "ttc-face-index-variant",
+                preimage = typefaceIdentityPreimage(
+                    sourceId = collectionSourceId,
+                    collectionIndex = 1,
+                    postScriptName = "FixtureCollectionSans-Bold",
+                    familyName = "Fixture Collection Sans",
+                    styleName = "Bold",
+                    style = FontStyle(weight = 700, width = 5, slant = FontSlant.UPRIGHT),
+                    outlineFormat = TypefaceOutlineFormat.TRUE_TYPE_GLYF,
+                    selectedCMap = unicodeCMap,
+                    scalerMode = TypefaceScalerMode.OUTLINE,
+                    tableTags = listOf("cmap", "glyf", "head", "name"),
+                ),
+            ),
+            TypefaceIdentityReportEntry(
+                label = "variable-axis-change",
+                preimage = typefaceIdentityPreimage(
+                    sourceId = variableSourceId,
+                    collectionIndex = 0,
+                    postScriptName = "FixtureVariableSans-Regular",
+                    familyName = "Fixture Variable Sans",
+                    styleName = "Regular",
+                    outlineFormat = TypefaceOutlineFormat.TRUE_TYPE_GLYF,
+                    selectedCMap = unicodeCMap,
+                    scalerMode = TypefaceScalerMode.OUTLINE,
+                    variationCoordinates = listOf(
+                        TypefaceVariationCoordinate(axisTag = "wght", value = 700.0),
+                    ),
+                    tableTags = listOf("name", "gvar", "cmap", "head", "fvar", "glyf"),
+                ),
+            ),
+            TypefaceIdentityReportEntry(
+                label = "palette-change",
+                preimage = typefaceIdentityPreimage(
+                    sourceId = paletteSourceId,
+                    collectionIndex = 0,
+                    postScriptName = "FixtureColorPalette-Regular",
+                    familyName = "Fixture Color Palette",
+                    styleName = "Regular",
+                    outlineFormat = TypefaceOutlineFormat.TRUE_TYPE_GLYF,
+                    selectedCMap = unicodeCMap,
+                    scalerMode = TypefaceScalerMode.OUTLINE,
+                    palette = TypefacePaletteSelection(
+                        index = 1,
+                        overrides = listOf("gid=42:#ff0000ff", "gid=7:#000000ff", "gid=42:#ff0000ff"),
+                    ),
+                    tableTags = listOf("CPAL", "COLR", "name", "cmap", "head", "glyf"),
+                ),
+            ),
+            TypefaceIdentityReportEntry(
+                label = "invalid-collection-index-diagnostic",
+                preimage = null,
+                diagnostics = listOf(
+                    typefaceIdentityDiagnostic(
+                        code = "font.collection-index-invalid",
+                        message = "Requested collection index 3 but the fixture reports 2 faces.",
+                    ),
+                    typefaceIdentityDiagnostic(
+                        code = "font.sfnt.identity-facts-incomplete",
+                        message = "Collection face facts are incomplete; no TypefaceID was derived.",
+                    ),
+                ),
+            ),
+            TypefaceIdentityReportEntry(
+                label = "no-usable-unicode-cmap-diagnostic",
+                preimage = null,
+                diagnostics = listOf(
+                    typefaceIdentityDiagnostic(
+                        code = "font.sfnt.cmap-unusable",
+                        message = "No usable Unicode cmap subtable was selected for this fixture face.",
+                    ),
+                    typefaceIdentityDiagnostic(
+                        code = "font.sfnt.identity-facts-incomplete",
+                        message = "Selected Unicode cmap facts are missing; no TypefaceID was derived.",
+                    ),
+                ),
+            ),
+        ),
+    )
+}
+
 private const val FONT_SOURCE_IDENTITY_REPORT_SCHEMA =
     "org.graphiks.kanvas.font.FontSourceIdentityReport.v1"
+
+private const val TYPEFACE_IDENTITY_REPORT_SCHEMA =
+    "org.graphiks.kanvas.font.TypefaceIdentityReport.v1"
 
 /**
  * Slant axis used by portable font style matching.
@@ -1654,14 +2223,36 @@ private fun List<String>.normalizedTableTags(): List<String> {
     return distinct().sorted()
 }
 
+private fun List<TypefaceVariationCoordinate>.normalizedVariationCoordinates(): List<TypefaceVariationCoordinate> {
+    val sorted = sortedBy { coordinate -> coordinate.axisTag }
+    require(sorted.map { coordinate -> coordinate.axisTag }.distinct().size == sorted.size) {
+        "variation coordinates must have unique axis tags."
+    }
+    return sorted
+}
+
 private fun String.isStableSfntTableTag(): Boolean =
     length == 4 && all { character -> character.code in 0x20..0x7E }
+
+private val FontSlant.typefaceSerializedName: String
+    get() = when (this) {
+        FontSlant.UPRIGHT -> "upright"
+        FontSlant.ITALIC -> "italic"
+        FontSlant.OBLIQUE -> "oblique"
+    }
 
 private fun String.isStableDiagnosticCode(): Boolean =
     isNotEmpty() && all { character -> character.code in 0x21..0x7E }
 
 private fun String.isLowercaseSha256Hex(): Boolean =
     length == 64 && all { character -> character in '0'..'9' || character in 'a'..'f' }
+
+private fun Double.toTypefaceJsonNumber(): String {
+    return normalizedTypefaceVariationValue().toString()
+}
+
+private fun Double.normalizedTypefaceVariationValue(): Double =
+    if (this == 0.0) 0.0 else this
 
 private fun ByteArray.sha256Hex(): String {
     val digest = MessageDigest.getInstance("SHA-256").digest(this)
