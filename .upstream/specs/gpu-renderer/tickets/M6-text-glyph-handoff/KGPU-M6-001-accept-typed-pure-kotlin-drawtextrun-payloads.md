@@ -1,7 +1,7 @@
 ---
 id: KGPU-M6-001
 title: "Accept typed pure Kotlin `DrawTextRun` payloads"
-status: blocked
+status: done
 milestone: M6
 priority: P0
 owner_area: text-handoff
@@ -83,10 +83,17 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: Depends on accepted pure Kotlin text `KFONT-M11-003`
-  `DrawTextRun` payload contracts. The GPU renderer must not invent that
-  payload shape, reshape text, parse fonts, read font bytes, or accept
-  CPU-rendered full text textures to clear this gate.
+- `done`: The renderer consumes the accepted pure Kotlin text handoff surface
+  through `:font:gpu-api` value objects and maps `GPUTextArtifactReference`
+  into dumpable `GPUTextArtifactRef` payload facts. Fresh validation covered
+  `GPUTextCommandHandoffTest`, `GPURecorderTest`, `:font:gpu-api:test`, and
+  `:gpu-renderer:test`; independent review
+  `019ec8d9-9b04-71b0-8d7d-83ce1ffdd94e` returned `ACCEPT`. `DrawTextRun`
+  remains a refused route and now emits stable terminal diagnostics for
+  Skia-like payload leakage and CPU-rendered text texture leakage. No shaping,
+  font parsing, font byte reads, GPU text route promotion, adapter-backed
+  execution, or CPU-rendered full text texture fallback is implied. Evidence:
+  `reports/gpu-renderer/2026-06-15-m6-001-text-handoff.md`.
 
 ## Linear Labels
 

@@ -4,6 +4,8 @@ plugins {
 }
 
 dependencies {
+    api(project(":font:gpu-api"))
+
     implementation(kotlin("stdlib"))
     testImplementation(kotlin("test"))
 }

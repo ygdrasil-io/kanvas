@@ -13,22 +13,24 @@ and the cited specs:
 - `.upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md`
 - `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
 
-## Decision
+## Decision Update
 
-M6 is not actionable as a renderer implementation wave in the current branch.
-All M6 tickets depend on external pure Kotlin text KFONT deliveries and, for
-the atlas/resource routes, adapter-backed upload/binding evidence. The GPU
-renderer must not invent text payloads, parse fonts, reshape text, decode font
-glyph payloads, or accept CPU-rendered text textures to clear these gates.
+Follow-up work on 2026-06-15 closed the two non-adapter M6 tickets:
+KGPU-M6-001 and KGPU-M6-004. The remaining M6 implementation work is still not
+actionable as a renderer route wave because KGPU-M6-002 and KGPU-M6-003 require
+resource/upload contracts plus adapter-backed upload, binding, WGSL/reflection,
+sampling, and readback evidence. The GPU renderer must still not parse fonts,
+reshape text, decode font glyph payloads, or accept CPU-rendered text textures
+to clear these gates.
 
 ## Ticket Gates
 
 | Ticket | Status | Remaining gate |
 |---|---|---|
-| KGPU-M6-001 | `blocked` | Accepted KFONT-M11-003 typed `DrawTextRun` payload contract. |
+| KGPU-M6-001 | `done` | Closed by `reports/gpu-renderer/2026-06-15-m6-001-text-handoff.md`; no text GPU route is promoted. |
 | KGPU-M6-002 | `blocked` | KGPU-M6-003 plus KFONT-M11-004, KFONT-M11-008, KFONT-M11-009 glyph/artifact evidence and adapter-backed A8 atlas sampling/readback proof. |
-| KGPU-M6-003 | `blocked` | KGPU-M6-001 plus KFONT-M11-007 resource/upload contracts and adapter-backed upload/binding/generation evidence. |
-| KGPU-M6-004 | `blocked` | KGPU-M6-001 typed artifact boundary, so SDF/color/bitmap/SVG/emoji/LCD refusal rows are classified from text artifacts rather than fabricated renderer payloads. |
+| KGPU-M6-003 | `blocked` | KFONT-M11-007 resource/upload contracts and adapter-backed upload/binding/generation evidence. |
+| KGPU-M6-004 | `done` | Closed by `reports/gpu-renderer/2026-06-15-m6-004-text-representation-gates.md`; refusal rows remain non-promoted. |
 
 ## Non-Claims
 
