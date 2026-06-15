@@ -41,6 +41,16 @@ class SceneCommandsTest {
     @Test
     fun `scene command family exposes business friendly names`() {
         assertEquals("fill-rect", SceneCommand.FillRect("card", SceneRect(0f, 0f, 8f, 8f), SceneColor.red()).family)
+        assertEquals(
+            "linear-gradient-rect",
+            SceneCommand.LinearGradientRect(
+                "gradient",
+                SceneRect(0f, 0f, 8f, 8f),
+                SceneColor.red(),
+                SceneColor.blue(),
+            ).family,
+        )
+        assertEquals("clip", SceneCommand.Clip("clip", SceneRect(0f, 0f, 8f, 8f)).family)
         assertEquals("runtime-effect", SceneCommand.RuntimeEffectTile("simple-rt").family)
         assertEquals("vertices", SceneCommand.MeshRibbon("mesh").family)
     }
@@ -50,6 +60,15 @@ class SceneCommandsTest {
         assertFailsWith<IllegalArgumentException> {
             SceneCommand.FillRect(" ", SceneRect(0f, 0f, 8f, 8f), SceneColor.red())
         }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.LinearGradientRect(
+                " ",
+                SceneRect(0f, 0f, 8f, 8f),
+                SceneColor.red(),
+                SceneColor.blue(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> { SceneCommand.Clip("", SceneRect(0f, 0f, 8f, 8f)) }
         assertFailsWith<IllegalArgumentException> { SceneCommand.RuntimeEffectTile("") }
         assertFailsWith<IllegalArgumentException> { SceneCommand.MeshRibbon("\t") }
     }
@@ -58,6 +77,15 @@ class SceneCommandsTest {
     fun `fill rect command rejects negative paint order`() {
         assertFailsWith<IllegalArgumentException> {
             SceneCommand.FillRect("card", SceneRect(0f, 0f, 8f, 8f), SceneColor.red(), paintOrder = -1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.LinearGradientRect(
+                "gradient",
+                SceneRect(0f, 0f, 8f, 8f),
+                SceneColor.red(),
+                SceneColor.blue(),
+                paintOrder = -1,
+            )
         }
     }
 

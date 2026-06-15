@@ -51,12 +51,14 @@ class RunGpuRendererSceneKadreMainTest {
     }
 
     @Test
-    fun `catalogued rect only scenes launch Kadre runner instead of not yet rendered`() {
+    fun `catalogued rect rrect gradient and clip scenes launch Kadre runner instead of not yet rendered`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-windowed-main")
-        val rectOnlyScenes = listOf(
+        val renderableScenes = listOf(
             "cache-pressure-deck" to 17,
             "blend-mode-strip" to 18,
             "legacy-route-comparison" to 19,
+            "path-badge-and-stroke" to 20,
+            "rounded-panel-gradient" to 21,
         )
         val invocations = mutableListOf<RunnerInvocation>()
 
@@ -71,7 +73,7 @@ class RunGpuRendererSceneKadreMainTest {
                 ).writeTo(output)
             },
         ) {
-            rectOnlyScenes.forEach { (sceneId, frames) ->
+            renderableScenes.forEach { (sceneId, frames) ->
                 val output = root.resolve("$sceneId-session.json")
 
                 runGpuRendererSceneKadre(arrayOf(sceneId, frames.toString(), output.toString()))
@@ -86,7 +88,7 @@ class RunGpuRendererSceneKadreMainTest {
         }
 
         assertEquals(
-            rectOnlyScenes.map { (sceneId, frames) ->
+            renderableScenes.map { (sceneId, frames) ->
                 RunnerInvocation(sceneId, frames, root.resolve("$sceneId-session.json"))
             },
             invocations,
@@ -117,7 +119,7 @@ class RunGpuRendererSceneKadreMainTest {
                     sceneId = "windowed-no-fill",
                     commands = listOf(SceneCommand.Clear(SceneColor(0f, 0f, 0f, 1f))),
                 ),
-                reason = "rect-only windowed render requires at least one FillRect command",
+                reason = "rect-only windowed render requires at least one FillRect, FillRRect, or LinearGradientRect command",
             ),
             UnsupportedRectOnlyCase(
                 scene = windowedTestScene(
@@ -127,7 +129,7 @@ class RunGpuRendererSceneKadreMainTest {
                         SceneCommand.Clear(SceneColor(0f, 0f, 0f, 1f)),
                     ),
                 ),
-                reason = "rect-only windowed render supports zero or one initial Clear before FillRect commands",
+                reason = "rect-only windowed render supports zero or one initial Clear before drawable commands",
             ),
             UnsupportedRectOnlyCase(
                 scene = windowedTestScene(
@@ -138,7 +140,7 @@ class RunGpuRendererSceneKadreMainTest {
                         testFillRect(),
                     ),
                 ),
-                reason = "rect-only windowed render supports zero or one initial Clear before FillRect commands",
+                reason = "rect-only windowed render supports zero or one initial Clear before drawable commands",
             ),
         )
 
@@ -167,7 +169,7 @@ class RunGpuRendererSceneKadreMainTest {
         assertContains(sessionJson, "\"status\": \"not-yet-rendered\"")
         assertContains(
             sessionJson,
-            "\"reason\": \"rect-only windowed render supports only clear and fill-rect command families: vertices\"",
+            "\"reason\": \"rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families: vertices\"",
         )
         assertContains(sessionJson, "\"requestedFrames\": 60")
         assertContains(sessionJson, "\"presentedFrames\": 0")

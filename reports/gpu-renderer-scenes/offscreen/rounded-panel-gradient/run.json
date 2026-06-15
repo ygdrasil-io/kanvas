@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sceneId": "rounded-panel-gradient",
+  "status": "rendered",
+  "productRefusal": false,
+  "backend": "webgpu-offscreen",
+  "imagePath": "render.png",
+  "width": 320,
+  "height": 200,
+  "byteCount": 256000,
+  "nonTransparentPixels": 33172,
+  "diagnostics": ["rendered rounded-panel-gradient via WebGPU offscreen","adapter=Apple M2 Max","fillRectCommands=0","fillRRectCommands=1","linearGradientRectCommands=1","clipCommands=1"]
+}

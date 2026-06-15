@@ -88,23 +88,44 @@ sealed interface SceneCommand {
             )
     }
 
-    data class FillRRect(override val label: String) : SceneCommand {
+    data class FillRRect(
+        override val label: String,
+        val rect: SceneRect,
+        val radius: Float,
+        val color: SceneColor,
+        val paintOrder: Int = 0,
+    ) : SceneCommand {
         override val family: String = "fill-rrect"
 
         init {
             requireSceneCommandLabel(label)
+            require(!radius.isNaN() && !radius.isInfinite()) {
+                "SceneCommand.FillRRect.radius must be finite"
+            }
+            require(radius >= 0f) { "SceneCommand.FillRRect.radius must be non-negative" }
+            require(paintOrder >= 0) { "SceneCommand.FillRRect.paintOrder must be non-negative" }
         }
     }
 
-    data class LinearGradientRect(override val label: String) : SceneCommand {
+    data class LinearGradientRect(
+        override val label: String,
+        val rect: SceneRect,
+        val startColor: SceneColor,
+        val endColor: SceneColor,
+        val paintOrder: Int = 0,
+    ) : SceneCommand {
         override val family: String = "linear-gradient-rect"
 
         init {
             requireSceneCommandLabel(label)
+            require(paintOrder >= 0) { "SceneCommand.LinearGradientRect.paintOrder must be non-negative" }
         }
     }
 
-    data class Clip(override val label: String) : SceneCommand {
+    data class Clip(
+        override val label: String,
+        val rect: SceneRect,
+    ) : SceneCommand {
         override val family: String = "clip"
 
         init {

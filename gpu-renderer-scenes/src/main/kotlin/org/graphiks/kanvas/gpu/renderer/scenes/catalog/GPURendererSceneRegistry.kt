@@ -53,9 +53,23 @@ object GPURendererSceneRegistry {
                 SceneRoadmapLink.milestone("M2", RStage.R3),
             ),
             commands = listOf(
-                SceneCommand.FillRRect("rounded-panel"),
-                SceneCommand.LinearGradientRect("panel-gradient"),
-                SceneCommand.Clip("panel-scissor"),
+                SceneCommand.FillRRect(
+                    label = "rounded-panel",
+                    rect = SceneRect(40f, 30f, 280f, 170f),
+                    radius = 24f,
+                    color = SceneColor.blue(0.70f),
+                ),
+                SceneCommand.Clip(
+                    label = "panel-scissor",
+                    rect = SceneRect(64f, 46f, 256f, 154f),
+                ),
+                SceneCommand.LinearGradientRect(
+                    label = "panel-gradient",
+                    rect = SceneRect(40f, 30f, 280f, 170f),
+                    startColor = SceneColor.amber(0.92f),
+                    endColor = SceneColor.green(0.72f),
+                    paintOrder = 1,
+                ),
             ),
         ),
         scene(
@@ -65,11 +79,17 @@ object GPURendererSceneRegistry {
             tags = setOf(SceneTag.RRect, SceneTag.Rect),
             links = listOf(SceneRoadmapLink.milestone("M3")),
             commands = listOf(
-                SceneCommand.FillRRect("badge-fill"),
+                SceneCommand.FillRRect(
+                    label = "badge-fill",
+                    rect = SceneRect(56f, 52f, 248f, 132f),
+                    radius = 32f,
+                    color = SceneColor.green(0.86f),
+                ),
                 SceneCommand.FillRect(
                     "stroke-proxy",
                     SceneRect(72f, 72f, 220f, 84f),
                     SceneColor.red(),
+                    paintOrder = 1,
                 ),
             ),
         ),
@@ -83,7 +103,10 @@ object GPURendererSceneRegistry {
                 SceneRoadmapLink.milestone("M5"),
             ),
             commands = listOf(
-                SceneCommand.Clip("avatar-rrect-clip"),
+                SceneCommand.Clip(
+                    label = "avatar-rrect-clip",
+                    rect = SceneRect(36f, 28f, 284f, 172f),
+                ),
                 SceneCommand.BitmapRect("avatar-cell"),
             ),
         ),

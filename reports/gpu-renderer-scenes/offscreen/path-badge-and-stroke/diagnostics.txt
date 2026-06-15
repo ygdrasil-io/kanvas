@@ -1,0 +1,4 @@
+rendered path-badge-and-stroke via WebGPU offscreen
+adapter=Apple M2 Max
+fillRectCommands=1
+fillRRectCommands=1
