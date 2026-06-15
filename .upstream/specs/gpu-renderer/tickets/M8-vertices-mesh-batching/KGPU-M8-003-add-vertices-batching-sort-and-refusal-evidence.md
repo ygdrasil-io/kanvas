@@ -1,7 +1,7 @@
 ---
 id: KGPU-M8-003
 title: "Add vertices batching sort and refusal evidence"
-status: proposed
+status: blocked
 milestone: M8
 priority: P2
 owner_area: batching
@@ -83,7 +83,11 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Batching evidence only.
+- `blocked`: Depends on KGPU-M8-001 and KGPU-M8-002. Remaining gate is
+  route/buffer evidence before batching can name compatible keys, sort windows,
+  split reasons, upload-generation boundaries, destination-read stops, layer
+  boundaries, and refusal rows. Batching must not be used as correctness or
+  performance readiness evidence.
 
 ## Linear Labels
 

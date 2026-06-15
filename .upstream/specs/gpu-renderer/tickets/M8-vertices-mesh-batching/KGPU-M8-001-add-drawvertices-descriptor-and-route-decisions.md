@@ -1,7 +1,7 @@
 ---
 id: KGPU-M8-001
 title: "Add `DrawVertices` descriptor and route decisions"
-status: proposed
+status: blocked
 milestone: M8
 priority: P1
 owner_area: vertices
@@ -81,7 +81,12 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Descriptor route first.
+- `blocked`: Depends on KGPU-M7-003, which remains blocked on KGPU-M5-002 and
+  native destination-read strategy evidence. Remaining gate is accepted
+  primitive blend/color route decisions, deterministic descriptor/key/refusal
+  dumps, adapter-backed layout/WGSL/route evidence, and explicit skipped or
+  refused lanes for unsupported topology, color, texcoord, and buffer cases.
+  Descriptor acceptance alone must not claim `DrawVertices` support.
 
 ## Linear Labels
 
