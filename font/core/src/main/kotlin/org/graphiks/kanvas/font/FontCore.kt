@@ -54,7 +54,406 @@ enum class FontSourceKind {
 
     /** Font loaded through an application or remote resource URI. */
     RESOURCE,
+
+    /** Deterministic font bytes committed with fixture provenance. */
+    BUNDLED_FIXTURE,
+
+    /** Deterministic generated font bytes used as parser, scaler, shaping, or color fixtures. */
+    GENERATED_FIXTURE,
+
+    /** Font bytes supplied directly by application memory with caller provenance. */
+    USER_DATA,
+
+    /** Caller stream copied into bounded immutable font data before parsing. */
+    USER_STREAM,
+
+    /** Caller file copied or hashed under an explicit content policy. */
+    USER_FILE,
+
+    /** Pure Kotlin scan result from host directories, never normative until bytes are captured. */
+    SYSTEM_SCANNED,
 }
+
+/**
+ * Stable provenance facts used as part of [FontSourceIdentityPreimage].
+ *
+ * This model deliberately carries display-level source facts, not filesystem
+ * paths, native handles, or platform font API objects.
+ */
+data class FontSourceProvenance(
+    val kind: FontSourceKind,
+    val declaredName: String,
+    val licenseId: String? = null,
+    val originPath: String? = null,
+    val hostDependent: Boolean = kind.isHostDependentByDefault(),
+) {
+    init {
+        require(declaredName.isNotBlank()) { "declaredName must not be blank." }
+        require(originPath == null || originPath.isNotBlank()) {
+            "originPath must not be blank when present."
+        }
+    }
+
+    internal fun toCanonicalJson(indent: String): String = buildString {
+        append(indent).append("{\n")
+        appendFontJsonField("kind", kind.serializedName, indent = "$indent  ", comma = true)
+        appendFontJsonField("declaredName", declaredName, indent = "$indent  ", comma = true)
+        append(indent).append("  ").append("\"licenseId\": ")
+        append(licenseId.toFontJsonNullableString())
+        append(",\n")
+        append(indent).append("  ").append("\"originPath\": ")
+        append(originPath.toFontJsonNullableString())
+        append(",\n")
+        appendFontJsonField("hostDependent", hostDependent, indent = "$indent  ", comma = false)
+        append(indent).append("}")
+    }
+}
+
+/**
+ * Stable source-level diagnostic included before [FontSourceID] derivation.
+ *
+ * [FontSourceDiagnostic] is still used after a source ID exists. This value
+ * object avoids circular identity derivation by storing only stable source
+ * diagnostic facts in the preimage.
+ */
+data class FontSourceIdentityDiagnostic(
+    val code: String,
+    val detail: String? = null,
+) {
+    init {
+        require(code.isStableDiagnosticCode()) { "code must be a stable one-line diagnostic code." }
+    }
+
+    internal fun toCanonicalJson(indent: String): String = buildString {
+        append(indent).append("{\n")
+        appendFontJsonField("code", code, indent = "$indent  ", comma = true)
+        append(indent).append("  ").append("\"detail\": ")
+        append(detail.toFontJsonNullableString())
+        append("\n")
+        append(indent).append("}")
+    }
+}
+
+/**
+ * Canonical preimage for deriving and auditing [FontSourceID].
+ *
+ * It includes only deterministic provenance and parser-supplied source facts.
+ * The font core does not parse tables here; callers provide face counts,
+ * table tags, diagnostics, and parser generation after their owning parser or
+ * scanner has produced those facts.
+ */
+class FontSourceIdentityPreimage(
+    val provenance: FontSourceProvenance,
+    val contentSha256: String?,
+    val byteLength: Long?,
+    val faceCount: Int,
+    tableTags: List<String>,
+    val parserGeneration: Int,
+    diagnostics: List<FontSourceIdentityDiagnostic> = emptyList(),
+) {
+    val tableTags: List<String> = tableTags.normalizedTableTags()
+    val diagnostics: List<FontSourceIdentityDiagnostic> =
+        diagnostics.sortedWith(compareBy<FontSourceIdentityDiagnostic> { it.code }.thenBy { it.detail.orEmpty() })
+    val kind: FontSourceKind
+        get() = provenance.kind
+    val hostDependent: Boolean
+        get() = provenance.hostDependent
+
+    init {
+        require((contentSha256 == null) == (byteLength == null)) {
+            "contentSha256 and byteLength must both be present or both be absent."
+        }
+        require(contentSha256 == null || contentSha256.isLowercaseSha256Hex()) {
+            "contentSha256 must be a lowercase hexadecimal SHA-256 digest."
+        }
+        require(byteLength == null || byteLength >= 0) { "byteLength must be non-negative." }
+        require(faceCount >= 0) { "faceCount must be non-negative." }
+        require(parserGeneration >= 0) { "parserGeneration must be non-negative." }
+    }
+
+    /**
+     * Serializes every [FontSourceID]-affecting fact as canonical JSON.
+     */
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendFontJsonField("schema", PreimageSchema, indent = "  ", comma = true)
+        append("  \"provenance\": ")
+        append(provenance.toCanonicalJson(indent = "  ").trimStart())
+        append(",\n")
+        append("  \"contentSha256\": ")
+        append(contentSha256.toFontJsonNullableString())
+        append(",\n")
+        append("  \"byteLength\": ")
+        append(byteLength?.toString() ?: "null")
+        append(",\n")
+        appendFontJsonField("faceCount", faceCount, indent = "  ", comma = true)
+        append("  \"tableTags\": ")
+        append(tableTags.joinToString(prefix = "[", postfix = "]", separator = ", ") { it.evidenceQuoted() })
+        append(",\n")
+        appendFontJsonField("parserGeneration", parserGeneration, indent = "  ", comma = true)
+        append("  \"diagnostics\": ")
+        if (diagnostics.isEmpty()) {
+            append("[]\n")
+        } else {
+            append("[\n")
+            append(diagnostics.joinToString(",\n") { it.toCanonicalJson(indent = "    ") })
+            append("\n  ]\n")
+        }
+        append("}\n")
+    }
+
+    /**
+     * Derives a deterministic UUID-backed source ID from [toCanonicalJson].
+     */
+    fun deriveFontSourceID(): FontSourceID =
+        FontSourceID(stableUuidFromSha256("kanvas-font-source-id-v1\n${toCanonicalJson()}"))
+
+    fun sourceId(): FontSourceID = deriveFontSourceID()
+
+    override fun equals(other: Any?): Boolean =
+        this === other || other is FontSourceIdentityPreimage &&
+            provenance == other.provenance &&
+            contentSha256 == other.contentSha256 &&
+            byteLength == other.byteLength &&
+            faceCount == other.faceCount &&
+            tableTags == other.tableTags &&
+            parserGeneration == other.parserGeneration &&
+            diagnostics == other.diagnostics
+
+    override fun hashCode(): Int {
+        var result = provenance.hashCode()
+        result = 31 * result + (contentSha256?.hashCode() ?: 0)
+        result = 31 * result + (byteLength?.hashCode() ?: 0)
+        result = 31 * result + faceCount
+        result = 31 * result + tableTags.hashCode()
+        result = 31 * result + parserGeneration
+        result = 31 * result + diagnostics.hashCode()
+        return result
+    }
+
+    companion object {
+        const val PreimageSchema: String = "org.graphiks.kanvas.font.FontSourceIdentityPreimage.v1"
+
+        /**
+         * Creates an identity preimage for sources whose bytes were captured.
+         */
+        fun fromCapturedBytes(
+            kind: FontSourceKind,
+            declaredName: String,
+            licenseId: String?,
+            bytes: ByteArray,
+            faceCount: Int,
+            tableTags: List<String> = emptyList(),
+            parserGeneration: Int,
+            diagnostics: List<FontSourceIdentityDiagnostic> = emptyList(),
+            hostDependent: Boolean = kind.isHostDependentByDefault(),
+            originPath: String? = null,
+        ): FontSourceIdentityPreimage =
+            FontSourceIdentityPreimage(
+                provenance = FontSourceProvenance(
+                    kind = kind,
+                    declaredName = declaredName,
+                    licenseId = licenseId,
+                    originPath = originPath,
+                    hostDependent = hostDependent,
+                ),
+                contentSha256 = bytes.sha256Hex(),
+                byteLength = bytes.size.toLong(),
+                faceCount = faceCount,
+                tableTags = tableTags,
+                parserGeneration = parserGeneration,
+                diagnostics = diagnostics,
+            )
+
+        /**
+         * Creates an identity preimage for a host-dependent system scan.
+         */
+        fun systemScanned(
+            declaredName: String,
+            faceCount: Int,
+            tableTags: List<String> = emptyList(),
+            parserGeneration: Int,
+            diagnostics: List<FontSourceIdentityDiagnostic> = emptyList(),
+        ): FontSourceIdentityPreimage =
+            FontSourceIdentityPreimage(
+                provenance = FontSourceProvenance(
+                    kind = FontSourceKind.SYSTEM_SCANNED,
+                    declaredName = declaredName,
+                    licenseId = null,
+                    originPath = null,
+                    hostDependent = true,
+                ),
+                contentSha256 = null,
+                byteLength = null,
+                faceCount = faceCount,
+                tableTags = tableTags,
+                parserGeneration = parserGeneration,
+                diagnostics = diagnostics,
+            )
+    }
+}
+
+data class FontSourceIdentityReportEntry(
+    val label: String,
+    val preimage: FontSourceIdentityPreimage,
+    val claimPromotionAllowed: Boolean = false,
+) {
+    init {
+        require(label.isNotBlank()) { "label must not be blank." }
+        require(!claimPromotionAllowed) {
+            "Font source identity evidence cannot promote rendering support claims."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("label", label, comma = true)
+        appendFontCompactJsonField("sourceId", preimage.sourceId().value.toHexDashString(), comma = true)
+        append("\"preimage\":")
+        append(preimage.toCanonicalJson().trim())
+        append(",")
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+        append("}")
+    }
+}
+
+class FontSourceIdentityReport(
+    val fixtureName: String,
+    entries: List<FontSourceIdentityReportEntry>,
+) {
+    val entries: List<FontSourceIdentityReportEntry> = entries.toList()
+
+    init {
+        require(fixtureName.isNotBlank()) { "fixtureName must not be blank." }
+        require(this.entries.map { entry -> entry.label }.distinct().size == this.entries.size) {
+            "font source identity report entries must have unique labels."
+        }
+        require(this.entries.all { entry -> !entry.claimPromotionAllowed }) {
+            "font source identity report cannot contain claim-promoting rows."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("schema", FONT_SOURCE_IDENTITY_REPORT_SCHEMA, comma = true)
+        appendFontCompactJsonField("fixtureName", fixtureName, comma = true)
+        append("\"entries\":")
+        append(entries.joinToString(separator = ",", prefix = "[", postfix = "]") { entry ->
+            entry.toCanonicalJson()
+        })
+        append("}")
+    }
+}
+
+fun fontSourceIdentityDiagnostic(
+    code: String,
+    message: String? = null,
+): FontSourceIdentityDiagnostic = FontSourceIdentityDiagnostic(
+    code = code,
+    detail = message,
+)
+
+fun fontSourceIdentityPreimage(
+    kind: FontSourceKind,
+    declaredName: String,
+    licenseId: String? = null,
+    originPath: String? = null,
+    contentBytes: ByteArray?,
+    faceCount: Int,
+    tableTags: List<String> = emptyList(),
+    parserGeneration: Int,
+    diagnostics: List<FontSourceIdentityDiagnostic> = emptyList(),
+): FontSourceIdentityPreimage =
+    if (contentBytes == null) {
+        FontSourceIdentityPreimage(
+            provenance = FontSourceProvenance(
+                kind = kind,
+                declaredName = declaredName,
+                licenseId = licenseId,
+                originPath = originPath,
+                hostDependent = kind.isHostDependentByDefault(),
+            ),
+            contentSha256 = null,
+            byteLength = null,
+            faceCount = faceCount,
+            tableTags = tableTags,
+            parserGeneration = parserGeneration,
+            diagnostics = diagnostics,
+        )
+    } else {
+        FontSourceIdentityPreimage.fromCapturedBytes(
+            kind = kind,
+            declaredName = declaredName,
+            licenseId = licenseId,
+            bytes = contentBytes,
+            faceCount = faceCount,
+            tableTags = tableTags,
+            parserGeneration = parserGeneration,
+            diagnostics = diagnostics,
+            originPath = originPath,
+        )
+    }
+
+fun defaultFontSourceIdentityReport(): FontSourceIdentityReport = FontSourceIdentityReport(
+    fixtureName = "font-source.json",
+    entries = listOf(
+        FontSourceIdentityReportEntry(
+            label = "bundled-fixture",
+            preimage = fontSourceIdentityPreimage(
+                kind = FontSourceKind.BUNDLED_FIXTURE,
+                declaredName = "Fixture Sans",
+                licenseId = "OFL-1.1",
+                contentBytes = byteArrayOf(1, 2, 3),
+                faceCount = 1,
+                tableTags = listOf("cmap", "head", "name"),
+                parserGeneration = 1,
+            ),
+        ),
+        FontSourceIdentityReportEntry(
+            label = "generated-fixture",
+            preimage = fontSourceIdentityPreimage(
+                kind = FontSourceKind.GENERATED_FIXTURE,
+                declaredName = "Generated Minimal",
+                contentBytes = byteArrayOf(4, 5, 6),
+                faceCount = 1,
+                tableTags = listOf("cmap", "head"),
+                parserGeneration = 1,
+            ),
+        ),
+        FontSourceIdentityReportEntry(
+            label = "user-data",
+            preimage = fontSourceIdentityPreimage(
+                kind = FontSourceKind.USER_DATA,
+                declaredName = "User Upload",
+                contentBytes = byteArrayOf(7, 8, 9),
+                faceCount = 1,
+                tableTags = listOf("cmap"),
+                parserGeneration = 1,
+            ),
+        ),
+        FontSourceIdentityReportEntry(
+            label = "system-scanned-host-dependent",
+            preimage = fontSourceIdentityPreimage(
+                kind = FontSourceKind.SYSTEM_SCANNED,
+                declaredName = "Host Scan Sans",
+                originPath = "system-fonts/HostScanSans.ttf",
+                contentBytes = null,
+                faceCount = 0,
+                tableTags = emptyList(),
+                parserGeneration = 1,
+                diagnostics = listOf(
+                    fontSourceIdentityDiagnostic(
+                        code = "font.source.host-dependent",
+                        message = "System scan entry has no captured fixture bytes.",
+                    ),
+                ),
+            ),
+        ),
+    ),
+)
+
+private const val FONT_SOURCE_IDENTITY_REPORT_SCHEMA =
+    "org.graphiks.kanvas.font.FontSourceIdentityReport.v1"
 
 /**
  * Slant axis used by portable font style matching.
@@ -290,7 +689,7 @@ data class FontSourceEvidence(
                 kind = source.kind,
                 displayName = source.displayName,
                 contentSha256 = source.bytes.sha256Hex(),
-                hostDependent = source.kind == FontSourceKind.SYSTEM,
+                hostDependent = source.kind.isHostDependentByDefault(),
                 faceCount = faceCount,
                 tableTags = tableTags.normalizedTableTags(),
                 diagnostics = diagnostics,
@@ -1229,6 +1628,23 @@ data class FallbackDecisionTrace(
 
 private fun String.familyKey(): String = trim().lowercase()
 
+private fun FontSourceKind.isHostDependentByDefault(): Boolean =
+    this == FontSourceKind.SYSTEM || this == FontSourceKind.SYSTEM_SCANNED
+
+val FontSourceKind.serializedName: String
+    get() = when (this) {
+        FontSourceKind.BUNDLED_FIXTURE -> "BundledFontSource"
+        FontSourceKind.GENERATED_FIXTURE -> "GeneratedFixtureFontSource"
+        FontSourceKind.USER_DATA -> "UserDataFontSource"
+        FontSourceKind.USER_STREAM -> "UserStreamFontSource"
+        FontSourceKind.USER_FILE -> "UserFileFontSource"
+        FontSourceKind.SYSTEM_SCANNED -> "SystemScannedFontSource"
+        FontSourceKind.MEMORY -> "UserDataFontSource"
+        FontSourceKind.SYSTEM -> "SystemScannedFontSource"
+        FontSourceKind.FILE -> "UserFileFontSource"
+        FontSourceKind.RESOURCE -> "UserDataFontSource"
+    }
+
 private fun List<String>.normalizedTableTags(): List<String> {
     for (tag in this) {
         require(tag.isStableSfntTableTag()) {
@@ -1258,16 +1674,101 @@ private fun ByteArray.sha256Hex(): String {
     return chars.concatToString()
 }
 
+private fun stableUuidFromSha256(preimage: String): Uuid {
+    val digest = MessageDigest.getInstance("SHA-256").digest(preimage.toByteArray(Charsets.UTF_8))
+    val uuidBytes = digest.copyOfRange(0, 16)
+    uuidBytes[6] = ((uuidBytes[6].toInt() and 0x0f) or 0x50).toByte()
+    uuidBytes[8] = ((uuidBytes[8].toInt() and 0x3f) or 0x80).toByte()
+    return Uuid.parse(uuidBytes.toUuidString())
+}
+
+private fun ByteArray.toUuidString(): String = buildString(36) {
+    for (index in this@toUuidString.indices) {
+        if (index == 4 || index == 6 || index == 8 || index == 10) {
+            append('-')
+        }
+        val value = this@toUuidString[index].toInt() and 0xff
+        append(value.toString(16).padStart(2, '0'))
+    }
+}
+
+private fun String?.toFontJsonNullableString(): String =
+    this?.evidenceQuoted() ?: "null"
+
+private fun StringBuilder.appendFontJsonField(
+    name: String,
+    value: String,
+    indent: String,
+    comma: Boolean,
+) {
+    append(indent).append(name.evidenceQuoted()).append(": ").append(value.evidenceQuoted())
+    if (comma) append(",")
+    append("\n")
+}
+
+private fun StringBuilder.appendFontJsonField(
+    name: String,
+    value: Int,
+    indent: String,
+    comma: Boolean,
+) {
+    append(indent).append(name.evidenceQuoted()).append(": ").append(value)
+    if (comma) append(",")
+    append("\n")
+}
+
+private fun StringBuilder.appendFontJsonField(
+    name: String,
+    value: Boolean,
+    indent: String,
+    comma: Boolean,
+) {
+    append(indent).append(name.evidenceQuoted()).append(": ").append(value)
+    if (comma) append(",")
+    append("\n")
+}
+
+private fun StringBuilder.appendFontCompactJsonField(
+    name: String,
+    value: String,
+    comma: Boolean,
+) {
+    append(name.evidenceQuoted())
+    append(":")
+    append(value.evidenceQuoted())
+    if (comma) append(",")
+}
+
+private fun StringBuilder.appendFontCompactJsonField(
+    name: String,
+    value: Boolean,
+    comma: Boolean,
+) {
+    append(name.evidenceQuoted())
+    append(":")
+    append(value)
+    if (comma) append(",")
+}
+
 private fun String.evidenceQuoted(): String = buildString {
     append('"')
     for (character in this@evidenceQuoted) {
         when (character) {
             '\\' -> append("\\\\")
             '"' -> append("\\\"")
+            '\b' -> append("\\b")
+            '\u000C' -> append("\\f")
             '\n' -> append("\\n")
             '\r' -> append("\\r")
             '\t' -> append("\\t")
-            else -> append(character)
+            else -> {
+                if (character < ' ') {
+                    append("\\u")
+                    append(character.code.toString(16).padStart(4, '0'))
+                } else {
+                    append(character)
+                }
+            }
         }
     }
     append('"')

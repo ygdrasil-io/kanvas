@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M1-001"
 title: "Complete `FontSourceID` provenance model"
-status: "proposed"
+status: "review"
 milestone: "M1"
 priority: "P0"
 owner_area: "font-core"
@@ -71,11 +71,11 @@ value class FontSourceID(val uuid: kotlin.uuid.Uuid)
 
 ## Acceptance Criteria
 
-- [ ] The same bundled or generated fixture bytes produce the same `FontSourceID` across repeated runs.
-- [ ] Two different byte streams with the same display name produce different source IDs.
-- [ ] `SystemScannedFontSource` records `hostDependent = true` unless bytes are captured into a fixture manifest.
-- [ ] Source diagnostics use stable codes such as `font.source.unreadable`, `font.source.host-dependent`, or `font.source.duplicate-face`.
-- [ ] No dump contains memory addresses, unordered map output, absolute temp paths, or other nondeterministic fields.
+- [x] The same bundled or generated fixture bytes produce the same `FontSourceID` across repeated runs.
+- [x] Two different byte streams with the same display name produce different source IDs.
+- [x] `SystemScannedFontSource` records `hostDependent = true` unless bytes are captured into a fixture manifest.
+- [x] Source diagnostics use stable codes such as `font.source.unreadable`, `font.source.host-dependent`, or `font.source.duplicate-face`.
+- [x] No dump contains memory addresses, unordered map output, absolute temp paths, or other nondeterministic fields.
 
 ## Required Evidence
 
@@ -104,8 +104,9 @@ rtk ./gradlew --no-daemon :font:core:test --tests '*FontSource*'
 
 ## Status Notes
 
-- `proposed`: Source identity fields are specified, but no `font-source.json` evidence is attached yet.
-- Move to `ready` after M0 diagnostics and module boundaries are accepted.
+- `review` (2026-06-15): Added `FontSourceIdentityPreimage`, deterministic `FontSourceID` derivation, target source-kind serialization, and checked-in `reports/pure-kotlin-text/font-source.json` evidence.
+- TDD evidence: red `:font:core:compileTestKotlin` on missing source identity contract, then green `rtk ./gradlew --no-daemon :font:core:test --tests '*FontSource*'` with 6 focused tests.
+- Remaining gate: this is source identity/provenance evidence only; `TypefaceID`, bundled fixture manifest, SFNT parser promotion, scaler, shaping, fallback, glyph artifacts, and GPU routes remain in later tickets.
 
 ## Linear Labels
 
