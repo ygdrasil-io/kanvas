@@ -1,7 +1,7 @@
 ---
 id: KGPU-M3-001
 title: "Add basic path fill prepared route"
-status: proposed
+status: done
 milestone: M3
 priority: P0
 owner_area: geometry-artifacts
@@ -86,7 +86,20 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: First path route remains prepared and evidence-gated.
+- `done`: Added `GPUBasicPathFillPreparedPlanner` contract evidence for one
+  bounded path fill as `CPUPreparedGPU`, with deterministic `GPUPathDescriptor`
+  facts, `GPUPreparedGeometryPlan` consumer `coverage-mask.sample.path-fill`,
+  prepared artifact key `prepared.path-fill.*` excluding handles, stable
+  route/refusal dumps, and explicit non-claims for product activation,
+  adapter-backed execution, hidden CPU texture fallback, and broad Path AA.
+  Broad `gpu-raster` Path/Coverage validation remains red identically on clean
+  `origin/codex/gpu-renderer-m1-wave` (`124` tests, `21` failed, `2` skipped;
+  identical failure classification), so it is tracked as a pre-existing
+  stacked-base gate rather than completion evidence for this contract slice.
+  Independent review `019ec7c5-ae98-7382-b5e2-865bd4734a59` accepted the
+  evidence and confirmed no product support claim or adapter-backed execution is
+  implied. Remaining gate: downstream M3 tickets still need their own GPU route,
+  stroke, clip, and atlas-refusal evidence.
 
 ## Linear Labels
 

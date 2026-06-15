@@ -17,6 +17,8 @@ data class GPUPathDescriptor(
     val inverseFill: Boolean,
     val finiteProof: String,
     val volatility: String,
+    val transformClass: String = "identity",
+    val edgeCount: Int = verbCount,
 )
 
 /** Stroke descriptor captured before expansion. */
@@ -46,7 +48,7 @@ sealed interface GPUGeometryRoute {
     data class CoverageMask(val atlasPlan: GPUCoverageAtlasPlan) : GPUGeometryRoute
 
     /** Prepared geometry route. */
-    data class Prepared(val artifact: PrecomputedGeometryArtifact) : GPUGeometryRoute
+    data class Prepared(val plan: GPUPreparedGeometryPlan) : GPUGeometryRoute
 
     /** Refused geometry route. */
     data class Refused(val diagnostic: GPUGeometryDiagnostic) : GPUGeometryRoute
@@ -178,3 +180,146 @@ data class GPUGeometryDiagnostic(
     val message: String,
     val terminal: Boolean,
 )
+
+/** Builds the first M3 prepared path-fill route evidence without product activation. */
+class GPUBasicPathFillPreparedPlanner(
+    private val maxEdges: Int = 256,
+) {
+    /**
+     * Plans one bounded path fill as a typed CPU-prepared GPU artifact.
+     *
+     * The plan is contract evidence only: it names the GPU consumer that would
+     * sample the prepared coverage, but it does not create an atlas entry,
+     * upload resources, submit adapter work, or activate product routing.
+     */
+    fun plan(
+        descriptor: GPUShapeDescriptor,
+        path: GPUPathDescriptor,
+    ): GPUGeometryPlan {
+        val refusalCode = descriptor.refusalCode() ?: path.refusalCode(maxEdges = maxEdges)
+        if (refusalCode != null) {
+            val diagnostic = GPUGeometryDiagnostic(
+                code = refusalCode,
+                geometryLabel = descriptor.shapeKind.ifBlank { "path-fill" },
+                message = "Basic prepared path fill refused: $refusalCode",
+                terminal = true,
+            )
+            return GPUGeometryPlan(
+                descriptor = descriptor,
+                path = path,
+                route = GPUGeometryRoute.Refused(diagnostic),
+                diagnostics = listOf(diagnostic),
+            )
+        }
+
+        val artifact = PrecomputedGeometryArtifact(
+            artifactKey = path.preparedArtifactKey(),
+            boundsLabel = descriptor.boundsLabel,
+            generation = 1,
+            lifetimeClass = "recording-local",
+            budgetClass = "path-fill-small",
+        )
+        val preparedPlan = GPUPreparedGeometryPlan(
+            artifact = artifact,
+            consumerKind = pathFillConsumerKind,
+            invalidationFacts = pathFillInvalidationFacts,
+        )
+
+        return GPUGeometryPlan(
+            descriptor = descriptor,
+            path = path,
+            route = GPUGeometryRoute.Prepared(preparedPlan),
+            diagnostics = listOf(
+                GPUGeometryDiagnostic(
+                    code = "geometry:path-fill.prepared",
+                    geometryLabel = descriptor.shapeKind,
+                    message = "Prepared path-fill artifact is available for $pathFillConsumerKind",
+                    terminal = false,
+                ),
+            ),
+        )
+    }
+
+    private companion object {
+        const val pathFillConsumerKind = "coverage-mask.sample.path-fill"
+        val pathFillInvalidationFacts = listOf("path-content-hash", "fill-rule", "transform-class", "bounds-proof")
+    }
+}
+
+/** Emits stable M3 path-fill evidence lines for reports and tests. */
+fun GPUGeometryPlan.dumpLines(): List<String> =
+    when (val selectedRoute = route) {
+        is GPUGeometryRoute.Prepared -> {
+            val pathDescriptor = requireNotNull(path) { "prepared path-fill dump requires a path descriptor" }
+            listOf(
+                "geometry:path-fill.prepared routeKind=CPUPreparedGPU consumer=${selectedRoute.plan.consumerKind}",
+                "path:descriptor key=${pathDescriptor.pathKey} verbs=${pathDescriptor.verbCount} " +
+                    "points=${pathDescriptor.pointCount} fillRule=${pathDescriptor.fillRule} " +
+                    "inverse=${pathDescriptor.inverseFill} transform=${pathDescriptor.transformClass} " +
+                    "edges=${pathDescriptor.edgeCount} finite=${pathDescriptor.finiteProof} " +
+                    "volatility=${pathDescriptor.volatility}",
+                "artifact:key=${selectedRoute.plan.artifact.artifactKey} " +
+                    "lifetime=${selectedRoute.plan.artifact.lifetimeClass} " +
+                    "budget=${selectedRoute.plan.artifact.budgetClass} " +
+                    "bounds=${selectedRoute.plan.artifact.boundsLabel}",
+                pathFillNonClaimLine,
+            )
+        }
+        is GPUGeometryRoute.Refused -> listOf(
+            "geometry:path-fill.refused reason=${selectedRoute.diagnostic.code}",
+            pathFillNonClaimLine,
+        )
+        is GPUGeometryRoute.Analytic,
+        is GPUGeometryRoute.Tessellation,
+        is GPUGeometryRoute.StencilCover,
+        is GPUGeometryRoute.PathAtlas,
+        is GPUGeometryRoute.CoverageMask,
+        -> listOf(
+            "geometry:path-fill.unsupported-dump route=${selectedRoute::class.simpleName}",
+            pathFillNonClaimLine,
+        )
+    }
+
+private fun GPUShapeDescriptor.refusalCode(): String? =
+    when {
+        shapeKind != "path-fill" -> "unsupported.geometry.shape_kind"
+        boundsLabel.isBlank() -> "unsupported.bounds.path"
+        antiAliasMode !in setOf("coverage-aa", "none") -> "unsupported.path.aa_mode"
+        else -> null
+    }
+
+private fun GPUPathDescriptor.refusalCode(maxEdges: Int): String? =
+    when {
+        !pathKey.isCanonicalPathKey() -> "unsupported.path.noncanonical_key"
+        verbCount <= 0 || pointCount <= 0 -> "unsupported.path.empty"
+        fillRule !in setOf("NonZero", "EvenOdd") -> "unsupported.path.fill_rule"
+        inverseFill -> "unsupported.path.inverse_fill"
+        transformClass == "perspective" -> "unsupported.transform.path_perspective"
+        transformClass !in setOf("identity", "translate") -> "unsupported.transform.path_class"
+        edgeCount < 0 || edgeCount > maxEdges -> "unsupported.path.edge_budget"
+        finiteProof != "finite" -> "unsupported.bounds.path"
+        volatility != "immutable" -> "unsupported.path.volatile"
+        else -> null
+    }
+
+private fun GPUPathDescriptor.preparedArtifactKey(): String =
+    "prepared.path-fill.${pathKey.sanitizeForArtifactKey()}.${fillRule.lowercase()}.${transformClass}.edges$edgeCount"
+
+private fun String.isCanonicalPathKey(): Boolean =
+    startsWith("path:") &&
+        isNotBlank() &&
+        !contains("handle", ignoreCase = true) &&
+        !contains("pointer", ignoreCase = true) &&
+        !contains("0x", ignoreCase = true)
+
+private fun String.sanitizeForArtifactKey(): String =
+    map { char ->
+        when {
+            char.isLetterOrDigit() -> char
+            else -> '_'
+        }
+    }.joinToString("")
+        .trim('_')
+
+private const val pathFillNonClaimLine =
+    "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback no-broad-path-aa"
