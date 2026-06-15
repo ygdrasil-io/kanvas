@@ -311,6 +311,30 @@ class GPUTextNoSkLeakageValidationTest {
     }
 
     @Test
+    fun `separator encoded Sk markers emit stable diagnostics`() {
+        val fields = listOf(
+            TextPayloadField("labels[0]", "String", "sk-font"),
+            TextPayloadField("labels[1]", "String", "sk_typeface"),
+            TextPayloadField("labels[2]", "String", "sk_text_blob"),
+            TextPayloadField("labels[3]", "String", "org.skia.foundation.sk_text_blob"),
+            TextPayloadField("labels[4]", "String", "sk-shaper"),
+            TextPayloadField("labels[5]", "String", "sk_paint"),
+        )
+
+        val report = validateGPUTextNoSkLeakage(
+            payloadKind = "ValuePayload",
+            fields = fields,
+        )
+
+        assertEquals("fail", report.status)
+        assertEquals(fields.map { field -> field.fieldPath }, report.findings.map { finding -> finding.fieldPath })
+        assertEquals(
+            List(fields.size) { "unsupported.text.sk_type_leaked" },
+            report.findings.map { finding -> finding.rendererDiagnostic },
+        )
+    }
+
+    @Test
     fun `non Skia sk words and mask fields do not fail leakage validation`() {
         val report = validateGPUTextNoSkLeakage(
             payloadKind = "ValuePayload",

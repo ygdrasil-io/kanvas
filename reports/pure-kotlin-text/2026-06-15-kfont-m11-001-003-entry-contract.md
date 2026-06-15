@@ -56,6 +56,8 @@ The tests cover:
   `WGPUTexture`, `TextureView`, `BindGroup`, `Sampler`, `CommandEncoder`,
   `RenderPassEncoder`, `GPUQueue`, `Queue`, `RenderPipeline`, `Pipeline`, and
   `PlatformFontHandle` markers;
+- separator-encoded `Sk*` markers such as `sk-font`, `sk_typeface`,
+  `sk_text_blob`, and qualified `org.skia.foundation.sk_text_blob` labels;
 - domain wrapper type names such as `GPUTextArtifactID`,
   `GPUTextArtifactGeneration`, and `GPUTextLayoutResultID` are not raw GPU
   handle leaks;

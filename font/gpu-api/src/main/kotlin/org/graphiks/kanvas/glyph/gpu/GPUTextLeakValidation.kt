@@ -250,8 +250,14 @@ private val FORBIDDEN_TEXT_PAYLOAD_MARKERS = listOf(
     "renderpipeline",
 )
 
-private val KNOWN_SK_PAYLOAD_TOKEN_REGEX =
-    Regex("""(?i)(^|[^A-Za-z0-9])sk(font|typeface|textblob|paint|path|shaper)([^A-Za-z0-9]|$)""")
+private val KNOWN_SK_PAYLOAD_TOKEN_REGEX = Regex(
+    """(?ix)
+    (^|[^A-Za-z0-9])
+    sk[-_\s.]*
+    (font|typeface|text[-_\s.]*blob|paint|path|shaper)
+    ([^A-Za-z0-9]|$)
+    """.trimIndent(),
+)
 private val GENERIC_GPU_HANDLE_TOKEN_REGEX =
     Regex("""(?i)(^|[.\s<({\[])(sampler|queue|pipeline)($|[.\s>)}\]])""")
 
