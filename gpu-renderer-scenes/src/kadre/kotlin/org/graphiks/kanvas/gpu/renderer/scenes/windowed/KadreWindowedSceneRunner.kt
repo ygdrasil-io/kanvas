@@ -25,10 +25,8 @@ import io.ygdrasil.webgpu.WGPU
 import io.ygdrasil.webgpu.WGPUInstanceBackend
 import io.ygdrasil.webgpu.WGPULowLevelApi
 import java.lang.foreign.MemorySegment
-import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Locale
-import kotlin.io.path.exists
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.ActiveEventLoop
 import org.graphiks.kadre.ApplicationHandler
@@ -55,14 +53,10 @@ class KadreWindowedSceneRunner(private val scene: GPURendererScene<*>) {
 
         val osName = System.getProperty("os.name", "").lowercase(Locale.US)
         if (!osName.contains("mac")) {
-            WindowedSceneSessionReport(
-                sceneId = scene.sceneId.value,
-                status = "blocked",
+            WindowedSceneSessionReport.blocked(
+                scene = scene,
                 reason = "kadre-windowed-runner-currently-macos-appkit",
                 requestedFrames = frames,
-                presentedFrames = 0,
-                surface = scene.windowedSurface(format = null),
-                adapterInfo = null,
                 error = "Kadre windowed runner currently supports macOS AppKit + Metal only: os.name=$osName",
             ).writeTo(output)
             return
@@ -76,30 +70,24 @@ class KadreWindowedSceneRunner(private val scene: GPURendererScene<*>) {
                 },
             )
         }.onFailure { failure ->
-            if (!output.exists()) {
-                WindowedSceneSessionReport(
-                    sceneId = scene.sceneId.value,
-                    status = "blocked",
+            if (!completed) {
+                WindowedSceneSessionReport.blocked(
+                    scene = scene,
                     reason = "kadre-windowed-initialization-failed",
                     requestedFrames = frames,
-                    presentedFrames = 0,
-                    surface = scene.windowedSurface(format = null),
-                    adapterInfo = null,
                     error = failure.message ?: failure.toString(),
                 ).writeTo(output)
+                completed = true
             }
         }
-        if (!completed && !Files.exists(output)) {
-            WindowedSceneSessionReport(
-                sceneId = scene.sceneId.value,
-                status = "blocked",
+        if (!completed) {
+            WindowedSceneSessionReport.blocked(
+                scene = scene,
                 reason = "kadre-windowed-initialization-failed",
                 requestedFrames = frames,
-                presentedFrames = 0,
-                surface = scene.windowedSurface(format = null),
-                adapterInfo = null,
                 error = "Kadre event loop returned without writing a session report.",
             ).writeTo(output)
+            completed = true
         }
     }
 }
@@ -258,10 +246,10 @@ private class SolidCardStackKadreApp(
         }
 
         val texture = surfaceTexture.texture
-        val textureView = texture.createView(null)
-        val pipeline = createScenePipeline(gpuDevice, format)
-        val encoder = gpuDevice.createCommandEncoder()
-        try {
+        GpuResourceScope().use { gpuResources ->
+            val textureView = gpuResources.track(texture.createView(null)) { it.close() }
+            val pipeline = gpuResources.track(createScenePipeline(gpuDevice, format)) { it.close() }
+            val encoder = gpuResources.trackIfAutoCloseable(gpuDevice.createCommandEncoder())
             val renderPass = encoder.beginRenderPass(
                 RenderPassDescriptor(
                     colorAttachments = listOf(
@@ -277,14 +265,10 @@ private class SolidCardStackKadreApp(
             renderPass.setPipeline(pipeline)
             renderPass.draw(3u, 1u, 0u, 0u)
             renderPass.end()
-            val commandBuffer = encoder.finish()
+            val commandBuffer = gpuResources.trackIfAutoCloseable(encoder.finish())
             gpuDevice.queue.submit(listOf(commandBuffer))
             surf.present()
             presentedFrames++
-        } finally {
-            textureView.close()
-            encoder.close()
-            pipeline.close()
         }
 
         if (presentedFrames >= requestedFrames) {
@@ -303,53 +287,60 @@ private class SolidCardStackKadreApp(
         val shader = gpuDevice.createShaderModule(
             ShaderModuleDescriptor(code = solidCardStackWgsl(scene)),
         )
-        val pipeline = gpuDevice.createRenderPipeline(
-            RenderPipelineDescriptor(
-                vertex = VertexState(module = shader, entryPoint = "vs_main"),
-                primitive = PrimitiveState(),
-                fragment = FragmentState(
-                    module = shader,
-                    entryPoint = "fs_main",
-                    targets = listOf(ColorTargetState(format = format)),
+        return try {
+            gpuDevice.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    vertex = VertexState(module = shader, entryPoint = "vs_main"),
+                    primitive = PrimitiveState(),
+                    fragment = FragmentState(
+                        module = shader,
+                        entryPoint = "fs_main",
+                        targets = listOf(ColorTargetState(format = format)),
+                    ),
                 ),
-            ),
-        )
-        shader.close()
-        return pipeline
+            )
+        } finally {
+            shader.close()
+        }
     }
 
     private fun completePresented(eventLoop: ActiveEventLoop) {
         if (completed) return
         completed = true
-        onComplete()
-        WindowedSceneSessionReport.presented(
-            scene = scene,
-            requestedFrames = requestedFrames,
-            surfaceFormat = surfaceFormat?.name ?: "unknown",
-            adapterInfo = adapterInfo ?: "unknown-adapter",
-        ).writeTo(output)
-        releaseResources()
-        eventLoop.setControlFlow(ControlFlow.Wait)
-        eventLoop.exit()
+        try {
+            WindowedSceneSessionReport.presented(
+                scene = scene,
+                requestedFrames = requestedFrames,
+                surfaceFormat = surfaceFormat?.name ?: "unknown",
+                adapterInfo = adapterInfo ?: "unknown-adapter",
+            ).writeTo(output)
+            onComplete()
+        } finally {
+            releaseResources()
+            eventLoop.setControlFlow(ControlFlow.Wait)
+            eventLoop.exit()
+        }
     }
 
     private fun completeBlocked(eventLoop: ActiveEventLoop, reason: String, error: String) {
         if (completed) return
         completed = true
-        onComplete()
-        WindowedSceneSessionReport(
-            sceneId = scene.sceneId.value,
-            status = "blocked",
-            reason = reason,
-            requestedFrames = requestedFrames,
-            presentedFrames = presentedFrames,
-            surface = scene.windowedSurface(format = surfaceFormat?.name),
-            adapterInfo = adapterInfo,
-            error = error,
-        ).writeTo(output)
-        releaseResources()
-        eventLoop.setControlFlow(ControlFlow.Wait)
-        eventLoop.exit()
+        try {
+            WindowedSceneSessionReport.blocked(
+                scene = scene,
+                reason = reason,
+                requestedFrames = requestedFrames,
+                presentedFrames = presentedFrames,
+                surfaceFormat = surfaceFormat?.name,
+                adapterInfo = adapterInfo,
+                error = error,
+            ).writeTo(output)
+            onComplete()
+        } finally {
+            releaseResources()
+            eventLoop.setControlFlow(ControlFlow.Wait)
+            eventLoop.exit()
+        }
     }
 
     private fun releaseResources() {
@@ -361,14 +352,39 @@ private class SolidCardStackKadreApp(
         wgpu = null
         window = null
     }
-}
 
-private fun GPURendererScene<*>.windowedSurface(format: String?): WindowedSceneSurface =
-    WindowedSceneSurface(
-        width = dimensions.width,
-        height = dimensions.height,
-        format = format,
-    )
+    private class GpuResourceScope : AutoCloseable {
+        private val closeActions = ArrayDeque<() -> Unit>()
+
+        fun <T> track(resource: T, close: (T) -> Unit): T {
+            closeActions.addFirst { close(resource) }
+            return resource
+        }
+
+        fun <T> trackIfAutoCloseable(resource: T): T {
+            if (resource is AutoCloseable) {
+                track(resource) { it.close() }
+            }
+            return resource
+        }
+
+        override fun close() {
+            var firstFailure: Throwable? = null
+            while (closeActions.isNotEmpty()) {
+                try {
+                    closeActions.removeFirst().invoke()
+                } catch (failure: Throwable) {
+                    if (firstFailure == null) {
+                        firstFailure = failure
+                    } else {
+                        firstFailure.addSuppressed(failure)
+                    }
+                }
+            }
+            firstFailure?.let { throw it }
+        }
+    }
+}
 
 private fun GPURendererScene<*>.clearColor(): SceneColor =
     commands.filterIsInstance<SceneCommand.Clear>().firstOrNull()?.color

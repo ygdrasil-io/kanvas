@@ -1,10 +1,11 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.windowed
 
 import java.lang.reflect.InvocationTargetException
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import kotlin.io.path.createDirectories
-import kotlin.io.path.exists
-import kotlin.io.path.writeText
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.reports.json
@@ -12,6 +13,13 @@ import org.graphiks.kanvas.gpu.renderer.scenes.reports.json
 private const val SOLID_CARD_STACK_SCENE_ID = "solid-card-stack"
 private const val KADRE_RUNNER_CLASS =
     "org.graphiks.kanvas.gpu.renderer.scenes.windowed.KadreWindowedSceneRunner"
+
+internal fun interface WindowedSceneRunnerLauncher {
+    fun run(scene: GPURendererScene<*>, frames: Int, output: Path)
+}
+
+internal var kadreWindowedSceneRunnerLauncher: WindowedSceneRunnerLauncher =
+    WindowedSceneRunnerLauncher(::runReflectiveKadreWindowedScene)
 
 fun main(args: Array<String>) = runGpuRendererSceneKadre(args)
 
@@ -38,15 +46,17 @@ fun runGpuRendererSceneKadre(args: Array<String>) {
     }
 
     runCatching {
-        runKadreWindowedScene(scene, frames, output)
+        kadreWindowedSceneRunnerLauncher.run(scene, frames, output)
     }.getOrElse { failure ->
-        if (!output.exists()) {
-            WindowedSceneSessionReport.blocked(
-                scene = scene,
-                requestedFrames = frames,
-                reason = "kadre-windowed-run-failed",
-                error = failure.toReportError(),
-            ).writeTo(output)
+        val reason = failure.runnerFailureReason()
+        WindowedSceneSessionReport.blocked(
+            scene = scene,
+            requestedFrames = frames,
+            reason = reason,
+            error = failure.toReportError(),
+        ).writeTo(output)
+        if (failure.isRunnerLoadingFailure()) {
+            throw failure
         }
         println(windowedCompletionMessage(scene.sceneId.value, "blocked", output))
     }
@@ -59,7 +69,7 @@ private fun parseFrames(raw: String): Int {
     return frames
 }
 
-private fun runKadreWindowedScene(
+private fun runReflectiveKadreWindowedScene(
     scene: GPURendererScene<*>,
     frames: Int,
     output: Path,
@@ -70,12 +80,27 @@ private fun runKadreWindowedScene(
         .invoke(runner, frames, output)
 }
 
+private fun Throwable.runnerFailureReason(): String =
+    if (isRunnerLoadingFailure()) {
+        "kadre-windowed-runner-loading-failed"
+    } else {
+        "kadre-windowed-runner-invocation-failed"
+    }
+
+private fun Throwable.isRunnerLoadingFailure(): Boolean {
+    val cause = unwrapInvocationTarget()
+    return cause is ClassNotFoundException || cause is NoSuchMethodException
+}
+
 private fun Throwable.toReportError(): String {
-    val cause = if (this is InvocationTargetException) targetException ?: this else this
+    val cause = unwrapInvocationTarget()
     val className = cause::class.qualifiedName ?: cause::class.simpleName ?: "Throwable"
     val messageText = cause.message?.takeIf { it.isNotBlank() }
     return if (messageText == null) className else "$className: $messageText"
 }
+
+private fun Throwable.unwrapInvocationTarget(): Throwable =
+    if (this is InvocationTargetException) targetException ?: this else this
 
 private fun windowedCompletionMessage(sceneId: String, status: String, output: Path): String =
     "GPU renderer scene Kadre windowed complete: sceneId=$sceneId " +
@@ -92,9 +117,16 @@ data class WindowedSceneSurface(
     }
 }
 
+enum class WindowedSceneSessionStatus(val wireName: String) {
+    DrySession("dry-session"),
+    NotYetRendered("not-yet-rendered"),
+    Blocked("blocked"),
+    Presented("presented"),
+}
+
 data class WindowedSceneSessionReport(
     val sceneId: String,
-    val status: String,
+    val runStatus: WindowedSceneSessionStatus,
     val reason: String?,
     val requestedFrames: Int,
     val presentedFrames: Int,
@@ -103,10 +135,11 @@ data class WindowedSceneSessionReport(
     val error: String?,
 ) {
     val manualValidation: Boolean = true
+    val productRefusal: Boolean = false
+    val status: String get() = runStatus.wireName
 
     init {
         require(sceneId.isNotBlank()) { "sceneId must not be blank" }
-        require(status.isNotBlank()) { "status must not be blank" }
         require(reason == null || reason.isNotBlank()) { "reason must not be blank" }
         require(requestedFrames >= 0) { "requestedFrames must be >= 0" }
         require(presentedFrames >= 0) { "presentedFrames must be >= 0" }
@@ -114,6 +147,33 @@ data class WindowedSceneSessionReport(
             "presentedFrames must not exceed requestedFrames"
         }
         require(error == null || error.isNotBlank()) { "error must not be blank" }
+        requireStatusInvariants()
+    }
+
+    private fun requireStatusInvariants() {
+        when (runStatus) {
+            WindowedSceneSessionStatus.DrySession -> {
+                require(requestedFrames == 0) { "dry-session reports must have requestedFrames == 0" }
+                require(presentedFrames == 0) { "dry-session reports must have presentedFrames == 0" }
+            }
+            WindowedSceneSessionStatus.NotYetRendered -> {
+                require(!reason.isNullOrBlank()) { "not-yet-rendered reports must include a reason" }
+                require(presentedFrames == 0) { "not-yet-rendered reports must have presentedFrames == 0" }
+            }
+            WindowedSceneSessionStatus.Blocked -> {
+                require(!reason.isNullOrBlank()) { "blocked reports must include a reason" }
+                require(!error.isNullOrBlank()) { "blocked reports must include an error" }
+            }
+            WindowedSceneSessionStatus.Presented -> {
+                require(requestedFrames > 0) { "presented reports must have requestedFrames > 0" }
+                require(presentedFrames == requestedFrames) {
+                    "presented reports must have presentedFrames == requestedFrames"
+                }
+                require(!surface.format.isNullOrBlank()) { "presented reports must include a surface format" }
+                require(!adapterInfo.isNullOrBlank()) { "presented reports must include adapterInfo" }
+                require(error == null) { "presented reports must not include an error" }
+            }
+        }
     }
 
     fun toJson(): String = buildString {
@@ -121,6 +181,7 @@ data class WindowedSceneSessionReport(
         appendLine("  \"schemaVersion\": 1,")
         appendLine("  \"sceneId\": ${sceneId.json()},")
         appendLine("  \"status\": ${status.json()},")
+        appendLine("  \"productRefusal\": $productRefusal,")
         appendLine("  \"reason\": ${reason?.json() ?: "null"},")
         appendLine("  \"requestedFrames\": $requestedFrames,")
         appendLine("  \"presentedFrames\": $presentedFrames,")
@@ -136,15 +197,31 @@ data class WindowedSceneSessionReport(
     }
 
     fun writeTo(output: Path) {
-        output.parent?.createDirectories()
-        output.writeText(toJson())
+        val absoluteOutput = output.toAbsolutePath()
+        val parent = absoluteOutput.parent ?: Path.of(".").toAbsolutePath()
+        parent.createDirectories()
+        val temp = Files.createTempFile(parent, "windowed-session-${absoluteOutput.fileName}.", ".tmp")
+        var moved = false
+        try {
+            Files.writeString(temp, toJson())
+            try {
+                Files.move(temp, absoluteOutput, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(temp, absoluteOutput, StandardCopyOption.REPLACE_EXISTING)
+            }
+            moved = true
+        } finally {
+            if (!moved) {
+                Files.deleteIfExists(temp)
+            }
+        }
     }
 
     companion object {
         fun drySession(scene: GPURendererScene<*>, requestedFrames: Int): WindowedSceneSessionReport =
             WindowedSceneSessionReport(
                 sceneId = scene.sceneId.value,
-                status = "dry-session",
+                runStatus = WindowedSceneSessionStatus.DrySession,
                 reason = "frames-zero-dry-session",
                 requestedFrames = requestedFrames,
                 presentedFrames = 0,
@@ -156,7 +233,7 @@ data class WindowedSceneSessionReport(
         fun notYetRendered(scene: GPURendererScene<*>, requestedFrames: Int): WindowedSceneSessionReport =
             WindowedSceneSessionReport(
                 sceneId = scene.sceneId.value,
-                status = "not-yet-rendered",
+                runStatus = WindowedSceneSessionStatus.NotYetRendered,
                 reason = "scene-renderer-not-yet-implemented",
                 requestedFrames = requestedFrames,
                 presentedFrames = 0,
@@ -170,15 +247,18 @@ data class WindowedSceneSessionReport(
             requestedFrames: Int,
             reason: String,
             error: String,
+            presentedFrames: Int = 0,
+            surfaceFormat: String? = null,
+            adapterInfo: String? = null,
         ): WindowedSceneSessionReport =
             WindowedSceneSessionReport(
                 sceneId = scene.sceneId.value,
-                status = "blocked",
+                runStatus = WindowedSceneSessionStatus.Blocked,
                 reason = reason,
                 requestedFrames = requestedFrames,
-                presentedFrames = 0,
-                surface = scene.surface(format = null),
-                adapterInfo = null,
+                presentedFrames = presentedFrames,
+                surface = scene.surface(format = surfaceFormat),
+                adapterInfo = adapterInfo,
                 error = error,
             )
 
@@ -190,7 +270,7 @@ data class WindowedSceneSessionReport(
         ): WindowedSceneSessionReport =
             WindowedSceneSessionReport(
                 sceneId = scene.sceneId.value,
-                status = "presented",
+                runStatus = WindowedSceneSessionStatus.Presented,
                 reason = "kadre-windowed-presented-frames",
                 requestedFrames = requestedFrames,
                 presentedFrames = requestedFrames,
