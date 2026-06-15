@@ -68,6 +68,157 @@ data class GPUCacheTelemetryEvent(
     }
 }
 
+/** Source classification for cache telemetry evidence. */
+enum class GPUCacheTelemetrySourceClassification(val label: String) {
+    /** Fully observed counter from a named runtime artifact with required fields present. */
+    Observed("observed"),
+    /** Runtime artifact exists but does not contain every required counter field. */
+    ObservedPartial("observed-partial"),
+    /** Counter is derived from non-runtime evidence such as reports, comments, or synthetic ledgers. */
+    Derived("derived"),
+    /** Required runtime evidence is missing or cannot be trusted. */
+    Unavailable("unavailable"),
+    /** Counter is intentionally reporting-only and cannot move readiness. */
+    ReportingOnly("reporting-only"),
+}
+
+/** Request to classify one cache telemetry counter against its named source. */
+data class GPUCacheTelemetrySourceMapRequest(
+    val counterName: String,
+    val cacheDomain: String,
+    val sourceArtifactLabel: String,
+    val sourceKind: String,
+    val sourceHash: String? = null,
+    val requiredFields: Set<String> = emptySet(),
+    val observedFields: Set<String> = emptySet(),
+    val derivedFrom: List<String> = emptyList(),
+) {
+    init {
+        require(counterName.isNotBlank()) { "GPU cache telemetry source-map counterName must not be blank" }
+        require(cacheDomain.isNotBlank()) { "GPU cache telemetry source-map cacheDomain must not be blank" }
+        require(sourceArtifactLabel.isNotBlank()) {
+            "GPU cache telemetry source-map sourceArtifactLabel must not be blank"
+        }
+        require(sourceKind.isNotBlank()) { "GPU cache telemetry source-map sourceKind must not be blank" }
+    }
+}
+
+/** Classified source-map entry for one cache telemetry counter. */
+data class GPUCacheTelemetrySourceMapEntry(
+    val counterName: String,
+    val cacheDomain: String,
+    val classification: GPUCacheTelemetrySourceClassification,
+    val sourceArtifactLabel: String,
+    val sourceKind: String,
+    val sourceHash: String?,
+    val requiredFields: Set<String>,
+    val observedFields: Set<String>,
+    val derivedFrom: List<String>,
+    val countsForObservedReadiness: Boolean,
+) {
+    /** Returns one canonical source-map dump line. */
+    fun dumpLine(): String =
+        "cache-source counter=$counterName domain=$cacheDomain classification=${classification.label} " +
+            "source=$sourceArtifactLabel kind=$sourceKind hash=${sourceHash ?: "none"} " +
+            "fields=${observedFields.stableFieldList()} required=${requiredFields.stableFieldList()} " +
+            "countsObserved=$countsForObservedReadiness"
+}
+
+/** Cache telemetry source-map report with non-promotional readiness fields. */
+data class GPUCacheTelemetrySourceMapReport(
+    val mapId: String,
+    val entries: List<GPUCacheTelemetrySourceMapEntry>,
+    val readinessDelta: Double = 0.0,
+    val releaseBlocking: Boolean = false,
+    val productRouteActivated: Boolean = false,
+) {
+    init {
+        require(mapId.isNotBlank()) { "GPU cache telemetry source-map mapId must not be blank" }
+    }
+
+    /** Returns counters that are backed by complete observed runtime artifacts. */
+    fun observedReadinessCounters(): List<String> =
+        entries
+            .filter { entry -> entry.countsForObservedReadiness }
+            .map { entry -> entry.counterName }
+
+    /** Returns canonical report lines for PM evidence and tests. */
+    fun dumpLines(): List<String> {
+        val counts = entries.groupingBy { entry -> entry.classification }.eachCount()
+
+        return listOf(
+            "cache-source-map id=$mapId entries=${entries.size} readinessDelta=$readinessDelta " +
+                "releaseBlocking=$releaseBlocking productRouteActivated=$productRouteActivated",
+        ) + entries.map { entry -> entry.dumpLine() } + listOf(
+            "pm:gpu-renderer.cache-telemetry-source-map classification=PolicyGated " +
+                "observed=${counts[GPUCacheTelemetrySourceClassification.Observed] ?: 0} " +
+                "observedPartial=${counts[GPUCacheTelemetrySourceClassification.ObservedPartial] ?: 0} " +
+                "derived=${counts[GPUCacheTelemetrySourceClassification.Derived] ?: 0} " +
+                "unavailable=${counts[GPUCacheTelemetrySourceClassification.Unavailable] ?: 0} " +
+                "reportingOnly=${counts[GPUCacheTelemetrySourceClassification.ReportingOnly] ?: 0} " +
+                "readinessDelta=$readinessDelta releaseBlocking=$releaseBlocking",
+            "nonclaim:no-release-blocking-gate no-readiness-delta no-product-activation " +
+                "no-derived-as-observed no-synthetic-comment-counters",
+        )
+    }
+}
+
+/** Builds non-promotional source maps for cache telemetry counters. */
+object GPUCacheTelemetrySourceMapper {
+    /** Classifies every requested counter into observed, partial, derived, unavailable, or reporting-only. */
+    fun map(
+        mapId: String,
+        requests: List<GPUCacheTelemetrySourceMapRequest>,
+    ): GPUCacheTelemetrySourceMapReport =
+        GPUCacheTelemetrySourceMapReport(
+            mapId = mapId,
+            entries = requests.map { request -> classify(request) },
+        )
+
+    private fun classify(request: GPUCacheTelemetrySourceMapRequest): GPUCacheTelemetrySourceMapEntry {
+        val normalizedSourceKind = request.sourceKind.lowercase()
+        val classification = classificationFor(request, normalizedSourceKind)
+
+        return GPUCacheTelemetrySourceMapEntry(
+            counterName = request.counterName,
+            cacheDomain = request.cacheDomain,
+            classification = classification,
+            sourceArtifactLabel = request.sourceArtifactLabel,
+            sourceKind = normalizedSourceKind,
+            sourceHash = request.sourceHash,
+            requiredFields = request.requiredFields,
+            observedFields = request.observedFields,
+            derivedFrom = request.derivedFrom,
+            countsForObservedReadiness = classification == GPUCacheTelemetrySourceClassification.Observed,
+        )
+    }
+
+    private fun classificationFor(
+        request: GPUCacheTelemetrySourceMapRequest,
+        normalizedSourceKind: String,
+    ): GPUCacheTelemetrySourceClassification =
+        when (normalizedSourceKind) {
+            in observedArtifactKinds -> classifyObservedArtifact(request)
+            in derivedSourceKinds -> GPUCacheTelemetrySourceClassification.Derived
+            "reporting-only" -> GPUCacheTelemetrySourceClassification.ReportingOnly
+            else -> GPUCacheTelemetrySourceClassification.Unavailable
+        }
+
+    private fun classifyObservedArtifact(
+        request: GPUCacheTelemetrySourceMapRequest,
+    ): GPUCacheTelemetrySourceClassification =
+        when {
+            request.sourceHash.isNullOrBlank() -> GPUCacheTelemetrySourceClassification.Unavailable
+            request.requiredFields.all { field -> field in request.observedFields } ->
+                GPUCacheTelemetrySourceClassification.Observed
+            request.observedFields.isNotEmpty() -> GPUCacheTelemetrySourceClassification.ObservedPartial
+            else -> GPUCacheTelemetrySourceClassification.Unavailable
+        }
+
+    private val observedArtifactKinds = setOf("adapter-runtime-artifact", "executed-pm-artifact")
+    private val derivedSourceKinds = setOf("comment", "report-text", "synthetic-ledger")
+}
+
 /**
  * Closed R6 first-route counter domains owned by telemetry.
  *
@@ -498,3 +649,10 @@ private fun requireStableTelemetryToken(label: String, value: String?) {
         "GPU first-route telemetry $label must not contain whitespace or ':'"
     }
 }
+
+private fun Set<String>.stableFieldList(): String =
+    if (isEmpty()) {
+        "-"
+    } else {
+        sorted().joinToString(",")
+    }
