@@ -42,7 +42,8 @@ The tests cover:
 - `GlyphUploadPlan` route metadata as a planning dependency, not an execution
   route;
 - descriptor missing, stale, and budget diagnostics in canonical dumps,
-  compact hashes, and no-`Sk*` scans;
+  compact hashes, and no-`Sk*` scans, with registered missing artifacts kept
+  distinct from unregistered artifact refusal;
 - unregistered artifact diagnostics;
 - registry descriptor no-`Sk*` leakage reports, including a negative descriptor
   fixture for `SkFont`, `fontBytes`, and raw GPU handle fields;
@@ -52,7 +53,9 @@ The tests cover:
 - no-`Sk*` positive and negative fixtures;
 - value-level payload scans for stringified or opaque `Sk*`, `fontBytes`,
   `NativeFontHandle`, `GPUHandle`, `GPUTexture`, `GPUBuffer`, `GPUDevice`,
-  `WGPUTexture`, `TextureView`, and `BindGroup` markers;
+  `WGPUTexture`, `TextureView`, `BindGroup`, `Sampler`, `CommandEncoder`,
+  `RenderPassEncoder`, `GPUQueue`, `Queue`, `RenderPipeline`, `Pipeline`, and
+  `PlatformFontHandle` markers;
 - domain wrapper type names such as `GPUTextArtifactID`,
   `GPUTextArtifactGeneration`, and `GPUTextLayoutResultID` are not raw GPU
   handle leaks;

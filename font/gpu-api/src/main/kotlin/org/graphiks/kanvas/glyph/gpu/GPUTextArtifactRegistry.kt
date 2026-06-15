@@ -275,6 +275,8 @@ private const val TEXT_GPU_ARTIFACT_UNREGISTERED_HANDOFF_DIAGNOSTIC =
     "text.gpu.artifact-unregistered"
 private const val TEXT_GPU_ARTIFACT_UNREGISTERED_RENDERER_DIAGNOSTIC =
     "unsupported.text.artifact_unregistered"
+private const val TEXT_GPU_ARTIFACT_MISSING_RENDERER_DIAGNOSTIC =
+    "unsupported.text.artifact_missing"
 private const val TEXT_GPU_ARTIFACT_GENERATION_STALE_DIAGNOSTIC =
     "unsupported.text.artifact_generation_stale"
 private const val TEXT_GPU_ARTIFACT_BUDGET_EXCEEDED_DIAGNOSTIC =
@@ -300,7 +302,7 @@ private fun textGPUArtifactDescriptor(
     memoryBudgetClass = memoryBudgetClass,
     uploadBudgetClass = uploadBudgetClass,
     supportedRoutes = supportedRoutes,
-    missingDiagnostic = TEXT_GPU_ARTIFACT_UNREGISTERED_RENDERER_DIAGNOSTIC,
+    missingDiagnostic = TEXT_GPU_ARTIFACT_MISSING_RENDERER_DIAGNOSTIC,
     staleDiagnostic = staleDiagnostic,
     budgetDiagnostic = budgetDiagnostic,
     productActivation = false,

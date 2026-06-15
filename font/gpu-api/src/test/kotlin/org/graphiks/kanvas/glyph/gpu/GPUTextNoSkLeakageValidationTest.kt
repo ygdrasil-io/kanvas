@@ -101,6 +101,14 @@ class GPUTextNoSkLeakageValidationTest {
             "WGPUTexture",
             "TextureView",
             "BindGroup",
+            "Sampler",
+            "CommandEncoder",
+            "RenderPassEncoder",
+            "GPUQueue",
+            "Queue",
+            "RenderPipeline",
+            "Pipeline",
+            "PlatformFontHandle",
         )
         val report = validateGPUTextNoSkLeakage(
             payloadKind = "GPUTextRunPlan",
@@ -310,6 +318,7 @@ class GPUTextNoSkLeakageValidationTest {
                 TextPayloadField("transform", "SkewTransformFacts", "sketch diagnostics"),
                 TextPayloadField("clip.maskPath", "String", "maskPath"),
                 TextPayloadField("material.maskFont", "String", "maskFont"),
+                TextPayloadField("routeLabel", "String", "wgsl-pipeline-target"),
             ),
         )
 

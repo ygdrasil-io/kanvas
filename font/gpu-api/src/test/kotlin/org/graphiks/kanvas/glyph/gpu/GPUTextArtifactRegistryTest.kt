@@ -52,10 +52,13 @@ class GPUTextArtifactRegistryTest {
         assertContains(json, """"supportedRoutes":["ColorGlyphCompositeRoute"]""")
         assertContains(json, """"supportedRoutes":["BitmapGlyphTextureRoute"]""")
         assertContains(json, """"supportedRoutes":["SVGGlyphVectorRoute"]""")
-        assertContains(json, """"missingDiagnostic":"unsupported.text.artifact_unregistered"""")
+        assertContains(json, """"missingDiagnostic":"unsupported.text.artifact_missing"""")
         assertContains(json, """"staleDiagnostic":"unsupported.text.artifact_generation_stale"""")
         assertContains(json, """"budgetDiagnostic":"unsupported.text.artifact_budget_exceeded"""")
         assertContains(json, """"productActivation":false""")
+        assertTrue(registry.descriptors.all { descriptor ->
+            descriptor.missingDiagnostic != "unsupported.text.artifact_unregistered"
+        })
 
         listOf("SkFont", "SkTypeface", "SkTextBlob", "SkPaint", "fontBytes", "GPUHandle").forEach { token ->
             assertFalse(json.contains(token), "Registry dump leaked forbidden token $token: $json")

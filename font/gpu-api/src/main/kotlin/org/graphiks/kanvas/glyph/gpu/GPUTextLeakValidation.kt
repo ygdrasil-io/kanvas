@@ -225,25 +225,35 @@ private fun TextPayloadField.hasNondumpablePayloadMarker(): Boolean {
 }
 
 private fun TextPayloadField.hasForbiddenPayloadMarker(): Boolean {
-    return normalizedScanValues().any { normalizedValue ->
-        FORBIDDEN_TEXT_PAYLOAD_MARKERS.any { marker -> normalizedValue.contains(marker) }
+    return scanValues().any { scanValue ->
+        FORBIDDEN_TEXT_PAYLOAD_MARKERS.any { marker -> scanValue.normalized.contains(marker) } ||
+            scanValue.raw.containsGenericGpuHandleMarker()
     }
 }
 
 private val FORBIDDEN_TEXT_PAYLOAD_MARKERS = listOf(
     "fontbytes",
+    "platformfonthandle",
     "nativefonthandle",
     "gpuhandle",
     "gputexture",
     "gpubuffer",
     "gpudevice",
+    "gpusampler",
+    "gpuqueue",
     "wgputexture",
+    "wgpusampler",
     "textureview",
     "bindgroup",
+    "commandencoder",
+    "renderpassencoder",
+    "renderpipeline",
 )
 
 private val KNOWN_SK_PAYLOAD_TOKEN_REGEX =
     Regex("""(?i)(^|[^A-Za-z0-9])sk(font|typeface|textblob|paint|path|shaper)([^A-Za-z0-9]|$)""")
+private val GENERIC_GPU_HANDLE_TOKEN_REGEX =
+    Regex("""(?i)(^|[.\s<({\[])(sampler|queue|pipeline)($|[.\s>)}\]])""")
 
 private data class TextPayloadScanValue(
     val raw: String,
@@ -276,6 +286,9 @@ private fun String.containsGenericSkTypeMarker(): Boolean =
 
 private fun String.containsKnownSkTokenMarker(): Boolean =
     KNOWN_SK_PAYLOAD_TOKEN_REGEX.containsMatchIn(this)
+
+private fun String.containsGenericGpuHandleMarker(): Boolean =
+    GENERIC_GPU_HANDLE_TOKEN_REGEX.containsMatchIn(this)
 
 private fun StringBuilder.appendTextPayloadLeakJsonField(
     name: String,
