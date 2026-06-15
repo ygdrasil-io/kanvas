@@ -534,6 +534,73 @@ data class COLRV1Table(
             nodes = nodes.toList(),
         )
     }
+
+    /**
+     * Detects a PaintColrGlyph cycle reachable from [glyphId] and reports it as stable evidence.
+     *
+     * This traversal follows only already-parsed COLRv1 paint data. It does not expand a renderer
+     * graph, compute bounds, resolve palettes, or claim complete COLRv1 rendering support.
+     *
+     * @param glyphId base glyph identifier to inspect for recursive PaintColrGlyph references.
+     * @return cycle diagnostic, or null when no cycle is found through parsed PaintColrGlyph links.
+     */
+    fun paintColrGlyphCycleDiagnostic(glyphId: Int): ColorGlyphDiagnostic? {
+        val glyphPath = ArrayList<Int>()
+
+        fun cycleDiagnostic(cyclePath: List<Int>): ColorGlyphDiagnostic {
+            val pathText = cyclePath.joinToString(">")
+            val cycleLength = cyclePath.size - 1
+            return ColorGlyphDiagnostic(
+                glyphId = glyphId,
+                route = "colr",
+                code = ColorGlyphDiagnosticCodes.COLRV1CycleDetected,
+                severity = "warning",
+                detail = "glyphId=$glyphId;tableFamily=COLR;version=1;" +
+                    "cyclePath=$pathText;cycleLength=$cycleLength",
+                message = "COLRv1 PaintColrGlyph cycle detected for glyph $glyphId: $pathText.",
+            )
+        }
+
+        fun visitPaint(paint: COLRV1Paint): ColorGlyphDiagnostic? {
+            when (paint) {
+                is COLRV1Paint.Solid,
+                is COLRV1Paint.LinearGradient,
+                is COLRV1Paint.RadialGradient,
+                is COLRV1Paint.SweepGradient -> return null
+                is COLRV1Paint.Glyph -> return visitPaint(paint.paint)
+                is COLRV1Paint.Layers -> {
+                    paint.paints.forEach { child ->
+                        visitPaint(child)?.let { diagnostic -> return diagnostic }
+                    }
+                    return null
+                }
+                is COLRV1Paint.Composite -> {
+                    visitPaint(paint.source)?.let { diagnostic -> return diagnostic }
+                    return visitPaint(paint.backdrop)
+                }
+                is COLRV1Paint.ColrGlyph -> {
+                    val cycleStart = glyphPath.indexOf(paint.glyphId)
+                    if (cycleStart >= 0) {
+                        return cycleDiagnostic(glyphPath.drop(cycleStart) + paint.glyphId)
+                    }
+
+                    val referencedPaint = paintForGlyph(paint.glyphId) ?: return null
+                    glyphPath += paint.glyphId
+                    val diagnostic = visitPaint(referencedPaint)
+                    glyphPath.removeAt(glyphPath.lastIndex)
+                    return diagnostic
+                }
+                is COLRV1Paint.Translate -> return visitPaint(paint.paint)
+                is COLRV1Paint.Transform -> return visitPaint(paint.paint)
+            }
+        }
+
+        val paint = paintForGlyph(glyphId) ?: return null
+        glyphPath += glyphId
+        val diagnostic = visitPaint(paint)
+        glyphPath.removeAt(glyphPath.lastIndex)
+        return diagnostic
+    }
 }
 
 /**
@@ -908,6 +975,43 @@ enum class COLRV1CompositeMode(val fontValue: Int, val graphSuffix: String) {
  * checked big-endian helpers.
  */
 object COLRV1Parser {
+    /**
+     * Builds a stable refusal diagnostic when a COLRv1 paint graph exceeds a parser budget.
+     *
+     * @param glyphId base glyph identifier whose paint graph exceeded the budget, or null when the
+     * glyph cannot be identified.
+     * @param limitName stable budget name, such as `expandedPaintCount` or `paintDepth`.
+     * @param limit configured budget limit.
+     * @param observed observed value that exceeded [limit].
+     * @return stable COLRv1 budget refusal diagnostic.
+     */
+    fun budgetExceededDiagnostic(
+        glyphId: Int?,
+        limitName: String,
+        limit: Int,
+        observed: Int,
+    ): ColorGlyphDiagnostic {
+        require(limitName.isNotBlank()) {
+            "COLRv1 budget diagnostic limit name must be non-blank."
+        }
+        require(limit >= 0 && observed >= 0) {
+            "COLRv1 budget diagnostic values must be non-negative."
+        }
+
+        val glyphLabel = glyphId?.toString() ?: "unknown"
+        val normalizedLimitName = limitName.trim()
+        return ColorGlyphDiagnostic(
+            glyphId = glyphId,
+            route = "colr",
+            code = ColorGlyphDiagnosticCodes.COLRV1BudgetExceeded,
+            severity = "warning",
+            detail = "glyphId=$glyphLabel;tableFamily=COLR;version=1;" +
+                "limitName=$normalizedLimitName;limit=$limit;observed=$observed",
+            message = "COLRv1 paint graph budget $normalizedLimitName exceeded for glyph $glyphLabel: " +
+                "observed $observed, limit $limit.",
+        )
+    }
+
     /**
      * Parses a COLR version 1 table.
      *
@@ -1514,6 +1618,224 @@ data class BitmapStrikeSelection(
 )
 
 /**
+ * Renderer-neutral plan for one PNG-backed embedded bitmap glyph.
+ *
+ * The plan records only deterministic font-owned facts. It does not allocate GPU textures, create
+ * renderer resources, call platform codecs, or claim that the glyph can be sampled by a GPU route.
+ *
+ * @property glyphId glyph identifier represented by the bitmap plan.
+ * @property tableFamily embedded bitmap table family that supplied the strike.
+ * @property requestedSizePx requested glyph size in pixels.
+ * @property selectedStrikePpem pixels-per-em advertised by the selected strike.
+ * @property sourceFormat normalized source payload format.
+ * @property left horizontal bitmap origin in glyph strike space.
+ * @property top vertical bitmap origin in glyph strike space.
+ * @property width decoded bitmap width in pixels.
+ * @property height decoded bitmap height in pixels.
+ * @property originX horizontal origin included in the future GPU handoff plan.
+ * @property originY vertical origin included in the future GPU handoff plan.
+ * @property scalingPolicy stable policy label explaining exact vs scaled strike use.
+ * @property alphaPolicy stable alpha/premul policy label for decoded pixels.
+ * @property sourcePayloadSha256 SHA-256 digest of the original PNG payload bytes.
+ * @property decodedPixelSha256 SHA-256 digest of decoded ARGB pixels in row-major order.
+ * @property diagnostics stable bitmap glyph diagnostics attached to this plan.
+ */
+data class BitmapGlyphPlan(
+    val glyphId: Int,
+    val tableFamily: String,
+    val requestedSizePx: Float,
+    val selectedStrikePpem: Int,
+    val sourceFormat: String,
+    val left: Int,
+    val top: Int,
+    val width: Int,
+    val height: Int,
+    val originX: Int,
+    val originY: Int,
+    val scalingPolicy: String,
+    val alphaPolicy: String,
+    val sourcePayloadSha256: String,
+    val decodedPixelSha256: String,
+    val diagnostics: List<ColorGlyphDiagnostic> = emptyList(),
+) {
+    /**
+     * SHA-256 digest of [toCanonicalJson] content with the `dumpSha256` field omitted.
+     */
+    val dumpSha256: String
+        get() = colorGlyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    /**
+     * Serializes this bitmap plan as deterministic JSON evidence.
+     *
+     * @return canonical JSON dump ending with a newline.
+     */
+    fun toCanonicalJson(): String = canonicalJson(includeDumpSha256 = true)
+
+    /**
+     * Shared constructors for bitmap glyph plans.
+     */
+    companion object {
+        /**
+         * Builds a plan from a selected PNG strike and already-decoded PNG image.
+         *
+         * @param strike selected embedded bitmap strike metadata.
+         * @param requestedSizePx requested glyph size in pixels.
+         * @param tableFamily source table family label, such as `CBDT/CBLC` or `sbix`.
+         * @param sourcePayload original PNG payload bytes.
+         * @param image decoded PNG glyph image.
+         * @return deterministic bitmap glyph plan.
+         */
+        fun fromPNG(
+            strike: BitmapStrikeSelection,
+            requestedSizePx: Float,
+            tableFamily: String,
+            sourcePayload: ByteArray,
+            image: PNGGlyphImage,
+        ): BitmapGlyphPlan {
+            require(requestedSizePx.isFinite() && requestedSizePx > 0f) {
+                "Bitmap glyph requested size must be finite and positive."
+            }
+            require(strike.glyphId == image.glyphId) {
+                "Bitmap strike glyph ${strike.glyphId} does not match decoded glyph ${image.glyphId}."
+            }
+            require(strike.width == image.width && strike.height == image.height) {
+                "Bitmap strike dimensions must match decoded PNG dimensions for glyph ${strike.glyphId}."
+            }
+            require(strike.format.trim().lowercase() == "png") {
+                "Bitmap glyph plan requires a PNG strike for glyph ${strike.glyphId}."
+            }
+            require(tableFamily.isNotBlank()) {
+                "Bitmap glyph table family must be non-blank."
+            }
+
+            return BitmapGlyphPlan(
+                glyphId = strike.glyphId,
+                tableFamily = tableFamily.trim(),
+                requestedSizePx = requestedSizePx,
+                selectedStrikePpem = strike.ppem,
+                sourceFormat = "png",
+                left = 0,
+                top = 0,
+                width = image.width,
+                height = image.height,
+                originX = 0,
+                originY = 0,
+                scalingPolicy = if (requestedSizePx == strike.ppem.toFloat()) {
+                    "exact-strike"
+                } else {
+                    "scale-to-requested-size"
+                },
+                alphaPolicy = "premultiplied-argb",
+                sourcePayloadSha256 = colorGlyphSha256(sourcePayload.copyOf()),
+                decodedPixelSha256 = colorGlyphSha256(image.pixels.toARGBByteArray()),
+                diagnostics = emptyList(),
+            )
+        }
+
+        /**
+         * Builds a stable refusal diagnostic for non-PNG embedded bitmap payloads.
+         *
+         * @param glyphId glyph identifier whose bitmap payload was inspected.
+         * @param tableFamily source table family label, such as `CBDT/CBLC` or `sbix`.
+         * @param sourceFormat unsupported source payload format label.
+         * @param sourcePayload original payload bytes used only for a deterministic hash.
+         * @return stable non-PNG bitmap payload refusal diagnostic.
+         */
+        fun unsupportedPayloadDiagnostic(
+            glyphId: Int,
+            tableFamily: String,
+            sourceFormat: String,
+            sourcePayload: ByteArray,
+        ): ColorGlyphDiagnostic {
+            val normalizedFamily = tableFamily.trim().ifEmpty { "unknown" }
+            val normalizedFormat = sourceFormat.trim().lowercase().ifEmpty { "unknown" }
+            val payloadHash = colorGlyphSha256(sourcePayload.copyOf())
+
+            return ColorGlyphDiagnostic(
+                glyphId = glyphId,
+                route = "bitmap",
+                code = ColorGlyphDiagnosticCodes.BitmapPayloadFormatUnsupported,
+                severity = "warning",
+                detail = "glyphId=$glyphId;tableFamily=$normalizedFamily;sourceFormat=$normalizedFormat;" +
+                    "sourcePayloadSha256=$payloadHash",
+                message = "Bitmap glyph payload format $normalizedFormat is unsupported for glyph $glyphId " +
+                    "from $normalizedFamily.",
+            )
+        }
+
+        /**
+         * Builds a stable refusal diagnostic for malformed PNG bitmap glyph payloads.
+         *
+         * @param glyphId glyph identifier whose PNG payload failed to decode.
+         * @param tableFamily source table family label, such as `CBDT/CBLC` or `sbix`.
+         * @param sourcePayload original payload bytes used only for deterministic evidence.
+         * @param failure decode failure emitted by the pure Kotlin PNG decoder.
+         * @return stable malformed PNG bitmap payload refusal diagnostic.
+         */
+        fun pngDecodeFailedDiagnostic(
+            glyphId: Int,
+            tableFamily: String,
+            sourcePayload: ByteArray,
+            failure: Throwable,
+        ): ColorGlyphDiagnostic {
+            val normalizedFamily = tableFamily.trim().ifEmpty { "unknown" }
+            val payloadHash = colorGlyphSha256(sourcePayload.copyOf())
+            val failureClass = failure.javaClass.simpleName.ifEmpty { "Throwable" }
+            val failureMessage = failure.message?.trim().orEmpty().ifEmpty { "unknown" }
+
+            return ColorGlyphDiagnostic(
+                glyphId = glyphId,
+                route = "bitmap",
+                code = ColorGlyphDiagnosticCodes.PNGDecodeFailed,
+                severity = "warning",
+                detail = "glyphId=$glyphId;tableFamily=$normalizedFamily;sourceFormat=png;" +
+                    "sourcePayloadSha256=$payloadHash;failureClass=$failureClass;" +
+                    "failureMessage=$failureMessage",
+                message = "Bitmap glyph PNG decode failed for glyph $glyphId from $normalizedFamily: " +
+                    failureMessage,
+            )
+        }
+    }
+
+    /**
+     * Serializes this plan with optional dump hash inclusion.
+     */
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendColorGlyphJsonField("schema", BitmapGlyphPlanSchema, comma = true)
+        appendColorGlyphJsonField("glyphId", glyphId, comma = true)
+        appendColorGlyphJsonField("tableFamily", tableFamily, comma = true)
+        append("  ").append(colorGlyphJsonString("requestedSizePx")).append(": ")
+        append(colorGlyphFloatToken(requestedSizePx)).append(",\n")
+        appendColorGlyphJsonField("selectedStrikePpem", selectedStrikePpem, comma = true)
+        appendColorGlyphJsonField("sourceFormat", sourceFormat, comma = true)
+        append("  \"bounds\": {")
+        append(colorGlyphJsonString("left")).append(": ").append(left).append(", ")
+        append(colorGlyphJsonString("top")).append(": ").append(top).append(", ")
+        append(colorGlyphJsonString("width")).append(": ").append(width).append(", ")
+        append(colorGlyphJsonString("height")).append(": ").append(height)
+        append("},\n")
+        append("  \"origin\": {")
+        append(colorGlyphJsonString("x")).append(": ").append(originX).append(", ")
+        append(colorGlyphJsonString("y")).append(": ").append(originY)
+        append("},\n")
+        appendColorGlyphJsonField("scalingPolicy", scalingPolicy, comma = true)
+        appendColorGlyphJsonField("alphaPolicy", alphaPolicy, comma = true)
+        appendColorGlyphJsonField("sourcePayloadSha256", sourcePayloadSha256, comma = true)
+        appendColorGlyphJsonField("decodedPixelSha256", decodedPixelSha256, comma = true)
+        append("  \"diagnostics\": ")
+        appendColorGlyphDiagnosticsJson(diagnostics, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendColorGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+}
+
+/**
  * Decodes PNG-backed glyph images into pure Kotlin byte buffers.
  */
 interface PNGGlyphDecoder {
@@ -1646,6 +1968,95 @@ interface SVGGlyphParser {
  * equivalent input ordering produces deterministic metadata.
  */
 object BasicSVGGlyphParser : SVGGlyphParser {
+    /**
+     * Builds a stable refusal diagnostic for an SVG glyph external resource reference.
+     *
+     * @param glyphId glyph identifier whose SVG payload referenced an external resource.
+     * @param elementName SVG element carrying the refused reference.
+     * @param attributeName SVG attribute carrying the refused reference.
+     * @param reference raw reference text, used only for deterministic hashing.
+     * @return stable SVG external resource refusal diagnostic.
+     */
+    fun externalResourceRefusedDiagnostic(
+        glyphId: Int,
+        elementName: String,
+        attributeName: String,
+        reference: String,
+    ): ColorGlyphDiagnostic {
+        val normalizedElement = elementName.trim().ifEmpty { "unknown" }
+        val normalizedAttribute = attributeName.trim().ifEmpty { "unknown" }
+        val referenceHash = colorGlyphSha256(reference.toByteArray(Charsets.UTF_8))
+
+        return ColorGlyphDiagnostic(
+            glyphId = glyphId,
+            route = "svg",
+            code = ColorGlyphDiagnosticCodes.SVGExternalResourceRefused,
+            severity = "warning",
+            detail = "glyphId=$glyphId;elementName=$normalizedElement;attributeName=$normalizedAttribute;" +
+                "referenceSha256=$referenceHash",
+            message = "SVG glyph external resource refused for glyph $glyphId: " +
+                "$normalizedElement $normalizedAttribute.",
+        )
+    }
+
+    /**
+     * Builds a stable refusal diagnostic for an unsupported SVG glyph feature.
+     *
+     * @param glyphId glyph identifier whose SVG payload used the unsupported feature.
+     * @param elementName SVG element associated with the unsupported feature.
+     * @param featureName stable feature label describing the unsupported behavior.
+     * @return stable SVG unsupported feature diagnostic.
+     */
+    fun unsupportedFeatureDiagnostic(
+        glyphId: Int,
+        elementName: String,
+        featureName: String,
+    ): ColorGlyphDiagnostic {
+        val normalizedElement = elementName.trim().ifEmpty { "unknown" }
+        val normalizedFeature = featureName.trim().ifEmpty { "unknown" }
+
+        return ColorGlyphDiagnostic(
+            glyphId = glyphId,
+            route = "svg",
+            code = ColorGlyphDiagnosticCodes.SVGFeatureUnsupported,
+            severity = "warning",
+            detail = "glyphId=$glyphId;elementName=$normalizedElement;featureName=$normalizedFeature",
+            message = "SVG glyph feature $normalizedFeature is unsupported for glyph $glyphId " +
+                "in $normalizedElement.",
+        )
+    }
+
+    /**
+     * Builds a stable refusal diagnostic for SVG `<use>` recursion exceeding a bounded depth.
+     *
+     * @param glyphId glyph identifier whose SVG payload exceeded the recursion budget.
+     * @param referenceId stable referenced symbol or element identifier.
+     * @param depth observed recursion depth.
+     * @param maxDepth configured maximum recursion depth.
+     * @return stable SVG recursion budget refusal diagnostic.
+     */
+    fun useRecursionRefusedDiagnostic(
+        glyphId: Int,
+        referenceId: String,
+        depth: Int,
+        maxDepth: Int,
+    ): ColorGlyphDiagnostic {
+        require(depth >= 0 && maxDepth >= 0) {
+            "SVG use recursion diagnostic depths must be non-negative."
+        }
+
+        val normalizedReferenceId = referenceId.trim().ifEmpty { "unknown" }
+        return ColorGlyphDiagnostic(
+            glyphId = glyphId,
+            route = "svg",
+            code = ColorGlyphDiagnosticCodes.SVGBudgetExceeded,
+            severity = "warning",
+            detail = "glyphId=$glyphId;referenceId=$normalizedReferenceId;depth=$depth;maxDepth=$maxDepth",
+            message = "SVG glyph use recursion exceeded for glyph $glyphId at $normalizedReferenceId: " +
+                "depth $depth, max $maxDepth.",
+        )
+    }
+
     /**
      * Parses bounded UTF-8 SVG text for one glyph.
      *
@@ -2097,6 +2508,7 @@ private data class EmojiRouteCandidate(
 
 private val COLOR_GLYPH_ROUTE_ORDER = listOf("colr", "bitmap", "png", "svg", "outline")
 private val COLOR_GLYPH_ROUTES = COLOR_GLYPH_ROUTE_ORDER.toSet()
+private const val BitmapGlyphPlanSchema = "org.graphiks.kanvas.glyph.color.BitmapGlyphPlan.v1"
 
 /**
  * Appends a canonical JSON string field using the module's two-space object indentation.
@@ -2160,6 +2572,19 @@ private fun StringBuilder.appendColorGlyphDiagnosticsJson(diagnostics: List<Colo
 }
 
 /**
+ * Formats a finite float using a stable JSON token.
+ */
+private fun colorGlyphFloatToken(value: Float): String {
+    require(value.isFinite()) { "Color glyph float values must be finite." }
+    val token = value.toString()
+    return if (token.endsWith(".0") && 'E' !in token && 'e' !in token) {
+        token.dropLast(2)
+    } else {
+        token
+    }
+}
+
+/**
  * Escapes a string for canonical JSON evidence.
  */
 private fun colorGlyphJsonString(value: String): String = buildString {
@@ -2193,6 +2618,21 @@ private fun colorGlyphSha256(bytes: ByteArray): String =
     MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { byte ->
         "%02x".format(byte.toInt() and 0xFF)
     }
+
+/**
+ * Encodes packed ARGB pixels into deterministic big-endian bytes for hashing.
+ */
+private fun List<Int>.toARGBByteArray(): ByteArray {
+    val bytes = ByteArray(size * 4)
+    forEachIndexed { index, pixel ->
+        val offset = index * 4
+        bytes[offset] = (pixel ushr 24).toByte()
+        bytes[offset + 1] = (pixel ushr 16).toByte()
+        bytes[offset + 2] = (pixel ushr 8).toByte()
+        bytes[offset + 3] = pixel.toByte()
+    }
+    return bytes
+}
 
 /**
  * Bounds-checked big-endian reader for raw OpenType color table bytes.
@@ -2983,6 +3423,8 @@ private val PNG_SIGNATURE = byteArrayOf(
 private val SVG_NUMBER_SEPARATOR = Regex("[,\\s]+")
 private val SVG_WHITESPACE = Regex("\\s+")
 private val SVG_SUMMARY_ELEMENT_NAMES = setOf(
+    "clippath",
+    "lineargradient",
     "path",
     "rect",
     "circle",
@@ -2990,21 +3432,27 @@ private val SVG_SUMMARY_ELEMENT_NAMES = setOf(
     "line",
     "polyline",
     "polygon",
+    "stop",
     "use",
 )
 private val SVG_SUMMARY_ATTRIBUTE_NAMES = setOf(
+    "clip-path",
     "cx",
     "cy",
     "d",
     "fill",
+    "gradientunits",
     "height",
     "href",
+    "id",
     "opacity",
+    "offset",
     "points",
     "r",
     "rx",
     "ry",
     "stroke",
+    "stop-color",
     "stroke-width",
     "transform",
     "width",

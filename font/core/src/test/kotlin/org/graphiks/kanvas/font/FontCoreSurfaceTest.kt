@@ -130,6 +130,28 @@ class FontCoreSurfaceTest {
     }
 
     @Test
+    fun scanRootsCanReportSkippedUnsupportedFilesDeterministically() {
+        val root = Files.createTempDirectory("kanvas-font-core-skip")
+        try {
+            val skipped = Files.write(root.resolve("README.txt"), byteArrayOf(10))
+
+            val scan = FontFileScanner.scanRoots(listOf(root), reportSkippedFiles = true)
+
+            assertEquals(emptyList(), scan.files)
+            assertEquals(listOf("font.scan.file-skipped"), scan.diagnostics.map { it.code })
+            assertEquals(root.toAbsolutePath().normalize(), scan.diagnostics.single().root)
+            assertEquals(skipped.toAbsolutePath().normalize(), scan.diagnostics.single().path)
+            assertEquals(
+                "font.scan.file-skipped root=${root.toAbsolutePath().normalize()} " +
+                    "path=${skipped.toAbsolutePath().normalize()} message=\"Unsupported font file extension.\"",
+                scan.dumpDiagnostics(),
+            )
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun dumpsSourceProvenanceEvidenceDeterministically() {
         val sourceId = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440100"))
         val source = FontSource(
@@ -401,6 +423,76 @@ class FontCoreSurfaceTest {
         val runs = resolver.resolve(FallbackRequest(text = "x", preferredFamilies = listOf("Missing", "Second")))
 
         assertEquals(listOf(ResolvedFontRun(start = 0, end = 1, face = second)), runs)
+    }
+
+    @Test
+    fun tracesFallbackDecisionWithStableCandidateOrderAndSelectedFace() {
+        val requested = testFace("550e8400-e29b-41d4-a716-446655440080", "Requested Sans")
+        val fallback = testFace("550e8400-e29b-41d4-a716-446655440081", "Fallback Sans")
+        val resolver = CatalogFontResolver(
+            catalog = FallbackCatalog(
+                families = mapOf(
+                    "Requested Sans" to FontCollection(listOf(requested)),
+                    "Fallback Sans" to FontCollection(listOf(fallback)),
+                ),
+            ),
+            policy = FontFallbackPolicy.Default.copy(
+                genericFallbackChains = mapOf(
+                    "sans-serif" to listOf("Fallback Sans"),
+                ),
+                scriptFallbackChains = emptyMap(),
+                localeFallbackChains = emptyMap(),
+                emojiPreferredFamilies = emptyList(),
+            ),
+            coverage = testCoverage(fallback.typeface.id to setOf('x'.code)),
+        )
+
+        val trace = resolver.trace(FallbackRequest(text = "x", preferredFamilies = listOf("Requested Sans")))
+
+        assertEquals(
+            "start=0 end=1 codePoint=U+0078 requestedFamilies=[Requested Sans] " +
+                "candidateFamilies=[Requested Sans,Fallback Sans] selectedFamily=\"Fallback Sans\" " +
+                "selectedTypefaceId=550e8400-e29b-41d4-a716-446655440081 covered=true diagnostic=none",
+            trace.dump(),
+        )
+        assertFalse(trace.dump().contains("Sk"))
+        assertFalse(trace.dump().contains("@"))
+    }
+
+    @Test
+    fun tracesFallbackRefusalsWithoutHidingNotdefOrEmptyCatalogPolicy() {
+        val requested = testFace("550e8400-e29b-41d4-a716-446655440082", "Requested Sans")
+        val resolver = CatalogFontResolver(
+            catalog = FallbackCatalog(families = mapOf("Requested Sans" to FontCollection(listOf(requested)))),
+            policy = FontFallbackPolicy.Default,
+            coverage = testCoverage(),
+        )
+
+        val missingGlyphTrace = resolver.trace(FallbackRequest(text = "x", preferredFamilies = listOf("Requested Sans")))
+
+        assertEquals(
+            "start=0 end=1 codePoint=U+0078 requestedFamilies=[Requested Sans] " +
+                "candidateFamilies=[Requested Sans] selectedFamily=\"Requested Sans\" " +
+                "selectedTypefaceId=550e8400-e29b-41d4-a716-446655440082 covered=false " +
+                "diagnostic=font.fallback-glyph-unavailable",
+            missingGlyphTrace.dump(),
+        )
+        assertEquals(listOf(ResolvedFontRun(start = 0, end = 1, face = requested)), resolver.resolve(FallbackRequest(text = "x", preferredFamilies = listOf("Requested Sans"))))
+
+        val emptyResolver = CatalogFontResolver(
+            catalog = FallbackCatalog(),
+            policy = FontFallbackPolicy.Default,
+            coverage = testCoverage(),
+        )
+        val emptyCatalogTrace = emptyResolver.trace(FallbackRequest(text = "x", preferredFamilies = listOf("Missing Sans")))
+
+        assertEquals(
+            "start=0 end=1 codePoint=U+0078 requestedFamilies=[Missing Sans] " +
+                "candidateFamilies=[] selectedFamily=none selectedTypefaceId=none covered=false " +
+                "diagnostic=font.fallback-family-unavailable",
+            emptyCatalogTrace.dump(),
+        )
+        assertEquals(emptyList(), emptyResolver.resolve(FallbackRequest(text = "x", preferredFamilies = listOf("Missing Sans"))))
     }
 
     @Test

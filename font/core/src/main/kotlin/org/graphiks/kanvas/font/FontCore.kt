@@ -388,7 +388,7 @@ data class FontFileScanDiagnostic(
         }
         if (message.isNotBlank()) {
             append(" message=")
-            append(message)
+            append(message.evidenceQuoted())
         }
     }
 }
@@ -430,9 +430,15 @@ object FontFileScanner {
      * Scans explicit roots for supported font files.
      *
      * @param roots Directories to scan recursively.
+     * @param reportSkippedFiles True to emit diagnostics for regular files
+     * under the explicit roots that are skipped because they do not use a
+     * supported font container extension.
      * @return Deterministically ordered files plus non-fatal diagnostics.
      */
-    fun scanRoots(roots: List<Path>): FontFileScanResult {
+    fun scanRoots(
+        roots: List<Path>,
+        reportSkippedFiles: Boolean = false,
+    ): FontFileScanResult {
         val files = linkedSetOf<Path>()
         val diagnostics = mutableListOf<FontFileScanDiagnostic>()
 
@@ -453,7 +459,17 @@ object FontFileScanner {
                     val iterator = stream.iterator()
                     while (iterator.hasNext()) {
                         val candidate = iterator.next()
-                        if (!candidate.isSupportedFontFile()) continue
+                        if (!candidate.isSupportedFontFile()) {
+                            if (reportSkippedFiles && candidate.isSkippedRegularFile()) {
+                                diagnostics += fileDiagnostic(
+                                    code = "font.scan.file-skipped",
+                                    root = root,
+                                    path = candidate,
+                                    message = "Unsupported font file extension.",
+                                )
+                            }
+                            continue
+                        }
                         val realPath = try {
                             candidate.toRealPath()
                         } catch (e: IOException) {
@@ -510,6 +526,15 @@ object FontFileScanner {
             false
         }
         return supported
+    }
+
+    private fun Path.isSkippedRegularFile(): Boolean {
+        val skipped = try {
+            isRegularFile() && extension.lowercase() !in supportedExtensions
+        } catch (e: SecurityException) {
+            false
+        }
+        return skipped
     }
 
     private fun rootDiagnostic(
@@ -678,28 +703,55 @@ class CatalogFontResolver(
      * list when no catalog face can be planned.
      */
     override fun resolve(request: FallbackRequest): List<ResolvedFontRun> {
-        if (request.text.isEmpty()) return emptyList()
-
         val runs = mutableListOf<ResolvedFontRun>()
-        var offset = 0
-        while (offset < request.text.length) {
-            val codePoint = request.text.codePointAt(offset)
-            val nextOffset = offset + Character.charCount(codePoint)
-            val face = resolveFace(request, codePoint)
+        for (decision in resolveDecisions(request)) {
+            val face = decision.face
             if (face != null) {
                 val previous = runs.lastOrNull()
-                if (previous != null && previous.face == face && previous.end == offset) {
-                    runs[runs.lastIndex] = previous.copy(end = nextOffset)
+                if (previous != null && previous.face == face && previous.end == decision.trace.start) {
+                    runs[runs.lastIndex] = previous.copy(end = decision.trace.end)
                 } else {
-                    runs += ResolvedFontRun(start = offset, end = nextOffset, face = face)
+                    runs += ResolvedFontRun(start = decision.trace.start, end = decision.trace.end, face = face)
                 }
             }
-            offset = nextOffset
         }
         return runs
     }
 
-    private fun resolveFace(request: FallbackRequest, codePoint: Int): FontFace? {
+    /**
+     * Records the per-code-point fallback decisions made by [resolve].
+     *
+     * @param request Text, locale, and preferred families to resolve.
+     * @return Deterministic trace with one decision per Unicode code point.
+     */
+    fun trace(request: FallbackRequest): FallbackResolutionTrace =
+        FallbackResolutionTrace(decisions = resolveDecisions(request).map { it.trace })
+
+    private fun resolveDecisions(request: FallbackRequest): List<ResolvedFallbackDecision> {
+        if (request.text.isEmpty()) return emptyList()
+
+        val decisions = mutableListOf<ResolvedFallbackDecision>()
+        var offset = 0
+        while (offset < request.text.length) {
+            val codePoint = request.text.codePointAt(offset)
+            val nextOffset = offset + Character.charCount(codePoint)
+            decisions += resolveDecision(
+                request = request,
+                codePoint = codePoint,
+                start = offset,
+                end = nextOffset,
+            )
+            offset = nextOffset
+        }
+        return decisions
+    }
+
+    private fun resolveDecision(
+        request: FallbackRequest,
+        codePoint: Int,
+        start: Int,
+        end: Int,
+    ): ResolvedFallbackDecision {
         val availableFamilyNames = catalog.availableFamilyNames()
         val plan = policy.planFamilyNames(
             availableFamilyNames = availableFamilyNames,
@@ -707,14 +759,67 @@ class CatalogFontResolver(
             locales = listOfNotNull(request.locale),
             codePoint = codePoint,
         )
+        val candidateFamilies = preferredThenPlannedFamilies(
+            preferredFamilies = request.preferredFamilies,
+            availableFamilyNames = availableFamilyNames,
+            plannedFamilies = plan.orderedFamilies,
+        )
         var firstPlannedFace: FontFace? = null
-        for (family in preferredThenPlannedFamilies(request.preferredFamilies, availableFamilyNames, plan.orderedFamilies)) {
+        var firstPlannedFamily: String? = null
+        for (family in candidateFamilies) {
             for (face in catalog.families[family]?.faces.orEmpty().orderedByStyleDistance(request.style)) {
-                if (firstPlannedFace == null) firstPlannedFace = face
-                if (coverage.supports(face.typeface.id, codePoint)) return face
+                if (firstPlannedFace == null) {
+                    firstPlannedFace = face
+                    firstPlannedFamily = family
+                }
+                if (coverage.supports(face.typeface.id, codePoint)) {
+                    return ResolvedFallbackDecision(
+                        trace = FallbackDecisionTrace(
+                            start = start,
+                            end = end,
+                            codePoint = codePoint,
+                            requestedFamilies = request.preferredFamilies,
+                            candidateFamilies = candidateFamilies,
+                            selectedFamily = family,
+                            selectedTypefaceId = face.typeface.id,
+                            covered = true,
+                        ),
+                        face = face,
+                    )
+                }
             }
         }
-        return firstPlannedFace
+        return if (firstPlannedFace != null) {
+            ResolvedFallbackDecision(
+                trace = FallbackDecisionTrace(
+                    start = start,
+                    end = end,
+                    codePoint = codePoint,
+                    requestedFamilies = request.preferredFamilies,
+                    candidateFamilies = candidateFamilies,
+                    selectedFamily = firstPlannedFamily,
+                    selectedTypefaceId = firstPlannedFace.typeface.id,
+                    covered = false,
+                    diagnosticCode = "font.fallback-glyph-unavailable",
+                ),
+                face = firstPlannedFace,
+            )
+        } else {
+            ResolvedFallbackDecision(
+                trace = FallbackDecisionTrace(
+                    start = start,
+                    end = end,
+                    codePoint = codePoint,
+                    requestedFamilies = request.preferredFamilies,
+                    candidateFamilies = candidateFamilies,
+                    selectedFamily = null,
+                    selectedTypefaceId = null,
+                    covered = false,
+                    diagnosticCode = "font.fallback-family-unavailable",
+                ),
+                face = null,
+            )
+        }
     }
 
     private fun preferredThenPlannedFamilies(
@@ -740,6 +845,11 @@ class CatalogFontResolver(
         plannedFamilies.forEach(::addAvailableFamily)
         return ordered
     }
+
+    private data class ResolvedFallbackDecision(
+        val trace: FallbackDecisionTrace,
+        val face: FontFace?,
+    )
 }
 
 /**
@@ -1034,6 +1144,89 @@ data class ResolvedFontRun(
     val face: FontFace,
 )
 
+/**
+ * Deterministic trace for the catalog fallback decisions used by [CatalogFontResolver].
+ *
+ * @property decisions One decision per Unicode code point in UTF-16 input order.
+ */
+data class FallbackResolutionTrace(
+    val decisions: List<FallbackDecisionTrace>,
+) {
+    /**
+     * Serializes all decisions as newline-separated stable lines.
+     *
+     * @return Empty string when the traced request has no text.
+     */
+    fun dump(): String = decisions.joinToString(separator = "\n") { it.dump() }
+}
+
+/**
+ * One catalog fallback decision for one Unicode code point.
+ *
+ * @property start Inclusive UTF-16 start offset in the request text.
+ * @property end Exclusive UTF-16 end offset in the request text.
+ * @property codePoint Unicode scalar value being resolved.
+ * @property requestedFamilies Caller-preferred families in request order.
+ * @property candidateFamilies Available candidate families in actual fallback order.
+ * @property selectedFamily Family selected for this code point, when any face
+ * could be planned.
+ * @property selectedTypefaceId Typeface selected for this code point, when any
+ * face could be planned.
+ * @property covered True when [FontCoverageProvider] reported direct glyph
+ * coverage for the selected face.
+ * @property diagnosticCode Stable reason code for fallback refusals or `.notdef`
+ * routing, or null when coverage was found.
+ */
+data class FallbackDecisionTrace(
+    val start: Int,
+    val end: Int,
+    val codePoint: Int,
+    val requestedFamilies: List<String>,
+    val candidateFamilies: List<String>,
+    val selectedFamily: String?,
+    val selectedTypefaceId: TypefaceID?,
+    val covered: Boolean,
+    val diagnosticCode: String? = null,
+) {
+    init {
+        require(start >= 0) { "start must be non-negative." }
+        require(end > start) { "end must be greater than start." }
+        require(Character.isValidCodePoint(codePoint)) { "codePoint must be a valid Unicode scalar value." }
+        require(diagnosticCode == null || diagnosticCode.isStableDiagnosticCode()) {
+            "diagnosticCode must be a stable one-line diagnostic code."
+        }
+        require((selectedFamily == null) == (selectedTypefaceId == null)) {
+            "selectedFamily and selectedTypefaceId must both be present or both be absent."
+        }
+    }
+
+    /**
+     * Serializes the decision as one stable line for fallback evidence.
+     *
+     * @return Dumpable fallback decision evidence without object identity or live handles.
+     */
+    fun dump(): String = buildString {
+        append("start=")
+        append(start)
+        append(" end=")
+        append(end)
+        append(" codePoint=")
+        append(codePoint.toCodePointEvidence())
+        append(" requestedFamilies=")
+        append(requestedFamilies.joinToString(prefix = "[", postfix = "]", separator = ","))
+        append(" candidateFamilies=")
+        append(candidateFamilies.joinToString(prefix = "[", postfix = "]", separator = ","))
+        append(" selectedFamily=")
+        append(selectedFamily?.evidenceQuoted() ?: "none")
+        append(" selectedTypefaceId=")
+        append(selectedTypefaceId?.value?.toHexDashString() ?: "none")
+        append(" covered=")
+        append(covered)
+        append(" diagnostic=")
+        append(diagnosticCode ?: "none")
+    }
+}
+
 private fun String.familyKey(): String = trim().lowercase()
 
 private fun List<String>.normalizedTableTags(): List<String> {
@@ -1142,3 +1335,8 @@ private fun Int.isLatinLetterCodePoint(): Boolean =
     Character.isValidCodePoint(this) &&
         Character.isLetter(this) &&
         Character.UnicodeScript.of(this) == Character.UnicodeScript.LATIN
+
+private fun Int.toCodePointEvidence(): String {
+    val minimumWidth = if (this <= 0xFFFF) 4 else 6
+    return "U+" + toString(radix = 16).uppercase().padStart(minimumWidth, '0')
+}
