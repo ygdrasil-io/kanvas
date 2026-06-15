@@ -49,3 +49,12 @@ After this closeout, the GPU renderer ticket catalog has no `proposed`,
 `ready`, `in-progress`, or `review` tickets remaining. The remaining non-done
 tickets are explicitly `blocked` with named adapter, dependency, policy, or
 evidence gates.
+
+## 2026-06-15 M6 Follow-Up
+
+After the font/text handoff evidence landed on master, KGPU-M6-001 and
+KGPU-M6-004 were completed by
+`reports/gpu-renderer/2026-06-15-m6-001-text-handoff.md` and
+`reports/gpu-renderer/2026-06-15-m6-004-text-representation-gates.md`.
+The current catalog total is 29 `done` and 17 `blocked`; no `proposed`,
+`ready`, `in-progress`, or `review` GPU renderer tickets remain.

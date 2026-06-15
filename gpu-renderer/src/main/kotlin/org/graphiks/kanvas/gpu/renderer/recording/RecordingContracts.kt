@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
+import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnosticCodes
 
 /** Stable recording identifier. */
 @JvmInline
@@ -280,6 +281,7 @@ class GPURecorder(
                 terminal = textDiagnostic.terminal,
             )
         }
+        val payloadDiagnostics = command.textPayloadLeakDiagnostics(recordId = recordId)
         val analysisRecord = GPUDrawAnalysisRecord(
             recordId = recordId,
             commandIdValue = command.commandId.value,
@@ -289,7 +291,7 @@ class GPURecorder(
             materialKeyHash = "none",
             renderStepCandidates = emptyList(),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
-            diagnostics = listOf(diagnostic) + textDiagnostics,
+            diagnostics = listOf(diagnostic) + textDiagnostics + payloadDiagnostics,
         )
         return GPUFirstRoutePlan(
             analysisRecord = analysisRecord,
@@ -303,9 +305,66 @@ class GPURecorder(
         )
     }
 
+    private fun NormalizedDrawCommand.DrawTextRun.textPayloadLeakDiagnostics(
+        recordId: String,
+    ): List<GPUAnalysisDiagnostic> {
+        val dumpableFields = buildList {
+            textLayoutResultId?.let(::add)
+            glyphRunId?.let(::add)
+            addAll(glyphRunDescriptorRefs)
+            artifactRefs.forEach { ref ->
+                add(ref.artifactType)
+                add(ref.artifactId)
+                add(ref.artifactKeyHash)
+                add(ref.generationToken)
+                ref.routeHint?.let(::add)
+            }
+            addAll(artifactKeyHashes)
+            addAll(atlasGenerationTokens)
+            addAll(uploadDependencyFacts)
+            routeDiagnostics.forEach { textDiagnostic ->
+                add(textDiagnostic.code)
+                add(textDiagnostic.message)
+            }
+        }
+        return buildList {
+            if (dumpableFields.any(::containsSkiaLikeToken)) {
+                add(
+                    GPUAnalysisDiagnostic(
+                        code = GPUTextDiagnosticCodes.SK_TYPE_LEAKED,
+                        recordId = recordId,
+                        decisionId = "text.payload_leak.${commandId.value}",
+                        terminal = true,
+                    ),
+                )
+            }
+            if (dumpableFields.any(::containsCpuRenderedTextureToken)) {
+                add(
+                    GPUAnalysisDiagnostic(
+                        code = GPUTextDiagnosticCodes.CPU_RENDERED_TEXTURE_FORBIDDEN,
+                        recordId = recordId,
+                        decisionId = "text.cpu_texture_forbidden.${commandId.value}",
+                        terminal = true,
+                    ),
+                )
+            }
+        }
+    }
+
     @Suppress("unused")
     private fun scopeEvidence(): List<String> =
         listOf(sharedScope.value, recorderScope.value, frameScope.value)
+}
+
+private fun containsSkiaLikeToken(value: String): Boolean =
+    value.contains("org.skia.") ||
+        value.split('#', ':', '/', '.', '$').any { token -> token.startsWith("Sk") }
+
+private fun containsCpuRenderedTextureToken(value: String): Boolean {
+    val normalized = value.lowercase()
+    return normalized.contains("cpu-rendered-texture") ||
+        normalized.contains("cpu_rendered_texture") ||
+        normalized.contains("cpu rendered texture")
 }
 
 /**

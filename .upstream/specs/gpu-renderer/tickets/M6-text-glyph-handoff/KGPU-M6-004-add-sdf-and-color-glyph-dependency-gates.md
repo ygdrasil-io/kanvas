@@ -1,7 +1,7 @@
 ---
 id: KGPU-M6-004
 title: "Add SDF and color glyph dependency gates"
-status: blocked
+status: done
 milestone: M6
 priority: P1
 owner_area: text-validation
@@ -85,11 +85,17 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: Depends on KGPU-M6-001 so the refusal matrix can classify typed
-  text artifacts rather than inventing renderer-owned font payloads. SDF,
-  bitmap, SVG, color glyph, emoji, LCD, and CPU-rendered text texture behavior
-  remain explicit non-claims; legacy gates stay open until font artifacts,
-  renderer route evidence, diagnostics, and dashboard updates are linked.
+- `done`: KGPU-M6-001 completed the typed text handoff boundary, and this
+  ticket adds `GPUTextRepresentationGateMatrix` refusal evidence for A8, SDF,
+  COLR/color glyph, bitmap glyph, SVG glyph, emoji color glyph, LCD, and
+  CPU-rendered text texture representations. Fresh validation covered
+  `GPUTextCommandHandoffTest`, `:font:gpu-api:test`, and `:gpu-renderer:test`;
+  independent review `019ec8df-9efc-72e0-bdef-b6a9b4e75600` returned
+  `ACCEPT`. The matrix keeps `dftext`, `scaledemoji_rendering`, and
+  `coloremoji_blendmodes` visible and marks every row `not-promoted`. No SDF,
+  bitmap, SVG, color glyph, emoji, LCD, A8 sampling, GPU route, adapter-backed
+  execution, or CPU-rendered full text texture support is implied. Evidence:
+  `reports/gpu-renderer/2026-06-15-m6-004-text-representation-gates.md`.
 
 ## Linear Labels
 

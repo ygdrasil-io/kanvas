@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.text
 
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactReference
+
 /** Text ordering token. */
 @JvmInline
 value class GPUTextOrderingToken(val value: String) {
@@ -162,6 +164,20 @@ data class GPUTextArtifactRef(
     val routeHint: String? = null,
 )
 
+/**
+ * Converts a pure Kotlin text-stack artifact reference into the renderer
+ * command payload shape without importing font objects, bytes, or GPU handles.
+ */
+fun GPUTextArtifactReference.toRendererTextArtifactRef(
+    routeHint: String? = null,
+): GPUTextArtifactRef = GPUTextArtifactRef(
+    artifactType = artifactName,
+    artifactId = artifactID.value.toHexDashString(),
+    artifactKeyHash = contentFingerprint,
+    generationToken = generation.value.toString(),
+    routeHint = routeHint,
+)
+
 /** Stable diagnostic codes for GPU text route selection and refusals. */
 object GPUTextDiagnosticCodes {
     const val PAYLOAD_NONDUMPABLE: String = "unsupported.text.payload_nondumpable"
@@ -186,6 +202,7 @@ object GPUTextDiagnosticCodes {
     const val COLOR_COMPOSITE_UNSUPPORTED: String = "unsupported.text.color_composite_unsupported"
     const val BITMAP_ROUTE_UNSUPPORTED: String = "unsupported.text.bitmap_route_unsupported"
     const val SVG_PLAN_UNSUPPORTED: String = "unsupported.text.svg_plan_unsupported"
+    const val EMOJI_COLOR_GLYPH_UNAVAILABLE: String = "dependency.text.emoji_color_glyph_unavailable"
     const val LCD_FUTURE_RESEARCH: String = "unsupported.text.lcd_future_research"
     const val INSTANCE_BUFFER_BUDGET_EXCEEDED: String = "unsupported.text.instance_buffer_budget_exceeded"
     const val BINDING_LAYOUT_UNAVAILABLE: String = "unsupported.text.binding_layout_unavailable"
@@ -216,6 +233,7 @@ object GPUTextDiagnosticCodes {
         COLOR_COMPOSITE_UNSUPPORTED,
         BITMAP_ROUTE_UNSUPPORTED,
         SVG_PLAN_UNSUPPORTED,
+        EMOJI_COLOR_GLYPH_UNAVAILABLE,
         LCD_FUTURE_RESEARCH,
         INSTANCE_BUFFER_BUDGET_EXCEEDED,
         BINDING_LAYOUT_UNAVAILABLE,
@@ -223,4 +241,74 @@ object GPUTextDiagnosticCodes {
         CLIP_ROUTE_UNACCEPTED,
         CPU_RENDERED_TEXTURE_FORBIDDEN,
     )
+}
+
+/** Dependency gate for one text representation that is visible to route diagnostics and PM dumps. */
+data class GPUTextRepresentationGate(
+    val representation: String,
+    val diagnosticCode: String,
+    val legacyGates: List<String>,
+    val promoted: Boolean = false,
+) {
+    /** Deterministic evidence line for reports and tests. */
+    fun dumpLine(): String =
+        listOf(
+            representation,
+            diagnosticCode,
+            legacyGates.joinToString(","),
+            if (promoted) "promoted" else "not-promoted",
+        ).joinToString("|")
+}
+
+/** Current text representation refusal matrix; it is evidence, not route promotion. */
+object GPUTextRepresentationGateMatrix {
+    private val gates: List<GPUTextRepresentationGate> = listOf(
+        GPUTextRepresentationGate(
+            representation = "A8MaskAtlas",
+            diagnosticCode = GPUTextDiagnosticCodes.A8_ATLAS_ROUTE_UNAVAILABLE,
+            legacyGates = listOf("dftext"),
+        ),
+        GPUTextRepresentationGate(
+            representation = "SDFMaskAtlas",
+            diagnosticCode = GPUTextDiagnosticCodes.SDF_ROUTE_UNAVAILABLE,
+            legacyGates = listOf("dftext"),
+        ),
+        GPUTextRepresentationGate(
+            representation = "COLRColorGlyph",
+            diagnosticCode = GPUTextDiagnosticCodes.COLOR_PLAN_UNSUPPORTED,
+            legacyGates = listOf("coloremoji_blendmodes"),
+        ),
+        GPUTextRepresentationGate(
+            representation = "BitmapGlyph",
+            diagnosticCode = GPUTextDiagnosticCodes.BITMAP_ROUTE_UNSUPPORTED,
+            legacyGates = listOf("scaledemoji_rendering"),
+        ),
+        GPUTextRepresentationGate(
+            representation = "SVGGlyph",
+            diagnosticCode = GPUTextDiagnosticCodes.SVG_PLAN_UNSUPPORTED,
+            legacyGates = listOf("scaledemoji_rendering"),
+        ),
+        GPUTextRepresentationGate(
+            representation = "EmojiColorGlyph",
+            diagnosticCode = GPUTextDiagnosticCodes.EMOJI_COLOR_GLYPH_UNAVAILABLE,
+            legacyGates = listOf("scaledemoji_rendering", "coloremoji_blendmodes"),
+        ),
+        GPUTextRepresentationGate(
+            representation = "LCDMask",
+            diagnosticCode = GPUTextDiagnosticCodes.LCD_FUTURE_RESEARCH,
+            legacyGates = listOf("dftext"),
+        ),
+        GPUTextRepresentationGate(
+            representation = "CPURenderedTextTexture",
+            diagnosticCode = GPUTextDiagnosticCodes.CPU_RENDERED_TEXTURE_FORBIDDEN,
+            legacyGates = listOf("dftext", "scaledemoji_rendering", "coloremoji_blendmodes"),
+        ),
+    )
+
+    /** Matrix keyed by representation name in deterministic insertion order. */
+    fun byRepresentation(): Map<String, GPUTextRepresentationGate> =
+        gates.associateBy { gate -> gate.representation }
+
+    /** Deterministic refusal dump for report evidence. */
+    fun dumpLines(): List<String> = gates.map { gate -> gate.dumpLine() }
 }

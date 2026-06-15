@@ -14,9 +14,9 @@ resource and binding infrastructure. The target source is
 
 ## Exit Criteria
 
-- [ ] `DrawTextRun` payloads and artifact refs stay immutable and dumpable.
+- [x] `DrawTextRun` payloads and artifact refs stay immutable and dumpable.
 - [ ] A8 atlas routes include upload, binding, WGSL, ordering, and GPU proof.
-- [ ] Unsupported SDF/color/bitmap/SVG/emoji routes refuse with stable
+- [x] Unsupported SDF/color/bitmap/SVG/emoji routes refuse with stable
       diagnostics.
 - [ ] Material keys exclude glyph IDs, atlas coordinates, generations, and live
       handles.
@@ -25,10 +25,10 @@ resource and binding infrastructure. The target source is
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M6-001 - Accept typed pure Kotlin `DrawTextRun` payloads](KGPU-M6-001-accept-typed-pure-kotlin-drawtextrun-payloads.md) | `blocked` | `P0` | `DependencyGated` | `CPUPreparedGPU` | `false` | `false` | `text-handoff` | `KFONT-M11-003` | `dftext` |
+| [KGPU-M6-001 - Accept typed pure Kotlin `DrawTextRun` payloads](KGPU-M6-001-accept-typed-pure-kotlin-drawtextrun-payloads.md) | `done` | `P0` | `DependencyGated` | `CPUPreparedGPU` | `false` | `false` | `text-handoff` | `KFONT-M11-003` | `dftext` |
 | [KGPU-M6-002 - Add A8 glyph atlas sampling route](KGPU-M6-002-add-a8-glyph-atlas-sampling-route.md) | `blocked` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `text-atlas` | `KGPU-M6-003`, `KFONT-M11-004`, `KFONT-M11-008`, `KFONT-M11-009` | `dftext` |
 | [KGPU-M6-003 - Add text resource upload and binding plans](KGPU-M6-003-add-text-resource-upload-and-binding-plans.md) | `blocked` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `text-resources` | `KGPU-M6-001`, `KFONT-M11-007` | `dftext` |
-| [KGPU-M6-004 - Add SDF and color glyph dependency gates](KGPU-M6-004-add-sdf-and-color-glyph-dependency-gates.md) | `blocked` | `P1` | `DependencyGated` | `RefuseDiagnostic` | `false` | `false` | `text-validation` | `KGPU-M6-001` | `scaledemoji_rendering,coloremoji_blendmodes` |
+| [KGPU-M6-004 - Add SDF and color glyph dependency gates](KGPU-M6-004-add-sdf-and-color-glyph-dependency-gates.md) | `done` | `P1` | `DependencyGated` | `RefuseDiagnostic` | `false` | `false` | `text-validation` | `KGPU-M6-001` | `scaledemoji_rendering,coloremoji_blendmodes` |
 
 ## Validation Bundle
 
@@ -43,10 +43,11 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Text*'
 - No broad shaping, fallback fonts, emoji, color fonts, LCD, SDF, or arbitrary
   text layout support.
 - The GPU renderer must not parse fonts or reshape text to repair payloads.
-- No M6 route is promoted until the named KFONT payload/artifact contracts and
-  adapter-backed text upload/binding evidence land.
-- M6-004 remains blocked because it depends on typed text artifacts from
-  M6-001; refusal rows must not be fabricated from renderer-owned font payloads.
+- No M6 text draw route is promoted by KGPU-M6-001; M6-002/M6-003 still need
+  the named KFONT payload/artifact contracts and adapter-backed text
+  upload/binding evidence.
+- M6-004 refusal rows are now sourced from the completed typed text handoff and
+  remain non-promoted dependency/refusal evidence.
 
 ## Status Update Rule
 

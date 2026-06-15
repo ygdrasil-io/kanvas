@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.text
 
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactID
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactReference
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawKind
@@ -14,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.uuid.Uuid
 
 class GPUTextCommandHandoffTest {
     @Test
@@ -101,6 +105,7 @@ class GPUTextCommandHandoffTest {
             "unsupported.text.color_composite_unsupported",
             "unsupported.text.bitmap_route_unsupported",
             "unsupported.text.svg_plan_unsupported",
+            "dependency.text.emoji_color_glyph_unavailable",
             "unsupported.text.lcd_future_research",
             "unsupported.text.instance_buffer_budget_exceeded",
             "unsupported.text.binding_layout_unavailable",
@@ -110,6 +115,62 @@ class GPUTextCommandHandoffTest {
         )
 
         assertEquals(expectedCodes, GPUTextDiagnosticCodes.all)
+    }
+
+    @Test
+    fun `text representation gate matrix keeps unsupported glyph representations refused`() {
+        val gates = GPUTextRepresentationGateMatrix.byRepresentation()
+
+        assertEquals(GPUTextDiagnosticCodes.A8_ATLAS_ROUTE_UNAVAILABLE, gates.getValue("A8MaskAtlas").diagnosticCode)
+        assertEquals(GPUTextDiagnosticCodes.SDF_ROUTE_UNAVAILABLE, gates.getValue("SDFMaskAtlas").diagnosticCode)
+        assertEquals(GPUTextDiagnosticCodes.COLOR_PLAN_UNSUPPORTED, gates.getValue("COLRColorGlyph").diagnosticCode)
+        assertEquals(GPUTextDiagnosticCodes.BITMAP_ROUTE_UNSUPPORTED, gates.getValue("BitmapGlyph").diagnosticCode)
+        assertEquals(GPUTextDiagnosticCodes.SVG_PLAN_UNSUPPORTED, gates.getValue("SVGGlyph").diagnosticCode)
+        assertEquals(
+            GPUTextDiagnosticCodes.EMOJI_COLOR_GLYPH_UNAVAILABLE,
+            gates.getValue("EmojiColorGlyph").diagnosticCode,
+        )
+        assertEquals(GPUTextDiagnosticCodes.LCD_FUTURE_RESEARCH, gates.getValue("LCDMask").diagnosticCode)
+        assertEquals(GPUTextDiagnosticCodes.CPU_RENDERED_TEXTURE_FORBIDDEN, gates.getValue("CPURenderedTextTexture").diagnosticCode)
+        assertFalse(gates.values.any { gate -> gate.promoted })
+    }
+
+    @Test
+    fun `text representation gate dump keeps legacy gates and non claims visible`() {
+        val dumpLines = GPUTextRepresentationGateMatrix.dumpLines()
+
+        assertEquals(
+            listOf(
+                "A8MaskAtlas|unsupported.text.a8_atlas_route_unavailable|dftext|not-promoted",
+                "SDFMaskAtlas|unsupported.text.sdf_route_unavailable|dftext|not-promoted",
+                "COLRColorGlyph|unsupported.text.color_plan_unsupported|coloremoji_blendmodes|not-promoted",
+                "BitmapGlyph|unsupported.text.bitmap_route_unsupported|scaledemoji_rendering|not-promoted",
+                "SVGGlyph|unsupported.text.svg_plan_unsupported|scaledemoji_rendering|not-promoted",
+                "EmojiColorGlyph|dependency.text.emoji_color_glyph_unavailable|scaledemoji_rendering,coloremoji_blendmodes|not-promoted",
+                "LCDMask|unsupported.text.lcd_future_research|dftext|not-promoted",
+                "CPURenderedTextTexture|unsupported.text.cpu_rendered_texture_forbidden|dftext,scaledemoji_rendering,coloremoji_blendmodes|not-promoted",
+            ),
+            dumpLines,
+        )
+    }
+
+    @Test
+    fun `font gpu artifact reference maps to renderer draw text run artifact facts`() {
+        val fontReference = GPUTextArtifactReference(
+            artifactName = "GlyphAtlasArtifact",
+            artifactID = GPUTextArtifactID(Uuid.parse("550e8400-e29b-41d4-a716-446655449001")),
+            generation = GPUTextArtifactGeneration(3),
+            contentFingerprint = "glyph-atlas-sha256",
+            sourceLabel = "TextGPUArtifactBundle.atlases",
+        )
+
+        val rendererReference = fontReference.toRendererTextArtifactRef(routeHint = "AtlasMaskSample")
+
+        assertEquals("GlyphAtlasArtifact", rendererReference.artifactType)
+        assertEquals("550e8400-e29b-41d4-a716-446655449001", rendererReference.artifactId)
+        assertEquals("glyph-atlas-sha256", rendererReference.artifactKeyHash)
+        assertEquals("3", rendererReference.generationToken)
+        assertEquals("AtlasMaskSample", rendererReference.routeHint)
     }
 
     @Test
