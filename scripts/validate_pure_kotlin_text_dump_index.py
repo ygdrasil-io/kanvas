@@ -31,6 +31,7 @@ REQUIRED_DUMPS = {
     "png-glyph-image",
     "sdf-atlas-build-result",
     "sfnt-cmap-format14-readiness",
+    "sfnt-table-facts",
     "svg-glyph-document",
     "truetype-variation-readiness",
     "unicode-data-seed",
