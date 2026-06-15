@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 
+import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Collections
 import kotlin.io.path.createDirectories
@@ -93,11 +94,15 @@ class OffscreenRunReport(
 
     fun writeTo(outputDir: Path) {
         outputDir.createDirectories()
+        if (runStatus != OffscreenRunStatus.Rendered) {
+            Files.deleteIfExists(outputDir.resolve(DEFAULT_RENDER_IMAGE_FILE_NAME))
+        }
         outputDir.resolve("run.json").writeText(toJson())
         outputDir.resolve("diagnostics.txt").writeText(diagnosticsText())
     }
 
     companion object {
+        private const val DEFAULT_RENDER_IMAGE_FILE_NAME: String = "render.png"
         private const val RAW_RGBA_BYTES_PER_PIXEL: Long = 4L
 
         fun notYetRendered(sceneId: String, reason: String): OffscreenRunReport =

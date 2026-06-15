@@ -28,6 +28,20 @@ class OffscreenRunReportTest {
     }
 
     @Test
+    fun `non rendered report writer removes stale render image`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen")
+        val staleImage = root.resolve("render.png")
+        Files.write(staleImage, byteArrayOf(1, 2, 3, 4))
+
+        OffscreenRunReport.failed(sceneId = "solid-card-stack", reason = "webgpu-context-unavailable")
+            .writeTo(root)
+
+        assertFalse(Files.exists(staleImage), "non-rendered reports must not leave stale render.png evidence")
+        assertContains(root.resolve("run.json").readText(), "\"status\": \"render-failed\"")
+        assertContains(root.resolve("run.json").readText(), "\"imagePath\": null")
+    }
+
+    @Test
     fun `render failed is a runner status not a product refusal`() {
         val report = OffscreenRunReport.failed(
             sceneId = "mesh-ribbon",
