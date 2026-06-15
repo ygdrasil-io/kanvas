@@ -1,12 +1,23 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.catalog
 
+private val sceneIdPattern = Regex("[a-z][a-z0-9-]{2,63}")
+private val roadmapLikeSceneIdPattern = Regex("m[0-9]+(?:-[a-z])?(?:-[0-9]{3})?")
+private val milestonePattern = Regex("M[0-9]+(?:-[A-Z])?")
+private val ticketIdPattern = Regex("KGPU-(M[0-9]+)-[0-9]{3}")
+
+private fun extractTicketMilestone(ticketId: String): String? =
+    ticketIdPattern.matchEntire(ticketId)?.groupValues?.get(1)
+
 @JvmInline
 value class SceneId(val value: String) {
     init {
-        require(value.matches(Regex("[a-z][a-z0-9-]{2,63}"))) {
+        require(value.matches(sceneIdPattern)) {
             "SceneId must be a readable lowercase business identifier: $value"
         }
         require(!value.startsWith("kgpu-")) { "SceneId must not be a roadmap ticket id: $value" }
+        require(!value.matches(roadmapLikeSceneIdPattern)) {
+            "SceneId must not be a roadmap milestone or ticket label: $value"
+        }
         require('-' in value) { "SceneId must contain a hyphenated business name: $value" }
     }
 }
@@ -44,9 +55,15 @@ data class SceneRoadmapLink(
     val rStage: RStage?,
 ) {
     init {
-        require(milestone.matches(Regex("M[0-9]+"))) { "milestone must look like M0..M10: $milestone" }
+        require(milestone.matches(milestonePattern)) {
+            "milestone must look like M0..M10 or M70-A: $milestone"
+        }
         ticketId?.let {
-            require(it.matches(Regex("KGPU-M[0-9]+-[0-9]{3}"))) { "ticketId must be a KGPU ticket id: $it" }
+            val ticketMilestone = extractTicketMilestone(it)
+            require(ticketMilestone != null) { "ticketId must be a KGPU ticket id: $it" }
+            require(ticketMilestone == milestone) {
+                "ticketId milestone $ticketMilestone must match milestone $milestone: $it"
+            }
         }
     }
 
@@ -55,10 +72,7 @@ data class SceneRoadmapLink(
             SceneRoadmapLink(milestone = milestone, ticketId = null, rStage = rStage)
 
         fun ticket(ticketId: String, rStage: RStage? = null): SceneRoadmapLink {
-            val milestone = Regex("KGPU-(M[0-9]+)-[0-9]{3}")
-                .matchEntire(ticketId)
-                ?.groupValues
-                ?.get(1)
+            val milestone = extractTicketMilestone(ticketId)
                 ?: error("Invalid KGPU ticket id: $ticketId")
             return SceneRoadmapLink(milestone = milestone, ticketId = ticketId, rStage = rStage)
         }
@@ -95,9 +109,14 @@ data class GPURendererScene<TCommand>(
 }
 
 class SceneRegistry<TCommand>(val scenes: List<GPURendererScene<TCommand>>) {
-    fun requireScene(sceneId: String): GPURendererScene<TCommand> =
-        scenes.singleOrNull { it.sceneId.value == sceneId }
-            ?: error("Unknown GPU renderer scene: $sceneId")
+    fun requireScene(sceneId: String): GPURendererScene<TCommand> {
+        val matches = scenes.filter { it.sceneId.value == sceneId }
+        return when (matches.size) {
+            0 -> error("Unknown GPU renderer scene: $sceneId")
+            1 -> matches.single()
+            else -> error("Duplicate GPU renderer scene: $sceneId")
+        }
+    }
 
     fun validate(): List<String> {
         val diagnostics = mutableListOf<String>()
@@ -108,11 +127,6 @@ class SceneRegistry<TCommand>(val scenes: List<GPURendererScene<TCommand>>) {
             }
             if (scene.roadmapLinks.isEmpty()) {
                 diagnostics += "scene ${scene.sceneId.value} roadmapLinks must not be empty"
-            }
-            if (scene.expectation is SceneExpectation.ProductRefusal &&
-                scene.expectation.reason !in ProductRefusalReason.entries
-            ) {
-                diagnostics += "scene ${scene.sceneId.value} has invalid product refusal"
             }
         }
         return diagnostics
