@@ -1,0 +1,71 @@
+# KFONT M11 001-003 Entry Contract Evidence
+
+Date: 2026-06-15
+
+## Scope
+
+| Ticket | Status | Evidence |
+|---|---|---|
+| `KFONT-M11-001` | `review` | `TextGPUArtifactRegistry`, deterministic registry dump, default descriptor order, unregistered artifact refusal, and defensive descriptor snapshots. |
+| `KFONT-M11-002` | `review` | `TextPayloadLeakReport`, positive no-`Sk*` fixture, forbidden-field fixtures, stable diagnostics, scan-order JSON, and mutation-proof report snapshots. |
+| `KFONT-M11-003` | `review` | `DrawTextRunPayload`, deterministic payload dump, no-leakage report integration, non-claim guards, nested glyph-run snapshots, and `*DrawTextRun*` validation coverage. |
+
+## Implemented Contracts
+
+- `font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifactRegistry.kt`
+- `font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextLeakValidation.kt`
+- `font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextDrawPayload.kt`
+
+## Test Evidence
+
+- `font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifactRegistryTest.kt`
+- `font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextNoSkLeakageValidationTest.kt`
+- `font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/DrawTextRunPayloadTest.kt`
+
+The tests cover:
+
+- deterministic artifact registry order;
+- `GlyphAtlasArtifact` as the only descriptor exposing `AtlasMaskSample`;
+- unregistered artifact diagnostics;
+- no-`Sk*` positive and negative fixtures;
+- full CPU-rendered text texture refusal;
+- report and payload mutation snapshots;
+- exact canonical JSON escaping/order fixtures;
+- `DrawTextRunPayload` non-claim guards.
+
+## Review Evidence
+
+Fresh subagent review checkpoints:
+
+- `KFONT-M11-001` spec review: accepted after validating descriptor order,
+  unregistered refusal diagnostics, and non-promoted route metadata.
+- `KFONT-M11-001` code-quality review: accepted after hardening descriptor
+  list snapshots and structural route assertions.
+- `KFONT-M11-002` spec review: accepted.
+- `KFONT-M11-002` code-quality review: accepted after replacing the report
+  `data class` with a snapshotting class and aligning JSON order with scan
+  order.
+- `KFONT-M11-003` spec review: accepted after renaming tests so
+  `--tests '*DrawTextRun*'` discovers the ticket validation lane.
+- `KFONT-M11-003` code-quality review: accepted.
+
+## Validation
+
+Fresh commands:
+
+```bash
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*ArtifactRegistry*'
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*NoSkLeakage*'
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*DrawTextRun*'
+rtk ./gradlew --no-daemon :font:gpu-api:test
+rtk git diff --check
+```
+
+## Non-Claims
+
+- No GPU text product support is promoted.
+- No WebGPU upload, binding, command submission, or readback is claimed.
+- No `KGPU-M6-002` or `KGPU-M6-003` status is changed by this evidence.
+- No A8/SDF/outline/color/bitmap/SVG glyph rendering support is claimed.
+- No CPU-rendered full text texture fallback is introduced.
+- `dftext`, `scaledemoji_rendering`, and `coloremoji_blendmodes` remain open.

@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-003"
 title: "Add normalized `DrawTextRun` contract"
-status: "proposed"
+status: "review"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -103,6 +103,11 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*DrawTextRun*'
 
 - `proposed`: Depends on paragraph/glyph descriptors and no-leakage validation.
 - Move to `ready` only after payload field list and dump schema are reviewed.
+- `review`: 2026-06-15 entry-contract evidence is in
+  `reports/pure-kotlin-text/2026-06-15-kfont-m11-001-003-entry-contract.md`.
+  This proves the normalized payload contract only; it does not implement
+  renderer route selection, resource upload, A8 atlas sampling, or product
+  support.
 
 ## Linear Labels
 
