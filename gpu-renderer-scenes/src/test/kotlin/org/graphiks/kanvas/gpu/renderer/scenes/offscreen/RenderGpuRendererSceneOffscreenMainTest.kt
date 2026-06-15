@@ -7,6 +7,9 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
 
 class RenderGpuRendererSceneOffscreenMainTest {
     @Test
@@ -50,5 +53,37 @@ class RenderGpuRendererSceneOffscreenMainTest {
         assertContains(runJson, "\"status\": \"render-failed\"")
         assertContains(runJson, "\"productRefusal\": false")
         assertContains(runJson, "webgpu-context-unavailable")
+    }
+
+    @Test
+    fun `solid card stack command preparation rejects scenes without fill rectangles`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            prepareSolidCardStackDrawPlan(
+                commands = listOf(SceneCommand.Clear(SceneColor(0f, 0f, 0f, 1f))),
+                width = 320,
+                height = 200,
+            )
+        }
+
+        assertContains(failure.message ?: "", "at least one FillRect")
+    }
+
+    @Test
+    fun `solid card stack command preparation rejects out of bounds fill rectangles`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            prepareSolidCardStackDrawPlan(
+                commands = listOf(
+                    SceneCommand.FillRect(
+                        label = "oversize",
+                        rect = SceneRect(left = 0f, top = 0f, right = 9f, bottom = 9f),
+                        color = SceneColor(1f, 0f, 0f, 1f),
+                    ),
+                ),
+                width = 8,
+                height = 8,
+            )
+        }
+
+        assertContains(failure.message ?: "", "inside positive bounds: oversize")
     }
 }

@@ -17,16 +17,12 @@ import io.ygdrasil.webgpu.GPUBindGroup
 import io.ygdrasil.webgpu.GPUBindGroupLayout
 import io.ygdrasil.webgpu.GPUBlendFactor
 import io.ygdrasil.webgpu.GPUBlendOperation
-import io.ygdrasil.webgpu.GPUBuffer
 import io.ygdrasil.webgpu.GPUBufferBindingType
 import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPULoadOp
-import io.ygdrasil.webgpu.GPURenderPipeline
-import io.ygdrasil.webgpu.GPUShaderModule
 import io.ygdrasil.webgpu.GPUShaderStage
 import io.ygdrasil.webgpu.GPUStoreOp
 import io.ygdrasil.webgpu.GPUTextureFormat
-import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.PipelineLayoutDescriptor
 import io.ygdrasil.webgpu.RenderPassColorAttachment
 import io.ygdrasil.webgpu.RenderPassDescriptor
@@ -88,67 +84,67 @@ class SolidCardStackOffscreenRenderer {
         target: HeadlessTarget,
         commands: List<SceneCommand>,
     ): ByteArray {
-        val clearColor = commands.filterIsInstance<SceneCommand.Clear>().firstOrNull()?.color
-            ?: SceneColor(0f, 0f, 0f, 0f)
-        val fills = commands.withIndex()
-            .filter { (_, command) -> command is SceneCommand.FillRect }
-            .sortedWith(
-                compareBy<IndexedValue<SceneCommand>> { (_, command) ->
-                    (command as SceneCommand.FillRect).paintOrder
-                }.thenBy { it.index },
-            )
-            .map { (_, command) -> command as SceneCommand.FillRect }
+        val drawPlan = prepareSolidCardStackDrawPlan(commands, target.width, target.height)
 
-        val bindGroupLayout = context.device.createBindGroupLayout(
-            BindGroupLayoutDescriptor(
-                entries = listOf(
-                    BindGroupLayoutEntry(
-                        binding = 0u,
-                        visibility = GPUShaderStage.Fragment,
-                        buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
-                    ),
-                ),
-            ),
-        )
-        val shader = context.device.createShaderModule(ShaderModuleDescriptor(code = SOLID_RECT_WGSL))
-        val pipelineLayout = context.device.createPipelineLayout(
-            PipelineLayoutDescriptor(bindGroupLayouts = listOf(bindGroupLayout)),
-        )
-        val pipeline = context.device.createRenderPipeline(
-            RenderPipelineDescriptor(
-                layout = pipelineLayout,
-                vertex = VertexState(module = shader, entryPoint = "vs_main"),
-                fragment = FragmentState(
-                    module = shader,
-                    entryPoint = "fs_main",
-                    targets = listOf(
-                        ColorTargetState(
-                            format = target.format,
-                            blend = srcOverBlendState(),
+        GpuResourceScope().use { gpuResources ->
+            val bindGroupLayout = gpuResources.track(
+                context.device.createBindGroupLayout(
+                    BindGroupLayoutDescriptor(
+                        entries = listOf(
+                            BindGroupLayoutEntry(
+                                binding = 0u,
+                                visibility = GPUShaderStage.Fragment,
+                                buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                            ),
                         ),
                     ),
                 ),
-            ),
-        )
-        val view = target.colorTexture.createView()
-        val resources = fills.map { fill -> createDrawResource(context, bindGroupLayout, target, fill) }
-
-        try {
-            val encoder = context.device.createCommandEncoder()
+            ) { it.close() }
+            val shader = gpuResources.track(
+                context.device.createShaderModule(ShaderModuleDescriptor(code = SOLID_RECT_WGSL)),
+            ) { it.close() }
+            val pipelineLayout = gpuResources.track(
+                context.device.createPipelineLayout(
+                    PipelineLayoutDescriptor(bindGroupLayouts = listOf(bindGroupLayout)),
+                ),
+            ) { it.close() }
+            val pipeline = gpuResources.track(
+                context.device.createRenderPipeline(
+                    RenderPipelineDescriptor(
+                        layout = pipelineLayout,
+                        vertex = VertexState(module = shader, entryPoint = "vs_main"),
+                        fragment = FragmentState(
+                            module = shader,
+                            entryPoint = "fs_main",
+                            targets = listOf(
+                                ColorTargetState(
+                                    format = target.format,
+                                    blend = srcOverBlendState(),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ) { it.close() }
+            val view = gpuResources.track(target.colorTexture.createView()) { it.close() }
+            val drawResources = drawPlan.fills.map { fill ->
+                createDrawResource(context, bindGroupLayout, gpuResources, fill)
+            }
+            val encoder = gpuResources.trackIfAutoCloseable(context.device.createCommandEncoder())
             encoder.beginRenderPass(
                 RenderPassDescriptor(
                     colorAttachments = listOf(
                         RenderPassColorAttachment(
                             view = view,
                             loadOp = GPULoadOp.Clear,
-                            clearValue = clearColor.toWebGpuColor(),
+                            clearValue = drawPlan.clearColor.toWebGpuColor(),
                             storeOp = GPUStoreOp.Store,
                         ),
                     ),
                 ),
             ) {
                 setPipeline(pipeline)
-                resources.forEach { resource ->
+                drawResources.forEach { resource ->
                     setBindGroup(0u, resource.bindGroup)
                     setScissorRect(
                         x = resource.scissorX.toUInt(),
@@ -161,61 +157,44 @@ class SolidCardStackOffscreenRenderer {
                 end()
             }
             target.encodeCopyToStaging(encoder)
-            context.queue.submit(listOf(encoder.finish()))
+            val commandBuffer = gpuResources.trackIfAutoCloseable(encoder.finish())
+            context.queue.submit(listOf(commandBuffer))
             return runBlocking { target.readPixels() }
-        } finally {
-            resources.forEach { it.close() }
-            view.close()
-            pipeline.close()
-            pipelineLayout.close()
-            shader.close()
-            bindGroupLayout.close()
         }
     }
 
     private fun createDrawResource(
         context: WebGpuContext,
         layout: GPUBindGroupLayout,
-        target: HeadlessTarget,
-        fill: SceneCommand.FillRect,
+        gpuResources: GpuResourceScope,
+        fill: SolidCardStackFillDraw,
     ): DrawResource {
-        val uniform = context.device.createBuffer(
-            BufferDescriptor(
-                size = COLOR_UNIFORM_SIZE_BYTES,
-                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
-                label = "SolidCardStackOffscreenRenderer.color",
-            ),
-        )
-        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(fill.color.toFloatArray()))
-        val bindGroup = context.device.createBindGroup(
-            BindGroupDescriptor(
-                layout = layout,
-                entries = listOf(
-                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+        val uniform = gpuResources.track(
+            context.device.createBuffer(
+                BufferDescriptor(
+                    size = COLOR_UNIFORM_SIZE_BYTES,
+                    usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                    label = "SolidCardStackOffscreenRenderer.color",
                 ),
             ),
-        )
-        val left = floor(fill.rect.left).toInt()
-        val top = floor(fill.rect.top).toInt()
-        val right = ceil(fill.rect.right).toInt()
-        val bottom = ceil(fill.rect.bottom).toInt()
-        require(
-            left >= 0 &&
-                top >= 0 &&
-                right <= target.width &&
-                bottom <= target.height &&
-                right > left &&
-                bottom > top,
-        ) {
-            "solid-card-stack fill rect must be inside positive bounds: ${fill.label}"
-        }
+        ) { it.close() }
+        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(fill.color.toFloatArray()))
+        val bindGroup = gpuResources.track(
+            context.device.createBindGroup(
+                BindGroupDescriptor(
+                    layout = layout,
+                    entries = listOf(
+                        BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                    ),
+                ),
+            ),
+        ) { it.close() }
         return DrawResource(
-            uniform = uniform,
             bindGroup = bindGroup,
-            scissorX = left,
-            scissorY = top,
-            scissorWidth = right - left,
-            scissorHeight = bottom - top,
+            scissorX = fill.scissorX,
+            scissorY = fill.scissorY,
+            scissorWidth = fill.scissorWidth,
+            scissorHeight = fill.scissorHeight,
         )
     }
 
@@ -238,16 +217,42 @@ class SolidCardStackOffscreenRenderer {
     }
 
     private data class DrawResource(
-        val uniform: GPUBuffer,
         val bindGroup: GPUBindGroup,
         val scissorX: Int,
         val scissorY: Int,
         val scissorWidth: Int,
         val scissorHeight: Int,
-    ) : AutoCloseable {
+    )
+
+    private class GpuResourceScope : AutoCloseable {
+        private val closeActions = ArrayDeque<() -> Unit>()
+
+        fun <T> track(resource: T, close: (T) -> Unit): T {
+            closeActions.addFirst { close(resource) }
+            return resource
+        }
+
+        fun <T> trackIfAutoCloseable(resource: T): T {
+            if (resource is AutoCloseable) {
+                track(resource) { it.close() }
+            }
+            return resource
+        }
+
         override fun close() {
-            bindGroup.close()
-            uniform.close()
+            var firstFailure: Throwable? = null
+            while (closeActions.isNotEmpty()) {
+                try {
+                    closeActions.removeFirst().invoke()
+                } catch (failure: Throwable) {
+                    if (firstFailure == null) {
+                        firstFailure = failure
+                    } else {
+                        firstFailure.addSuppressed(failure)
+                    }
+                }
+            }
+            firstFailure?.let { throw it }
         }
     }
 
@@ -300,4 +305,69 @@ class SolidCardStackOffscreenRenderer {
             return count
         }
     }
+}
+
+internal data class SolidCardStackDrawPlan(
+    val clearColor: SceneColor,
+    val fills: List<SolidCardStackFillDraw>,
+)
+
+internal data class SolidCardStackFillDraw(
+    val label: String,
+    val color: SceneColor,
+    val scissorX: Int,
+    val scissorY: Int,
+    val scissorWidth: Int,
+    val scissorHeight: Int,
+)
+
+internal fun prepareSolidCardStackDrawPlan(
+    commands: List<SceneCommand>,
+    width: Int,
+    height: Int,
+): SolidCardStackDrawPlan {
+    require(width > 0) { "solid-card-stack target width must be positive" }
+    require(height > 0) { "solid-card-stack target height must be positive" }
+
+    val fills = commands.withIndex()
+        .filter { (_, command) -> command is SceneCommand.FillRect }
+        .sortedWith(
+            compareBy<IndexedValue<SceneCommand>> { (_, command) ->
+                (command as SceneCommand.FillRect).paintOrder
+            }.thenBy { it.index },
+        )
+        .map { (_, command) ->
+            val fill = command as SceneCommand.FillRect
+            val left = floor(fill.rect.left).toInt()
+            val top = floor(fill.rect.top).toInt()
+            val right = ceil(fill.rect.right).toInt()
+            val bottom = ceil(fill.rect.bottom).toInt()
+            require(
+                left >= 0 &&
+                    top >= 0 &&
+                    right <= width &&
+                    bottom <= height &&
+                    right > left &&
+                    bottom > top,
+            ) {
+                "solid-card-stack fill rect must be inside positive bounds: ${fill.label}"
+            }
+            SolidCardStackFillDraw(
+                label = fill.label,
+                color = fill.color,
+                scissorX = left,
+                scissorY = top,
+                scissorWidth = right - left,
+                scissorHeight = bottom - top,
+            )
+        }
+    require(fills.isNotEmpty()) {
+        "solid-card-stack offscreen render requires at least one FillRect command"
+    }
+
+    return SolidCardStackDrawPlan(
+        clearColor = commands.filterIsInstance<SceneCommand.Clear>().firstOrNull()?.color
+            ?: SceneColor(0f, 0f, 0f, 0f),
+        fills = fills,
+    )
 }
