@@ -137,6 +137,7 @@ class GPUTextArtifactsSurfaceTest {
             ),
             references.map { it.artifactName },
         )
+        assertEquals(references.map { it.artifactName }, references.map { it.artifactType })
         assertEquals((1..7).toList(), references.map { it.generation.value })
         assertEquals(
             listOf(
@@ -150,6 +151,20 @@ class GPUTextArtifactsSurfaceTest {
             ),
             references.map { it.contentFingerprint },
         )
+        assertEquals(references.map { it.contentFingerprint }, references.map { it.artifactKeyHash })
+        assertEquals(
+            listOf(
+                listOf("generation", "contentFingerprint", "atlasCapacity"),
+                listOf("generation", "contentFingerprint", "distanceRange"),
+                listOf("generation", "contentFingerprint", "payloadByteSize"),
+                listOf("generation", "contentFingerprint", "outlinePolicy"),
+                listOf("generation", "contentFingerprint", "colorLayerPolicy"),
+                listOf("generation", "contentFingerprint", "bitmapPayloadPolicy"),
+                listOf("generation", "contentFingerprint", "vectorDocumentPolicy"),
+            ),
+            references.map { it.invalidationFacts },
+        )
+        assertTrue(references.all { reference -> reference.diagnostics.isEmpty() })
         assertEquals(
             listOf(
                 "TextGPUArtifactBundle.atlases",
@@ -166,6 +181,9 @@ class GPUTextArtifactsSurfaceTest {
         val dump = references.joinToString(separator = "\n")
         assertTrue(dump.contains("GPUTextArtifactReference"))
         assertTrue(dump.contains("artifactName=GlyphAtlasArtifact"))
+        assertTrue(dump.contains("artifactType=GlyphAtlasArtifact"))
+        assertTrue(dump.contains("artifactKeyHash=glyph-atlas-a8"))
+        assertTrue(dump.contains("invalidationFacts=[generation, contentFingerprint, atlasCapacity]"))
         listOf(
             "renderer=",
             "fontParser",
@@ -184,6 +202,70 @@ class GPUTextArtifactsSurfaceTest {
         assertTrue(references.all { it.toString() != it.contentFingerprint })
         assertFalse(references.map { it.artifactID.value.toHexDashString() }.contains("glyph-atlas-a8"))
         assertFalse(references.map { it.contentFingerprint }.contains("550e8400-e29b-41d4-a716-446655441001"))
+    }
+
+    @Test
+    fun `artifact references attach matching artifact diagnostics deterministically`() {
+        val atlasKey = fixtureArtifactKey(
+            uuid = "550e8400-e29b-41d4-a716-446655441011",
+            generation = 11,
+            contentFingerprint = "glyph-atlas-diagnostic",
+        )
+        val outlineKey = fixtureArtifactKey(
+            uuid = "550e8400-e29b-41d4-a716-446655441012",
+            generation = 12,
+            contentFingerprint = "outline-diagnostic",
+        )
+        val bundle = TextGPUArtifactBundle(
+            artifactKey = atlasKey,
+            uploadPlans = emptyList(),
+            glyphUploadPlans = emptyList(),
+            outlineGlyphPlans = listOf(
+                OutlineGlyphPlan(
+                    artifactKey = outlineKey,
+                    glyphIDs = listOf(12U),
+                    windingRule = "non-zero",
+                ),
+            ),
+            colorGlyphPlans = emptyList(),
+            bitmapGlyphPlans = emptyList(),
+            svgGlyphPlans = emptyList(),
+            atlases = listOf(
+                GlyphAtlasArtifact(
+                    artifactKey = atlasKey,
+                    width = 128,
+                    height = 128,
+                    format = "r8",
+                ),
+            ),
+            sdfAtlases = emptyList(),
+            diagnostics = GPUTextRouteDiagnostics(
+                diagnostics = listOf(
+                    GPUTextArtifactDiagnostic(
+                        code = GPUTextArtifactDiagnosticCode.ATLAS_CAPACITY_EXCEEDED,
+                        message = "Atlas capacity exceeded for page 0.",
+                        artifactKey = atlasKey,
+                    ),
+                    GPUTextArtifactDiagnostic(
+                        code = GPUTextArtifactDiagnosticCode.UNSUPPORTED_GLYPH_FORMAT,
+                        message = "Outline policy rejected glyph 12.",
+                        artifactKey = outlineKey,
+                    ),
+                ),
+                refusalRequired = true,
+            ),
+        )
+
+        val references = bundle.artifactReferences()
+
+        assertEquals(
+            listOf(
+                listOf("ATLAS_CAPACITY_EXCEEDED:Atlas capacity exceeded for page 0."),
+                listOf("UNSUPPORTED_GLYPH_FORMAT:Outline policy rejected glyph 12."),
+            ),
+            references.map { reference -> reference.diagnostics },
+        )
+        assertEquals(references, bundle.artifactReferences())
     }
 
     @Test

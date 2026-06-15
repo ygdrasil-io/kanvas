@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-001"
 title: "Align `font:gpu-api` with target artifact registry"
-status: "proposed"
+status: "review"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -103,6 +103,10 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*ArtifactRegistry*'
 
 - `proposed`: Establishes the artifact registry consumed by all M11 route tickets.
 - Move to `ready` only after artifact type names, route families, and refusal code mapping are reviewed.
+- `review`: 2026-06-15 entry-contract evidence is in
+  `reports/pure-kotlin-text/2026-06-15-kfont-m11-001-003-entry-contract.md`.
+  This is contract evidence only; it does not promote GPU text route support,
+  WebGPU execution, or any legacy gate closure.
 
 ## Linear Labels
 

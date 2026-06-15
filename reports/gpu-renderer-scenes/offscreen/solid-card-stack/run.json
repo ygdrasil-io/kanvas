@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sceneId": "solid-card-stack",
+  "status": "rendered",
+  "productRefusal": false,
+  "backend": "webgpu-offscreen",
+  "imagePath": "render.png",
+  "width": 320,
+  "height": 200,
+  "byteCount": 256000,
+  "nonTransparentPixels": 64000,
+  "diagnostics": ["rendered solid-card-stack via WebGPU offscreen","adapter=Apple M2 Max","fillRectCommands=3"]
+}
