@@ -1,11 +1,15 @@
 package org.graphiks.kanvas.gpu.renderer.scenes
 
 import java.nio.file.Files
+import java.nio.file.Path
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import kotlin.io.path.Path
 import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 class GPURendererScenesModuleBoundaryTest {
     @Test
@@ -18,14 +22,25 @@ class GPURendererScenesModuleBoundaryTest {
     }
 
     @Test
-    fun `check task does not depend on opt in render tasks`() {
-        val build = repoPath("gpu-renderer-scenes/build.gradle.kts").readText()
-        val checkDependsOnRenderTasks = build.contains("dependsOn(\"renderGpuRendererSceneOffscreen\")") ||
-            build.contains("dependsOn(\"runGpuRendererSceneKadre\")")
+    fun `check task graph does not include opt in render tasks`() {
+        val output = runGradleDryRun(":gpu-renderer-scenes:check")
 
-        assertFalse(checkDependsOnRenderTasks, "check must not depend on opt-in render tasks")
-        assertTrue(build.contains("renderGpuRendererSceneOffscreen"))
-        assertTrue(build.contains("runGpuRendererSceneKadre"))
+        assertTrue(
+            output.contains(":gpu-renderer-scenes:check"),
+            "Gradle dry-run did not include the requested check task.\n$output",
+        )
+        assertFalse(
+            output.contains(":gpu-renderer-scenes:renderGpuRendererSceneOffscreen"),
+            "check must not depend on the opt-in offscreen render task.\n$output",
+        )
+        assertFalse(
+            output.contains(":gpu-renderer-scenes:runGpuRendererSceneKadre"),
+            "check must not depend on the opt-in Kadre windowed render task.\n$output",
+        )
+        assertFalse(
+            output.contains(":gpu-renderer-scenes:compileKadreKotlin"),
+            "check must not compile the opt-in Kadre source set.\n$output",
+        )
     }
 
     @Test
@@ -56,10 +71,34 @@ class GPURendererScenesModuleBoundaryTest {
         assertTrue(launcher.contains("Class.forName(KADRE_RUNNER_CLASS)"))
     }
 
-    private fun repoPath(path: String): java.nio.file.Path = repoRoot().resolve(path)
+    private fun runGradleDryRun(task: String): String {
+        val output = StringBuilder()
+        val process = ProcessBuilder("./gradlew", "--no-daemon", task, "--dry-run")
+            .directory(repoRoot().toFile())
+            .redirectErrorStream(true)
+            .start()
+        val reader = thread(start = true, name = "gradle-dry-run-output-reader") {
+            process.inputStream.bufferedReader().use { output.append(it.readText()) }
+        }
+        val finished = process.waitFor(120, TimeUnit.SECONDS)
+        if (!finished) {
+            process.destroyForcibly()
+            reader.join(1_000)
+            fail("Gradle dry-run timed out for $task.\n$output")
+        }
 
-    private fun repoRoot(): java.nio.file.Path {
-        var current: java.nio.file.Path? = Path("").toAbsolutePath()
+        reader.join(5_000)
+        val exitCode = process.exitValue()
+        if (exitCode != 0) {
+            fail("Gradle dry-run failed for $task with exit code $exitCode.\n$output")
+        }
+        return output.toString()
+    }
+
+    private fun repoPath(path: String): Path = repoRoot().resolve(path)
+
+    private fun repoRoot(): Path {
+        var current: Path? = Path("").toAbsolutePath()
         while (current != null) {
             if (Files.exists(current.resolve("settings.gradle.kts")) &&
                 Files.exists(current.resolve("gpu-renderer-scenes"))
