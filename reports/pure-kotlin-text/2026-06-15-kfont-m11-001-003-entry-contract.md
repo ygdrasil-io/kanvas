@@ -67,19 +67,22 @@ The tests cover:
 
 ## Review Evidence
 
-Fresh subagent review checkpoints:
+Fresh subagent review checkpoints found and remediated these PR A gaps before
+this evidence was published:
 
-- `KFONT-M11-001` spec review: accepted after validating descriptor order,
-  unregistered refusal diagnostics, and non-promoted route metadata.
-- `KFONT-M11-001` code-quality review: accepted after hardening descriptor
-  list snapshots and structural route assertions.
-- `KFONT-M11-002` spec review: accepted.
-- `KFONT-M11-002` code-quality review: accepted after replacing the report
-  `data class` with a snapshotting class and aligning JSON order with scan
-  order.
-- `KFONT-M11-003` spec review: accepted after renaming tests so
-  `--tests '*DrawTextRun*'` discovers the ticket validation lane.
-- `KFONT-M11-003` code-quality review: accepted.
+- Registry descriptor snapshots and test discovery filters were hardened.
+- `DrawTextRunPayload` leakage validation was changed from static type facts
+  to real value scans.
+- Generic stringified `Sk*` markers, raw GPU handles, CPU-rendered full text
+  textures, and nondumpable payload markers were covered by stable diagnostics.
+- Registry descriptors were added to the no-`Sk*` scan surface.
+- Descriptor compact hashes, route family metadata, and missing/stale/budget
+  diagnostics were added as registry metadata only.
+- Artifact references were enriched with artifact type, artifact key hash,
+  invalidation facts, and scoped diagnostics.
+- Concrete `TextGPUArtifactBundle` scan fixtures were added; the future
+  `GPUTextSubRunPlan` coverage remains a generic field-list fixture only, with
+  no production subrun planning claim in PR A.
 
 ## Validation
 
