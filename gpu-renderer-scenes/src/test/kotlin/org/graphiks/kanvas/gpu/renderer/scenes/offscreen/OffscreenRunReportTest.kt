@@ -6,6 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
 class OffscreenRunReportTest {
@@ -158,5 +159,29 @@ class OffscreenRunReportTest {
                 diagnostics = listOf("runner-subset"),
             )
         }
+    }
+
+    @Test
+    fun `diagnostics are immutable after construction`() {
+        val diagnostics = mutableListOf("runner-subset")
+        val report = OffscreenRunReport(
+            sceneId = "mutable-diagnostics",
+            runStatus = OffscreenRunStatus.NotYetRendered,
+            backend = "webgpu-offscreen",
+            imagePath = null,
+            width = null,
+            height = null,
+            byteCount = null,
+            nonTransparentPixels = null,
+            diagnostics = diagnostics,
+        )
+
+        diagnostics.clear()
+        diagnostics += "mutated after construction"
+        diagnostics += " "
+
+        assertEquals(listOf("runner-subset"), report.diagnostics)
+        assertContains(report.toJson(), "runner-subset")
+        assertFalse(report.toJson().contains("mutated after construction"))
     }
 }

@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 
 import java.nio.file.Path
+import java.util.Collections
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 import org.graphiks.kanvas.gpu.renderer.scenes.reports.json
@@ -10,7 +11,7 @@ enum class OffscreenRunStatus(val wireName: String) {
     RenderFailed("render-failed"),
 }
 
-data class OffscreenRunReport(
+class OffscreenRunReport(
     val sceneId: String,
     val runStatus: OffscreenRunStatus,
     val backend: String,
@@ -19,22 +20,27 @@ data class OffscreenRunReport(
     val height: Int?,
     val byteCount: Long?,
     val nonTransparentPixels: Int?,
-    val diagnostics: List<String>,
+    diagnostics: List<String>,
 ) {
+    private val diagnosticsSnapshot: List<String> = Collections.unmodifiableList(diagnostics.toList())
+
+    val diagnostics: List<String> get() = diagnosticsSnapshot
     val status: String get() = runStatus.wireName
     val productRefusal: Boolean get() = false
 
     init {
         require(sceneId.isNotBlank()) { "sceneId must not be blank" }
         require(backend.isNotBlank()) { "backend must not be blank" }
-        require(diagnostics.isNotEmpty()) { "diagnostics must not be empty" }
-        require(diagnostics.all { it.isNotBlank() }) { "diagnostics must not contain blank entries" }
+        require(diagnosticsSnapshot.isNotEmpty()) { "diagnostics must not be empty" }
+        require(diagnosticsSnapshot.all { it.isNotBlank() }) { "diagnostics must not contain blank entries" }
+        requireStatusInvariants()
+    }
 
+    private fun requireStatusInvariants(): Unit =
         when (runStatus) {
             OffscreenRunStatus.NotYetRendered,
             OffscreenRunStatus.RenderFailed -> requireNoRenderedOutput()
         }
-    }
 
     private fun requireNoRenderedOutput() {
         require(imagePath == null) { "${runStatus.wireName} reports must not include imagePath" }
