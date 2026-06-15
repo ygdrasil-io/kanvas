@@ -9,8 +9,8 @@ object GPURendererSceneRegistry {
         scene(
             id = "solid-card-stack",
             title = "Solid Card Stack",
-            description = "Rectangles with source-over alpha and deterministic draw order.",
-            tags = setOf(SceneTag.Rect, SceneTag.Blend),
+            description = "Rectangles with alpha values and deterministic draw order.",
+            tags = setOf(SceneTag.Rect),
             links = listOf(
                 SceneRoadmapLink.milestone("M0", RStage.R0),
                 SceneRoadmapLink.milestone("M1", RStage.R1),
@@ -61,8 +61,8 @@ object GPURendererSceneRegistry {
         scene(
             id = "path-badge-and-stroke",
             title = "Path Badge And Stroke",
-            description = "Simple filled path plus simple stroke.",
-            tags = setOf(SceneTag.Path, SceneTag.Stroke),
+            description = "Rounded badge and rectangular stroke proxy using current command families.",
+            tags = setOf(SceneTag.RRect, SceneTag.Rect),
             links = listOf(SceneRoadmapLink.milestone("M3")),
             commands = listOf(
                 SceneCommand.FillRRect("badge-fill"),
@@ -90,7 +90,7 @@ object GPURendererSceneRegistry {
         scene(
             id = "texture-swatch-board",
             title = "Texture Swatch Board",
-            description = "Already-decoded bitmap sampling with nearest and linear lanes.",
+            description = "Already-decoded bitmap swatches represented by bitmap-rect commands.",
             tags = setOf(SceneTag.Image),
             links = listOf(SceneRoadmapLink.milestone("M4")),
             commands = listOf(
@@ -101,7 +101,7 @@ object GPURendererSceneRegistry {
         scene(
             id = "layered-shadow-card",
             title = "Layered Shadow Card",
-            description = "Isolated layer target and restore composite.",
+            description = "Layer and filter command markers for bounded route observation.",
             tags = setOf(SceneTag.Layer, SceneTag.Filter),
             links = listOf(SceneRoadmapLink.milestone("M5")),
             commands = listOf(
@@ -112,7 +112,7 @@ object GPURendererSceneRegistry {
         scene(
             id = "filtered-photo-chip",
             title = "Filtered Photo Chip",
-            description = "Bounded filter over image or layer content.",
+            description = "Bitmap and filter command markers for bounded route observation.",
             tags = setOf(SceneTag.Filter, SceneTag.Image),
             links = listOf(SceneRoadmapLink.milestone("M5")),
             commands = listOf(
@@ -131,7 +131,7 @@ object GPURendererSceneRegistry {
         scene(
             id = "runtime-effect-color-tile",
             title = "Runtime Effect Color Tile",
-            description = "Registered runtime effect with bounded editable parameters.",
+            description = "Runtime-effect tile command marker with bounded parameter intent.",
             tags = setOf(SceneTag.RuntimeEffect),
             links = listOf(SceneRoadmapLink.milestone("M7")),
             commands = listOf(SceneCommand.RuntimeEffectTile("simple-rt-color")),
@@ -139,8 +139,8 @@ object GPURendererSceneRegistry {
         scene(
             id = "blend-mode-strip",
             title = "Blend Mode Strip",
-            description = "Supported blend family strip and final-product blend limits.",
-            tags = setOf(SceneTag.Blend),
+            description = "Rect strip reserved for future explicit blend coverage.",
+            tags = setOf(SceneTag.Rect),
             links = listOf(SceneRoadmapLink.milestone("M7")),
             commands = listOf(
                 SceneCommand.FillRect(
@@ -161,8 +161,8 @@ object GPURendererSceneRegistry {
         scene(
             id = "cache-pressure-deck",
             title = "Cache Pressure Deck",
-            description = "Repeated scenes for cache and resource telemetry observation.",
-            tags = setOf(SceneTag.Cache, SceneTag.Rect),
+            description = "Repeated rect commands for future cache telemetry observation.",
+            tags = setOf(SceneTag.Rect),
             links = listOf(SceneRoadmapLink.milestone("M9")),
             commands = listOf(
                 SceneCommand.FillRect(
@@ -180,8 +180,8 @@ object GPURendererSceneRegistry {
         scene(
             id = "legacy-route-comparison",
             title = "Legacy Route Comparison",
-            description = "New-route intent compared with legacy gpu-raster route ownership.",
-            tags = setOf(SceneTag.LegacyComparison, SceneTag.Rect),
+            description = "Rect command marker for future legacy-route comparison.",
+            tags = setOf(SceneTag.Rect),
             links = listOf(SceneRoadmapLink.milestone("M10")),
             commands = listOf(
                 SceneCommand.FillRect(
