@@ -1,7 +1,7 @@
 ---
 id: KGPU-M7-002
 title: "Add runtime-effect child and source refusal gates"
-status: proposed
+status: blocked
 milestone: M7
 priority: P0
 owner_area: runtime-effects-validation
@@ -82,7 +82,10 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Refusal gates only.
+- `blocked`: Depends on KGPU-M7-001. Child/source refusal rows must be anchored
+  to the registered descriptor route and compatibility lookup boundary after
+  KGPU-M7-001 has accepted descriptor evidence; no arbitrary SkSL/WGSL source
+  or child-slot support is implied.
 
 ## Linear Labels
 

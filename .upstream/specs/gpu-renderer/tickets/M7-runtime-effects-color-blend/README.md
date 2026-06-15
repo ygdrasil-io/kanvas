@@ -27,9 +27,9 @@ blend modes that require destination access. Runtime effects must follow
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M7-001 - Add registered runtime-effect descriptor route](KGPU-M7-001-add-registered-runtime-effect-descriptor-route.md) | `proposed` | `P0` | `DependencyGated` | `GPUNative` | `false` | `true` | `runtime-effects` | `KGPU-M2-002` | `runtime-effect legacy` |
-| [KGPU-M7-002 - Add runtime-effect child and source refusal gates](KGPU-M7-002-add-runtime-effect-child-and-source-refusal-gates.md) | `proposed` | `P0` | `RefuseRequired` | `RefuseDiagnostic` | `false` | `false` | `runtime-effects-validation` | `KGPU-M7-001` | - |
-| [KGPU-M7-003 - Add blend mode allowlist and destination-read refusals](KGPU-M7-003-add-blend-mode-allowlist-and-destination-read-refusals.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `blend-destination-read` | `KGPU-M5-002` | `blend legacy` |
-| [KGPU-M7-004 - Add SDR color plan and HDR profile refusal gates](KGPU-M7-004-add-sdr-color-plan-and-hdr-profile-refusal-gates.md) | `proposed` | `P1` | `DependencyGated` | `GPUNative` | `false` | `false` | `color` | `KGPU-M2-002` | `color legacy` |
+| [KGPU-M7-002 - Add runtime-effect child and source refusal gates](KGPU-M7-002-add-runtime-effect-child-and-source-refusal-gates.md) | `blocked` | `P0` | `RefuseRequired` | `RefuseDiagnostic` | `false` | `false` | `runtime-effects-validation` | `KGPU-M7-001` | - |
+| [KGPU-M7-003 - Add blend mode allowlist and destination-read refusals](KGPU-M7-003-add-blend-mode-allowlist-and-destination-read-refusals.md) | `blocked` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `blend-destination-read` | `KGPU-M5-002` | `blend legacy` |
+| [KGPU-M7-004 - Add SDR color plan and HDR profile refusal gates](KGPU-M7-004-add-sdr-color-plan-and-hdr-profile-refusal-gates.md) | `done` | `P1` | `DependencyGated` | `GPUNative` | `false` | `false` | `color` | `KGPU-M2-002` | `color legacy` |
 
 ## Validation Bundle
 
@@ -44,6 +44,24 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Runtime*' --tests '*Blend*'
 - No arbitrary SkSL or dynamic shader compilation.
 - No broad color-management, HDR, ICC/CICP, gainmap, or all-blend-mode support.
 - Runtime descriptor acceptance is not product support without route evidence.
+
+## Current Evidence
+
+- KGPU-M7-001 remains `proposed`; remaining gate is a registered descriptor
+  with Kotlin/CPU oracle, complete parser-validated WGSL/reflection through
+  `wgsl4k`, route integration, adapter-backed execution/readback evidence, and
+  explicit unregistered-descriptor refusals.
+- KGPU-M7-002 is `blocked` on KGPU-M7-001 so child/source refusal rows cannot
+  be asserted against a descriptor route that is still unpromoted.
+- KGPU-M7-003 is `blocked` on KGPU-M5-002 and native destination-read strategy
+  evidence; no framebuffer-fetch, active-attachment sampling, or CPU-rendered
+  blend fallback is implied.
+- KGPU-M7-004 is `done` with bounded SDR color boundary evidence:
+  deterministic finite-sRGB value/store dumps, behavior key facts that exclude
+  source/profile identity, and terminal refusals for HDR, gainmap, ICC/CICP,
+  untagged, and extended-range cases. Independent review
+  `019ec850-9390-7240-9313-1f9af4b9a77d` accepted the evidence with no
+  findings. This is contract/refusal evidence only.
 
 ## Status Update Rule
 

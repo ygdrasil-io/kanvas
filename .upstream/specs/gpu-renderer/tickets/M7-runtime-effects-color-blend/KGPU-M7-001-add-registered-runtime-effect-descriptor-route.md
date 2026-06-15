@@ -82,7 +82,10 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Descriptor-backed only.
+- `proposed`: Descriptor-backed only. Remaining gate is a registered descriptor
+  with Kotlin/CPU oracle, complete parser-validated WGSL/reflection through
+  `wgsl4k`, route integration, adapter-backed execution/readback evidence, and
+  explicit unregistered-descriptor refusals.
 
 ## Linear Labels
 
