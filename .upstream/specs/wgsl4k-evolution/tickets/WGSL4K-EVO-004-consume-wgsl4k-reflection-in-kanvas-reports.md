@@ -1,7 +1,7 @@
 ---
 id: WGSL4K-EVO-004
 title: "Consume wgsl4k reflection in Kanvas reports"
-status: proposed
+status: blocked
 priority: P0
 owner_area: wgsl4k-evolution
 claim_impact: DependencyGated
@@ -83,7 +83,10 @@ consuming modules are selected.
 
 ## Status Notes
 
-- `proposed`: Requires reviewed wgsl4k SHA and submodule import.
+- `blocked`: Requires a reviewed wgsl4k SHA from
+  `https://github.com/ygdrasil-io/wgsl4k/pull/9` or an explicit user-approved
+  commit before Kanvas can generate/compare report fixtures. No Kanvas reports
+  were generated in this ticket wave.
 
 ## Labels
 
