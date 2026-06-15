@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class GPUTextArtifactRegistryTest {
@@ -25,12 +26,19 @@ class GPUTextArtifactRegistryTest {
             ),
             descriptorNames,
         )
-        assertEquals(listOf("AtlasMaskSample"), registry.descriptor("GlyphAtlasArtifact")?.supportedRoutes)
-        descriptorNames
-            .filterNot { descriptorName -> descriptorName == "GlyphAtlasArtifact" }
-            .forEach { descriptorName ->
-                assertEquals(emptyList(), registry.descriptor(descriptorName)?.supportedRoutes)
-            }
+        assertEquals(
+            mapOf(
+                "GlyphAtlasArtifact" to listOf("AtlasMaskSample"),
+                "SDFGlyphAtlasArtifact" to listOf("AtlasSDFSample"),
+                "GlyphUploadPlan" to listOf("DependencyGated"),
+                "OutlineGlyphPlan" to listOf("OutlinePathRoute"),
+                "ColorGlyphPlan" to listOf("ColorGlyphCompositeRoute"),
+                "BitmapGlyphPlan" to listOf("BitmapGlyphTextureRoute"),
+                "SVGGlyphPlan" to listOf("SVGGlyphVectorRoute"),
+            ),
+            registry.descriptors.associate { descriptor -> descriptor.artifactName to descriptor.supportedRoutes },
+        )
+        assertTrue(registry.descriptors.all { descriptor -> !descriptor.productActivation })
 
         val json = registry.toCanonicalJson()
         assertEquals(json, defaultTextGPUArtifactRegistry().toCanonicalJson())
@@ -38,7 +46,15 @@ class GPUTextArtifactRegistryTest {
         assertContains(json, """"artifactName":"GlyphAtlasArtifact"""")
         assertContains(json, """"descriptorCompactHash":"${registry.descriptors[0].descriptorCompactHash}"""")
         assertContains(json, """"supportedRoutes":["AtlasMaskSample"]""")
+        assertContains(json, """"supportedRoutes":["AtlasSDFSample"]""")
+        assertContains(json, """"supportedRoutes":["DependencyGated"]""")
+        assertContains(json, """"supportedRoutes":["OutlinePathRoute"]""")
+        assertContains(json, """"supportedRoutes":["ColorGlyphCompositeRoute"]""")
+        assertContains(json, """"supportedRoutes":["BitmapGlyphTextureRoute"]""")
+        assertContains(json, """"supportedRoutes":["SVGGlyphVectorRoute"]""")
         assertContains(json, """"missingDiagnostic":"unsupported.text.artifact_unregistered"""")
+        assertContains(json, """"staleDiagnostic":"unsupported.text.artifact_generation_stale"""")
+        assertContains(json, """"budgetDiagnostic":"unsupported.text.artifact_budget_exceeded"""")
         assertContains(json, """"productActivation":false""")
 
         listOf("SkFont", "SkTypeface", "SkTextBlob", "SkPaint", "fontBytes", "GPUHandle").forEach { token ->
@@ -58,6 +74,8 @@ class GPUTextArtifactRegistryTest {
         assertContains(json, """"payloadKind":"TextGPUArtifactRegistry"""")
         assertContains(json, """"fieldPath":"descriptors[0].artifactName"""")
         assertContains(json, """"fieldPath":"descriptors[0].descriptorCompactHash"""")
+        assertContains(json, """"fieldPath":"descriptors[0].staleDiagnostic"""")
+        assertContains(json, """"fieldPath":"descriptors[0].budgetDiagnostic"""")
     }
 
     @Test
@@ -73,6 +91,8 @@ class GPUTextArtifactRegistryTest {
             uploadBudgetClass = "test-upload",
             supportedRoutes = listOf("DependencyGated"),
             missingDiagnostic = "unsupported.text.artifact_unregistered",
+            staleDiagnostic = "unsupported.text.artifact_generation_stale",
+            budgetDiagnostic = "unsupported.text.artifact_budget_exceeded",
         )
         val report = TextGPUArtifactRegistry(listOf(descriptor)).noSkLeakageReport()
 
@@ -92,6 +112,34 @@ class GPUTextArtifactRegistryTest {
                 "unsupported.text.sk_type_leaked",
             ),
             report.findings.map { finding -> finding.rendererDiagnostic },
+        )
+    }
+
+    @Test
+    fun `descriptor compact hash includes stale and budget diagnostics`() {
+        val descriptor = TextGPUArtifactDescriptor(
+            artifactName = "HashDiagnosticArtifact",
+            descriptorVersion = 1,
+            ownerSubsystem = "pure-kotlin-text",
+            keyPreimageFields = listOf("artifactID", "generation"),
+            lifetimeClass = "test-lifetime",
+            invalidationFacts = listOf("generation"),
+            memoryBudgetClass = "test-memory",
+            uploadBudgetClass = "test-upload",
+            supportedRoutes = listOf("DependencyGated"),
+            missingDiagnostic = "unsupported.text.artifact_unregistered",
+            staleDiagnostic = "unsupported.text.artifact_generation_stale",
+            budgetDiagnostic = "unsupported.text.artifact_budget_exceeded",
+        )
+
+        assertEquals(descriptor.descriptorCompactHash, descriptor.copy().descriptorCompactHash)
+        assertNotEquals(
+            descriptor.descriptorCompactHash,
+            descriptor.copy(staleDiagnostic = "unsupported.text.atlas_generation_stale").descriptorCompactHash,
+        )
+        assertNotEquals(
+            descriptor.descriptorCompactHash,
+            descriptor.copy(budgetDiagnostic = "unsupported.text.upload_budget_exceeded").descriptorCompactHash,
         )
     }
 
@@ -149,6 +197,8 @@ class GPUTextArtifactRegistryTest {
                     uploadBudgetClass = "test-upload",
                     supportedRoutes = supportedRoutes,
                     missingDiagnostic = "unsupported.text.artifact_unregistered",
+                    staleDiagnostic = "unsupported.text.artifact_generation_stale",
+                    budgetDiagnostic = "unsupported.text.artifact_budget_exceeded",
                 ),
             ),
         )

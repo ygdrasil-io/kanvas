@@ -31,7 +31,14 @@ promote those inline fixtures into checked-in generated artifacts.
 The tests cover:
 
 - deterministic artifact registry order and descriptor compact hashes;
-- `GlyphAtlasArtifact` as the only descriptor exposing `AtlasMaskSample`;
+- target route family metadata for all seven descriptors:
+  `AtlasMaskSample`, `AtlasSDFSample`, `DependencyGated`,
+  `OutlinePathRoute`, `ColorGlyphCompositeRoute`,
+  `BitmapGlyphTextureRoute`, and `SVGGlyphVectorRoute`;
+- `GlyphUploadPlan` route metadata as a planning dependency, not an execution
+  route;
+- descriptor missing, stale, and budget diagnostics in canonical dumps,
+  compact hashes, and no-`Sk*` scans;
 - unregistered artifact diagnostics;
 - registry descriptor no-`Sk*` leakage reports, including a negative descriptor
   fixture for `SkFont`, `fontBytes`, and raw GPU handle fields;
@@ -79,6 +86,8 @@ rtk git diff --check
 ## Non-Claims
 
 - No GPU text product support is promoted.
+- Target route family metadata remains descriptor metadata only; it does not
+  activate route execution.
 - No WebGPU upload, binding, command submission, or readback is claimed.
 - No `KGPU-M6-002` or `KGPU-M6-003` status is changed by this evidence.
 - No A8/SDF/outline/color/bitmap/SVG glyph rendering support is claimed.

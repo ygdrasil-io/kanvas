@@ -18,6 +18,8 @@ data class TextGPUArtifactDescriptor(
     val uploadBudgetClass: String?,
     val supportedRoutes: List<String>,
     val missingDiagnostic: String,
+    val staleDiagnostic: String,
+    val budgetDiagnostic: String,
     val productActivation: Boolean = false,
 ) {
     init {
@@ -39,6 +41,8 @@ data class TextGPUArtifactDescriptor(
             "supportedRoutes must not contain blank entries."
         }
         require(missingDiagnostic.isNotBlank()) { "missingDiagnostic must not be blank." }
+        require(staleDiagnostic.isNotBlank()) { "staleDiagnostic must not be blank." }
+        require(budgetDiagnostic.isNotBlank()) { "budgetDiagnostic must not be blank." }
         require(!productActivation) {
             "Text GPU artifact registration does not activate product renderer support."
         }
@@ -65,6 +69,8 @@ data class TextGPUArtifactDescriptor(
         appendTextArtifactJsonNullableField("uploadBudgetClass", uploadBudgetClass, comma = true)
         appendTextArtifactJsonField("supportedRoutes", supportedRoutes, comma = true)
         appendTextArtifactJsonField("missingDiagnostic", missingDiagnostic, comma = true)
+        appendTextArtifactJsonField("staleDiagnostic", staleDiagnostic, comma = true)
+        appendTextArtifactJsonField("budgetDiagnostic", budgetDiagnostic, comma = true)
         appendTextArtifactJsonField("productActivation", productActivation, comma = false)
         append("}")
     }
@@ -180,6 +186,7 @@ fun defaultTextGPUArtifactRegistry(): TextGPUArtifactRegistry = TextGPUArtifactR
             invalidationFacts = listOf("generation", "contentFingerprint", "distanceRange"),
             memoryBudgetClass = "sdf-atlas-memory",
             uploadBudgetClass = "sdf-atlas-upload",
+            supportedRoutes = listOf("AtlasSDFSample"),
         ),
         textGPUArtifactDescriptor(
             artifactName = "GlyphUploadPlan",
@@ -194,6 +201,8 @@ fun defaultTextGPUArtifactRegistry(): TextGPUArtifactRegistry = TextGPUArtifactR
             invalidationFacts = listOf("generation", "contentFingerprint", "payloadByteSize"),
             memoryBudgetClass = "glyph-upload-payload",
             uploadBudgetClass = "glyph-upload-bytes",
+            // Planning dependency metadata only; it is not an execution route.
+            supportedRoutes = listOf("DependencyGated"),
         ),
         textGPUArtifactDescriptor(
             artifactName = "OutlineGlyphPlan",
@@ -208,6 +217,7 @@ fun defaultTextGPUArtifactRegistry(): TextGPUArtifactRegistry = TextGPUArtifactR
             invalidationFacts = listOf("generation", "contentFingerprint", "outlinePolicy"),
             memoryBudgetClass = "outline-plan-memory",
             uploadBudgetClass = null,
+            supportedRoutes = listOf("OutlinePathRoute"),
         ),
         textGPUArtifactDescriptor(
             artifactName = "ColorGlyphPlan",
@@ -222,6 +232,7 @@ fun defaultTextGPUArtifactRegistry(): TextGPUArtifactRegistry = TextGPUArtifactR
             invalidationFacts = listOf("generation", "contentFingerprint", "colorLayerPolicy"),
             memoryBudgetClass = "color-glyph-plan-memory",
             uploadBudgetClass = null,
+            supportedRoutes = listOf("ColorGlyphCompositeRoute"),
         ),
         textGPUArtifactDescriptor(
             artifactName = "BitmapGlyphPlan",
@@ -236,6 +247,7 @@ fun defaultTextGPUArtifactRegistry(): TextGPUArtifactRegistry = TextGPUArtifactR
             invalidationFacts = listOf("generation", "contentFingerprint", "bitmapPayloadPolicy"),
             memoryBudgetClass = "bitmap-glyph-plan-memory",
             uploadBudgetClass = null,
+            supportedRoutes = listOf("BitmapGlyphTextureRoute"),
         ),
         textGPUArtifactDescriptor(
             artifactName = "SVGGlyphPlan",
@@ -250,6 +262,7 @@ fun defaultTextGPUArtifactRegistry(): TextGPUArtifactRegistry = TextGPUArtifactR
             invalidationFacts = listOf("generation", "contentFingerprint", "vectorDocumentPolicy"),
             memoryBudgetClass = "svg-glyph-plan-memory",
             uploadBudgetClass = null,
+            supportedRoutes = listOf("SVGGlyphVectorRoute"),
         ),
     ),
 )
@@ -262,6 +275,10 @@ private const val TEXT_GPU_ARTIFACT_UNREGISTERED_HANDOFF_DIAGNOSTIC =
     "text.gpu.artifact-unregistered"
 private const val TEXT_GPU_ARTIFACT_UNREGISTERED_RENDERER_DIAGNOSTIC =
     "unsupported.text.artifact_unregistered"
+private const val TEXT_GPU_ARTIFACT_GENERATION_STALE_DIAGNOSTIC =
+    "unsupported.text.artifact_generation_stale"
+private const val TEXT_GPU_ARTIFACT_BUDGET_EXCEEDED_DIAGNOSTIC =
+    "unsupported.text.artifact_budget_exceeded"
 
 private fun textGPUArtifactDescriptor(
     artifactName: String,
@@ -271,6 +288,8 @@ private fun textGPUArtifactDescriptor(
     memoryBudgetClass: String,
     uploadBudgetClass: String?,
     supportedRoutes: List<String> = emptyList(),
+    staleDiagnostic: String = TEXT_GPU_ARTIFACT_GENERATION_STALE_DIAGNOSTIC,
+    budgetDiagnostic: String = TEXT_GPU_ARTIFACT_BUDGET_EXCEEDED_DIAGNOSTIC,
 ): TextGPUArtifactDescriptor = TextGPUArtifactDescriptor(
     artifactName = artifactName,
     descriptorVersion = 1,
@@ -282,6 +301,8 @@ private fun textGPUArtifactDescriptor(
     uploadBudgetClass = uploadBudgetClass,
     supportedRoutes = supportedRoutes,
     missingDiagnostic = TEXT_GPU_ARTIFACT_UNREGISTERED_RENDERER_DIAGNOSTIC,
+    staleDiagnostic = staleDiagnostic,
+    budgetDiagnostic = budgetDiagnostic,
     productActivation = false,
 )
 
@@ -307,6 +328,8 @@ private fun TextGPUArtifactDescriptor.textPayloadLeakageFields(fieldPrefix: Stri
             add(TextPayloadField("$fieldPrefix.supportedRoutes[$index]", "String", route))
         }
         add(TextPayloadField("$fieldPrefix.missingDiagnostic", "String", missingDiagnostic))
+        add(TextPayloadField("$fieldPrefix.staleDiagnostic", "String", staleDiagnostic))
+        add(TextPayloadField("$fieldPrefix.budgetDiagnostic", "String", budgetDiagnostic))
         add(TextPayloadField("$fieldPrefix.productActivation", "Boolean", productActivation.toString()))
     }
 
@@ -326,6 +349,8 @@ private fun TextGPUArtifactDescriptor.toDescriptorHashPreimage(): String = build
     appendTextArtifactJsonNullableField("uploadBudgetClass", uploadBudgetClass, comma = true)
     appendTextArtifactJsonField("supportedRoutes", supportedRoutes, comma = true)
     appendTextArtifactJsonField("missingDiagnostic", missingDiagnostic, comma = true)
+    appendTextArtifactJsonField("staleDiagnostic", staleDiagnostic, comma = true)
+    appendTextArtifactJsonField("budgetDiagnostic", budgetDiagnostic, comma = true)
     appendTextArtifactJsonField("productActivation", productActivation, comma = false)
     append("}")
 }
