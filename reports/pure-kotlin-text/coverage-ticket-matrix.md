@@ -667,7 +667,7 @@ conformance, complete required-table validation, `cmap` format 14 support,
 CFF/CFF2 support, scaler support, shaping support, or platform font behavior.
 ### PKT-03D: Malformed SFNT And CMap Format 14 Fixture Pack
 
-Status: implemented; independent review pending.
+Status: done; independently reviewed and freshly validated.
 
 Files:
 
@@ -2602,3 +2602,61 @@ Remaining gate: this is parser-only `cmap` evidence. Format 13 remains
 fixture-gated/refused, and this checkpoint does not claim shaping, GSUB/GPOS,
 bidi, segmentation, fallback runs, paragraph layout, scaler, rendering, native
 font-engine parity, or GPU text-route support.
+
+### KFONT-M2-004: OpenType Table Fact Dumps
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTTableFactDumpTest.kt`
+- `reports/pure-kotlin-text/sfnt-tables.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m2-004-table-fact-dumps.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `.upstream/specs/pure-kotlin-text/tickets/M2-sfnt-opentype-parser/KFONT-M2-004-add-opentype-table-fact-dumps.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M2-sfnt-opentype-parser/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `OpenTypeTableFactReportWriter` emits
+  `sfnt-tables.json` with canonical required/high-value OpenType table facts:
+  `cmap`, `head`, `hhea`, `hmtx`, `maxp`, `name`, `OS/2`, `post`, `loca`,
+  `glyf`, `CFF `, `CFF2`, `vhea`, `vmtx`, `GDEF`, `GSUB`, `GPOS`, `BASE`,
+  `kern`, `fvar`, `avar`, `gvar`, `HVAR`, `VVAR`, `MVAR`, `COLR`, `CPAL`,
+  `CBDT`, `CBLC`, `sbix`, and `SVG `.
+- The Liberation Sans TTF row links to M1 source/typeface evidence labels
+  `bundled-fixture` and `single-face-ttf`, carries bounded byte ranges,
+  checksums, raw SHA-256 table payload hashes, roles, parser status, metadata
+  classifications, and `claimPromotionAllowed=false`.
+- Generated rows capture a malformed optional `fvar` table diagnostic
+  `font.sfnt.optional-table-malformed` and missing required `loca`/`glyf`
+  diagnostics `font.sfnt.required-table-missing`.
+- `cmapMapLink` deterministically references
+  `reports/pure-kotlin-text/cmap-map.json` and the KFONT-M2-003 generated
+  `cmap` entry IDs as metadata-only facts.
+- Focused tests prove byte-for-byte repeated generation and canonical table
+  ordering independent of SFNT directory order.
+- `dump-evidence-index.json` tracks `sfnt-table-facts` as producer-only dump
+  evidence.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test --tests '*TableFactDump*' --tests '*CMap*'
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Review: independent spec review accepted with no remediations. Independent
+code review accepted with non-blocking notes on writer-level entry ordering and
+validation-command consistency.
+
+Remaining gate: none for KFONT-M2-004. This is metadata-only table evidence;
+it does not claim shaping, scaler, CFF/CFF2 outline, color glyph, bitmap/SVG
+rendering, native engine parity, fallback, paragraph layout, or GPU text-route
+support.
