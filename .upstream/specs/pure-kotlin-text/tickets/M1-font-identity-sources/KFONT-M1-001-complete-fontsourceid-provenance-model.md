@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M1-001"
 title: "Complete `FontSourceID` provenance model"
-status: "review"
+status: "done"
 milestone: "M1"
 priority: "P0"
 owner_area: "font-core"
@@ -104,6 +104,7 @@ rtk ./gradlew --no-daemon :font:core:test --tests '*FontSource*'
 
 ## Status Notes
 
+- `done`: Merged into `master` by PR #1655 (`b85796d50`) and revalidated on 2026-06-15 in `reports/pure-kotlin-text/2026-06-15-kfont-review-closeout.md`. Remaining non-claims and later gates stay active.
 - `review` (2026-06-15): Added `FontSourceIdentityPreimage`, deterministic `FontSourceID` derivation, target source-kind serialization, and checked-in `reports/pure-kotlin-text/font-source.json` evidence.
 - TDD evidence: red `:font:core:compileTestKotlin` on missing source identity contract, then green `rtk ./gradlew --no-daemon :font:core:test --tests '*FontSource*'` with 6 focused tests.
 - Remaining gate: this is source identity/provenance evidence only; `TypefaceID`, bundled fixture manifest, SFNT parser promotion, scaler, shaping, fallback, glyph artifacts, and GPU routes remain in later tickets.

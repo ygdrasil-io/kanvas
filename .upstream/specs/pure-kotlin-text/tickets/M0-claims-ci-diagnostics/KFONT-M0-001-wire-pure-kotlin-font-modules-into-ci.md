@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M0-001"
 title: "Wire pure Kotlin font modules into CI"
-status: "review"
+status: "done"
 milestone: "M0"
 priority: "P0"
 owner_area: "ci"
@@ -102,6 +102,7 @@ rtk ./gradlew --no-daemon :font:core:test :font:sfnt:test :font:scaler:test :fon
 
 ## Status Notes
 
+- `done`: Merged into `master` by PR #1661 (`3fb53af78`) and revalidated on 2026-06-15 in `reports/pure-kotlin-text/2026-06-15-kfont-review-closeout.md`. Remaining non-claims and later gates stay active.
 - `review`: CI lane `pure-kotlin-font-foundation` is wired in
   `.github/workflows/test.yml`, validates
   `reports/pure-kotlin-text/font-ci-lane.json`, invokes the six `:font:*`

@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-003"
 title: "Add normalized `DrawTextRun` contract"
-status: "review"
+status: "done"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -101,6 +101,7 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*DrawTextRun*'
 
 ## Status Notes
 
+- `done`: Merged into `master` by PR #1653 (`7e74ee77`) and revalidated on 2026-06-15 in `reports/pure-kotlin-text/2026-06-15-kfont-review-closeout.md`. This remains contract evidence only; no GPU text route or legacy gate is promoted.
 - `proposed`: Depends on paragraph/glyph descriptors and no-leakage validation.
 - Move to `ready` only after payload field list and dump schema are reviewed.
 - `review`: 2026-06-15 entry-contract evidence is in
