@@ -4,8 +4,15 @@ import java.nio.file.Files
 import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.SceneDimensions
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.SceneExpectation
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.SceneId
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.SceneRoadmapLink
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.SceneTag
 
 class SceneCatalogReportTest {
     @Test
@@ -24,5 +31,26 @@ class SceneCatalogReportTest {
 
         assertTrue(root.resolve("catalog.md").readText().contains("GPU Renderer Scene Catalog"))
         assertTrue(root.resolve("catalog.json").readText().contains("\"sceneId\": \"solid-card-stack\""))
+    }
+
+    @Test
+    fun `catalog report json escapes non-printing control characters`() {
+        val json = SceneCatalogReport(
+            listOf(
+                GPURendererScene(
+                    sceneId = SceneId("control-char-scene"),
+                    title = "Control\u0001Title",
+                    description = "Description",
+                    dimensions = SceneDimensions(1, 1),
+                    tags = setOf(SceneTag.Rect),
+                    roadmapLinks = listOf(SceneRoadmapLink.milestone("M0")),
+                    expectation = SceneExpectation.ShouldRender,
+                    commands = listOf(Unit),
+                ),
+            ),
+        ).toJson()
+
+        assertContains(json, "\"title\": \"Control\\u0001Title\"")
+        assertFalse(json.contains('\u0001'))
     }
 }

@@ -59,15 +59,24 @@ private fun SceneExpectation.label(): String =
 
 private fun String.escapeTable(): String = replace("|", "\\|")
 
+private const val HEX_DIGITS = "0123456789abcdef"
+
 internal fun String.json(): String = buildString {
     append('"')
     this@json.forEach { ch ->
         when (ch) {
             '\\' -> append("\\\\")
             '"' -> append("\\\"")
+            '\b' -> append("\\b")
             '\n' -> append("\\n")
+            '\u000C' -> append("\\f")
             '\r' -> append("\\r")
             '\t' -> append("\\t")
+            in '\u0000'..'\u001F' -> {
+                append("\\u00")
+                append(HEX_DIGITS[ch.code ushr 4])
+                append(HEX_DIGITS[ch.code and 0xF])
+            }
             else -> append(ch)
         }
     }
