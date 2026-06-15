@@ -22,7 +22,10 @@ class GPUTextNoSkLeakageValidationTest {
 
         assertTrue(report.findings.isEmpty())
         assertEquals("pass", report.status)
+        assertTrue(report.payloadHash.startsWith("fnv1a64:"))
+        assertEquals("fnv1a64:".length + 16, report.payloadHash.length)
         assertContains(json, """"schema":"org.graphiks.kanvas.glyph.gpu.TextPayloadLeakReport.v1"""")
+        assertContains(json, """"payloadHash":"${report.payloadHash}"""")
         assertContains(json, """"status":"pass"""")
         assertContains(json, """"payloadKind":"TextGPUArtifactBundle"""")
         assertContains(json, """"findings":[]""")
@@ -153,7 +156,13 @@ class GPUTextNoSkLeakageValidationTest {
         assertEquals(fieldsSnapshot, report.fields)
         assertEquals(findingsSnapshot, report.findings)
         assertEquals(json, report.toCanonicalJson())
+        assertEquals(report.payloadHash, validateGPUTextNoSkLeakage("DrawTextRunPayload", fieldsSnapshot).payloadHash)
+        assertTrue(report.payloadHash != validateGPUTextNoSkLeakage(
+            payloadKind = "DrawTextRunPayload",
+            fields = listOf(TextPayloadField("paint", "SkPaint", "changed")),
+        ).payloadHash)
         assertContains(json, """"schema":"org.graphiks.kanvas.glyph.gpu.TextPayloadLeakReport.v1"""")
+        assertContains(json, """"payloadHash":"${report.payloadHash}"""")
         assertContains(json, """"fieldPath":"paint"""")
         assertTrue(!report.toCanonicalJson().contains("SkTypeface"))
     }
@@ -174,6 +183,7 @@ class GPUTextNoSkLeakageValidationTest {
             "{" +
                 "\"schema\":\"org.graphiks.kanvas.glyph.gpu.TextPayloadLeakReport.v1\"," +
                 "\"payloadKind\":\"EscapedPayload\"," +
+                "\"payloadHash\":\"fnv1a64:f0186fcbce3b9c51\"," +
                 "\"status\":\"fail\"," +
                 "\"fields\":[" +
                 "{\"fieldPath\":\"z\\\"quote\\\\slash\\nline\",\"typeName\":\"SkFont\"}," +
@@ -225,6 +235,7 @@ class GPUTextNoSkLeakageValidationTest {
             "{" +
                 "\"schema\":\"org.graphiks.kanvas.glyph.gpu.TextPayloadLeakReport.v1\"," +
                 "\"payloadKind\":\"ValuePayload\"," +
+                "\"payloadHash\":\"fnv1a64:0b1d71deb1245e45\"," +
                 "\"status\":\"fail\"," +
                 "\"fields\":[" +
                 "{" +

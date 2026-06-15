@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.glyph.gpu
 
+import kotlin.uuid.Uuid
+
 data class TextTransformFacts(
     val transformClass: String,
     val matrixLabel: String,
@@ -32,19 +34,31 @@ data class TextEvidenceProvenance(
 
 @JvmInline
 value class GPUTextUploadDependencyID(
-    val value: String,
-) {
-    init {
-        require(value.isNotBlank()) { "GPU text upload dependency ID must not be blank." }
-    }
-}
+    val value: Uuid,
+)
 
 @JvmInline
 value class GPUTextRouteDiagnosticID(
-    val value: String,
+    val value: Uuid,
+)
+
+data class GPUTextUploadDependencyRef(
+    val id: GPUTextUploadDependencyID,
+    val label: String,
 ) {
     init {
-        require(value.isNotBlank()) { "GPU text route diagnostic ID must not be blank." }
+        require(label.isNotBlank()) { "GPU text upload dependency label must not be blank." }
+    }
+}
+
+data class GPUTextRouteDiagnosticRef(
+    val id: GPUTextRouteDiagnosticID,
+    val code: String,
+    val message: String,
+) {
+    init {
+        require(code.isNotBlank()) { "GPU text route diagnostic code must not be blank." }
+        require(message.isNotBlank()) { "GPU text route diagnostic message must not be blank." }
     }
 }
 
@@ -61,8 +75,8 @@ class DrawTextRunPayload(
     val blendColor: TextBlendColorFacts,
     artifactKeyHashes: List<String>,
     atlasGenerations: List<GPUTextArtifactGeneration>,
-    uploadDependencyIds: List<GPUTextUploadDependencyID>,
-    diagnostics: List<GPUTextRouteDiagnosticID>,
+    uploadDependencies: List<GPUTextUploadDependencyRef>,
+    routeDiagnostics: List<GPUTextRouteDiagnosticRef>,
     val provenance: TextEvidenceProvenance,
     val routePromotion: String = DRAW_TEXT_RUN_NOT_PROMOTED,
     val productActivation: Boolean = false,
@@ -71,8 +85,8 @@ class DrawTextRunPayload(
     val artifacts: List<GPUTextArtifactReference> = artifacts.map { artifact -> artifact.snapshotForDrawPayload() }
     val artifactKeyHashes: List<String> = artifactKeyHashes.toList()
     val atlasGenerations: List<GPUTextArtifactGeneration> = atlasGenerations.toList()
-    val uploadDependencyIds: List<GPUTextUploadDependencyID> = uploadDependencyIds.toList()
-    val diagnostics: List<GPUTextRouteDiagnosticID> = diagnostics.toList()
+    val uploadDependencies: List<GPUTextUploadDependencyRef> = uploadDependencies.toList()
+    val routeDiagnostics: List<GPUTextRouteDiagnosticRef> = routeDiagnostics.toList()
 
     init {
         require(commandId.isNotBlank()) { "commandId must not be blank." }
@@ -164,13 +178,24 @@ class DrawTextRunPayload(
         atlasGenerations.forEachIndexed { index, generation ->
             fields += TextPayloadField("atlasGenerations[$index]", "GPUTextArtifactGeneration", generation.value.toString())
         }
-        fields += TextPayloadField("uploadDependencyIds", "List<GPUTextUploadDependencyID>")
-        uploadDependencyIds.forEachIndexed { index, dependencyID ->
-            fields += TextPayloadField("uploadDependencyIds[$index]", "GPUTextUploadDependencyID", dependencyID.value)
+        fields += TextPayloadField("uploadDependencies", "List<GPUTextUploadDependencyRef>")
+        uploadDependencies.forEachIndexed { index, dependency ->
+            fields += TextPayloadField(
+                "uploadDependencies[$index].id",
+                "GPUTextUploadDependencyID",
+                dependency.id.value.toString(),
+            )
+            fields += TextPayloadField("uploadDependencies[$index].label", "String", dependency.label)
         }
-        fields += TextPayloadField("diagnostics", "List<GPUTextRouteDiagnosticID>")
-        diagnostics.forEachIndexed { index, diagnostic ->
-            fields += TextPayloadField("diagnostics[$index]", "GPUTextRouteDiagnosticID", diagnostic.value)
+        fields += TextPayloadField("routeDiagnostics", "List<GPUTextRouteDiagnosticRef>")
+        routeDiagnostics.forEachIndexed { index, diagnostic ->
+            fields += TextPayloadField(
+                "routeDiagnostics[$index].id",
+                "GPUTextRouteDiagnosticID",
+                diagnostic.id.value.toString(),
+            )
+            fields += TextPayloadField("routeDiagnostics[$index].code", "String", diagnostic.code)
+            fields += TextPayloadField("routeDiagnostics[$index].message", "String", diagnostic.message)
         }
         fields += TextPayloadField("provenance", "TextEvidenceProvenance")
         fields += TextPayloadField("provenance.source", "String", provenance.source)
@@ -207,14 +232,18 @@ class DrawTextRunPayload(
             atlasGenerations.map { generation -> generation.value },
             comma = true,
         )
-        appendDrawTextRunStringListJsonField(
-            "uploadDependencyIds",
-            uploadDependencyIds.map { dependencyID -> dependencyID.value },
+        appendDrawTextRunRawJsonField(
+            "uploadDependencies",
+            uploadDependencies.joinToString(separator = ",", prefix = "[", postfix = "]") { dependency ->
+                dependency.toDrawTextRunCanonicalJson()
+            },
             comma = true,
         )
-        appendDrawTextRunStringListJsonField(
-            "diagnostics",
-            diagnostics.map { diagnostic -> diagnostic.value },
+        appendDrawTextRunRawJsonField(
+            "routeDiagnostics",
+            routeDiagnostics.joinToString(separator = ",", prefix = "[", postfix = "]") { diagnostic ->
+                diagnostic.toDrawTextRunCanonicalJson()
+            },
             comma = true,
         )
         appendDrawTextRunRawJsonField("provenance", provenance.toDrawTextRunCanonicalJson(), comma = true)
@@ -319,6 +348,21 @@ private fun TextEvidenceProvenance.toDrawTextRunCanonicalJson(): String = buildS
     append("{")
     appendDrawTextRunJsonField("source", source, comma = true)
     appendDrawTextRunJsonField("ticket", ticket, comma = false)
+    append("}")
+}
+
+private fun GPUTextUploadDependencyRef.toDrawTextRunCanonicalJson(): String = buildString {
+    append("{")
+    appendDrawTextRunJsonField("id", id.value.toString(), comma = true)
+    appendDrawTextRunJsonField("label", label, comma = false)
+    append("}")
+}
+
+private fun GPUTextRouteDiagnosticRef.toDrawTextRunCanonicalJson(): String = buildString {
+    append("{")
+    appendDrawTextRunJsonField("id", id.value.toString(), comma = true)
+    appendDrawTextRunJsonField("code", code, comma = true)
+    appendDrawTextRunJsonField("message", message, comma = false)
     append("}")
 }
 

@@ -70,6 +70,7 @@ class TextPayloadLeakReport(
 ) {
     val fields: List<TextPayloadField> = scannedFields.toList()
     val findings: List<TextPayloadLeakFinding> = leakFindings.toList()
+    val payloadHash: String = textPayloadLeakReportHash(payloadKind, fields)
     val status: String = if (findings.isEmpty()) "pass" else "fail"
 
     init {
@@ -80,6 +81,7 @@ class TextPayloadLeakReport(
         append("{")
         appendTextPayloadLeakJsonField("schema", TEXT_PAYLOAD_LEAK_REPORT_SCHEMA, comma = true)
         appendTextPayloadLeakJsonField("payloadKind", payloadKind, comma = true)
+        appendTextPayloadLeakJsonField("payloadHash", payloadHash, comma = true)
         appendTextPayloadLeakJsonField("status", status, comma = true)
         append("\"fields\":")
         append(
@@ -142,6 +144,8 @@ fun validateGPUTextNoSkLeakage(
 
 private const val TEXT_PAYLOAD_LEAK_REPORT_SCHEMA =
     "org.graphiks.kanvas.glyph.gpu.TextPayloadLeakReport.v1"
+private const val TEXT_PAYLOAD_LEAK_REPORT_HASH_SCHEMA =
+    "org.graphiks.kanvas.glyph.gpu.TextPayloadLeakReportHash.v1"
 private const val TEXT_GPU_SK_TYPE_LEAKED_HANDOFF_DIAGNOSTIC =
     "text.gpu.sk-type-leaked"
 private const val TEXT_GPU_SK_TYPE_LEAKED_RENDERER_DIAGNOSTIC =
@@ -168,6 +172,39 @@ private fun TextPayloadField.toLeakFinding(
     handoffDiagnostic = handoffDiagnostic,
     rendererDiagnostic = rendererDiagnostic,
 )
+
+private fun textPayloadLeakReportHash(
+    payloadKind: String,
+    fields: List<TextPayloadField>,
+): String = "fnv1a64:${textPayloadLeakFnv1a64Hex(textPayloadLeakHashPreimage(payloadKind, fields))}"
+
+private fun textPayloadLeakHashPreimage(
+    payloadKind: String,
+    fields: List<TextPayloadField>,
+): String = buildString {
+    append("{")
+    appendTextPayloadLeakJsonField("schema", TEXT_PAYLOAD_LEAK_REPORT_HASH_SCHEMA, comma = true)
+    appendTextPayloadLeakJsonField("payloadKind", payloadKind, comma = true)
+    append("\"fields\":")
+    append(
+        fields.joinToString(separator = ",", prefix = "[", postfix = "]") { field ->
+            field.toCanonicalJson()
+        },
+    )
+    append("}")
+}
+
+private fun textPayloadLeakFnv1a64Hex(value: String): String {
+    var hash = TEXT_PAYLOAD_LEAK_FNV1A64_OFFSET_BASIS
+    value.toByteArray(Charsets.UTF_8).forEach { byte ->
+        hash = hash xor (byte.toLong() and 0xFFL)
+        hash *= TEXT_PAYLOAD_LEAK_FNV1A64_PRIME
+    }
+    return java.lang.Long.toUnsignedString(hash, 16).padStart(16, '0')
+}
+
+private const val TEXT_PAYLOAD_LEAK_FNV1A64_OFFSET_BASIS = -0x340d631b7bdddcdbL
+private const val TEXT_PAYLOAD_LEAK_FNV1A64_PRIME = 0x100000001b3L
 
 private fun TextPayloadField.hasSkTypeLeak(): Boolean =
     scanValues().any { scanValue ->

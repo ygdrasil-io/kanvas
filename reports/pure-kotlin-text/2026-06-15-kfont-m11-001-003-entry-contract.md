@@ -7,8 +7,8 @@ Date: 2026-06-15
 | Ticket | Status | Evidence |
 |---|---|---|
 | `KFONT-M11-001` | `review` | `TextGPUArtifactRegistry`, deterministic registry dump, default descriptor order, descriptor compact hashes, unregistered artifact refusal, and defensive descriptor snapshots. |
-| `KFONT-M11-002` | `review` | `TextPayloadLeakReport`, positive no-`Sk*` fixture, concrete `TextGPUArtifactBundle.noSkLeakageReport()` field scans, registry descriptor scans, forbidden-field fixtures, stable diagnostics, scan-order JSON, and mutation-proof report snapshots. |
-| `KFONT-M11-003` | `review` | `DrawTextRunPayload`, deterministic payload dump with enriched artifact refs, no-leakage report integration, non-claim guards, nested glyph-run snapshots, and `*DrawTextRun*` validation coverage. |
+| `KFONT-M11-002` | `review` | `TextPayloadLeakReport`, deterministic `payloadHash` evidence, positive no-`Sk*` fixture, concrete `TextGPUArtifactBundle.noSkLeakageReport()` field scans, registry descriptor scans, forbidden-field fixtures, stable diagnostics, scan-order JSON, and mutation-proof report snapshots. |
+| `KFONT-M11-003` | `review` | `DrawTextRunPayload`, deterministic payload dump with enriched artifact refs, UUID-backed upload/diagnostic refs, no-leakage report integration, non-claim guards, nested glyph-run snapshots, and `*DrawTextRun*` validation coverage. |
 
 ## Implemented Contracts
 
@@ -58,6 +58,11 @@ The tests cover:
   handle leaks;
 - full CPU-rendered text texture refusal;
 - nondumpable payload refusal with `unsupported.text.payload_nondumpable`;
+- deterministic `TextPayloadLeakReport.payloadHash` values derived from
+  payload kind and scanned field facts;
+- UUID-backed `GPUTextUploadDependencyID` and `GPUTextRouteDiagnosticID`
+  wrappers carried through scanable upload labels and route diagnostic
+  code/message refs;
 - report and payload mutation snapshots;
 - exact canonical JSON escaping/order fixtures;
 - `DrawTextRunPayload` non-claim guards.
