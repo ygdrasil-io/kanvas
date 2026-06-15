@@ -26,7 +26,7 @@ or coverage artifact routes must cite `19-path-coverage-atlas-strategy.md`,
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M3-001 - Add basic path fill prepared route](KGPU-M3-001-add-basic-path-fill-prepared-route.md) | `done` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `geometry-artifacts` | `KGPU-M2-003` | `path fill legacy` |
-| [KGPU-M3-002 - Add stencil-cover path route candidate](KGPU-M3-002-add-stencil-cover-path-route-candidate.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry-passes` | `KGPU-M3-001` | `path fill legacy` |
+| [KGPU-M3-002 - Add stencil-cover path route candidate](KGPU-M3-002-add-stencil-cover-path-route-candidate.md) | `blocked` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry-passes` | `KGPU-M3-001` | `path fill legacy` |
 | [KGPU-M3-003 - Add simple stroke route candidate](KGPU-M3-003-add-simple-stroke-route-candidate.md) | `done` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `geometry-stroke` | `KGPU-M3-001` | `stroke legacy` |
 | [KGPU-M3-004 - Add bounded clip rrect and path route candidate](KGPU-M3-004-add-bounded-clip-rrect-and-path-route-candidate.md) | `done` | `P0` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `clips-atlas` | `KGPU-M3-001` | `clip legacy` |
 | [KGPU-M3-005 - Add path and coverage atlas refusal policy gates](KGPU-M3-005-add-path-and-coverage-atlas-refusal-policy-gates.md) | `done` | `P1` | `RefuseRequired` | `RefuseDiagnostic` | `false` | `false` | `atlas-policy` | `KGPU-M3-001` | - |
@@ -59,7 +59,7 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Coverage*' --tests '*Path*'
   gate, not as KGPU-M3-001 route evidence.
 - Independent review `019ec7c5-ae98-7382-b5e2-865bd4734a59` accepted KGPU-M3-001
   for `done` with no findings.
-- KGPU-M3-002 remains `proposed` because it is a `GPUNative` stencil-cover
+- KGPU-M3-002 is `blocked` because it is a `GPUNative` stencil-cover
   candidate. Its remaining gate is native/adapter evidence for depth/stencil
   capability, stencil producer before cover consumer ordering, pass/resource
   and readback artifacts, and explicit skipped-lane or refusal diagnostics. The

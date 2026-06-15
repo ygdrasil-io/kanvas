@@ -1,7 +1,7 @@
 ---
 id: KGPU-M9-003
 title: "Add PM readiness dashboard integration for GPU renderer"
-status: proposed
+status: blocked
 milestone: M9
 priority: P1
 owner_area: pm-evidence
@@ -83,7 +83,10 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: PM integration after gate policy.
+- `blocked`: PM integration depends on accepted KGPU-M9-002 gate policy plus a
+  PM manifest/dashboard diff that keeps correctness support, activation,
+  performance, cache, and release readiness separate. Missing gates must keep
+  `readinessDelta=0.0`, `releaseBlocking=false`, and reporting-only status.
 
 ## Linear Labels
 
