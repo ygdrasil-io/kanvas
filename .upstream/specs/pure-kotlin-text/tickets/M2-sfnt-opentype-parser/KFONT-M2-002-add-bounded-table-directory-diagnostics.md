@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M2-002"
 title: "Add bounded table directory diagnostics"
-status: "proposed"
+status: "review"
 milestone: "M2"
 priority: "P0"
 owner_area: "font-sfnt"
@@ -22,7 +22,8 @@ SFNT table directories define offsets, lengths, checksums, tags, and required ta
 
 ## Scope
 
-- Validate SFNT header, table count, search fields, table record offsets, lengths, and checksum fields with bounded reads.
+- Validate SFNT header, table count, table record offsets, and lengths with bounded reads.
+- Preserve search/checksum fields as bounded directory facts; search-field formula validation and checksum verification remain future hardening, not a support claim in this slice.
 - Detect duplicate table tags, overlapping slices, zero-length required tables, and records that exceed source byte bounds.
 - Emit required-table diagnostics for `cmap`, `head`, `hhea`, `hmtx`, `maxp`, `name`, `OS/2`, `post`, `loca`, and `glyf` when the outline contract requires them.
 - Distinguish malformed required tables from malformed optional tables.
@@ -67,11 +68,11 @@ class SFNTTableDirectoryValidator {
 
 ## Acceptance Criteria
 
-- [ ] Out-of-bounds table records emit a stable diagnostic such as `font.sfnt.table-out-of-bounds`.
-- [ ] Missing required tables emit `font.required-table-missing` with the missing tag and face identity.
-- [ ] Malformed optional tables emit `font.optional-table-malformed` without invalidating ordinary outline text when safe.
-- [ ] Duplicate or overlapping table records are reported deterministically and do not depend on map iteration order.
-- [ ] The parser never reads beyond the declared bounded byte source while producing diagnostics.
+- [x] Out-of-bounds table records emit a stable diagnostic such as `font.sfnt.table-out-of-bounds`.
+- [x] Missing required tables emit `font.sfnt.required-table-missing` with the missing tag and face identity.
+- [x] Malformed optional tables emit `font.sfnt.optional-table-malformed` without invalidating ordinary outline text when safe.
+- [x] Duplicate or overlapping table records are reported deterministically and do not depend on map iteration order.
+- [x] The parser never reads beyond the declared bounded byte source while producing diagnostics.
 
 ## Required Evidence
 
@@ -95,14 +96,17 @@ class SFNTTableDirectoryValidator {
 ## Validation
 
 ```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*DiagnosticTaxonomy*'
+rtk ./gradlew --no-daemon --rerun-tasks :font:sfnt:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_font_fixtures.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:sfnt:test --tests '*TableDirectory*' --tests '*MalformedSFNT*'
 ```
 
 ## Status Notes
 
-- `proposed`: Directory diagnostic cases are specified, but no malformed fixture evidence is attached yet.
-- Move to `ready` after KFONT-M0-004 accepts diagnostic namespace rules and KFONT-M2-001 defines parse entry points.
+- `review`: Bounded directory diagnostics, required-table flow, malformed optional-table diagnostics, fixture source hash, intended diagnostic, and taxonomy alignment have fresh local evidence in `reports/pure-kotlin-text/2026-06-15-kfont-m2-002-bounded-directory-diagnostics.md`.
+- Remaining gate: PR validation and merge. Independent spec and quality reviews were accepted after remediation. Search-field formula validation and checksum verification are still future hardening. KFONT-M2-005 still owns the complete malformed SFNT fixture suite.
 
 ## Linear Labels
 

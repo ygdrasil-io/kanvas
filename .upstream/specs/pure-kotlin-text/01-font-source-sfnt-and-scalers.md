@@ -276,8 +276,8 @@ Stable reason-code families:
 
 - `font.source.unreadable`;
 - `font.source.host-dependent`;
-- `font.required-table-missing`;
-- `font.optional-table-malformed`;
+- `font.sfnt.required-table-missing`;
+- `font.sfnt.optional-table-malformed`;
 - `font.collection-index-invalid`;
 - `font.cmap-format-unsupported`;
 - `font.outline-format-unsupported`;

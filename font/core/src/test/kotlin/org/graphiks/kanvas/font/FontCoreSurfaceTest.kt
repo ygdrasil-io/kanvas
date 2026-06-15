@@ -163,7 +163,7 @@ class FontCoreSurfaceTest {
         val diagnostic = FontSourceDiagnostic(
             sourceId = sourceId,
             message = "missing hhea",
-            causeCode = "font.required-table-missing",
+            causeCode = "font.sfnt.required-table-missing",
             causeMessage = "hhea",
         )
 
@@ -180,7 +180,7 @@ class FontCoreSurfaceTest {
             "sourceId=550e8400-e29b-41d4-a716-446655440100 kind=MEMORY displayName=\"Fixture Sans\" " +
                 "contentSha256=039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81 " +
                 "hostDependent=false faceCount=1 tableTags=[cmap,head,name] " +
-                "diagnostics=[font.required-table-missing sourceId=550e8400-e29b-41d4-a716-446655440100 " +
+                "diagnostics=[font.sfnt.required-table-missing sourceId=550e8400-e29b-41d4-a716-446655440100 " +
                 "message=\"missing hhea\" causeMessage=\"hhea\"]",
             evidence.dump(),
         )

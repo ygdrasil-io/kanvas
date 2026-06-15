@@ -553,9 +553,13 @@
           "generationPolicy": "Generate a face with a malformed optional table and preserve ordinary parsed face evidence plus diagnostics.",
           "evidencePaths": [
             "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+            "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTParserEntryPointTest.kt",
+            "reports/pure-kotlin-text/sfnt-directory.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
+            "sourceSha256:654b72afe84b9161da7af35682ab19792fee6cfdf436a56dff480c9e7232afff",
+            "intendedDiagnostic:font.sfnt.optional-table-malformed",
             "face evidence dump",
             "optional table diagnostic",
             "raw table hash"
@@ -577,7 +581,7 @@
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
-            "font.required-table-missing diagnostic",
+            "font.sfnt.required-table-missing diagnostic",
             "directory diagnostic dump"
           ],
           "nonClaims": [

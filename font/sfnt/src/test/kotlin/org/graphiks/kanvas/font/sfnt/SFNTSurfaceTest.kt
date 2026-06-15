@@ -100,8 +100,8 @@ class SFNTSurfaceTest {
 
         assertEquals(
             listOf(
-                "font.required-table-missing tag=\"glyf\" offset=80 length=0 sourceLength=128 message=\"Required table is present with zero length.\"",
-                "font.required-table-missing tag=\"head\" offset=none length=none sourceLength=128 message=\"Required table is not present.\"",
+                "font.sfnt.required-table-missing tag=\"glyf\" offset=80 length=0 sourceLength=128 message=\"Required table is present with zero length.\"",
+                "font.sfnt.required-table-missing tag=\"head\" offset=none length=none sourceLength=128 message=\"Required table is not present.\"",
                 "font.sfnt.table-duplicate tag=\"name\" offset=40 length=8 sourceLength=128 message=\"Duplicate SFNT table tag.\"",
                 "font.sfnt.table-out-of-bounds tag=\"post\" offset=120 length=16 sourceLength=128 message=\"Table range exceeds source length.\"",
                 "font.sfnt.table-overlap tag=\"cmap\" offset=44 length=12 sourceLength=128 message=\"Table range overlaps previous table range ending at 48.\"",
@@ -539,7 +539,7 @@ class SFNTSurfaceTest {
         val diagnostic = parsed.diagnostics.single()
 
         assertEquals(SFNTTableTag("fvar"), diagnostic.table)
-        assertEquals("INVALID_TABLE", diagnostic.causeCode)
+        assertEquals("font.sfnt.optional-table-malformed", diagnostic.causeCode)
         assertTrue(
             diagnostic.causeMessage.orEmpty().contains("OpenType fvar table must contain at least 16 bytes"),
             "Unexpected diagnostic: $diagnostic",
@@ -598,7 +598,7 @@ class SFNTSurfaceTest {
         val diagnostic = parsed.diagnostics.single()
 
         assertEquals(SFNTTableTag("fvar"), diagnostic.table)
-        assertEquals("INVALID_TABLE", diagnostic.causeCode)
+        assertEquals("font.sfnt.optional-table-malformed", diagnostic.causeCode)
         assertTrue(
             diagnostic.causeMessage.orEmpty().contains("axesArrayOffset"),
             "Unexpected diagnostic: $diagnostic",
@@ -608,7 +608,7 @@ class SFNTSurfaceTest {
     }
 
     @Test
-    fun defaultOpenTypeFaceParserReportsMalformedOptionalTablesAsDiagnostics() {
+    fun defaultOpenTypeFaceParserKeepsMalformedNameAsInvalidTableDiagnostic() {
         val source = memoryFontSource(
             sfntFont(
                 "name" to ByteArray(5),
@@ -976,8 +976,8 @@ class SFNTSurfaceTest {
 
         assertEquals(
             listOf(
-                "font.required-table-missing tag=\"cmap\" offset=none length=none sourceLength=96 message=\"Required table is not present.\"",
-                "font.required-table-missing tag=\"glyf\" offset=64 length=0 sourceLength=96 message=\"Required table is present with zero length.\"",
+                "font.sfnt.required-table-missing tag=\"cmap\" offset=none length=none sourceLength=96 message=\"Required table is not present.\"",
+                "font.sfnt.required-table-missing tag=\"glyf\" offset=64 length=0 sourceLength=96 message=\"Required table is present with zero length.\"",
                 "font.sfnt.table-duplicate tag=\"name\" offset=48 length=8 sourceLength=96 message=\"Duplicate SFNT table tag.\"",
                 "font.sfnt.table-out-of-bounds tag=\"post\" offset=88 length=16 sourceLength=96 message=\"Table range exceeds source length.\"",
             ),
@@ -2245,7 +2245,7 @@ class SFNTSurfaceTest {
         val diagnostic = parsed.diagnostics.single()
 
         assertEquals(SFNTTableTag("GPOS"), diagnostic.table)
-        assertEquals("INVALID_TABLE", diagnostic.causeCode)
+        assertEquals("font.sfnt.optional-table-malformed", diagnostic.causeCode)
         assertTrue(
             diagnostic.causeMessage.orEmpty().contains("format 2 expanded glyph pair count"),
             "Unexpected diagnostic: $diagnostic",
@@ -2312,7 +2312,7 @@ class SFNTSurfaceTest {
         val diagnostic = parsed.diagnostics.single()
 
         assertEquals(SFNTTableTag("GPOS"), diagnostic.table)
-        assertEquals("INVALID_TABLE", diagnostic.causeCode)
+        assertEquals("font.sfnt.optional-table-malformed", diagnostic.causeCode)
         assertTrue(
             diagnostic.causeMessage.orEmpty().contains("OpenType GPOS pair adjustment format 1 pairSetCount"),
             "Unexpected diagnostic: $diagnostic",
@@ -2368,7 +2368,7 @@ class SFNTSurfaceTest {
         val diagnostic = parsed.diagnostics.single()
 
         assertEquals(SFNTTableTag("kern"), diagnostic.table)
-        assertEquals("INVALID_TABLE", diagnostic.causeCode)
+        assertEquals("font.sfnt.optional-table-malformed", diagnostic.causeCode)
         assertTrue(
             diagnostic.causeMessage.orEmpty().contains("OpenType kern format 0 pair array for subtable 0"),
             "Unexpected diagnostic: $diagnostic",
