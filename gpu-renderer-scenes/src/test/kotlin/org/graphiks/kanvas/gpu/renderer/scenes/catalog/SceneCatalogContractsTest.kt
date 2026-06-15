@@ -10,10 +10,53 @@ class SceneCatalogContractsTest {
     fun `scene ids are readable lowercase business identifiers`() {
         assertEquals("solid-card-stack", SceneId("solid-card-stack").value)
         assertFailsWith<IllegalArgumentException> { SceneId("KGPU-M1-001") }
+        assertFailsWith<IllegalArgumentException> { SceneId("kgpu-m1-001") }
         assertFailsWith<IllegalArgumentException> { SceneId("solid_card_stack") }
+        assertFailsWith<IllegalArgumentException> { SceneId("solidcardstack") }
         assertFailsWith<IllegalArgumentException> { SceneId("m1-001") }
         assertFailsWith<IllegalArgumentException> { SceneId("m70-a") }
         assertFailsWith<IllegalArgumentException> { SceneId("a") }
+    }
+
+    @Test
+    fun `scene dimensions reject non positive values`() {
+        assertEquals(SceneDimensions(320, 200), SceneDimensions(320, 200))
+        assertFailsWith<IllegalArgumentException> { SceneDimensions(0, 200) }
+        assertFailsWith<IllegalArgumentException> { SceneDimensions(-1, 200) }
+        assertFailsWith<IllegalArgumentException> { SceneDimensions(320, 0) }
+        assertFailsWith<IllegalArgumentException> { SceneDimensions(320, -1) }
+    }
+
+    @Test
+    fun `scene tags exactly match required catalog tags`() {
+        assertEquals(
+            listOf(
+                SceneTag.Rect,
+                SceneTag.RRect,
+                SceneTag.Gradient,
+                SceneTag.Clip,
+                SceneTag.Path,
+                SceneTag.Stroke,
+                SceneTag.Image,
+                SceneTag.Layer,
+                SceneTag.Filter,
+                SceneTag.Text,
+                SceneTag.RuntimeEffect,
+                SceneTag.Blend,
+                SceneTag.Vertices,
+                SceneTag.Cache,
+                SceneTag.LegacyComparison,
+            ),
+            SceneTag.entries,
+        )
+    }
+
+    @Test
+    fun `r stages exactly match required roadmap stages`() {
+        assertEquals(
+            listOf(RStage.R0, RStage.R1, RStage.R2, RStage.R3, RStage.R4, RStage.R5, RStage.R6),
+            RStage.entries,
+        )
     }
 
     @Test
@@ -31,6 +74,17 @@ class SceneCatalogContractsTest {
             SceneExpectation.ProductRefusal(ProductRefusalReason.BudgetExceeded).reason.code,
         )
         assertEquals(SceneExpectation.ShouldRender, SceneExpectation.ShouldRender)
+    }
+
+    @Test
+    fun `gpu renderer scenes reject blank and empty required fields`() {
+        assertEquals("Solid Card Stack", sampleScene().title)
+        assertFailsWith<IllegalArgumentException> { sampleScene(title = "") }
+        assertFailsWith<IllegalArgumentException> { sampleScene(title = "   ") }
+        assertFailsWith<IllegalArgumentException> { sampleScene(description = "") }
+        assertFailsWith<IllegalArgumentException> { sampleScene(description = "   ") }
+        assertFailsWith<IllegalArgumentException> { sampleScene(tags = emptySet()) }
+        assertFailsWith<IllegalArgumentException> { sampleScene(commands = emptyList()) }
     }
 
     @Test
@@ -76,15 +130,20 @@ class SceneCatalogContractsTest {
         )
     }
 
-    private fun sampleScene(): GPURendererScene<String> =
+    private fun sampleScene(
+        title: String = "Solid Card Stack",
+        description: String = "Rectangles with alpha and draw order.",
+        tags: Set<SceneTag> = setOf(SceneTag.Rect, SceneTag.Blend),
+        commands: List<String> = listOf("clear", "card-1"),
+    ): GPURendererScene<String> =
         GPURendererScene(
             sceneId = SceneId("solid-card-stack"),
-            title = "Solid Card Stack",
-            description = "Rectangles with alpha and draw order.",
+            title = title,
+            description = description,
             dimensions = SceneDimensions(320, 200),
-            tags = setOf(SceneTag.Rect, SceneTag.Blend),
+            tags = tags,
             roadmapLinks = listOf(SceneRoadmapLink.milestone("M1", RStage.R1)),
             expectation = SceneExpectation.ShouldRender,
-            commands = listOf("clear", "card-1"),
+            commands = commands,
         )
 }
