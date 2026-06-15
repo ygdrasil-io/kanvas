@@ -1,7 +1,7 @@
 ---
 id: KGPU-M6-004
 title: "Add SDF and color glyph dependency gates"
-status: proposed
+status: blocked
 milestone: M6
 priority: P1
 owner_area: text-validation
@@ -85,7 +85,11 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Dependency gates only.
+- `blocked`: Depends on KGPU-M6-001 so the refusal matrix can classify typed
+  text artifacts rather than inventing renderer-owned font payloads. SDF,
+  bitmap, SVG, color glyph, emoji, LCD, and CPU-rendered text texture behavior
+  remain explicit non-claims; legacy gates stay open until font artifacts,
+  renderer route evidence, diagnostics, and dashboard updates are linked.
 
 ## Linear Labels
 
