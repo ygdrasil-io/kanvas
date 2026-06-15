@@ -191,6 +191,8 @@ data class GlyphMetrics(
 object FontScalerDiagnosticCodes {
     const val OUTLINE_FORMAT_UNSUPPORTED: String = "font.outline-format-unsupported"
     const val CFF_OPERATOR_UNSUPPORTED: String = "font.cff-operator-unsupported"
+    const val CFF_STACK_MALFORMED: String = "font.cff-stack-malformed"
+    const val CFF_TABLE_MALFORMED: String = "font.cff-table-malformed"
     const val VARIATION_DATA_MALFORMED: String = "font.variation-data-malformed"
     const val VARIATION_AXIS_UNSUPPORTED: String = "font.variation-axis-unsupported"
     const val METRICS_VARIATION_UNAVAILABLE: String = "font.metrics-variation-unavailable"
@@ -238,6 +240,161 @@ class FontScalerRefusalException(
     val diagnostic: FontScalerDiagnostic,
     message: String,
 ) : UnsupportedOperationException(message)
+
+/**
+ * Deterministic call edge emitted while interpreting a CFF/CFF2 charstring fixture.
+ *
+ * @property depth Subroutine call depth from the top-level charstring.
+ * @property scope `local` for `callsubr`, `global` for `callgsubr`.
+ * @property encodedIndex Operand value before CFF subroutine bias is applied.
+ * @property resolvedIndex Subroutine array index after applying CFF bias.
+ */
+data class CFFCharStringCallTrace(
+    val depth: Int,
+    val scope: String,
+    val encodedIndex: Int,
+    val resolvedIndex: Int,
+) {
+    init {
+        require(depth >= 0) { "CFF call trace depth must be non-negative." }
+        require(scope.isStableToken()) { "CFF call trace scope must be stable." }
+        require(resolvedIndex >= 0) { "CFF call trace resolvedIndex must be non-negative." }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(scalerJsonString("depth")).append(": ").append(depth).append(", ")
+        append(scalerJsonString("scope")).append(": ").append(scalerJsonString(scope)).append(", ")
+        append(scalerJsonString("encodedIndex")).append(": ").append(encodedIndex).append(", ")
+        append(scalerJsonString("resolvedIndex")).append(": ").append(resolvedIndex)
+        append("}")
+    }
+}
+
+/**
+ * Fixture-level evidence for one interpreted CFF/CFF2 charstring.
+ *
+ * This evidence covers generated Type 2/CFF2 charstring fixtures only. It is intentionally not a
+ * complete CFF table parser or a claim that OpenType/CFF fonts are fully supported.
+ */
+data class CFFCharStringEvidence(
+    val format: String,
+    val glyphId: UInt,
+    val width: Double? = null,
+    val stemHintCount: Int = 0,
+    val hintMaskByteCount: Int = 0,
+    val outlineCommands: List<String>,
+    val outlineCommandDump: String = outlineCommands.joinToString("\n"),
+    val outlineCommandDumpSha256: String = outlineCommandDump.scalerSha256Hex(),
+    val callTrace: List<CFFCharStringCallTrace> = emptyList(),
+    val variationPosition: List<VariationCoordinateEvidence> = emptyList(),
+    val cff2VsIndex: Int = 0,
+    val diagnostics: List<FontScalerDiagnostic> = emptyList(),
+) {
+    init {
+        require(format.isStableToken()) { "CFF charstring evidence format must be stable." }
+        require(width == null || width.isFinite()) { "CFF charstring width must be finite when present." }
+        require(stemHintCount >= 0) { "CFF stem hint count must be non-negative." }
+        require(hintMaskByteCount >= 0) { "CFF hint mask byte count must be non-negative." }
+        require(outlineCommands.none { line -> line.any { it == '\n' || it == '\r' } }) {
+            "CFF outline command evidence lines must be single-line."
+        }
+        require(outlineCommandDump == outlineCommands.joinToString("\n")) {
+            "CFF outline command dump must match outlineCommands."
+        }
+        require(outlineCommandDumpSha256 == outlineCommandDump.scalerSha256Hex()) {
+            "CFF outline command dump SHA-256 must match outlineCommandDump."
+        }
+        require(variationPosition.isSortedByTag()) {
+            "CFF variation evidence coordinates must be sorted by axis tag."
+        }
+        require(cff2VsIndex >= 0) { "CFF2 vsindex must be non-negative." }
+    }
+
+    /**
+     * Serializes this evidence with stable field order and no host-dependent facts.
+     */
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  ").append(scalerJsonString("format")).append(": ")
+            .append(scalerJsonString(format)).append(",\n")
+        append("  ").append(scalerJsonString("glyphId")).append(": ").append(glyphId.toString()).append(",\n")
+        append("  ").append(scalerJsonString("width")).append(": ")
+            .append(width?.toCanonicalScalerNumber() ?: "null").append(",\n")
+        append("  ").append(scalerJsonString("stemHintCount")).append(": ")
+            .append(stemHintCount).append(",\n")
+        append("  ").append(scalerJsonString("hintMaskByteCount")).append(": ")
+            .append(hintMaskByteCount).append(",\n")
+        append("  ").append(scalerJsonString("outlineCommands")).append(": ")
+            .append(outlineCommands.toJsonStringArray()).append(",\n")
+        append("  ").append(scalerJsonString("outlineCommandDump")).append(": ")
+            .append(scalerJsonString(outlineCommandDump)).append(",\n")
+        append("  ").append(scalerJsonString("outlineCommandDumpSha256")).append(": ")
+            .append(scalerJsonString(outlineCommandDumpSha256)).append(",\n")
+        append("  ").append(scalerJsonString("callTrace")).append(": ")
+            .append(callTrace.toCFFCallTraceJson()).append(",\n")
+        append("  ").append(scalerJsonString("variationPosition")).append(": ")
+            .append(variationPosition.toCoordinateJson()).append(",\n")
+        append("  ").append(scalerJsonString("cff2VsIndex")).append(": ").append(cff2VsIndex).append(",\n")
+        append("  ").append(scalerJsonString("diagnostics")).append(": ")
+            .append(diagnostics.toDiagnosticJson()).append("\n")
+        append("}")
+    }
+}
+
+/**
+ * Deterministic provenance evidence for the bounded CFF/CFF2 table parser.
+ */
+data class CFFTableEvidence(
+    val format: String,
+    val charStringCount: Int,
+    val localSubroutineCount: Int,
+    val globalSubroutineCount: Int,
+    val hasPrivateDict: Boolean,
+    val topDictOperators: List<String>,
+    val variationAxisTags: List<String> = emptyList(),
+) {
+    init {
+        require(format.isStableToken()) { "CFF table evidence format must be stable." }
+        require(charStringCount > 0) { "CFF table evidence charStringCount must be positive." }
+        require(localSubroutineCount >= 0) { "CFF table evidence localSubroutineCount must be non-negative." }
+        require(globalSubroutineCount >= 0) { "CFF table evidence globalSubroutineCount must be non-negative." }
+        require(topDictOperators == topDictOperators.sorted()) {
+            "CFF table evidence topDictOperators must be sorted."
+        }
+        require(topDictOperators.all { operator -> operator.isStableToken() }) {
+            "CFF table evidence topDictOperators must be stable."
+        }
+        require(variationAxisTags == variationAxisTags.sorted()) {
+            "CFF table evidence variationAxisTags must be sorted."
+        }
+        variationAxisTags.forEach { tag ->
+            require(tag.length == 4) { "CFF table evidence variation axis tag must contain exactly four characters." }
+            require(tag.all { character -> character.code in 0x20..0x7e }) {
+                "CFF table evidence variation axis tag $tag must contain printable ASCII characters."
+            }
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  ").append(scalerJsonString("format")).append(": ")
+            .append(scalerJsonString(format)).append(",\n")
+        append("  ").append(scalerJsonString("charStringCount")).append(": ")
+            .append(charStringCount).append(",\n")
+        append("  ").append(scalerJsonString("localSubroutineCount")).append(": ")
+            .append(localSubroutineCount).append(",\n")
+        append("  ").append(scalerJsonString("globalSubroutineCount")).append(": ")
+            .append(globalSubroutineCount).append(",\n")
+        append("  ").append(scalerJsonString("hasPrivateDict")).append(": ")
+            .append(hasPrivateDict).append(",\n")
+        append("  ").append(scalerJsonString("topDictOperators")).append(": ")
+            .append(topDictOperators.toJsonStringArray()).append(",\n")
+        append("  ").append(scalerJsonString("variationAxisTags")).append(": ")
+            .append(variationAxisTags.toJsonStringArray()).append("\n")
+        append("}")
+    }
+}
 
 /**
  * One variation coordinate in deterministic evidence order.
@@ -297,6 +454,72 @@ data class TrueTypeLocaRangeEvidence(
 }
 
 /**
+ * Deterministic evidence for one component edge in a TrueType composite glyph.
+ *
+ * @property depth Composite recursion depth where the component was encountered.
+ * @property parentGlyphId Composite glyph that owns this component record.
+ * @property componentIndex Zero-based component record index in the parent glyph.
+ * @property componentGlyphId Referenced component glyph.
+ * @property flags Raw component flags as lowercase hexadecimal.
+ * @property argumentKind Decoded argument mode: `xy` or `point-matching`.
+ * @property argument1 First decoded component argument.
+ * @property argument2 Second decoded component argument.
+ * @property xx X-to-X affine coefficient.
+ * @property xy Y-to-X affine coefficient.
+ * @property yx X-to-Y affine coefficient.
+ * @property yy Y-to-Y affine coefficient.
+ * @property dx Translation X in font units.
+ * @property dy Translation Y in font units.
+ */
+data class TrueTypeCompositeComponentEvidence(
+    val depth: Int,
+    val parentGlyphId: UInt,
+    val componentIndex: Int,
+    val componentGlyphId: UInt,
+    val flags: String,
+    val argumentKind: String,
+    val argument1: Int,
+    val argument2: Int,
+    val xx: Double,
+    val xy: Double,
+    val yx: Double,
+    val yy: Double,
+    val dx: Double,
+    val dy: Double,
+) {
+    init {
+        require(depth >= 0) { "composite component evidence depth must be non-negative." }
+        require(componentIndex >= 0) { "composite component evidence componentIndex must be non-negative." }
+        require(flags.matches(Regex("0x[0-9a-f]{4}"))) {
+            "composite component evidence flags must be lowercase hexadecimal uint16 text."
+        }
+        require(argumentKind.isStableToken()) { "composite component evidence argumentKind must be stable." }
+        require(listOf(xx, xy, yx, yy, dx, dy).all(Double::isFinite)) {
+            "composite component evidence transform values must be finite."
+        }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(scalerJsonString("depth")).append(": ").append(depth).append(", ")
+        append(scalerJsonString("parentGlyphId")).append(": ").append(parentGlyphId).append(", ")
+        append(scalerJsonString("componentIndex")).append(": ").append(componentIndex).append(", ")
+        append(scalerJsonString("componentGlyphId")).append(": ").append(componentGlyphId).append(", ")
+        append(scalerJsonString("flags")).append(": ").append(scalerJsonString(flags)).append(", ")
+        append(scalerJsonString("argumentKind")).append(": ").append(scalerJsonString(argumentKind)).append(", ")
+        append(scalerJsonString("argument1")).append(": ").append(argument1).append(", ")
+        append(scalerJsonString("argument2")).append(": ").append(argument2).append(", ")
+        append(scalerJsonString("xx")).append(": ").append(xx.toCanonicalScalerNumber()).append(", ")
+        append(scalerJsonString("xy")).append(": ").append(xy.toCanonicalScalerNumber()).append(", ")
+        append(scalerJsonString("yx")).append(": ").append(yx.toCanonicalScalerNumber()).append(", ")
+        append(scalerJsonString("yy")).append(": ").append(yy.toCanonicalScalerNumber()).append(", ")
+        append(scalerJsonString("dx")).append(": ").append(dx.toCanonicalScalerNumber()).append(", ")
+        append(scalerJsonString("dy")).append(": ").append(dy.toCanonicalScalerNumber())
+        append("}")
+    }
+}
+
+/**
  * Deterministic current-state evidence for one scaled TrueType `glyf` glyph.
  *
  * The dump is intentionally narrow: it records the current pure Kotlin `glyf` scaler output and
@@ -315,6 +538,7 @@ data class ScaledTrueTypeGlyphEvidence(
     val locaRange: TrueTypeLocaRangeEvidence,
     val scalerFamily: String = TRUE_TYPE_GLYF_SCALER_FAMILY,
     val route: String = TRUE_TYPE_GLYF_SCALER_ROUTE,
+    val compositeComponents: List<TrueTypeCompositeComponentEvidence> = emptyList(),
     val diagnostics: List<FontScalerDiagnostic> = emptyList(),
 ) {
     init {
@@ -360,6 +584,8 @@ data class ScaledTrueTypeGlyphEvidence(
             .append(conservativeBounds?.toCanonicalJson() ?: "null").append(",\n")
         append("  ").append(scalerJsonString("metrics")).append(": ")
             .append(metrics?.toCanonicalJson() ?: "null").append(",\n")
+        append("  ").append(scalerJsonString("compositeComponents")).append(": ")
+            .append(compositeComponents.toCompositeComponentJson()).append(",\n")
         append("  ").append(scalerJsonString("diagnostics")).append(": ")
             .append(diagnostics.toDiagnosticJson()).append("\n")
         append("}")
@@ -2008,6 +2234,8 @@ class ParsedTrueTypeGlyphScaler(
             }
         val outlineCommands = outline?.commands.orEmpty().map { command -> command.toEvidenceLine() }
         val outlineCommandDump = outlineCommands.joinToString("\n")
+        val compositeComponents = runCatching { compositeComponentEvidence(glyphId) }
+            .getOrDefault(emptyList())
 
         return ScaledTrueTypeGlyphEvidence(
             glyphId = glyphId,
@@ -2019,6 +2247,7 @@ class ParsedTrueTypeGlyphScaler(
             conservativeBounds = outline?.conservativeBounds(),
             metrics = metrics,
             locaRange = range.toEvidence(),
+            compositeComponents = compositeComponents,
             diagnostics = diagnostics.sortedWith(fontScalerDiagnosticOrdering),
         )
     }
@@ -2029,6 +2258,29 @@ class ParsedTrueTypeGlyphScaler(
             loca = loca,
             glyphId = glyphId,
         )
+
+    private fun compositeComponentEvidence(
+        glyphId: UInt,
+        depth: Int = 0,
+    ): List<TrueTypeCompositeComponentEvidence> {
+        if (depth > MAX_COMPOSITE_GLYPH_DEPTH) return emptyList()
+        val glyph = parseGlyph(glyphId)
+        if (glyph !is TrueTypeGlyph.Composite) return emptyList()
+
+        val evidence = mutableListOf<TrueTypeCompositeComponentEvidence>()
+        glyph.components.forEachIndexed { index, component ->
+            evidence += component.toEvidence(
+                parentGlyphId = glyphId,
+                componentIndex = index,
+                depth = depth,
+            )
+            evidence += compositeComponentEvidence(
+                glyphId = component.glyphId,
+                depth = depth + 1,
+            )
+        }
+        return evidence
+    }
 
     private fun resolveGlyphOutline(
         glyphId: UInt,
@@ -2191,6 +2443,37 @@ class ParsedTrueTypeGlyphScaler(
     }
 }
 
+private fun TrueTypeCompositeGlyphComponent.toEvidence(
+    parentGlyphId: UInt,
+    componentIndex: Int,
+    depth: Int,
+): TrueTypeCompositeComponentEvidence {
+    val (argumentKind, argument1, argument2) = when (val decoded = arguments) {
+        is TrueTypeCompositeGlyphArgument.XyValues -> Triple("xy", decoded.x, decoded.y)
+        is TrueTypeCompositeGlyphArgument.PointMatching -> Triple(
+            "point-matching",
+            decoded.compoundPointIndex,
+            decoded.componentPointIndex,
+        )
+    }
+    return TrueTypeCompositeComponentEvidence(
+        depth = depth,
+        parentGlyphId = parentGlyphId,
+        componentIndex = componentIndex,
+        componentGlyphId = glyphId,
+        flags = "0x${flags.toString(radix = 16).padStart(4, '0')}",
+        argumentKind = argumentKind,
+        argument1 = argument1,
+        argument2 = argument2,
+        xx = transform.xx,
+        xy = transform.xy,
+        yx = transform.yx,
+        yy = transform.yy,
+        dx = transform.dx,
+        dy = transform.dy,
+    )
+}
+
 private fun TrueTypeGlyphHeader.toGlyphBounds(): GlyphBounds =
     GlyphBounds(
         left = xMin.toDouble(),
@@ -2237,6 +2520,12 @@ private fun List<VariationCoordinateEvidence>.toCoordinateJson(): String =
 
 private fun List<String>.toJsonStringArray(): String =
     joinToString(prefix = "[", postfix = "]") { value -> scalerJsonString(value) }
+
+private fun List<TrueTypeCompositeComponentEvidence>.toCompositeComponentJson(): String =
+    joinToString(prefix = "[", postfix = "]") { component -> component.toCanonicalJson() }
+
+private fun List<CFFCharStringCallTrace>.toCFFCallTraceJson(): String =
+    joinToString(prefix = "[", postfix = "]") { trace -> trace.toCanonicalJson() }
 
 private fun List<FontScalerDiagnostic>.toDiagnosticJson(): String =
     joinToString(prefix = "[", postfix = "]") { diagnostic -> diagnostic.toCanonicalJson() }
@@ -2573,6 +2862,12 @@ private fun readInt16(data: ByteArray, offset: Int): Int {
     return if (value and 0x8000 != 0) value - 0x10000 else value
 }
 
+private fun readInt32(data: ByteArray, offset: Int): Int =
+    ((data[offset].toInt() and 0xff) shl 24) or
+        ((data[offset + 1].toInt() and 0xff) shl 16) or
+        ((data[offset + 2].toInt() and 0xff) shl 8) or
+        (data[offset + 3].toInt() and 0xff)
+
 private fun readUInt32(data: ByteArray, offset: Int): Long =
     ((data[offset].toLong() and 0xff) shl 24) or
         ((data[offset + 1].toLong() and 0xff) shl 16) or
@@ -2774,14 +3069,31 @@ class TrueTypeGlyfScaler(
             glyphId = glyphId,
             position = normalizedPosition,
             requestedPosition = position,
-            additionalDiagnostics = normalizationDiagnostics + avarDiagnostics(glyphId),
+            additionalDiagnostics = normalizationDiagnostics + avarDiagnostics(),
             includeNormalizedVariationPosition = normalizationDiagnostics.isEmpty(),
         )
     }
 
     private fun VariationPosition.normalizedForGvar(): VariationPosition {
         val normalizer = variationNormalizer ?: return this
-        return VariationPosition(axes = normalizer.normalize(this))
+        return VariationPosition(axes = normalizer.normalize(this).applyAvarSegmentMaps())
+    }
+
+    private fun Map<String, Double>.applyAvarSegmentMaps(): Map<String, Double> {
+        val maps = face.variations.axisSegmentMaps
+        if (maps.isEmpty()) return this
+
+        val remapped = LinkedHashMap<String, Double>(size)
+        face.variations.axes
+            .map { axis -> axis.tag.text }
+            .sorted()
+            .forEach { tag ->
+                val value = this[tag] ?: return@forEach
+                val axisIndex = face.variations.axes.indexOfFirst { axis -> axis.tag.text == tag }
+                val segments = maps.getOrNull(axisIndex)?.segments.orEmpty()
+                remapped[tag] = remapAvarCoordinate(value, segments)
+            }
+        return remapped
     }
 
     private fun VariationPosition.normalizationDiagnostics(glyphId: UInt): List<FontScalerDiagnostic> {
@@ -2808,20 +3120,32 @@ class TrueTypeGlyfScaler(
         }
     }
 
-    private fun avarDiagnostics(glyphId: UInt): List<FontScalerDiagnostic> =
-        if (face.variations.axisSegmentMaps.isNotEmpty()) {
-            listOf(
-                FontScalerDiagnostic(
-                    code = FontScalerDiagnosticCodes.VARIATION_AXIS_UNSUPPORTED,
-                    detail = "truetype.avar-unapplied",
-                    operation = "variation",
-                    glyphId = glyphId,
-                    severity = "warning",
-                ),
-            )
-        } else {
-            emptyList()
-        }
+    private fun avarDiagnostics(): List<FontScalerDiagnostic> = emptyList()
+}
+
+private fun remapAvarCoordinate(
+    coordinate: Double,
+    segments: List<org.graphiks.kanvas.font.sfnt.OpenTypeAvarSegment>,
+): Double {
+    if (segments.isEmpty()) return coordinate
+
+    val sorted = segments.sortedBy { segment -> segment.fromCoordinate }
+    if (coordinate <= sorted.first().fromCoordinate) {
+        return sorted.first().toCoordinate.coerceIn(-1.0, 1.0)
+    }
+    if (coordinate >= sorted.last().fromCoordinate) {
+        return sorted.last().toCoordinate.coerceIn(-1.0, 1.0)
+    }
+
+    val upperIndex = sorted.indexOfFirst { segment -> coordinate <= segment.fromCoordinate }
+    val lower = sorted[upperIndex - 1]
+    val upper = sorted[upperIndex]
+    val fromRange = upper.fromCoordinate - lower.fromCoordinate
+    if (fromRange == 0.0) {
+        return upper.toCoordinate.coerceIn(-1.0, 1.0)
+    }
+    val ratio = (coordinate - lower.fromCoordinate) / fromRange
+    return (lower.toCoordinate + ratio * (upper.toCoordinate - lower.toCoordinate)).coerceIn(-1.0, 1.0)
 }
 
 private fun OpenTypeFaceData.requiredRawTableBytes(tag: String): ByteArray =
@@ -2849,6 +3173,24 @@ private fun List<Int>.toRawSfntTableBytes(tag: String): ByteArray =
 class CFFScaler(
     private val face: OpenTypeFaceData,
 ) : GlyphScaler {
+    private val parsedCFF: ParsedCFFProgram? by lazy {
+        face.rawTableBytesOrNull("CFF ")?.let(::parseCFFTable)
+    }
+
+    /**
+     * Emits deterministic parser provenance for the selected CFF table.
+     *
+     * This is generated-fixture evidence only; it is not a complete CFF support claim.
+     */
+    fun tableEvidence(): CFFTableEvidence =
+        cffTableEvidence(
+            format = "cff",
+            displayFormat = "CFF",
+            face = face,
+            programProvider = { parsedCFF },
+            variationAxisTags = emptyList(),
+        )
+
     /**
      * Produces a CFF glyph outline.
      *
@@ -2857,7 +3199,16 @@ class CFFScaler(
      * @return Scaled CFF glyph outline.
      */
     override fun outline(glyphId: UInt, position: VariationPosition): GlyphOutline =
-        unsupportedCFFGlyph("CFF", "outline", face, glyphId, position)
+        parsedCFF?.let { program ->
+            CFFType2CharStringInterpreter(
+                localSubroutines = program.localSubroutines,
+                globalSubroutines = program.globalSubroutines,
+            ).interpretOutline(
+                charString = program.charString(glyphId),
+                glyphId = glyphId,
+                position = position,
+            )
+        } ?: unsupportedCFFGlyph("CFF", "outline", face, glyphId, position)
 
     /**
      * Produces CFF glyph metrics.
@@ -2867,7 +3218,28 @@ class CFFScaler(
      * @return Scaled CFF glyph metrics.
      */
     override fun metrics(glyphId: UInt, position: VariationPosition): GlyphMetrics =
-        unsupportedCFFGlyph("CFF", "metrics", face, glyphId, position)
+        parsedCFF?.let { program ->
+            val interpreter = CFFType2CharStringInterpreter(
+                localSubroutines = program.localSubroutines,
+                globalSubroutines = program.globalSubroutines,
+            )
+            val charString = program.charString(glyphId)
+            cffGlyphMetrics(
+                face = face,
+                glyphId = glyphId,
+                outline = interpreter.interpretOutline(
+                    charString = charString,
+                    glyphId = glyphId,
+                    position = position,
+                ),
+                width = interpreter.interpretEvidence(
+                    charString = charString,
+                    glyphId = glyphId,
+                    format = "cff",
+                    position = position,
+                ).width,
+            )
+        } ?: unsupportedCFFGlyph("CFF", "metrics", face, glyphId, position)
 }
 
 /**
@@ -2878,6 +3250,24 @@ class CFFScaler(
 class CFF2Scaler(
     private val face: OpenTypeFaceData,
 ) : GlyphScaler {
+    private val parsedCFF2: ParsedCFFProgram? by lazy {
+        face.rawTableBytesOrNull("CFF2")?.let(::parseCFF2Table)
+    }
+
+    /**
+     * Emits deterministic parser provenance for the selected CFF2 table.
+     *
+     * This is generated-fixture evidence only; it is not a complete CFF2 support claim.
+     */
+    fun tableEvidence(): CFFTableEvidence =
+        cffTableEvidence(
+            format = "cff2",
+            displayFormat = "CFF2",
+            face = face,
+            programProvider = { parsedCFF2 },
+            variationAxisTags = face.variations.axes.map { axis -> axis.tag.text }.sorted(),
+        )
+
     /**
      * Produces a CFF2 glyph outline.
      *
@@ -2886,7 +3276,23 @@ class CFF2Scaler(
      * @return Scaled CFF2 glyph outline.
      */
     override fun outline(glyphId: UInt, position: VariationPosition): GlyphOutline =
-        unsupportedCFFGlyph("CFF2", "outline", face, glyphId, position)
+        parsedCFF2?.let { program ->
+            val axisTags = face.variations.axes.map { axis -> axis.tag.text }
+            CFFType2CharStringInterpreter(
+                localSubroutines = program.localSubroutines,
+                globalSubroutines = program.globalSubroutines,
+                blendAxisTagsByVsIndex = mapOf(
+                    0 to axisTags.sorted(),
+                ),
+                blendScalarProvider = program.variationStore?.let { store ->
+                    { vsIndex, variationPosition -> store.scalars(vsIndex, axisTags, variationPosition) }
+                },
+            ).interpretOutline(
+                charString = program.charString(glyphId),
+                glyphId = glyphId,
+                position = position,
+            )
+        } ?: unsupportedCFFGlyph("CFF2", "outline", face, glyphId, position)
 
     /**
      * Produces CFF2 glyph metrics.
@@ -2896,8 +3302,515 @@ class CFF2Scaler(
      * @return Scaled CFF2 glyph metrics.
      */
     override fun metrics(glyphId: UInt, position: VariationPosition): GlyphMetrics =
-        unsupportedCFFGlyph("CFF2", "metrics", face, glyphId, position)
+        parsedCFF2?.let { program ->
+            val axisTags = face.variations.axes.map { axis -> axis.tag.text }
+            val interpreter = CFFType2CharStringInterpreter(
+                localSubroutines = program.localSubroutines,
+                globalSubroutines = program.globalSubroutines,
+                blendAxisTagsByVsIndex = mapOf(
+                    0 to axisTags.sorted(),
+                ),
+                blendScalarProvider = program.variationStore?.let { store ->
+                    { vsIndex, variationPosition -> store.scalars(vsIndex, axisTags, variationPosition) }
+                },
+            )
+            val charString = program.charString(glyphId)
+            cffGlyphMetrics(
+                face = face,
+                glyphId = glyphId,
+                outline = interpreter.interpretOutline(
+                    charString = charString,
+                    glyphId = glyphId,
+                    position = position,
+                ),
+                width = interpreter.interpretEvidence(
+                    charString = charString,
+                    glyphId = glyphId,
+                    format = "cff2",
+                    position = position,
+                ).width,
+            )
+        } ?: unsupportedCFFGlyph("CFF2", "metrics", face, glyphId, position)
 }
+
+private fun cffGlyphMetrics(
+    face: OpenTypeFaceData,
+    glyphId: UInt,
+    outline: GlyphOutline,
+    width: Double?,
+): GlyphMetrics {
+    val metric = face.metrics.horizontalMetrics.firstOrNull { metric -> metric.glyphId.toUInt() == glyphId }
+        ?: throw IllegalArgumentException("CFF glyph metrics missing for glyphId $glyphId.")
+    return GlyphMetrics(
+        advanceX = width ?: metric.advanceWidth.toDouble(),
+        advanceY = 0.0,
+        bounds = outline.commands.conservativeBounds()
+            ?: GlyphBounds(left = 0.0, top = 0.0, right = 0.0, bottom = 0.0),
+    )
+}
+
+private data class ParsedCFFProgram(
+    val charStrings: List<ByteArray>,
+    val localSubroutines: List<ByteArray>,
+    val globalSubroutines: List<ByteArray>,
+    val hasPrivateDict: Boolean,
+    val topDictOperators: List<String>,
+    val variationStore: CFF2VariationStore? = null,
+) {
+    init {
+        require(charStrings.isNotEmpty()) { "CFF charstring INDEX must not be empty." }
+        require(topDictOperators == topDictOperators.sorted()) {
+            "CFF top dict operator evidence must be sorted."
+        }
+    }
+
+    fun charString(glyphId: UInt): ByteArray {
+        require(glyphId.toLong() <= Int.MAX_VALUE) { "CFF glyphId $glyphId does not fit Int." }
+        val index = glyphId.toInt()
+        require(index in charStrings.indices) {
+            "CFF glyphId $glyphId is outside charstring INDEX size ${charStrings.size}."
+        }
+        return charStrings[index]
+    }
+}
+
+private fun parseCFFTable(data: ByteArray): ParsedCFFProgram {
+    requireCFFAvailable(data, offset = 0, byteCount = 4, section = "header")
+    require(data[0].toInt() and 0xff == 1) { "CFF header major version must be 1." }
+    val headerSize = data[2].toInt() and 0xff
+    require(headerSize >= 4) { "CFF header size must be at least 4." }
+    requireCFFAvailable(data, offset = 0, byteCount = headerSize, section = "header")
+
+    val nameIndex = readCFFIndex(data, headerSize, "Name INDEX")
+    val topDictIndex = readCFFIndex(data, nameIndex.nextOffset, "Top DICT INDEX")
+    require(topDictIndex.objects.size == 1) { "CFF Top DICT INDEX must contain exactly one dict." }
+    val stringIndex = readCFFIndex(data, topDictIndex.nextOffset, "String INDEX")
+    val globalSubrIndex = readCFFIndex(data, stringIndex.nextOffset, "Global Subr INDEX")
+    val topDict = parseCFFDict(topDictIndex.objects.single(), "Top DICT")
+    val charStringsOffset = topDict.singleOperand(CFF_DICT_CHAR_STRINGS)
+        ?: throw IllegalArgumentException("CFF Top DICT missing CharStrings offset.")
+    val privateLocation = topDict.privateLocation()
+    val localSubroutines = if (privateLocation != null) {
+        val (privateSize, privateOffset) = privateLocation
+        requireCFFAvailable(data, privateOffset, privateSize, "Private DICT")
+        val privateDict = parseCFFDict(data.copyOfRange(privateOffset, privateOffset + privateSize), "Private DICT")
+        val subrsOffset = privateDict.singleOperand(CFF_DICT_SUBRS)
+        if (subrsOffset == null) {
+            emptyList()
+        } else {
+            readCFFIndex(data, privateOffset + subrsOffset, "Local Subr INDEX").objects
+        }
+    } else {
+        emptyList()
+    }
+    val charStringsIndex = readCFFIndex(data, charStringsOffset, "CharStrings INDEX")
+    return ParsedCFFProgram(
+        charStrings = charStringsIndex.objects,
+        localSubroutines = localSubroutines,
+        globalSubroutines = globalSubrIndex.objects,
+        hasPrivateDict = privateLocation != null,
+        topDictOperators = topDict.operatorNames(),
+    )
+}
+
+private fun parseCFF2Table(data: ByteArray): ParsedCFFProgram {
+    requireCFFAvailable(data, offset = 0, byteCount = 5, section = "CFF2 header")
+    require(data[0].toInt() and 0xff == 2) { "CFF2 header major version must be 2." }
+    val headerSize = data[2].toInt() and 0xff
+    require(headerSize >= 5) { "CFF2 header size must be at least 5." }
+    requireCFFAvailable(data, offset = 0, byteCount = headerSize, section = "CFF2 header")
+    val topDictLength = readUInt16(data, 3)
+    val topDictOffset = headerSize
+    requireCFFAvailable(data, topDictOffset, topDictLength, "CFF2 Top DICT")
+    val topDict = parseCFFDict(data.copyOfRange(topDictOffset, topDictOffset + topDictLength), "CFF2 Top DICT")
+    val globalSubrIndex = readCFFIndex(data, topDictOffset + topDictLength, "CFF2 Global Subr INDEX")
+    val charStringsOffset = topDict.singleOperand(CFF_DICT_CHAR_STRINGS)
+        ?: throw IllegalArgumentException("CFF2 Top DICT missing CharStrings offset.")
+    val variationStore = topDict.singleOperand(CFF_DICT_CFF2_VARIATION_STORE)
+        ?.let { offset -> parseCFF2VariationStore(data, offset) }
+    val charStringsIndex = readCFFIndex(data, charStringsOffset, "CFF2 CharStrings INDEX")
+    return ParsedCFFProgram(
+        charStrings = charStringsIndex.objects,
+        localSubroutines = emptyList(),
+        globalSubroutines = globalSubrIndex.objects,
+        hasPrivateDict = false,
+        topDictOperators = topDict.operatorNames(),
+        variationStore = variationStore,
+    )
+}
+
+private data class CFF2VariationStore(
+    val axisCount: Int,
+    val regions: List<CFF2VariationRegion>,
+    val regionIndexesByVsIndex: List<List<Int>>,
+) {
+    fun scalars(
+        vsIndex: Int,
+        axisTags: List<String>,
+        position: VariationPosition,
+    ): List<Double> {
+        if (axisTags.size != axisCount) {
+            throw CFF2VariationStoreException("cff2.variation-axis-count")
+        }
+        val regionIndexes = regionIndexesByVsIndex.getOrNull(vsIndex)
+            ?: throw CFF2VariationStoreException("cff2.vsindex-invalid")
+        return regionIndexes.map { regionIndex ->
+            val region = regions.getOrNull(regionIndex)
+                ?: throw CFF2VariationStoreException("cff2.region-index-invalid")
+            region.scalar(axisTags = axisTags, position = position)
+        }
+    }
+}
+
+private data class CFF2VariationRegion(
+    val startCoordinates: List<Double>,
+    val peakCoordinates: List<Double>,
+    val endCoordinates: List<Double>,
+) {
+    init {
+        require(startCoordinates.size == peakCoordinates.size && peakCoordinates.size == endCoordinates.size) {
+            "CFF2 variation region coordinate counts must match."
+        }
+    }
+
+    fun scalar(axisTags: List<String>, position: VariationPosition): Double {
+        require(axisTags.size == peakCoordinates.size) {
+            "CFF2 variation axis count must match region coordinate count."
+        }
+        return peakCoordinates.indices.fold(1.0) { scalar, index ->
+            scalar * axisScalar(
+                coordinate = position.axes[axisTags[index]] ?: 0.0,
+                start = startCoordinates[index],
+                peak = peakCoordinates[index],
+                end = endCoordinates[index],
+            )
+        }
+    }
+}
+
+private fun axisScalar(
+    coordinate: Double,
+    start: Double,
+    peak: Double,
+    end: Double,
+): Double =
+    when {
+        start > peak || peak > end -> 1.0
+        start < 0.0 && end > 0.0 && peak != 0.0 -> 1.0
+        peak == 0.0 -> 1.0
+        coordinate < start || coordinate > end -> 0.0
+        coordinate == peak -> 1.0
+        coordinate < peak -> (coordinate - start) / (peak - start)
+        else -> (end - coordinate) / (end - peak)
+    }
+
+private class CFF2VariationStoreException(
+    val detail: String,
+) : IllegalArgumentException(detail)
+
+private fun parseCFF2VariationStore(data: ByteArray, offset: Int): CFF2VariationStore {
+    requireCFFAvailable(data, offset, 8, "CFF2 VariationStore")
+    val format = readUInt16(data, offset)
+    require(format == 1) { "CFF2 VariationStore format must be 1." }
+    val regionListOffset = readCFFUInt32AsInt(data, offset + 2, "CFF2 VariationRegionList offset")
+    val itemVariationDataCount = readUInt16(data, offset + 6)
+    require(itemVariationDataCount > 0) { "CFF2 VariationStore must contain ItemVariationData." }
+    requireCFFAvailable(data, offset + 8, itemVariationDataCount * 4, "CFF2 ItemVariationData offsets")
+    val itemVariationDataOffsets = (0 until itemVariationDataCount).map { index ->
+        readCFFUInt32AsInt(data, offset + 8 + index * 4, "CFF2 ItemVariationData offset")
+    }
+    val (axisCount, regions) = parseCFF2VariationRegionList(
+        data = data,
+        offset = offset + regionListOffset,
+    )
+    val regionIndexesByVsIndex = itemVariationDataOffsets.mapIndexed { index, relativeOffset ->
+        require(relativeOffset > 0) { "CFF2 ItemVariationData offset $index must be non-zero." }
+        parseCFF2ItemVariationData(
+            data = data,
+            offset = offset + relativeOffset,
+            regionCount = regions.size,
+        )
+    }
+    return CFF2VariationStore(
+        axisCount = axisCount,
+        regions = regions,
+        regionIndexesByVsIndex = regionIndexesByVsIndex,
+    )
+}
+
+private fun parseCFF2VariationRegionList(
+    data: ByteArray,
+    offset: Int,
+): Pair<Int, List<CFF2VariationRegion>> {
+    requireCFFAvailable(data, offset, 4, "CFF2 VariationRegionList")
+    val axisCount = readUInt16(data, offset)
+    val regionCount = readUInt16(data, offset + 2)
+    require(axisCount > 0) { "CFF2 VariationRegionList axisCount must be positive." }
+    require(regionCount > 0) { "CFF2 VariationRegionList regionCount must be positive." }
+    var cursor = offset + 4
+    val regions = (0 until regionCount).map {
+        requireCFFAvailable(data, cursor, axisCount * 6, "CFF2 VariationRegion")
+        val start = mutableListOf<Double>()
+        val peak = mutableListOf<Double>()
+        val end = mutableListOf<Double>()
+        repeat(axisCount) {
+            start += readCFFF2Dot14(data, cursor)
+            peak += readCFFF2Dot14(data, cursor + 2)
+            end += readCFFF2Dot14(data, cursor + 4)
+            cursor += 6
+        }
+        CFF2VariationRegion(
+            startCoordinates = start,
+            peakCoordinates = peak,
+            endCoordinates = end,
+        )
+    }
+    return axisCount to regions
+}
+
+private fun parseCFF2ItemVariationData(
+    data: ByteArray,
+    offset: Int,
+    regionCount: Int,
+): List<Int> {
+    requireCFFAvailable(data, offset, 6, "CFF2 ItemVariationData")
+    val itemCount = readUInt16(data, offset)
+    val wordDeltaCount = readUInt16(data, offset + 2)
+    val regionIndexCount = readUInt16(data, offset + 4)
+    require(regionIndexCount > 0) { "CFF2 ItemVariationData regionIndexCount must be positive." }
+    requireCFFAvailable(data, offset + 6, regionIndexCount * 2, "CFF2 ItemVariationData region indexes")
+    val regionIndexes = (0 until regionIndexCount).map { index ->
+        readUInt16(data, offset + 6 + index * 2).also { regionIndex ->
+            require(regionIndex < regionCount) {
+                "CFF2 ItemVariationData region index $regionIndex is outside region count $regionCount."
+            }
+        }
+    }
+    val longWords = wordDeltaCount and 0x8000 != 0
+    val wordCount = wordDeltaCount and 0x7fff
+    require(wordCount <= regionIndexCount) { "CFF2 ItemVariationData wordDeltaCount exceeds regionIndexCount." }
+    val bytesPerDeltaSet = if (longWords) {
+        wordCount * 4 + (regionIndexCount - wordCount) * 2
+    } else {
+        wordCount * 2 + (regionIndexCount - wordCount)
+    }
+    requireCFFAvailable(data, offset + 6 + regionIndexCount * 2, itemCount * bytesPerDeltaSet, "CFF2 delta sets")
+    return regionIndexes
+}
+
+private fun readCFFF2Dot14(data: ByteArray, offset: Int): Double =
+    readInt16(data, offset) / 16384.0
+
+private fun readCFFUInt32AsInt(data: ByteArray, offset: Int, section: String): Int {
+    requireCFFAvailable(data, offset, 4, section)
+    val value = readUInt32(data, offset)
+    require(value <= Int.MAX_VALUE) { "$section UInt32 value $value does not fit Int." }
+    return value.toInt()
+}
+
+private fun cffTableEvidence(
+    format: String,
+    displayFormat: String,
+    face: OpenTypeFaceData,
+    programProvider: () -> ParsedCFFProgram?,
+    variationAxisTags: List<String>,
+): CFFTableEvidence {
+    val parsed = try {
+        programProvider()
+    } catch (error: IllegalArgumentException) {
+        malformedCFFTable(format = format, displayFormat = displayFormat, error = error)
+    } ?: unsupportedCFFGlyph(displayFormat, "table", face, 0u, VariationPosition())
+    return CFFTableEvidence(
+        format = format,
+        charStringCount = parsed.charStrings.size,
+        localSubroutineCount = parsed.localSubroutines.size,
+        globalSubroutineCount = parsed.globalSubroutines.size,
+        hasPrivateDict = parsed.hasPrivateDict,
+        topDictOperators = parsed.topDictOperators,
+        variationAxisTags = variationAxisTags,
+    )
+}
+
+private data class CFFIndexReadResult(
+    val objects: List<ByteArray>,
+    val nextOffset: Int,
+)
+
+private fun readCFFIndex(
+    data: ByteArray,
+    offset: Int,
+    section: String,
+): CFFIndexReadResult {
+    requireCFFAvailable(data, offset, 2, section)
+    val count = readUInt16(data, offset)
+    if (count == 0) {
+        return CFFIndexReadResult(objects = emptyList(), nextOffset = offset + 2)
+    }
+    requireCFFAvailable(data, offset + 2, 1, section)
+    val offSize = data[offset + 2].toInt() and 0xff
+    require(offSize in 1..4) { "$section offSize must be in 1..4." }
+    val offsetsStart = offset + 3
+    val offsetCount = count + 1
+    requireCFFAvailable(data, offsetsStart, offsetCount * offSize, section)
+    val offsets = (0 until offsetCount).map { index ->
+        readCFFOffset(data, offsetsStart + index * offSize, offSize)
+    }
+    require(offsets.first() == 1) { "$section first object offset must be 1." }
+    require(offsets.zipWithNext().all { (left, right) -> right >= left }) {
+        "$section offsets must be monotonic."
+    }
+    val objectDataStart = offsetsStart + offsetCount * offSize
+    val objectDataLength = offsets.last() - 1
+    requireCFFAvailable(data, objectDataStart, objectDataLength, section)
+    val objects = offsets.zipWithNext().map { (start, end) ->
+        data.copyOfRange(objectDataStart + start - 1, objectDataStart + end - 1)
+    }
+    return CFFIndexReadResult(
+        objects = objects,
+        nextOffset = objectDataStart + objectDataLength,
+    )
+}
+
+private fun readCFFOffset(data: ByteArray, offset: Int, offSize: Int): Int {
+    var result = 0
+    repeat(offSize) { index ->
+        result = (result shl 8) or (data[offset + index].toInt() and 0xff)
+    }
+    return result
+}
+
+private data class CFFDict(
+    val entries: Map<Int, List<List<Int>>>,
+) {
+    fun singleOperand(operator: Int): Int? =
+        entries[operator]?.lastOrNull()?.lastOrNull()
+
+    fun operatorNames(): List<String> =
+        entries.keys.map(::cffDictOperatorName).sorted()
+
+    fun privateLocation(): Pair<Int, Int>? {
+        val operands = entries[CFF_DICT_PRIVATE]?.lastOrNull() ?: return null
+        require(operands.size >= 2) { "CFF Private operator requires size and offset operands." }
+        return operands[operands.size - 2] to operands[operands.size - 1]
+    }
+}
+
+private fun parseCFFDict(data: ByteArray, section: String): CFFDict {
+    val entries = linkedMapOf<Int, MutableList<List<Int>>>()
+    val operands = mutableListOf<Int>()
+    var offset = 0
+    while (offset < data.size) {
+        val byte = data[offset++].toInt() and 0xff
+        when {
+            byte == 12 -> {
+                requireCFFAvailable(data, offset, 1, section)
+                val escaped = data[offset++].toInt() and 0xff
+                entries.getOrPut(0x0c00 + escaped) { mutableListOf() } += operands.toList()
+                operands.clear()
+            }
+            byte in 0..27 -> {
+                entries.getOrPut(byte) { mutableListOf() } += operands.toList()
+                operands.clear()
+            }
+            else -> {
+                val number = readCFFDictNumber(data, byte, offset, section)
+                operands += number.value
+                offset = number.nextOffset
+            }
+        }
+    }
+    return CFFDict(entries = entries)
+}
+
+private data class CFFDictNumberReadResult(
+    val value: Int,
+    val nextOffset: Int,
+)
+
+private fun readCFFDictNumber(
+    data: ByteArray,
+    firstByte: Int,
+    offsetAfterFirstByte: Int,
+    section: String,
+): CFFDictNumberReadResult =
+    when (firstByte) {
+        28 -> {
+            requireCFFAvailable(data, offsetAfterFirstByte, 2, section)
+            CFFDictNumberReadResult(
+                value = readInt16(data, offsetAfterFirstByte),
+                nextOffset = offsetAfterFirstByte + 2,
+            )
+        }
+        29 -> {
+            requireCFFAvailable(data, offsetAfterFirstByte, 4, section)
+            CFFDictNumberReadResult(
+                value = readInt32(data, offsetAfterFirstByte),
+                nextOffset = offsetAfterFirstByte + 4,
+            )
+        }
+        in 32..246 -> CFFDictNumberReadResult(
+            value = firstByte - 139,
+            nextOffset = offsetAfterFirstByte,
+        )
+        in 247..250 -> {
+            requireCFFAvailable(data, offsetAfterFirstByte, 1, section)
+            CFFDictNumberReadResult(
+                value = (firstByte - 247) * 256 + (data[offsetAfterFirstByte].toInt() and 0xff) + 108,
+                nextOffset = offsetAfterFirstByte + 1,
+            )
+        }
+        in 251..254 -> {
+            requireCFFAvailable(data, offsetAfterFirstByte, 1, section)
+            CFFDictNumberReadResult(
+                value = -((firstByte - 251) * 256) - (data[offsetAfterFirstByte].toInt() and 0xff) - 108,
+                nextOffset = offsetAfterFirstByte + 1,
+            )
+        }
+        else -> throw IllegalArgumentException("$section contains unsupported DICT number byte $firstByte.")
+    }
+
+private fun requireCFFAvailable(
+    data: ByteArray,
+    offset: Int,
+    byteCount: Int,
+    section: String,
+) {
+    require(offset >= 0) { "$section offset must be non-negative." }
+    require(byteCount >= 0) { "$section byteCount must be non-negative." }
+    require(offset <= data.size && byteCount <= data.size - offset) {
+        "$section is truncated: need $byteCount bytes at offset $offset, table length ${data.size}."
+    }
+}
+
+private const val CFF_DICT_CHAR_STRINGS = 17
+private const val CFF_DICT_PRIVATE = 18
+private const val CFF_DICT_SUBRS = 19
+private const val CFF_DICT_CFF2_VARIATION_STORE = 24
+
+private fun cffDictOperatorName(operator: Int): String =
+    when (operator) {
+        CFF_DICT_CHAR_STRINGS -> "cff.dict.charstrings"
+        CFF_DICT_PRIVATE -> "cff.dict.private"
+        CFF_DICT_SUBRS -> "cff.dict.subrs"
+        CFF_DICT_CFF2_VARIATION_STORE -> "cff.dict.variation-store"
+        in 0x0c00..0x0cff -> "cff.dict.escaped-${operator and 0xff}"
+        else -> "cff.dict.operator-$operator"
+    }
+
+private fun malformedCFFTable(
+    format: String,
+    displayFormat: String,
+    error: Throwable,
+): Nothing =
+    throw FontScalerRefusalException(
+        diagnostic = FontScalerDiagnostic(
+            code = FontScalerDiagnosticCodes.CFF_TABLE_MALFORMED,
+            detail = "$format.table-malformed",
+            operation = "table",
+            glyphId = 0u,
+        ),
+        message = "$displayFormat table malformed: ${error.message.orEmpty()}",
+    )
 
 private fun unsupportedCFFGlyph(
     format: String,
@@ -2907,8 +3820,8 @@ private fun unsupportedCFFGlyph(
     position: VariationPosition,
 ): Nothing =
     throw UnsupportedOperationException(
-        "$format $operation for ${face.id.value} glyphId $glyphId requires a pure Kotlin " +
-            "Type 2 charstring interpreter before CFF/CFF2 glyph scaling can be claimed. " +
+        "$format $operation for ${face.id.value} glyphId $glyphId requires bounded $format " +
+            "table bytes and generated charstring evidence before glyph scaling can be claimed. " +
             "positionAxes=${position.axes.keys.sorted().joinToString(",")}",
     )
 
@@ -2925,6 +3838,942 @@ interface CFFCharStringInterpreter {
      */
     fun interpret(charString: ByteArray, position: VariationPosition = VariationPosition()): List<String>
 }
+
+/**
+ * Narrow, deterministic Type 2/CFF2 charstring interpreter used by generated font fixture tests.
+ *
+ * It supports the fixture operators needed to prove the current CFF/CFF2 gates: moves, lines,
+ * cubic curves, flex, bounded local/global subroutine calls, `vsindex`, and `blend`. Full CFF table
+ * parsing, private dictionaries, width integration, hint behavior, and complete CFF/CFF2 scaler
+ * support remain outside this fixture interpreter.
+ */
+class CFFType2CharStringInterpreter(
+    localSubroutines: List<ByteArray> = emptyList(),
+    globalSubroutines: List<ByteArray> = emptyList(),
+    blendAxisTagsByVsIndex: Map<Int, List<String>> = emptyMap(),
+    private val blendScalarProvider: ((Int, VariationPosition) -> List<Double>)? = null,
+) : CFFCharStringInterpreter {
+    private val localSubroutines: List<ByteArray> = localSubroutines.map { it.copyOf() }
+    private val globalSubroutines: List<ByteArray> = globalSubroutines.map { it.copyOf() }
+    private val blendAxisTagsByVsIndex: Map<Int, List<String>> =
+        blendAxisTagsByVsIndex.toSortedMap().mapValues { (_, tags) ->
+            tags.sorted().also { sortedTags ->
+                require(sortedTags.distinct() == sortedTags) {
+                    "CFF2 blend axis tags for one vsindex must be unique."
+                }
+                sortedTags.forEach { tag ->
+                    require(tag.length == 4) { "CFF2 blend axis tag must contain exactly four characters." }
+                    require(tag.all { character -> character.code in 0x20..0x7e }) {
+                        "CFF2 blend axis tag $tag must contain printable ASCII characters."
+                    }
+                }
+            }
+        }
+
+    init {
+        require(blendAxisTagsByVsIndex.keys.all { index -> index >= 0 }) {
+            "CFF2 blend vsindex values must be non-negative."
+        }
+    }
+
+    override fun interpret(
+        charString: ByteArray,
+        position: VariationPosition,
+    ): List<String> =
+        interpretEvidence(
+            charString = charString,
+            glyphId = 0u,
+            format = "cff",
+            position = position,
+        ).outlineCommands
+
+    /**
+     * Interprets one generated CFF/CFF2 charstring fixture into typed outline commands.
+     */
+    fun interpretOutline(
+        charString: ByteArray,
+        glyphId: UInt = 0u,
+        position: VariationPosition = VariationPosition(),
+    ): GlyphOutline =
+        GlyphOutline(
+            glyphId = glyphId,
+            commands = interpretState(
+                charString = charString,
+                glyphId = glyphId,
+                position = position,
+            ).commands.toList(),
+        )
+
+    /**
+     * Interprets one generated CFF/CFF2 charstring fixture and returns stable evidence.
+     */
+    fun interpretEvidence(
+        charString: ByteArray,
+        glyphId: UInt = 0u,
+        format: String = "cff",
+        position: VariationPosition = VariationPosition(),
+    ): CFFCharStringEvidence {
+        require(format == "cff" || format == "cff2") { "CFF charstring evidence format must be cff or cff2." }
+        val state = interpretState(
+            charString = charString,
+            glyphId = glyphId,
+            position = position,
+        )
+        val outlineCommands = state.commands.map { command -> command.toEvidenceLine() }
+        return CFFCharStringEvidence(
+            format = format,
+            glyphId = glyphId,
+            width = state.width,
+            stemHintCount = state.stemHintCount,
+            hintMaskByteCount = state.hintMaskByteCount,
+            outlineCommands = outlineCommands,
+            callTrace = state.callTrace.toList(),
+            variationPosition = position.toEvidenceCoordinates(),
+            cff2VsIndex = state.cff2VsIndex,
+        )
+    }
+
+    private fun interpretState(
+        charString: ByteArray,
+        glyphId: UInt,
+        position: VariationPosition,
+    ): CFFType2ExecutionState {
+        val state = CFFType2ExecutionState()
+        execute(
+            data = charString,
+            state = state,
+            glyphId = glyphId,
+            position = position,
+            depth = 0,
+            allowReturn = false,
+        )
+        return state
+    }
+
+    private fun execute(
+        data: ByteArray,
+        state: CFFType2ExecutionState,
+        glyphId: UInt,
+        position: VariationPosition,
+        depth: Int,
+        allowReturn: Boolean,
+    ): CFFType2Signal {
+        var offset = 0
+        while (offset < data.size) {
+            val operatorOffset = offset
+            val byte = data[offset++].toInt() and 0xff
+            when {
+                byte == 28 -> {
+                    requireAvailable(data, offset, 2, glyphId, "shortint", operatorOffset)
+                    state.push(readInt16(data, offset).toDouble(), glyphId, operatorOffset)
+                    offset += 2
+                }
+                byte == 255 -> {
+                    requireAvailable(data, offset, 4, glyphId, "fixed16dot16", operatorOffset)
+                    state.push(readInt32(data, offset) / 65536.0, glyphId, operatorOffset)
+                    offset += 4
+                }
+                byte in 32..246 -> state.push((byte - 139).toDouble(), glyphId, operatorOffset)
+                byte in 247..250 -> {
+                    requireAvailable(data, offset, 1, glyphId, "positive-number", operatorOffset)
+                    val value = (byte - 247) * 256 + (data[offset++].toInt() and 0xff) + 108
+                    state.push(value.toDouble(), glyphId, operatorOffset)
+                }
+                byte in 251..254 -> {
+                    requireAvailable(data, offset, 1, glyphId, "negative-number", operatorOffset)
+                    val value = -((byte - 251) * 256) - (data[offset++].toInt() and 0xff) - 108
+                    state.push(value.toDouble(), glyphId, operatorOffset)
+                }
+                byte == 12 -> {
+                    requireAvailable(data, offset, 1, glyphId, "escaped-operator", operatorOffset)
+                    val escapedOperator = data[offset++].toInt() and 0xff
+                    val signal = handleEscapedOperator(
+                        operator = escapedOperator,
+                        operatorOffset = operatorOffset,
+                        state = state,
+                        glyphId = glyphId,
+                    )
+                    if (signal != CFFType2Signal.CONTINUE) return signal
+                }
+                byte == 19 || byte == 20 -> {
+                    offset = handleHintMaskOperator(
+                        data = data,
+                        maskOffset = offset,
+                        state = state,
+                        glyphId = glyphId,
+                        operatorOffset = operatorOffset,
+                    )
+                }
+                else -> {
+                    val signal = handleOperator(
+                        operator = byte,
+                        operatorOffset = operatorOffset,
+                        state = state,
+                        glyphId = glyphId,
+                        position = position,
+                        depth = depth,
+                        allowReturn = allowReturn,
+                    )
+                    if (signal != CFFType2Signal.CONTINUE) return signal
+                }
+            }
+        }
+        return CFFType2Signal.CONTINUE
+    }
+
+    private fun handleOperator(
+        operator: Int,
+        operatorOffset: Int,
+        state: CFFType2ExecutionState,
+        glyphId: UInt,
+        position: VariationPosition,
+        depth: Int,
+        allowReturn: Boolean,
+    ): CFFType2Signal =
+        when (operator) {
+            1, 3, 18, 23 -> {
+                state.consumeStemHints(glyphId = glyphId, operatorOffset = operatorOffset)
+                CFFType2Signal.CONTINUE
+            }
+            4 -> {
+                val dy = state.takeMoveArguments(count = 1, glyphId = glyphId, operatorOffset = operatorOffset)[0]
+                state.moveBy(dx = 0.0, dy = dy)
+                CFFType2Signal.CONTINUE
+            }
+            5 -> {
+                drawLines(state.drainOperands(glyphId, operatorOffset), state, glyphId, operatorOffset)
+                CFFType2Signal.CONTINUE
+            }
+            6 -> {
+                drawAlternatingLines(
+                    operands = state.drainOperands(glyphId, operatorOffset),
+                    state = state,
+                    glyphId = glyphId,
+                    operatorOffset = operatorOffset,
+                    horizontalFirst = true,
+                )
+                CFFType2Signal.CONTINUE
+            }
+            7 -> {
+                drawAlternatingLines(
+                    operands = state.drainOperands(glyphId, operatorOffset),
+                    state = state,
+                    glyphId = glyphId,
+                    operatorOffset = operatorOffset,
+                    horizontalFirst = false,
+                )
+                CFFType2Signal.CONTINUE
+            }
+            8 -> {
+                drawCurves(state.drainOperands(glyphId, operatorOffset), state, glyphId, operatorOffset)
+                CFFType2Signal.CONTINUE
+            }
+            10 -> callSubroutine(
+                scope = "local",
+                subroutines = localSubroutines,
+                state = state,
+                glyphId = glyphId,
+                position = position,
+                depth = depth,
+                operatorOffset = operatorOffset,
+            )
+            11 -> {
+                if (!allowReturn) {
+                    malformedCFFStack(glyphId, "cff.return-outside-subroutine", operatorOffset)
+                }
+                state.stack.clear()
+                CFFType2Signal.RETURN
+            }
+            14 -> {
+                state.stack.clear()
+                state.closeOpenPath()
+                CFFType2Signal.END
+            }
+            15 -> {
+                state.cff2VsIndex = state.popInt(glyphId, operatorOffset)
+                if (state.cff2VsIndex < 0) {
+                    malformedCFFStack(glyphId, "cff2.vsindex-negative", operatorOffset)
+                }
+                CFFType2Signal.CONTINUE
+            }
+            16 -> {
+                applyBlend(state, glyphId, position, operatorOffset)
+                CFFType2Signal.CONTINUE
+            }
+            21 -> {
+                val (dx, dy) = state.takeMoveArguments(count = 2, glyphId = glyphId, operatorOffset = operatorOffset)
+                state.moveBy(dx = dx, dy = dy)
+                CFFType2Signal.CONTINUE
+            }
+            22 -> {
+                val dx = state.takeMoveArguments(count = 1, glyphId = glyphId, operatorOffset = operatorOffset)[0]
+                state.moveBy(dx = dx, dy = 0.0)
+                CFFType2Signal.CONTINUE
+            }
+            24 -> {
+                drawCurveLine(state.drainOperands(glyphId, operatorOffset), state, glyphId, operatorOffset)
+                CFFType2Signal.CONTINUE
+            }
+            25 -> {
+                drawLineCurve(state.drainOperands(glyphId, operatorOffset), state, glyphId, operatorOffset)
+                CFFType2Signal.CONTINUE
+            }
+            26 -> {
+                drawVVCurves(state.drainOperands(glyphId, operatorOffset), state, glyphId, operatorOffset)
+                CFFType2Signal.CONTINUE
+            }
+            27 -> {
+                drawHHCurves(state.drainOperands(glyphId, operatorOffset), state, glyphId, operatorOffset)
+                CFFType2Signal.CONTINUE
+            }
+            29 -> callSubroutine(
+                scope = "global",
+                subroutines = globalSubroutines,
+                state = state,
+                glyphId = glyphId,
+                position = position,
+                depth = depth,
+                operatorOffset = operatorOffset,
+            )
+            30 -> {
+                drawVHCurves(state.drainOperands(glyphId, operatorOffset), state, glyphId, operatorOffset)
+                CFFType2Signal.CONTINUE
+            }
+            31 -> {
+                drawHVCurves(state.drainOperands(glyphId, operatorOffset), state, glyphId, operatorOffset)
+                CFFType2Signal.CONTINUE
+            }
+            else -> unsupportedCFFOperator(glyphId, "cff.operator-$operator", operatorOffset)
+        }
+
+    private fun handleEscapedOperator(
+        operator: Int,
+        operatorOffset: Int,
+        state: CFFType2ExecutionState,
+        glyphId: UInt,
+    ): CFFType2Signal =
+        when (operator) {
+            34 -> {
+                drawHFlex(state.drainOperands(glyphId, operatorOffset), state, glyphId, operatorOffset)
+                CFFType2Signal.CONTINUE
+            }
+            35 -> {
+                drawFlex(state.drainOperands(glyphId, operatorOffset), state, glyphId, operatorOffset)
+                CFFType2Signal.CONTINUE
+            }
+            36 -> {
+                drawHFlex1(state.drainOperands(glyphId, operatorOffset), state, glyphId, operatorOffset)
+                CFFType2Signal.CONTINUE
+            }
+            37 -> {
+                drawFlex1(state.drainOperands(glyphId, operatorOffset), state, glyphId, operatorOffset)
+                CFFType2Signal.CONTINUE
+            }
+            else -> unsupportedCFFOperator(glyphId, "cff.escaped-operator-$operator", operatorOffset)
+        }
+
+    private fun handleHintMaskOperator(
+        data: ByteArray,
+        maskOffset: Int,
+        state: CFFType2ExecutionState,
+        glyphId: UInt,
+        operatorOffset: Int,
+    ): Int {
+        if (state.stack.isNotEmpty()) {
+            state.consumeStemHints(glyphId = glyphId, operatorOffset = operatorOffset)
+        }
+        val maskByteCount = (state.stemHintCount + 7) / 8
+        requireAvailable(data, maskOffset, maskByteCount, glyphId, "hint-mask", operatorOffset)
+        state.hintMaskByteCount += maskByteCount
+        return maskOffset + maskByteCount
+    }
+
+    private fun callSubroutine(
+        scope: String,
+        subroutines: List<ByteArray>,
+        state: CFFType2ExecutionState,
+        glyphId: UInt,
+        position: VariationPosition,
+        depth: Int,
+        operatorOffset: Int,
+    ): CFFType2Signal {
+        val encodedIndex = state.popInt(glyphId, operatorOffset)
+        val resolvedIndex = encodedIndex + subroutineBias(subroutines.size)
+        if (resolvedIndex !in subroutines.indices) {
+            malformedCFFStack(glyphId, "cff.subroutine-index", operatorOffset)
+        }
+        if (depth >= MAX_CFF_SUBROUTINE_DEPTH) {
+            malformedCFFStack(glyphId, "cff.subroutine-recursion", operatorOffset)
+        }
+        state.callTrace += CFFCharStringCallTrace(
+            depth = depth,
+            scope = scope,
+            encodedIndex = encodedIndex,
+            resolvedIndex = resolvedIndex,
+        )
+        return when (
+            execute(
+                data = subroutines[resolvedIndex],
+                state = state,
+                glyphId = glyphId,
+                position = position,
+                depth = depth + 1,
+                allowReturn = true,
+            )
+        ) {
+            CFFType2Signal.END -> CFFType2Signal.END
+            CFFType2Signal.RETURN,
+            CFFType2Signal.CONTINUE -> CFFType2Signal.CONTINUE
+        }
+    }
+
+    private fun applyBlend(
+        state: CFFType2ExecutionState,
+        glyphId: UInt,
+        position: VariationPosition,
+        operatorOffset: Int,
+    ) {
+        val blendCount = state.popInt(glyphId, operatorOffset)
+        if (blendCount <= 0) {
+            malformedCFFStack(glyphId, "cff2.blend-count", operatorOffset)
+        }
+        val scalars = try {
+            blendScalarProvider?.invoke(state.cff2VsIndex, position)
+        } catch (error: CFF2VariationStoreException) {
+            malformedCFFVariation(glyphId, error.detail, operatorOffset)
+        } ?: blendAxisTagsByVsIndex[state.cff2VsIndex].orEmpty().map { tag ->
+            position.axes[tag] ?: 0.0
+        }
+        val requiredOperandCount = blendCount * (1 + scalars.size)
+        if (state.stack.size < requiredOperandCount) {
+            malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+        }
+        val start = state.stack.size - requiredOperandCount
+        val defaults = state.stack.subList(start, start + blendCount).toList()
+        val blended = defaults.toMutableList()
+        var deltaOffset = start + blendCount
+        scalars.forEach { scalar ->
+            repeat(blendCount) { valueIndex ->
+                blended[valueIndex] += state.stack[deltaOffset++] * scalar
+            }
+        }
+        state.stack.subList(start, state.stack.size).clear()
+        state.stack += blended
+    }
+}
+
+private class CFFType2ExecutionState {
+    val stack: MutableList<Double> = mutableListOf()
+    val commands: MutableList<OutlineCommand> = mutableListOf()
+    val callTrace: MutableList<CFFCharStringCallTrace> = mutableListOf()
+    var x: Double = 0.0
+    var y: Double = 0.0
+    var cff2VsIndex: Int = 0
+    var width: Double? = null
+    var stemHintCount: Int = 0
+    var hintMaskByteCount: Int = 0
+    private var pathOpen: Boolean = false
+
+    fun push(value: Double, glyphId: UInt, operatorOffset: Int) {
+        if (stack.size >= MAX_CFF_OPERAND_STACK_DEPTH) {
+            malformedCFFStack(glyphId, "cff.stack-overflow", operatorOffset)
+        }
+        stack += value
+    }
+
+    fun takeMoveArguments(
+        count: Int,
+        glyphId: UInt,
+        operatorOffset: Int,
+    ): List<Double> {
+        captureOptionalWidth(
+            expectedRemainingOperandCount = count,
+            glyphId = glyphId,
+            operatorOffset = operatorOffset,
+        )
+        if (stack.size < count) {
+            malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+        }
+        if (stack.size != count) {
+            malformedCFFStack(glyphId, "cff.stack-malformed", operatorOffset)
+        }
+        val result = stack.takeLast(count)
+        stack.clear()
+        return result
+    }
+
+    fun drainOperands(
+        glyphId: UInt,
+        operatorOffset: Int,
+    ): List<Double> {
+        if (stack.isEmpty()) {
+            malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+        }
+        return stack.toList().also { stack.clear() }
+    }
+
+    fun popInt(glyphId: UInt, operatorOffset: Int): Int {
+        if (stack.isEmpty()) {
+            malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+        }
+        val value = stack.removeAt(stack.lastIndex)
+        if (!value.isFinite() || value % 1.0 != 0.0 || value < Int.MIN_VALUE || value > Int.MAX_VALUE) {
+            malformedCFFStack(glyphId, "cff.integer-operand", operatorOffset)
+        }
+        return value.toInt()
+    }
+
+    fun consumeStemHints(glyphId: UInt, operatorOffset: Int) {
+        if (stack.isEmpty()) {
+            return
+        }
+        if (stack.size % 2 == 1) {
+            captureWidth(stack.removeAt(0), glyphId, operatorOffset)
+        }
+        if (stack.size % 2 != 0) {
+            malformedCFFStack(glyphId, "cff.stem-stack-malformed", operatorOffset)
+        }
+        stemHintCount += stack.size / 2
+        stack.clear()
+    }
+
+    fun moveBy(dx: Double, dy: Double) {
+        x += dx
+        y += dy
+        commands += moveTo(x, y)
+        pathOpen = true
+    }
+
+    fun lineBy(dx: Double, dy: Double) {
+        x += dx
+        y += dy
+        commands += lineTo(x, y)
+        pathOpen = true
+    }
+
+    fun curveBy(
+        dx1: Double,
+        dy1: Double,
+        dx2: Double,
+        dy2: Double,
+        dx3: Double,
+        dy3: Double,
+    ) {
+        val controlX1 = x + dx1
+        val controlY1 = y + dy1
+        val controlX2 = controlX1 + dx2
+        val controlY2 = controlY1 + dy2
+        x = controlX2 + dx3
+        y = controlY2 + dy3
+        commands += cubicTo(
+            controlX1 = controlX1,
+            controlY1 = controlY1,
+            controlX2 = controlX2,
+            controlY2 = controlY2,
+            x = x,
+            y = y,
+        )
+        pathOpen = true
+    }
+
+    fun closeOpenPath() {
+        if (pathOpen && commands.lastOrNull() != OutlineCommand.Close) {
+            commands += close()
+        }
+        pathOpen = false
+    }
+
+    private fun captureOptionalWidth(
+        expectedRemainingOperandCount: Int,
+        glyphId: UInt,
+        operatorOffset: Int,
+    ) {
+        if (stack.size == expectedRemainingOperandCount + 1) {
+            captureWidth(stack.removeAt(0), glyphId, operatorOffset)
+        }
+    }
+
+    private fun captureWidth(value: Double, glyphId: UInt, operatorOffset: Int) {
+        if (width != null) {
+            malformedCFFStack(glyphId, "cff.width-duplicate", operatorOffset)
+        }
+        if (!value.isFinite()) {
+            malformedCFFStack(glyphId, "cff.width-non-finite", operatorOffset)
+        }
+        width = value
+    }
+}
+
+private enum class CFFType2Signal {
+    CONTINUE,
+    RETURN,
+    END,
+}
+
+private fun drawLines(
+    operands: List<Double>,
+    state: CFFType2ExecutionState,
+    glyphId: UInt,
+    operatorOffset: Int,
+) {
+    if (operands.size < 2 || operands.size % 2 != 0) {
+        malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+    }
+    operands.chunked(2).forEach { (dx, dy) -> state.lineBy(dx, dy) }
+}
+
+private fun drawAlternatingLines(
+    operands: List<Double>,
+    state: CFFType2ExecutionState,
+    glyphId: UInt,
+    operatorOffset: Int,
+    horizontalFirst: Boolean,
+) {
+    if (operands.isEmpty()) {
+        malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+    }
+    operands.forEachIndexed { index, value ->
+        val horizontal = if (horizontalFirst) index % 2 == 0 else index % 2 != 0
+        if (horizontal) {
+            state.lineBy(dx = value, dy = 0.0)
+        } else {
+            state.lineBy(dx = 0.0, dy = value)
+        }
+    }
+}
+
+private fun drawCurves(
+    operands: List<Double>,
+    state: CFFType2ExecutionState,
+    glyphId: UInt,
+    operatorOffset: Int,
+) {
+    if (operands.size < 6 || operands.size % 6 != 0) {
+        malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+    }
+    operands.chunked(6).forEach { chunk ->
+        state.curveBy(
+            dx1 = chunk[0],
+            dy1 = chunk[1],
+            dx2 = chunk[2],
+            dy2 = chunk[3],
+            dx3 = chunk[4],
+            dy3 = chunk[5],
+        )
+    }
+}
+
+private fun drawCurveLine(
+    operands: List<Double>,
+    state: CFFType2ExecutionState,
+    glyphId: UInt,
+    operatorOffset: Int,
+) {
+    if (operands.size < 8 || (operands.size - 2) % 6 != 0) {
+        malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+    }
+    drawCurves(operands.dropLast(2), state, glyphId, operatorOffset)
+    val (dx, dy) = operands.takeLast(2)
+    state.lineBy(dx, dy)
+}
+
+private fun drawLineCurve(
+    operands: List<Double>,
+    state: CFFType2ExecutionState,
+    glyphId: UInt,
+    operatorOffset: Int,
+) {
+    if (operands.size < 8 || (operands.size - 6) % 2 != 0) {
+        malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+    }
+    drawLines(operands.dropLast(6), state, glyphId, operatorOffset)
+    val curve = operands.takeLast(6)
+    state.curveBy(
+        dx1 = curve[0],
+        dy1 = curve[1],
+        dx2 = curve[2],
+        dy2 = curve[3],
+        dx3 = curve[4],
+        dy3 = curve[5],
+    )
+}
+
+private fun drawVVCurves(
+    operands: List<Double>,
+    state: CFFType2ExecutionState,
+    glyphId: UInt,
+    operatorOffset: Int,
+) {
+    if (operands.size < 4) {
+        malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+    }
+    var index = 0
+    val firstDx = if (operands.size % 4 == 1) operands[index++] else 0.0
+    if ((operands.size - index) % 4 != 0) {
+        malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+    }
+    var firstCurve = true
+    while (index < operands.size) {
+        val dx1 = if (firstCurve) firstDx else 0.0
+        state.curveBy(
+            dx1 = dx1,
+            dy1 = operands[index],
+            dx2 = operands[index + 1],
+            dy2 = operands[index + 2],
+            dx3 = 0.0,
+            dy3 = operands[index + 3],
+        )
+        firstCurve = false
+        index += 4
+    }
+}
+
+private fun drawHHCurves(
+    operands: List<Double>,
+    state: CFFType2ExecutionState,
+    glyphId: UInt,
+    operatorOffset: Int,
+) {
+    if (operands.size < 4) {
+        malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+    }
+    var index = 0
+    val firstDy = if (operands.size % 4 == 1) operands[index++] else 0.0
+    if ((operands.size - index) % 4 != 0) {
+        malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+    }
+    var firstCurve = true
+    while (index < operands.size) {
+        val dy1 = if (firstCurve) firstDy else 0.0
+        state.curveBy(
+            dx1 = operands[index],
+            dy1 = dy1,
+            dx2 = operands[index + 1],
+            dy2 = operands[index + 2],
+            dx3 = operands[index + 3],
+            dy3 = 0.0,
+        )
+        firstCurve = false
+        index += 4
+    }
+}
+
+private fun drawHVCurves(
+    operands: List<Double>,
+    state: CFFType2ExecutionState,
+    glyphId: UInt,
+    operatorOffset: Int,
+) {
+    if (operands.size != 4) {
+        malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+    }
+    state.curveBy(
+        dx1 = operands[0],
+        dy1 = 0.0,
+        dx2 = operands[1],
+        dy2 = operands[2],
+        dx3 = 0.0,
+        dy3 = operands[3],
+    )
+}
+
+private fun drawVHCurves(
+    operands: List<Double>,
+    state: CFFType2ExecutionState,
+    glyphId: UInt,
+    operatorOffset: Int,
+) {
+    if (operands.size != 4) {
+        malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+    }
+    state.curveBy(
+        dx1 = 0.0,
+        dy1 = operands[0],
+        dx2 = operands[1],
+        dy2 = operands[2],
+        dx3 = operands[3],
+        dy3 = 0.0,
+    )
+}
+
+private fun drawFlex(
+    operands: List<Double>,
+    state: CFFType2ExecutionState,
+    glyphId: UInt,
+    operatorOffset: Int,
+) {
+    if (operands.size != 13) {
+        malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+    }
+    val dx1 = operands[0]
+    val dy1 = operands[1]
+    val dx2 = operands[2]
+    val dy2 = operands[3]
+    val dx3 = operands[4]
+    val dy3 = operands[5]
+    val dx4 = operands[6]
+    val dy4 = operands[7]
+    val dx5 = operands[8]
+    val dy5 = operands[9]
+    val dx6 = operands[10]
+    val dy6 = operands[11]
+    state.curveBy(dx1, dy1, dx2, dy2, dx3, dy3)
+    state.curveBy(dx4, dy4, dx5, dy5, dx6, dy6)
+}
+
+private fun drawHFlex(
+    operands: List<Double>,
+    state: CFFType2ExecutionState,
+    glyphId: UInt,
+    operatorOffset: Int,
+) {
+    if (operands.size != 7) {
+        malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+    }
+    val dx1 = operands[0]
+    val dx2 = operands[1]
+    val dy2 = operands[2]
+    val dx3 = operands[3]
+    val dx4 = operands[4]
+    val dx5 = operands[5]
+    val dx6 = operands[6]
+    state.curveBy(dx1, 0.0, dx2, dy2, dx3, 0.0)
+    state.curveBy(dx4, 0.0, dx5, -dy2, dx6, 0.0)
+}
+
+private fun drawHFlex1(
+    operands: List<Double>,
+    state: CFFType2ExecutionState,
+    glyphId: UInt,
+    operatorOffset: Int,
+) {
+    if (operands.size != 9) {
+        malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+    }
+    val dy6 = -(operands[1] + operands[3] + operands[7])
+    state.curveBy(
+        dx1 = operands[0],
+        dy1 = operands[1],
+        dx2 = operands[2],
+        dy2 = operands[3],
+        dx3 = operands[4],
+        dy3 = 0.0,
+    )
+    state.curveBy(
+        dx1 = operands[5],
+        dy1 = 0.0,
+        dx2 = operands[6],
+        dy2 = operands[7],
+        dx3 = operands[8],
+        dy3 = dy6,
+    )
+}
+
+private fun drawFlex1(
+    operands: List<Double>,
+    state: CFFType2ExecutionState,
+    glyphId: UInt,
+    operatorOffset: Int,
+) {
+    if (operands.size != 11) {
+        malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+    }
+    val sumDx = operands[0] + operands[2] + operands[4] + operands[6] + operands[8]
+    val sumDy = operands[1] + operands[3] + operands[5] + operands[7] + operands[9]
+    val dx6: Double
+    val dy6: Double
+    if (abs(sumDx) > abs(sumDy)) {
+        dx6 = operands[10]
+        dy6 = -sumDy
+    } else {
+        dx6 = -sumDx
+        dy6 = operands[10]
+    }
+    state.curveBy(
+        dx1 = operands[0],
+        dy1 = operands[1],
+        dx2 = operands[2],
+        dy2 = operands[3],
+        dx3 = operands[4],
+        dy3 = operands[5],
+    )
+    state.curveBy(
+        dx1 = operands[6],
+        dy1 = operands[7],
+        dx2 = operands[8],
+        dy2 = operands[9],
+        dx3 = dx6,
+        dy3 = dy6,
+    )
+}
+
+private fun requireAvailable(
+    data: ByteArray,
+    offset: Int,
+    byteCount: Int,
+    glyphId: UInt,
+    section: String,
+    operatorOffset: Int,
+) {
+    if (offset < 0 || byteCount < 0 || offset > data.size || byteCount > data.size - offset) {
+        malformedCFFStack(glyphId, "cff.$section-truncated", operatorOffset)
+    }
+}
+
+private fun unsupportedCFFOperator(
+    glyphId: UInt,
+    detail: String,
+    operatorOffset: Int,
+): Nothing =
+    throw FontScalerRefusalException(
+        diagnostic = FontScalerDiagnostic(
+            code = FontScalerDiagnosticCodes.CFF_OPERATOR_UNSUPPORTED,
+            detail = detail,
+            operation = "charstring",
+            glyphId = glyphId,
+        ),
+        message = "CFF Type 2 operator is unsupported at operator offset $operatorOffset for glyphId $glyphId.",
+    )
+
+private fun malformedCFFStack(
+    glyphId: UInt,
+    detail: String,
+    operatorOffset: Int,
+): Nothing =
+    throw FontScalerRefusalException(
+        diagnostic = FontScalerDiagnostic(
+            code = FontScalerDiagnosticCodes.CFF_STACK_MALFORMED,
+            detail = detail,
+            operation = "charstring",
+            glyphId = glyphId,
+        ),
+        message = "CFF Type 2 stack is malformed at operator offset $operatorOffset for glyphId $glyphId.",
+    )
+
+private fun malformedCFFVariation(
+    glyphId: UInt,
+    detail: String,
+    operatorOffset: Int,
+): Nothing =
+    throw FontScalerRefusalException(
+        diagnostic = FontScalerDiagnostic(
+            code = FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED,
+            detail = detail,
+            operation = "charstring",
+            glyphId = glyphId,
+        ),
+        message = "CFF2 variation data is malformed at operator offset $operatorOffset for glyphId $glyphId.",
+    )
+
+private fun subroutineBias(subroutineCount: Int): Int =
+    when {
+        subroutineCount < 1240 -> 107
+        subroutineCount < 33900 -> 1131
+        else -> 32768
+    }
+
+private const val MAX_CFF_OPERAND_STACK_DEPTH = 48
+private const val MAX_CFF_SUBROUTINE_DEPTH = 16
 
 /**
  * User-space position in a variable font design space.

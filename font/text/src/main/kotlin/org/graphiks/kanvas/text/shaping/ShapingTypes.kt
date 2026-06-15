@@ -1104,6 +1104,12 @@ public class EmojiSequenceShaper {
         while (index < codePoints.size && isVariationSelector(codePoints[index].codePoint)) {
             index += 1
         }
+        if (index < codePoints.size && isEmojiModifier(codePoints[index].codePoint)) {
+            index += 1
+        }
+        while (index < codePoints.size && isVariationSelector(codePoints[index].codePoint)) {
+            index += 1
+        }
         return index
     }
 }
@@ -1373,8 +1379,11 @@ private fun isVariationSelector(codePoint: Int): Boolean =
     codePoint in 0xFE00..0xFE0F ||
         codePoint in 0xE0100..0xE01EF
 
+private fun isEmojiModifier(codePoint: Int): Boolean =
+    codePoint in 0x1F3FB..0x1F3FF
+
 private fun isBaseEmoji(codePoint: Int): Boolean =
-    codePoint in 0x1F000..0x1FAFF ||
+    !isEmojiModifier(codePoint) && codePoint in 0x1F000..0x1FAFF ||
         codePoint in 0x2600..0x27BF
 
 private fun isParagraphSeparator(codePoint: Int): Boolean =

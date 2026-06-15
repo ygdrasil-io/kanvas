@@ -48,6 +48,195 @@ data class SFNTTableRecord(
 )
 
 /**
+ * Stable diagnostic for bounded SFNT table-directory validation.
+ *
+ * @property code Stable diagnostic code from the pure Kotlin text diagnostic taxonomy.
+ * @property tag Table tag associated with the diagnostic, when one is known.
+ * @property offset Advertised table offset, when a record is involved.
+ * @property length Advertised table length, when a record is involved.
+ * @property sourceLength Total bounded byte-source length supplied to validation.
+ * @property message Deterministic human-readable detail.
+ */
+data class SFNTTableDirectoryDiagnostic(
+    val code: String,
+    val tag: SFNTTableTag?,
+    val offset: Long?,
+    val length: Long?,
+    val sourceLength: Long,
+    val message: String,
+) {
+    init {
+        require(code.isStableSFNTDiagnosticToken()) {
+            "SFNT table directory diagnostic code must be a stable one-line diagnostic token."
+        }
+        require(tag == null || tag.value.isStableSFNTTableTag()) {
+            "SFNT table directory diagnostic tag must be a four-character printable ASCII SFNT tag."
+        }
+        require(offset == null || offset >= 0L) { "SFNT table directory diagnostic offset must be non-negative." }
+        require(length == null || length >= 0L) { "SFNT table directory diagnostic length must be non-negative." }
+        require(sourceLength >= 0L) { "SFNT table directory diagnostic sourceLength must be non-negative." }
+    }
+
+    /**
+     * Serializes the diagnostic as one stable line for table-directory evidence.
+     *
+     * @return Dumpable diagnostic evidence without parser exceptions or object identity.
+     */
+    fun dump(): String = buildString {
+        append(code)
+        append(" tag=")
+        append(tag?.value?.sfntEvidenceQuoted() ?: "none")
+        append(" offset=")
+        append(this@SFNTTableDirectoryDiagnostic.offset ?: "none")
+        append(" length=")
+        append(this@SFNTTableDirectoryDiagnostic.length ?: "none")
+        append(" sourceLength=")
+        append(sourceLength)
+        append(" message=")
+        append(message.sfntEvidenceQuoted())
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("code", code, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("tag", tag?.value, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("offset", offset, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("length", this@SFNTTableDirectoryDiagnostic.length, indent = "  ", comma = true)
+        appendSFNTJsonField("sourceLength", sourceLength, indent = "  ", comma = true)
+        appendSFNTJsonField("message", message, indent = "  ", comma = false)
+        append("}")
+    }
+}
+
+/**
+ * Deterministic validator for already-read SFNT table-directory records.
+ *
+ * This validator does not parse table payloads and does not repair malformed
+ * offsets. It produces bounded diagnostics that callers can include in
+ * directory evidence before deciding whether a face is safe to parse.
+ */
+object SFNTTableDirectoryValidator {
+    /**
+     * Validates table directory records against a bounded source length.
+     *
+     * @param directory Directory records to inspect.
+     * @param sourceLength Total byte length of the bounded source.
+     * @param requiredTables Required table tags for the caller's outline contract.
+     * @return Deterministically sorted diagnostics for missing, duplicate,
+     * overlapping, zero-length, and out-of-bounds table records.
+     */
+    fun validate(
+        directory: SFNTTableDirectory,
+        sourceLength: Long,
+        requiredTables: Set<SFNTTableTag>,
+    ): List<SFNTTableDirectoryDiagnostic> {
+        require(sourceLength >= 0L) { "sourceLength must be non-negative." }
+
+        val diagnostics = mutableListOf<SFNTTableDirectoryDiagnostic>()
+        val recordsByTag = directory.tables.groupBy { it.tag }
+
+        for (required in requiredTables.sortedBy { it.value }) {
+            val records = recordsByTag[required].orEmpty()
+            if (records.isEmpty()) {
+                diagnostics += diagnostic(
+                    code = "font.required-table-missing",
+                    tag = required,
+                    sourceLength = sourceLength,
+                    message = "Required table is not present.",
+                )
+            } else if (records.any { it.length == 0u }) {
+                val record = records.first { it.length == 0u }
+                diagnostics += diagnostic(
+                    code = "font.required-table-missing",
+                    record = record,
+                    sourceLength = sourceLength,
+                    message = "Required table is present with zero length.",
+                )
+            }
+        }
+
+        for ((tag, records) in recordsByTag.entries.sortedBy { (tag, _) -> tag.value }) {
+            if (records.size > 1) {
+                for (record in records.drop(1).sortedWith(SFNT_RECORD_ORDER)) {
+                    diagnostics += diagnostic(
+                        code = "font.sfnt.table-duplicate",
+                        record = record,
+                        sourceLength = sourceLength,
+                        message = "Duplicate SFNT table tag.",
+                    )
+                }
+            }
+        }
+
+        for (record in directory.tables.sortedWith(SFNT_RECORD_ORDER)) {
+            val offset = record.offset.toLong()
+            val length = record.length.toLong()
+            val end = offset + length
+            if (offset > sourceLength || end > sourceLength) {
+                diagnostics += diagnostic(
+                    code = "font.sfnt.table-out-of-bounds",
+                    record = record,
+                    sourceLength = sourceLength,
+                    message = "Table range exceeds source length.",
+                )
+            }
+        }
+
+        var previousEnd = 0L
+        var previousRecord: SFNTTableRecord? = null
+        for (record in directory.tables.sortedWith(SFNT_RECORD_ORDER)) {
+            val offset = record.offset.toLong()
+            val end = offset + record.length.toLong()
+            if (previousRecord != null && record.length > 0u && offset < previousEnd) {
+                diagnostics += diagnostic(
+                    code = "font.sfnt.table-overlap",
+                    record = record,
+                    sourceLength = sourceLength,
+                    message = "Table range overlaps previous table range ending at $previousEnd.",
+                )
+            }
+            if (end > previousEnd) {
+                previousEnd = end
+                previousRecord = record
+            }
+        }
+
+        return diagnostics.sortedWith(SFNT_TABLE_DIRECTORY_DIAGNOSTIC_ORDER)
+    }
+
+    private fun diagnostic(
+        code: String,
+        tag: SFNTTableTag? = null,
+        record: SFNTTableRecord? = null,
+        sourceLength: Long,
+        message: String,
+    ): SFNTTableDirectoryDiagnostic =
+        SFNTTableDirectoryDiagnostic(
+            code = code,
+            tag = record?.tag ?: tag,
+            offset = record?.offset?.toLong(),
+            length = record?.length?.toLong(),
+            sourceLength = sourceLength,
+            message = message,
+        )
+
+    private val SFNT_RECORD_ORDER = compareBy<SFNTTableRecord>(
+        { it.offset.toLong() },
+        { it.length.toLong() },
+        { it.tag.value },
+        { it.checksum.toLong() },
+    )
+
+    private val SFNT_TABLE_DIRECTORY_DIAGNOSTIC_ORDER = compareBy<SFNTTableDirectoryDiagnostic>(
+        { it.code },
+        { it.tag?.value.orEmpty() },
+        { it.offset ?: -1L },
+        { it.length ?: -1L },
+        { it.message },
+    )
+}
+
+/**
  * Low-level reader for SFNT table directories and table byte ranges.
  */
 interface SFNTReader {
@@ -1104,6 +1293,7 @@ data class OpenTypeFaceData(
  * @property scalerType Raw SFNT scaler type as lowercase hexadecimal.
  * @property scalerTypeLabel Human-readable raw scaler tag or version label.
  * @property tableRecords Directory table records sorted for deterministic dumps.
+ * @property directoryDiagnostics Bounded table-directory diagnostics for this face.
  * @property preferredCMap Preferred parsed `cmap` facts used by lookup, when present.
  * @property metrics Parsed metric summary.
  * @property diagnostics Non-fatal parse diagnostics.
@@ -1116,6 +1306,7 @@ data class OpenTypeFaceEvidence(
     val scalerType: String,
     val scalerTypeLabel: String,
     val tableRecords: List<SFNTTableEvidence>,
+    val directoryDiagnostics: List<SFNTTableDirectoryDiagnostic> = emptyList(),
     val preferredCMap: OpenTypeCMapEvidence?,
     val metrics: OpenTypeMetricsEvidence,
     val diagnostics: List<OpenTypeParseDiagnosticEvidence>,
@@ -1129,6 +1320,9 @@ data class OpenTypeFaceEvidence(
         }
         require(tableRecords == tableRecords.sortedWith(SFNT_TABLE_EVIDENCE_ORDER)) {
             "OpenType face evidence tableRecords must be sorted by tag, offset, length, and checksum."
+        }
+        require(directoryDiagnostics == directoryDiagnostics.sortedWith(SFNT_TABLE_DIRECTORY_DIAGNOSTIC_EVIDENCE_ORDER)) {
+            "OpenType face evidence directoryDiagnostics must be sorted by code, table, offset, length, and message."
         }
         require(diagnostics == diagnostics.sortedWith(SFNT_DIAGNOSTIC_EVIDENCE_ORDER)) {
             "OpenType face evidence diagnostics must be sorted by table, causeCode, message, and causeMessage."
@@ -1152,6 +1346,13 @@ data class OpenTypeFaceEvidence(
         if (tableRecords.isNotEmpty()) {
             append("\n")
             append(tableRecords.joinToString(",\n") { record -> record.toCanonicalJson().prependIndent("    ") })
+            append("\n  ")
+        }
+        append("],\n")
+        append("  \"directoryDiagnostics\": [")
+        if (directoryDiagnostics.isNotEmpty()) {
+            append("\n")
+            append(directoryDiagnostics.joinToString(",\n") { diagnostic -> diagnostic.toCanonicalJson().prependIndent("    ") })
             append("\n  ")
         }
         append("],\n")
@@ -1339,9 +1540,12 @@ data class OpenTypeParseDiagnosticEvidence(
 /**
  * Builds deterministic evidence for this parsed face.
  *
+ * @param requiredTables Required table tags for bounded table-directory diagnostics.
  * @return selected face, identity, table, preferred `cmap`, metric, and diagnostic facts.
  */
-fun OpenTypeFaceData.faceEvidence(): OpenTypeFaceEvidence =
+fun OpenTypeFaceData.faceEvidence(
+    requiredTables: Set<SFNTTableTag> = emptySet(),
+): OpenTypeFaceEvidence =
     OpenTypeFaceEvidence(
         faceIndex = faceIndex,
         sourceId = source.id,
@@ -1362,6 +1566,11 @@ fun OpenTypeFaceData.faceEvidence(): OpenTypeFaceEvidence =
                 )
             }
             .sortedWith(SFNT_TABLE_EVIDENCE_ORDER),
+        directoryDiagnostics = SFNTTableDirectoryValidator.validate(
+            directory = directory,
+            sourceLength = source.bytes.size.toLong(),
+            requiredTables = requiredTables,
+        ),
         preferredCMap = cmap.preferredSubtable?.toEvidence(cmap),
         metrics = metrics.toEvidence(),
         diagnostics = diagnostics
@@ -2323,6 +2532,18 @@ private fun StringBuilder.appendSFNTJsonNullableField(
     append("\n")
 }
 
+private fun StringBuilder.appendSFNTJsonNullableField(
+    name: String,
+    value: Long?,
+    indent: String,
+    comma: Boolean,
+) {
+    append(indent).append(sfntJsonString(name)).append(": ")
+    append(value?.toString() ?: "null")
+    if (comma) append(",")
+    append("\n")
+}
+
 private fun sfntJsonString(value: String): String = buildString {
     append('"')
     for (ch in value) {
@@ -2344,6 +2565,8 @@ private fun sfntJsonString(value: String): String = buildString {
     }
     append('"')
 }
+
+private fun String.sfntEvidenceQuoted(): String = sfntJsonString(this)
 
 /**
  * Pure Kotlin factory for turning OpenType sources into core typeface metadata.
@@ -2559,6 +2782,13 @@ private val SFNT_TABLE_EVIDENCE_ORDER = compareBy<SFNTTableEvidence>(
     { it.offset },
     { it.length },
     { it.checksum },
+)
+private val SFNT_TABLE_DIRECTORY_DIAGNOSTIC_EVIDENCE_ORDER = compareBy<SFNTTableDirectoryDiagnostic>(
+    { it.code },
+    { it.tag?.value.orEmpty() },
+    { it.offset ?: -1L },
+    { it.length ?: -1L },
+    { it.message },
 )
 private val SFNT_DIAGNOSTIC_EVIDENCE_ORDER = compareBy<OpenTypeParseDiagnosticEvidence>(
     { it.table?.value.orEmpty() },

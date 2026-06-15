@@ -43,6 +43,10 @@ class GlyphSurfaceTest {
             GlyphCacheRecord::class.simpleName,
             GlyphMaskSummary::class.simpleName,
             GlyphRouteDiagnostic::class.simpleName,
+            GlyphArtifactPlanDecision::class.simpleName,
+            GlyphArtifactRouteRejection::class.simpleName,
+            GlyphAtlasPackingResult::class.simpleName,
+            A8GlyphMaskArtifactEvidence::class.simpleName,
         )
 
         assertEquals(
@@ -68,6 +72,10 @@ class GlyphSurfaceTest {
                 "GlyphCacheRecord",
                 "GlyphMaskSummary",
                 "GlyphRouteDiagnostic",
+                "GlyphArtifactPlanDecision",
+                "GlyphArtifactRouteRejection",
+                "GlyphAtlasPackingResult",
+                "A8GlyphMaskArtifactEvidence",
             ),
             names,
         )
@@ -118,6 +126,51 @@ class GlyphSurfaceTest {
         )
 
         assertEquals(A8GlyphMask(glyphId = 51, width = 0, height = 0, pixels = emptyList()), mask)
+    }
+
+    @Test
+    fun a8GlyphMaskArtifactEvidenceRecordsBoundsAndCoverageHash() {
+        val mask = A8GlyphMask(
+            glyphId = 70,
+            width = 2,
+            height = 2,
+            left = -1,
+            top = 3,
+            rowBytes = 3,
+            pixels = listOf(
+                0, 7, 99,
+                255, 0, 99,
+            ),
+        )
+
+        val evidence = A8GlyphMaskArtifactEvidence.from(
+            mask = mask,
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441072"),
+        )
+
+        assertEquals(70, evidence.glyphId)
+        assertEquals(4, evidence.addressablePixelCount)
+        assertEquals(2, evidence.nonZeroPixels)
+        assertEquals("79ef38e8384dc02cd1de6202a09cab298e2bac8148fff30a3c437f87e63956eb", evidence.coverageSha256)
+        assertEquals(64, evidence.strikeKeySha256.length)
+        assertEquals(64, evidence.dumpSha256.length)
+        assertEquals(
+            """
+            {
+              "schema": "org.graphiks.kanvas.glyph.A8GlyphMaskArtifactEvidence.v1",
+              "glyphId": 70,
+              "strikeKeySha256": "${evidence.strikeKeySha256}",
+              "bounds": {"left": -1, "top": 3, "width": 2, "height": 2},
+              "rowBytes": 3,
+              "addressablePixelCount": 4,
+              "nonZeroPixels": 2,
+              "coverageSha256": "79ef38e8384dc02cd1de6202a09cab298e2bac8148fff30a3c437f87e63956eb",
+              "diagnostics": [],
+              "dumpSha256": "${evidence.dumpSha256}"
+            }
+            """.trimIndent() + "\n",
+            evidence.toCanonicalJson(),
+        )
     }
 
     @Test
@@ -186,6 +239,45 @@ class GlyphSurfaceTest {
                 GlyphAtlasPlacement(glyphId = 12, x = 1, y = 6, width = 1, height = 1),
             ),
             placements,
+        )
+    }
+
+    @Test
+    fun rowPackerReportsCapacityDiagnosticWithoutPartialPlacements() {
+        val packer = RowGlyphAtlasPacker(atlasWidth = 4, padding = 1)
+
+        val result = packer.packWithDiagnostics(
+            listOf(
+                a8Mask(glyphId = 60, width = 2, height = 1),
+                a8Mask(glyphId = 61, width = 3, height = 1),
+            ),
+        )
+
+        assertEquals(emptyList(), result.placements)
+        assertEquals(1, result.diagnostics.size)
+        assertEquals(61, result.diagnostics.single().glyphId)
+        assertEquals("text.glyph.atlas-capacity-exceeded", result.diagnostics.single().route)
+        assertTrue(result.diagnostics.single().message.contains("atlas width 4"))
+        assertEquals(64, result.dumpSha256.length)
+        assertEquals(
+            """
+            {
+              "schema": "org.graphiks.kanvas.glyph.GlyphAtlasPackingResult.v1",
+              "placementCount": 0,
+              "diagnosticCount": 1,
+              "placements": [],
+              "diagnostics": [
+                {
+                  "glyphId": 61,
+                  "route": "text.glyph.atlas-capacity-exceeded",
+                  "severity": "warning",
+                  "message": "Glyph 61 width plus padding (5) exceeds atlas width 4; refusing atlas pack without partial placements."
+                }
+              ],
+              "dumpSha256": "${result.dumpSha256}"
+            }
+            """.trimIndent() + "\n",
+            result.toCanonicalGlyphAtlasPackingJson(),
         )
     }
 
@@ -595,6 +687,61 @@ class GlyphSurfaceTest {
     }
 
     @Test
+    fun routeDiagnosticRecordsStaleAtlasGenerationRefusal() {
+        val diagnostic = GlyphRouteDiagnostic.atlasGenerationStale(
+            glyphId = 91,
+            artifactGeneration = 3,
+            currentGeneration = 4,
+            invalidationToken = "font-source-v2",
+        )
+
+        assertEquals(91, diagnostic.glyphId)
+        assertEquals("text.glyph.atlas-generation-stale", diagnostic.route)
+        assertEquals("warning", diagnostic.severity)
+        assertTrue(diagnostic.message.contains("artifactGeneration=3"))
+        assertTrue(diagnostic.message.contains("currentGeneration=4"))
+        assertTrue(diagnostic.message.contains("invalidationToken=font-source-v2"))
+        assertEquals(64, diagnostic.dumpSha256.length)
+        assertEquals(
+            """
+            {
+              "glyphId": 91,
+              "route": "text.glyph.atlas-generation-stale",
+              "severity": "warning",
+              "message": "Glyph atlas generation is stale for glyph 91: artifactGeneration=3, currentGeneration=4, invalidationToken=font-source-v2."
+            }
+            """.trimIndent(),
+            diagnostic.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun routeDiagnosticRecordsSDFTransformUnsupportedRefusal() {
+        val diagnostic = GlyphRouteDiagnostic.sdfTransformUnsupported(
+            glyphId = 92,
+            transformBucket = "perspective",
+            fallbackRoute = "text.glyph.mask.A8",
+        )
+
+        assertEquals(92, diagnostic.glyphId)
+        assertEquals("text.glyph.SDF-transform-unsupported", diagnostic.route)
+        assertEquals("warning", diagnostic.severity)
+        assertTrue(diagnostic.message.contains("transformBucket=perspective"))
+        assertTrue(diagnostic.message.contains("fallbackRoute=text.glyph.mask.A8"))
+        assertEquals(
+            """
+            {
+              "glyphId": 92,
+              "route": "text.glyph.SDF-transform-unsupported",
+              "severity": "warning",
+              "message": "SDF transform is unsupported for glyph 92: transformBucket=perspective, fallbackRoute=text.glyph.mask.A8."
+            }
+            """.trimIndent(),
+            diagnostic.toCanonicalJson(),
+        )
+    }
+
+    @Test
     fun routePlannerSelectsPreferredAvailableRepresentationForEachGlyph() {
         val strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441021")
         val outline = OutlineGlyphRepresentation(glyphId = 10, pathCommands = listOf("M 0 0"))
@@ -671,6 +818,139 @@ class GlyphSurfaceTest {
         assertEquals(listOf("sdf", "sdf"), plan.diagnostics.map { it.route })
         assertTrue(plan.diagnostics.all { diagnostic -> diagnostic.severity == "warning" })
         assertTrue(plan.diagnostics.all { diagnostic -> diagnostic.message.contains("requested") })
+    }
+
+    @Test
+    fun glyphArtifactPlanRecordsDecisionTraceAndCanonicalDump() {
+        val outline = OutlineGlyphRepresentation(glyphId = 30, pathCommands = listOf("M 0 0"))
+        val a8 = A8GlyphMask(glyphId = 31, width = 1, height = 1, pixels = listOf(64))
+        val sdf = SDFGlyphMask(glyphId = 32, width = 1, height = 1, distanceRange = 8f, pixels = listOf(192))
+        val planner = GlyphArtifactRoutePlanner(
+            request = GlyphArtifactRouteRequest(
+                preferredRoutes = listOf(GlyphArtifactRoute.SDF, GlyphArtifactRoute.A8, GlyphArtifactRoute.OUTLINE),
+                availableRepresentations = mapOf(
+                    30 to listOf(outline),
+                    31 to listOf(outline.copy(glyphId = 31), a8),
+                    32 to listOf(a8.copy(glyphId = 32), sdf),
+                ),
+            ),
+        )
+
+        val plan = planner.plan(
+            run = glyphRun(glyphIds = listOf(30, 31, 32, 33)),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441071"),
+        )
+
+        assertEquals(listOf(outline, a8, sdf), plan.representations)
+        assertEquals(listOf(0, 1, 2, 3), plan.decisions.map { decision -> decision.index })
+        assertEquals(listOf(30, 31, 32, 33), plan.decisions.map { decision -> decision.glyphId })
+        assertEquals(
+            listOf(
+                "text.glyph.outline",
+                "text.glyph.mask.A8",
+                "text.glyph.mask.SDF",
+                "text.glyph.unsupported",
+            ),
+            plan.decisions.map { decision -> decision.selectedRoute },
+        )
+        assertEquals(
+            listOf(
+                "fallback-selected-after-rejections",
+                "fallback-selected-after-rejections",
+                "selected-first-requested-route",
+                "refuse-no-requested-representation",
+            ),
+            plan.decisions.map { decision -> decision.fallbackPolicy },
+        )
+        assertEquals(1, plan.diagnostics.size)
+        assertTrue(plan.decisions.all { decision -> decision.keySha256.length == 64 })
+        assertEquals(plan.diagnostics.single(), plan.decisions.last().diagnostic)
+        assertEquals(
+            listOf("text.glyph.mask.SDF", "text.glyph.mask.A8"),
+            plan.decisions.first().rejectedAlternatives.map { rejection -> rejection.route },
+        )
+        assertEquals(64, plan.dumpSha256.length)
+        assertEquals(
+            """
+            {
+              "schema": "org.graphiks.kanvas.glyph.GlyphArtifactPlan.v1",
+              "runId": "550e8400-e29b-41d4-a716-446655441101",
+              "glyphCount": 4,
+              "representationCount": 3,
+              "diagnosticCount": 1,
+              "decisions": [
+                {
+                  "index": 0,
+                  "glyphId": 30,
+                  "selectedRoute": "text.glyph.outline",
+                  "representation": "outline",
+                  "source": "request",
+                  "keySha256": "${plan.decisions[0].keySha256}",
+                  "fallbackPolicy": "fallback-selected-after-rejections",
+                  "rejectedAlternatives": [
+                    {"route": "text.glyph.mask.SDF", "reason": "route-unavailable"},
+                    {"route": "text.glyph.mask.A8", "reason": "route-unavailable"}
+                  ],
+                  "diagnostic": null
+                },
+                {
+                  "index": 1,
+                  "glyphId": 31,
+                  "selectedRoute": "text.glyph.mask.A8",
+                  "representation": "a8",
+                  "source": "request",
+                  "keySha256": "${plan.decisions[1].keySha256}",
+                  "fallbackPolicy": "fallback-selected-after-rejections",
+                  "rejectedAlternatives": [
+                    {"route": "text.glyph.mask.SDF", "reason": "route-unavailable"}
+                  ],
+                  "diagnostic": null
+                },
+                {
+                  "index": 2,
+                  "glyphId": 32,
+                  "selectedRoute": "text.glyph.mask.SDF",
+                  "representation": "sdf",
+                  "source": "request",
+                  "keySha256": "${plan.decisions[2].keySha256}",
+                  "fallbackPolicy": "selected-first-requested-route",
+                  "rejectedAlternatives": [],
+                  "diagnostic": null
+                },
+                {
+                  "index": 3,
+                  "glyphId": 33,
+                  "selectedRoute": "text.glyph.unsupported",
+                  "representation": null,
+                  "source": null,
+                  "keySha256": "${plan.decisions[3].keySha256}",
+                  "fallbackPolicy": "refuse-no-requested-representation",
+                  "rejectedAlternatives": [
+                    {"route": "text.glyph.mask.SDF", "reason": "route-unavailable"},
+                    {"route": "text.glyph.mask.A8", "reason": "route-unavailable"},
+                    {"route": "text.glyph.outline", "reason": "route-unavailable"}
+                  ],
+                  "diagnostic": {
+                    "glyphId": 33,
+                    "route": "sdf|a8|outline",
+                    "severity": "warning",
+                    "message": "No requested glyph representation is available for glyph 33; requested sdf|a8|outline, available none."
+                  }
+                }
+              ],
+              "diagnostics": [
+                {
+                  "glyphId": 33,
+                  "route": "sdf|a8|outline",
+                  "severity": "warning",
+                  "message": "No requested glyph representation is available for glyph 33; requested sdf|a8|outline, available none."
+                }
+              ],
+              "dumpSha256": "${plan.dumpSha256}"
+            }
+            """.trimIndent() + "\n",
+            plan.toCanonicalGlyphArtifactPlanJson(),
+        )
     }
 
     @Test

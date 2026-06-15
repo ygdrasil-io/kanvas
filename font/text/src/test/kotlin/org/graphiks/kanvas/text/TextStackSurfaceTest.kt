@@ -1312,6 +1312,28 @@ class TextStackSurfaceTest {
         )
     }
 
+    @Test
+    fun emojiSequenceShaperDumpsVS15SkinToneAndZwjFamilyFixtures() {
+        val text = "a\u2603\uFE0E b\uD83D\uDC4B\uD83C\uDFFD c\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67d"
+
+        val clusters = EmojiSequenceShaper().shapeEmoji(
+            ShapingRequest(
+                text = text,
+                textRange = 1..18,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                GlyphCluster(textRange = 1..2, glyphRange = 0..0, advanceX = 20f),
+                GlyphCluster(textRange = 5..8, glyphRange = 1..1, advanceX = 20f),
+                GlyphCluster(textRange = 11..18, glyphRange = 2..2, advanceX = 20f),
+            ),
+            clusters,
+        )
+    }
+
     private fun mapGlyphs(vararg mappings: Pair<Int, Int>): GlyphMapper {
         val glyphsByCodePoint = mappings.toMap()
         return object : GlyphMapper {

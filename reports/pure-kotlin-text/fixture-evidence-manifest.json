@@ -29,25 +29,21 @@
     {
       "familyId": "a8-sdf-artifacts",
       "familyName": "A8/SDF artifacts",
-      "classification": "tracked-gap",
+      "classification": "current-supported",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
         "section": "Glyph artifact tests"
       },
       "currentEvidencePaths": [
+        "reports/pure-kotlin-text/font-fixture-inventory.json",
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
         "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
         "reports/font/fixtures/expected/glyph/a8-sdf-atlas-lifecycle.json"
       ],
-      "requiredEvidenceGates": [
-        "Add A8 atlas pack fixture evidence.",
-        "Add SDF normalization fixture evidence.",
-        "Add SDF transform refusal evidence.",
-        "Add atlas capacity refusal evidence.",
-        "Add stale generation refusal evidence."
-      ],
+      "requiredEvidenceGates": [],
       "validationCommands": [
+        "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
         "rtk ./gradlew --no-daemon :font:glyph:test"
       ],
       "fixtureCommands": [
@@ -63,56 +59,58 @@
     {
       "familyId": "cff-cff2-scaler",
       "familyName": "CFF/CFF2 scaler",
-      "classification": "fixture-gated",
+      "classification": "tracked-gap",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
         "section": "CFF and CFF2 scaler coverage"
       },
       "currentEvidencePaths": [
-        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
         "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+        "reports/pure-kotlin-text/font-fixture-inventory.json",
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "reports/font/fixtures/expected/scaler/cff-cff2-readiness.json"
       ],
       "requiredEvidenceGates": [
-        "Add CFF Type 2 line, curve, and flex glyph fixtures.",
-        "Add local and global subroutine fixtures.",
-        "Add malformed stack and unsupported operator refusal fixtures.",
-        "Add CFF2 blend and vsindex fixtures."
+        "Add broader real-font corpus evidence before claiming complete CFF/CFF2 target support."
       ],
       "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScalerUsesVariationStoreRegionScalarsForBlendAndMetricsBounds",
+        "rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffScalersExposeDeterministicTableEvidenceDumps --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffTableEvidenceRefusesMalformedIndexAndDictDeterministically",
+        "rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterCoversRemainingCurveAndFlexOperators --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterRecordsWidthAndHintMaskMetadata",
+        "rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffScalerUsesGeneratedCffTableCharstringsSubrsAndMetrics --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScalerUsesGeneratedCff2TableAndVariationBlend",
+        "rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterBuildsLineCurveAndFlexEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterTracesLocalAndGlobalSubroutines --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2FixtureInterpreterAppliesVsindexBlendEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterReportsStackAndOperatorRefusals",
+        "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
       ],
       "fixtureCommands": [
-        "Generate or bundle deterministic CFF/CFF2 fixtures with provenance before any support claim."
+        "CFF/CFF2 fixture bytes are generated in font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",
-        "no-cff-rendering-support-claim",
-        "no-cff2-variation-support-claim",
+        "no-complete-cff-rendering-support-claim",
+        "no-complete-cff2-variation-support-claim",
         "no-native-scaler-oracle-claim"
       ]
     },
     {
       "familyId": "color-glyphs",
       "familyName": "Color glyphs",
-      "classification": "tracked-gap",
+      "classification": "current-supported",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
         "section": "Color glyph tests"
       },
       "currentEvidencePaths": [
+        "reports/pure-kotlin-text/font-fixture-inventory.json",
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
         "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
         "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
       ],
-      "requiredEvidenceGates": [
-        "Add COLRv0 layer fixture evidence.",
-        "Add COLRv1 solid, gradient, transform, composite, and clip fixture evidence.",
-        "Add cycle refusal evidence.",
-        "Add color glyph budget refusal evidence."
-      ],
+      "requiredEvidenceGates": [],
       "validationCommands": [
+        "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
         "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest",
         "rtk ./gradlew --no-daemon :font:glyph:test"
       ],
@@ -164,25 +162,21 @@
     {
       "familyId": "emoji",
       "familyName": "Emoji",
-      "classification": "fixture-gated",
+      "classification": "current-supported",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
         "section": "Emoji dispatch"
       },
       "currentEvidencePaths": [
+        "reports/pure-kotlin-text/font-fixture-inventory.json",
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
         "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
         "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
       ],
-      "requiredEvidenceGates": [
-        "Add VS15 and VS16 emoji fixture evidence.",
-        "Add skin tone fixture evidence.",
-        "Add ZWJ family sequence fixture evidence.",
-        "Add emoji fallback unavailable refusal evidence.",
-        "Add color glyph unavailable refusal evidence."
-      ],
+      "requiredEvidenceGates": [],
       "validationCommands": [
+        "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
         "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest"
       ],
       "fixtureCommands": [
@@ -204,6 +198,7 @@
         "section": "Font sources, SFNT/OpenType parsing, and collections"
       },
       "currentEvidencePaths": [
+        "reports/pure-kotlin-text/font-fixture-inventory.json",
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
         "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt",
@@ -212,14 +207,9 @@
         "reports/font/fixtures/expected/font-source/liberation-scan-root.json",
         "reports/font/fixtures/expected/sfnt/sfnt-cmap-format14-readiness.json"
       ],
-      "requiredEvidenceGates": [
-        "Add single TTF fixture provenance.",
-        "Add TTC face-index fixture provenance.",
-        "Add malformed required table diagnostics.",
-        "Add malformed optional table diagnostics.",
-        "Add system-scan skipped file diagnostic evidence."
-      ],
+      "requiredEvidenceGates": [],
       "validationCommands": [
+        "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
         "rtk ./gradlew --no-daemon :font:core:test :font:sfnt:test"
       ],
       "fixtureCommands": [
@@ -412,25 +402,21 @@
     {
       "familyId": "png-bitmap-glyphs",
       "familyName": "PNG bitmap glyphs",
-      "classification": "fixture-gated",
+      "classification": "current-supported",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
         "section": "PNG bitmap glyphs"
       },
       "currentEvidencePaths": [
+        "reports/pure-kotlin-text/font-fixture-inventory.json",
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
         "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
         "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
       ],
-      "requiredEvidenceGates": [
-        "Add CBDT/CBLC PNG fixture evidence.",
-        "Add sbix PNG fixture evidence.",
-        "Add unavailable strike refusal evidence.",
-        "Add malformed PNG refusal evidence.",
-        "Add non-PNG payload refusal evidence."
-      ],
+      "requiredEvidenceGates": [],
       "validationCommands": [
+        "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
         "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest"
       ],
       "fixtureCommands": [
@@ -513,25 +499,21 @@
     {
       "familyId": "svg-glyphs",
       "familyName": "SVG glyphs",
-      "classification": "fixture-gated",
+      "classification": "current-supported",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
         "section": "SVG glyphs"
       },
       "currentEvidencePaths": [
+        "reports/pure-kotlin-text/font-fixture-inventory.json",
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
         "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
         "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
       ],
-      "requiredEvidenceGates": [
-        "Add static path SVG glyph fixture evidence.",
-        "Add gradient, transform, and clip fixture evidence.",
-        "Add use recursion refusal evidence.",
-        "Add external resource refusal evidence.",
-        "Add unsupported feature refusal evidence."
-      ],
+      "requiredEvidenceGates": [],
       "validationCommands": [
+        "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
         "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest"
       ],
       "fixtureCommands": [
@@ -553,19 +535,15 @@
         "section": "TrueType glyf and variations"
       },
       "currentEvidencePaths": [
+        "reports/pure-kotlin-text/font-fixture-inventory.json",
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
         "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
         "reports/font/fixtures/expected/scaler/truetype-variation-readiness.json"
       ],
-      "requiredEvidenceGates": [
-        "Add simple glyph fixture evidence.",
-        "Add composite glyph and component transform fixture evidence.",
-        "Add gvar simple and composite delta fixture evidence.",
-        "Add avar coordinate mapping fixture evidence.",
-        "Retain diagnostics for current variation gaps until implementation evidence lands."
-      ],
+      "requiredEvidenceGates": [],
       "validationCommands": [
+        "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
         "rtk ./gradlew --no-daemon :font:scaler:test"
       ],
       "fixtureCommands": [

@@ -80,6 +80,37 @@ class SFNTSurfaceTest {
     }
 
     @Test
+    fun tableDirectoryValidatorReportsBoundedDiagnosticsDeterministically() {
+        val directory = SFNTTableDirectory(
+            scalerType = 0x00010000u,
+            tables = listOf(
+                SFNTTableRecord(tag = SFNTTableTag("name"), checksum = 0u, offset = 24u, length = 16u),
+                SFNTTableRecord(tag = SFNTTableTag("name"), checksum = 1u, offset = 40u, length = 8u),
+                SFNTTableRecord(tag = SFNTTableTag("cmap"), checksum = 2u, offset = 44u, length = 12u),
+                SFNTTableRecord(tag = SFNTTableTag("glyf"), checksum = 3u, offset = 80u, length = 0u),
+                SFNTTableRecord(tag = SFNTTableTag("post"), checksum = 4u, offset = 120u, length = 16u),
+            ),
+        )
+
+        val diagnostics = SFNTTableDirectoryValidator.validate(
+            directory = directory,
+            sourceLength = 128,
+            requiredTables = setOf(SFNTTableTag("cmap"), SFNTTableTag("glyf"), SFNTTableTag("head")),
+        )
+
+        assertEquals(
+            listOf(
+                "font.required-table-missing tag=\"glyf\" offset=80 length=0 sourceLength=128 message=\"Required table is present with zero length.\"",
+                "font.required-table-missing tag=\"head\" offset=none length=none sourceLength=128 message=\"Required table is not present.\"",
+                "font.sfnt.table-duplicate tag=\"name\" offset=40 length=8 sourceLength=128 message=\"Duplicate SFNT table tag.\"",
+                "font.sfnt.table-out-of-bounds tag=\"post\" offset=120 length=16 sourceLength=128 message=\"Table range exceeds source length.\"",
+                "font.sfnt.table-overlap tag=\"cmap\" offset=44 length=12 sourceLength=128 message=\"Table range overlaps previous table range ending at 48.\"",
+            ),
+            diagnostics.map { it.dump() },
+        )
+    }
+
+    @Test
     fun exposesSfntDirectoryAndParsedTableContainers() {
         val tag = SFNTTableTag("name")
         val record = SFNTTableRecord(
@@ -860,6 +891,7 @@ class SFNTSurfaceTest {
                   "rawSha256": "${malformedName.sha256Hex()}"
                 }
               ],
+              "directoryDiagnostics": [],
               "preferredCMap": {
                 "platformId": 3,
                 "encodingId": 10,
@@ -919,6 +951,39 @@ class SFNTSurfaceTest {
         assertEquals(cmap, data.cmap)
         assertEquals(names, data.names)
         assertEquals(0, data.faceIndex)
+    }
+
+    @Test
+    fun openTypeFaceEvidenceIncludesBoundedDirectoryDiagnostics() {
+        val source = memoryFontSource(ByteArray(96))
+        val data = OpenTypeFaceData(
+            id = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440193")),
+            source = source,
+            directory = SFNTTableDirectory(
+                scalerType = 0x00010000u,
+                tables = listOf(
+                    SFNTTableRecord(tag = SFNTTableTag("name"), checksum = 0u, offset = 32u, length = 16u),
+                    SFNTTableRecord(tag = SFNTTableTag("name"), checksum = 1u, offset = 48u, length = 8u),
+                    SFNTTableRecord(tag = SFNTTableTag("glyf"), checksum = 2u, offset = 64u, length = 0u),
+                    SFNTTableRecord(tag = SFNTTableTag("post"), checksum = 3u, offset = 88u, length = 16u),
+                ),
+            ),
+        )
+
+        val evidence = data.faceEvidence(
+            requiredTables = setOf(SFNTTableTag("cmap"), SFNTTableTag("glyf")),
+        )
+
+        assertEquals(
+            listOf(
+                "font.required-table-missing tag=\"cmap\" offset=none length=none sourceLength=96 message=\"Required table is not present.\"",
+                "font.required-table-missing tag=\"glyf\" offset=64 length=0 sourceLength=96 message=\"Required table is present with zero length.\"",
+                "font.sfnt.table-duplicate tag=\"name\" offset=48 length=8 sourceLength=96 message=\"Duplicate SFNT table tag.\"",
+                "font.sfnt.table-out-of-bounds tag=\"post\" offset=88 length=16 sourceLength=96 message=\"Table range exceeds source length.\"",
+            ),
+            evidence.directoryDiagnostics.map { it.dump() },
+        )
+        assertTrue(evidence.toCanonicalJson().contains("\"directoryDiagnostics\""))
     }
 
     @Test
