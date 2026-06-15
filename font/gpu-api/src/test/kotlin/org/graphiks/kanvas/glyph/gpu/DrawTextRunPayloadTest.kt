@@ -22,6 +22,10 @@ class DrawTextRunPayloadTest {
         assertContains(json, """"glyphRunID":"550e8400-e29b-41d4-a716-446655441101"""")
         assertContains(json, """"glyphIDs":[42,43]""")
         assertContains(json, """"artifactName":"GlyphAtlasArtifact"""")
+        assertContains(json, """"artifactType":"GlyphAtlasArtifact"""")
+        assertContains(json, """"artifactKeyHash":"sha256:a8-atlas"""")
+        assertContains(json, """"invalidationFacts":["generation","contentFingerprint","atlasCapacity"]""")
+        assertContains(json, """"diagnostics":["text.gpu.upload-plan-ready"]""")
         assertContains(json, """"artifactKeyHashes":["sha256:a8-atlas"]""")
         assertContains(json, """"atlasGenerations":[3]""")
         assertContains(json, """"uploadDependencyIds":["upload-a8-page-0"]""")
@@ -32,6 +36,10 @@ class DrawTextRunPayloadTest {
         assertEquals("pass", leakReport.status)
         assertContains(leakReport.toCanonicalJson(), """"payloadKind":"DrawTextRunPayload"""")
         assertContains(leakReport.toCanonicalJson(), """"fieldPath":"artifacts[0].sourceLabel"""")
+        assertContains(leakReport.toCanonicalJson(), """"fieldPath":"artifacts[0].artifactType","typeName":"String","value":"GlyphAtlasArtifact"""")
+        assertContains(leakReport.toCanonicalJson(), """"fieldPath":"artifacts[0].artifactKeyHash","typeName":"String","value":"sha256:a8-atlas"""")
+        assertContains(leakReport.toCanonicalJson(), """"fieldPath":"artifacts[0].invalidationFacts[2]","typeName":"String","value":"atlasCapacity"""")
+        assertContains(leakReport.toCanonicalJson(), """"fieldPath":"artifacts[0].diagnostics[0]","typeName":"String","value":"text.gpu.upload-plan-ready"""")
         assertContains(leakReport.toCanonicalJson(), """"fieldPath":"uploadDependencyIds","typeName":"List<GPUTextUploadDependencyID>"""")
         assertContains(leakReport.toCanonicalJson(), """"fieldPath":"uploadDependencyIds[0]","typeName":"GPUTextUploadDependencyID","value":"upload-a8-page-0"""")
         assertContains(leakReport.toCanonicalJson(), """"fieldPath":"diagnostics","typeName":"List<GPUTextRouteDiagnosticID>"""")
@@ -120,6 +128,7 @@ class DrawTextRunPayloadTest {
                     generation = GPUTextArtifactGeneration(3),
                     contentFingerprint = "sha256:a8-atlas",
                     sourceLabel = "CPURenderedTextTexture(full-text-fallback)",
+                    diagnostics = listOf("text.gpu.CPU-rendered-texture-forbidden"),
                 ),
             ),
         )
@@ -179,6 +188,7 @@ class DrawTextRunPayloadTest {
                 generation = GPUTextArtifactGeneration(3),
                 contentFingerprint = "sha256:a8-atlas",
                 sourceLabel = "fixture.atlas",
+                diagnostics = listOf("text.gpu.upload-plan-ready"),
             ),
         )
         val artifactKeyHashes = mutableListOf("sha256:a8-atlas")
@@ -255,6 +265,7 @@ class DrawTextRunPayloadTest {
                 generation = GPUTextArtifactGeneration(3),
                 contentFingerprint = "sha256:a8-atlas",
                 sourceLabel = "fixture.atlas",
+                diagnostics = listOf("text.gpu.upload-plan-ready"),
             ),
         ),
         artifactKeyHashes: List<String> = listOf("sha256:a8-atlas"),
@@ -307,9 +318,13 @@ class DrawTextRunPayloadTest {
             "\"artifacts\":[" +
             "{" +
             "\"artifactName\":\"GlyphAtlasArtifact\"," +
+            "\"artifactType\":\"GlyphAtlasArtifact\"," +
             "\"artifactID\":\"550e8400-e29b-41d4-a716-446655441102\"," +
             "\"generation\":3," +
             "\"contentFingerprint\":\"sha256:a8-atlas\"," +
+            "\"artifactKeyHash\":\"sha256:a8-atlas\"," +
+            "\"invalidationFacts\":[\"generation\",\"contentFingerprint\",\"atlasCapacity\"]," +
+            "\"diagnostics\":[\"text.gpu.upload-plan-ready\"]," +
             "\"sourceLabel\":\"fixture.atlas\"" +
             "}" +
             "]," +

@@ -68,7 +68,7 @@ class DrawTextRunPayload(
     val productActivation: Boolean = false,
 ) {
     val glyphRuns: List<GPUGlyphRunDescriptor> = glyphRuns.map { glyphRun -> glyphRun.snapshotForDrawPayload() }
-    val artifacts: List<GPUTextArtifactReference> = artifacts.toList()
+    val artifacts: List<GPUTextArtifactReference> = artifacts.map { artifact -> artifact.snapshotForDrawPayload() }
     val artifactKeyHashes: List<String> = artifactKeyHashes.toList()
     val atlasGenerations: List<GPUTextArtifactGeneration> = atlasGenerations.toList()
     val uploadDependencyIds: List<GPUTextUploadDependencyID> = uploadDependencyIds.toList()
@@ -122,6 +122,7 @@ class DrawTextRunPayload(
         fields += TextPayloadField("artifacts", "List<GPUTextArtifactReference>")
         artifacts.forEachIndexed { index, artifact ->
             fields += TextPayloadField("artifacts[$index].artifactName", "String", artifact.artifactName)
+            fields += TextPayloadField("artifacts[$index].artifactType", "String", artifact.artifactType)
             fields += TextPayloadField("artifacts[$index].artifactID", "GPUTextArtifactID", artifact.artifactID.value.toString())
             fields += TextPayloadField(
                 "artifacts[$index].generation",
@@ -129,6 +130,15 @@ class DrawTextRunPayload(
                 artifact.generation.value.toString(),
             )
             fields += TextPayloadField("artifacts[$index].contentFingerprint", "String", artifact.contentFingerprint)
+            fields += TextPayloadField("artifacts[$index].artifactKeyHash", "String", artifact.artifactKeyHash)
+            fields += TextPayloadField("artifacts[$index].invalidationFacts", "List<String>")
+            artifact.invalidationFacts.forEachIndexed { factIndex, fact ->
+                fields += TextPayloadField("artifacts[$index].invalidationFacts[$factIndex]", "String", fact)
+            }
+            fields += TextPayloadField("artifacts[$index].diagnostics", "List<String>")
+            artifact.diagnostics.forEachIndexed { diagnosticIndex, diagnostic ->
+                fields += TextPayloadField("artifacts[$index].diagnostics[$diagnosticIndex]", "String", diagnostic)
+            }
             fields += TextPayloadField("artifacts[$index].sourceLabel", "String", artifact.sourceLabel)
         }
         fields += TextPayloadField("transform", "TextTransformFacts")
@@ -227,6 +237,11 @@ private fun GPUGlyphRunDescriptor.snapshotForDrawPayload(): GPUGlyphRunDescripto
     offsets = offsets.toList(),
 )
 
+private fun GPUTextArtifactReference.snapshotForDrawPayload(): GPUTextArtifactReference = copy(
+    invalidationFacts = invalidationFacts.toList(),
+    diagnostics = diagnostics.toList(),
+)
+
 private fun GPUGlyphRunDescriptor.requireFiniteCoordinates() {
     require(advances.all { advance -> !advance.isNaN() && !advance.isInfinite() }) {
         "glyph run advances must be finite."
@@ -254,9 +269,13 @@ private fun GPUGlyphRunDescriptor.toDrawTextRunCanonicalJson(): String = buildSt
 private fun GPUTextArtifactReference.toDrawTextRunCanonicalJson(): String = buildString {
     append("{")
     appendDrawTextRunJsonField("artifactName", artifactName, comma = true)
+    appendDrawTextRunJsonField("artifactType", artifactType, comma = true)
     appendDrawTextRunJsonField("artifactID", artifactID.value.toString(), comma = true)
     appendDrawTextRunJsonField("generation", generation.value, comma = true)
     appendDrawTextRunJsonField("contentFingerprint", contentFingerprint, comma = true)
+    appendDrawTextRunJsonField("artifactKeyHash", artifactKeyHash, comma = true)
+    appendDrawTextRunStringListJsonField("invalidationFacts", invalidationFacts, comma = true)
+    appendDrawTextRunStringListJsonField("diagnostics", diagnostics, comma = true)
     appendDrawTextRunJsonField("sourceLabel", sourceLabel, comma = false)
     append("}")
 }

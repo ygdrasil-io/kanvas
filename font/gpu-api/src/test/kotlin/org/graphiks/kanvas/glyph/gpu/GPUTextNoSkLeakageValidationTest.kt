@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.uuid.Uuid
 
 class GPUTextNoSkLeakageValidationTest {
     @Test
@@ -304,4 +305,206 @@ class GPUTextNoSkLeakageValidationTest {
         assertEquals("pass", report.status)
         assertTrue(report.findings.isEmpty())
     }
+
+    @Test
+    fun `real text gpu artifact bundle passes no Sk leakage validation`() {
+        val report = fixtureTextGPUArtifactBundle().noSkLeakageReport()
+        val json = report.toCanonicalJson()
+
+        assertEquals("pass", report.status)
+        assertTrue(report.findings.isEmpty())
+        assertContains(json, """"payloadKind":"TextGPUArtifactBundle"""")
+        assertContains(json, """"fieldPath":"artifactKey.artifactID","typeName":"GPUTextArtifactID","value":"550e8400-e29b-41d4-a716-446655444000"""")
+        assertContains(json, """"fieldPath":"uploadPlans[0].ranges[0].label","typeName":"String","value":"glyph-page-0"""")
+        assertContains(json, """"fieldPath":"artifactReferences[0].artifactType","typeName":"String","value":"GlyphAtlasArtifact"""")
+        assertContains(json, """"fieldPath":"artifactReferences[0].artifactKeyHash","typeName":"String","value":"bundle-atlas-a8"""")
+        assertContains(json, """"fieldPath":"artifactReferences[0].invalidationFacts[2]","typeName":"String","value":"atlasCapacity"""")
+        assertContains(json, """"fieldPath":"diagnostics.diagnostics[0].message","typeName":"String","value":"Glyph route is fixture-clean."""")
+    }
+
+    @Test
+    fun `real text gpu artifact bundle rejects forbidden diagnostic and reference values`() {
+        val atlasKey = fixtureArtifactKey(
+            uuid = "550e8400-e29b-41d4-a716-446655444100",
+            generation = 1,
+            contentFingerprint = "bundle-atlas-a8",
+        )
+        val bundle = fixtureTextGPUArtifactBundle(
+            artifactKey = atlasKey,
+            atlases = listOf(
+                GlyphAtlasArtifact(
+                    artifactKey = atlasKey,
+                    width = 64,
+                    height = 64,
+                    format = "r8",
+                ),
+            ),
+            diagnostics = GPUTextRouteDiagnostics(
+                diagnostics = listOf(
+                    GPUTextArtifactDiagnostic(
+                        code = GPUTextArtifactDiagnosticCode.MISSING_GLYPH,
+                        message = "SkFont leaked through a diagnostic wrapper.",
+                        artifactKey = atlasKey,
+                    ),
+                ),
+                refusalRequired = true,
+            ),
+        )
+
+        val report = bundle.noSkLeakageReport()
+
+        assertEquals("fail", report.status)
+        assertEquals(
+            listOf(
+                "diagnostics.diagnostics[0].message",
+                "artifactReferences[0].diagnostics[0]",
+            ),
+            report.findings.map { finding -> finding.fieldPath },
+        )
+        assertEquals(
+            listOf("unsupported.text.sk_type_leaked", "unsupported.text.sk_type_leaked"),
+            report.findings.map { finding -> finding.rendererDiagnostic },
+        )
+    }
+
+    @Test
+    fun `future GPUTextSubRunPlan fixture scans generic field list without production type`() {
+        val passReport = validateGPUTextNoSkLeakage(
+            payloadKind = "FutureGPUTextSubRunPlanFixture",
+            fields = futureSubRunPlanFixtureFields(
+                artifactType = "GlyphAtlasArtifact",
+                artifactKeyHash = "sha256:a8-atlas",
+                diagnostic = "text.gpu.upload-plan-ready",
+            ),
+        )
+        val failReport = validateGPUTextNoSkLeakage(
+            payloadKind = "FutureGPUTextSubRunPlanFixture",
+            fields = futureSubRunPlanFixtureFields(
+                artifactType = "SkTextBlobArtifact",
+                artifactKeyHash = "GPUTexture:raw",
+                diagnostic = "BindGroup leaked",
+            ),
+        )
+
+        assertEquals("pass", passReport.status)
+        assertTrue(passReport.findings.isEmpty())
+        assertEquals("fail", failReport.status)
+        assertEquals(
+            listOf(
+                "futureSubRunPlan.artifactReferences[0].artifactType",
+                "futureSubRunPlan.artifactReferences[0].artifactKeyHash",
+                "futureSubRunPlan.diagnostics[0]",
+            ),
+            failReport.findings.map { finding -> finding.fieldPath },
+        )
+    }
+
+    private fun futureSubRunPlanFixtureFields(
+        artifactType: String,
+        artifactKeyHash: String,
+        diagnostic: String,
+    ): List<TextPayloadField> = listOf(
+        TextPayloadField("futureSubRunPlan.subRunID", "String", "subrun-0"),
+        TextPayloadField("futureSubRunPlan.glyphRange", "String", "0..2"),
+        TextPayloadField("futureSubRunPlan.artifactReferences", "List<GPUTextArtifactReference>"),
+        TextPayloadField(
+            "futureSubRunPlan.artifactReferences[0].artifactName",
+            "String",
+            "GlyphAtlasArtifact",
+        ),
+        TextPayloadField(
+            "futureSubRunPlan.artifactReferences[0].artifactType",
+            "String",
+            artifactType,
+        ),
+        TextPayloadField(
+            "futureSubRunPlan.artifactReferences[0].artifactKeyHash",
+            "String",
+            artifactKeyHash,
+        ),
+        TextPayloadField(
+            "futureSubRunPlan.artifactReferences[0].invalidationFacts[0]",
+            "String",
+            "generation",
+        ),
+        TextPayloadField("futureSubRunPlan.diagnostics[0]", "String", diagnostic),
+    )
+
+    private fun fixtureTextGPUArtifactBundle(
+        artifactKey: GPUTextArtifactKey = fixtureArtifactKey(
+            uuid = "550e8400-e29b-41d4-a716-446655444000",
+            generation = 0,
+            contentFingerprint = "bundle-root",
+        ),
+        atlases: List<GlyphAtlasArtifact> = listOf(
+            GlyphAtlasArtifact(
+                artifactKey = fixtureArtifactKey(
+                    uuid = "550e8400-e29b-41d4-a716-446655444001",
+                    generation = 1,
+                    contentFingerprint = "bundle-atlas-a8",
+                ),
+                width = 64,
+                height = 64,
+                format = "r8",
+            ),
+        ),
+        diagnostics: GPUTextRouteDiagnostics = GPUTextRouteDiagnostics(
+            diagnostics = listOf(
+                GPUTextArtifactDiagnostic(
+                    code = GPUTextArtifactDiagnosticCode.MISSING_GLYPH,
+                    message = "Glyph route is fixture-clean.",
+                ),
+            ),
+            refusalRequired = false,
+        ),
+    ): TextGPUArtifactBundle {
+        val uploadKey = fixtureArtifactKey(
+            uuid = "550e8400-e29b-41d4-a716-446655444002",
+            generation = 2,
+            contentFingerprint = "bundle-upload",
+        )
+        val uploadPlan = GPUTextUploadPlan(
+            artifactKey = uploadKey,
+            ranges = listOf(GPUTextUploadRange(offset = 0, size = 16, label = "glyph-page-0")),
+            byteSize = 16,
+        )
+        return TextGPUArtifactBundle(
+            artifactKey = artifactKey,
+            uploadPlans = listOf(uploadPlan),
+            glyphUploadPlans = listOf(
+                GlyphUploadPlan(
+                    artifactKey = uploadKey,
+                    uploadPlan = uploadPlan,
+                    glyphIDs = listOf(7U, 8U),
+                ),
+            ),
+            outlineGlyphPlans = listOf(
+                OutlineGlyphPlan(
+                    artifactKey = fixtureArtifactKey(
+                        uuid = "550e8400-e29b-41d4-a716-446655444003",
+                        generation = 3,
+                        contentFingerprint = "bundle-outline",
+                    ),
+                    glyphIDs = listOf(7U),
+                    windingRule = "non-zero",
+                ),
+            ),
+            colorGlyphPlans = emptyList(),
+            bitmapGlyphPlans = emptyList(),
+            svgGlyphPlans = emptyList(),
+            atlases = atlases,
+            sdfAtlases = emptyList(),
+            diagnostics = diagnostics,
+        )
+    }
+
+    private fun fixtureArtifactKey(
+        uuid: String,
+        generation: Int,
+        contentFingerprint: String,
+    ): GPUTextArtifactKey = GPUTextArtifactKey(
+        artifactID = GPUTextArtifactID(Uuid.parse(uuid)),
+        generation = GPUTextArtifactGeneration(generation),
+        contentFingerprint = contentFingerprint,
+    )
 }

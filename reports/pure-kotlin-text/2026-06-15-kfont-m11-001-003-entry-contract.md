@@ -7,18 +7,20 @@ Date: 2026-06-15
 | Ticket | Status | Evidence |
 |---|---|---|
 | `KFONT-M11-001` | `review` | `TextGPUArtifactRegistry`, deterministic registry dump, default descriptor order, descriptor compact hashes, unregistered artifact refusal, and defensive descriptor snapshots. |
-| `KFONT-M11-002` | `review` | `TextPayloadLeakReport`, positive no-`Sk*` fixture, registry descriptor scans, forbidden-field fixtures, stable diagnostics, scan-order JSON, and mutation-proof report snapshots. |
-| `KFONT-M11-003` | `review` | `DrawTextRunPayload`, deterministic payload dump, no-leakage report integration, non-claim guards, nested glyph-run snapshots, and `*DrawTextRun*` validation coverage. |
+| `KFONT-M11-002` | `review` | `TextPayloadLeakReport`, positive no-`Sk*` fixture, concrete `TextGPUArtifactBundle.noSkLeakageReport()` field scans, registry descriptor scans, forbidden-field fixtures, stable diagnostics, scan-order JSON, and mutation-proof report snapshots. |
+| `KFONT-M11-003` | `review` | `DrawTextRunPayload`, deterministic payload dump with enriched artifact refs, no-leakage report integration, non-claim guards, nested glyph-run snapshots, and `*DrawTextRun*` validation coverage. |
 
 ## Implemented Contracts
 
 - `font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifactRegistry.kt`
+- `font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifacts.kt`
 - `font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextLeakValidation.kt`
 - `font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextDrawPayload.kt`
 
 ## Test Evidence
 
 - `font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifactRegistryTest.kt`
+- `font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifactsSurfaceTest.kt`
 - `font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextNoSkLeakageValidationTest.kt`
 - `font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/DrawTextRunPayloadTest.kt`
 
@@ -31,6 +33,8 @@ promote those inline fixtures into checked-in generated artifacts.
 The tests cover:
 
 - deterministic artifact registry order and descriptor compact hashes;
+- artifact references carrying artifact type, artifact key hash, registry
+  invalidation facts, and scoped diagnostic facts;
 - target route family metadata for all seven descriptors:
   `AtlasMaskSample`, `AtlasSDFSample`, `DependencyGated`,
   `OutlinePathRoute`, `ColorGlyphCompositeRoute`,
@@ -42,6 +46,9 @@ The tests cover:
 - unregistered artifact diagnostics;
 - registry descriptor no-`Sk*` leakage reports, including a negative descriptor
   fixture for `SkFont`, `fontBytes`, and raw GPU handle fields;
+- concrete `TextGPUArtifactBundle.noSkLeakageReport()` scans over real bundle
+  fields, generated artifact references, diagnostics, upload ranges, glyph
+  plans, and atlas facts;
 - no-`Sk*` positive and negative fixtures;
 - value-level payload scans for stringified or opaque `Sk*`, `fontBytes`,
   `NativeFontHandle`, `GPUHandle`, `GPUTexture`, `GPUBuffer`, `GPUDevice`,
@@ -54,6 +61,9 @@ The tests cover:
 - report and payload mutation snapshots;
 - exact canonical JSON escaping/order fixtures;
 - `DrawTextRunPayload` non-claim guards.
+- a generic future `GPUTextSubRunPlan` field-list fixture that validates the
+  scanner can cover future subrun payloads without implementing or claiming
+  subrun planning in PR A.
 
 ## Review Evidence
 
@@ -79,6 +89,7 @@ Fresh commands:
 rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*ArtifactRegistry*'
 rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*NoSkLeakage*'
 rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*DrawTextRun*'
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*TextArtifactsSurface*'
 rtk ./gradlew --no-daemon :font:gpu-api:test
 rtk git diff --check
 ```
