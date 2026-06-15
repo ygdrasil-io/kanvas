@@ -55,6 +55,18 @@ data class SceneColor(val r: Float, val g: Float, val b: Float, val a: Float = 1
     }
 }
 
+data class SceneBitmapSource(
+    val topLeft: SceneColor,
+    val topRight: SceneColor,
+    val bottomLeft: SceneColor,
+    val bottomRight: SceneColor,
+)
+
+enum class SceneBitmapSampling {
+    Nearest,
+    Linear,
+}
+
 sealed interface SceneCommand {
     val label: String
     val family: String
@@ -133,11 +145,22 @@ sealed interface SceneCommand {
         }
     }
 
-    data class BitmapRect(override val label: String) : SceneCommand {
+    data class BitmapRect(
+        override val label: String,
+        val rect: SceneRect? = null,
+        val source: SceneBitmapSource? = null,
+        val sampling: SceneBitmapSampling = SceneBitmapSampling.Nearest,
+        val paintOrder: Int = 0,
+    ) : SceneCommand {
         override val family: String = "bitmap-rect"
+        val hasFixturePayload: Boolean = rect != null && source != null
 
         init {
             requireSceneCommandLabel(label)
+            require((rect == null) == (source == null)) {
+                "SceneCommand.BitmapRect fixture payload requires both rect and source"
+            }
+            require(paintOrder >= 0) { "SceneCommand.BitmapRect.paintOrder must be non-negative" }
         }
     }
 

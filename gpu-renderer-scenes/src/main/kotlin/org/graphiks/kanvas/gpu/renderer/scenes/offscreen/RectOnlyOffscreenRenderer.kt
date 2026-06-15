@@ -38,6 +38,8 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSampling
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSource
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
@@ -85,6 +87,7 @@ class RectOnlyOffscreenRenderer {
                         fillRRectCount = drawPlan.fillRRectCount,
                         linearGradientRectCount = drawPlan.linearGradientRectCount,
                         clipCount = drawPlan.clipCount,
+                        bitmapRectCount = drawPlan.bitmapRectCount,
                     ),
                 )
             }
@@ -269,12 +272,14 @@ class RectOnlyOffscreenRenderer {
     private companion object {
         const val RENDER_FILE_NAME: String = "render.png"
         const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
-        const val COLOR_UNIFORM_SIZE_BYTES: ULong = 64uL
+        const val COLOR_UNIFORM_SIZE_BYTES: ULong = 96uL
 
         val SOLID_RECT_WGSL: String = """
             struct Uniforms {
                 color0: vec4f,
                 color1: vec4f,
+                color2: vec4f,
+                color3: vec4f,
                 rect: vec4f,
                 radius_and_kind: vec4f,
             };
@@ -305,7 +310,31 @@ class RectOnlyOffscreenRenderer {
             fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
                 let coverage = rounded_rect_coverage(position.xy, uniforms.rect, uniforms.radius_and_kind.x);
                 var color = uniforms.color0;
-                if (uniforms.radius_and_kind.y >= 0.5) {
+                if (uniforms.radius_and_kind.y >= 2.5) {
+                    let uv = clamp(
+                        (position.xy - uniforms.rect.xy) / max(uniforms.rect.zw - uniforms.rect.xy, vec2f(0.0001)),
+                        vec2f(0.0),
+                        vec2f(1.0)
+                    );
+                    let top = mix(uniforms.color0, uniforms.color1, uv.x);
+                    let bottom = mix(uniforms.color2, uniforms.color3, uv.x);
+                    color = mix(top, bottom, uv.y);
+                } else if (uniforms.radius_and_kind.y >= 1.5) {
+                    let uv = clamp(
+                        (position.xy - uniforms.rect.xy) / max(uniforms.rect.zw - uniforms.rect.xy, vec2f(0.0001)),
+                        vec2f(0.0),
+                        vec2f(1.0)
+                    );
+                    if (uv.y >= 0.5) {
+                        if (uv.x >= 0.5) {
+                            color = uniforms.color3;
+                        } else {
+                            color = uniforms.color2;
+                        }
+                    } else if (uv.x >= 0.5) {
+                        color = uniforms.color1;
+                    }
+                } else if (uniforms.radius_and_kind.y >= 0.5) {
                     let t = clamp(
                         (position.y - uniforms.rect.y) / max(uniforms.rect.w - uniforms.rect.y, 0.0001),
                         0.0,
@@ -340,6 +369,14 @@ class RectOnlyOffscreenRenderer {
                 endColor.g,
                 endColor.b,
                 endColor.a,
+                bottomLeftColor.r,
+                bottomLeftColor.g,
+                bottomLeftColor.b,
+                bottomLeftColor.a,
+                bottomRightColor.r,
+                bottomRightColor.g,
+                bottomRightColor.b,
+                bottomRightColor.a,
                 left,
                 top,
                 right,
@@ -370,6 +407,7 @@ internal data class RectOnlyDrawPlan(
     val fillRectCount: Int = fills.count { it.family == "fill-rect" }
     val fillRRectCount: Int = fills.count { it.family == "fill-rrect" }
     val linearGradientRectCount: Int = fills.count { it.family == "linear-gradient-rect" }
+    val bitmapRectCount: Int = fills.count { it.family == "bitmap-rect" }
 }
 
 internal data class RectOnlyFillDraw(
@@ -377,6 +415,8 @@ internal data class RectOnlyFillDraw(
     val family: String,
     val startColor: SceneColor,
     val endColor: SceneColor,
+    val bottomLeftColor: SceneColor,
+    val bottomRightColor: SceneColor,
     val left: Float,
     val top: Float,
     val right: Float,
@@ -425,6 +465,9 @@ internal fun prepareRectOnlyDrawPlan(
                 is SceneCommand.FillRect,
                 is SceneCommand.FillRRect,
                 is SceneCommand.LinearGradientRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
+                is SceneCommand.BitmapRect -> if (command.hasFixturePayload) {
+                    add(RectOnlyIndexedDraw(index, command, activeClip))
+                }
                 else -> Unit
             }
         }
@@ -455,6 +498,8 @@ internal fun prepareRectOnlyDrawPlan(
                 family = command.family,
                 startColor = command.shapeStartColor(),
                 endColor = command.shapeEndColor(),
+                bottomLeftColor = command.shapeBottomLeftColor(),
+                bottomRightColor = command.shapeBottomRightColor(),
                 left = rect.left,
                 top = rect.top,
                 right = rect.right,
@@ -468,7 +513,7 @@ internal fun prepareRectOnlyDrawPlan(
             )
     }
     require(fills.isNotEmpty()) {
-        "$sceneId rect-only offscreen render requires at least one FillRect, FillRRect, or LinearGradientRect command"
+        "$sceneId rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, or BitmapRect command"
     }
 
     return RectOnlyDrawPlan(
@@ -488,7 +533,8 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
                 command is SceneCommand.FillRect ||
                 command is SceneCommand.FillRRect ||
                 command is SceneCommand.LinearGradientRect ||
-                command is SceneCommand.Clip
+                command is SceneCommand.Clip ||
+                command is SceneCommand.BitmapRect
             ) {
                 null
             } else {
@@ -497,12 +543,26 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families: " +
+        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, and fixture-backed bitmap-rect command families: " +
             unsupportedFamilies.joinToString()
     }
 
-    if (commands.none { it is SceneCommand.FillRect || it is SceneCommand.FillRRect || it is SceneCommand.LinearGradientRect }) {
-        return "rect-only offscreen render requires at least one FillRect, FillRRect, or LinearGradientRect command"
+    val bitmapMarkers = commands.filterIsInstance<SceneCommand.BitmapRect>()
+        .filterNot { it.hasFixturePayload }
+        .map { it.label }
+    if (bitmapMarkers.isNotEmpty()) {
+        return "rect-only offscreen render requires fixture-backed BitmapRect payloads: " +
+            bitmapMarkers.joinToString()
+    }
+
+    if (commands.none {
+            it is SceneCommand.FillRect ||
+                it is SceneCommand.FillRRect ||
+                it is SceneCommand.LinearGradientRect ||
+                it is SceneCommand.BitmapRect
+        }
+    ) {
+        return "rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, or BitmapRect command"
     }
 
     val clearIndices = commands.withIndex()
@@ -522,10 +582,11 @@ internal fun rectOnlyRenderedDiagnostics(
     fillRRectCount: Int,
     linearGradientRectCount: Int = 0,
     clipCount: Int = 0,
+    bitmapRectCount: Int = 0,
 ): List<String> {
     require(sceneId.isNotBlank()) { "rect-only sceneId must not be blank" }
-    require(fillRectCount + fillRRectCount + linearGradientRectCount > 0) {
-        "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, or LinearGradientRect command"
+    require(fillRectCount + fillRRectCount + linearGradientRectCount + bitmapRectCount > 0) {
+        "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, LinearGradientRect, or BitmapRect command"
     }
     return listOf(
         "rendered $sceneId via WebGPU offscreen",
@@ -534,6 +595,7 @@ internal fun rectOnlyRenderedDiagnostics(
         "fillRRectCommands=$fillRRectCount",
         "linearGradientRectCommands=$linearGradientRectCount",
         "clipCommands=$clipCount",
+        "bitmapRectCommands=$bitmapRectCount",
     )
 }
 
@@ -542,6 +604,7 @@ private fun SceneCommand.paintOrder(): Int =
         is SceneCommand.FillRect -> paintOrder
         is SceneCommand.FillRRect -> paintOrder
         is SceneCommand.LinearGradientRect -> paintOrder
+        is SceneCommand.BitmapRect -> paintOrder
         else -> 0
     }
 
@@ -550,6 +613,7 @@ private fun SceneCommand.shapeRect() =
         is SceneCommand.FillRect -> rect
         is SceneCommand.FillRRect -> rect
         is SceneCommand.LinearGradientRect -> rect
+        is SceneCommand.BitmapRect -> fixtureRect()
         else -> error("Unsupported shape command: $family")
     }
 
@@ -558,6 +622,7 @@ private fun SceneCommand.shapeStartColor() =
         is SceneCommand.FillRect -> color
         is SceneCommand.FillRRect -> color
         is SceneCommand.LinearGradientRect -> startColor
+        is SceneCommand.BitmapRect -> fixtureSource().topLeft
         else -> error("Unsupported shape command: $family")
     }
 
@@ -566,6 +631,25 @@ private fun SceneCommand.shapeEndColor() =
         is SceneCommand.FillRect -> color
         is SceneCommand.FillRRect -> color
         is SceneCommand.LinearGradientRect -> endColor
+        is SceneCommand.BitmapRect -> fixtureSource().topRight
+        else -> error("Unsupported shape command: $family")
+    }
+
+private fun SceneCommand.shapeBottomLeftColor() =
+    when (this) {
+        is SceneCommand.FillRect -> color
+        is SceneCommand.FillRRect -> color
+        is SceneCommand.LinearGradientRect -> startColor
+        is SceneCommand.BitmapRect -> fixtureSource().bottomLeft
+        else -> error("Unsupported shape command: $family")
+    }
+
+private fun SceneCommand.shapeBottomRightColor() =
+    when (this) {
+        is SceneCommand.FillRect -> color
+        is SceneCommand.FillRRect -> color
+        is SceneCommand.LinearGradientRect -> endColor
+        is SceneCommand.BitmapRect -> fixtureSource().bottomRight
         else -> error("Unsupported shape command: $family")
     }
 
@@ -574,14 +658,25 @@ private fun SceneCommand.shapeRadius(): Float =
         is SceneCommand.FillRect -> 0f
         is SceneCommand.FillRRect -> radius
         is SceneCommand.LinearGradientRect -> 0f
+        is SceneCommand.BitmapRect -> 0f
         else -> error("Unsupported shape command: $family")
     }
 
 private fun SceneCommand.shapePaintKind(): Float =
     when (this) {
         is SceneCommand.LinearGradientRect -> 1f
+        is SceneCommand.BitmapRect -> when (sampling) {
+            SceneBitmapSampling.Nearest -> 2f
+            SceneBitmapSampling.Linear -> 3f
+        }
         else -> 0f
     }
+
+private fun SceneCommand.BitmapRect.fixtureRect(): SceneRect =
+    rect ?: error("BitmapRect requires rect fixture payload: $label")
+
+private fun SceneCommand.BitmapRect.fixtureSource(): SceneBitmapSource =
+    source ?: error("BitmapRect requires source fixture payload: $label")
 
 private fun requireInsideTarget(
     sceneId: String,
