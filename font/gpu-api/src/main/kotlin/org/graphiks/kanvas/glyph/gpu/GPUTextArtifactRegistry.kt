@@ -98,7 +98,7 @@ data class TextGPUArtifactUnregisteredRefusal(
  * Deterministic registry of text GPU artifact descriptors.
  */
 class TextGPUArtifactRegistry(descriptors: List<TextGPUArtifactDescriptor>) {
-    val descriptors: List<TextGPUArtifactDescriptor> = descriptors.toList()
+    val descriptors: List<TextGPUArtifactDescriptor> = descriptors.map { descriptor -> descriptor.snapshot() }
 
     init {
         require(this.descriptors.map { descriptor -> descriptor.artifactName }.distinct().size == this.descriptors.size) {
@@ -127,6 +127,12 @@ class TextGPUArtifactRegistry(descriptors: List<TextGPUArtifactDescriptor>) {
         append("}")
     }
 }
+
+private fun TextGPUArtifactDescriptor.snapshot(): TextGPUArtifactDescriptor = copy(
+    keyPreimageFields = keyPreimageFields.toList(),
+    invalidationFacts = invalidationFacts.toList(),
+    supportedRoutes = supportedRoutes.toList(),
+)
 
 fun defaultTextGPUArtifactRegistry(): TextGPUArtifactRegistry = TextGPUArtifactRegistry(
     listOf(
