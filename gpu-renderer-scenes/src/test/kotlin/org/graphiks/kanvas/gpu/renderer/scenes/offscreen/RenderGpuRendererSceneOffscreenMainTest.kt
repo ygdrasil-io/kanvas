@@ -82,6 +82,11 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 bitmapRectCount = 1,
                 filterNodeCount = 1,
             ),
+            RenderedShapeExpectation(
+                sceneId = "runtime-effect-color-tile",
+                fillRectCount = 0,
+                runtimeEffectCount = 1,
+            ),
         )
 
         rectOnlyScenes.forEach { expectation ->
@@ -153,6 +158,42 @@ class RenderGpuRendererSceneOffscreenMainTest {
         }
 
         assertContains(failure.message ?: "", "fixture-backed FilterNode payloads: marker")
+    }
+
+    @Test
+    fun `rect only command preparation rejects runtime effect markers without fixture payloads`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            prepareRectOnlyDrawPlan(
+                sceneId = "runtime-effect-marker-only",
+                commands = listOf(SceneCommand.RuntimeEffectTile("marker")),
+                width = 320,
+                height = 200,
+            )
+        }
+
+        assertContains(failure.message ?: "", "fixture-backed RuntimeEffectTile payloads: marker")
+    }
+
+    @Test
+    fun `rect only command preparation rejects runtime effects outside the registered SimpleRT contract`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            prepareRectOnlyDrawPlan(
+                sceneId = "runtime-effect-wrong-descriptor",
+                commands = listOf(
+                    SceneCommand.RuntimeEffectTile(
+                        label = "wrong-runtime-effect",
+                        rect = SceneRect(16f, 16f, 96f, 96f),
+                        stableId = "runtime.spiral_rt",
+                        wgslImplementationId = "wgsl/runtime_spiral_rt",
+                        uniformColor = SceneColor.blue(),
+                    ),
+                ),
+                width = 320,
+                height = 200,
+            )
+        }
+
+        assertContains(failure.message ?: "", "supports only registered runtime.simple_rt RuntimeEffectTile payloads")
     }
 
     @Test
@@ -259,6 +300,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
         val clipCount: Int? = null,
         val bitmapRectCount: Int? = null,
         val filterNodeCount: Int? = null,
+        val runtimeEffectCount: Int? = null,
     )
 
     private fun assertRenderedShapeScene(root: Path, expectation: RenderedShapeExpectation) {
@@ -297,6 +339,22 @@ class RenderGpuRendererSceneOffscreenMainTest {
             assertContains(runJson, "filterNodeCommands=$count")
             assertContains(runJson, "filterKinds=luma-tint")
             assertContains(runJson, "filterInputs=photo")
+        }
+        expectation.runtimeEffectCount?.let { count ->
+            assertContains(runJson, "runtimeEffectCommands=$count")
+            assertContains(runJson, "runtimeEffectStableIds=runtime.simple_rt")
+            assertContains(runJson, "runtimeEffectWgslImplementationIds=wgsl/runtime_simple_rt")
+            assertContains(runJson, "runtimeEffectUniformLayout=gColor@0:16")
+            assertContains(
+                runJson,
+                "runtimeEffectPipelineKey=runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+            )
+            assertContains(runJson, "runtimeEffectDescriptorEvidence=reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json")
+            assertContains(
+                runJson,
+                "runtimeEffectParserEvidence=RuntimeEffectDescriptorWebGpuTest#runtime SimpleRT descriptor WGSL parses and reflects uniforms",
+            )
+            assertContains(runJson, "fallbackReason=none")
         }
         assertFalse(runJson.contains("runner-subset:$sceneId"), sceneId)
     }

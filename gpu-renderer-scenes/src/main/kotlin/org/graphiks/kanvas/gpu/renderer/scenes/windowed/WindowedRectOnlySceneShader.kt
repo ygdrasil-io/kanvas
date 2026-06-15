@@ -14,6 +14,9 @@ object WindowedRectOnlySceneShader {
             ?: SceneColor(0f, 0f, 0f, 0f)
 
     fun wgsl(scene: GPURendererScene<*>): String {
+        val unsupportedReason = scene.kadreWindowedRectOnlyUnsupportedReason()
+        require(unsupportedReason == null) { "${scene.sceneId.value} $unsupportedReason" }
+
         val clear = clearColor(scene)
         val drawBranches = scene.draws().joinToString(separator = "\n") { draw ->
             """
@@ -110,7 +113,9 @@ object WindowedRectOnlySceneShader {
                 filter_strength: f32
             ) -> vec4<f32> {
                 var color = start_color;
-                if (paint_kind >= 2.5) {
+                if (paint_kind >= 3.5) {
+                    color = runtime_simple_rt_color(pixel, start_color);
+                } else if (paint_kind >= 2.5) {
                     let uv = clamp((pixel - rect.xy) / max(rect.zw - rect.xy, vec2<f32>(0.0001)), vec2<f32>(0.0), vec2<f32>(1.0));
                     let top = mix(start_color, end_color, uv.x);
                     let bottom = mix(bottom_left_color, bottom_right_color, uv.x);
@@ -136,6 +141,10 @@ object WindowedRectOnlySceneShader {
                     color = vec4<f32>(mix(color.rgb, luma_tint, clamp(filter_strength, 0.0, 1.0)), color.a);
                 }
                 return color;
+            }
+
+            fn runtime_simple_rt_color(pos: vec2<f32>, gColor: vec4<f32>) -> vec4<f32> {
+                return vec4<f32>(pos.x * (1.0 / 255.0), pos.y * (1.0 / 255.0), gColor.b, 1.0);
             }
 
             fn src_over_coverage(dst: vec4<f32>, src: vec4<f32>, coverage: f32) -> vec4<f32> {
@@ -192,7 +201,8 @@ private fun GPURendererScene<*>.draws(): List<WindowedDraw> {
                 is SceneCommand.Clip -> activeClip = command.rect
                 is SceneCommand.FillRect,
                 is SceneCommand.FillRRect,
-                is SceneCommand.LinearGradientRect -> add(IndexedWindowedDraw(index, command, activeClip))
+                is SceneCommand.LinearGradientRect,
+                is SceneCommand.RuntimeEffectTile -> add(IndexedWindowedDraw(index, command, activeClip))
                 is SceneCommand.BitmapRect -> if (command.hasFixturePayload) {
                     add(IndexedWindowedDraw(index, command, activeClip))
                 }
@@ -265,6 +275,23 @@ private fun GPURendererScene<*>.draws(): List<WindowedDraw> {
                     filterStrength = filter?.strength ?: 0f,
                     clip = clip,
                 )
+                is SceneCommand.RuntimeEffectTile -> {
+                    val uniformColor = command.uniformColor
+                        ?: error("RuntimeEffectTile requires uniform color fixture payload: ${command.label}")
+                    WindowedDraw(
+                        label = command.label,
+                        rect = command.rect ?: error("RuntimeEffectTile requires rect fixture payload: ${command.label}"),
+                        radius = 0f,
+                        startColor = uniformColor,
+                        endColor = uniformColor,
+                        bottomLeftColor = uniformColor,
+                        bottomRightColor = uniformColor,
+                        paintKind = 4f,
+                        filterKind = 0f,
+                        filterStrength = 0f,
+                        clip = clip,
+                    )
+                }
                 else -> error("Unsupported windowed fill command")
             }
         }
@@ -276,6 +303,7 @@ private fun SceneCommand.paintOrder(): Int =
         is SceneCommand.FillRRect -> paintOrder
         is SceneCommand.LinearGradientRect -> paintOrder
         is SceneCommand.BitmapRect -> paintOrder
+        is SceneCommand.RuntimeEffectTile -> paintOrder
         else -> 0
     }
 

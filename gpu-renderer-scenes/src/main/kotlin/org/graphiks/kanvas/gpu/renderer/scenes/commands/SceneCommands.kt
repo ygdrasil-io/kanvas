@@ -12,6 +12,10 @@ private fun requireSceneCommandLabel(label: String) {
     require(label.isNotBlank()) { "SceneCommand.label must not be blank" }
 }
 
+private fun requireOptionalField(value: String?, fieldName: String) {
+    require(value == null || value.isNotBlank()) { "$fieldName must not be blank" }
+}
+
 data class SceneTarget(val width: Int, val height: Int, val colorFormat: String = "rgba8unorm") {
     init {
         require(width > 0) { "SceneTarget.width must be positive" }
@@ -208,11 +212,52 @@ sealed interface SceneCommand {
         }
     }
 
-    data class RuntimeEffectTile(override val label: String) : SceneCommand {
+    data class RuntimeEffectTile(
+        override val label: String,
+        val rect: SceneRect? = null,
+        val stableId: String? = null,
+        val wgslImplementationId: String? = null,
+        val uniformColor: SceneColor? = null,
+        val paintOrder: Int = 0,
+        val cpuImplementationId: String = "kotlin/simple_rt",
+        val uniformName: String = "gColor",
+        val uniformType: String = "kFloat4",
+        val uniformOffset: Int = 0,
+        val uniformSize: Int = 16,
+        val pipelineKey: String = "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+    ) : SceneCommand {
         override val family: String = "runtime-effect"
+        val hasFixturePayload: Boolean =
+            rect != null && stableId != null && wgslImplementationId != null && uniformColor != null
+        val isRegisteredSimpleRt: Boolean =
+            hasFixturePayload &&
+                stableId == "runtime.simple_rt" &&
+                wgslImplementationId == "wgsl/runtime_simple_rt" &&
+                cpuImplementationId == "kotlin/simple_rt" &&
+                uniformName == "gColor" &&
+                uniformType == "kFloat4" &&
+                uniformOffset == 0 &&
+                uniformSize == 16 &&
+                pipelineKey == "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]"
+        val uniformLayout: String = "$uniformName@$uniformOffset:$uniformSize"
 
         init {
             requireSceneCommandLabel(label)
+            val payloadFieldCount = listOf(rect, stableId, wgslImplementationId, uniformColor).count { it != null }
+            require(payloadFieldCount == 0 || payloadFieldCount == 4) {
+                "SceneCommand.RuntimeEffectTile fixture payload requires rect, stableId, wgslImplementationId, and uniformColor"
+            }
+            requireOptionalField(stableId, "SceneCommand.RuntimeEffectTile.stableId")
+            requireOptionalField(wgslImplementationId, "SceneCommand.RuntimeEffectTile.wgslImplementationId")
+            require(cpuImplementationId.isNotBlank()) {
+                "SceneCommand.RuntimeEffectTile.cpuImplementationId must not be blank"
+            }
+            require(uniformName.isNotBlank()) { "SceneCommand.RuntimeEffectTile.uniformName must not be blank" }
+            require(uniformType.isNotBlank()) { "SceneCommand.RuntimeEffectTile.uniformType must not be blank" }
+            require(uniformOffset >= 0) { "SceneCommand.RuntimeEffectTile.uniformOffset must be non-negative" }
+            require(uniformSize > 0) { "SceneCommand.RuntimeEffectTile.uniformSize must be positive" }
+            require(pipelineKey.isNotBlank()) { "SceneCommand.RuntimeEffectTile.pipelineKey must not be blank" }
+            require(paintOrder >= 0) { "SceneCommand.RuntimeEffectTile.paintOrder must be non-negative" }
         }
     }
 

@@ -90,6 +90,7 @@ class RectOnlyOffscreenRenderer {
                         clipCount = drawPlan.clipCount,
                         bitmapRectCount = drawPlan.bitmapRectCount,
                         filters = drawPlan.filters,
+                        runtimeEffects = drawPlan.runtimeEffects,
                     ),
                 )
             }
@@ -312,7 +313,14 @@ class RectOnlyOffscreenRenderer {
             fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
                 let coverage = rounded_rect_coverage(position.xy, uniforms.rect, uniforms.radius_and_kind.x);
                 var color = uniforms.color0;
-                if (uniforms.radius_and_kind.y >= 2.5) {
+                if (uniforms.radius_and_kind.y >= 3.5) {
+                    color = vec4f(
+                        position.x * (1.0 / 255.0),
+                        position.y * (1.0 / 255.0),
+                        uniforms.color0.b,
+                        1.0
+                    );
+                } else if (uniforms.radius_and_kind.y >= 2.5) {
                     let uv = clamp(
                         (position.xy - uniforms.rect.xy) / max(uniforms.rect.zw - uniforms.rect.xy, vec2f(0.0001)),
                         vec2f(0.0),
@@ -420,6 +428,22 @@ internal data class RectOnlyDrawPlan(
     val linearGradientRectCount: Int = fills.count { it.family == "linear-gradient-rect" }
     val bitmapRectCount: Int = fills.count { it.family == "bitmap-rect" }
     val filterNodeCount: Int = filters.size
+    val runtimeEffects: List<RectOnlyRuntimeEffectTile> = fills
+        .filter { it.family == "runtime-effect" }
+        .map { fill ->
+            RectOnlyRuntimeEffectTile(
+                label = fill.label,
+                stableId = fill.runtimeEffectStableId
+                    ?: error("RuntimeEffectTile draw requires stableId: ${fill.label}"),
+                wgslImplementationId = fill.runtimeEffectWgslImplementationId
+                    ?: error("RuntimeEffectTile draw requires wgslImplementationId: ${fill.label}"),
+                uniformLayout = fill.runtimeEffectUniformLayout
+                    ?: error("RuntimeEffectTile draw requires uniform layout: ${fill.label}"),
+                pipelineKey = fill.runtimeEffectPipelineKey
+                    ?: error("RuntimeEffectTile draw requires pipeline key: ${fill.label}"),
+            )
+        }
+    val runtimeEffectCount: Int = runtimeEffects.size
 }
 
 internal data class RectOnlyFilterNode(
@@ -427,6 +451,14 @@ internal data class RectOnlyFilterNode(
     val inputLabel: String,
     val kind: SceneFilterKind,
     val strength: Float,
+)
+
+internal data class RectOnlyRuntimeEffectTile(
+    val label: String,
+    val stableId: String,
+    val wgslImplementationId: String,
+    val uniformLayout: String,
+    val pipelineKey: String,
 )
 
 internal data class RectOnlyFillDraw(
@@ -448,6 +480,10 @@ internal data class RectOnlyFillDraw(
     val scissorY: Int,
     val scissorWidth: Int,
     val scissorHeight: Int,
+    val runtimeEffectStableId: String? = null,
+    val runtimeEffectWgslImplementationId: String? = null,
+    val runtimeEffectUniformLayout: String? = null,
+    val runtimeEffectPipelineKey: String? = null,
 )
 
 private data class RectOnlyIndexedDraw(
@@ -497,7 +533,8 @@ internal fun prepareRectOnlyDrawPlan(
                 is SceneCommand.Clip -> activeClip = command
                 is SceneCommand.FillRect,
                 is SceneCommand.FillRRect,
-                is SceneCommand.LinearGradientRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
+                is SceneCommand.LinearGradientRect,
+                is SceneCommand.RuntimeEffectTile -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.BitmapRect -> if (command.hasFixturePayload) {
                     add(RectOnlyIndexedDraw(index, command, activeClip))
                 }
@@ -546,10 +583,14 @@ internal fun prepareRectOnlyDrawPlan(
                 scissorY = top,
                 scissorWidth = right - left,
                 scissorHeight = bottom - top,
+                runtimeEffectStableId = (command as? SceneCommand.RuntimeEffectTile)?.stableId,
+                runtimeEffectWgslImplementationId = (command as? SceneCommand.RuntimeEffectTile)?.wgslImplementationId,
+                runtimeEffectUniformLayout = (command as? SceneCommand.RuntimeEffectTile)?.uniformLayout,
+                runtimeEffectPipelineKey = (command as? SceneCommand.RuntimeEffectTile)?.pipelineKey,
             )
     }
     require(fills.isNotEmpty()) {
-        "$sceneId rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, or BitmapRect command"
+        "$sceneId rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, or RuntimeEffectTile command"
     }
 
     return RectOnlyDrawPlan(
@@ -572,7 +613,8 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
                 command is SceneCommand.LinearGradientRect ||
                 command is SceneCommand.Clip ||
                 command is SceneCommand.BitmapRect ||
-                command is SceneCommand.FilterNode
+                command is SceneCommand.FilterNode ||
+                command is SceneCommand.RuntimeEffectTile
             ) {
                 null
             } else {
@@ -581,7 +623,7 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, and fixture-backed filter-node command families: " +
+        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed filter-node, and fixture-backed runtime-effect command families: " +
             unsupportedFamilies.joinToString()
     }
 
@@ -599,6 +641,22 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
     if (filterMarkers.isNotEmpty()) {
         return "rect-only offscreen render requires fixture-backed FilterNode payloads: " +
             filterMarkers.joinToString()
+    }
+
+    val runtimeEffectMarkers = commands.filterIsInstance<SceneCommand.RuntimeEffectTile>()
+        .filterNot { it.hasFixturePayload }
+        .map { it.label }
+    if (runtimeEffectMarkers.isNotEmpty()) {
+        return "rect-only offscreen render requires fixture-backed RuntimeEffectTile payloads: " +
+            runtimeEffectMarkers.joinToString()
+    }
+
+    val unsupportedRuntimeEffects = commands.filterIsInstance<SceneCommand.RuntimeEffectTile>()
+        .filter { it.hasFixturePayload && !it.isRegisteredSimpleRt }
+        .map { it.label }
+    if (unsupportedRuntimeEffects.isNotEmpty()) {
+        return "rect-only offscreen render supports only registered runtime.simple_rt RuntimeEffectTile payloads: " +
+            unsupportedRuntimeEffects.joinToString()
     }
 
     val fixtureBitmapLabels = commands.filterIsInstance<SceneCommand.BitmapRect>()
@@ -627,13 +685,14 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
     }
 
     if (commands.none {
-            it is SceneCommand.FillRect ||
+                it is SceneCommand.FillRect ||
                 it is SceneCommand.FillRRect ||
                 it is SceneCommand.LinearGradientRect ||
-                it is SceneCommand.BitmapRect
+                it is SceneCommand.BitmapRect ||
+                it is SceneCommand.RuntimeEffectTile
         }
     ) {
-        return "rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, or BitmapRect command"
+        return "rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, or RuntimeEffectTile command"
     }
 
     val clearIndices = commands.withIndex()
@@ -655,10 +714,11 @@ internal fun rectOnlyRenderedDiagnostics(
     clipCount: Int = 0,
     bitmapRectCount: Int = 0,
     filters: List<RectOnlyFilterNode> = emptyList(),
+    runtimeEffects: List<RectOnlyRuntimeEffectTile> = emptyList(),
 ): List<String> {
     require(sceneId.isNotBlank()) { "rect-only sceneId must not be blank" }
-    require(fillRectCount + fillRRectCount + linearGradientRectCount + bitmapRectCount > 0) {
-        "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, LinearGradientRect, or BitmapRect command"
+    require(fillRectCount + fillRRectCount + linearGradientRectCount + bitmapRectCount + runtimeEffects.size > 0) {
+        "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, or RuntimeEffectTile command"
     }
     return buildList {
         add("rendered $sceneId via WebGPU offscreen")
@@ -673,6 +733,19 @@ internal fun rectOnlyRenderedDiagnostics(
             add("filterKinds=${filters.joinToString { it.kind.wireName }}")
             add("filterInputs=${filters.joinToString { it.inputLabel }}")
         }
+        if (runtimeEffects.isNotEmpty()) {
+            add("runtimeEffectCommands=${runtimeEffects.size}")
+            add("runtimeEffectStableIds=${runtimeEffects.joinToString { it.stableId }}")
+            add("runtimeEffectWgslImplementationIds=${runtimeEffects.joinToString { it.wgslImplementationId }}")
+            add("runtimeEffectUniformLayout=${runtimeEffects.joinToString { it.uniformLayout }}")
+            add("runtimeEffectPipelineKey=${runtimeEffects.joinToString { it.pipelineKey }}")
+            add("runtimeEffectDescriptorEvidence=reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json")
+            add(
+                "runtimeEffectParserEvidence=" +
+                    "RuntimeEffectDescriptorWebGpuTest#runtime SimpleRT descriptor WGSL parses and reflects uniforms",
+            )
+            add("fallbackReason=none")
+        }
     }
 }
 
@@ -682,6 +755,7 @@ private fun SceneCommand.paintOrder(): Int =
         is SceneCommand.FillRRect -> paintOrder
         is SceneCommand.LinearGradientRect -> paintOrder
         is SceneCommand.BitmapRect -> paintOrder
+        is SceneCommand.RuntimeEffectTile -> paintOrder
         else -> 0
     }
 
@@ -691,6 +765,7 @@ private fun SceneCommand.shapeRect() =
         is SceneCommand.FillRRect -> rect
         is SceneCommand.LinearGradientRect -> rect
         is SceneCommand.BitmapRect -> fixtureRect()
+        is SceneCommand.RuntimeEffectTile -> fixtureRect()
         else -> error("Unsupported shape command: $family")
     }
 
@@ -700,6 +775,7 @@ private fun SceneCommand.shapeStartColor() =
         is SceneCommand.FillRRect -> color
         is SceneCommand.LinearGradientRect -> startColor
         is SceneCommand.BitmapRect -> fixtureSource().topLeft
+        is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
         else -> error("Unsupported shape command: $family")
     }
 
@@ -709,6 +785,7 @@ private fun SceneCommand.shapeEndColor() =
         is SceneCommand.FillRRect -> color
         is SceneCommand.LinearGradientRect -> endColor
         is SceneCommand.BitmapRect -> fixtureSource().topRight
+        is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
         else -> error("Unsupported shape command: $family")
     }
 
@@ -718,6 +795,7 @@ private fun SceneCommand.shapeBottomLeftColor() =
         is SceneCommand.FillRRect -> color
         is SceneCommand.LinearGradientRect -> startColor
         is SceneCommand.BitmapRect -> fixtureSource().bottomLeft
+        is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
         else -> error("Unsupported shape command: $family")
     }
 
@@ -727,6 +805,7 @@ private fun SceneCommand.shapeBottomRightColor() =
         is SceneCommand.FillRRect -> color
         is SceneCommand.LinearGradientRect -> endColor
         is SceneCommand.BitmapRect -> fixtureSource().bottomRight
+        is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
         else -> error("Unsupported shape command: $family")
     }
 
@@ -736,11 +815,13 @@ private fun SceneCommand.shapeRadius(): Float =
         is SceneCommand.FillRRect -> radius
         is SceneCommand.LinearGradientRect -> 0f
         is SceneCommand.BitmapRect -> 0f
+        is SceneCommand.RuntimeEffectTile -> 0f
         else -> error("Unsupported shape command: $family")
     }
 
 private fun SceneCommand.shapePaintKind(): Float =
     when (this) {
+        is SceneCommand.RuntimeEffectTile -> 4f
         is SceneCommand.LinearGradientRect -> 1f
         is SceneCommand.BitmapRect -> when (sampling) {
             SceneBitmapSampling.Nearest -> 2f
@@ -759,6 +840,12 @@ private fun SceneCommand.BitmapRect.fixtureRect(): SceneRect =
 
 private fun SceneCommand.BitmapRect.fixtureSource(): SceneBitmapSource =
     source ?: error("BitmapRect requires source fixture payload: $label")
+
+private fun SceneCommand.RuntimeEffectTile.fixtureRect(): SceneRect =
+    rect ?: error("RuntimeEffectTile requires rect fixture payload: $label")
+
+private fun SceneCommand.RuntimeEffectTile.fixtureUniformColor(): SceneColor =
+    uniformColor ?: error("RuntimeEffectTile requires uniform color fixture payload: $label")
 
 private fun requireInsideTarget(
     sceneId: String,

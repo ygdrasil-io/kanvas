@@ -204,10 +204,18 @@ object GPURendererSceneRegistry {
         scene(
             id = "runtime-effect-color-tile",
             title = "Runtime Effect Color Tile",
-            description = "Runtime-effect tile command marker with bounded parameter intent.",
+            description = "Registered SimpleRT runtime-effect tile with reflected gColor parameter intent.",
             tags = setOf(SceneTag.RuntimeEffect),
             links = listOf(SceneRoadmapLink.milestone("M7")),
-            commands = listOf(SceneCommand.RuntimeEffectTile("simple-rt-color")),
+            commands = listOf(
+                SceneCommand.RuntimeEffectTile(
+                    label = "simple-rt-color",
+                    rect = SceneRect(48f, 36f, 272f, 164f),
+                    stableId = "runtime.simple_rt",
+                    wgslImplementationId = "wgsl/runtime_simple_rt",
+                    uniformColor = SceneColor(0.18f, 0.42f, 0.72f, 1f),
+                ),
+            ),
         ),
         scene(
             id = "blend-mode-strip",

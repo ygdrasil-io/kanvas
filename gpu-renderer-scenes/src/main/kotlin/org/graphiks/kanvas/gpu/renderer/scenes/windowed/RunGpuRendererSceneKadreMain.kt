@@ -303,14 +303,15 @@ internal fun GPURendererScene<*>.kadreWindowedRectOnlyUnsupportedReason(): Strin
                 is SceneCommand.LinearGradientRect,
                 is SceneCommand.Clip,
                 is SceneCommand.BitmapRect,
-                is SceneCommand.FilterNode -> null
+                is SceneCommand.FilterNode,
+                is SceneCommand.RuntimeEffectTile -> null
                 is SceneCommand -> command.family
                 else -> command::class.simpleName ?: "unknown-command"
             }
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, and fixture-backed filter-node command families: " +
+        return "rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed filter-node, and fixture-backed runtime-effect command families: " +
             unsupportedFamilies.joinToString()
     }
 
@@ -328,6 +329,22 @@ internal fun GPURendererScene<*>.kadreWindowedRectOnlyUnsupportedReason(): Strin
     if (filterMarkers.isNotEmpty()) {
         return "rect-only windowed render requires fixture-backed FilterNode payloads: " +
             filterMarkers.joinToString()
+    }
+
+    val runtimeEffectMarkers = commands.filterIsInstance<SceneCommand.RuntimeEffectTile>()
+        .filterNot { it.hasFixturePayload }
+        .map { it.label }
+    if (runtimeEffectMarkers.isNotEmpty()) {
+        return "rect-only windowed render requires fixture-backed RuntimeEffectTile payloads: " +
+            runtimeEffectMarkers.joinToString()
+    }
+
+    val unsupportedRuntimeEffects = commands.filterIsInstance<SceneCommand.RuntimeEffectTile>()
+        .filter { it.hasFixturePayload && !it.isRegisteredSimpleRt }
+        .map { it.label }
+    if (unsupportedRuntimeEffects.isNotEmpty()) {
+        return "rect-only windowed render supports only registered runtime.simple_rt RuntimeEffectTile payloads: " +
+            unsupportedRuntimeEffects.joinToString()
     }
 
     val fixtureBitmapLabels = commands.filterIsInstance<SceneCommand.BitmapRect>()
@@ -359,10 +376,11 @@ internal fun GPURendererScene<*>.kadreWindowedRectOnlyUnsupportedReason(): Strin
             it is SceneCommand.FillRect ||
                 it is SceneCommand.FillRRect ||
                 it is SceneCommand.LinearGradientRect ||
-                it is SceneCommand.BitmapRect
+                it is SceneCommand.BitmapRect ||
+                it is SceneCommand.RuntimeEffectTile
         }
     ) {
-        return "rect-only windowed render requires at least one FillRect, FillRRect, LinearGradientRect, or BitmapRect command"
+        return "rect-only windowed render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, or RuntimeEffectTile command"
     }
 
     val clearIndices = commands.withIndex()

@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.scenes.catalog
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 
@@ -57,6 +58,20 @@ class GPURendererSceneRegistryTest {
         assertEquals(SceneExpectation.ShouldRender, scene.expectation)
         assertTrue(scene.commands.any { it is SceneCommand.FillRect })
         assertTrue(scene.roadmapLinks.any { it.rStage == RStage.R6 })
+    }
+
+    @Test
+    fun `runtime effect color tile is backed by registered SimpleRT scene payload`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("runtime-effect-color-tile")
+        val command = assertIs<SceneCommand.RuntimeEffectTile>(scene.commands.single())
+
+        assertTrue(command.hasFixturePayload)
+        assertEquals("runtime.simple_rt", command.stableId)
+        assertEquals("wgsl/runtime_simple_rt", command.wgslImplementationId)
+        assertEquals("kotlin/simple_rt", command.cpuImplementationId)
+        assertEquals("gColor", command.uniformName)
+        assertEquals(0, command.uniformOffset)
+        assertEquals(16, command.uniformSize)
     }
 
     private data class SceneExpectationRow(

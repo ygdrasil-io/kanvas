@@ -63,6 +63,7 @@ class RunGpuRendererSceneKadreMainTest {
             "texture-swatch-board" to 22,
             "clipped-avatar-grid" to 23,
             "filtered-photo-chip" to 24,
+            "runtime-effect-color-tile" to 25,
         )
         val invocations = mutableListOf<RunnerInvocation>()
 
@@ -116,6 +117,43 @@ class RunGpuRendererSceneKadreMainTest {
     }
 
     @Test
+    fun `windowed WGSL materializes registered SimpleRT color tile without dynamic SkSL`() {
+        val wgsl = WindowedRectOnlySceneShader.wgsl(
+            GPURendererSceneRegistry.registry.requireScene("runtime-effect-color-tile"),
+        )
+
+        assertContains(wgsl, "runtime_simple_rt_color")
+        assertContains(wgsl, "gColor")
+        assertContains(wgsl, "pos.x * (1.0 / 255.0)")
+        assertFalse(wgsl.contains("SkSL"))
+    }
+
+    @Test
+    fun `windowed WGSL refuses runtime effects outside the registered SimpleRT contract when called directly`() {
+        val scene = windowedTestScene(
+            sceneId = "windowed-runtime-effect-wrong-descriptor",
+            commands = listOf(
+                SceneCommand.RuntimeEffectTile(
+                    label = "wrong-runtime-effect",
+                    rect = SceneRect(0f, 0f, 16f, 16f),
+                    stableId = "runtime.spiral_rt",
+                    wgslImplementationId = "wgsl/runtime_spiral_rt",
+                    uniformColor = SceneColor.blue(),
+                ),
+            ),
+        )
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            WindowedRectOnlySceneShader.wgsl(scene)
+        }
+
+        assertContains(
+            failure.message ?: "",
+            "supports only registered runtime.simple_rt RuntimeEffectTile payloads: wrong-runtime-effect",
+        )
+    }
+
+    @Test
     fun `rect only unsupported command sequences write detailed not yet rendered reports before launcher handoff`() {
         val cases = listOf(
             UnsupportedRectOnlyCase(
@@ -123,7 +161,7 @@ class RunGpuRendererSceneKadreMainTest {
                     sceneId = "windowed-no-fill",
                     commands = listOf(SceneCommand.Clear(SceneColor(0f, 0f, 0f, 1f))),
                 ),
-                reason = "rect-only windowed render requires at least one FillRect, FillRRect, LinearGradientRect, or BitmapRect command",
+                reason = "rect-only windowed render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, or RuntimeEffectTile command",
             ),
             UnsupportedRectOnlyCase(
                 scene = windowedTestScene(
@@ -138,6 +176,28 @@ class RunGpuRendererSceneKadreMainTest {
                     commands = listOf(testBitmapRect(), SceneCommand.FilterNode("marker")),
                 ),
                 reason = "rect-only windowed render requires fixture-backed FilterNode payloads: marker",
+            ),
+            UnsupportedRectOnlyCase(
+                scene = windowedTestScene(
+                    sceneId = "windowed-runtime-effect-marker",
+                    commands = listOf(SceneCommand.RuntimeEffectTile("marker")),
+                ),
+                reason = "rect-only windowed render requires fixture-backed RuntimeEffectTile payloads: marker",
+            ),
+            UnsupportedRectOnlyCase(
+                scene = windowedTestScene(
+                    sceneId = "windowed-runtime-effect-wrong-descriptor",
+                    commands = listOf(
+                        SceneCommand.RuntimeEffectTile(
+                            label = "wrong-runtime-effect",
+                            rect = SceneRect(0f, 0f, 16f, 16f),
+                            stableId = "runtime.spiral_rt",
+                            wgslImplementationId = "wgsl/runtime_spiral_rt",
+                            uniformColor = SceneColor.blue(),
+                        ),
+                    ),
+                ),
+                reason = "rect-only windowed render supports only registered runtime.simple_rt RuntimeEffectTile payloads: wrong-runtime-effect",
             ),
             UnsupportedRectOnlyCase(
                 scene = windowedTestScene(
@@ -187,7 +247,7 @@ class RunGpuRendererSceneKadreMainTest {
         assertContains(sessionJson, "\"status\": \"not-yet-rendered\"")
         assertContains(
             sessionJson,
-            "\"reason\": \"rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, and fixture-backed filter-node command families: vertices\"",
+            "\"reason\": \"rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed filter-node, and fixture-backed runtime-effect command families: vertices\"",
         )
         assertContains(sessionJson, "\"requestedFrames\": 60")
         assertContains(sessionJson, "\"presentedFrames\": 0")

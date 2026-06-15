@@ -78,6 +78,27 @@ class SceneCommandsTest {
     }
 
     @Test
+    fun `runtime effect tile fixture payload names the registered SimpleRT descriptor contract`() {
+        val command = SceneCommand.RuntimeEffectTile(
+            label = "simple-rt-color",
+            rect = SceneRect(48f, 36f, 272f, 164f),
+            stableId = "runtime.simple_rt",
+            wgslImplementationId = "wgsl/runtime_simple_rt",
+            uniformColor = SceneColor(0.18f, 0.42f, 0.72f, 1f),
+        )
+
+        assertTrue(command.hasFixturePayload)
+        assertEquals("runtime.simple_rt", command.stableId)
+        assertEquals("wgsl/runtime_simple_rt", command.wgslImplementationId)
+        assertEquals("kotlin/simple_rt", command.cpuImplementationId)
+        assertEquals("gColor", command.uniformName)
+        assertEquals("kFloat4", command.uniformType)
+        assertEquals(0, command.uniformOffset)
+        assertEquals(16, command.uniformSize)
+        assertEquals("runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]", command.pipelineKey)
+    }
+
+    @Test
     fun `label bearing scene commands reject blank labels`() {
         assertFailsWith<IllegalArgumentException> {
             SceneCommand.FillRect(" ", SceneRect(0f, 0f, 8f, 8f), SceneColor.red())
@@ -125,6 +146,42 @@ class SceneCommandsTest {
                 inputLabel = "photo",
                 kind = SceneFilterKind.LumaTint,
                 strength = 1.01f,
+            )
+        }
+    }
+
+    @Test
+    fun `runtime effect tile fixture payload requires descriptor rect and uniform color together`() {
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.RuntimeEffectTile(
+                label = "simple-rt-color",
+                stableId = "runtime.simple_rt",
+                wgslImplementationId = "wgsl/runtime_simple_rt",
+                uniformColor = SceneColor.blue(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.RuntimeEffectTile(
+                label = "simple-rt-color",
+                rect = SceneRect(0f, 0f, 8f, 8f),
+                wgslImplementationId = "wgsl/runtime_simple_rt",
+                uniformColor = SceneColor.blue(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.RuntimeEffectTile(
+                label = "simple-rt-color",
+                rect = SceneRect(0f, 0f, 8f, 8f),
+                stableId = "runtime.simple_rt",
+                uniformColor = SceneColor.blue(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.RuntimeEffectTile(
+                label = "simple-rt-color",
+                rect = SceneRect(0f, 0f, 8f, 8f),
+                stableId = "runtime.simple_rt",
+                wgslImplementationId = "wgsl/runtime_simple_rt",
             )
         }
     }
