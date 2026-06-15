@@ -20,9 +20,9 @@ M8 supplies paragraph and glyph run outputs. M9 supplies strike keys, A8/SDF art
 
 | Ticket | Status | Priority | Claim Impact | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|
-| [KFONT-M11-001 - Align `font:gpu-api` with target artifact registry](KFONT-M11-001-align-font-gpu-api-with-target-artifact-registry.md) | `proposed` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M9-002`, `KFONT-M10-010` | `dftext`, `scaledemoji_rendering`, `coloremoji_blendmodes` |
-| [KFONT-M11-002 - Add no-`Sk*` leakage validation](KFONT-M11-002-add-no-sk-leakage-validation.md) | `proposed` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-001` | - |
-| [KFONT-M11-003 - Add normalized `DrawTextRun` contract](KFONT-M11-003-add-normalized-drawtextrun-contract.md) | `proposed` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M8-002`, `KFONT-M9-002`, `KFONT-M11-002` | - |
+| [KFONT-M11-001 - Align `font:gpu-api` with target artifact registry](KFONT-M11-001-align-font-gpu-api-with-target-artifact-registry.md) | `review` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M9-002`, `KFONT-M10-010` | `dftext`, `scaledemoji_rendering`, `coloremoji_blendmodes` |
+| [KFONT-M11-002 - Add no-`Sk*` leakage validation](KFONT-M11-002-add-no-sk-leakage-validation.md) | `review` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-001` | - |
+| [KFONT-M11-003 - Add normalized `DrawTextRun` contract](KFONT-M11-003-add-normalized-drawtextrun-contract.md) | `review` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M8-002`, `KFONT-M9-002`, `KFONT-M11-002` | - |
 | [KFONT-M11-004 - Wire atlas A8 artifact route](KFONT-M11-004-wire-atlas-a8-artifact-route.md) | `proposed` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M9-003`, `KFONT-M9-005`, `KFONT-M11-003` | - |
 | [KFONT-M11-005 - Wire dependency-gated diagnostics for unsupported routes](KFONT-M11-005-wire-dependency-gated-diagnostics-for-unsupported-routes.md) | `proposed` | `P0` | `DependencyGated` | `gpu-api` | `KFONT-M11-001`, `KFONT-M11-003` | `dftext`, `scaledemoji_rendering`, `coloremoji_blendmodes` |
 | [KFONT-M11-006 - Add `GPUTextSubRunPlan` splitting tests](KFONT-M11-006-add-gputextsubrunplan-splitting-tests.md) | `proposed` | `P1` | `GPU-gated` | `gpu-api` | `KFONT-M11-003`, `KFONT-M11-004`, `KFONT-M11-005` | - |
