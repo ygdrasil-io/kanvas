@@ -55,6 +55,12 @@ Parser dependency use must stay inside the smallest module boundary that needs
 it. Code outside that boundary should consume Kanvas-level descriptors and
 reports, not parser internals.
 
+The repo-native wgsl4k contribution and submodule plan lives in
+`.upstream/specs/wgsl4k-evolution/`. That pack is the active dependency gate
+for adding missing parser/reflection behavior through a tracked
+`https://github.com/ygdrasil-io/wgsl4k.git` branch and PR. It does not promote
+any Kanvas route by itself.
+
 ## Validation
 
 Every WGSL source touched by generated-pipeline work must parse through the

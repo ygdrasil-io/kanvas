@@ -38,6 +38,7 @@ route contract, not arbitrary SkSL or source strings.
 ## Spec Sources
 
 - `.upstream/specs/gpu-renderer/27-registered-runtime-effects-registry.md`
+- `.upstream/specs/wgsl4k-evolution/01-validation-reflection-contract.md`
 
 ## Graphite Algorithm References
 
@@ -86,6 +87,7 @@ rtk git diff --check
   with Kotlin/CPU oracle, complete parser-validated WGSL/reflection through
   `wgsl4k`, route integration, adapter-backed execution/readback evidence, and
   explicit unregistered-descriptor refusals.
+- wgsl4k dependency evolution is tracked by `.upstream/specs/wgsl4k-evolution/`.
 
 ## Linear Labels
 
