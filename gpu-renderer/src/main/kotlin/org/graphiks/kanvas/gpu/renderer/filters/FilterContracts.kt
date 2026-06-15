@@ -200,3 +200,127 @@ data class GPUFilterDiagnostic(
     val message: String,
     val terminal: Boolean,
 )
+
+/** Input facts used to build a refusal-only filter DAG matrix. */
+data class GPUFilterDagRefusalInput(
+    val graph: GPUFilterGraphDescriptor,
+    val finiteBounds: Boolean = true,
+    val intermediateOwnershipValidated: Boolean = true,
+    val hasCycle: Boolean = false,
+    val cpuRenderedTextureFallbackRequested: Boolean = false,
+    val supportableBoundedNodeKinds: Set<String> = emptySet(),
+    val registeredRuntimeEffectIds: Set<String> = emptySet(),
+)
+
+/** PM-facing filter DAG matrix row status. */
+enum class GPUFilterDagMatrixStatus {
+    /** Node can become supportable only when its bounded route has separate evidence. */
+    SupportableBounded,
+    /** Node or graph variant is refused with a stable diagnostic. */
+    Refused,
+}
+
+/** One PM-facing support/refusal matrix row for a filter DAG node. */
+data class GPUFilterDagMatrixRow(
+    val nodeId: GPUFilterNodeID,
+    val nodeKind: String,
+    val status: GPUFilterDagMatrixStatus,
+    val diagnosticCode: String?,
+    val nonClaim: String,
+)
+
+/** Result of refusal-only filter DAG classification. */
+data class GPUFilterDagRefusalReport(
+    val graphId: String,
+    val rows: List<GPUFilterDagMatrixRow>,
+    val diagnostics: List<GPUFilterDiagnostic>,
+) {
+    /** Refusal-only M5 evidence never promotes filter DAG support by itself. */
+    val promotable: Boolean = false
+}
+
+/** Builds a refusal-only filter DAG matrix without promoting filter execution support. */
+object GPUFilterDagRefusalMatrix {
+    /** Evaluates graph and node facts into stable refusal diagnostics. */
+    fun evaluate(input: GPUFilterDagRefusalInput): GPUFilterDagRefusalReport {
+        val graphDiagnostics = buildGraphDiagnostics(input)
+        val rows = input.graph.nodes.map { descriptor ->
+            rowFor(descriptor, input, graphDiagnostics.isNotEmpty())
+        }
+
+        return GPUFilterDagRefusalReport(
+            graphId = input.graph.graphId,
+            rows = rows,
+            diagnostics = graphDiagnostics + rows.mapNotNull { row ->
+                row.diagnosticCode?.let { code ->
+                    GPUFilterDiagnostic(
+                        code = code,
+                        nodeId = row.nodeId,
+                        message = row.nonClaim,
+                        terminal = true,
+                    )
+                }
+            },
+        )
+    }
+
+    private fun buildGraphDiagnostics(input: GPUFilterDagRefusalInput): List<GPUFilterDiagnostic> =
+        buildList {
+            if (input.hasCycle) {
+                add(graphDiagnostic("unsupported.filter.graph_cycle", input.graph.graphId))
+            }
+            if (!input.finiteBounds) {
+                add(graphDiagnostic("unsupported.filter.bounds_unbounded", input.graph.graphId))
+            }
+            if (!input.intermediateOwnershipValidated) {
+                add(graphDiagnostic("unsupported.filter.intermediate_unvalidated", input.graph.graphId))
+            }
+            if (input.cpuRenderedTextureFallbackRequested) {
+                add(graphDiagnostic("unsupported.filter.cpu_rendered_texture_forbidden", input.graph.graphId))
+            }
+        }
+
+    private fun graphDiagnostic(code: String, graphId: String): GPUFilterDiagnostic =
+        GPUFilterDiagnostic(
+            code = code,
+            message = "Filter graph $graphId is refused by the DAG refusal matrix.",
+            terminal = true,
+        )
+
+    private fun rowFor(
+        descriptor: GPUFilterNodeDescriptor,
+        input: GPUFilterDagRefusalInput,
+        graphRefused: Boolean,
+    ): GPUFilterDagMatrixRow {
+        val diagnosticCode = when {
+            graphRefused -> null
+            descriptor.nodeKind == "Picture" -> "unsupported.filter.picture_unbounded"
+            descriptor.nodeKind == "RuntimeShader" &&
+                descriptor.parameterHash !in input.registeredRuntimeEffectIds ->
+                "unsupported.filter.runtime_effect_unregistered"
+            descriptor.nodeKind !in input.supportableBoundedNodeKinds ->
+                "unsupported.filter.node_unimplemented"
+            else -> null
+        }
+        val status = if (diagnosticCode == null && !graphRefused) {
+            GPUFilterDagMatrixStatus.SupportableBounded
+        } else {
+            GPUFilterDagMatrixStatus.Refused
+        }
+
+        return GPUFilterDagMatrixRow(
+            nodeId = descriptor.nodeId,
+            nodeKind = descriptor.nodeKind,
+            status = status,
+            diagnosticCode = diagnosticCode,
+            nonClaim = nonClaimFor(descriptor.nodeKind, diagnosticCode, graphRefused),
+        )
+    }
+
+    private fun nonClaimFor(nodeKind: String, diagnosticCode: String?, graphRefused: Boolean): String =
+        when {
+            graphRefused -> "Graph-level bounds, topology, fallback, or intermediate ownership blocks promotion."
+            diagnosticCode == null -> "Supportable bounded row only; no filter DAG route is promoted by this matrix."
+            else -> "$nodeKind remains refused by $diagnosticCode."
+        }
+}

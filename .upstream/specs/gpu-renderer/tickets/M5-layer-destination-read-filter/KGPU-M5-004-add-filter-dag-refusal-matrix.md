@@ -1,7 +1,7 @@
 ---
 id: KGPU-M5-004
 title: "Add filter DAG refusal matrix"
-status: proposed
+status: done
 milestone: M5
 priority: P1
 owner_area: filters-validation
@@ -83,7 +83,16 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Refusal matrix ticket.
+- `done`: Refusal-only matrix implemented in
+  `GPUFilterDagRefusalMatrix` and independently reviewed on 2026-06-15 with
+  no findings after the non-promotion remediation. Fresh evidence:
+  `rtk ./gradlew --no-daemon --rerun-tasks :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.filters.FilterDagRefusalMatrixTest`
+  and `rtk ./gradlew --no-daemon --rerun-tasks :gpu-renderer:check` passed on
+  2026-06-15. The matrix remains non-promotable even when rows are classified
+  as supportable-bounded, does not imply simple filter node support from
+  KGPU-M5-003, and keeps arbitrary DAGs, unbounded intermediates, picture
+  prepass, runtime-effect-without-descriptor, and CPU-rendered filter textures
+  refused.
 
 ## Linear Labels
 
