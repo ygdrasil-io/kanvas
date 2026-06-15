@@ -1,7 +1,7 @@
 ---
 id: KGPU-M4-003
 title: "Add codec provenance and dependency-gated refusals"
-status: proposed
+status: done
 milestone: M4
 priority: P1
 owner_area: images-codecs
@@ -84,8 +84,21 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Codec provenance and refusal gates first; prepared upload
-  implementation remains in later tickets.
+- `done`: Added `GPUImageCodecRegistrySnapshot` dependency-gated provenance
+  evidence for encoded image codec descriptors. Registry dumps include codec
+  ID, descriptor version, supported formats, implementation kind,
+  determinism, color policy, and dependency gate. Provenance planning emits
+  `DependencyGated` diagnostics for unregistered formats, external/platform
+  codecs disallowed by the conformance tier, nondeterministic versions/output
+  policy, and planned codecs whose real delivery remains gated. Decode output
+  without registry-backed codec provenance refuses with
+  `dependency.image.decode.provenance_missing`. Evidence is provenance/refusal
+  only and does not implement codecs, accept decode output, promote an uploaded
+  texture route from metadata, use platform decoder substitutes, or activate
+  product routing. Post-remediation independent review
+  `019ec81d-b49e-7eb2-8a66-6f2d81e0ce95` accepted the evidence for `done` and
+  confirmed no hidden activation, support-claim widening, package-cycle risk,
+  material-key/resource-handle leak, or M4-004 promotion.
 
 ## Linear Labels
 

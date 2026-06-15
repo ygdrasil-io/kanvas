@@ -324,6 +324,185 @@ interface GPUResourceProvider {
     }
 }
 
+/** Resource-layer snapshot of uploaded texture artifact facts. */
+data class GPUUploadedTextureArtifactFacts(
+    val artifactKey: String,
+    val artifactType: String,
+    val pixelWidth: Int,
+    val pixelHeight: Int,
+    val pixelFormat: String,
+    val generation: Long,
+    val lifetimeClass: String,
+    val uploadBudgetClass: String,
+)
+
+/** Request to validate an uploaded image artifact before it can be sampled. */
+data class GPUUploadedTextureArtifactOwnershipRequest(
+    val artifact: GPUUploadedTextureArtifactFacts,
+    val textureDescriptor: GPUTextureDescriptor,
+    val viewDescriptor: GPUTextureViewDescriptor,
+    val samplerDescriptor: GPUSamplerDescriptor,
+    val ownerLabel: String,
+    val ownerScope: String,
+    val expectedArtifactGeneration: Long,
+    val artifactDeviceGeneration: Long,
+    val expectedDeviceGeneration: Long,
+    val requiredUsageLabels: Set<String>,
+    val activeAttachmentSampled: Boolean = false,
+    val debugLiveResourceLabel: String? = null,
+) {
+    internal val requiredUsageLabelsSnapshot: Set<String> = requiredUsageLabels.toSet()
+}
+
+/** Accepted or refused ownership gate for an uploaded texture artifact. */
+data class GPUUploadedTextureArtifactOwnershipGatePlan(
+    val request: GPUUploadedTextureArtifactOwnershipRequest,
+    val ownership: GPUTextureOwnershipPlan,
+    val allocation: GPUTextureAllocationPlan,
+    val routeKind: String,
+    val requiredUsageLabels: Set<String>,
+    val diagnostics: List<GPUResourceDiagnostic> = emptyList(),
+)
+
+/** Builds upload-artifact ownership evidence without materializing a backend texture. */
+class GPUUploadedTextureArtifactOwnershipGate {
+    /**
+     * Validates typed upload artifact ownership before sampling.
+     *
+     * This is contract evidence only: accepted output names an
+     * `UploadFromArtifact` allocation plan and resource ownership facts, but it
+     * does not allocate a texture, upload bytes, inspect cache residency, or
+     * expose live resource handles.
+     */
+    fun plan(request: GPUUploadedTextureArtifactOwnershipRequest): GPUUploadedTextureArtifactOwnershipGatePlan {
+        val ownership = GPUTextureOwnershipPlan(
+            ownerLabel = request.ownerLabel,
+            lifetimeClass = request.artifact.lifetimeClass,
+            releasePolicy = "recording-complete",
+            canAliasScratch = false,
+        )
+        val diagnostics = request.refusalDiagnostics()
+
+        if (diagnostics.isNotEmpty()) {
+            val diagnostic = diagnostics.first()
+            return GPUUploadedTextureArtifactOwnershipGatePlan(
+                request = request,
+                ownership = ownership,
+                allocation = GPUTextureAllocationPlan.Refuse(diagnostic),
+                routeKind = "RefuseDiagnostic",
+                requiredUsageLabels = request.requiredUsageLabelsSnapshot,
+                diagnostics = diagnostics,
+            )
+        }
+
+        val diagnostic = GPUResourceDiagnostic(
+            code = "texture:uploaded-artifact.ownership.accepted",
+            resourceLabel = request.ownerLabel,
+            message = "Uploaded texture artifact ${request.artifact.artifactKey} passed ownership gates.",
+            terminal = false,
+        )
+
+        return GPUUploadedTextureArtifactOwnershipGatePlan(
+            request = request,
+            ownership = ownership,
+            allocation = GPUTextureAllocationPlan.UploadFromArtifact(
+                artifactKey = request.artifact.artifactKey,
+                descriptor = request.textureDescriptor,
+            ),
+            routeKind = "CPUPreparedGPU",
+            requiredUsageLabels = request.requiredUsageLabelsSnapshot,
+            diagnostics = listOf(diagnostic),
+        )
+    }
+}
+
+/** Emits stable M4 uploaded-texture ownership evidence lines. */
+fun GPUUploadedTextureArtifactOwnershipGatePlan.dumpLines(): List<String> {
+    if (routeKind == "RefuseDiagnostic") {
+        val diagnostic = diagnostics.firstOrNull()
+        return listOf(
+            "texture:uploaded-artifact.refused reason=${diagnostic?.code ?: "unknown"} " +
+                "artifact=${request.artifact.artifactKey} routeKind=RefuseDiagnostic",
+            uploadedTextureOwnershipNonClaimLine,
+        )
+    }
+
+    return listOf(
+        "texture:uploaded-artifact.accepted routeKind=CPUPreparedGPU provenance=${request.artifact.artifactType} " +
+            "owner=${ownership.ownerLabel} lifetime=${ownership.lifetimeClass} allocation=UploadFromArtifact",
+        "texture:artifact key=${request.artifact.artifactKey} " +
+            "generation=${request.artifact.generation} expectedGeneration=${request.expectedArtifactGeneration} " +
+            "budget=${request.artifact.uploadBudgetClass} uploadBeforeSample=true",
+        "texture:usage required=${requiredUsageLabels.sorted().joinToString(",")} " +
+            "available=${request.textureDescriptor.usageLabels.sorted().joinToString(",")} " +
+            "deviceGeneration=${request.artifactDeviceGeneration} " +
+            "expectedDeviceGeneration=${request.expectedDeviceGeneration}",
+        "texture:view descriptor=${request.viewDescriptor.textureDescriptorHash} " +
+            "view=${request.viewDescriptor.viewDimension} mipRange=${request.viewDescriptor.mipRange} " +
+            "sampler=${request.samplerDescriptor.dumpToken()}",
+        "texture:ownership owner=${ownership.ownerLabel} scope=${request.ownerScope} " +
+            "release=${ownership.releasePolicy} materialization=upload-before-sample",
+        uploadedTextureOwnershipNonClaimLine,
+    )
+}
+
+private fun GPUUploadedTextureArtifactOwnershipRequest.refusalDiagnostics(): List<GPUResourceDiagnostic> =
+    buildList {
+        if (artifact.artifactType != "UploadedTextureArtifact") {
+            add(
+                GPUResourceDiagnostic.uploadArtifactMissing(
+                    resourceLabel = ownerLabel,
+                    artifactType = artifact.artifactType,
+                ),
+            )
+        }
+        if (artifact.generation != expectedArtifactGeneration) {
+            add(
+                GPUResourceDiagnostic.uploadArtifactGenerationStale(
+                    resourceLabel = ownerLabel,
+                    expectedGeneration = expectedArtifactGeneration,
+                    actualGeneration = artifact.generation,
+                ),
+            )
+        }
+        textureDescriptor.validateRequiredUsage(
+            requiredUsageLabels = requiredUsageLabelsSnapshot,
+            resourceLabel = ownerLabel,
+        )?.let(::add)
+        if (artifactDeviceGeneration != expectedDeviceGeneration) {
+            add(
+                GPUResourceDiagnostic.deviceGenerationStale(
+                    resourceLabel = ownerLabel,
+                    expectedDeviceGeneration = expectedDeviceGeneration,
+                    actualDeviceGeneration = artifactDeviceGeneration,
+                ),
+            )
+        }
+        if (activeAttachmentSampled) {
+            add(GPUResourceDiagnostic.activeAttachmentSampled(resourceLabel = ownerLabel))
+        }
+        if (!textureDescriptor.matchesArtifactPixels(artifact)) {
+            add(
+                GPUResourceDiagnostic.textureDescriptorInvalid(
+                    resourceLabel = ownerLabel,
+                    reason = "texture descriptor does not match uploaded artifact pixel plan",
+                ),
+            )
+        }
+    }
+
+private fun GPUTextureDescriptor.matchesArtifactPixels(artifact: GPUUploadedTextureArtifactFacts): Boolean =
+    width == artifact.pixelWidth &&
+        height == artifact.pixelHeight &&
+        format == artifact.pixelFormat
+
+private fun GPUSamplerDescriptor.dumpToken(): String =
+    "$addressModeU/$addressModeV/$magFilter/$minFilter/$mipmapFilter"
+
+private const val uploadedTextureOwnershipNonClaimLine =
+    "nonclaim:no-product-activation no-adapter-backed-execution no-live-resource-handle " +
+        "no-cache-residency-claim no-codec-support no-cpu-rendered-compat-texture"
+
 /**
  * Frame-scoped surface texture lease.
  *
@@ -699,6 +878,43 @@ data class GPUResourceDiagnostic(
                 message = "Texture resource $resourceLabel is active as a render attachment and cannot be sampled without an accepted copy or intermediate route.",
                 terminal = true,
                 facts = mapOf("activeAttachmentSampled" to "true"),
+            )
+
+        /** Builds a stale uploaded-artifact generation diagnostic. */
+        fun uploadArtifactGenerationStale(
+            resourceLabel: String,
+            expectedGeneration: Long,
+            actualGeneration: Long,
+        ): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.texture.upload_artifact_generation_stale",
+                resourceLabel = resourceLabel,
+                message = "Uploaded texture artifact for $resourceLabel has generation $actualGeneration but expected $expectedGeneration.",
+                terminal = true,
+                facts = mapOf(
+                    "actualGeneration" to actualGeneration.toString(),
+                    "expectedGeneration" to expectedGeneration.toString(),
+                ),
+            )
+
+        /** Builds a diagnostic for missing uploaded-artifact provenance. */
+        fun uploadArtifactMissing(resourceLabel: String, artifactType: String): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.texture.upload_artifact_missing",
+                resourceLabel = resourceLabel,
+                message = "Resource $resourceLabel requires UploadedTextureArtifact but found $artifactType.",
+                terminal = true,
+                facts = mapOf("artifactType" to artifactType),
+            )
+
+        /** Builds a texture descriptor mismatch diagnostic. */
+        fun textureDescriptorInvalid(resourceLabel: String, reason: String): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.texture.descriptor_invalid",
+                resourceLabel = resourceLabel,
+                message = "Texture descriptor for $resourceLabel is invalid: $reason.",
+                terminal = true,
+                facts = mapOf("reason" to reason),
             )
 
         /** Builds an upload or staging budget diagnostic. */

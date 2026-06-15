@@ -83,7 +83,13 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Boundary evidence before expansion.
+- `proposed`: Boundary evidence before expansion. Remaining gate: this ticket
+  is `TargetNative`/`GPUNative` and adapter-required; promotion needs real
+  WebGPU/adapter sampler evidence for tile/filter/mipmap mapping, behavior
+  affecting key boundaries, unsupported cubic/aniso/perspective diagnostics,
+  and reference or readback artifacts. The M4-001 prepared decoded-pixel route
+  and M4-002 uploaded-artifact ownership gate do not by themselves prove native
+  sampler support or mipmap behavior.
 
 ## Linear Labels
 

@@ -1,7 +1,7 @@
 ---
 id: KGPU-M4-001
 title: "Add image shader route for already-decoded pixels"
-status: proposed
+status: done
 milestone: M4
 priority: P0
 owner_area: images-textures
@@ -85,7 +85,27 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Decoded-pixel source only.
+- `done`: Added `GPUDecodedImageShaderPreparedPlanner` contract evidence for
+  already decoded CPU pixels as a `CPUPreparedGPU` image shader route. The plan
+  emits deterministic `GPUImageSourceDescriptor`, `UploadedTextureArtifact`,
+  texture/view/sampler/binding, material-key boundary, route, and refusal dumps.
+  Material keys exclude upload artifact keys, pixel content hashes, row bytes,
+  and resource handles; upload artifact keys include descriptor version,
+  source/content/generation/size/format/row-byte facts, alpha type,
+  color-profile label, orientation state, conformance tier, budget class,
+  generator version, and mip facts. Stable refusals cover invalid source
+  descriptors, unsupported pixel format, row stride, unapplied orientation,
+  nondeterministic content or color-profile key facts, upload budget overflow,
+  unsupported tile mode, mip requirements, and unsupported sampling filters.
+  Independent review `019ec815-a637-7e92-baa9-24bd28b69904` found the initial
+  upload artifact key under-specified; remediation added RED/GREEN coverage for
+  alpha/color key separation plus descriptor/budget/generator/orientation key
+  facts. Evidence is contract-only and does not activate product image drawing,
+  adapter execution, codec support, mipmaps, broad image support, or
+  CPU-rendered compatibility textures. Post-remediation independent review
+  `019ec81d-b49e-7eb2-8a66-6f2d81e0ce95` accepted the evidence for `done` and
+  confirmed no hidden activation, support-claim widening, package-cycle risk,
+  material-key/resource-handle leak, or M4-004 promotion.
 
 ## Linear Labels
 
