@@ -1,10 +1,200 @@
 {
   "schema": "org.graphiks.kanvas.font.sfnt.SFNTDirectoryReport.v1",
   "schemaVersion": 1,
-  "ticketId": "KFONT-M2-001",
+  "ticketIds": ["KFONT-M2-001", "KFONT-M2-002"],
   "dashboardClassification": "tracked-gap",
   "claimPromotionAllowed": false,
   "entries": [
+    {
+      "entryId": "generated-directory-diagnostics",
+      "fixtureId": "sfnt-directory-diagnostics-generated",
+      "fixtureKind": "GeneratedFixtureFontSource",
+      "sourceId": "550e8400-e29b-41d4-a716-446655449105",
+      "sourceKind": "MEMORY",
+      "displayName": "generated-directory-diagnostics",
+      "parserGeneration": 1,
+      "sourceByteOffset": 0,
+      "sourceByteLength": 96,
+      "sourceSha256": null,
+      "containerKind": "SINGLE_FACE",
+      "requestedCollectionIndex": 0,
+      "selectedFaceIndex": 0,
+      "faceCount": 1,
+      "dashboardClassification": "tracked-gap",
+      "claimPromotionAllowed": false,
+      "tableRecords": [
+        {
+          "tag": "cmap",
+          "checksum": "0x00000002",
+          "offset": 90,
+          "length": 6,
+          "rawByteLength": 6,
+          "rawSha256": "b0f66adc83641586656866813fd9dd0b8ebb63796075661ba45d1aa8089e1d44"
+        },
+        {
+          "tag": "name",
+          "checksum": "0x00000000",
+          "offset": 80,
+          "length": 8,
+          "rawByteLength": 8,
+          "rawSha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc"
+        },
+        {
+          "tag": "name",
+          "checksum": "0x00000001",
+          "offset": 88,
+          "length": 4,
+          "rawByteLength": 4,
+          "rawSha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+        },
+        {
+          "tag": "post",
+          "checksum": "0x00000003",
+          "offset": 92,
+          "length": 12,
+          "rawByteLength": null,
+          "rawSha256": null
+        }
+      ],
+      "directoryDiagnostics": [
+        {
+          "code": "font.sfnt.required-table-missing",
+          "tag": "glyf",
+          "offset": null,
+          "length": null,
+          "sourceLength": 96,
+          "message": "Required table is not present."
+        },
+        {
+          "code": "font.sfnt.required-table-missing",
+          "tag": "head",
+          "offset": null,
+          "length": null,
+          "sourceLength": 96,
+          "message": "Required table is not present."
+        },
+        {
+          "code": "font.sfnt.table-duplicate",
+          "tag": "name",
+          "offset": 88,
+          "length": 4,
+          "sourceLength": 96,
+          "message": "Duplicate SFNT table tag."
+        },
+        {
+          "code": "font.sfnt.table-out-of-bounds",
+          "tag": "post",
+          "offset": 92,
+          "length": 12,
+          "sourceLength": 96,
+          "message": "Table range exceeds source length."
+        },
+        {
+          "code": "font.sfnt.table-overlap",
+          "tag": "cmap",
+          "offset": 90,
+          "length": 6,
+          "sourceLength": 96,
+          "message": "Table range overlaps previous table range ending at 92."
+        },
+        {
+          "code": "font.sfnt.table-overlap",
+          "tag": "post",
+          "offset": 92,
+          "length": 12,
+          "sourceLength": 96,
+          "message": "Table range overlaps previous table range ending at 96."
+        }
+      ],
+      "faceDiagnostics": [],
+      "diagnostics": []
+    },
+    {
+      "entryId": "generated-optional-table-malformed",
+      "fixtureId": "font-source-sfnt-malformed-optional-table-diagnostic",
+      "fixtureKind": "GeneratedFixtureFontSource",
+      "sourceId": "550e8400-e29b-41d4-a716-446655449106",
+      "sourceKind": "MEMORY",
+      "displayName": "generated-optional-table-malformed",
+      "parserGeneration": 1,
+      "sourceByteOffset": 0,
+      "sourceByteLength": 330,
+      "sourceSha256": "654b72afe84b9161da7af35682ab19792fee6cfdf436a56dff480c9e7232afff",
+      "containerKind": "SINGLE_FACE",
+      "requestedCollectionIndex": 0,
+      "selectedFaceIndex": 0,
+      "faceCount": 1,
+      "dashboardClassification": "tracked-gap",
+      "claimPromotionAllowed": false,
+      "tableRecords": [
+        {
+          "tag": "cmap",
+          "checksum": "0x00000000",
+          "offset": 178,
+          "length": 44,
+          "rawByteLength": 44,
+          "rawSha256": "bb8e3f288667afcd3503b583e3f0d19f19b182bce2e986da892aa9737b50f714"
+        },
+        {
+          "tag": "fvar",
+          "checksum": "0x00000000",
+          "offset": 322,
+          "length": 8,
+          "rawByteLength": 8,
+          "rawSha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc"
+        },
+        {
+          "tag": "head",
+          "checksum": "0x00000000",
+          "offset": 222,
+          "length": 54,
+          "rawByteLength": 54,
+          "rawSha256": "a5afb3d0e85a1b75ed25d965ebe5d2d79dbddf3b76d5689ca6390866f3832e33"
+        },
+        {
+          "tag": "hhea",
+          "checksum": "0x00000000",
+          "offset": 276,
+          "length": 36,
+          "rawByteLength": 36,
+          "rawSha256": "ac11e4de4e9011fd7a00a9250ed8045faa9904c4122a1173a6ee0bcf58ca3977"
+        },
+        {
+          "tag": "hmtx",
+          "checksum": "0x00000000",
+          "offset": 318,
+          "length": 4,
+          "rawByteLength": 4,
+          "rawSha256": "925d19f8e3e4c7a4be1990f5e7d11c4524616f704288e0ade7a4b7d8d7d9ced5"
+        },
+        {
+          "tag": "maxp",
+          "checksum": "0x00000000",
+          "offset": 312,
+          "length": 6,
+          "rawByteLength": 6,
+          "rawSha256": "186128bf8a4d60eb4b51102ae2a2cb6a0b80011977582480395a454454bec7e1"
+        },
+        {
+          "tag": "name",
+          "checksum": "0x00000000",
+          "offset": 124,
+          "length": 54,
+          "rawByteLength": 54,
+          "rawSha256": "716cd28ac495d03a8ab81283bcbbbcfc8a71d8db51635b17873a07eafb9c7f86"
+        }
+      ],
+      "directoryDiagnostics": [],
+      "faceDiagnostics": [
+        {
+          "table": "fvar",
+          "causeCode": "font.sfnt.optional-table-malformed",
+          "message": "Unable to parse OpenType table fvar.",
+          "causeMessage": "OpenType fvar table must contain at least 16 bytes, was 8."
+        }
+      ],
+      "diagnostics": []
+    },
     {
       "entryId": "generated-ttc-face-index-1",
       "fixtureId": "ttc-face-index-planned-generated",
@@ -15,6 +205,7 @@
       "parserGeneration": 1,
       "sourceByteOffset": 0,
       "sourceByteLength": 628,
+      "sourceSha256": null,
       "containerKind": "TTC_COLLECTION",
       "requestedCollectionIndex": 1,
       "selectedFaceIndex": 1,
@@ -72,6 +263,7 @@
         }
       ],
       "directoryDiagnostics": [],
+      "faceDiagnostics": [],
       "diagnostics": []
     },
     {
@@ -84,6 +276,7 @@
       "parserGeneration": 1,
       "sourceByteOffset": 0,
       "sourceByteLength": 628,
+      "sourceSha256": null,
       "containerKind": "TTC_COLLECTION",
       "requestedCollectionIndex": 3,
       "selectedFaceIndex": null,
@@ -92,6 +285,7 @@
       "claimPromotionAllowed": false,
       "tableRecords": [],
       "directoryDiagnostics": [],
+      "faceDiagnostics": [],
       "diagnostics": [
         {
           "code": "font.collection-index-invalid",
@@ -115,6 +309,7 @@
       "parserGeneration": 1,
       "sourceByteOffset": 0,
       "sourceByteLength": 410712,
+      "sourceSha256": null,
       "containerKind": "SINGLE_FACE",
       "requestedCollectionIndex": 0,
       "selectedFaceIndex": 0,
@@ -276,6 +471,7 @@
         }
       ],
       "directoryDiagnostics": [],
+      "faceDiagnostics": [],
       "diagnostics": []
     }
   ]

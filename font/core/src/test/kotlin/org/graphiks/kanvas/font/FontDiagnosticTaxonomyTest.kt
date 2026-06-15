@@ -54,6 +54,35 @@ class FontDiagnosticTaxonomyTest {
             "tableTag",
         )
         assertRequiredFields(
+            taxonomy.code("font.sfnt.optional-table-malformed"),
+            "sourceId",
+            "tableTag",
+        )
+        assertRequiredFields(
+            taxonomy.code("font.sfnt.table-out-of-bounds"),
+            "sourceId",
+            "tableTag",
+            "offset",
+            "length",
+            "sourceLength",
+        )
+        assertRequiredFields(
+            taxonomy.code("font.sfnt.table-duplicate"),
+            "sourceId",
+            "tableTag",
+            "offset",
+            "length",
+            "sourceLength",
+        )
+        assertRequiredFields(
+            taxonomy.code("font.sfnt.table-overlap"),
+            "sourceId",
+            "tableTag",
+            "offset",
+            "length",
+            "sourceLength",
+        )
+        assertRequiredFields(
             taxonomy.code("font.scaler.outline-unavailable"),
             "sourceId",
             "typefaceId",

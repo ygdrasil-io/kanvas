@@ -583,14 +583,18 @@ complete SFNT conformance, TrueType scaler support, CFF/CFF2 support, or
 complete font-source coverage.
 ### PKT-03B: Bounded SFNT Table Directory Diagnostics
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: review for KFONT-M2-002; independent spec and quality reviews accepted
+after remediation.
 
 Files:
 
 - `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
 - `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTParserEntryPointTest.kt`
 - `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/sfnt-directory.json`
+- `reports/pure-kotlin-text/font-diagnostic-taxonomy.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m2-002-bounded-directory-diagnostics.md`
 
 Evidence:
 
@@ -604,19 +608,31 @@ Evidence:
   ranges, out-of-bounds ranges, missing required tables, and zero-length
   required tables using stable reason-code families such as
   `font.sfnt.table-out-of-bounds`, `font.sfnt.table-duplicate`,
-  `font.sfnt.table-overlap`, and `font.required-table-missing`.
+  `font.sfnt.table-overlap`, and `font.sfnt.required-table-missing`.
+- `SFNTParseRequest.requiredTables` now flows through `DefaultSFNTParser`, and
+  `sfnt-directory.json` includes a generated malformed directory fixture row
+  with duplicate, out-of-bounds, overlap, and missing-required-table evidence.
+- Malformed optional table diagnostics are classified as
+  `font.sfnt.optional-table-malformed` while remaining tracked-gap, with
+  `sfnt-directory.json` carrying the generated `fvar` malformed fixture,
+  source SHA-256, and face diagnostic.
+- `font-fixture-inventory.json` records the optional malformed source SHA-256
+  and intended diagnostic without promoting complete malformed-suite support.
 
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.tableDirectoryValidatorReportsBoundedDiagnosticsDeterministically
-rtk ./gradlew --no-daemon :font:sfnt:test --rerun-tasks
+rtk ./gradlew --no-daemon :font:core:test --tests '*DiagnosticTaxonomy*'
+rtk ./gradlew --no-daemon --rerun-tasks :font:sfnt:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_font_fixtures.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
 ```
 
 Remaining gate: this is bounded directory diagnostic evidence only. It does not
-claim full SFNT parser conformance, malformed fixture manifest completion,
+claim full SFNT parser conformance, malformed fixture suite completion,
 automatic parser refusal policy integration, complete `cmap` coverage, scaler
-support, shaping support, color glyph support, or GPU text-route support.
+support, shaping support, color glyph support, search-field formula validation,
+checksum verification, or GPU text-route support.
 ### PKT-03C: Malformed Table And Format-14 Fixture Plan
 
 Status: implemented with local diff review.
@@ -695,8 +711,8 @@ shaping support, platform font behavior, native oracle behavior, or GPU route
 support.
 ### PKT-03E: SFNT Directory Diagnostics In Face Evidence
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: review for KFONT-M2-002; independent spec and quality reviews accepted
+after remediation.
 
 Files:
 
