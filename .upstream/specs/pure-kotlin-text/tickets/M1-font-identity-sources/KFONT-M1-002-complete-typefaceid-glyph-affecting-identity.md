@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M1-002"
 title: "Complete `TypefaceID` glyph-affecting identity"
-status: "review"
+status: "done"
 milestone: "M1"
 priority: "P0"
 owner_area: "font-core"
@@ -100,6 +100,7 @@ rtk ./gradlew --no-daemon :font:core:test --tests '*Typeface*'
 
 ## Status Notes
 
+- `done`: Merged into `master` by PR #1656 (`68897c182`) and revalidated on 2026-06-15 in `reports/pure-kotlin-text/2026-06-15-kfont-review-closeout.md`. Remaining non-claims and later gates stay active.
 - `proposed`: Typeface identity fields are specified, but no `typeface-id.json` evidence is attached yet.
 - Move to `ready` after KFONT-M1-001 lands the source identity model.
 - `review` 2026-06-15: `TypefaceIdentityPreimage` now records source ID,

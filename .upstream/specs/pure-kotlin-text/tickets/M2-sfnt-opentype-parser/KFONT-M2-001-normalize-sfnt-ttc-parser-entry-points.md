@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M2-001"
 title: "Normalize SFNT/TTC parser entry points"
-status: "review"
+status: "done"
 milestone: "M2"
 priority: "P0"
 owner_area: "font-sfnt"
@@ -97,6 +97,7 @@ rtk ./gradlew --no-daemon :font:sfnt:test --tests '*SFNTParser*' --tests '*TTC*'
 
 ## Status Notes
 
+- `done`: Merged into `master` by PR #1660 (`e63dc095b`) and revalidated on 2026-06-15 in `reports/pure-kotlin-text/2026-06-15-kfont-review-closeout.md`. Remaining non-claims and later gates stay active.
 - `proposed`: Entry-point contract is specified, but no parser dump evidence is attached yet.
 - `review`: `SFNTParseRequest`, `BoundedFontBytes`, `DefaultSFNTParser`, and
   `SFNTDirectoryReportWriter` are implemented with checked-in

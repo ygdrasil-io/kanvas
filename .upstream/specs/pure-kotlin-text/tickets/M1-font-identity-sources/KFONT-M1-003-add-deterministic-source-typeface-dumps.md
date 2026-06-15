@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M1-003"
 title: "Add deterministic source/typeface dumps"
-status: "review"
+status: "done"
 milestone: "M1"
 priority: "P0"
 owner_area: "validation"
@@ -95,6 +95,7 @@ rtk ./gradlew --no-daemon :font:core:test --tests '*IdentityDump*'
 
 ## Status Notes
 
+- `done`: Merged into `master` by PR #1657 (`8ef0f9b72`) and revalidated on 2026-06-15 in `reports/pure-kotlin-text/2026-06-15-kfont-review-closeout.md`. Remaining non-claims and later gates stay active.
 - `review`: `FontIdentityDumpWriter` emits the checked-in `font-source.json`
   and `typeface-id.json` goldens through canonical wrappers, records explicit
   schema version/order rules, and verifies repeated dump bundles byte-for-byte.

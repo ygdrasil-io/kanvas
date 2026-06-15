@@ -139,7 +139,7 @@ evidence, or GPU text route support.
 
 ### KFONT-M0-001/M0-002: Pure Kotlin Font CI Foundation
 
-Status: review.
+Status: done; merged and freshly revalidated for closeout.
 
 Files:
 
@@ -186,7 +186,7 @@ font engine, or GPU text support.
 
 ### KFONT-M0-003: Module And Package Boundary Validation
 
-Status: review.
+Status: done; merged and freshly revalidated for closeout.
 
 Files:
 
@@ -226,7 +226,7 @@ does not add font behavior, rendering behavior, or GPU text route support.
 
 ### KFONT-M0-004: Stable Diagnostic Taxonomy
 
-Status: review.
+Status: done; merged and freshly revalidated for closeout.
 
 Files:
 
@@ -264,7 +264,7 @@ them explicitly.
 
 ### KFONT-M0-005: Dashboard Claim Classification
 
-Status: review.
+Status: done; merged and freshly revalidated for closeout.
 
 Files:
 
@@ -317,7 +317,7 @@ retires them explicitly.
 
 ### KFONT-M1-003: Deterministic Source/Typeface Identity Dumps
 
-Status: review.
+Status: done; merged and freshly revalidated for closeout.
 
 Files:
 
@@ -583,8 +583,7 @@ complete SFNT conformance, TrueType scaler support, CFF/CFF2 support, or
 complete font-source coverage.
 ### PKT-03B: Bounded SFNT Table Directory Diagnostics
 
-Status: review for KFONT-M2-002; independent spec and quality reviews accepted
-after remediation.
+Status: done; merged, independently reviewed, and freshly revalidated for KFONT-M2-002 closeout.
 
 Files:
 
@@ -711,8 +710,7 @@ shaping support, platform font behavior, native oracle behavior, or GPU route
 support.
 ### PKT-03E: SFNT Directory Diagnostics In Face Evidence
 
-Status: review for KFONT-M2-002; independent spec and quality reviews accepted
-after remediation.
+Status: done; merged, independently reviewed, and freshly revalidated for KFONT-M2-002 closeout.
 
 Files:
 
@@ -2442,7 +2440,7 @@ runtime performance, promote indicative budgets into release gates, synthesize
 GPU upload evidence, or claim GPU text rendering support.
 ### KFONT-M1-004: Bundled Source Fixture Manifest
 
-Status: review; independently reviewed after remediation.
+Status: done; merged, independently reviewed, and freshly revalidated for closeout.
 
 Files:
 
@@ -2497,7 +2495,7 @@ support, rendering support, or GPU support.
 
 ### KFONT-M2-001: SFNT/TTC Parser Entry Points
 
-Status: review.
+Status: done; merged and freshly revalidated for closeout.
 
 Files:
 

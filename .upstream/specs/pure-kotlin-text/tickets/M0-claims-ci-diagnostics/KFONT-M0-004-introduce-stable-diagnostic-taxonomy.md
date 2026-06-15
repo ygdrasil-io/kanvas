@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M0-004"
 title: "Introduce stable diagnostic taxonomy"
-status: "review"
+status: "done"
 milestone: "M0"
 priority: "P0"
 owner_area: "diagnostics"
@@ -108,6 +108,7 @@ rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePerformanceTrendWar
 
 ## Status Notes
 
+- `done`: Merged into `master` by PR #1661 (`3fb53af78`) and revalidated on 2026-06-15 in `reports/pure-kotlin-text/2026-06-15-kfont-review-closeout.md`. Remaining non-claims and later gates stay active.
 - `review`: `FontDiagnosticTaxonomy` and
   `reports/pure-kotlin-text/font-diagnostic-taxonomy.json` define accepted
   namespaces, required fields, sample diagnostics, legacy mappings, and
