@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M2-003"
 title: "Complete cmap format coverage"
-status: "proposed"
+status: "done"
 milestone: "M2"
 priority: "P0"
 owner_area: "font-sfnt"
@@ -24,7 +24,7 @@ Kanvas text cannot progress beyond parser facts unless Unicode `cmap` selection 
 
 - Parse and select Unicode `cmap` format 12, format 4, format 14, format 6, and format 0 according to target priority.
 - Treat format 13 as fixture-gated unless product fixtures justify many-to-one support.
-- Emit `font.cmap-format-unsupported` for unsupported formats and a stable no-usable-Unicode-`cmap` diagnostic when selection fails.
+- Emit `font.sfnt.cmap-format-unsupported` for unsupported formats and a stable no-usable-Unicode-`cmap` diagnostic when selection fails.
 - Produce `cmap-map.json` with selected subtable, platform/encoding IDs, mapped ranges, missing-codepoint behavior, and variation selector facts.
 - Keep glyph ID lookup pure parser behavior; do not shape clusters or render glyphs.
 
@@ -65,11 +65,11 @@ class CMapTable(
 
 ## Acceptance Criteria
 
-- [ ] Format 12 and format 4 fixtures map expected Unicode code points to stable glyph IDs.
-- [ ] Format 14 fixtures expose variation selector mappings without changing base mapping semantics.
-- [ ] Format 6 and format 0 fixtures are lower-priority fallbacks and do not override a usable format 12 or 4 Unicode subtable.
-- [ ] Missing code points return glyph ID `0` and appear in `cmap-map.json` test evidence.
-- [ ] Unsupported formats emit `font.cmap-format-unsupported` with format, platform ID, encoding ID, and source face identity.
+- [x] Format 12 and format 4 fixtures map expected Unicode code points to stable glyph IDs.
+- [x] Format 14 fixtures expose variation selector mappings without changing base mapping semantics.
+- [x] Format 6 and format 0 fixtures are lower-priority fallbacks and do not override a usable format 12 or 4 Unicode subtable.
+- [x] Missing code points return glyph ID `0` and appear in `cmap-map.json` test evidence.
+- [x] Unsupported formats emit `font.sfnt.cmap-format-unsupported` with format, platform ID, encoding ID, and source face identity.
 
 ## Required Evidence
 
@@ -99,8 +99,13 @@ rtk ./gradlew --no-daemon :font:sfnt:test --tests '*CMap*'
 
 ## Status Notes
 
-- `proposed`: `cmap` coverage requirements are specified, but no `cmap-map.json` evidence is attached yet.
-- Move to `ready` after SFNT entry points and directory diagnostics are available.
+- `review` (2026-06-15): Parser-only implementation covers formats 12, 4, 14, 6, and 0 in `:font:sfnt`; `lookupGlyphId(codePoint, variationSelector: Int? = null)` returns stable glyph ID `0` for missing code points; format 14 default variation ranges preserve base mapping semantics and non-default mappings return explicit glyph IDs.
+- `review` (2026-06-15): `reports/pure-kotlin-text/cmap-map.json` records selected subtable facts, platform/encoding IDs, mapped ranges, missing-codepoint behavior, variation selector facts, `font.sfnt.cmap-format-unsupported`, `font.sfnt.cmap-unusable`, source face identities, and `claimPromotionAllowed=false`.
+- `review` (2026-06-15): The unsupported-format diagnostic is scoped under `font.sfnt.*` to preserve the fixed M0 diagnostic namespace taxonomy.
+- `review` (2026-06-15): Format 13 remains fixture-gated/refused; no shaping, fallback, scaler, rendering, native oracle, or GPU support claim is made.
+- `review` (2026-06-16): Remediation added explicit format 4 over legacy 6/0 fallback evidence and refreshed `font-diagnostic-taxonomy.json` for the `font.sfnt.cmap-*` diagnostics.
+- `review` (2026-06-16): `CMapGlyphMapper` keeps parser glyph ID `0` from becoming a shaping support claim by preserving the existing `null` boundary contract for missing-glyph diagnostics.
+- `done` (2026-06-16): Independent spec re-review verdict `ACCEPT`; independent code-quality re-review verdict `Ready to merge: Yes`; fresh validations cover `:font:core:test`, `:font:sfnt:test`, `:font:text:test`, pure Kotlin text report validators, and `rtk git diff --check`.
 
 ## Linear Labels
 

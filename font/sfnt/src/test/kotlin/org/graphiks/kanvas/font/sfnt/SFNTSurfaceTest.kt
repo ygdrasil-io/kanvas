@@ -744,8 +744,8 @@ class SFNTSurfaceTest {
         assertEquals(firstFamily, firstParsed.names.lookupName(nameId = 1))
         assertEquals(secondFamily, secondParsed.names.lookupName(nameId = 1))
         assertEquals(7, firstParsed.cmap.lookupGlyphId(0x0041))
-        assertEquals(null, firstParsed.cmap.lookupGlyphId(0x0042))
-        assertEquals(null, secondParsed.cmap.lookupGlyphId(0x0041))
+        assertEquals(0, firstParsed.cmap.lookupGlyphId(0x0042))
+        assertEquals(0, secondParsed.cmap.lookupGlyphId(0x0041))
         assertEquals(11, secondParsed.cmap.lookupGlyphId(0x0042))
         assertEquals(1000, firstParsed.metrics.unitsPerEm)
         assertEquals(1200, secondParsed.metrics.unitsPerEm)
@@ -1376,7 +1376,7 @@ class SFNTSurfaceTest {
         assertEquals(CMapEncodingRecord(platformId = 3, encodingId = 1, offset = 12, format = 4), table.encodingRecords.single())
         assertEquals(4, table.preferredSubtable?.format)
         assertEquals(7, table.lookupGlyphId(0x0041))
-        assertEquals(null, table.lookupGlyphId(0x0042))
+        assertEquals(0, table.lookupGlyphId(0x0042))
         assertEquals(32, table.subtables["3:1:4"]?.size)
     }
 
@@ -1403,7 +1403,7 @@ class SFNTSurfaceTest {
             ),
         )
 
-        assertEquals(null, table.lookupGlyphId(0x0041))
+        assertEquals(0, table.lookupGlyphId(0x0041))
         assertEquals(7, table.lookupGlyphId(0x0042))
     }
 
@@ -1423,7 +1423,7 @@ class SFNTSurfaceTest {
             ),
         )
 
-        assertEquals(null, table.lookupGlyphId(0x0041))
+        assertEquals(0, table.lookupGlyphId(0x0041))
         assertEquals(11, table.lookupGlyphId(0x0042))
     }
 
@@ -1475,8 +1475,141 @@ class SFNTSurfaceTest {
             ),
         )
 
-        assertEquals(null, table.lookupGlyphId(0x0041))
+        assertEquals(0, table.lookupGlyphId(0x0041))
         assertEquals(7, table.lookupGlyphId(0x0042))
+    }
+
+    @Test
+    fun cmapTableParserReturnsGlyphZeroForMissingCodepoints() {
+        val table = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 10,
+                    subtable = format12Subtable(
+                        testFormat12Group(startCharCode = 0x0041, endCharCode = 0x0041, startGlyphId = 7),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(7, table.lookupGlyphId(0x0041))
+        assertEquals(0, table.lookupGlyphId(0x0042))
+        assertEquals(0, table.lookupGlyphId(0x0042, variationSelector = 0xfe0f))
+    }
+
+    @Test
+    fun cmapTableParserAppliesFormat14NonDefaultVariationSelectors() {
+        val table = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 10,
+                    subtable = format12Subtable(
+                        testFormat12Group(startCharCode = 0x2764, endCharCode = 0x2764, startGlyphId = 20),
+                        testFormat12Group(startCharCode = 0x1f600, endCharCode = 0x1f600, startGlyphId = 40),
+                    ),
+                ),
+                testCMapRecord(
+                    platformId = 0,
+                    encodingId = 5,
+                    subtable = format14Subtable(
+                        variationSelector = 0xfe0f,
+                        defaultRanges = listOf(0x2764 to 0),
+                        nonDefaultMappings = listOf(0x1f600 to 99),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(12, table.preferredSubtable?.format)
+        assertEquals(14, table.variationSubtable?.format)
+        assertEquals(20, table.lookupGlyphId(0x2764))
+        assertEquals(20, table.lookupGlyphId(0x2764, variationSelector = 0xfe0f))
+        assertEquals(40, table.lookupGlyphId(0x1f600))
+        assertEquals(99, table.lookupGlyphId(0x1f600, variationSelector = 0xfe0f))
+        assertEquals(0, table.lookupGlyphId(0x0041, variationSelector = 0xfe0f))
+    }
+
+    @Test
+    fun cmapTableParserReportsUnsupportedAndUnusableCMapDiagnostics() {
+        val table = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 10,
+                    subtable = format13Subtable(),
+                ),
+            ),
+        )
+
+        assertEquals(null, table.preferredSubtable)
+        assertEquals(
+            listOf(
+                "font.sfnt.cmap-format-unsupported format=13 platformId=3 encodingId=10 offset=12 message=\"Unsupported cmap format 13 is not selected for Unicode lookup.\"",
+                "font.sfnt.cmap-unusable format=none platformId=none encodingId=none offset=none message=\"No usable Unicode cmap subtable was parsed.\"",
+            ),
+            table.diagnostics.map { it.dump() },
+        )
+    }
+
+    @Test
+    fun cmapTableParserPrefersFormat4OverLegacyFallbackSubtables() {
+        val fallbackGlyphIds = MutableList(256) { 0 }
+        fallbackGlyphIds[0x41] = 3
+        val table = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 0,
+                    encodingId = 0,
+                    subtable = format6Subtable(firstCode = 0x41, glyphIds = listOf(2)),
+                ),
+                testCMapRecord(
+                    platformId = 1,
+                    encodingId = 0,
+                    subtable = format0Subtable(fallbackGlyphIds),
+                ),
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    subtable = format4Subtable(
+                        testFormat4Segment(
+                            startCode = 0x0041,
+                            endCode = 0x0041,
+                            startGlyphId = 7,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(4, table.preferredSubtable?.format)
+        assertEquals(7, table.lookupGlyphId(0x0041))
+    }
+
+    @Test
+    fun cmapMapReportCoversKfontM2CMapEvidence() {
+        val actual = cmapMapReport()
+        val expectedPath = fixturePath("reports/pure-kotlin-text/cmap-map.json")
+
+        if (!Files.exists(expectedPath)) {
+            error("Missing cmap-map.json golden. Actual report:\n$actual")
+        }
+
+        assertEquals(Files.readString(expectedPath), actual)
+        assertEquals(actual, cmapMapReport())
+        assertTrue(actual.contains("\"KFONT-M2-003\""))
+        assertTrue(actual.contains("\"format\": 12"))
+        assertTrue(actual.contains("\"format\": 14"))
+        assertTrue(actual.contains("\"format\": 6"))
+        assertTrue(actual.contains("\"format\": 0"))
+        assertTrue(actual.contains("\"code\": \"font.sfnt.cmap-format-unsupported\""))
+        assertTrue(actual.contains("\"code\": \"font.sfnt.cmap-unusable\""))
+        assertTrue(actual.contains("\"glyphId\": 0"))
+        assertTrue(actual.contains("\"claimPromotionAllowed\": false"))
+        listOf("GPU", "Skia", "HarfBuzz", "FreeType", "Fontations", "CoreText", "DirectWrite").forEach { token ->
+            assertFalse(actual.contains(token), "cmap-map.json must not contain hidden engine token $token")
+        }
     }
 
     @Test
@@ -1497,8 +1630,8 @@ class SFNTSurfaceTest {
         assertEquals(CMapEncodingRecord(platformId = 1, encodingId = 0, offset = 12, format = 0), table.encodingRecords.single())
         assertEquals(0, table.preferredSubtable?.format)
         assertEquals(7, table.lookupGlyphId(0x41))
-        assertEquals(null, table.lookupGlyphId(0x42))
-        assertEquals(null, table.lookupGlyphId(0x100))
+        assertEquals(0, table.lookupGlyphId(0x42))
+        assertEquals(0, table.lookupGlyphId(0x100))
         assertEquals(262, table.subtables["1:0:0"]?.size)
     }
 
@@ -1519,7 +1652,7 @@ class SFNTSurfaceTest {
 
         assertEquals(7, table.lookupGlyphId(0x0041))
         assertEquals(11, table.lookupGlyphId(0x00C4))
-        assertEquals(null, table.lookupGlyphId(0x0080))
+        assertEquals(0, table.lookupGlyphId(0x0080))
     }
 
     @Test
@@ -1536,9 +1669,9 @@ class SFNTSurfaceTest {
 
         assertEquals(6, table.preferredSubtable?.format)
         assertEquals(7, table.lookupGlyphId(0x41))
-        assertEquals(null, table.lookupGlyphId(0x42))
+        assertEquals(0, table.lookupGlyphId(0x42))
         assertEquals(9, table.lookupGlyphId(0x43))
-        assertEquals(null, table.lookupGlyphId(0x44))
+        assertEquals(0, table.lookupGlyphId(0x44))
         assertEquals(16, table.subtables["0:0:6"]?.size)
     }
 
@@ -1556,7 +1689,7 @@ class SFNTSurfaceTest {
 
         assertEquals(11, table.lookupGlyphId(0x00C4))
         assertEquals(12, table.lookupGlyphId(0x00C5))
-        assertEquals(null, table.lookupGlyphId(0x0080))
+        assertEquals(0, table.lookupGlyphId(0x0080))
     }
 
     @Test
@@ -2656,6 +2789,232 @@ class SFNTSurfaceTest {
         return table
     }
 
+    private fun cmapMapReport(): String {
+        val priorityGlyphIds = MutableList(256) { 0 }
+        priorityGlyphIds[0x41] = 3
+        val priority = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 0,
+                    encodingId = 0,
+                    subtable = format6Subtable(firstCode = 0x41, glyphIds = listOf(2, 0)),
+                ),
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    subtable = format4Subtable(
+                        testFormat4Segment(startCode = 0x0041, endCode = 0x0041, startGlyphId = 7),
+                    ),
+                ),
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 10,
+                    subtable = format12Subtable(
+                        testFormat12Group(startCharCode = 0x0041, endCharCode = 0x0041, startGlyphId = 9),
+                        testFormat12Group(startCharCode = 0x2764, endCharCode = 0x2764, startGlyphId = 20),
+                        testFormat12Group(startCharCode = 0x1f600, endCharCode = 0x1f600, startGlyphId = 300),
+                    ),
+                ),
+                testCMapRecord(
+                    platformId = 0,
+                    encodingId = 5,
+                    subtable = format14Subtable(
+                        variationSelector = 0xfe0f,
+                        defaultRanges = listOf(0x2764 to 0),
+                        nonDefaultMappings = listOf(0x1f600 to 99),
+                    ),
+                ),
+                testCMapRecord(
+                    platformId = 1,
+                    encodingId = 0,
+                    subtable = format0Subtable(priorityGlyphIds),
+                ),
+            ),
+        )
+        val format4 = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    subtable = format4Subtable(
+                        testFormat4Segment(startCode = 0x0041, endCode = 0x0042, startGlyphId = 11),
+                    ),
+                ),
+            ),
+        )
+        val format6 = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 0,
+                    encodingId = 0,
+                    subtable = format6Subtable(firstCode = 0x41, glyphIds = listOf(17, 0, 19)),
+                ),
+            ),
+        )
+        val format0GlyphIds = MutableList(256) { 0 }
+        format0GlyphIds[0x41] = 23
+        val format0 = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 1,
+                    encodingId = 0,
+                    subtable = format0Subtable(format0GlyphIds),
+                ),
+            ),
+        )
+        val unsupported = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 10,
+                    subtable = format13Subtable(),
+                ),
+            ),
+        )
+
+        val unsupportedDiagnostics = unsupported.diagnostics.joinToString(",\n") { diagnostic ->
+            """{"code": "${diagnostic.code}", "format": ${diagnostic.format?.toString() ?: "null"}, "platformId": ${diagnostic.platformId?.toString() ?: "null"}, "encodingId": ${diagnostic.encodingId?.toString() ?: "null"}, "offset": ${diagnostic.offset?.toString() ?: "null"}, "message": "${diagnostic.message.jsonEscapedForTest()}"}"""
+        }.replace("\n", "\n                    ")
+
+        return """
+            {
+              "schema": "org.graphiks.kanvas.font.sfnt.CMapMapReport.v1",
+              "schemaVersion": 1,
+              "ticketIds": ["KFONT-M2-003"],
+              "dashboardClassification": "tracked-gap",
+              "claimPromotionAllowed": false,
+              "entries": [
+                {
+                  "entryId": "generated-format12-priority-with-format14",
+                  "fixtureId": "cmap-formats-12-4-14-6-0-generated",
+                  "fixtureKind": "GeneratedFixtureFontSource",
+                  "sourceFaceId": "generated-cmap-priority-face-0",
+                  "selectedSubtable": {"platformId": ${priority.preferredSubtable?.platformId}, "encodingId": ${priority.preferredSubtable?.encodingId}, "format": ${priority.preferredSubtable?.format}},
+                  "encodingRecords": [
+                    {"platformId": 0, "encodingId": 0, "format": 6},
+                    {"platformId": 3, "encodingId": 1, "format": 4},
+                    {"platformId": 3, "encodingId": 10, "format": 12},
+                    {"platformId": 0, "encodingId": 5, "format": 14},
+                    {"platformId": 1, "encodingId": 0, "format": 0}
+                  ],
+                  "mappedRanges": [
+                    {"format": 12, "startCodePoint": "U+0041", "endCodePoint": "U+0041", "startGlyphId": 9},
+                    {"format": 12, "startCodePoint": "U+2764", "endCodePoint": "U+2764", "startGlyphId": 20},
+                    {"format": 12, "startCodePoint": "U+1F600", "endCodePoint": "U+1F600", "startGlyphId": 300}
+                  ],
+                  "lookupFacts": [
+                    {"codePoint": "U+0041", "variationSelector": null, "glyphId": ${priority.lookupGlyphId(0x0041)}},
+                    {"codePoint": "U+0042", "variationSelector": null, "glyphId": ${priority.lookupGlyphId(0x0042)}},
+                    {"codePoint": "U+2764", "variationSelector": "U+FE0F", "glyphId": ${priority.lookupGlyphId(0x2764, variationSelector = 0xfe0f)}},
+                    {"codePoint": "U+1F600", "variationSelector": "U+FE0F", "glyphId": ${priority.lookupGlyphId(0x1f600, variationSelector = 0xfe0f)}}
+                  ],
+                  "variationSelectorFacts": [
+                    {
+                      "format": ${priority.variationSubtable?.format},
+                      "variationSelector": "U+FE0F",
+                      "defaultRanges": [{"startCodePoint": "U+2764", "endCodePoint": "U+2764", "baseGlyphId": 20}],
+                      "nonDefaultMappings": [{"codePoint": "U+1F600", "glyphId": 99}]
+                    }
+                  ],
+                  "diagnostics": []
+                },
+                {
+                  "entryId": "generated-format4-bmp-selected",
+                  "fixtureId": "cmap-format4-generated",
+                  "fixtureKind": "GeneratedFixtureFontSource",
+                  "sourceFaceId": "generated-cmap-format4-face-0",
+                  "selectedSubtable": {"platformId": ${format4.preferredSubtable?.platformId}, "encodingId": ${format4.preferredSubtable?.encodingId}, "format": ${format4.preferredSubtable?.format}},
+                  "mappedRanges": [{"format": 4, "startCodePoint": "U+0041", "endCodePoint": "U+0042", "startGlyphId": 11}],
+                  "lookupFacts": [
+                    {"codePoint": "U+0041", "variationSelector": null, "glyphId": ${format4.lookupGlyphId(0x0041)}},
+                    {"codePoint": "U+0043", "variationSelector": null, "glyphId": ${format4.lookupGlyphId(0x0043)}}
+                  ],
+                  "diagnostics": []
+                },
+                {
+                  "entryId": "generated-format6-legacy-fallback-selected",
+                  "fixtureId": "cmap-format6-generated",
+                  "fixtureKind": "GeneratedFixtureFontSource",
+                  "sourceFaceId": "generated-cmap-format6-face-0",
+                  "selectedSubtable": {"platformId": ${format6.preferredSubtable?.platformId}, "encodingId": ${format6.preferredSubtable?.encodingId}, "format": ${format6.preferredSubtable?.format}},
+                  "mappedRanges": [{"format": 6, "startCodePoint": "U+0041", "endCodePoint": "U+0043", "glyphIds": [17, 0, 19]}],
+                  "lookupFacts": [
+                    {"codePoint": "U+0041", "variationSelector": null, "glyphId": ${format6.lookupGlyphId(0x0041)}},
+                    {"codePoint": "U+0042", "variationSelector": null, "glyphId": ${format6.lookupGlyphId(0x0042)}},
+                    {"codePoint": "U+0044", "variationSelector": null, "glyphId": ${format6.lookupGlyphId(0x0044)}}
+                  ],
+                  "diagnostics": []
+                },
+                {
+                  "entryId": "generated-format0-legacy-fallback-selected",
+                  "fixtureId": "cmap-format0-generated",
+                  "fixtureKind": "GeneratedFixtureFontSource",
+                  "sourceFaceId": "generated-cmap-format0-face-0",
+                  "selectedSubtable": {"platformId": ${format0.preferredSubtable?.platformId}, "encodingId": ${format0.preferredSubtable?.encodingId}, "format": ${format0.preferredSubtable?.format}},
+                  "mappedRanges": [{"format": 0, "startCodePoint": "U+0000", "endCodePoint": "U+00FF", "glyphArrayLength": 256}],
+                  "lookupFacts": [
+                    {"codePoint": "U+0041", "variationSelector": null, "glyphId": ${format0.lookupGlyphId(0x0041)}},
+                    {"codePoint": "U+0042", "variationSelector": null, "glyphId": ${format0.lookupGlyphId(0x0042)}}
+                  ],
+                  "diagnostics": []
+                },
+                {
+                  "entryId": "generated-format13-refused",
+                  "fixtureId": "cmap-format13-generated-refusal",
+                  "fixtureKind": "GeneratedFixtureFontSource",
+                  "sourceFaceId": "generated-cmap-format13-face-0",
+                  "selectedSubtable": null,
+                  "mappedRanges": [],
+                  "lookupFacts": [{"codePoint": "U+0041", "variationSelector": null, "glyphId": ${unsupported.lookupGlyphId(0x0041)}}],
+                  "diagnostics": [
+                    $unsupportedDiagnostics
+                  ]
+                }
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun format13Subtable(): ByteArray {
+        val table = ByteArray(16)
+        table.writeUInt16(0, 13)
+        table.writeUInt16(2, 0)
+        table.writeUInt32(4, table.size)
+        table.writeUInt32(8, 0)
+        table.writeUInt32(12, 0)
+        return table
+    }
+
+    private fun format14Subtable(
+        variationSelector: Int,
+        defaultRanges: List<Pair<Int, Int>>,
+        nonDefaultMappings: List<Pair<Int, Int>>,
+    ): ByteArray {
+        val defaultOffset = 10 + 11
+        val nonDefaultOffset = defaultOffset + 4 + defaultRanges.size * 4
+        val length = nonDefaultOffset + 4 + nonDefaultMappings.size * 5
+        val table = ByteArray(length)
+        table.writeUInt16(0, 14)
+        table.writeUInt32(2, length)
+        table.writeUInt32(6, 1)
+        table.writeUInt24(10, variationSelector)
+        table.writeUInt32(13, defaultOffset)
+        table.writeUInt32(17, nonDefaultOffset)
+        table.writeUInt32(defaultOffset, defaultRanges.size)
+        defaultRanges.forEachIndexed { index, (startUnicodeValue, additionalCount) ->
+            val rangeOffset = defaultOffset + 4 + index * 4
+            table.writeUInt24(rangeOffset, startUnicodeValue)
+            table[rangeOffset + 3] = additionalCount.toByte()
+        }
+        table.writeUInt32(nonDefaultOffset, nonDefaultMappings.size)
+        nonDefaultMappings.forEachIndexed { index, (unicodeValue, glyphId) ->
+            val mappingOffset = nonDefaultOffset + 4 + index * 5
+            table.writeUInt24(mappingOffset, unicodeValue)
+            table.writeUInt16(mappingOffset + 3, glyphId)
+        }
+        return table
+    }
+
     private fun format0Subtable(glyphIds: List<Int>): ByteArray {
         require(glyphIds.size == 256)
         val table = ByteArray(262)
@@ -3239,6 +3598,12 @@ class SFNTSurfaceTest {
         this[offset + 1] = (value and 0xff).toByte()
     }
 
+    private fun ByteArray.writeUInt24(offset: Int, value: Int) {
+        this[offset] = ((value ushr 16) and 0xff).toByte()
+        this[offset + 1] = ((value ushr 8) and 0xff).toByte()
+        this[offset + 2] = (value and 0xff).toByte()
+    }
+
     private fun ByteArray.readUInt16(offset: Int): Int =
         ((this[offset].toInt() and 0xff) shl 8) or
             (this[offset + 1].toInt() and 0xff)
@@ -3269,6 +3634,18 @@ class SFNTSurfaceTest {
 
     private fun ByteArray.toUnsignedByteList(): List<Int> =
         map { it.toInt() and 0xff }
+
+    private fun String.jsonEscapedForTest(): String =
+        flatMap { character ->
+            when (character) {
+                '\\' -> listOf('\\', '\\')
+                '"' -> listOf('\\', '"')
+                '\n' -> listOf('\\', 'n')
+                '\r' -> listOf('\\', 'r')
+                '\t' -> listOf('\\', 't')
+                else -> listOf(character)
+            }
+        }.joinToString(separator = "")
 
     private fun ByteArray.sha256Hex(): String =
         MessageDigest.getInstance("SHA-256")
