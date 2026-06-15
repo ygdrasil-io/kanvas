@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "laneId": "KFONT-M0-001-002-ci-foundation",
+  "laneName": "pure-kotlin-font-foundation",
+  "tickets": [
+    {
+      "id": "KFONT-M0-001",
+      "path": ".upstream/specs/pure-kotlin-text/tickets/M0-claims-ci-diagnostics/KFONT-M0-001-wire-pure-kotlin-font-modules-into-ci.md",
+      "classification": "tracked-gap"
+    },
+    {
+      "id": "KFONT-M0-002",
+      "path": ".upstream/specs/pure-kotlin-text/tickets/M0-claims-ci-diagnostics/KFONT-M0-002-add-pure-kotlin-text-specs-to-ci-trigger-paths.md",
+      "classification": "tracked-gap"
+    }
+  ],
+  "dashboardClassification": "tracked-gap",
+  "claimPromotionAllowed": false,
+  "supportClaim": "validation-infrastructure-only",
+  "headlessPolicy": {
+    "runtime": "ubuntu-latest",
+    "nativeFontEnginesRequired": false,
+    "kadreRequired": false,
+    "normativeOracle": "Kanvas-owned CI diagnostics only",
+    "forbiddenDependencies": [
+      "HarfBuzz",
+      "FreeType",
+      "Fontations",
+      "CoreText",
+      "DirectWrite",
+      "fontconfig",
+      "java.awt",
+      "javax.swing",
+      "JNI",
+      "AWT"
+    ]
+  },
+  "gradleTasks": [
+    {
+      "modulePath": ":font:core",
+      "task": ":font:core:test",
+      "moduleExistsExpected": true,
+      "claimPromotionAllowed": false
+    },
+    {
+      "modulePath": ":font:sfnt",
+      "task": ":font:sfnt:test",
+      "moduleExistsExpected": true,
+      "claimPromotionAllowed": false
+    },
+    {
+      "modulePath": ":font:scaler",
+      "task": ":font:scaler:test",
+      "moduleExistsExpected": true,
+      "claimPromotionAllowed": false
+    },
+    {
+      "modulePath": ":font:text",
+      "task": ":font:text:test",
+      "moduleExistsExpected": true,
+      "claimPromotionAllowed": false
+    },
+    {
+      "modulePath": ":font:glyph",
+      "task": ":font:glyph:test",
+      "moduleExistsExpected": true,
+      "claimPromotionAllowed": false
+    },
+    {
+      "modulePath": ":font:gpu-api",
+      "task": ":font:gpu-api:test",
+      "moduleExistsExpected": true,
+      "claimPromotionAllowed": false
+    }
+  ],
+  "workflow": {
+    "file": ".github/workflows/test.yml",
+    "jobId": "pure_kotlin_font_foundation",
+    "requiredPathFilters": [
+      ".upstream/specs/pure-kotlin-text/**",
+      "font/**",
+      "reports/pure-kotlin-text/**",
+      "scripts/validate_pure_kotlin_text_boundary_contracts.py",
+      "scripts/test_validate_pure_kotlin_text_boundary_contracts.py"
+    ],
+    "invokesValidator": "python3 scripts/validate_pure_kotlin_text_ci.py",
+    "invokesBoundaryValidator": "python3 scripts/validate_pure_kotlin_text_boundary_contracts.py",
+    "invokesDiffCheck": "git diff --check",
+    "diffCheckPaths": [
+      ".upstream/specs/pure-kotlin-text",
+      "reports/pure-kotlin-text"
+    ]
+  },
+  "missingModulePolicy": {
+    "diagnosticCode": "font.ci.module-missing",
+    "classification": "tracked-gap",
+    "claimPromotionAllowed": false,
+    "action": "emit-diagnostic-and-fail-lane-until-module-or-reviewed-plan-exists",
+    "blockingMilestones": [
+      "M1",
+      "M2",
+      "M3",
+      "M4",
+      "M5",
+      "M6",
+      "M7",
+      "M8",
+      "M9",
+      "M10",
+      "M11",
+      "M12",
+      "M13"
+    ],
+    "sampleDiagnostic": {
+      "code": "font.ci.module-missing",
+      "classification": "tracked-gap",
+      "modulePath": ":font:sfnt",
+      "task": ":font:sfnt:test",
+      "claimPromotionAllowed": false
+    }
+  },
+  "triggerSamples": [
+    {
+      "path": ".upstream/specs/pure-kotlin-text/README.md",
+      "matchedGlob": ".upstream/specs/pure-kotlin-text/**",
+      "triggersLane": true,
+      "laneName": "pure-kotlin-font-foundation",
+      "reason": "target pure Kotlin text spec changes define validation gates"
+    },
+    {
+      "path": ".upstream/specs/pure-kotlin-text/tickets/M0-claims-ci-diagnostics/KFONT-M0-002-add-pure-kotlin-text-specs-to-ci-trigger-paths.md",
+      "matchedGlob": ".upstream/specs/pure-kotlin-text/**",
+      "triggersLane": true,
+      "laneName": "pure-kotlin-font-foundation",
+      "reason": "ticket catalog changes define CI and claim-drift gates"
+    },
+    {
+      "path": "archives/target-closeout-2026-05-31/pure-kotlin-text/archived-migration.md",
+      "matchedGlob": null,
+      "triggersLane": false,
+      "laneName": "pure-kotlin-font-foundation",
+      "reason": "archived-only migration evidence is historical and does not activate this lane"
+    }
+  ],
+  "nonClaims": [
+    "Does not add rendering behavior.",
+    "Does not add shaping behavior.",
+    "Does not add scaler behavior.",
+    "Does not add GPU text behavior.",
+    "Does not promote parsing, fallback, glyph atlas, SDF, emoji, or paragraph behavior."
+  ],
+  "validationCommands": [
+    "rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_ci.py",
+    "rtk python3 scripts/validate_pure_kotlin_text_ci.py",
+    "rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_boundary_contracts.py",
+    "rtk python3 scripts/validate_pure_kotlin_text_boundary_contracts.py",
+    "rtk git diff --check"
+  ]
+}

@@ -4,7 +4,7 @@ All tickets start as `proposed`. Move a ticket to `ready` only after its scope, 
 
 | Milestone | Proposed | Ready | In Progress | Blocked | Review | Done |
 |---|---:|---:|---:|---:|---:|---:|
-| M0 | 5 | 0 | 0 | 0 | 0 | 0 |
+| M0 | 1 | 0 | 0 | 0 | 4 | 0 |
 | M1 | 0 | 0 | 0 | 0 | 4 | 0 |
 | M2 | 4 | 0 | 0 | 0 | 1 | 0 |
 | M3 | 5 | 0 | 0 | 0 | 0 | 0 |

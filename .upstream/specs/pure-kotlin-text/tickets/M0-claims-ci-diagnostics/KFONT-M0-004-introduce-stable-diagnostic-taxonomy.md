@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M0-004"
 title: "Introduce stable diagnostic taxonomy"
-status: "proposed"
+status: "review"
 milestone: "M0"
 priority: "P0"
 owner_area: "diagnostics"
@@ -73,11 +73,11 @@ data class LegacyDiagnosticMapping(
 
 ## Acceptance Criteria
 
-- [ ] Every accepted diagnostic code belongs to one of the target namespace families.
-- [ ] `font.native-engine-unavailable` maps to `expected-unsupported` or `drift-only`, never to a product dependency.
-- [ ] `font.bitmap-strike-unavailable` maps to a route-specific bitmap/color refusal, not a generic font failure.
-- [ ] `font.emoji-sequence-shaping-unsupported` maps to shaping or emoji route diagnostics without claiming complex shaping support.
-- [ ] Diagnostics are serializable and contain enough deterministic fields to appear in evidence dumps.
+- [x] Every accepted diagnostic code belongs to one of the target namespace families.
+- [x] `font.native-engine-unavailable` maps to `expected-unsupported` or `drift-only`, never to a product dependency.
+- [x] `font.bitmap-strike-unavailable` maps to a route-specific bitmap/color refusal, not a generic font failure.
+- [x] `font.emoji-sequence-shaping-unsupported` maps to shaping or emoji route diagnostics without claiming complex shaping support.
+- [x] Diagnostics are serializable and contain enough deterministic fields to appear in evidence dumps.
 
 ## Required Evidence
 
@@ -108,8 +108,11 @@ rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePerformanceTrendWar
 
 ## Status Notes
 
-- `proposed`: Diagnostic namespaces and legacy mappings are specified, but no taxonomy artifact is attached yet.
-- Move to `ready` after KFONT-M0-003 freezes the owning package/module boundaries for diagnostics.
+- `review`: `FontDiagnosticTaxonomy` and
+  `reports/pure-kotlin-text/font-diagnostic-taxonomy.json` define accepted
+  namespaces, required fields, sample diagnostics, legacy mappings, and
+  rejected generic diagnostic evidence. Classification stays `tracked-gap`;
+  legacy gates remain open.
 
 ## Linear Labels
 
