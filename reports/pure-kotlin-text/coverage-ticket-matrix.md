@@ -137,6 +137,227 @@ Remaining gate: this is architecture and boundary audit infrastructure only.
 It does not add rendering behavior, complete target fixtures, CPU/GPU oracle
 evidence, or GPU text route support.
 
+### KFONT-M0-001/M0-002: Pure Kotlin Font CI Foundation
+
+Status: review.
+
+Files:
+
+- `.github/workflows/test.yml`
+- `scripts/validate_pure_kotlin_text_ci.py`
+- `scripts/test_validate_pure_kotlin_text_ci.py`
+- `reports/pure-kotlin-text/font-ci-lane.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m0-001-002-ci-foundation.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M0-claims-ci-diagnostics/KFONT-M0-001-wire-pure-kotlin-font-modules-into-ci.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M0-claims-ci-diagnostics/KFONT-M0-002-add-pure-kotlin-text-specs-to-ci-trigger-paths.md`
+
+Evidence:
+
+- Workflow job `pure_kotlin_font_foundation` names the
+  `pure-kotlin-font-foundation` lane and runs on `ubuntu-latest`.
+- The lane resolves an explicit PR, push, or default-branch merge-base before
+  running `git diff --check` on `.upstream/specs/pure-kotlin-text` and
+  `reports/pure-kotlin-text`.
+- The lane validates `font-ci-lane.json`, runs the boundary validator, and
+  invokes `:font:core:test`, `:font:sfnt:test`, `:font:scaler:test`,
+  `:font:text:test`, `:font:glyph:test`, and `:font:gpu-api:test`.
+- `scripts/test_validate_pure_kotlin_text_ci.py` rejects removed, disabled, or
+  comment-only diff hygiene, CI validator, and boundary validator steps.
+- Path filters include `.upstream/specs/pure-kotlin-text/**`, `font/**`,
+  `reports/pure-kotlin-text/**`, and the pure Kotlin text CI/boundary
+  validator scripts.
+- Trigger samples cover one target spec file, one ticket file, and one
+  archived-only migration path that remains inactive.
+- Missing module policy emits `font.ci.module-missing` as `tracked-gap` with
+  `claimPromotionAllowed=false`.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_ci.py
+rtk python3 scripts/validate_pure_kotlin_text_ci.py
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_boundary_contracts.py
+rtk python3 scripts/validate_pure_kotlin_text_boundary_contracts.py
+```
+
+Remaining gate: this is validation infrastructure only. It does not claim
+parser, scaler, shaping, paragraph, glyph artifact, fallback, rendering, native
+font engine, or GPU text support.
+
+### KFONT-M0-003: Module And Package Boundary Validation
+
+Status: review.
+
+Files:
+
+- `reports/pure-kotlin-text/boundary-contracts.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m0-003-boundary-diagnostics.md`
+- `scripts/validate_pure_kotlin_text_boundary_contracts.py`
+- `scripts/test_validate_pure_kotlin_text_boundary_contracts.py`
+- `.github/workflows/test.yml`
+- `.upstream/specs/pure-kotlin-text/tickets/M0-claims-ci-diagnostics/KFONT-M0-003-freeze-module-package-layout-for-the-pure-kotlin-font-core.md`
+
+Evidence:
+
+- `boundary-contracts.json` records the owner package roots for font core,
+  scaler, shaping, paragraph, glyph artifacts, GPU handoff, and renderer text
+  command/route consumers.
+- Boundary validation rejects pure Kotlin font/text/glyph imports of renderer,
+  Skia-like, platform, native, HarfBuzz, FreeType, Fontations, CoreText,
+  DirectWrite, or fontconfig APIs.
+- Boundary diagnostics now use stable `font.architecture.*` codes. The
+  synthetic snapshot asserts `font.architecture.skia-api-leak` for a `SkFont`
+  import and `font.architecture.gpu-backedge` for a pure Kotlin import of
+  `org.graphiks.kanvas.gpu.renderer.text.GPUTextRouteDiagnostics`.
+- GPU renderer text boundary validation rejects Skia-like, parser/scaler,
+  shaping, paragraph, or native font-engine imports.
+- The M0 CI lane now invokes the boundary validator before the six font module
+  test tasks.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_boundary_contracts.py
+rtk python3 scripts/validate_pure_kotlin_text_boundary_contracts.py
+```
+
+Remaining gate: this is package-boundary and architecture evidence only. It
+does not add font behavior, rendering behavior, or GPU text route support.
+
+### KFONT-M0-004: Stable Diagnostic Taxonomy
+
+Status: review.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontDiagnosticTaxonomyTest.kt`
+- `reports/pure-kotlin-text/font-diagnostic-taxonomy.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m0-004-diagnostic-taxonomy.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M0-claims-ci-diagnostics/KFONT-M0-004-introduce-stable-diagnostic-taxonomy.md`
+
+Evidence:
+
+- `FontDiagnosticTaxonomy` defines accepted namespace families, stable
+  diagnostic rows, required fields, severity, route, and claim impact facts.
+- `font-diagnostic-taxonomy.json` includes sample diagnostics for source,
+  SFNT, scaler, shaping, and GPU/text route refusal cases.
+- Legacy diagnostics `font.native-engine-unavailable`,
+  `font.bitmap-strike-unavailable`, and
+  `font.emoji-sequence-shaping-unsupported` map to target classifications while
+  keeping gates open.
+- Generic `font missing` is rejected as `tracked-gap` with reason
+  `generic-or-unknown-diagnostic`.
+- Every row keeps `claimPromotionAllowed=false`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon --rerun-tasks :font:core:test --tests '*DiagnosticTaxonomy*'
+rtk ./gradlew --no-daemon :font:core:test
+```
+
+Remaining gate: this is taxonomy evidence only. It does not implement parser,
+scaler, shaping, paragraph, glyph artifact, renderer, GPU, fixture, CPU oracle,
+or GPU evidence support. Legacy gates remain open until later evidence retires
+them explicitly.
+
+### KFONT-M0-005: Dashboard Claim Classification
+
+Status: review.
+
+Files:
+
+- `build.gradle.kts`
+- `.github/workflows/test.yml`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `reports/pure-kotlin-text/font-ci-lane.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m0-005-dashboard-claim-classification.md`
+- `scripts/validate_pure_kotlin_text_claim_dashboard.py`
+- `scripts/test_validate_pure_kotlin_text_claim_dashboard.py`
+- `scripts/validate_pure_kotlin_text_ci.py`
+- `scripts/test_validate_pure_kotlin_text_ci.py`
+- `.upstream/specs/pure-kotlin-text/tickets/M0-claims-ci-diagnostics/KFONT-M0-005-harden-dashboard-claim-classification.md`
+
+Evidence:
+
+- `font-claim-dashboard.json` records the eight claim classifications,
+  classification rules, required evidence kinds, split surface rows for
+  `outline/path`, `simple-latin atlas`, `complex shaping`, `fallback`,
+  `emoji/color`, `SDF`, and `LCD`, and keeps `claimPromotionAllowed=false`.
+- Negative generic labels `font missing`, `text works`, and `emoji supported`
+  have stable `font.claim.*` or `text.claim.*` diagnostics and remain
+  `tracked-gap`.
+- Legacy gates `coloremoji_blendmodes`, `scaledemoji`,
+  `scaledemoji_rendering`, `dftext`, `fontations`,
+  `fontations_ft_compare`, and `pdf_never_embed` remain visible, open, and
+  non-promotable.
+- The validator rejects missing taxonomy values, generic labels in claim rows,
+  GPU claims without GPU artifacts, missing legacy gates, and missing Gradle
+  wiring.
+- `validatePureKotlinTextClaimDashboard` is wired into
+  `pipelineSceneDashboardGate` and `pipelinePmBundle`; CI path filters and the
+  pure Kotlin font foundation job invoke the new dashboard validator.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_claim_dashboard.py
+rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_ci.py
+rtk python3 scripts/validate_pure_kotlin_text_ci.py
+rtk ./gradlew --no-daemon validatePureKotlinTextClaimDashboard
+rtk git diff --check
+```
+
+Remaining gate: this is claim-dashboard validation infrastructure only. It
+does not add rendering, shaping, fallback, SDF, color, emoji, LCD, or GPU text
+support. All KFONT-M0-005 legacy gates remain open until later target evidence
+retires them explicitly.
+
+### KFONT-M1-003: Deterministic Source/Typeface Identity Dumps
+
+Status: review.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontIdentityDumpTest.kt`
+- `reports/pure-kotlin-text/font-source.json`
+- `reports/pure-kotlin-text/typeface-id.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m1-003-identity-dumps.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M1-font-identity-sources/KFONT-M1-003-add-deterministic-source-typeface-dumps.md`
+
+Evidence:
+
+- `FontIdentityDumpWriter` emits the checked-in `font-source.json` and
+  `typeface-id.json` goldens through canonical JSON wrappers.
+- `FontIdentityDumpBundle` compares `font-source.json`, `typeface-id.json`,
+  and `identity-dump-schema.json` byte-for-byte as UTF-8 strings.
+- `FontIdentityDumpDeterminismResult` records matching state, both SHA-256
+  digests, and exact differing file labels.
+- `FontIdentityDumpSchema` records schema version `1`, required fields, output
+  file order, sorted table tags, sorted variation coordinates, sorted palette
+  overrides, host-dependent markers, diagnostics, and
+  `claimPromotionAllowed=false`.
+- The host-dependent source row remains visible through
+  `system-scanned-host-dependent`, `hostDependent`, and
+  `font.source.host-dependent` without host temp paths.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*IdentityDump*'
+rtk ./gradlew --no-daemon --rerun-tasks :font:core:test --tests '*IdentityDump*'
+rtk ./gradlew --no-daemon :font:core:test
+rtk git diff --check
+```
+
+Remaining gate: this is deterministic dump evidence only. It does not add font
+fixture bytes, glyph outlines, shaping, glyph scaling/cache, fallback
+completion, renderer backend behavior, GPU evidence, or support-claim
+promotion.
+
 ### PKT-02A: Font Source Provenance Evidence Dumps
 
 Status: implemented and independently reviewed.
@@ -362,14 +583,18 @@ complete SFNT conformance, TrueType scaler support, CFF/CFF2 support, or
 complete font-source coverage.
 ### PKT-03B: Bounded SFNT Table Directory Diagnostics
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: review for KFONT-M2-002; independent spec and quality reviews accepted
+after remediation.
 
 Files:
 
 - `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
 - `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTParserEntryPointTest.kt`
 - `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/sfnt-directory.json`
+- `reports/pure-kotlin-text/font-diagnostic-taxonomy.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m2-002-bounded-directory-diagnostics.md`
 
 Evidence:
 
@@ -383,19 +608,31 @@ Evidence:
   ranges, out-of-bounds ranges, missing required tables, and zero-length
   required tables using stable reason-code families such as
   `font.sfnt.table-out-of-bounds`, `font.sfnt.table-duplicate`,
-  `font.sfnt.table-overlap`, and `font.required-table-missing`.
+  `font.sfnt.table-overlap`, and `font.sfnt.required-table-missing`.
+- `SFNTParseRequest.requiredTables` now flows through `DefaultSFNTParser`, and
+  `sfnt-directory.json` includes a generated malformed directory fixture row
+  with duplicate, out-of-bounds, overlap, and missing-required-table evidence.
+- Malformed optional table diagnostics are classified as
+  `font.sfnt.optional-table-malformed` while remaining tracked-gap, with
+  `sfnt-directory.json` carrying the generated `fvar` malformed fixture,
+  source SHA-256, and face diagnostic.
+- `font-fixture-inventory.json` records the optional malformed source SHA-256
+  and intended diagnostic without promoting complete malformed-suite support.
 
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.tableDirectoryValidatorReportsBoundedDiagnosticsDeterministically
-rtk ./gradlew --no-daemon :font:sfnt:test --rerun-tasks
+rtk ./gradlew --no-daemon :font:core:test --tests '*DiagnosticTaxonomy*'
+rtk ./gradlew --no-daemon --rerun-tasks :font:sfnt:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_font_fixtures.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
 ```
 
 Remaining gate: this is bounded directory diagnostic evidence only. It does not
-claim full SFNT parser conformance, malformed fixture manifest completion,
+claim full SFNT parser conformance, malformed fixture suite completion,
 automatic parser refusal policy integration, complete `cmap` coverage, scaler
-support, shaping support, color glyph support, or GPU text-route support.
+support, shaping support, color glyph support, search-field formula validation,
+checksum verification, or GPU text-route support.
 ### PKT-03C: Malformed Table And Format-14 Fixture Plan
 
 Status: implemented with local diff review.
@@ -474,8 +711,8 @@ shaping support, platform font behavior, native oracle behavior, or GPU route
 support.
 ### PKT-03E: SFNT Directory Diagnostics In Face Evidence
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: review for KFONT-M2-002; independent spec and quality reviews accepted
+after remediation.
 
 Files:
 
@@ -2203,3 +2440,103 @@ rtk ./gradlew --no-daemon :font:gpu-api:test
 Remaining gate: this is telemetry scaffolding only. It does not measure actual
 runtime performance, promote indicative budgets into release gates, synthesize
 GPU upload evidence, or claim GPU text rendering support.
+### KFONT-M1-004: Bundled Source Fixture Manifest
+
+Status: review; independently reviewed after remediation.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontFixtureManifestTest.kt`
+- `reports/pure-kotlin-text/font-fixtures-manifest.json`
+- `reports/pure-kotlin-text/font-source.json`
+- `reports/pure-kotlin-text/typeface-id.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m1-004-fixture-manifest.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M1-font-identity-sources/KFONT-M1-004-add-bundled-source-fixture-manifest.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M1-font-identity-sources/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `FontFixtureManifestWriter` emits the checked-in
+  `font-fixtures-manifest.json` canonical JSON byte-for-byte.
+- The manifest records normative bundled fixture rows for Liberation Sans TTF,
+  Source Serif OTF/CFF candidate, and Roboto Flex variable TTF candidate, with
+  license/provenance, SHA-256, byte length, face count, intended coverage tags,
+  and `claimPromotionAllowed=false`.
+- Planned generated TTC, malformed directory, and missing-required-table rows
+  record generator IDs, source parameters, non-normative status, remaining
+  gates, and `font.fixture.generated-bytes-missing`.
+- Host-scanned sources remain non-normative with `font.source.host-dependent`;
+  normative entries missing license/provenance/hash produce
+  `font.fixture.provenance-missing`.
+- `font-source.json` includes `manifestFixtureId` for the bundled source row,
+  and manifest entries link to stable `font-source.json` and `typeface-id.json`
+  labels through report-label arrays.
+- Independent spec review verdict: `ACCEPT` after removing an out-of-scope
+  `font/core/build.gradle.kts` packaging change from the worktree.
+- Independent code-quality review verdict: `ACCEPT_WITH_FIXES`; remediated by
+  adding generated/planned fixture invariants and negative tests, tightening the
+  host-dependent normative diagnostic to uncaptured bytes, and removing unused
+  helper code.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*FixtureManifest*'
+rtk ./gradlew --no-daemon --rerun-tasks :font:core:test --tests '*FixtureManifest*'
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontSourceIdentity*' --tests '*IdentityDump*'
+rtk ./gradlew --no-daemon :font:core:test
+rtk git diff --check
+```
+
+Remaining gate: this is fixture provenance and evidence linkage only. It does
+not claim SFNT parser behavior, CFF support, variable font support, TTC
+support, malformed parser support, fallback behavior, glyph scaling/cache
+support, rendering support, or GPU support.
+
+### KFONT-M2-001: SFNT/TTC Parser Entry Points
+
+Status: review.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTParserEntryPointTest.kt`
+- `reports/pure-kotlin-text/sfnt-directory.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m2-001-sfnt-entry-points.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M2-sfnt-opentype-parser/KFONT-M2-001-normalize-sfnt-ttc-parser-entry-points.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M2-sfnt-opentype-parser/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `SFNTParseRequest` carries `FontSourceID`, source kind, display name,
+  bounded byte range, requested collection index, and parser generation for
+  both single-face SFNT and TTC requests.
+- `DefaultSFNTParser` returns one `SFNTParseResult` surface separating
+  directory facts, intentionally empty parsed face facts, table slices, and
+  container diagnostics.
+- `DefaultSFNTParser` is directory-only for this ticket and does not delegate to
+  `DefaultOpenTypeFaceParser` or typed layout/color table payload parsers.
+- Invalid TTC collection index returns `font.collection-index-invalid` with no
+  selected face and no delegated parse of another face.
+- Unknown wrappers return stable non-promoting SFNT diagnostics without
+  platform APIs or external parsers.
+- `sfnt-directory.json` records one Liberation Sans single TTF, one generated
+  TTC selected face, and one invalid TTC index diagnostic with
+  `dashboardClassification=tracked-gap` and `claimPromotionAllowed=false`.
+- Report construction is byte-for-byte deterministic across repeated parses of
+  the same fixtures.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test --tests '*SFNTParser*' --tests '*TTC*'
+rtk git diff --check
+```
+
+Remaining gate: this is parser entry-point and directory evidence only. It
+does not claim complete SFNT conformance, table payload semantics, glyph
+outlines, CFF/CFF2 scaler support, GSUB/GPOS shaping behavior, fallback,
+paragraph layout, rendering, or broad text support.

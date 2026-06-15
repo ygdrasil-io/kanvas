@@ -54,7 +54,2181 @@ enum class FontSourceKind {
 
     /** Font loaded through an application or remote resource URI. */
     RESOURCE,
+
+    /** Deterministic font bytes committed with fixture provenance. */
+    BUNDLED_FIXTURE,
+
+    /** Deterministic generated font bytes used as parser, scaler, shaping, or color fixtures. */
+    GENERATED_FIXTURE,
+
+    /** Font bytes supplied directly by application memory with caller provenance. */
+    USER_DATA,
+
+    /** Caller stream copied into bounded immutable font data before parsing. */
+    USER_STREAM,
+
+    /** Caller file copied or hashed under an explicit content policy. */
+    USER_FILE,
+
+    /** Pure Kotlin scan result from host directories, never normative until bytes are captured. */
+    SYSTEM_SCANNED,
 }
+
+/**
+ * Stable provenance facts used as part of [FontSourceIdentityPreimage].
+ *
+ * This model deliberately carries display-level source facts, not filesystem
+ * paths, native handles, or platform font API objects.
+ */
+data class FontSourceProvenance(
+    val kind: FontSourceKind,
+    val declaredName: String,
+    val licenseId: String? = null,
+    val originPath: String? = null,
+    val hostDependent: Boolean = kind.isHostDependentByDefault(),
+) {
+    init {
+        require(declaredName.isNotBlank()) { "declaredName must not be blank." }
+        require(originPath == null || originPath.isNotBlank()) {
+            "originPath must not be blank when present."
+        }
+    }
+
+    internal fun toCanonicalJson(indent: String): String = buildString {
+        append(indent).append("{\n")
+        appendFontJsonField("kind", kind.serializedName, indent = "$indent  ", comma = true)
+        appendFontJsonField("declaredName", declaredName, indent = "$indent  ", comma = true)
+        append(indent).append("  ").append("\"licenseId\": ")
+        append(licenseId.toFontJsonNullableString())
+        append(",\n")
+        append(indent).append("  ").append("\"originPath\": ")
+        append(originPath.toFontJsonNullableString())
+        append(",\n")
+        appendFontJsonField("hostDependent", hostDependent, indent = "$indent  ", comma = false)
+        append(indent).append("}")
+    }
+}
+
+/**
+ * Stable source-level diagnostic included before [FontSourceID] derivation.
+ *
+ * [FontSourceDiagnostic] is still used after a source ID exists. This value
+ * object avoids circular identity derivation by storing only stable source
+ * diagnostic facts in the preimage.
+ */
+data class FontSourceIdentityDiagnostic(
+    val code: String,
+    val detail: String? = null,
+) {
+    init {
+        require(code.isStableDiagnosticCode()) { "code must be a stable one-line diagnostic code." }
+    }
+
+    internal fun toCanonicalJson(indent: String): String = buildString {
+        append(indent).append("{\n")
+        appendFontJsonField("code", code, indent = "$indent  ", comma = true)
+        append(indent).append("  ").append("\"detail\": ")
+        append(detail.toFontJsonNullableString())
+        append("\n")
+        append(indent).append("}")
+    }
+}
+
+/**
+ * Canonical preimage for deriving and auditing [FontSourceID].
+ *
+ * It includes only deterministic provenance and parser-supplied source facts.
+ * The font core does not parse tables here; callers provide face counts,
+ * table tags, diagnostics, and parser generation after their owning parser or
+ * scanner has produced those facts.
+ */
+class FontSourceIdentityPreimage(
+    val provenance: FontSourceProvenance,
+    val contentSha256: String?,
+    val byteLength: Long?,
+    val faceCount: Int,
+    tableTags: List<String>,
+    val parserGeneration: Int,
+    diagnostics: List<FontSourceIdentityDiagnostic> = emptyList(),
+) {
+    val tableTags: List<String> = tableTags.normalizedTableTags()
+    val diagnostics: List<FontSourceIdentityDiagnostic> =
+        diagnostics.sortedWith(compareBy<FontSourceIdentityDiagnostic> { it.code }.thenBy { it.detail.orEmpty() })
+    val kind: FontSourceKind
+        get() = provenance.kind
+    val hostDependent: Boolean
+        get() = provenance.hostDependent
+
+    init {
+        require((contentSha256 == null) == (byteLength == null)) {
+            "contentSha256 and byteLength must both be present or both be absent."
+        }
+        require(contentSha256 == null || contentSha256.isLowercaseSha256Hex()) {
+            "contentSha256 must be a lowercase hexadecimal SHA-256 digest."
+        }
+        require(byteLength == null || byteLength >= 0) { "byteLength must be non-negative." }
+        require(faceCount >= 0) { "faceCount must be non-negative." }
+        require(parserGeneration >= 0) { "parserGeneration must be non-negative." }
+    }
+
+    /**
+     * Serializes every [FontSourceID]-affecting fact as canonical JSON.
+     */
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendFontJsonField("schema", PreimageSchema, indent = "  ", comma = true)
+        append("  \"provenance\": ")
+        append(provenance.toCanonicalJson(indent = "  ").trimStart())
+        append(",\n")
+        append("  \"contentSha256\": ")
+        append(contentSha256.toFontJsonNullableString())
+        append(",\n")
+        append("  \"byteLength\": ")
+        append(byteLength?.toString() ?: "null")
+        append(",\n")
+        appendFontJsonField("faceCount", faceCount, indent = "  ", comma = true)
+        append("  \"tableTags\": ")
+        append(tableTags.joinToString(prefix = "[", postfix = "]", separator = ", ") { it.evidenceQuoted() })
+        append(",\n")
+        appendFontJsonField("parserGeneration", parserGeneration, indent = "  ", comma = true)
+        append("  \"diagnostics\": ")
+        if (diagnostics.isEmpty()) {
+            append("[]\n")
+        } else {
+            append("[\n")
+            append(diagnostics.joinToString(",\n") { it.toCanonicalJson(indent = "    ") })
+            append("\n  ]\n")
+        }
+        append("}\n")
+    }
+
+    /**
+     * Derives a deterministic UUID-backed source ID from [toCanonicalJson].
+     */
+    fun deriveFontSourceID(): FontSourceID =
+        FontSourceID(stableUuidFromSha256("kanvas-font-source-id-v1\n${toCanonicalJson()}"))
+
+    fun sourceId(): FontSourceID = deriveFontSourceID()
+
+    override fun equals(other: Any?): Boolean =
+        this === other || other is FontSourceIdentityPreimage &&
+            provenance == other.provenance &&
+            contentSha256 == other.contentSha256 &&
+            byteLength == other.byteLength &&
+            faceCount == other.faceCount &&
+            tableTags == other.tableTags &&
+            parserGeneration == other.parserGeneration &&
+            diagnostics == other.diagnostics
+
+    override fun hashCode(): Int {
+        var result = provenance.hashCode()
+        result = 31 * result + (contentSha256?.hashCode() ?: 0)
+        result = 31 * result + (byteLength?.hashCode() ?: 0)
+        result = 31 * result + faceCount
+        result = 31 * result + tableTags.hashCode()
+        result = 31 * result + parserGeneration
+        result = 31 * result + diagnostics.hashCode()
+        return result
+    }
+
+    companion object {
+        const val PreimageSchema: String = "org.graphiks.kanvas.font.FontSourceIdentityPreimage.v1"
+
+        /**
+         * Creates an identity preimage for sources whose bytes were captured.
+         */
+        fun fromCapturedBytes(
+            kind: FontSourceKind,
+            declaredName: String,
+            licenseId: String?,
+            bytes: ByteArray,
+            faceCount: Int,
+            tableTags: List<String> = emptyList(),
+            parserGeneration: Int,
+            diagnostics: List<FontSourceIdentityDiagnostic> = emptyList(),
+            hostDependent: Boolean = kind.isHostDependentByDefault(),
+            originPath: String? = null,
+        ): FontSourceIdentityPreimage =
+            FontSourceIdentityPreimage(
+                provenance = FontSourceProvenance(
+                    kind = kind,
+                    declaredName = declaredName,
+                    licenseId = licenseId,
+                    originPath = originPath,
+                    hostDependent = hostDependent,
+                ),
+                contentSha256 = bytes.sha256Hex(),
+                byteLength = bytes.size.toLong(),
+                faceCount = faceCount,
+                tableTags = tableTags,
+                parserGeneration = parserGeneration,
+                diagnostics = diagnostics,
+            )
+
+        /**
+         * Creates an identity preimage for a host-dependent system scan.
+         */
+        fun systemScanned(
+            declaredName: String,
+            faceCount: Int,
+            tableTags: List<String> = emptyList(),
+            parserGeneration: Int,
+            diagnostics: List<FontSourceIdentityDiagnostic> = emptyList(),
+        ): FontSourceIdentityPreimage =
+            FontSourceIdentityPreimage(
+                provenance = FontSourceProvenance(
+                    kind = FontSourceKind.SYSTEM_SCANNED,
+                    declaredName = declaredName,
+                    licenseId = null,
+                    originPath = null,
+                    hostDependent = true,
+                ),
+                contentSha256 = null,
+                byteLength = null,
+                faceCount = faceCount,
+                tableTags = tableTags,
+                parserGeneration = parserGeneration,
+                diagnostics = diagnostics,
+            )
+    }
+}
+
+data class FontSourceIdentityReportEntry(
+    val label: String,
+    val preimage: FontSourceIdentityPreimage,
+    val manifestFixtureId: String? = null,
+    val claimPromotionAllowed: Boolean = false,
+) {
+    init {
+        require(label.isNotBlank()) { "label must not be blank." }
+        require(manifestFixtureId == null || manifestFixtureId.isStableManifestToken()) {
+            "manifestFixtureId must be a stable manifest token when present."
+        }
+        require(!claimPromotionAllowed) {
+            "Font source identity evidence cannot promote rendering support claims."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("label", label, comma = true)
+        appendFontCompactJsonField("sourceId", preimage.sourceId().value.toHexDashString(), comma = true)
+        append("manifestFixtureId".evidenceQuoted()).append(":")
+        append(manifestFixtureId.toFontJsonNullableString())
+        append(",")
+        append("\"preimage\":")
+        append(preimage.toCanonicalJson().trim())
+        append(",")
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+        append("}")
+    }
+}
+
+class FontSourceIdentityReport(
+    val fixtureName: String,
+    entries: List<FontSourceIdentityReportEntry>,
+) {
+    val entries: List<FontSourceIdentityReportEntry> = entries.toList()
+
+    init {
+        require(fixtureName.isNotBlank()) { "fixtureName must not be blank." }
+        require(this.entries.map { entry -> entry.label }.distinct().size == this.entries.size) {
+            "font source identity report entries must have unique labels."
+        }
+        require(this.entries.all { entry -> !entry.claimPromotionAllowed }) {
+            "font source identity report cannot contain claim-promoting rows."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("schema", FONT_SOURCE_IDENTITY_REPORT_SCHEMA, comma = true)
+        appendFontCompactJsonField("fixtureName", fixtureName, comma = true)
+        append("\"entries\":")
+        append(entries.joinToString(separator = ",", prefix = "[", postfix = "]") { entry ->
+            entry.toCanonicalJson()
+        })
+        append("}")
+    }
+}
+
+fun fontSourceIdentityDiagnostic(
+    code: String,
+    message: String? = null,
+): FontSourceIdentityDiagnostic = FontSourceIdentityDiagnostic(
+    code = code,
+    detail = message,
+)
+
+fun fontSourceIdentityPreimage(
+    kind: FontSourceKind,
+    declaredName: String,
+    licenseId: String? = null,
+    originPath: String? = null,
+    contentBytes: ByteArray?,
+    faceCount: Int,
+    tableTags: List<String> = emptyList(),
+    parserGeneration: Int,
+    diagnostics: List<FontSourceIdentityDiagnostic> = emptyList(),
+): FontSourceIdentityPreimage =
+    if (contentBytes == null) {
+        FontSourceIdentityPreimage(
+            provenance = FontSourceProvenance(
+                kind = kind,
+                declaredName = declaredName,
+                licenseId = licenseId,
+                originPath = originPath,
+                hostDependent = kind.isHostDependentByDefault(),
+            ),
+            contentSha256 = null,
+            byteLength = null,
+            faceCount = faceCount,
+            tableTags = tableTags,
+            parserGeneration = parserGeneration,
+            diagnostics = diagnostics,
+        )
+    } else {
+        FontSourceIdentityPreimage.fromCapturedBytes(
+            kind = kind,
+            declaredName = declaredName,
+            licenseId = licenseId,
+            bytes = contentBytes,
+            faceCount = faceCount,
+            tableTags = tableTags,
+            parserGeneration = parserGeneration,
+            diagnostics = diagnostics,
+            originPath = originPath,
+        )
+    }
+
+private fun liberationSansManifestSourcePreimage(): FontSourceIdentityPreimage =
+    FontSourceIdentityPreimage(
+        provenance = FontSourceProvenance(
+            kind = FontSourceKind.BUNDLED_FIXTURE,
+            declaredName = "Liberation Sans Regular",
+            licenseId = "SIL-OFL-1.1",
+            originPath = "reports/font/fixtures/fonts/liberation/LiberationSans-Regular.ttf",
+            hostDependent = false,
+        ),
+        contentSha256 = "76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+        byteLength = 410712,
+        faceCount = 1,
+        tableTags = listOf("cmap", "glyf", "head", "name"),
+        parserGeneration = 1,
+    )
+
+fun defaultFontSourceIdentityReport(): FontSourceIdentityReport = FontSourceIdentityReport(
+    fixtureName = "font-source.json",
+    entries = listOf(
+        FontSourceIdentityReportEntry(
+            label = "bundled-fixture",
+            manifestFixtureId = "single-ttf-liberation-sans",
+            preimage = liberationSansManifestSourcePreimage(),
+        ),
+        FontSourceIdentityReportEntry(
+            label = "generated-fixture",
+            preimage = fontSourceIdentityPreimage(
+                kind = FontSourceKind.GENERATED_FIXTURE,
+                declaredName = "Generated Minimal",
+                contentBytes = byteArrayOf(4, 5, 6),
+                faceCount = 1,
+                tableTags = listOf("cmap", "head"),
+                parserGeneration = 1,
+            ),
+        ),
+        FontSourceIdentityReportEntry(
+            label = "user-data",
+            preimage = fontSourceIdentityPreimage(
+                kind = FontSourceKind.USER_DATA,
+                declaredName = "User Upload",
+                contentBytes = byteArrayOf(7, 8, 9),
+                faceCount = 1,
+                tableTags = listOf("cmap"),
+                parserGeneration = 1,
+            ),
+        ),
+        FontSourceIdentityReportEntry(
+            label = "system-scanned-host-dependent",
+            preimage = fontSourceIdentityPreimage(
+                kind = FontSourceKind.SYSTEM_SCANNED,
+                declaredName = "Host Scan Sans",
+                originPath = "system-fonts/HostScanSans.ttf",
+                contentBytes = null,
+                faceCount = 0,
+                tableTags = emptyList(),
+                parserGeneration = 1,
+                diagnostics = listOf(
+                    fontSourceIdentityDiagnostic(
+                        code = "font.source.host-dependent",
+                        message = "System scan entry has no captured fixture bytes.",
+                    ),
+                ),
+            ),
+        ),
+    ),
+)
+
+enum class FontFixtureNormativeStatus(
+    val serializedName: String,
+) {
+    NORMATIVE("normative"),
+    NON_NORMATIVE("non-normative"),
+    PLANNED_GENERATED("planned-generated"),
+}
+
+data class FontFixtureManifestDiagnostic(
+    val code: String,
+    val detail: String? = null,
+    val fixtureId: String? = null,
+) {
+    init {
+        require(code.isStableDiagnosticCode()) { "code must be a stable one-line diagnostic code." }
+        require(fixtureId == null || fixtureId.isStableManifestToken()) {
+            "fixtureId must be a stable manifest token when present."
+        }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("code", code, comma = true)
+        append("fixtureId".evidenceQuoted()).append(":")
+        append(fixtureId.toFontJsonNullableString())
+        append(",")
+        append("detail".evidenceQuoted()).append(":")
+        append(detail.toFontJsonNullableString())
+        append("}")
+    }
+}
+
+class BundledFontFixtureManifestEntry(
+    val fixtureId: String,
+    val sourceKind: FontSourceKind,
+    val relativePath: String?,
+    val generatorId: String?,
+    generatorParameters: List<String> = emptyList(),
+    val licenseId: String?,
+    val licensePath: String?,
+    val provenance: String?,
+    val contentSha256: String?,
+    val byteLength: Long?,
+    val faceCount: Int,
+    coverageTags: List<String>,
+    val normativeStatus: FontFixtureNormativeStatus,
+    val remainingGate: String?,
+    diagnostics: List<FontFixtureManifestDiagnostic> = emptyList(),
+    fontSourceReportLabels: List<String> = emptyList(),
+    typefaceReportLabels: List<String> = emptyList(),
+    val claimPromotionAllowed: Boolean = false,
+) {
+    val generatorParameters: List<String> = generatorParameters.normalizedManifestStrings("generatorParameters")
+    val coverageTags: List<String> = coverageTags.normalizedManifestStrings("coverageTags")
+    val diagnostics: List<FontFixtureManifestDiagnostic> =
+        diagnostics.sortedWith(compareBy<FontFixtureManifestDiagnostic> { it.code }.thenBy { it.fixtureId.orEmpty() }.thenBy { it.detail.orEmpty() })
+    val fontSourceReportLabels: List<String> = fontSourceReportLabels.normalizedManifestStrings("fontSourceReportLabels")
+    val typefaceReportLabels: List<String> = typefaceReportLabels.normalizedManifestStrings("typefaceReportLabels")
+
+    init {
+        require(fixtureId.isStableManifestToken()) { "fixtureId must be a stable manifest token." }
+        require(relativePath == null || relativePath.isStableManifestString()) {
+            "relativePath must be one stable JSON-line string when present."
+        }
+        require(generatorId == null || generatorId.isStableManifestToken()) {
+            "generatorId must be a stable manifest token when present."
+        }
+        require(licenseId == null || licenseId.isStableManifestToken()) {
+            "licenseId must be a stable manifest token when present."
+        }
+        require(licensePath == null || licensePath.isStableManifestString()) {
+            "licensePath must be one stable JSON-line string when present."
+        }
+        require(provenance == null || provenance.isStableManifestString()) {
+            "provenance must be one stable JSON-line string when present."
+        }
+        require(contentSha256 == null || contentSha256.isLowercaseSha256Hex()) {
+            "contentSha256 must be a lowercase hexadecimal SHA-256 digest."
+        }
+        require(byteLength == null || byteLength >= 0) { "byteLength must be non-negative." }
+        require(faceCount >= 0) { "faceCount must be non-negative." }
+        require(remainingGate == null || remainingGate.isStableManifestString()) {
+            "remainingGate must be one stable JSON-line string when present."
+        }
+        if (sourceKind == FontSourceKind.GENERATED_FIXTURE) {
+            require(generatorId != null) {
+                "generated fixture manifest entries require a generatorId."
+            }
+            require(this.generatorParameters.isNotEmpty()) {
+                "generated fixture manifest entries require generatorParameters."
+            }
+            require(relativePath == null) {
+                "generated fixture manifest entries must not use relativePath until generated bytes are captured."
+            }
+        }
+        if (normativeStatus == FontFixtureNormativeStatus.PLANNED_GENERATED) {
+            require(sourceKind == FontSourceKind.GENERATED_FIXTURE) {
+                "planned generated fixture entries must use GeneratedFixtureFontSource."
+            }
+            require(contentSha256 == null && byteLength == null) {
+                "planned generated fixture entries must not carry captured byte facts."
+            }
+            require(generatorId != null && this.generatorParameters.isNotEmpty()) {
+                "planned generated fixture entries require generator provenance."
+            }
+        }
+        require(!claimPromotionAllowed) {
+            "Font fixture manifest entries cannot promote parser, scaler, rendering, fallback, glyph, or GPU claims."
+        }
+    }
+
+    fun normativeEvidenceDiagnostics(): List<FontFixtureManifestDiagnostic> {
+        if (normativeStatus != FontFixtureNormativeStatus.NORMATIVE) return emptyList()
+        val result = mutableListOf<FontFixtureManifestDiagnostic>()
+        val hasCapturedBytes = contentSha256 != null && byteLength != null && relativePath != null
+        if (sourceKind.isHostDependentByDefault() && !hasCapturedBytes) {
+            result += FontFixtureManifestDiagnostic(
+                code = "font.fixture.host-dependent-normative-refused",
+                fixtureId = fixtureId,
+                detail = "Host-dependent sources cannot be normative without captured bytes.",
+            )
+        }
+        if (
+            licenseId == null ||
+            licensePath == null ||
+            provenance == null ||
+            contentSha256 == null ||
+            byteLength == null ||
+            relativePath == null
+        ) {
+            result += FontFixtureManifestDiagnostic(
+                code = "font.fixture.provenance-missing",
+                fixtureId = fixtureId,
+                detail = "Normative fixture entries require license, provenance, path, SHA-256, and byte length.",
+            )
+        }
+        if (coverageTags.isEmpty()) {
+            result += FontFixtureManifestDiagnostic(
+                code = "font.fixture.coverage-missing",
+                fixtureId = fixtureId,
+                detail = "Normative fixture entries require intended coverage tags.",
+            )
+        }
+        return result.sortedWith(
+            compareBy<FontFixtureManifestDiagnostic> { it.code }
+                .thenBy { it.fixtureId.orEmpty() }
+                .thenBy { it.detail.orEmpty() },
+        )
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("fixtureId", fixtureId, comma = true)
+        appendFontCompactJsonField("sourceKind", sourceKind.serializedName, comma = true)
+        appendFontCompactJsonField("normativeStatus", normativeStatus.serializedName, comma = true)
+        append("relativePath".evidenceQuoted()).append(":")
+        append(relativePath.toFontJsonNullableString())
+        append(",")
+        append("generatorId".evidenceQuoted()).append(":")
+        append(generatorId.toFontJsonNullableString())
+        append(",")
+        appendStringArrayField("generatorParameters", generatorParameters, comma = true)
+        append("licenseId".evidenceQuoted()).append(":")
+        append(licenseId.toFontJsonNullableString())
+        append(",")
+        append("licensePath".evidenceQuoted()).append(":")
+        append(licensePath.toFontJsonNullableString())
+        append(",")
+        append("provenance".evidenceQuoted()).append(":")
+        append(provenance.toFontJsonNullableString())
+        append(",")
+        append("contentSha256".evidenceQuoted()).append(":")
+        append(contentSha256.toFontJsonNullableString())
+        append(",")
+        append("byteLength".evidenceQuoted()).append(":")
+        append(byteLength?.toString() ?: "null")
+        append(",")
+        append("faceCount".evidenceQuoted()).append(":")
+        append(faceCount)
+        append(",")
+        appendStringArrayField("coverageTags", coverageTags, comma = true)
+        appendStringArrayField("fontSourceReportLabels", fontSourceReportLabels, comma = true)
+        appendStringArrayField("typefaceReportLabels", typefaceReportLabels, comma = true)
+        append("diagnostics".evidenceQuoted()).append(":")
+        append(diagnostics.joinToString(prefix = "[", postfix = "]", separator = ",") { it.toCanonicalJson() })
+        append(",")
+        append("remainingGate".evidenceQuoted()).append(":")
+        append(remainingGate.toFontJsonNullableString())
+        append(",")
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+        append("}")
+    }
+}
+
+class FontFixtureManifest(
+    val schemaVersion: Int = 1,
+    val manifestName: String = "font-fixtures-manifest.json",
+    entries: List<BundledFontFixtureManifestEntry>,
+    val dashboardClassification: String = "fixture-gated",
+    nonClaims: List<String> = FontFixtureManifestNonClaims,
+    val claimPromotionAllowed: Boolean = false,
+) {
+    val entries: List<BundledFontFixtureManifestEntry> = entries.sortedBy { it.fixtureId }
+    val nonClaims: List<String> = nonClaims.normalizedManifestStrings("nonClaims")
+
+    init {
+        require(schemaVersion == 1) { "unsupported font fixture manifest schema version." }
+        require(manifestName == "font-fixtures-manifest.json") { "font fixture manifest output name is fixed." }
+        require(dashboardClassification == "fixture-gated") { "font fixture manifest dashboard row must stay fixture-gated." }
+        require(this.entries.map { it.fixtureId }.distinct().size == this.entries.size) {
+            "font fixture manifest entries must have unique fixture IDs."
+        }
+        require(!claimPromotionAllowed) {
+            "Font fixture manifests cannot promote parser, scaler, rendering, fallback, glyph, or GPU claims."
+        }
+    }
+
+    fun normativeEvidenceDiagnostics(): List<FontFixtureManifestDiagnostic> =
+        entries.flatMap { it.normativeEvidenceDiagnostics() }.sortedWith(
+            compareBy<FontFixtureManifestDiagnostic> { it.code }
+                .thenBy { it.fixtureId.orEmpty() }
+                .thenBy { it.detail.orEmpty() },
+        )
+
+    fun toCanonicalJson(): CanonicalFontIdentityJson = CanonicalFontIdentityJson(
+        buildString {
+            append("{")
+            appendFontCompactJsonField("schema", FONT_FIXTURE_MANIFEST_SCHEMA, comma = true)
+            append("schemaVersion".evidenceQuoted()).append(":").append(schemaVersion).append(",")
+            appendFontCompactJsonField("manifestName", manifestName, comma = true)
+            append("dashboardRow".evidenceQuoted()).append(":{")
+            appendFontCompactJsonField("name", "bundled font fixture manifest", comma = true)
+            appendFontCompactJsonField("classification", dashboardClassification, comma = true)
+            appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+            append("},")
+            append("entries".evidenceQuoted()).append(":")
+            append(entries.joinToString(separator = ",", prefix = "[", postfix = "]") { it.toCanonicalJson() })
+            append(",")
+            appendStringArrayField("nonClaims", nonClaims, comma = true)
+            append("normativeEvidenceDiagnostics".evidenceQuoted()).append(":")
+            append(normativeEvidenceDiagnostics().joinToString(prefix = "[", postfix = "]", separator = ",") { it.toCanonicalJson() })
+            append(",")
+            appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+            append("}")
+        },
+    )
+}
+
+fun defaultFontFixtureManifest(): FontFixtureManifest = FontFixtureManifest(
+    entries = listOf(
+        BundledFontFixtureManifestEntry(
+            fixtureId = "single-ttf-liberation-sans",
+            sourceKind = FontSourceKind.BUNDLED_FIXTURE,
+            relativePath = "reports/font/fixtures/fonts/liberation/LiberationSans-Regular.ttf",
+            generatorId = null,
+            generatorParameters = emptyList(),
+            licenseId = "SIL-OFL-1.1",
+            licensePath = "reports/font/fixtures/licenses/liberation-OFL-1.1.txt",
+            provenance = "Liberation Fonts; repo-vendored-existing; kanvas-skia/src/main/resources/fonts/liberation",
+            contentSha256 = "76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+            byteLength = 410712,
+            faceCount = 1,
+            coverageTags = listOf("sfnt-source", "single-ttf", "table:cmap", "table:glyf", "table:head", "table:name"),
+            normativeStatus = FontFixtureNormativeStatus.NORMATIVE,
+            remainingGate = "Parser and scaler evidence must be attached by later tickets before support promotion.",
+            fontSourceReportLabels = listOf("bundled-fixture"),
+            typefaceReportLabels = listOf("single-face-ttf"),
+        ),
+        BundledFontFixtureManifestEntry(
+            fixtureId = "otf-cff-source-serif",
+            sourceKind = FontSourceKind.BUNDLED_FIXTURE,
+            relativePath = "reports/font/fixtures/fonts/scaler/SourceSerif4-Regular.otf",
+            generatorId = null,
+            generatorParameters = emptyList(),
+            licenseId = "SIL-OFL-1.1",
+            licensePath = "reports/font/fixtures/licenses/source-serif-OFL-1.1.txt",
+            provenance = "Source Serif 4.005R; vendored external fixture from Adobe Source Serif release",
+            contentSha256 = "edf160d0d584deee8a3bb2c3371b2a7624ca63580fbe02c57c1f4c91e84d8787",
+            byteLength = 241392,
+            faceCount = 1,
+            coverageTags = listOf("otf-cff-candidate", "sfnt-source", "table:CFF", "table:cmap", "table:name"),
+            normativeStatus = FontFixtureNormativeStatus.NORMATIVE,
+            remainingGate = "CFF parser and scaler tickets must attach separate evidence before support promotion.",
+        ),
+        BundledFontFixtureManifestEntry(
+            fixtureId = "variable-ttf-roboto-flex",
+            sourceKind = FontSourceKind.BUNDLED_FIXTURE,
+            relativePath = "reports/font/fixtures/fonts/scaler/RobotoFlex-Variable.ttf",
+            generatorId = null,
+            generatorParameters = emptyList(),
+            licenseId = "SIL-OFL-1.1",
+            licensePath = "reports/font/fixtures/licenses/roboto-flex-OFL-1.1.txt",
+            provenance = "Roboto Flex; googlefonts/roboto-flex blob 0abe2ee29292f1b39f59103d069feda87cde585e",
+            contentSha256 = "94a7ea95ccee28c54885a507e3cc0a534ce41ec61d413935df0e07261a7ffe63",
+            byteLength = 1775480,
+            faceCount = 1,
+            coverageTags = listOf("sfnt-source", "table:cmap", "table:fvar", "table:glyf", "table:gvar", "variable-font-candidate"),
+            normativeStatus = FontFixtureNormativeStatus.NORMATIVE,
+            remainingGate = "Variable parser and scaler tickets must attach separate evidence before support promotion.",
+            typefaceReportLabels = listOf("variable-axis-change"),
+        ),
+        plannedGeneratedFixtureManifestEntry(
+            fixtureId = "ttc-face-index-planned-generated",
+            generatorId = "kfont.fixture.ttc-face-index.v1",
+            generatorParameters = listOf("container=ttc", "faceCount=2", "outline=glyf", "selectedFaceIndex=1"),
+            faceCount = 2,
+            coverageTags = listOf("collection-index", "sfnt-source", "ttc-face-index"),
+            remainingGate = "Generate and check in deterministic TTC bytes before normative collection evidence.",
+            typefaceReportLabels = listOf("ttc-face-index-variant"),
+        ),
+        plannedGeneratedFixtureManifestEntry(
+            fixtureId = "malformed-directory-planned-generated",
+            generatorId = "kfont.fixture.malformed-directory.v1",
+            generatorParameters = listOf("directory=malformed", "faceCount=0", "tableDirectory=truncated"),
+            faceCount = 0,
+            coverageTags = listOf("malformed-directory", "sfnt-directory-refusal"),
+            remainingGate = "Generate deterministic malformed bytes and refusal dump before normative parser evidence.",
+        ),
+        plannedGeneratedFixtureManifestEntry(
+            fixtureId = "missing-required-table-planned-generated",
+            generatorId = "kfont.fixture.missing-required-table.v1",
+            generatorParameters = listOf("faceCount=0", "missing=head", "requiredTable=head"),
+            faceCount = 0,
+            coverageTags = listOf("missing-required-table", "sfnt-required-table-refusal"),
+            remainingGate = "Generate deterministic missing-required-table bytes and refusal dump before normative parser evidence.",
+        ),
+        BundledFontFixtureManifestEntry(
+            fixtureId = "system-scanned-host-dependent",
+            sourceKind = FontSourceKind.SYSTEM_SCANNED,
+            relativePath = null,
+            generatorId = null,
+            generatorParameters = emptyList(),
+            licenseId = null,
+            licensePath = null,
+            provenance = "Host system scan source without captured fixture bytes; non-normative drift input only.",
+            contentSha256 = null,
+            byteLength = null,
+            faceCount = 0,
+            coverageTags = listOf("host-dependent", "system-scan-non-normative"),
+            normativeStatus = FontFixtureNormativeStatus.NON_NORMATIVE,
+            remainingGate = "Capture source bytes, license, provenance, hash, and byte length before normative evidence use.",
+            diagnostics = listOf(
+                FontFixtureManifestDiagnostic(
+                    code = "font.source.host-dependent",
+                    fixtureId = "system-scanned-host-dependent",
+                    detail = "Host-scanned fonts are non-normative until bytes are captured into the fixture manifest.",
+                ),
+            ),
+            fontSourceReportLabels = listOf("system-scanned-host-dependent"),
+        ),
+    ),
+)
+
+private fun plannedGeneratedFixtureManifestEntry(
+    fixtureId: String,
+    generatorId: String,
+    generatorParameters: List<String>,
+    faceCount: Int,
+    coverageTags: List<String>,
+    remainingGate: String,
+    typefaceReportLabels: List<String> = emptyList(),
+): BundledFontFixtureManifestEntry = BundledFontFixtureManifestEntry(
+    fixtureId = fixtureId,
+    sourceKind = FontSourceKind.GENERATED_FIXTURE,
+    relativePath = null,
+    generatorId = generatorId,
+    generatorParameters = generatorParameters,
+    licenseId = "Kanvas-generated-fixture",
+    licensePath = null,
+    provenance = "Planned pure Kotlin generated fixture; bytes are not checked in yet.",
+    contentSha256 = null,
+    byteLength = null,
+    faceCount = faceCount,
+    coverageTags = coverageTags,
+    normativeStatus = FontFixtureNormativeStatus.PLANNED_GENERATED,
+    remainingGate = remainingGate,
+    diagnostics = listOf(
+        FontFixtureManifestDiagnostic(
+            code = "font.fixture.generated-bytes-missing",
+            fixtureId = fixtureId,
+            detail = "Generated fixture provenance exists, but deterministic bytes are not checked in.",
+        ),
+    ),
+    typefaceReportLabels = typefaceReportLabels,
+)
+
+object FontFixtureManifestWriter {
+    fun writeManifestJson(
+        manifest: FontFixtureManifest = defaultFontFixtureManifest(),
+    ): CanonicalFontIdentityJson = CanonicalFontIdentityJson("${manifest.toCanonicalJson().value}\n")
+}
+
+/**
+ * Stable outline family facts included in [TypefaceIdentityPreimage].
+ */
+enum class TypefaceOutlineFormat(
+    val serializedName: String,
+) {
+    TRUE_TYPE_GLYF("TrueTypeGlyf"),
+    CFF("CFF"),
+    CFF2("CFF2"),
+    BITMAP_ONLY("BitmapOnly"),
+    UNKNOWN("Unknown"),
+}
+
+/**
+ * Stable scaler route facts included in [TypefaceIdentityPreimage].
+ */
+enum class TypefaceScalerMode(
+    val serializedName: String,
+) {
+    OUTLINE("Outline"),
+    A8("A8"),
+    SDF("SDF"),
+    DRIFT_ONLY("DriftOnly"),
+}
+
+/**
+ * Canonical facts for the selected character map used by a typeface.
+ */
+data class TypefaceCMapSelection(
+    val platformId: Int,
+    val encodingId: Int,
+    val format: Int,
+    val language: Int,
+    val unicode: Boolean,
+) {
+    init {
+        require(platformId >= 0) { "platformId must be non-negative." }
+        require(encodingId >= 0) { "encodingId must be non-negative." }
+        require(format >= 0) { "format must be non-negative." }
+        require(language >= 0) { "language must be non-negative." }
+    }
+
+    internal fun toCanonicalJson(indent: String): String = buildString {
+        append(indent).append("{\n")
+        appendFontJsonField("platformId", platformId, indent = "$indent  ", comma = true)
+        appendFontJsonField("encodingId", encodingId, indent = "$indent  ", comma = true)
+        appendFontJsonField("format", format, indent = "$indent  ", comma = true)
+        appendFontJsonField("language", language, indent = "$indent  ", comma = true)
+        appendFontJsonField("unicode", unicode, indent = "$indent  ", comma = false)
+        append(indent).append("}")
+    }
+}
+
+/**
+ * One normalized OpenType variation coordinate.
+ */
+class TypefaceVariationCoordinate(
+    val axisTag: String,
+    value: Double,
+) {
+    val value: Double = value.normalizedTypefaceVariationValue()
+
+    init {
+        require(axisTag.isStableSfntTableTag()) {
+            "axisTag must be a four-character printable ASCII OpenType tag."
+        }
+        require(!value.isNaN() && !value.isInfinite()) {
+            "variation coordinate value must be finite."
+        }
+    }
+
+    internal fun toCanonicalJson(indent: String): String = buildString {
+        append(indent).append("{\n")
+        appendFontJsonField("axisTag", axisTag, indent = "$indent  ", comma = true)
+        append(indent).append("  ").append("value".evidenceQuoted()).append(": ")
+        append(value.toTypefaceJsonNumber())
+        append("\n")
+        append(indent).append("}")
+    }
+
+    override fun equals(other: Any?): Boolean =
+        this === other || other is TypefaceVariationCoordinate &&
+            axisTag == other.axisTag &&
+            value == other.value
+
+    override fun hashCode(): Int {
+        var result = axisTag.hashCode()
+        result = 31 * result + value.hashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "TypefaceVariationCoordinate(axisTag=$axisTag, value=$value)"
+}
+
+/**
+ * Palette selection facts that can affect color glyph output.
+ */
+class TypefacePaletteSelection(
+    val index: Int,
+    overrides: List<String> = emptyList(),
+) {
+    val overrides: List<String> = overrides.distinct().sorted()
+
+    init {
+        require(index >= 0) { "palette index must be non-negative." }
+        require(this.overrides.all { override -> override.isNotBlank() && override.none { it < ' ' } }) {
+            "palette overrides must be stable one-line strings."
+        }
+    }
+
+    internal fun toCanonicalJson(indent: String): String = buildString {
+        append(indent).append("{\n")
+        appendFontJsonField("index", index, indent = "$indent  ", comma = true)
+        append(indent).append("  ").append("overrides".evidenceQuoted()).append(": ")
+        append(overrides.joinToString(prefix = "[", postfix = "]", separator = ", ") { it.evidenceQuoted() })
+        append("\n")
+        append(indent).append("}")
+    }
+
+    override fun equals(other: Any?): Boolean =
+        this === other || other is TypefacePaletteSelection &&
+            index == other.index &&
+            overrides == other.overrides
+
+    override fun hashCode(): Int {
+        var result = index
+        result = 31 * result + overrides.hashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "TypefacePaletteSelection(index=$index, overrides=$overrides)"
+}
+
+/**
+ * Stable diagnostic included in typeface identity evidence.
+ */
+data class TypefaceIdentityDiagnostic(
+    val code: String,
+    val detail: String? = null,
+) {
+    init {
+        require(code.isStableDiagnosticCode()) { "code must be a stable one-line diagnostic code." }
+    }
+
+    internal fun toCanonicalJson(indent: String): String = buildString {
+        append(indent).append("{\n")
+        appendFontJsonField("code", code, indent = "$indent  ", comma = true)
+        append(indent).append("  ").append("detail".evidenceQuoted()).append(": ")
+        append(detail.toFontJsonNullableString())
+        append("\n")
+        append(indent).append("}")
+    }
+}
+
+/**
+ * Canonical preimage for deriving and auditing [TypefaceID].
+ */
+class TypefaceIdentityPreimage(
+    val sourceId: FontSourceID,
+    val collectionIndex: Int,
+    val postScriptName: String?,
+    val familyName: String,
+    val styleName: String,
+    val style: FontStyle,
+    val outlineFormat: TypefaceOutlineFormat,
+    val selectedCMap: TypefaceCMapSelection,
+    val scalerMode: TypefaceScalerMode,
+    variationCoordinates: List<TypefaceVariationCoordinate> = emptyList(),
+    val palette: TypefacePaletteSelection? = null,
+    val fallbackCatalogGeneration: Int? = null,
+    tableTags: List<String> = emptyList(),
+    diagnostics: List<TypefaceIdentityDiagnostic> = emptyList(),
+) {
+    val variationCoordinates: List<TypefaceVariationCoordinate> = variationCoordinates.normalizedVariationCoordinates()
+    val tableTags: List<String> = tableTags.normalizedTableTags()
+    val diagnostics: List<TypefaceIdentityDiagnostic> =
+        diagnostics.sortedWith(compareBy<TypefaceIdentityDiagnostic> { it.code }.thenBy { it.detail.orEmpty() })
+
+    init {
+        require(collectionIndex >= 0) { "collectionIndex must be non-negative." }
+        require(postScriptName == null || postScriptName.isNotBlank()) {
+            "postScriptName must not be blank when present."
+        }
+        require(familyName.isNotBlank()) { "familyName must not be blank." }
+        require(styleName.isNotBlank()) { "styleName must not be blank." }
+        require(selectedCMap.unicode) { "selectedCMap must be a usable Unicode cmap." }
+        require(fallbackCatalogGeneration == null || fallbackCatalogGeneration >= 0) {
+            "fallbackCatalogGeneration must be non-negative when present."
+        }
+    }
+
+    /**
+     * Serializes every [TypefaceID]-affecting fact as canonical JSON.
+     */
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendFontJsonField("schema", PreimageSchema, indent = "  ", comma = true)
+        appendFontJsonField("sourceId", sourceId.value.toHexDashString(), indent = "  ", comma = true)
+        appendFontJsonField("collectionIndex", collectionIndex, indent = "  ", comma = true)
+        append("  ").append("postScriptName".evidenceQuoted()).append(": ")
+        append(postScriptName.toFontJsonNullableString())
+        append(",\n")
+        appendFontJsonField("familyName", familyName, indent = "  ", comma = true)
+        appendFontJsonField("styleName", styleName, indent = "  ", comma = true)
+        append("  ").append("style".evidenceQuoted()).append(": {\n")
+        appendFontJsonField("weight", style.weight, indent = "    ", comma = true)
+        appendFontJsonField("width", style.width, indent = "    ", comma = true)
+        appendFontJsonField("slant", style.slant.typefaceSerializedName, indent = "    ", comma = false)
+        append("  },\n")
+        appendFontJsonField("outlineFormat", outlineFormat.serializedName, indent = "  ", comma = true)
+        append("  ").append("selectedCMap".evidenceQuoted()).append(": ")
+        append(selectedCMap.toCanonicalJson(indent = "  ").trimStart())
+        append(",\n")
+        appendFontJsonField("scalerMode", scalerMode.serializedName, indent = "  ", comma = true)
+        append("  ").append("variationCoordinates".evidenceQuoted()).append(": ")
+        if (variationCoordinates.isEmpty()) {
+            append("[]")
+        } else {
+            append("[\n")
+            append(variationCoordinates.joinToString(",\n") { it.toCanonicalJson(indent = "    ") })
+            append("\n  ]")
+        }
+        append(",\n")
+        append("  ").append("palette".evidenceQuoted()).append(": ")
+        append(palette?.toCanonicalJson(indent = "  ")?.trimStart() ?: "null")
+        append(",\n")
+        append("  ").append("fallbackCatalogGeneration".evidenceQuoted()).append(": ")
+        append(fallbackCatalogGeneration?.toString() ?: "null")
+        append(",\n")
+        append("  ").append("tableTags".evidenceQuoted()).append(": ")
+        append(tableTags.joinToString(prefix = "[", postfix = "]", separator = ", ") { it.evidenceQuoted() })
+        append(",\n")
+        append("  ").append("diagnostics".evidenceQuoted()).append(": ")
+        if (diagnostics.isEmpty()) {
+            append("[]\n")
+        } else {
+            append("[\n")
+            append(diagnostics.joinToString(",\n") { it.toCanonicalJson(indent = "    ") })
+            append("\n  ]\n")
+        }
+        append("}\n")
+    }
+
+    /**
+     * Derives a deterministic UUID-backed typeface ID from [toCanonicalJson].
+     */
+    fun deriveTypefaceID(): TypefaceID =
+        TypefaceID(stableUuidFromSha256("kanvas-typeface-id-v1\n${toCanonicalJson()}"))
+
+    fun typefaceId(): TypefaceID = deriveTypefaceID()
+
+    override fun equals(other: Any?): Boolean =
+        this === other || other is TypefaceIdentityPreimage &&
+            sourceId == other.sourceId &&
+            collectionIndex == other.collectionIndex &&
+            postScriptName == other.postScriptName &&
+            familyName == other.familyName &&
+            styleName == other.styleName &&
+            style == other.style &&
+            outlineFormat == other.outlineFormat &&
+            selectedCMap == other.selectedCMap &&
+            scalerMode == other.scalerMode &&
+            variationCoordinates == other.variationCoordinates &&
+            palette == other.palette &&
+            fallbackCatalogGeneration == other.fallbackCatalogGeneration &&
+            tableTags == other.tableTags &&
+            diagnostics == other.diagnostics
+
+    override fun hashCode(): Int {
+        var result = sourceId.hashCode()
+        result = 31 * result + collectionIndex
+        result = 31 * result + (postScriptName?.hashCode() ?: 0)
+        result = 31 * result + familyName.hashCode()
+        result = 31 * result + styleName.hashCode()
+        result = 31 * result + style.hashCode()
+        result = 31 * result + outlineFormat.hashCode()
+        result = 31 * result + selectedCMap.hashCode()
+        result = 31 * result + scalerMode.hashCode()
+        result = 31 * result + variationCoordinates.hashCode()
+        result = 31 * result + (palette?.hashCode() ?: 0)
+        result = 31 * result + (fallbackCatalogGeneration ?: 0)
+        result = 31 * result + tableTags.hashCode()
+        result = 31 * result + diagnostics.hashCode()
+        return result
+    }
+
+    companion object {
+        const val PreimageSchema: String = "org.graphiks.kanvas.font.TypefaceIdentityPreimage.v1"
+    }
+}
+
+/**
+ * One deterministic row in [TypefaceIdentityReport].
+ */
+class TypefaceIdentityReportEntry(
+    val label: String,
+    val preimage: TypefaceIdentityPreimage?,
+    diagnostics: List<TypefaceIdentityDiagnostic> = preimage?.diagnostics ?: emptyList(),
+    val claimPromotionAllowed: Boolean = false,
+) {
+    val diagnostics: List<TypefaceIdentityDiagnostic> =
+        diagnostics.sortedWith(compareBy<TypefaceIdentityDiagnostic> { it.code }.thenBy { it.detail.orEmpty() })
+
+    init {
+        require(label.isNotBlank()) { "label must not be blank." }
+        require(preimage != null || this.diagnostics.isNotEmpty()) {
+            "diagnostic-only typeface identity rows must include diagnostics."
+        }
+        require(!claimPromotionAllowed) {
+            "Typeface identity evidence cannot promote rendering support claims."
+        }
+    }
+
+    fun typefaceId(): TypefaceID? = preimage?.typefaceId()
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("label", label, comma = true)
+        append("typefaceId".evidenceQuoted()).append(":")
+        val typefaceId = typefaceId()
+        append(typefaceId?.value?.toHexDashString()?.evidenceQuoted() ?: "null")
+        append(",")
+        append("preimage".evidenceQuoted()).append(":")
+        append(preimage?.toCanonicalJson()?.trim() ?: "null")
+        append(",")
+        append("diagnostics".evidenceQuoted()).append(":")
+        if (diagnostics.isEmpty()) {
+            append("[]")
+        } else {
+            append("[")
+            append(diagnostics.joinToString(",") { it.toCanonicalJson(indent = "    ").trim() })
+            append("]")
+        }
+        append(",")
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+        append("}")
+    }
+}
+
+/**
+ * Deterministic report for KFONT-M1-002 typeface identity evidence.
+ */
+class TypefaceIdentityReport(
+    val fixtureName: String,
+    entries: List<TypefaceIdentityReportEntry>,
+) {
+    val entries: List<TypefaceIdentityReportEntry> = entries.toList()
+    val legacyGate: String = "typeface"
+    val gateStatus: String = "open"
+    val claimPromotionAllowed: Boolean = false
+
+    init {
+        require(fixtureName.isNotBlank()) { "fixtureName must not be blank." }
+        require(this.entries.map { entry -> entry.label }.distinct().size == this.entries.size) {
+            "typeface identity report entries must have unique labels."
+        }
+        require(this.entries.all { entry -> !entry.claimPromotionAllowed }) {
+            "typeface identity report cannot contain claim-promoting rows."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("schema", TYPEFACE_IDENTITY_REPORT_SCHEMA, comma = true)
+        appendFontCompactJsonField("fixtureName", fixtureName, comma = true)
+        appendFontCompactJsonField("legacyGate", legacyGate, comma = true)
+        appendFontCompactJsonField("gateStatus", gateStatus, comma = true)
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = true)
+        append("dashboardRow".evidenceQuoted()).append(":{")
+        appendFontCompactJsonField("name", "TypefaceID glyph-affecting identity", comma = true)
+        appendFontCompactJsonField("classification", "tracked-gap", comma = true)
+        appendFontCompactJsonField("legacyGate", legacyGate, comma = true)
+        appendFontCompactJsonField("gateStatus", gateStatus, comma = true)
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+        append("},")
+        append("entries".evidenceQuoted()).append(":")
+        append(entries.joinToString(separator = ",", prefix = "[", postfix = "]") { entry ->
+            entry.toCanonicalJson()
+        })
+        append("}")
+    }
+}
+
+fun typefaceIdentityDiagnostic(
+    code: String,
+    message: String? = null,
+): TypefaceIdentityDiagnostic = TypefaceIdentityDiagnostic(
+    code = code,
+    detail = message,
+)
+
+fun typefaceIdentityPreimage(
+    sourceId: FontSourceID,
+    collectionIndex: Int,
+    postScriptName: String?,
+    familyName: String,
+    styleName: String,
+    style: FontStyle = FontStyle.fromStyleName(styleName),
+    outlineFormat: TypefaceOutlineFormat,
+    selectedCMap: TypefaceCMapSelection,
+    scalerMode: TypefaceScalerMode,
+    variationCoordinates: List<TypefaceVariationCoordinate> = emptyList(),
+    palette: TypefacePaletteSelection? = null,
+    fallbackCatalogGeneration: Int? = null,
+    tableTags: List<String> = emptyList(),
+    diagnostics: List<TypefaceIdentityDiagnostic> = emptyList(),
+): TypefaceIdentityPreimage = TypefaceIdentityPreimage(
+    sourceId = sourceId,
+    collectionIndex = collectionIndex,
+    postScriptName = postScriptName,
+    familyName = familyName,
+    styleName = styleName,
+    style = style,
+    outlineFormat = outlineFormat,
+    selectedCMap = selectedCMap,
+    scalerMode = scalerMode,
+    variationCoordinates = variationCoordinates,
+    palette = palette,
+    fallbackCatalogGeneration = fallbackCatalogGeneration,
+    tableTags = tableTags,
+    diagnostics = diagnostics,
+)
+
+fun defaultTypefaceIdentityReport(): TypefaceIdentityReport {
+    val singleFaceSourceId = liberationSansManifestSourcePreimage().sourceId()
+    val collectionSourceId = fontSourceIdentityPreimage(
+        kind = FontSourceKind.GENERATED_FIXTURE,
+        declaredName = "Fixture Collection TTC",
+        contentBytes = byteArrayOf(10, 11, 12),
+        faceCount = 2,
+        tableTags = listOf("cmap", "glyf", "head", "name"),
+        parserGeneration = 1,
+    ).sourceId()
+    val variableSourceId = fontSourceIdentityPreimage(
+        kind = FontSourceKind.GENERATED_FIXTURE,
+        declaredName = "Fixture Variable Sans",
+        contentBytes = byteArrayOf(20, 21, 22),
+        faceCount = 1,
+        tableTags = listOf("cmap", "fvar", "gvar", "glyf", "head", "name"),
+        parserGeneration = 1,
+    ).sourceId()
+    val paletteSourceId = fontSourceIdentityPreimage(
+        kind = FontSourceKind.GENERATED_FIXTURE,
+        declaredName = "Fixture Color Palette",
+        contentBytes = byteArrayOf(30, 31, 32),
+        faceCount = 1,
+        tableTags = listOf("COLR", "CPAL", "cmap", "glyf", "head", "name"),
+        parserGeneration = 1,
+    ).sourceId()
+    val unicodeCMap = TypefaceCMapSelection(
+        platformId = 3,
+        encodingId = 10,
+        format = 12,
+        language = 0,
+        unicode = true,
+    )
+
+    return TypefaceIdentityReport(
+        fixtureName = "typeface-id.json",
+        entries = listOf(
+            TypefaceIdentityReportEntry(
+                label = "single-face-ttf",
+                preimage = typefaceIdentityPreimage(
+                    sourceId = singleFaceSourceId,
+                    collectionIndex = 0,
+                    postScriptName = "FixtureSans-Regular",
+                    familyName = "Fixture Sans",
+                    styleName = "Regular",
+                    outlineFormat = TypefaceOutlineFormat.TRUE_TYPE_GLYF,
+                    selectedCMap = unicodeCMap,
+                    scalerMode = TypefaceScalerMode.OUTLINE,
+                    tableTags = listOf("name", "cmap", "glyf", "head"),
+                ),
+            ),
+            TypefaceIdentityReportEntry(
+                label = "ttc-face-index-variant",
+                preimage = typefaceIdentityPreimage(
+                    sourceId = collectionSourceId,
+                    collectionIndex = 1,
+                    postScriptName = "FixtureCollectionSans-Bold",
+                    familyName = "Fixture Collection Sans",
+                    styleName = "Bold",
+                    style = FontStyle(weight = 700, width = 5, slant = FontSlant.UPRIGHT),
+                    outlineFormat = TypefaceOutlineFormat.TRUE_TYPE_GLYF,
+                    selectedCMap = unicodeCMap,
+                    scalerMode = TypefaceScalerMode.OUTLINE,
+                    tableTags = listOf("cmap", "glyf", "head", "name"),
+                ),
+            ),
+            TypefaceIdentityReportEntry(
+                label = "variable-axis-change",
+                preimage = typefaceIdentityPreimage(
+                    sourceId = variableSourceId,
+                    collectionIndex = 0,
+                    postScriptName = "FixtureVariableSans-Regular",
+                    familyName = "Fixture Variable Sans",
+                    styleName = "Regular",
+                    outlineFormat = TypefaceOutlineFormat.TRUE_TYPE_GLYF,
+                    selectedCMap = unicodeCMap,
+                    scalerMode = TypefaceScalerMode.OUTLINE,
+                    variationCoordinates = listOf(
+                        TypefaceVariationCoordinate(axisTag = "wght", value = 700.0),
+                    ),
+                    tableTags = listOf("name", "gvar", "cmap", "head", "fvar", "glyf"),
+                ),
+            ),
+            TypefaceIdentityReportEntry(
+                label = "palette-change",
+                preimage = typefaceIdentityPreimage(
+                    sourceId = paletteSourceId,
+                    collectionIndex = 0,
+                    postScriptName = "FixtureColorPalette-Regular",
+                    familyName = "Fixture Color Palette",
+                    styleName = "Regular",
+                    outlineFormat = TypefaceOutlineFormat.TRUE_TYPE_GLYF,
+                    selectedCMap = unicodeCMap,
+                    scalerMode = TypefaceScalerMode.OUTLINE,
+                    palette = TypefacePaletteSelection(
+                        index = 1,
+                        overrides = listOf("gid=42:#ff0000ff", "gid=7:#000000ff", "gid=42:#ff0000ff"),
+                    ),
+                    tableTags = listOf("CPAL", "COLR", "name", "cmap", "head", "glyf"),
+                ),
+            ),
+            TypefaceIdentityReportEntry(
+                label = "invalid-collection-index-diagnostic",
+                preimage = null,
+                diagnostics = listOf(
+                    typefaceIdentityDiagnostic(
+                        code = "font.collection-index-invalid",
+                        message = "Requested collection index 3 but the fixture reports 2 faces.",
+                    ),
+                    typefaceIdentityDiagnostic(
+                        code = "font.sfnt.identity-facts-incomplete",
+                        message = "Collection face facts are incomplete; no TypefaceID was derived.",
+                    ),
+                ),
+            ),
+            TypefaceIdentityReportEntry(
+                label = "no-usable-unicode-cmap-diagnostic",
+                preimage = null,
+                diagnostics = listOf(
+                    typefaceIdentityDiagnostic(
+                        code = "font.sfnt.cmap-unusable",
+                        message = "No usable Unicode cmap subtable was selected for this fixture face.",
+                    ),
+                    typefaceIdentityDiagnostic(
+                        code = "font.sfnt.identity-facts-incomplete",
+                        message = "Selected Unicode cmap facts are missing; no TypefaceID was derived.",
+                    ),
+                ),
+            ),
+        ),
+    )
+}
+
+@JvmInline
+value class CanonicalFontIdentityJson(
+    val value: String,
+) {
+    init {
+        require(value.isNotBlank()) { "canonical font identity JSON must not be blank." }
+        require(value.isSingleJsonObjectWithOptionalTerminalNewline()) {
+            "canonical font identity JSON must be one complete JSON object with at most one terminal newline."
+        }
+    }
+}
+
+class FontIdentityDumpSchema(
+    val schemaVersion: Int = SchemaVersion,
+    val schema: String = SchemaName,
+    outputFiles: List<String> = OutputFiles,
+    requiredFields: List<String> = RequiredFields,
+    orderingRules: List<String> = OrderingRules,
+    val claimPromotionAllowed: Boolean = false,
+) {
+    val outputFiles: List<String> = outputFiles.toList()
+    val requiredFields: List<String> = requiredFields.toList()
+    val orderingRules: List<String> = orderingRules.toList()
+
+    init {
+        require(schemaVersion == SchemaVersion) { "unsupported font identity dump schema version." }
+        require(schema.isNotBlank()) { "schema must not be blank." }
+        require(this.outputFiles == OutputFiles) { "font identity dump output file order is fixed by the schema." }
+        require(this.requiredFields == RequiredFields) { "font identity dump required fields are fixed by the schema." }
+        require(this.orderingRules == OrderingRules) { "font identity dump ordering rules are fixed by the schema." }
+        require(!claimPromotionAllowed) {
+            "Font identity dumps are evidence plumbing only and cannot promote support claims."
+        }
+    }
+
+    fun toCanonicalJson(): CanonicalFontIdentityJson = CanonicalFontIdentityJson(
+        buildString {
+            append("{")
+            appendFontCompactJsonField("schema", schema, comma = true)
+            append("schemaVersion".evidenceQuoted()).append(":").append(schemaVersion).append(",")
+            appendStringArrayField("outputFiles", outputFiles, comma = true)
+            appendStringArrayField("requiredFields", requiredFields, comma = true)
+            appendStringArrayField("orderingRules", orderingRules, comma = true)
+            appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+            append("}")
+        },
+    )
+
+    companion object {
+        const val SchemaVersion: Int = 1
+        const val SchemaName: String = "org.graphiks.kanvas.font.FontIdentityDumpSchema.v1"
+
+        val OutputFiles: List<String> = listOf(
+            "font-source.json",
+            "typeface-id.json",
+            "identity-dump-schema.json",
+        )
+
+        val RequiredFields: List<String> = listOf(
+            "font source kind",
+            "font source face count",
+            "font source table tags",
+            "typeface collection index",
+            "typeface selected cmap",
+            "typeface variation coordinates",
+            "typeface palette identity",
+            "host-dependent marker",
+            "diagnostics",
+            "claimPromotionAllowed",
+        )
+
+        val OrderingRules: List<String> = listOf(
+            "reports preserve explicit fixture row order",
+            "sorted table tags",
+            "sorted variation coordinates",
+            "sorted palette overrides",
+            "diagnostics sorted by code and detail",
+            "byte-for-byte UTF-8 comparison includes schema description",
+        )
+
+        val Default: FontIdentityDumpSchema = FontIdentityDumpSchema()
+    }
+}
+
+data class FontIdentityDumpBundle(
+    val fontSourceJson: CanonicalFontIdentityJson,
+    val typefaceIdJson: CanonicalFontIdentityJson,
+    val schemaDescriptionJson: CanonicalFontIdentityJson = FontIdentityDumpSchema.Default.toCanonicalJson(),
+    val claimPromotionAllowed: Boolean = false,
+) {
+    init {
+        require(!claimPromotionAllowed) {
+            "Font identity dump bundles cannot promote support claims."
+        }
+    }
+
+    fun toCanonicalJson(): CanonicalFontIdentityJson = CanonicalFontIdentityJson(
+        buildString {
+            append("{")
+            appendFontCompactJsonField("schema", FONT_IDENTITY_DUMP_BUNDLE_SCHEMA, comma = true)
+            append("schemaVersion".evidenceQuoted()).append(":")
+            append(FontIdentityDumpSchema.SchemaVersion)
+            append(",")
+            appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = true)
+            append("files".evidenceQuoted()).append(":[")
+            append(dumpFiles().joinToString(separator = ",") { (label, json) ->
+                buildString {
+                    append("{")
+                    appendFontCompactJsonField("label", label, comma = true)
+                    append("json".evidenceQuoted()).append(":").append(json.value)
+                    append("}")
+                }
+            })
+            append("]")
+            append("}")
+        },
+    )
+
+    internal fun dumpFiles(): List<Pair<String, CanonicalFontIdentityJson>> = listOf(
+        "font-source.json" to fontSourceJson,
+        "typeface-id.json" to typefaceIdJson,
+        "identity-dump-schema.json" to schemaDescriptionJson,
+    )
+}
+
+class FontIdentityDumpDeterminismResult(
+    val matches: Boolean,
+    val firstSha256: String,
+    val secondSha256: String,
+    differingFiles: List<String>,
+) {
+    val differingFiles: List<String> = differingFiles.toList()
+
+    init {
+        require(firstSha256.isLowercaseSha256Hex()) { "firstSha256 must be a lowercase SHA-256 digest." }
+        require(secondSha256.isLowercaseSha256Hex()) { "secondSha256 must be a lowercase SHA-256 digest." }
+        require(this.differingFiles == this.differingFiles.distinct()) { "differing files must be unique." }
+        require(matches == (firstSha256 == secondSha256 && this.differingFiles.isEmpty())) {
+            "determinism result must agree with hashes and differing files."
+        }
+    }
+
+    fun toCanonicalJson(): CanonicalFontIdentityJson = CanonicalFontIdentityJson(
+        buildString {
+            append("{")
+            appendFontCompactJsonField("schema", FONT_IDENTITY_DUMP_DETERMINISM_SCHEMA, comma = true)
+            appendFontCompactJsonField("matches", matches, comma = true)
+            appendFontCompactJsonField("firstSha256", firstSha256, comma = true)
+            appendFontCompactJsonField("secondSha256", secondSha256, comma = true)
+            appendStringArrayField("differingFiles", differingFiles, comma = false)
+            append("}")
+        },
+    )
+}
+
+object FontIdentityDumpWriter {
+    fun writeFontSourceJson(
+        report: FontSourceIdentityReport = defaultFontSourceIdentityReport(),
+    ): CanonicalFontIdentityJson = CanonicalFontIdentityJson("${report.toCanonicalJson()}\n")
+
+    fun writeTypefaceIdJson(
+        report: TypefaceIdentityReport = defaultTypefaceIdentityReport(),
+    ): CanonicalFontIdentityJson = CanonicalFontIdentityJson("${report.toCanonicalJson()}\n")
+
+    fun writeBundle(
+        fontSourceReport: FontSourceIdentityReport = defaultFontSourceIdentityReport(),
+        typefaceReport: TypefaceIdentityReport = defaultTypefaceIdentityReport(),
+        schema: FontIdentityDumpSchema = FontIdentityDumpSchema.Default,
+    ): FontIdentityDumpBundle = FontIdentityDumpBundle(
+        fontSourceJson = writeFontSourceJson(fontSourceReport),
+        typefaceIdJson = writeTypefaceIdJson(typefaceReport),
+        schemaDescriptionJson = schema.toCanonicalJson(),
+        claimPromotionAllowed = false,
+    )
+
+    fun assertDeterministicDump(
+        run: () -> FontIdentityDumpBundle,
+    ): FontIdentityDumpDeterminismResult = verifyDeterministicRuns(
+        first = run(),
+        second = run(),
+    )
+
+    fun verifyDeterministicRuns(
+        first: FontIdentityDumpBundle,
+        second: FontIdentityDumpBundle,
+    ): FontIdentityDumpDeterminismResult {
+        val firstFiles = first.dumpFiles()
+        val secondFiles = second.dumpFiles()
+        val differingFiles = firstFiles.zip(secondFiles)
+            .filter { (firstFile, secondFile) ->
+                firstFile.first != secondFile.first || firstFile.second.value != secondFile.second.value
+            }
+            .map { (firstFile, secondFile) ->
+                if (firstFile.first == secondFile.first) firstFile.first else "${firstFile.first}|${secondFile.first}"
+            }
+        val firstSha256 = firstFiles.toDumpBytePreimage().toByteArray(Charsets.UTF_8).sha256Hex()
+        val secondSha256 = secondFiles.toDumpBytePreimage().toByteArray(Charsets.UTF_8).sha256Hex()
+        return FontIdentityDumpDeterminismResult(
+            matches = firstSha256 == secondSha256 && differingFiles.isEmpty(),
+            firstSha256 = firstSha256,
+            secondSha256 = secondSha256,
+            differingFiles = differingFiles,
+        )
+    }
+}
+
+enum class FontDiagnosticClaimImpact(
+    val serializedName: String,
+) {
+    TARGET_SUPPORTED("target-supported"),
+    CURRENT_SUPPORTED("current-supported"),
+    TRACKED_GAP("tracked-gap"),
+    DEPENDENCY_GATED("DependencyGated"),
+    FIXTURE_GATED("fixture-gated"),
+    GPU_GATED("GPU-gated"),
+    EXPECTED_UNSUPPORTED("expected-unsupported"),
+    DRIFT_ONLY("drift-only"),
+}
+
+enum class FontDiagnosticSeverity(
+    val serializedName: String,
+) {
+    INFO("info"),
+    WARNING("warning"),
+    ERROR("error"),
+}
+
+class FontDiagnosticCode(
+    val code: String,
+    val namespace: String,
+    val claimImpact: FontDiagnosticClaimImpact,
+    val severity: FontDiagnosticSeverity,
+    val route: String,
+    requiredFields: List<String>,
+    val claimPromotionAllowed: Boolean = false,
+) {
+    val requiredFields: List<String> =
+        (FontDiagnosticCommonRequiredFields + requiredFields).normalizedDiagnosticFieldNames()
+
+    init {
+        require(code.isStableDiagnosticCode()) { "diagnostic code must be a stable one-line token." }
+        require(namespace in FontDiagnosticAcceptedNamespaces) {
+            "diagnostic namespace must be one of the accepted font taxonomy namespaces."
+        }
+        require(code.startsWith("$namespace.")) {
+            "diagnostic code must belong to its declared namespace."
+        }
+        require(route.isStableDiagnosticCode()) { "diagnostic route must be a stable one-line token." }
+        require(claimImpact.isNonClaimImpact()) {
+            "KFONT M0 diagnostic taxonomy rows cannot promote support claims."
+        }
+        require(!claimPromotionAllowed) {
+            "Font diagnostic taxonomy rows cannot promote support claims."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("code", code, comma = true)
+        appendFontCompactJsonField("namespace", namespace, comma = true)
+        appendFontCompactJsonField("claimImpact", claimImpact.serializedName, comma = true)
+        appendFontCompactJsonField("severity", severity.serializedName, comma = true)
+        appendFontCompactJsonField("route", route, comma = true)
+        appendStringArrayField("requiredFields", requiredFields, comma = true)
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+        append("}")
+    }
+}
+
+class LegacyFontDiagnosticMapping(
+    val legacyCode: String,
+    val targetCode: String,
+    val classification: FontDiagnosticClaimImpact,
+    val gateStatus: String = "open",
+    val claimPromotionAllowed: Boolean = false,
+) {
+    init {
+        require(legacyCode.isStableDiagnosticCode()) { "legacy diagnostic code must be stable." }
+        require(targetCode.isStableDiagnosticCode()) { "target diagnostic code must be stable." }
+        require(classification.isNonClaimImpact()) {
+            "Legacy diagnostic mappings cannot promote support claims."
+        }
+        require(gateStatus == "open") { "KFONT M0 legacy diagnostic gates must remain open." }
+        require(!claimPromotionAllowed) {
+            "Legacy diagnostic mappings cannot promote support claims."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("legacyCode", legacyCode, comma = true)
+        appendFontCompactJsonField("targetCode", targetCode, comma = true)
+        appendFontCompactJsonField("classification", classification.serializedName, comma = true)
+        appendFontCompactJsonField("gateStatus", gateStatus, comma = true)
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+        append("}")
+    }
+}
+
+class FontDiagnosticClassification(
+    val inputCode: String,
+    val accepted: Boolean,
+    val targetCode: String?,
+    val namespace: String?,
+    val classification: FontDiagnosticClaimImpact,
+    val reason: String,
+    val claimPromotionAllowed: Boolean = false,
+) {
+    init {
+        require(inputCode.isNotBlank()) { "input diagnostic code must not be blank." }
+        require(targetCode == null || targetCode.isStableDiagnosticCode()) {
+            "target diagnostic code must be stable when present."
+        }
+        require(namespace == null || namespace in FontDiagnosticAcceptedNamespaces) {
+            "classified namespace must be accepted when present."
+        }
+        require(classification.isNonClaimImpact()) {
+            "Diagnostic classifications cannot promote support claims."
+        }
+        require(reason.isStableDiagnosticCode()) { "classification reason must be stable." }
+        require(!claimPromotionAllowed) {
+            "Diagnostic classifications cannot promote support claims."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("inputCode", inputCode, comma = true)
+        appendFontCompactJsonField("accepted", accepted, comma = true)
+        append("targetCode".evidenceQuoted()).append(":")
+        append(targetCode.toFontJsonNullableString())
+        append(",")
+        append("namespace".evidenceQuoted()).append(":")
+        append(namespace.toFontJsonNullableString())
+        append(",")
+        appendFontCompactJsonField("classification", classification.serializedName, comma = true)
+        appendFontCompactJsonField("reason", reason, comma = true)
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+        append("}")
+    }
+}
+
+class FontDiagnosticSample(
+    val label: String,
+    val code: String,
+    val subject: String,
+    val route: String,
+    val severity: FontDiagnosticSeverity,
+    val classification: FontDiagnosticClaimImpact,
+    fields: Map<String, String>,
+    val claimPromotionAllowed: Boolean = false,
+) {
+    val fields: Map<String, String> = normalizedDiagnosticFieldMap(
+        mapOf(
+            "subject" to subject,
+            "route" to route,
+            "severity" to severity.serializedName,
+            "claimImpact" to classification.serializedName,
+        ) + fields,
+    )
+
+    init {
+        require(label.isStableManifestToken()) { "sample diagnostic label must be stable." }
+        require(code.isStableDiagnosticCode()) { "sample diagnostic code must be stable." }
+        require(subject.isStableManifestString()) { "sample diagnostic subject must be stable." }
+        require(route.isStableDiagnosticCode()) { "sample diagnostic route must be stable." }
+        require(classification.isNonClaimImpact()) {
+            "Sample diagnostics cannot promote support claims."
+        }
+        require(!claimPromotionAllowed) {
+            "Sample diagnostics cannot promote support claims."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("label", label, comma = true)
+        appendFontCompactJsonField("code", code, comma = true)
+        appendFontCompactJsonField("subject", subject, comma = true)
+        appendFontCompactJsonField("route", route, comma = true)
+        appendFontCompactJsonField("severity", severity.serializedName, comma = true)
+        appendFontCompactJsonField("classification", classification.serializedName, comma = true)
+        append("fields".evidenceQuoted()).append(":{")
+        append(fields.entries.joinToString(separator = ",") { (name, value) ->
+            "${name.evidenceQuoted()}:${value.evidenceQuoted()}"
+        })
+        append("},")
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+        append("}")
+    }
+}
+
+class FontDiagnosticTaxonomy(
+    val acceptedNamespaces: List<String>,
+    codes: List<FontDiagnosticCode>,
+    legacyMappings: List<LegacyFontDiagnosticMapping>,
+    sampleDiagnostics: List<FontDiagnosticSample>,
+    rejectedDiagnostics: List<FontDiagnosticClassification>,
+    val dashboardClassification: String = "tracked-gap",
+    val claimPromotionAllowed: Boolean = false,
+) {
+    val codes: List<FontDiagnosticCode> = codes.sortedBy { code -> code.code }
+    val legacyMappings: List<LegacyFontDiagnosticMapping> = legacyMappings.sortedBy { mapping -> mapping.legacyCode }
+    val sampleDiagnostics: List<FontDiagnosticSample> = sampleDiagnostics.sortedBy { sample -> sample.label }
+    val rejectedDiagnostics: List<FontDiagnosticClassification> =
+        rejectedDiagnostics.sortedBy { classification -> classification.inputCode }
+    private val codesByCode: Map<String, FontDiagnosticCode> = this.codes.associateBy { code -> code.code }
+    private val legacyByCode: Map<String, LegacyFontDiagnosticMapping> =
+        this.legacyMappings.associateBy { mapping -> mapping.legacyCode }
+
+    init {
+        require(acceptedNamespaces == FontDiagnosticAcceptedNamespaces) {
+            "accepted font diagnostic namespaces are fixed by KFONT M0."
+        }
+        require(this.codes.isNotEmpty()) { "font diagnostic taxonomy must define at least one code." }
+        require(this.codes.size == codesByCode.size) { "font diagnostic codes must be unique." }
+        require(this.codes.all { code -> code.namespace in acceptedNamespaces }) {
+            "all font diagnostic codes must belong to accepted namespaces."
+        }
+        require(this.legacyMappings.size == legacyByCode.size) {
+            "legacy diagnostic mappings must have unique legacy codes."
+        }
+        require(this.legacyMappings.all { mapping -> mapping.targetCode in codesByCode }) {
+            "legacy diagnostic mappings must target accepted taxonomy codes."
+        }
+        require(this.sampleDiagnostics.map { sample -> sample.label }.distinct().size == this.sampleDiagnostics.size) {
+            "sample diagnostic labels must be unique."
+        }
+        require(this.sampleDiagnostics.all { sample -> sample.code in codesByCode }) {
+            "sample diagnostics must use accepted taxonomy codes."
+        }
+        require(dashboardClassification == "tracked-gap") {
+            "KFONT M0 diagnostic taxonomy evidence must remain tracked-gap."
+        }
+        require(!claimPromotionAllowed) {
+            "Font diagnostic taxonomy cannot promote support claims."
+        }
+    }
+
+    fun code(code: String): FontDiagnosticCode =
+        codesByCode[code] ?: error("unknown font diagnostic taxonomy code: $code")
+
+    fun legacyMapping(legacyCode: String): LegacyFontDiagnosticMapping =
+        legacyByCode[legacyCode] ?: error("unknown legacy font diagnostic code: $legacyCode")
+
+    fun classify(inputCode: String): FontDiagnosticClassification {
+        val direct = codesByCode[inputCode]
+        if (direct != null) {
+            return FontDiagnosticClassification(
+                inputCode = inputCode,
+                accepted = true,
+                targetCode = direct.code,
+                namespace = direct.namespace,
+                classification = direct.claimImpact,
+                reason = "accepted-taxonomy-code",
+            )
+        }
+
+        val legacy = legacyByCode[inputCode]
+        if (legacy != null) {
+            val target = code(legacy.targetCode)
+            return FontDiagnosticClassification(
+                inputCode = inputCode,
+                accepted = false,
+                targetCode = legacy.targetCode,
+                namespace = target.namespace,
+                classification = legacy.classification,
+                reason = "legacy-diagnostic-mapped",
+            )
+        }
+
+        return FontDiagnosticClassification(
+            inputCode = inputCode,
+            accepted = false,
+            targetCode = null,
+            namespace = null,
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+            reason = "generic-or-unknown-diagnostic",
+        )
+    }
+
+    fun toCanonicalJson(): CanonicalFontIdentityJson = CanonicalFontIdentityJson(
+        buildString {
+            append("{")
+            appendFontCompactJsonField("schema", FONT_DIAGNOSTIC_TAXONOMY_SCHEMA, comma = true)
+            append("schemaVersion".evidenceQuoted()).append(":1,")
+            append("dashboardRow".evidenceQuoted()).append(":{")
+            appendFontCompactJsonField("name", "pure-kotlin-font diagnostic taxonomy", comma = true)
+            appendFontCompactJsonField("classification", dashboardClassification, comma = true)
+            appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+            append("},")
+            appendStringArrayField("acceptedNamespaces", acceptedNamespaces, comma = true)
+            append("codes".evidenceQuoted()).append(":")
+            append(codes.joinToString(prefix = "[", postfix = "]", separator = ",") { code -> code.toCanonicalJson() })
+            append(",")
+            append("legacyMappings".evidenceQuoted()).append(":")
+            append(legacyMappings.joinToString(prefix = "[", postfix = "]", separator = ",") { mapping ->
+                mapping.toCanonicalJson()
+            })
+            append(",")
+            append("sampleDiagnostics".evidenceQuoted()).append(":")
+            append(sampleDiagnostics.joinToString(prefix = "[", postfix = "]", separator = ",") { sample ->
+                sample.toCanonicalJson()
+            })
+            append(",")
+            append("rejectedDiagnostics".evidenceQuoted()).append(":")
+            append(rejectedDiagnostics.joinToString(prefix = "[", postfix = "]", separator = ",") { classification ->
+                classification.toCanonicalJson()
+            })
+            append(",")
+            appendStringArrayField("nonClaims", FontDiagnosticTaxonomyNonClaims, comma = true)
+            appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+            append("}")
+        },
+    )
+}
+
+fun defaultFontDiagnosticTaxonomy(): FontDiagnosticTaxonomy = FontDiagnosticTaxonomy(
+    acceptedNamespaces = FontDiagnosticAcceptedNamespaces,
+    codes = listOf(
+        fontDiagnosticCode(
+            code = "font.source.bytes-unavailable",
+            namespace = "font.source",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.ERROR,
+            route = "font-source",
+            requiredFields = listOf("sourceId", "sourceKind"),
+        ),
+        fontDiagnosticCode(
+            code = "font.source.native-engine-request-unsupported",
+            namespace = "font.source",
+            claimImpact = FontDiagnosticClaimImpact.EXPECTED_UNSUPPORTED,
+            severity = FontDiagnosticSeverity.INFO,
+            route = "external-drift",
+            requiredFields = listOf("externalEngine", "requestedBehavior"),
+        ),
+        fontDiagnosticCode(
+            code = "font.sfnt.required-table-missing",
+            namespace = "font.sfnt",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.ERROR,
+            route = "sfnt-directory",
+            requiredFields = listOf("sourceId", "tableTag"),
+        ),
+        fontDiagnosticCode(
+            code = "font.sfnt.optional-table-malformed",
+            namespace = "font.sfnt",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.WARNING,
+            route = "sfnt-directory",
+            requiredFields = listOf("sourceId", "tableTag"),
+        ),
+        fontDiagnosticCode(
+            code = "font.sfnt.table-duplicate",
+            namespace = "font.sfnt",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.ERROR,
+            route = "sfnt-directory",
+            requiredFields = listOf("sourceId", "tableTag", "offset", "length", "sourceLength"),
+        ),
+        fontDiagnosticCode(
+            code = "font.sfnt.table-out-of-bounds",
+            namespace = "font.sfnt",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.ERROR,
+            route = "sfnt-directory",
+            requiredFields = listOf("sourceId", "tableTag", "offset", "length", "sourceLength"),
+        ),
+        fontDiagnosticCode(
+            code = "font.sfnt.table-overlap",
+            namespace = "font.sfnt",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.ERROR,
+            route = "sfnt-directory",
+            requiredFields = listOf("sourceId", "tableTag", "offset", "length", "sourceLength"),
+        ),
+        fontDiagnosticCode(
+            code = "font.scaler.outline-unavailable",
+            namespace = "font.scaler",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.ERROR,
+            route = "scaler-outline",
+            requiredFields = listOf("sourceId", "typefaceId", "glyphId"),
+        ),
+        fontDiagnosticCode(
+            code = "text.shaping.emoji-sequence-unsupported",
+            namespace = "text.shaping",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.WARNING,
+            route = "shaping-emoji",
+            requiredFields = listOf("textRange", "script"),
+        ),
+        fontDiagnosticCode(
+            code = "text.paragraph.line-breaker-dependency-gated",
+            namespace = "text.paragraph",
+            claimImpact = FontDiagnosticClaimImpact.DEPENDENCY_GATED,
+            severity = FontDiagnosticSeverity.WARNING,
+            route = "paragraph-layout",
+            requiredFields = listOf("textRange", "paragraphRoute"),
+        ),
+        fontDiagnosticCode(
+            code = "glyph.artifact.bitmap-strike-unavailable",
+            namespace = "glyph.artifact",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.WARNING,
+            route = "bitmap-glyph-artifact",
+            requiredFields = listOf("typefaceId", "glyphId", "strikeKey"),
+        ),
+        fontDiagnosticCode(
+            code = "text.gpu.artifact-unregistered",
+            namespace = "text.gpu",
+            claimImpact = FontDiagnosticClaimImpact.GPU_GATED,
+            severity = FontDiagnosticSeverity.ERROR,
+            route = "gpu-text-handoff",
+            requiredFields = listOf("artifactId", "generation"),
+        ),
+        fontDiagnosticCode(
+            code = "unsupported.text.artifact_unregistered",
+            namespace = "unsupported.text",
+            claimImpact = FontDiagnosticClaimImpact.GPU_GATED,
+            severity = FontDiagnosticSeverity.ERROR,
+            route = "gpu-renderer-text",
+            requiredFields = listOf("rendererRoute", "artifactId"),
+        ),
+    ),
+    legacyMappings = listOf(
+        LegacyFontDiagnosticMapping(
+            legacyCode = "font.native-engine-unavailable",
+            targetCode = "font.source.native-engine-request-unsupported",
+            classification = FontDiagnosticClaimImpact.EXPECTED_UNSUPPORTED,
+        ),
+        LegacyFontDiagnosticMapping(
+            legacyCode = "font.bitmap-strike-unavailable",
+            targetCode = "glyph.artifact.bitmap-strike-unavailable",
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+        ),
+        LegacyFontDiagnosticMapping(
+            legacyCode = "font.emoji-sequence-shaping-unsupported",
+            targetCode = "text.shaping.emoji-sequence-unsupported",
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+        ),
+    ),
+    sampleDiagnostics = listOf(
+        fontDiagnosticSample(
+            label = "source-failure",
+            code = "font.source.bytes-unavailable",
+            subject = "source:generated-malformed-directory",
+            route = "font-source",
+            severity = FontDiagnosticSeverity.ERROR,
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+            fields = mapOf(
+                "sourceId" to "550e8400-e29b-41d4-a716-446655440200",
+                "sourceKind" to FontSourceKind.GENERATED_FIXTURE.serializedName,
+            ),
+        ),
+        fontDiagnosticSample(
+            label = "sfnt-failure",
+            code = "font.sfnt.required-table-missing",
+            subject = "sfnt:missing-head",
+            route = "sfnt-directory",
+            severity = FontDiagnosticSeverity.ERROR,
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+            fields = mapOf(
+                "sourceId" to "550e8400-e29b-41d4-a716-446655440201",
+                "tableTag" to "head",
+            ),
+        ),
+        fontDiagnosticSample(
+            label = "scaler-failure",
+            code = "font.scaler.outline-unavailable",
+            subject = "glyph:42",
+            route = "scaler-outline",
+            severity = FontDiagnosticSeverity.ERROR,
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+            fields = mapOf(
+                "sourceId" to "550e8400-e29b-41d4-a716-446655440202",
+                "typefaceId" to "550e8400-e29b-41d4-a716-446655440302",
+                "glyphId" to "42",
+            ),
+        ),
+        fontDiagnosticSample(
+            label = "shaping-refusal",
+            code = "text.shaping.emoji-sequence-unsupported",
+            subject = "text-range:0..7",
+            route = "shaping-emoji",
+            severity = FontDiagnosticSeverity.WARNING,
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+            fields = mapOf(
+                "script" to "Emoji",
+                "textRange" to "0..7",
+            ),
+        ),
+        fontDiagnosticSample(
+            label = "gpu-text-route-refusal",
+            code = "unsupported.text.artifact_unregistered",
+            subject = "artifact:text-a8-atlas",
+            route = "gpu-renderer-text",
+            severity = FontDiagnosticSeverity.ERROR,
+            classification = FontDiagnosticClaimImpact.GPU_GATED,
+            fields = mapOf(
+                "artifactId" to "text-a8-atlas",
+                "rendererRoute" to "a8-atlas",
+            ),
+        ),
+    ),
+    rejectedDiagnostics = listOf(
+        FontDiagnosticClassification(
+            inputCode = "font missing",
+            accepted = false,
+            targetCode = null,
+            namespace = null,
+            classification = FontDiagnosticClaimImpact.TRACKED_GAP,
+            reason = "generic-or-unknown-diagnostic",
+        ),
+    ),
+)
+
+object FontDiagnosticTaxonomyWriter {
+    fun writeTaxonomyJson(
+        taxonomy: FontDiagnosticTaxonomy = defaultFontDiagnosticTaxonomy(),
+    ): CanonicalFontIdentityJson = CanonicalFontIdentityJson("${taxonomy.toCanonicalJson().value}\n")
+}
+
+private fun fontDiagnosticCode(
+    code: String,
+    namespace: String,
+    claimImpact: FontDiagnosticClaimImpact,
+    severity: FontDiagnosticSeverity,
+    route: String,
+    requiredFields: List<String>,
+): FontDiagnosticCode = FontDiagnosticCode(
+    code = code,
+    namespace = namespace,
+    claimImpact = claimImpact,
+    severity = severity,
+    route = route,
+    requiredFields = requiredFields,
+)
+
+private fun fontDiagnosticSample(
+    label: String,
+    code: String,
+    subject: String,
+    route: String,
+    severity: FontDiagnosticSeverity,
+    classification: FontDiagnosticClaimImpact,
+    fields: Map<String, String>,
+): FontDiagnosticSample = FontDiagnosticSample(
+    label = label,
+    code = code,
+    subject = subject,
+    route = route,
+    severity = severity,
+    classification = classification,
+    fields = fields,
+)
+
+private const val FONT_SOURCE_IDENTITY_REPORT_SCHEMA =
+    "org.graphiks.kanvas.font.FontSourceIdentityReport.v1"
+
+private const val TYPEFACE_IDENTITY_REPORT_SCHEMA =
+    "org.graphiks.kanvas.font.TypefaceIdentityReport.v1"
+
+private const val FONT_IDENTITY_DUMP_BUNDLE_SCHEMA =
+    "org.graphiks.kanvas.font.FontIdentityDumpBundle.v1"
+
+private const val FONT_IDENTITY_DUMP_DETERMINISM_SCHEMA =
+    "org.graphiks.kanvas.font.FontIdentityDumpDeterminismResult.v1"
+
+private const val FONT_FIXTURE_MANIFEST_SCHEMA =
+    "org.graphiks.kanvas.font.FontFixtureManifest.v1"
+
+private const val FONT_DIAGNOSTIC_TAXONOMY_SCHEMA =
+    "org.graphiks.kanvas.font.FontDiagnosticTaxonomy.v1"
+
+private val FontFixtureManifestNonClaims: List<String> = listOf(
+    "no-fallback-support-claim",
+    "no-glyph-support-claim",
+    "no-gpu-support-claim",
+    "no-parser-support-claim",
+    "no-rendering-support-claim",
+    "no-scaler-support-claim",
+    "no-shaping-support-claim",
+)
+
+private val FontDiagnosticAcceptedNamespaces: List<String> = listOf(
+    "font.source",
+    "font.sfnt",
+    "font.scaler",
+    "text.shaping",
+    "text.paragraph",
+    "glyph.artifact",
+    "text.gpu",
+    "unsupported.text",
+)
+
+private val FontDiagnosticCommonRequiredFields: List<String> = listOf(
+    "subject",
+    "route",
+    "severity",
+    "claimImpact",
+)
+
+private val FontDiagnosticTaxonomyNonClaims: List<String> = listOf(
+    "legacy-gates-remain-open",
+    "no-external-engine-product-dependency",
+    "no-gpu-route-support-claim",
+    "no-rendering-support-claim",
+    "no-shaping-support-claim",
+    "taxonomy-only-tracked-gap",
+)
 
 /**
  * Slant axis used by portable font style matching.
@@ -290,7 +2464,7 @@ data class FontSourceEvidence(
                 kind = source.kind,
                 displayName = source.displayName,
                 contentSha256 = source.bytes.sha256Hex(),
-                hostDependent = source.kind == FontSourceKind.SYSTEM,
+                hostDependent = source.kind.isHostDependentByDefault(),
                 faceCount = faceCount,
                 tableTags = tableTags.normalizedTableTags(),
                 diagnostics = diagnostics,
@@ -1227,7 +3401,57 @@ data class FallbackDecisionTrace(
     }
 }
 
+private fun List<String>.normalizedDiagnosticFieldNames(): List<String> {
+    for (fieldName in this) {
+        require(fieldName.isStableDiagnosticFieldName()) {
+            "diagnostic field names must be stable one-line field identifiers."
+        }
+    }
+    return distinct().sorted()
+}
+
+private fun normalizedDiagnosticFieldMap(fields: Map<String, String>): Map<String, String> {
+    for ((fieldName, value) in fields) {
+        require(fieldName.isStableDiagnosticFieldName()) {
+            "diagnostic field names must be stable one-line field identifiers."
+        }
+        require(value.isStableManifestString()) {
+            "diagnostic field values must be stable one-line strings."
+        }
+    }
+    return fields.toSortedMap()
+}
+
+private fun String.isStableDiagnosticFieldName(): Boolean =
+    isNotBlank() && all { character ->
+        character in 'A'..'Z' ||
+            character in 'a'..'z' ||
+            character in '0'..'9' ||
+            character == '-'
+    }
+
+private fun FontDiagnosticClaimImpact.isNonClaimImpact(): Boolean =
+    this != FontDiagnosticClaimImpact.TARGET_SUPPORTED &&
+        this != FontDiagnosticClaimImpact.CURRENT_SUPPORTED
+
 private fun String.familyKey(): String = trim().lowercase()
+
+private fun FontSourceKind.isHostDependentByDefault(): Boolean =
+    this == FontSourceKind.SYSTEM || this == FontSourceKind.SYSTEM_SCANNED
+
+val FontSourceKind.serializedName: String
+    get() = when (this) {
+        FontSourceKind.BUNDLED_FIXTURE -> "BundledFontSource"
+        FontSourceKind.GENERATED_FIXTURE -> "GeneratedFixtureFontSource"
+        FontSourceKind.USER_DATA -> "UserDataFontSource"
+        FontSourceKind.USER_STREAM -> "UserStreamFontSource"
+        FontSourceKind.USER_FILE -> "UserFileFontSource"
+        FontSourceKind.SYSTEM_SCANNED -> "SystemScannedFontSource"
+        FontSourceKind.MEMORY -> "UserDataFontSource"
+        FontSourceKind.SYSTEM -> "SystemScannedFontSource"
+        FontSourceKind.FILE -> "UserFileFontSource"
+        FontSourceKind.RESOURCE -> "UserDataFontSource"
+    }
 
 private fun List<String>.normalizedTableTags(): List<String> {
     for (tag in this) {
@@ -1238,14 +3462,49 @@ private fun List<String>.normalizedTableTags(): List<String> {
     return distinct().sorted()
 }
 
+private fun List<String>.normalizedManifestStrings(fieldName: String): List<String> {
+    for (value in this) {
+        require(value.isStableManifestString()) { "$fieldName must contain stable single-line strings." }
+    }
+    return distinct().sorted()
+}
+
+private fun List<TypefaceVariationCoordinate>.normalizedVariationCoordinates(): List<TypefaceVariationCoordinate> {
+    val sorted = sortedBy { coordinate -> coordinate.axisTag }
+    require(sorted.map { coordinate -> coordinate.axisTag }.distinct().size == sorted.size) {
+        "variation coordinates must have unique axis tags."
+    }
+    return sorted
+}
+
 private fun String.isStableSfntTableTag(): Boolean =
     length == 4 && all { character -> character.code in 0x20..0x7E }
+
+private fun String.isStableManifestToken(): Boolean =
+    isNotBlank() && all { character -> character.code in 0x21..0x7E }
+
+private fun String.isStableManifestString(): Boolean =
+    isNotBlank() && all { character -> character.code in 0x20..0x7E }
+
+private val FontSlant.typefaceSerializedName: String
+    get() = when (this) {
+        FontSlant.UPRIGHT -> "upright"
+        FontSlant.ITALIC -> "italic"
+        FontSlant.OBLIQUE -> "oblique"
+    }
 
 private fun String.isStableDiagnosticCode(): Boolean =
     isNotEmpty() && all { character -> character.code in 0x21..0x7E }
 
 private fun String.isLowercaseSha256Hex(): Boolean =
     length == 64 && all { character -> character in '0'..'9' || character in 'a'..'f' }
+
+private fun Double.toTypefaceJsonNumber(): String {
+    return normalizedTypefaceVariationValue().toString()
+}
+
+private fun Double.normalizedTypefaceVariationValue(): Double =
+    if (this == 0.0) 0.0 else this
 
 private fun ByteArray.sha256Hex(): String {
     val digest = MessageDigest.getInstance("SHA-256").digest(this)
@@ -1258,16 +3517,149 @@ private fun ByteArray.sha256Hex(): String {
     return chars.concatToString()
 }
 
+private fun stableUuidFromSha256(preimage: String): Uuid {
+    val digest = MessageDigest.getInstance("SHA-256").digest(preimage.toByteArray(Charsets.UTF_8))
+    val uuidBytes = digest.copyOfRange(0, 16)
+    uuidBytes[6] = ((uuidBytes[6].toInt() and 0x0f) or 0x50).toByte()
+    uuidBytes[8] = ((uuidBytes[8].toInt() and 0x3f) or 0x80).toByte()
+    return Uuid.parse(uuidBytes.toUuidString())
+}
+
+private fun ByteArray.toUuidString(): String = buildString(36) {
+    for (index in this@toUuidString.indices) {
+        if (index == 4 || index == 6 || index == 8 || index == 10) {
+            append('-')
+        }
+        val value = this@toUuidString[index].toInt() and 0xff
+        append(value.toString(16).padStart(2, '0'))
+    }
+}
+
+private fun String?.toFontJsonNullableString(): String =
+    this?.evidenceQuoted() ?: "null"
+
+private fun StringBuilder.appendFontJsonField(
+    name: String,
+    value: String,
+    indent: String,
+    comma: Boolean,
+) {
+    append(indent).append(name.evidenceQuoted()).append(": ").append(value.evidenceQuoted())
+    if (comma) append(",")
+    append("\n")
+}
+
+private fun StringBuilder.appendFontJsonField(
+    name: String,
+    value: Int,
+    indent: String,
+    comma: Boolean,
+) {
+    append(indent).append(name.evidenceQuoted()).append(": ").append(value)
+    if (comma) append(",")
+    append("\n")
+}
+
+private fun StringBuilder.appendFontJsonField(
+    name: String,
+    value: Boolean,
+    indent: String,
+    comma: Boolean,
+) {
+    append(indent).append(name.evidenceQuoted()).append(": ").append(value)
+    if (comma) append(",")
+    append("\n")
+}
+
+private fun StringBuilder.appendFontCompactJsonField(
+    name: String,
+    value: String,
+    comma: Boolean,
+) {
+    append(name.evidenceQuoted())
+    append(":")
+    append(value.evidenceQuoted())
+    if (comma) append(",")
+}
+
+private fun StringBuilder.appendFontCompactJsonField(
+    name: String,
+    value: Boolean,
+    comma: Boolean,
+) {
+    append(name.evidenceQuoted())
+    append(":")
+    append(value)
+    if (comma) append(",")
+}
+
+private fun StringBuilder.appendStringArrayField(
+    name: String,
+    values: List<String>,
+    comma: Boolean,
+) {
+    append(name.evidenceQuoted())
+    append(":")
+    append(values.joinToString(prefix = "[", postfix = "]", separator = ",") { value -> value.evidenceQuoted() })
+    if (comma) append(",")
+}
+
+private fun List<Pair<String, CanonicalFontIdentityJson>>.toDumpBytePreimage(): String =
+    joinToString(separator = "\n") { (label, json) ->
+        "$label\n${json.value}"
+    }
+
+private fun String.isSingleJsonObjectWithOptionalTerminalNewline(): Boolean {
+    if (isEmpty() || first() != '{') return false
+    val endExclusive = if (last() == '\n') length - 1 else length
+    if (endExclusive <= 0 || this[endExclusive - 1] != '}') return false
+
+    var depth = 0
+    var inString = false
+    var escaping = false
+    for (index in 0 until endExclusive) {
+        val character = this[index]
+        if (inString) {
+            when {
+                escaping -> escaping = false
+                character == '\\' -> escaping = true
+                character == '"' -> inString = false
+            }
+            continue
+        }
+
+        when (character) {
+            '"' -> inString = true
+            '{' -> depth += 1
+            '}' -> {
+                depth -= 1
+                if (depth < 0) return false
+                if (depth == 0 && index != endExclusive - 1) return false
+            }
+        }
+    }
+    return depth == 0 && !inString && !escaping
+}
+
 private fun String.evidenceQuoted(): String = buildString {
     append('"')
     for (character in this@evidenceQuoted) {
         when (character) {
             '\\' -> append("\\\\")
             '"' -> append("\\\"")
+            '\b' -> append("\\b")
+            '\u000C' -> append("\\f")
             '\n' -> append("\\n")
             '\r' -> append("\\r")
             '\t' -> append("\\t")
-            else -> append(character)
+            else -> {
+                if (character < ' ') {
+                    append("\\u")
+                    append(character.code.toString(16).padStart(4, '0'))
+                } else {
+                    append(character)
+                }
+            }
         }
     }
     append('"')

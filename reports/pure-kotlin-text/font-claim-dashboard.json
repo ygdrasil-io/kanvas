@@ -1,0 +1,566 @@
+{
+  "schemaVersion": 1,
+  "dashboardId": "pure-kotlin-text-font-claim-dashboard",
+  "ticketId": "KFONT-M0-005",
+  "sourceSpecs": [
+    {
+      "path": ".upstream/specs/pure-kotlin-text/README.md",
+      "section": "Validation"
+    },
+    {
+      "path": ".upstream/specs/pure-kotlin-text/ROADMAP.md",
+      "section": "Modele de claims"
+    },
+    {
+      "path": ".upstream/specs/pure-kotlin-text/00-architecture-and-module-boundaries.md",
+      "section": "Core Data Contracts"
+    },
+    {
+      "path": ".upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md",
+      "section": "GM And Dashboard Classification"
+    },
+    {
+      "path": ".upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md",
+      "section": "Refusal Evidence"
+    },
+    {
+      "path": ".upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md",
+      "section": "Durable Legacy Gates"
+    },
+    {
+      "path": ".upstream/specs/pure-kotlin-text/tickets/M0-claims-ci-diagnostics/KFONT-M0-005-harden-dashboard-claim-classification.md",
+      "section": "Acceptance Criteria"
+    }
+  ],
+  "supportClaim": "validation-dashboard-infrastructure-only",
+  "claimPromotionAllowed": false,
+  "classifications": [
+    "target-supported",
+    "current-supported",
+    "tracked-gap",
+    "DependencyGated",
+    "fixture-gated",
+    "GPU-gated",
+    "expected-unsupported",
+    "drift-only"
+  ],
+  "classificationRules": [
+    {
+      "classification": "target-supported",
+      "meaning": "Complete pure Kotlin target contract has implementation evidence.",
+      "minimumEvidenceKinds": [
+        "fixture-provenance",
+        "deterministic-dump",
+        "cpu-oracle",
+        "route-diagnostics"
+      ],
+      "promotionPolicy": "A GPU artifact is additionally required whenever a GPU route is claimed."
+    },
+    {
+      "classification": "current-supported",
+      "meaning": "Current code supports a narrower compatibility behavior with documented limits.",
+      "minimumEvidenceKinds": [
+        "deterministic-dump",
+        "route-diagnostics"
+      ],
+      "promotionPolicy": "Must not imply complete target support or GPU renderer support."
+    },
+    {
+      "classification": "tracked-gap",
+      "meaning": "The target wants this behavior but implementation evidence is missing.",
+      "minimumEvidenceKinds": [
+        "route-diagnostics",
+        "refusal-diagnostics"
+      ],
+      "promotionPolicy": "Must name the owning spec and next evidence gate before any support promotion."
+    },
+    {
+      "classification": "DependencyGated",
+      "meaning": "A required pure Kotlin dependency or contract is not delivered yet.",
+      "minimumEvidenceKinds": [
+        "route-diagnostics",
+        "refusal-diagnostics"
+      ],
+      "promotionPolicy": "Must remain blocked until the dependency delivers target evidence."
+    },
+    {
+      "classification": "fixture-gated",
+      "meaning": "Code or current evidence exists, but normative fixtures, goldens, or provenance are missing.",
+      "minimumEvidenceKinds": [
+        "deterministic-dump",
+        "route-diagnostics"
+      ],
+      "promotionPolicy": "Must not promote until fixture provenance is attached."
+    },
+    {
+      "classification": "GPU-gated",
+      "meaning": "CPU or text route evidence exists, but the GPU artifact route is missing or unpromoted.",
+      "minimumEvidenceKinds": [
+        "cpu-oracle",
+        "route-diagnostics"
+      ],
+      "promotionPolicy": "Any GPU-claimed row without a GPU artifact must stay GPU-gated."
+    },
+    {
+      "classification": "expected-unsupported",
+      "meaning": "The behavior is outside the complete Kanvas target and has stable refusal policy.",
+      "minimumEvidenceKinds": [
+        "refusal-diagnostics"
+      ],
+      "promotionPolicy": "Must link the architecture or spec decision that keeps the refusal intentional."
+    },
+    {
+      "classification": "drift-only",
+      "meaning": "External comparison can be recorded but is never a normative oracle.",
+      "minimumEvidenceKinds": [
+        "route-diagnostics"
+      ],
+      "promotionPolicy": "Must not become target support without Kanvas-owned fixture, dump, CPU oracle, and required GPU evidence."
+    }
+  ],
+  "requiredEvidenceKinds": [
+    {
+      "kind": "fixture-provenance",
+      "dashboardField": "fixtureProvenance",
+      "requiredWhen": "Required before target-supported promotion and before fixture-gated rows can move."
+    },
+    {
+      "kind": "deterministic-dump",
+      "dashboardField": "deterministicDumps",
+      "requiredWhen": "Required before target-supported promotion and for current-supported compatibility rows."
+    },
+    {
+      "kind": "cpu-oracle",
+      "dashboardField": "cpuOracle",
+      "requiredWhen": "Required before target-supported promotion and for CPU-only evidence samples."
+    },
+    {
+      "kind": "gpu-artifact",
+      "dashboardField": "gpuArtifacts",
+      "requiredWhen": "Required whenever a row claims GPU support."
+    },
+    {
+      "kind": "route-diagnostics",
+      "dashboardField": "routeDiagnostics",
+      "requiredWhen": "Required for every row that routes, gates, or refuses text/font behavior."
+    },
+    {
+      "kind": "refusal-diagnostics",
+      "dashboardField": "refusalDiagnostics",
+      "requiredWhen": "Required for expected-unsupported rows, tracked gaps, and legacy gates."
+    }
+  ],
+  "surfaceRows": [
+    {
+      "surfaceId": "complex-shaping",
+      "label": "complex shaping",
+      "classification": "DependencyGated",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Required Script Matrix"
+      },
+      "evidence": {
+        "fixtureProvenance": [],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/dump-evidence-index.json"
+        ],
+        "cpuOracle": [],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "Deliver pure Kotlin script itemization, GSUB/GPOS/GDEF shaping, cluster dumps, and CPU oracle evidence before support promotion.",
+        "Keep complex shaping separate from simple drawString compatibility."
+      ],
+      "legacyGates": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complex-shaping-support-claim",
+        "no-harfbuzz-or-platform-shaper-claim"
+      ]
+    },
+    {
+      "surfaceId": "emoji-color",
+      "label": "emoji/color",
+      "classification": "DependencyGated",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
+        "section": "Purpose"
+      },
+      "evidence": {
+        "fixtureProvenance": [],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/dump-evidence-index.json"
+        ],
+        "cpuOracle": [],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "Deliver color glyph plans, emoji sequence route traces, fallback facts, CPU oracle evidence, and GPU artifact evidence when GPU is claimed.",
+        "Split COLR, bitmap, SVG, fallback, and shaping blockers instead of using emoji supported."
+      ],
+      "legacyGates": [
+        "coloremoji_blendmodes",
+        "scaledemoji",
+        "scaledemoji_rendering"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-emoji-support-claim",
+        "no-color-font-rendering-support-claim"
+      ]
+    },
+    {
+      "surfaceId": "fallback",
+      "label": "fallback",
+      "classification": "tracked-gap",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Fallback Runs"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/font-source.json",
+          "reports/pure-kotlin-text/typeface-id.json"
+        ],
+        "cpuOracle": [],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "Add cluster-safe fallback run dumps with selected and rejected font facts.",
+        "Add CPU oracle evidence for fallback decisions before promotion."
+      ],
+      "legacyGates": [
+        "scaledemoji"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-fallback-support-claim",
+        "no-platform-font-fallback-claim"
+      ]
+    },
+    {
+      "surfaceId": "lcd",
+      "label": "LCD",
+      "classification": "expected-unsupported",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        "section": "Unsupported Or Refused Glyph Routes"
+      },
+      "evidence": {
+        "fixtureProvenance": [],
+        "deterministicDumps": [],
+        "cpuOracle": [],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ]
+      },
+      "requiredEvidenceGates": [],
+      "legacyGates": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-lcd-subpixel-text-support-claim",
+        "no-gpu-lcd-route-claim"
+      ]
+    },
+    {
+      "surfaceId": "outline-path",
+      "label": "outline/path",
+      "classification": "current-supported",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md",
+        "section": "Baselines To Preserve"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/font-source.json",
+          "reports/pure-kotlin-text/typeface-id.json"
+        ],
+        "cpuOracle": [],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "Complete target promotion still requires glyph outline contract evidence and CPU oracle artifacts.",
+        "Current simple drawString compatibility does not imply complex shaping, fallback, SDF, color, LCD, or GPU text support."
+      ],
+      "legacyGates": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complex-shaping-support-claim",
+        "no-gpu-text-support-claim"
+      ]
+    },
+    {
+      "surfaceId": "sdf",
+      "label": "SDF",
+      "classification": "GPU-gated",
+      "gpuClaimed": true,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        "section": "SDF Glyph Atlas Artifact"
+      },
+      "evidence": {
+        "fixtureProvenance": [],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/dump-evidence-index.json"
+        ],
+        "cpuOracle": [],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "Deliver SDF artifact contract, atlas/cache telemetry, CPU oracle evidence, and typed GPU artifact evidence before any GPU support claim.",
+        "Legacy dftext remains open until explicit replacement evidence is linked."
+      ],
+      "legacyGates": [
+        "dftext"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-sdf-support-claim",
+        "no-gpu-sdf-route-claim"
+      ]
+    },
+    {
+      "surfaceId": "simple-latin-atlas",
+      "label": "simple-latin atlas",
+      "classification": "fixture-gated",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        "section": "Glyph Atlas Artifact A8"
+      },
+      "evidence": {
+        "fixtureProvenance": [],
+        "deterministicDumps": [
+          "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json"
+        ],
+        "cpuOracle": [
+          "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json"
+        ],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "Attach pure Kotlin text fixture provenance before promoting this compatibility evidence.",
+        "Replace current WGSL scene evidence with font-owned glyph artifact dumps before target support."
+      ],
+      "legacyGates": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-final-glyph-atlas-support-claim",
+        "no-gpu-text-support-claim"
+      ]
+    }
+  ],
+  "negativeGenericLabels": [
+    {
+      "label": "emoji supported",
+      "diagnosticCode": "text.claim.generic-emoji-label",
+      "classification": "tracked-gap",
+      "replacementRequirement": "Split emoji/color into sequence shaping, fallback, color glyph representation, CPU oracle, GPU artifact, and refusal diagnostics.",
+      "claimPromotionAllowed": false
+    },
+    {
+      "label": "font missing",
+      "diagnosticCode": "font.claim.generic-missing-label",
+      "classification": "tracked-gap",
+      "replacementRequirement": "Name the missing source, table, glyph, fallback, fixture, route, or dependency blocker with a stable diagnostic.",
+      "claimPromotionAllowed": false
+    },
+    {
+      "label": "text works",
+      "diagnosticCode": "text.claim.generic-success-label",
+      "classification": "tracked-gap",
+      "replacementRequirement": "Replace broad success wording with a route-specific row such as outline/path, simple-latin atlas, complex shaping, fallback, emoji/color, SDF, or LCD.",
+      "claimPromotionAllowed": false
+    }
+  ],
+  "legacyGates": [
+    {
+      "gate": "coloremoji_blendmodes",
+      "status": "open",
+      "classification": "DependencyGated",
+      "targetOwners": [
+        ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
+        ".upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md"
+      ],
+      "requiredRetirementEvidence": [
+        "COLR/emoji color route",
+        "blend/composite policy",
+        "CPU oracle",
+        "GPU artifact when GPU is claimed"
+      ],
+      "replacementClaim": null,
+      "claimPromotionAllowed": false
+    },
+    {
+      "gate": "dftext",
+      "status": "open",
+      "classification": "GPU-gated",
+      "targetOwners": [
+        ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        ".upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md",
+        ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md"
+      ],
+      "requiredRetirementEvidence": [
+        "SDF artifact contract",
+        "atlas/cache telemetry",
+        "transform policy",
+        "CPU/GPU evidence for the claimed slice"
+      ],
+      "replacementClaim": null,
+      "claimPromotionAllowed": false
+    },
+    {
+      "gate": "fontations",
+      "status": "open",
+      "classification": "drift-only",
+      "targetOwners": [
+        ".upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md"
+      ],
+      "requiredRetirementEvidence": [
+        "Keep Fontations external comparison non-normative",
+        "Do not add Fontations as product dependency"
+      ],
+      "replacementClaim": null,
+      "claimPromotionAllowed": false
+    },
+    {
+      "gate": "fontations_ft_compare",
+      "status": "open",
+      "classification": "drift-only",
+      "targetOwners": [
+        ".upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md"
+      ],
+      "requiredRetirementEvidence": [
+        "Optional drift report only",
+        "FreeType/Fontations parity is not a product oracle"
+      ],
+      "replacementClaim": null,
+      "claimPromotionAllowed": false
+    },
+    {
+      "gate": "pdf_never_embed",
+      "status": "open",
+      "classification": "expected-unsupported",
+      "targetOwners": [
+        "Adjacent PDF/font-subset workstream"
+      ],
+      "requiredRetirementEvidence": [
+        "Keep separate from the pure Kotlin runtime font core unless a future PDF subset spec adopts it"
+      ],
+      "replacementClaim": null,
+      "claimPromotionAllowed": false
+    },
+    {
+      "gate": "scaledemoji",
+      "status": "open",
+      "classification": "DependencyGated",
+      "targetOwners": [
+        ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md"
+      ],
+      "requiredRetirementEvidence": [
+        "Emoji sequence shaping",
+        "emoji fallback",
+        "selected color glyph representation",
+        "route diagnostics"
+      ],
+      "replacementClaim": null,
+      "claimPromotionAllowed": false
+    },
+    {
+      "gate": "scaledemoji_rendering",
+      "status": "open",
+      "classification": "DependencyGated",
+      "targetOwners": [
+        ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
+        ".upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md"
+      ],
+      "requiredRetirementEvidence": [
+        "Emoji glyph artifact plan",
+        "renderer route evidence",
+        "unsupported sequence refusals"
+      ],
+      "replacementClaim": null,
+      "claimPromotionAllowed": false
+    }
+  ],
+  "gradleWiring": {
+    "taskName": "validatePureKotlinTextClaimDashboard",
+    "validatorCommand": "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+    "sceneGateTask": "pipelineSceneDashboardGate",
+    "pmBundleTask": "pipelinePmBundle"
+  },
+  "validationCommands": [
+    "rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_claim_dashboard.py",
+    "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+    "rtk ./gradlew --no-daemon validatePureKotlinTextClaimDashboard",
+    "rtk git diff --check"
+  ],
+  "nonClaims": [
+    "no-complete-target-support-claim",
+    "Does not add rendering support.",
+    "Does not add shaping support.",
+    "Does not add fallback support.",
+    "Does not add SDF support.",
+    "Does not add emoji or color font support.",
+    "Does not add GPU text support."
+  ]
+}

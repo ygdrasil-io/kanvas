@@ -91,6 +91,21 @@ class PureKotlinTextFontFixtureInventoryTest(unittest.TestCase):
             validator.validate_inventory(PROJECT_ROOT, modified)
         self.assertIn("target-supported", str(failure.exception))
 
+    def test_sfnt_optional_malformed_fixture_records_source_hash_and_intended_diagnostic(self) -> None:
+        validator = load_validator()
+        inventory = validator.load_inventory(PROJECT_ROOT)
+        fixture = next(
+            fixture
+            for family in inventory["families"]
+            if family["familyId"] == "font-source-sfnt"
+            for fixture in family["fixtures"]
+            if fixture["fixtureId"] == "font-source-sfnt-malformed-optional-table-diagnostic"
+        )
+        artifacts = fixture["expectedArtifacts"]
+
+        self.assertTrue(any(artifact.startswith("sourceSha256:") for artifact in artifacts), artifacts)
+        self.assertIn("intendedDiagnostic:font.sfnt.optional-table-malformed", artifacts)
+
 
 if __name__ == "__main__":
     unittest.main()

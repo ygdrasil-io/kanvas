@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M0-003"
 title: "Freeze module/package layout for the pure Kotlin font core"
-status: "proposed"
+status: "review"
 milestone: "M0"
 priority: "P0"
 owner_area: "font-architecture"
@@ -66,11 +66,11 @@ fun validateFontBoundaries(boundaries: List<FontPackageBoundary>): List<Boundary
 
 ## Acceptance Criteria
 
-- [ ] The boundary report lists `org.graphiks.kanvas.font`, `org.graphiks.kanvas.font.scaler`, and text/glyph package roots with their owner areas.
-- [ ] Pure Kotlin font/text/glyph modules have no direct dependency on `:gpu-renderer`.
-- [ ] Pure Kotlin modules do not expose `SkFont`, `SkTypeface`, `SkPaint`, or other `Sk*` facade types in their public contracts.
-- [ ] Boundary violations use stable diagnostics such as `font.architecture.skia-api-leak` and `font.architecture.gpu-backedge`.
-- [ ] The dashboard keeps this row as `tracked-gap` until the boundary report and validation output are attached.
+- [x] The boundary report lists `org.graphiks.kanvas.font`, `org.graphiks.kanvas.font.scaler`, and text/glyph package roots with their owner areas.
+- [x] Pure Kotlin font/text/glyph modules have no direct dependency on `:gpu-renderer`.
+- [x] Pure Kotlin modules do not expose `SkFont`, `SkTypeface`, `SkPaint`, or other `Sk*` facade types in their public contracts.
+- [x] Boundary violations use stable diagnostics such as `font.architecture.skia-api-leak` and `font.architecture.gpu-backedge`.
+- [x] The dashboard keeps this row as `tracked-gap` until the boundary report and validation output are attached.
 
 ## Required Evidence
 
@@ -99,8 +99,15 @@ rtk ./gradlew --no-daemon :font:core:test --tests '*ModuleBoundary*'
 
 ## Status Notes
 
-- `proposed`: Boundary contracts are specified, but no architecture report is attached yet.
-- Move to `ready` after the CI lane from KFONT-M0-001 can execute the boundary checks.
+- `review`: `reports/pure-kotlin-text/boundary-contracts.json` and
+  `scripts/validate_pure_kotlin_text_boundary_contracts.py` provide package
+  root and import-boundary evidence. The M0 CI lane now invokes the boundary
+  validator before the six `:font:*` test tasks.
+- `review-unblock`: `reports/pure-kotlin-text/2026-06-15-kfont-m0-003-boundary-diagnostics.md`
+  records stable `font.architecture.*` import-boundary diagnostics. The focused
+  unit snapshot asserts `font.architecture.skia-api-leak` for a synthetic
+  `SkFont` leak and `font.architecture.gpu-backedge` for a pure Kotlin
+  `org.graphiks.kanvas.gpu.renderer.*` backedge.
 
 ## Linear Labels
 

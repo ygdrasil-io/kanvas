@@ -24,6 +24,7 @@ on:
       - 'math/**'
       - 'codec-*/**'
       - 'kanvas-skia/**'
+      - 'font/**'
       - 'cpu-raster/**'
       - 'gpu-raster/**'
       - 'render-pipeline/**'
@@ -39,15 +40,24 @@ on:
       - '.upstream/source/map/**'
       - '.upstream/specs/front/**'
       - '.upstream/specs/font/**'
+      - '.upstream/specs/pure-kotlin-text/**'
       - '.upstream/target/rendering-conformance-performance-target.md'
       - '.upstream/target/post-mvp-conformance-backlog.md'
+      - 'reports/pure-kotlin-text/**'
       - 'reports/wgsl-pipeline/**'
+      - 'scripts/validate_pure_kotlin_text_ci.py'
+      - 'scripts/test_validate_pure_kotlin_text_ci.py'
+      - 'scripts/validate_pure_kotlin_text_boundary_contracts.py'
+      - 'scripts/test_validate_pure_kotlin_text_boundary_contracts.py'
+      - 'scripts/validate_pure_kotlin_text_claim_dashboard.py'
+      - 'scripts/test_validate_pure_kotlin_text_claim_dashboard.py'
   push:
     branches: [master]
     paths:
       - 'math/**'
       - 'codec-*/**'
       - 'kanvas-skia/**'
+      - 'font/**'
       - 'cpu-raster/**'
       - 'gpu-raster/**'
       - 'render-pipeline/**'
@@ -63,9 +73,17 @@ on:
       - '.upstream/source/map/**'
       - '.upstream/specs/front/**'
       - '.upstream/specs/font/**'
+      - '.upstream/specs/pure-kotlin-text/**'
       - '.upstream/target/rendering-conformance-performance-target.md'
       - '.upstream/target/post-mvp-conformance-backlog.md'
+      - 'reports/pure-kotlin-text/**'
       - 'reports/wgsl-pipeline/**'
+      - 'scripts/validate_pure_kotlin_text_ci.py'
+      - 'scripts/test_validate_pure_kotlin_text_ci.py'
+      - 'scripts/validate_pure_kotlin_text_boundary_contracts.py'
+      - 'scripts/test_validate_pure_kotlin_text_boundary_contracts.py'
+      - 'scripts/validate_pure_kotlin_text_claim_dashboard.py'
+      - 'scripts/test_validate_pure_kotlin_text_claim_dashboard.py'
   workflow_dispatch:
 
 permissions:
@@ -76,6 +94,61 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  pure_kotlin_font_foundation:
+    name: Pure Kotlin font foundation (ubuntu)
+    runs-on: ubuntu-latest
+    env:
+      FONT_CI_LANE_NAME: pure-kotlin-font-foundation
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check pure Kotlin text diff hygiene
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha || github.event.before || '' }}"
+          if [ -z "$BASE_SHA" ] || ! git cat-file -e "$BASE_SHA^{commit}"; then
+            git fetch --no-tags --prune origin "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
+            BASE_SHA="$(git merge-base "origin/${DEFAULT_BRANCH}" HEAD)"
+          fi
+          if [ -z "$BASE_SHA" ]; then
+            echo "Unable to resolve a base commit for pure Kotlin text diff hygiene." >&2
+            exit 1
+          fi
+          git diff --check "$BASE_SHA...HEAD" -- \
+            .upstream/specs/pure-kotlin-text \
+            reports/pure-kotlin-text
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Validate pure Kotlin font CI lane
+        run: python3 scripts/validate_pure_kotlin_text_ci.py
+
+      - name: Validate pure Kotlin text boundaries
+        run: python3 scripts/validate_pure_kotlin_text_boundary_contracts.py
+
+      - name: Validate pure Kotlin text claim dashboard
+        run: python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+
+      - name: Run pure Kotlin font foundation Gradle tests
+        run: |
+          ./gradlew --no-daemon \
+            :font:core:test \
+            :font:sfnt:test \
+            :font:scaler:test \
+            :font:text:test \
+            :font:glyph:test \
+            :font:gpu-api:test
+
   raster:
     name: Raster tests (ubuntu)
     runs-on: ubuntu-latest

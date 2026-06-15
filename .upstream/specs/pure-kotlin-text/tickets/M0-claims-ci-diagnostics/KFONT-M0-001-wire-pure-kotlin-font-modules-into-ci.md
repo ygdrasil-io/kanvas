@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M0-001"
 title: "Wire pure Kotlin font modules into CI"
-status: "proposed"
+status: "review"
 milestone: "M0"
 priority: "P0"
 owner_area: "ci"
@@ -69,11 +69,11 @@ data class FontCiDiagnostic(
 
 ## Acceptance Criteria
 
-- [ ] The CI configuration invokes every listed `FontCiModule` task when the module exists.
-- [ ] A missing candidate module is surfaced as a reviewed `tracked-gap` diagnostic, not silently skipped.
-- [ ] A failing font task fails the CI lane and identifies the exact Gradle path.
-- [ ] The lane remains independent from platform-native or external font engines.
-- [ ] The milestone dashboard cannot use this ticket as support evidence for parsing, shaping, scaling, fallback, or GPU rendering.
+- [x] The CI configuration invokes every listed `FontCiModule` task when the module exists.
+- [x] A missing candidate module is surfaced as a reviewed `tracked-gap` diagnostic, not silently skipped.
+- [x] A failing font task fails the CI lane and identifies the exact Gradle path.
+- [x] The lane remains independent from platform-native or external font engines.
+- [x] The milestone dashboard cannot use this ticket as support evidence for parsing, shaping, scaling, fallback, or GPU rendering.
 
 ## Required Evidence
 
@@ -102,8 +102,11 @@ rtk ./gradlew --no-daemon :font:core:test :font:sfnt:test :font:scaler:test :fon
 
 ## Status Notes
 
-- `proposed`: CI lane scope is defined, but no module validation evidence is attached yet.
-- Move to `ready` only after the candidate module list and missing-module policy are reviewed.
+- `review`: CI lane `pure-kotlin-font-foundation` is wired in
+  `.github/workflows/test.yml`, validates
+  `reports/pure-kotlin-text/font-ci-lane.json`, invokes the six `:font:*`
+  test tasks, and records `font.ci.module-missing` as the non-promoting
+  missing-module policy.
 
 ## Linear Labels
 

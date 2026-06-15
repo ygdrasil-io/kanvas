@@ -139,7 +139,7 @@ object SFNTTableDirectoryValidator {
             val records = recordsByTag[required].orEmpty()
             if (records.isEmpty()) {
                 diagnostics += diagnostic(
-                    code = "font.required-table-missing",
+                    code = "font.sfnt.required-table-missing",
                     tag = required,
                     sourceLength = sourceLength,
                     message = "Required table is not present.",
@@ -147,7 +147,7 @@ object SFNTTableDirectoryValidator {
             } else if (records.any { it.length == 0u }) {
                 val record = records.first { it.length == 0u }
                 diagnostics += diagnostic(
-                    code = "font.required-table-missing",
+                    code = "font.sfnt.required-table-missing",
                     record = record,
                     sourceLength = sourceLength,
                     message = "Required table is present with zero length.",
@@ -356,6 +356,581 @@ interface OpenTypeFaceParser {
 }
 
 /**
+ * Bounded view over caller-provided font bytes for one parse request.
+ *
+ * The parser only receives [byteOffset, byteOffset + byteLength) from
+ * [rawBytes]. This lets callers keep provenance for a larger stream or file
+ * while preventing SFNT directory reads from escaping the requested byte range.
+ *
+ * @property rawBytes Caller-owned byte array containing the requested range.
+ * @property byteOffset Start of the bounded font byte range.
+ * @property byteLength Length of the bounded font byte range.
+ */
+data class BoundedFontBytes(
+    val rawBytes: ByteArray,
+    val byteOffset: Int = 0,
+    val byteLength: Int = rawBytes.size - byteOffset,
+) {
+    init {
+        val end = byteOffset.toLong() + byteLength.toLong()
+        require(byteOffset >= 0) { "Bounded font byte offset must be non-negative." }
+        require(byteLength >= 0) { "Bounded font byte length must be non-negative." }
+        require(end <= rawBytes.size.toLong()) {
+            "Bounded font byte range [$byteOffset, $end) exceeds source length ${rawBytes.size}."
+        }
+    }
+
+    /**
+     * Copies only the bounded bytes requested by the parse contract.
+     */
+    fun toByteArray(): ByteArray =
+        rawBytes.copyOfRange(byteOffset, byteOffset + byteLength)
+}
+
+/**
+ * Container type observed by the SFNT parser entry point.
+ */
+enum class SFNTContainerKind {
+    /** A raw single-face SFNT font. */
+    SINGLE_FACE,
+
+    /** A TrueType Collection using the `ttcf` wrapper. */
+    TTC_COLLECTION,
+
+    /** An OpenType/CFF collection using the same collection wrapper. */
+    OTC_COLLECTION,
+
+    /** A wrapper or top-level container the pure Kotlin SFNT parser does not accept. */
+    UNKNOWN_WRAPPER,
+}
+
+/**
+ * One bounded SFNT parser request shared by single-face fonts and collections.
+ *
+ * @property sourceId Stable source identity supplied by font core.
+ * @property sourceKind Source provenance kind used to build a [FontSource].
+ * @property displayName Deterministic source label for diagnostics.
+ * @property bytes Bounded byte range to parse.
+ * @property collectionIndex Requested zero-based face index, or `0` when absent.
+ * @property parserGeneration Parser contract generation recorded in evidence.
+ * @property requiredTables Required table tags for bounded directory diagnostics.
+ */
+data class SFNTParseRequest(
+    val sourceId: FontSourceID,
+    val sourceKind: FontSourceKind,
+    val displayName: String,
+    val bytes: BoundedFontBytes,
+    val collectionIndex: Int? = 0,
+    val parserGeneration: Int,
+    val requiredTables: Set<SFNTTableTag> = emptySet(),
+) {
+    init {
+        require(displayName.isNotBlank()) { "SFNT parse request displayName must be non-blank." }
+        require(parserGeneration >= 0) { "SFNT parse request parserGeneration must be non-negative." }
+        require(requiredTables.all { it.value.isStableSFNTTableTag() }) {
+            "SFNT parse request requiredTables must contain stable SFNT tags."
+        }
+    }
+}
+
+/**
+ * Stable container-level SFNT parser diagnostic.
+ *
+ * These diagnostics are separate from table-specific face parser facts. Codes
+ * use the `font.*` taxonomy so invalid collection indices and unsupported
+ * wrappers are observable without exceptions or platform font APIs.
+ */
+data class SFNTParseDiagnostic(
+    val code: String,
+    val message: String,
+    val sourceId: FontSourceID,
+    val parserGeneration: Int,
+    val requestedCollectionIndex: Int,
+    val containerKind: SFNTContainerKind,
+    val faceCount: Int?,
+    val causeMessage: String? = null,
+) {
+    init {
+        require(code.startsWith("font.") && code.isStableSFNTDiagnosticToken()) {
+            "SFNT parse diagnostic code must be a stable font.* diagnostic token."
+        }
+        require(parserGeneration >= 0) { "SFNT parse diagnostic parserGeneration must be non-negative." }
+        require(faceCount == null || faceCount >= 0) { "SFNT parse diagnostic faceCount must be non-negative." }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("code", code, indent = "  ", comma = true)
+        appendSFNTJsonField("message", message, indent = "  ", comma = true)
+        appendSFNTJsonField("sourceId", sourceId.value.toString(), indent = "  ", comma = true)
+        appendSFNTJsonField("parserGeneration", parserGeneration, indent = "  ", comma = true)
+        appendSFNTJsonField("requestedCollectionIndex", requestedCollectionIndex, indent = "  ", comma = true)
+        appendSFNTJsonField("containerKind", containerKind.name, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("faceCount", faceCount, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("causeMessage", causeMessage, indent = "  ", comma = false)
+        append("}")
+    }
+}
+
+/**
+ * Directory-level facts for the selected face of an SFNT parse request.
+ */
+data class SFNTDirectoryFacts(
+    val scalerType: String,
+    val scalerTypeLabel: String,
+    val tableRecords: List<SFNTTableEvidence>,
+    val directoryDiagnostics: List<SFNTTableDirectoryDiagnostic> = emptyList(),
+) {
+    init {
+        require(scalerType.matches(SFNT_HEX_UINT32_PATTERN)) {
+            "SFNT directory facts scalerType must be lowercase hexadecimal uint32 text."
+        }
+        require(tableRecords == tableRecords.sortedWith(SFNT_TABLE_EVIDENCE_ORDER)) {
+            "SFNT directory facts tableRecords must be sorted."
+        }
+        require(directoryDiagnostics == directoryDiagnostics.sortedWith(SFNT_TABLE_DIRECTORY_DIAGNOSTIC_EVIDENCE_ORDER)) {
+            "SFNT directory facts diagnostics must be sorted."
+        }
+    }
+}
+
+/**
+ * Container-level parse result shared by single-face SFNT, TTC, and OTC inputs.
+ */
+data class SFNTParseResult(
+    val sourceId: FontSourceID,
+    val sourceKind: FontSourceKind,
+    val displayName: String,
+    val parserGeneration: Int,
+    val sourceByteOffset: Int,
+    val sourceByteLength: Int,
+    val containerKind: SFNTContainerKind,
+    val requestedCollectionIndex: Int,
+    val selectedFaceIndex: Int?,
+    val faceCount: Int?,
+    val directoryFacts: SFNTDirectoryFacts?,
+    val faceFacts: OpenTypeFaceEvidence?,
+    val tableSlices: List<SFNTTableEvidence>,
+    val diagnostics: List<SFNTParseDiagnostic>,
+    val dashboardClassification: String = "tracked-gap",
+    val claimPromotionAllowed: Boolean = false,
+) {
+    init {
+        require(parserGeneration >= 0) { "SFNT parse result parserGeneration must be non-negative." }
+        require(sourceByteOffset >= 0) { "SFNT parse result sourceByteOffset must be non-negative." }
+        require(sourceByteLength >= 0) { "SFNT parse result sourceByteLength must be non-negative." }
+        require(selectedFaceIndex == null || selectedFaceIndex >= 0) {
+            "SFNT parse result selectedFaceIndex must be non-negative when present."
+        }
+        require(faceCount == null || faceCount >= 0) { "SFNT parse result faceCount must be non-negative." }
+        require(tableSlices == tableSlices.sortedWith(SFNT_TABLE_EVIDENCE_ORDER)) {
+            "SFNT parse result tableSlices must be sorted."
+        }
+        require(dashboardClassification == "tracked-gap") {
+            "SFNT parser entry-point result must remain tracked-gap."
+        }
+        require(!claimPromotionAllowed) {
+            "SFNT parser entry-point result cannot promote support claims."
+        }
+    }
+}
+
+/**
+ * Public SFNT parser entry point for bounded single-face and collection requests.
+ */
+interface SFNTParser {
+    /**
+     * Parses one bounded request into container-level directory evidence.
+     */
+    fun parse(request: SFNTParseRequest): SFNTParseResult
+}
+
+/**
+ * Default pure Kotlin SFNT parser entry point.
+ *
+ * This class normalizes single-face SFNT and collection requests, then reads
+ * only the selected face directory and bounded table slices. Invalid collection
+ * indices and unsupported wrappers return stable diagnostics instead of
+ * falling through to face `0` or invoking external font engines.
+ */
+class DefaultSFNTParser(
+    private val reader: SFNTReader = DefaultSFNTReader(),
+) : SFNTParser {
+    override fun parse(request: SFNTParseRequest): SFNTParseResult {
+        val boundedBytes = request.bytes.toByteArray()
+        val requestedIndex = request.collectionIndex ?: 0
+        val detectedKind = boundedBytes.detectSFNTContainerKind()
+        val faceCount = boundedBytes.collectionFaceCountOrNull()
+            ?: if (detectedKind == SFNTContainerKind.SINGLE_FACE) 1 else null
+
+        if (requestedIndex < 0) {
+            return request.diagnosticResult(
+                boundedBytes = boundedBytes,
+                containerKind = detectedKind,
+                requestedIndex = requestedIndex,
+                faceCount = faceCount,
+                diagnostic = request.collectionIndexDiagnostic(
+                    containerKind = detectedKind,
+                    requestedIndex = requestedIndex,
+                    faceCount = faceCount,
+                ),
+            )
+        }
+
+        if (detectedKind == SFNTContainerKind.UNKNOWN_WRAPPER) {
+            return request.diagnosticResult(
+                boundedBytes = boundedBytes,
+                containerKind = detectedKind,
+                requestedIndex = requestedIndex,
+                faceCount = faceCount,
+                diagnostic = request.unsupportedWrapperDiagnostic(
+                    boundedBytes = boundedBytes,
+                    requestedIndex = requestedIndex,
+                ),
+            )
+        }
+
+        if (detectedKind == SFNTContainerKind.SINGLE_FACE && requestedIndex != 0) {
+            return request.diagnosticResult(
+                boundedBytes = boundedBytes,
+                containerKind = detectedKind,
+                requestedIndex = requestedIndex,
+                faceCount = 1,
+                diagnostic = request.collectionIndexDiagnostic(
+                    containerKind = detectedKind,
+                    requestedIndex = requestedIndex,
+                    faceCount = 1,
+                ),
+            )
+        }
+
+        if (detectedKind == SFNTContainerKind.TTC_COLLECTION && faceCount != null && requestedIndex >= faceCount) {
+            return request.diagnosticResult(
+                boundedBytes = boundedBytes,
+                containerKind = detectedKind,
+                requestedIndex = requestedIndex,
+                faceCount = faceCount,
+                diagnostic = request.collectionIndexDiagnostic(
+                    containerKind = detectedKind,
+                    requestedIndex = requestedIndex,
+                    faceCount = faceCount,
+                ),
+            )
+        }
+
+        val source = FontSource(
+            id = request.sourceId,
+            kind = request.sourceKind,
+            displayName = request.displayName,
+            bytes = boundedBytes,
+        )
+
+        return runCatching {
+            selectDirectoryOnlyFaceInput(
+                source = source,
+                boundedBytes = boundedBytes,
+                containerKind = detectedKind,
+                faceIndex = requestedIndex,
+            )
+        }
+            .fold(
+                onSuccess = { selectedFace ->
+                    val tableSlices = selectedFace.directory.tables
+                        .map { record ->
+                            val rawBytes = runCatching { selectedFace.readTable(record) }.getOrNull()
+                            SFNTTableEvidence(
+                                tag = record.tag.value,
+                                checksum = record.checksum.toSFNTUInt32Hex(),
+                                offset = record.offset.toLong(),
+                                length = record.length.toLong(),
+                                rawByteLength = rawBytes?.size,
+                                rawSha256 = rawBytes?.sfntSha256Hex(),
+                            )
+                        }
+                        .sortedWith(SFNT_TABLE_EVIDENCE_ORDER)
+                    val directoryDiagnostics = SFNTTableDirectoryValidator.validate(
+                        directory = selectedFace.directory,
+                        sourceLength = boundedBytes.size.toLong(),
+                        requiredTables = request.requiredTables,
+                    )
+                    val containerKind = detectedKind.refineCollectionKind(selectedFace.directory)
+                    val directoryFacts = SFNTDirectoryFacts(
+                        scalerType = selectedFace.directory.scalerType.toSFNTUInt32Hex(),
+                        scalerTypeLabel = selectedFace.directory.scalerType.toSFNTScalerTypeLabel(),
+                        tableRecords = tableSlices,
+                        directoryDiagnostics = directoryDiagnostics,
+                    )
+                    SFNTParseResult(
+                        sourceId = request.sourceId,
+                        sourceKind = request.sourceKind,
+                        displayName = request.displayName,
+                        parserGeneration = request.parserGeneration,
+                        sourceByteOffset = request.bytes.byteOffset,
+                        sourceByteLength = boundedBytes.size,
+                        containerKind = containerKind,
+                        requestedCollectionIndex = requestedIndex,
+                        selectedFaceIndex = requestedIndex,
+                        faceCount = faceCount,
+                        directoryFacts = directoryFacts,
+                        faceFacts = null,
+                        tableSlices = tableSlices,
+                        diagnostics = emptyList(),
+                    )
+                },
+                onFailure = { error ->
+                    val diagnostic = request.parseFailureDiagnostic(
+                        containerKind = detectedKind,
+                        requestedIndex = requestedIndex,
+                        faceCount = faceCount,
+                        error = error,
+                    )
+                    request.diagnosticResult(
+                        boundedBytes = boundedBytes,
+                        containerKind = detectedKind,
+                        requestedIndex = requestedIndex,
+                        faceCount = faceCount,
+                        diagnostic = diagnostic,
+                    )
+                },
+            )
+    }
+
+    private fun selectDirectoryOnlyFaceInput(
+        source: FontSource,
+        boundedBytes: ByteArray,
+        containerKind: SFNTContainerKind,
+        faceIndex: Int,
+    ): SelectedSFNTFaceInput =
+        when (containerKind) {
+            SFNTContainerKind.SINGLE_FACE -> SelectedSFNTFaceInput(
+                directory = reader.readDirectory(source),
+                readTable = { record -> reader.readTable(source, record) },
+            )
+
+            SFNTContainerKind.TTC_COLLECTION,
+            SFNTContainerKind.OTC_COLLECTION,
+            -> boundedBytes.selectTtcDirectoryOnlyFaceInput(faceIndex)
+
+            SFNTContainerKind.UNKNOWN_WRAPPER -> error("Unsupported wrapper cannot select an SFNT face.")
+        }
+}
+
+/**
+ * One entry in the deterministic `sfnt-directory.json` report.
+ */
+data class SFNTDirectoryReportEntry(
+    val entryId: String,
+    val fixtureId: String,
+    val fixtureKind: String,
+    val sourceId: FontSourceID,
+    val sourceKind: FontSourceKind,
+    val displayName: String,
+    val parserGeneration: Int,
+    val sourceByteOffset: Int,
+    val sourceByteLength: Int,
+    val sourceSha256: String? = null,
+    val containerKind: SFNTContainerKind,
+    val requestedCollectionIndex: Int,
+    val selectedFaceIndex: Int?,
+    val faceCount: Int?,
+    val tableRecords: List<SFNTTableEvidence>,
+    val directoryDiagnostics: List<SFNTTableDirectoryDiagnostic>,
+    val faceDiagnostics: List<OpenTypeParseDiagnosticEvidence> = emptyList(),
+    val diagnostics: List<SFNTParseDiagnostic>,
+    val dashboardClassification: String,
+    val claimPromotionAllowed: Boolean,
+) {
+    init {
+        require(entryId.isNotBlank()) { "SFNT directory report entryId must be non-blank." }
+        require(fixtureId.isNotBlank()) { "SFNT directory report fixtureId must be non-blank." }
+        require(fixtureKind.isNotBlank()) { "SFNT directory report fixtureKind must be non-blank." }
+        require(sourceSha256 == null || sourceSha256.matches(SFNT_SHA256_PATTERN)) {
+            "SFNT directory report sourceSha256 must be lowercase SHA-256 when present."
+        }
+        require(tableRecords == tableRecords.sortedWith(SFNT_TABLE_EVIDENCE_ORDER)) {
+            "SFNT directory report tableRecords must be sorted."
+        }
+        require(directoryDiagnostics == directoryDiagnostics.sortedWith(SFNT_TABLE_DIRECTORY_DIAGNOSTIC_EVIDENCE_ORDER)) {
+            "SFNT directory report directoryDiagnostics must be sorted."
+        }
+        require(faceDiagnostics == faceDiagnostics.sortedWith(SFNT_DIAGNOSTIC_EVIDENCE_ORDER)) {
+            "SFNT directory report faceDiagnostics must be sorted."
+        }
+        require(dashboardClassification == "tracked-gap") {
+            "SFNT directory report entries must remain tracked-gap."
+        }
+        require(!claimPromotionAllowed) {
+            "SFNT directory report entries cannot promote support claims."
+        }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("entryId", entryId, indent = "  ", comma = true)
+        appendSFNTJsonField("fixtureId", fixtureId, indent = "  ", comma = true)
+        appendSFNTJsonField("fixtureKind", fixtureKind, indent = "  ", comma = true)
+        appendSFNTJsonField("sourceId", sourceId.value.toString(), indent = "  ", comma = true)
+        appendSFNTJsonField("sourceKind", sourceKind.name, indent = "  ", comma = true)
+        appendSFNTJsonField("displayName", displayName, indent = "  ", comma = true)
+        appendSFNTJsonField("parserGeneration", parserGeneration, indent = "  ", comma = true)
+        appendSFNTJsonField("sourceByteOffset", sourceByteOffset, indent = "  ", comma = true)
+        appendSFNTJsonField("sourceByteLength", sourceByteLength, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("sourceSha256", sourceSha256, indent = "  ", comma = true)
+        appendSFNTJsonField("containerKind", containerKind.name, indent = "  ", comma = true)
+        appendSFNTJsonField("requestedCollectionIndex", requestedCollectionIndex, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("selectedFaceIndex", selectedFaceIndex, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("faceCount", faceCount, indent = "  ", comma = true)
+        appendSFNTJsonField("dashboardClassification", dashboardClassification, indent = "  ", comma = true)
+        appendSFNTJsonField("claimPromotionAllowed", claimPromotionAllowed, indent = "  ", comma = true)
+        append("  \"tableRecords\": [")
+        if (tableRecords.isNotEmpty()) {
+            append("\n")
+            append(tableRecords.joinToString(",\n") { record -> record.toCanonicalJson().prependIndent("    ") })
+            append("\n  ")
+        }
+        append("],\n")
+        append("  \"directoryDiagnostics\": [")
+        if (directoryDiagnostics.isNotEmpty()) {
+            append("\n")
+            append(directoryDiagnostics.joinToString(",\n") { diagnostic -> diagnostic.toCanonicalJson().prependIndent("    ") })
+            append("\n  ")
+        }
+        append("],\n")
+        append("  \"faceDiagnostics\": [")
+        if (faceDiagnostics.isNotEmpty()) {
+            append("\n")
+            append(faceDiagnostics.joinToString(",\n") { diagnostic -> diagnostic.toCanonicalJson().prependIndent("    ") })
+            append("\n  ")
+        }
+        append("],\n")
+        append("  \"diagnostics\": [")
+        if (diagnostics.isNotEmpty()) {
+            append("\n")
+            append(diagnostics.joinToString(",\n") { diagnostic -> diagnostic.toCanonicalJson().prependIndent("    ") })
+            append("\n  ")
+        }
+        append("]\n")
+        append("}")
+    }
+
+    companion object {
+        /**
+         * Builds a report entry from a container-level parse result.
+         */
+        fun fromResult(
+            entryId: String,
+            fixtureId: String,
+            fixtureKind: String,
+            result: SFNTParseResult,
+        ): SFNTDirectoryReportEntry =
+            SFNTDirectoryReportEntry(
+                entryId = entryId,
+                fixtureId = fixtureId,
+                fixtureKind = fixtureKind,
+                sourceId = result.sourceId,
+                sourceKind = result.sourceKind,
+                displayName = result.displayName,
+                parserGeneration = result.parserGeneration,
+                sourceByteOffset = result.sourceByteOffset,
+                sourceByteLength = result.sourceByteLength,
+                sourceSha256 = null,
+                containerKind = result.containerKind,
+                requestedCollectionIndex = result.requestedCollectionIndex,
+                selectedFaceIndex = result.selectedFaceIndex,
+                faceCount = result.faceCount,
+                tableRecords = result.tableSlices,
+                directoryDiagnostics = result.directoryFacts?.directoryDiagnostics.orEmpty(),
+                faceDiagnostics = emptyList(),
+                diagnostics = result.diagnostics,
+                dashboardClassification = result.dashboardClassification,
+                claimPromotionAllowed = result.claimPromotionAllowed,
+            )
+
+        /**
+         * Builds a report entry from already parsed face data without changing
+         * the directory-only [DefaultSFNTParser] route.
+         */
+        fun fromFaceData(
+            entryId: String,
+            fixtureId: String,
+            fixtureKind: String,
+            face: OpenTypeFaceData,
+        ): SFNTDirectoryReportEntry {
+            val evidence = face.faceEvidence()
+            return SFNTDirectoryReportEntry(
+                entryId = entryId,
+                fixtureId = fixtureId,
+                fixtureKind = fixtureKind,
+                sourceId = face.source.id,
+                sourceKind = face.source.kind,
+                displayName = face.source.displayName,
+                parserGeneration = 1,
+                sourceByteOffset = 0,
+                sourceByteLength = face.source.bytes.size,
+                sourceSha256 = face.source.bytes.sfntSha256Hex(),
+                containerKind = SFNTContainerKind.SINGLE_FACE,
+                requestedCollectionIndex = face.faceIndex,
+                selectedFaceIndex = face.faceIndex,
+                faceCount = 1,
+                tableRecords = evidence.tableRecords,
+                directoryDiagnostics = evidence.directoryDiagnostics,
+                faceDiagnostics = evidence.diagnostics,
+                diagnostics = emptyList(),
+                dashboardClassification = "tracked-gap",
+                claimPromotionAllowed = false,
+            )
+        }
+    }
+}
+
+/**
+ * Deterministic directory report for M2 SFNT parser and diagnostic evidence.
+ */
+data class SFNTDirectoryReport(
+    val entries: List<SFNTDirectoryReportEntry>,
+    val schemaVersion: Int = 1,
+    val ticketIds: List<String> = listOf("KFONT-M2-001", "KFONT-M2-002"),
+    val dashboardClassification: String = "tracked-gap",
+    val claimPromotionAllowed: Boolean = false,
+) {
+    init {
+        require(schemaVersion == 1) { "SFNT directory report schemaVersion must be 1." }
+        require(ticketIds == listOf("KFONT-M2-001", "KFONT-M2-002")) {
+            "SFNT directory report ticketIds must be KFONT-M2-001 and KFONT-M2-002."
+        }
+        require(dashboardClassification == "tracked-gap") {
+            "SFNT directory report must remain tracked-gap."
+        }
+        require(!claimPromotionAllowed) {
+            "SFNT directory report cannot promote support claims."
+        }
+    }
+}
+
+/**
+ * Canonical writer for `reports/pure-kotlin-text/sfnt-directory.json`.
+ */
+object SFNTDirectoryReportWriter {
+    fun write(report: SFNTDirectoryReport): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("schema", "org.graphiks.kanvas.font.sfnt.SFNTDirectoryReport.v1", indent = "  ", comma = true)
+        appendSFNTJsonField("schemaVersion", report.schemaVersion, indent = "  ", comma = true)
+        appendStringArrayField("ticketIds", report.ticketIds, indent = "  ", comma = true)
+        appendSFNTJsonField("dashboardClassification", report.dashboardClassification, indent = "  ", comma = true)
+        appendSFNTJsonField("claimPromotionAllowed", report.claimPromotionAllowed, indent = "  ", comma = true)
+        append("  \"entries\": [")
+        val sortedEntries = report.entries.sortedBy { it.entryId }
+        if (sortedEntries.isNotEmpty()) {
+            append("\n")
+            append(sortedEntries.joinToString(",\n") { entry -> entry.toCanonicalJson().prependIndent("    ") })
+            append("\n  ")
+        }
+        append("]\n")
+        append("}\n")
+    }
+}
+
+/**
  * Default parser for OpenType or TrueType SFNT faces.
  *
  * Single-face SFNT sources continue to flow through [SFNTReader]. TrueType or
@@ -560,15 +1135,15 @@ class DefaultOpenTypeFaceParser(
         val kern = rawTableBytes[KERN_TABLE_TAG]?.let { table ->
             runCatching { OpenTypeKernTableParser.parse(table) }
                 .getOrElse { error ->
-                    diagnostics += tableDiagnostic(
-                        source = source,
-                        table = KERN_TABLE_TAG,
-                        message = "Unable to parse OpenType table ${KERN_TABLE_TAG.value}.",
-                        causeCode = "INVALID_TABLE",
-                        cause = error,
-                    )
-                    null
-                }
+                diagnostics += tableDiagnostic(
+                    source = source,
+                    table = KERN_TABLE_TAG,
+                    message = "Unable to parse OpenType table ${KERN_TABLE_TAG.value}.",
+                    causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
+                    cause = error,
+                )
+                null
+            }
         }
         val gposPairs = rawTableBytes[GPOS_TABLE_TAG]?.let { table ->
             runCatching {
@@ -581,7 +1156,7 @@ class DefaultOpenTypeFaceParser(
                     source = source,
                     table = GPOS_TABLE_TAG,
                     message = "Unable to parse OpenType table ${GPOS_TABLE_TAG.value}.",
-                    causeCode = "INVALID_TABLE",
+                    causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
                     cause = error,
                 )
                 null
@@ -607,15 +1182,15 @@ class DefaultOpenTypeFaceParser(
         val svg = rawTableBytes[SVG_TABLE_TAG]?.let { table ->
             runCatching { parseSvgTable(table) }
                 .getOrElse { error ->
-                    diagnostics += tableDiagnostic(
-                        source = source,
-                        table = SVG_TABLE_TAG,
-                        message = "Unable to parse OpenType table ${SVG_TABLE_TAG.value}.",
-                        causeCode = "INVALID_TABLE",
-                        cause = error,
-                    )
-                    null
-                }
+                diagnostics += tableDiagnostic(
+                    source = source,
+                    table = SVG_TABLE_TAG,
+                    message = "Unable to parse OpenType table ${SVG_TABLE_TAG.value}.",
+                    causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
+                    cause = error,
+                )
+                null
+            }
         }
         val bitmap = parseBitmapFont(
             source = source,
@@ -727,7 +1302,7 @@ class DefaultOpenTypeFaceParser(
                 sourceId = source.id,
                 message = "Unable to parse OpenType bitmap tables without a parsed maxp numGlyphs value.",
                 table = CBDT_TABLE_TAG.takeIf { it in rawTableBytes } ?: SBIX_TABLE_TAG,
-                causeCode = "INVALID_TABLE",
+                causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
                 causeMessage = "OpenType bitmap parsing requires maxp numGlyphs.",
             )
             return null
@@ -746,7 +1321,7 @@ class DefaultOpenTypeFaceParser(
                     source = source,
                     table = CBDT_TABLE_TAG,
                     message = "Unable to parse OpenType bitmap tables ${CBDT_TABLE_TAG.value}/${CBLC_TABLE_TAG.value}.",
-                    causeCode = "INVALID_TABLE",
+                    causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
                     cause = error,
                 )
                 emptyMap()
@@ -762,7 +1337,7 @@ class DefaultOpenTypeFaceParser(
                         source = source,
                         table = SBIX_TABLE_TAG,
                         message = "Unable to parse OpenType table ${SBIX_TABLE_TAG.value}.",
-                        causeCode = "INVALID_TABLE",
+                        causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
                         cause = error,
                     )
                     emptyMap()
@@ -1099,7 +1674,7 @@ class DefaultOpenTypeFaceParser(
                     source = source,
                     table = FVAR_TABLE_TAG,
                     message = "Unable to parse OpenType table ${FVAR_TABLE_TAG.value}.",
-                    causeCode = "INVALID_TABLE",
+                    causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
                     cause = error,
                 )
                 return VariationTables()
@@ -1118,7 +1693,7 @@ class DefaultOpenTypeFaceParser(
                 source = source,
                 table = AVAR_TABLE_TAG,
                 message = "Unable to parse OpenType table ${AVAR_TABLE_TAG.value}.",
-                causeCode = "INVALID_TABLE",
+                causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
                 cause = error,
             )
             fvarTables
@@ -2508,6 +3083,29 @@ private fun StringBuilder.appendSFNTJsonField(
     append("\n")
 }
 
+private fun StringBuilder.appendSFNTJsonField(
+    name: String,
+    value: Boolean,
+    indent: String,
+    comma: Boolean,
+) {
+    append(indent).append(sfntJsonString(name)).append(": ").append(value)
+    if (comma) append(",")
+    append("\n")
+}
+
+private fun StringBuilder.appendStringArrayField(
+    name: String,
+    values: List<String>,
+    indent: String,
+    comma: Boolean,
+) {
+    append(indent).append(sfntJsonString(name)).append(": ")
+    append(values.joinToString(prefix = "[", postfix = "]", separator = ", ") { value -> sfntJsonString(value) })
+    if (comma) append(",")
+    append("\n")
+}
+
 private fun StringBuilder.appendSFNTJsonNullableField(
     name: String,
     value: String?,
@@ -2567,6 +3165,190 @@ private fun sfntJsonString(value: String): String = buildString {
 }
 
 private fun String.sfntEvidenceQuoted(): String = sfntJsonString(this)
+
+private fun SFNTParseRequest.diagnosticResult(
+    boundedBytes: ByteArray,
+    containerKind: SFNTContainerKind,
+    requestedIndex: Int,
+    faceCount: Int?,
+    diagnostic: SFNTParseDiagnostic,
+): SFNTParseResult =
+    SFNTParseResult(
+        sourceId = sourceId,
+        sourceKind = sourceKind,
+        displayName = displayName,
+        parserGeneration = parserGeneration,
+        sourceByteOffset = bytes.byteOffset,
+        sourceByteLength = boundedBytes.size,
+        containerKind = containerKind,
+        requestedCollectionIndex = requestedIndex,
+        selectedFaceIndex = null,
+        faceCount = faceCount,
+        directoryFacts = null,
+        faceFacts = null,
+        tableSlices = emptyList(),
+        diagnostics = listOf(diagnostic),
+    )
+
+private fun SFNTParseRequest.collectionIndexDiagnostic(
+    containerKind: SFNTContainerKind,
+    requestedIndex: Int,
+    faceCount: Int?,
+): SFNTParseDiagnostic =
+    SFNTParseDiagnostic(
+        code = "font.collection-index-invalid",
+        message = when (faceCount) {
+            null -> "Requested collection index $requestedIndex is invalid for the source container."
+            1 -> "Requested collection index $requestedIndex is invalid for a single-face SFNT source."
+            else -> "Requested collection index $requestedIndex is outside collection range 0..${faceCount - 1}."
+        },
+        sourceId = sourceId,
+        parserGeneration = parserGeneration,
+        requestedCollectionIndex = requestedIndex,
+        containerKind = containerKind,
+        faceCount = faceCount,
+    )
+
+private fun SFNTParseRequest.unsupportedWrapperDiagnostic(
+    boundedBytes: ByteArray,
+    requestedIndex: Int,
+): SFNTParseDiagnostic {
+    val code = if (boundedBytes.hasKnownUnsupportedSFNTWrapper()) {
+        "font.sfnt.wrapper-unsupported"
+    } else {
+        "font.outline-format-unsupported"
+    }
+    return SFNTParseDiagnostic(
+        code = code,
+        message = if (code == "font.sfnt.wrapper-unsupported") {
+            "Unsupported SFNT wrapper/container; provide bounded raw SFNT, TTC, or OTC bytes."
+        } else {
+            "Unsupported SFNT outline scaler type at the bounded source entry point."
+        },
+        sourceId = sourceId,
+        parserGeneration = parserGeneration,
+        requestedCollectionIndex = requestedIndex,
+        containerKind = SFNTContainerKind.UNKNOWN_WRAPPER,
+        faceCount = null,
+        causeMessage = boundedBytes.sfntLeadingTagDescription(),
+    )
+}
+
+private fun SFNTParseRequest.parseFailureDiagnostic(
+    containerKind: SFNTContainerKind,
+    requestedIndex: Int,
+    faceCount: Int?,
+    error: Throwable,
+): SFNTParseDiagnostic {
+    val message = error.message.orEmpty()
+    val code = when {
+        "faceIndex" in message -> "font.collection-index-invalid"
+        "Unsupported" in message && "scaler type" in message -> "font.outline-format-unsupported"
+        else -> "font.sfnt.wrapper-unsupported"
+    }
+    return SFNTParseDiagnostic(
+        code = code,
+        message = when (code) {
+            "font.collection-index-invalid" -> "Requested collection index $requestedIndex is invalid for the source container."
+            "font.outline-format-unsupported" -> "Unsupported SFNT outline scaler type at the bounded source entry point."
+            else -> "Unable to parse a bounded SFNT directory from the source container."
+        },
+        sourceId = sourceId,
+        parserGeneration = parserGeneration,
+        requestedCollectionIndex = requestedIndex,
+        containerKind = containerKind,
+        faceCount = faceCount,
+        causeMessage = error.message,
+    )
+}
+
+private fun ByteArray.detectSFNTContainerKind(): SFNTContainerKind {
+    if (startsWithTtcTag()) {
+        return SFNTContainerKind.TTC_COLLECTION
+    }
+    if (size < SFNT_TAG_BYTE_LENGTH) {
+        return SFNTContainerKind.UNKNOWN_WRAPPER
+    }
+    val tag = readUInt32BE(0, "SFNT parser source tag")
+    return if (tag.isSupportedSFNTScalerType()) {
+        SFNTContainerKind.SINGLE_FACE
+    } else {
+        SFNTContainerKind.UNKNOWN_WRAPPER
+    }
+}
+
+private fun ByteArray.collectionFaceCountOrNull(): Int? {
+    if (!startsWithTtcTag()) {
+        return null
+    }
+    return runCatching {
+        requireRange(0, TTC_HEADER_SIZE, "SFNT parser TTC header")
+        val version = readUInt32BE(4, "SFNT parser TTC version")
+        require(version == TTC_VERSION_1 || version == TTC_VERSION_2) {
+            "Unsupported TTC/ttcf version ${version.toHexUInt32()}."
+        }
+        val count = readUInt32BE(8, "SFNT parser TTC numFonts")
+        require(count in 1..Int.MAX_VALUE.toLong()) {
+            "TTC/ttcf numFonts $count must be between 1 and ${Int.MAX_VALUE}."
+        }
+        count.toInt()
+    }.getOrNull()
+}
+
+private fun ByteArray.selectTtcDirectoryOnlyFaceInput(faceIndex: Int): SelectedSFNTFaceInput {
+    requireRange(0, TTC_HEADER_SIZE, "SFNT parser TTC header")
+    val version = readUInt32BE(4, "SFNT parser TTC version")
+    require(version == TTC_VERSION_1 || version == TTC_VERSION_2) {
+        "Unsupported TTC/ttcf version ${version.toHexUInt32()}; expected 0x00010000 or 0x00020000."
+    }
+    val faceCount = readUInt32BE(8, "SFNT parser TTC numFonts")
+    require(faceCount in 1..Int.MAX_VALUE.toLong()) {
+        "TTC/ttcf numFonts $faceCount must be between 1 and ${Int.MAX_VALUE}."
+    }
+    require(faceIndex.toLong() < faceCount) {
+        "TTC/ttcf faceIndex $faceIndex is outside collection range 0..${faceCount - 1}."
+    }
+
+    val offsetTableEnd = TTC_HEADER_SIZE.toLong() + faceCount * TTC_OFFSET_TABLE_ENTRY_SIZE.toLong()
+    require(offsetTableEnd <= size.toLong()) {
+        "TTC/ttcf offset table range [$TTC_HEADER_SIZE, $offsetTableEnd) exceeds source length $size."
+    }
+
+    val faceOffsetRecord = TTC_HEADER_SIZE + faceIndex * TTC_OFFSET_TABLE_ENTRY_SIZE
+    val faceOffset = readUInt32BE(faceOffsetRecord, "SFNT parser TTC face offset[$faceIndex]")
+    require(faceOffset <= Int.MAX_VALUE.toLong() && faceOffset + SFNT_DIRECTORY_HEADER_SIZE.toLong() <= size.toLong()) {
+        "TTC/ttcf face $faceIndex offset $faceOffset must allow an SFNT header within source length $size."
+    }
+
+    return SelectedSFNTFaceInput(
+        directory = readSfntDirectoryAt(
+            directoryOffset = faceOffset.toInt(),
+            label = "SFNT parser TTC face $faceIndex",
+        ),
+        readTable = { record -> readSfntTable(record, tableLabel = "SFNT parser TTC") },
+    )
+}
+
+private fun SFNTContainerKind.refineCollectionKind(directory: SFNTTableDirectory): SFNTContainerKind =
+    if (this == SFNTContainerKind.TTC_COLLECTION && directory.scalerType == 0x4f54544fu) {
+        SFNTContainerKind.OTC_COLLECTION
+    } else {
+        this
+    }
+
+private fun ByteArray.hasKnownUnsupportedSFNTWrapper(): Boolean {
+    if (size < SFNT_TAG_BYTE_LENGTH) {
+        return true
+    }
+    return readTag(0, "SFNT parser wrapper tag") in setOf("wOFF", "wOF2")
+}
+
+private fun ByteArray.sfntLeadingTagDescription(): String =
+    if (size < SFNT_TAG_BYTE_LENGTH) {
+        "Source contains $size bytes, fewer than a four-byte SFNT tag."
+    } else {
+        "Leading tag ${readTag(0, "SFNT parser leading tag").sfntEvidenceQuoted()}."
+    }
 
 /**
  * Pure Kotlin factory for turning OpenType sources into core typeface metadata.
@@ -2817,6 +3599,7 @@ private val SVG_TABLE_TAG = SFNTTableTag("SVG ")
 private val METRIC_TABLE_TAGS = listOf(HEAD_TABLE_TAG, HHEA_TABLE_TAG, MAXP_TABLE_TAG, HMTX_TABLE_TAG)
 private val LAYOUT_TABLE_TAGS = setOf(KERN_TABLE_TAG, GPOS_TABLE_TAG)
 private val COLOR_FONT_TABLE_TAGS = setOf(COLR_TABLE_TAG, CPAL_TABLE_TAG, CBDT_TABLE_TAG, CBLC_TABLE_TAG, SBIX_TABLE_TAG, SVG_TABLE_TAG)
+private const val OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC = "font.sfnt.optional-table-malformed"
 private const val CMAP_HEADER_SIZE = 4
 private const val CMAP_ENCODING_RECORD_SIZE = 8
 private const val FORMAT0_HEADER_SIZE = 6

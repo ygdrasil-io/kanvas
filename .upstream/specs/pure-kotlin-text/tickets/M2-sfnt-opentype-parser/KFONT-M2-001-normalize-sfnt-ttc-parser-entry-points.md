@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M2-001"
 title: "Normalize SFNT/TTC parser entry points"
-status: "proposed"
+status: "review"
 milestone: "M2"
 priority: "P0"
 owner_area: "font-sfnt"
@@ -64,11 +64,11 @@ interface SFNTParser {
 
 ## Acceptance Criteria
 
-- [ ] Single-face SFNT and TTC inputs use the same `SFNTParseRequest` and result type.
-- [ ] TTC face selection by index is deterministic and rejects out-of-range indices with `font.collection-index-invalid`.
-- [ ] Parser results expose table directory slices without copying arbitrary out-of-bounds data.
-- [ ] `sfnt-directory.json` includes source ID, container kind, collection index, table records, and diagnostics.
-- [ ] The parser contract does not instantiate scaler, shaper, fallback, or GPU types.
+- [x] Single-face SFNT and TTC inputs use the same `SFNTParseRequest` and result type.
+- [x] TTC face selection by index is deterministic and rejects out-of-range indices with `font.collection-index-invalid`.
+- [x] Parser results expose table directory slices without copying arbitrary out-of-bounds data.
+- [x] `sfnt-directory.json` includes source ID, container kind, collection index, table records, and diagnostics.
+- [x] The parser contract does not instantiate scaler, shaper, fallback, or GPU types.
 
 ## Required Evidence
 
@@ -98,7 +98,11 @@ rtk ./gradlew --no-daemon :font:sfnt:test --tests '*SFNTParser*' --tests '*TTC*'
 ## Status Notes
 
 - `proposed`: Entry-point contract is specified, but no parser dump evidence is attached yet.
-- Move to `ready` after M1 source identity and fixture manifest can provide stable inputs.
+- `review`: `SFNTParseRequest`, `BoundedFontBytes`, `DefaultSFNTParser`, and
+  `SFNTDirectoryReportWriter` are implemented with checked-in
+  `sfnt-directory.json` evidence for Liberation Sans, a generated TTC face, and
+  invalid TTC index refusal. Classification remains `tracked-gap` with
+  `claimPromotionAllowed=false`.
 
 ## Linear Labels
 
