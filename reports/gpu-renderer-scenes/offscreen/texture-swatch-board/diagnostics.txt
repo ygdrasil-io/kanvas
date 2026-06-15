@@ -1,0 +1,7 @@
+rendered texture-swatch-board via WebGPU offscreen
+adapter=Apple M2 Max
+fillRectCommands=0
+fillRRectCommands=0
+linearGradientRectCommands=0
+clipCommands=0
+bitmapRectCommands=2

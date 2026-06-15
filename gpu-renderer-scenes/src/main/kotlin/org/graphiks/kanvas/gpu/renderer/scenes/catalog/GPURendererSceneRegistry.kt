@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.catalog
 
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSampling
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSource
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
 
@@ -107,7 +109,18 @@ object GPURendererSceneRegistry {
                     label = "avatar-rrect-clip",
                     rect = SceneRect(36f, 28f, 284f, 172f),
                 ),
-                SceneCommand.BitmapRect("avatar-cell"),
+                SceneCommand.BitmapRect(
+                    label = "avatar-cell",
+                    rect = SceneRect(24f, 20f, 296f, 180f),
+                    source = SceneBitmapSource(
+                        topLeft = SceneColor.blue(0.95f),
+                        topRight = SceneColor.green(0.88f),
+                        bottomLeft = SceneColor.amber(0.92f),
+                        bottomRight = SceneColor.red(),
+                    ),
+                    sampling = SceneBitmapSampling.Linear,
+                    paintOrder = 1,
+                ),
             ),
         ),
         scene(
@@ -117,8 +130,29 @@ object GPURendererSceneRegistry {
             tags = setOf(SceneTag.Image),
             links = listOf(SceneRoadmapLink.milestone("M4")),
             commands = listOf(
-                SceneCommand.BitmapRect("nearest-swatch"),
-                SceneCommand.BitmapRect("linear-swatch"),
+                SceneCommand.BitmapRect(
+                    label = "nearest-swatch",
+                    rect = SceneRect(36f, 42f, 148f, 154f),
+                    source = SceneBitmapSource(
+                        topLeft = SceneColor.red(),
+                        topRight = SceneColor.blue(),
+                        bottomLeft = SceneColor.green(),
+                        bottomRight = SceneColor.amber(),
+                    ),
+                    sampling = SceneBitmapSampling.Nearest,
+                ),
+                SceneCommand.BitmapRect(
+                    label = "linear-swatch",
+                    rect = SceneRect(172f, 42f, 284f, 154f),
+                    source = SceneBitmapSource(
+                        topLeft = SceneColor.amber(),
+                        topRight = SceneColor.green(),
+                        bottomLeft = SceneColor.blue(),
+                        bottomRight = SceneColor.red(),
+                    ),
+                    sampling = SceneBitmapSampling.Linear,
+                    paintOrder = 1,
+                ),
             ),
         ),
         scene(

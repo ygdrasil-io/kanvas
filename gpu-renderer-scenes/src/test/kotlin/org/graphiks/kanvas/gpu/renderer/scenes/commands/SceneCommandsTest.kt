@@ -51,6 +51,19 @@ class SceneCommandsTest {
             ).family,
         )
         assertEquals("clip", SceneCommand.Clip("clip", SceneRect(0f, 0f, 8f, 8f)).family)
+        assertEquals(
+            "bitmap-rect",
+            SceneCommand.BitmapRect(
+                label = "bitmap",
+                rect = SceneRect(0f, 0f, 8f, 8f),
+                source = SceneBitmapSource(
+                    topLeft = SceneColor.red(),
+                    topRight = SceneColor.blue(),
+                    bottomLeft = SceneColor.green(),
+                    bottomRight = SceneColor.amber(),
+                ),
+            ).family,
+        )
         assertEquals("runtime-effect", SceneCommand.RuntimeEffectTile("simple-rt").family)
         assertEquals("vertices", SceneCommand.MeshRibbon("mesh").family)
     }
@@ -69,6 +82,7 @@ class SceneCommandsTest {
             )
         }
         assertFailsWith<IllegalArgumentException> { SceneCommand.Clip("", SceneRect(0f, 0f, 8f, 8f)) }
+        assertFailsWith<IllegalArgumentException> { SceneCommand.BitmapRect(" ") }
         assertFailsWith<IllegalArgumentException> { SceneCommand.RuntimeEffectTile("") }
         assertFailsWith<IllegalArgumentException> { SceneCommand.MeshRibbon("\t") }
     }
@@ -84,6 +98,19 @@ class SceneCommandsTest {
                 SceneRect(0f, 0f, 8f, 8f),
                 SceneColor.red(),
                 SceneColor.blue(),
+                paintOrder = -1,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.BitmapRect(
+                label = "bitmap",
+                rect = SceneRect(0f, 0f, 8f, 8f),
+                source = SceneBitmapSource(
+                    topLeft = SceneColor.red(),
+                    topRight = SceneColor.blue(),
+                    bottomLeft = SceneColor.green(),
+                    bottomRight = SceneColor.amber(),
+                ),
                 paintOrder = -1,
             )
         }
