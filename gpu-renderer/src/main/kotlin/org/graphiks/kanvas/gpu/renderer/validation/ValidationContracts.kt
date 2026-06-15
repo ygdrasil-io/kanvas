@@ -34,6 +34,11 @@ class GPUValidationFixture {
                 ),
                 GPUContractDump.Entry(
                     ownerPackage = "commands",
+                    concept = "NormalizedDrawCommand.FillRRect",
+                    detail = "first-expansion rounded-rect command",
+                ),
+                GPUContractDump.Entry(
+                    ownerPackage = "commands",
                     concept = "GPUMaterialDescriptor.SolidColor",
                     detail = "first-slice material descriptor",
                 ),
@@ -1756,6 +1761,8 @@ private val firstRoutePositiveEvidenceCategories = setOf(
 private val firstRouteUnsupportedFamilies = listOf(
     "perspective-transform",
     "singular-transform",
+    "rrect-scale-transform",
+    "rrect-affine-transform",
     "unsupported-target-format",
     "unsupported-blend",
     "non-simple-clip",

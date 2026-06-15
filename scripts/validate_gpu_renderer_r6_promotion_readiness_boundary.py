@@ -34,16 +34,20 @@ EXPECTED_ROOT_GENERATION_COMMAND = (
     "rtk ./gradlew --no-daemon :gpu-renderer:gpuRendererR6FirstRoutePmEvidenceBundle"
 )
 EXPECTED_ROOT_PM_PACKAGE_COMMAND = "rtk ./gradlew --no-daemon pipelinePmBundle"
+EXPECTED_ROOT_ACTIVATION_DECISION_REF = "reports/gpu-renderer/2026-06-14-m1-promotion-policy-decision.md"
+EXPECTED_ROOT_PACKAGING_STATE = "activation-candidate"
+EXPECTED_ROOT_ADAPTER_EVIDENCE_PROVENANCE = "opt-in-adapter-backed-r6-executed-diagnostic"
+EXPECTED_ROOT_ADAPTER_EVIDENCE_REQUIREMENT = "required-before-product-activation"
 EXPECTED_ROOT_NON_CLAIMS = [
     "No product route activation.",
     "No WebGPU adapter, Kadre window, or native demo requirement for this bundle.",
-    "No first-route support claim while promotion evidence is missing.",
+    "Activation-candidate PM packaging is not a first-route support claim.",
     "No hidden CPU-rendered texture fallback.",
 ]
 EXPECTED_ROOT_NOTICE = (
-    "The GPU renderer R6 bundle packages validation-owned first-route PM evidence. "
-    "The default artifact is refusal-first and incomplete; it is review evidence, "
-    "not a product support claim."
+    "The GPU renderer R6 bundle packages validation-owned first-route PM evidence as an M1 activation candidate. "
+    "The default artifact remains refusal-first and incomplete; this is PM packaging, "
+    "not product route activation."
 )
 EXPECTED_EXECUTED_VALIDATION_REPORT = "diagnostic-webgpu-first-route-pm-evidence"
 EXPECTED_EXECUTED_ARTIFACT_DIRECTORY = (
@@ -102,6 +106,11 @@ ROOT_DEFAULT_ENTRY_FIELDS = {
     "key",
     "claimLevel",
     "status",
+    "packagingState",
+    "validationReportStatus",
+    "activationDecisionRef",
+    "adapterEvidenceProvenance",
+    "adapterEvidenceRequirement",
     "promotionGate",
     "promotionGatePassed",
     "missingEvidence",
@@ -275,8 +284,28 @@ def validate_root_default_entry(entry: dict[str, Any]) -> dict[str, Any]:
         "root default PM evidence claimLevel changed",
     )
     require(
-        entry.get("status") == "Incomplete",
-        "root default PM evidence must remain Incomplete",
+        entry.get("status") == "ActivationCandidate",
+        "root default PM evidence must remain ActivationCandidate",
+    )
+    require(
+        entry.get("packagingState") == EXPECTED_ROOT_PACKAGING_STATE,
+        "root default PM packaging state changed",
+    )
+    require(
+        entry.get("validationReportStatus") == "Incomplete",
+        "root default PM validation report status must remain Incomplete",
+    )
+    require(
+        entry.get("activationDecisionRef") == EXPECTED_ROOT_ACTIVATION_DECISION_REF,
+        "root default PM activation decision reference changed",
+    )
+    require(
+        entry.get("adapterEvidenceProvenance") == EXPECTED_ROOT_ADAPTER_EVIDENCE_PROVENANCE,
+        "root default PM adapter evidence provenance changed",
+    )
+    require(
+        entry.get("adapterEvidenceRequirement") == EXPECTED_ROOT_ADAPTER_EVIDENCE_REQUIREMENT,
+        "root default PM adapter evidence requirement changed",
     )
     require(entry.get("promotionGate") == "first-route-promotion", "root default promotion gate changed")
     require_bool(entry, "promotionGatePassed", False, "rootDefaultBundle")
@@ -303,6 +332,8 @@ def validate_root_default_entry(entry: dict[str, Any]) -> dict[str, Any]:
     return {
         "key": entry["key"],
         "status": entry["status"],
+        "packagingState": entry["packagingState"],
+        "validationReportStatus": entry["validationReportStatus"],
         "promotionGatePassed": entry["promotionGatePassed"],
         "missingEvidence": list(entry["missingEvidence"]),
         "artifactCount": entry.get("artifactCount"),
@@ -357,6 +388,11 @@ def validate_root_pm_manifest(pm_bundle_dir: Path, entry: dict[str, Any]) -> Non
         "key",
         "claimLevel",
         "status",
+        "packagingState",
+        "validationReportStatus",
+        "activationDecisionRef",
+        "adapterEvidenceProvenance",
+        "adapterEvidenceRequirement",
         "promotionGate",
         "promotionGatePassed",
         "missingEvidence",
@@ -410,6 +446,11 @@ def validate_root_pm_release_copy(pm_bundle_dir: Path, entry: dict[str, Any]) ->
         "key",
         "claimLevel",
         "status",
+        "packagingState",
+        "validationReportStatus",
+        "activationDecisionRef",
+        "adapterEvidenceProvenance",
+        "adapterEvidenceRequirement",
         "promotionGate",
         "promotionGatePassed",
         "missingEvidence",
@@ -568,14 +609,14 @@ def validate_boundary(pm_bundle_dir: Path, executed_summary_path: Path | None = 
         "productRouteActivated": False,
         "releaseBlocking": False,
         "readinessDelta": 0.0,
-        "promotionDecisionRequired": True,
+        "promotionDecisionRequired": False,
         "requiredBeforeActivation": [
-            "Reviewed non-skipped adapter-backed R6 executed evidence.",
-            "Explicit release/product activation decision.",
-            "Root PM packaging policy update if adapter-backed evidence becomes release-gated.",
+            "Controlled first-route product flag from KGPU-M1-003.",
+            "Rollback and parity validation from KGPU-M1-004.",
+            "No default product route until the flag and rollback gates are accepted.",
         ],
         "nonClaims": [
-            "The root PM bundle remains refusal-first and incomplete.",
+            "The root PM bundle is activation-candidate packaging with refusal-first evidence.",
             "The executed diagnostic lane is opt-in and not a root pipelinePmBundle dependency.",
             "This boundary report does not activate a product route or move readiness.",
         ],
@@ -593,10 +634,12 @@ def write_markdown_report(result: dict[str, Any], report_path: Path) -> None:
     lines = [
         "# GPU Renderer R6 Promotion Readiness Boundary",
         "",
-        "This report validates the boundary between the root refusal-first PM bundle and the opt-in executed diagnostic evidence lane.",
+        "This report validates the boundary between the root activation-candidate PM packaging and the opt-in executed diagnostic evidence lane.",
         "",
         f"- Classification: `{result['classification']}`",
         f"- Root default bundle status: `{root['status']}`",
+        f"- Root default packaging state: `{root['packagingState']}`",
+        f"- Root default validation report status: `{root['validationReportStatus']}`",
         f"- Root default promotion gate passed: `{markdown_bool(root['promotionGatePassed'])}`",
         f"- Root missing evidence: `{','.join(root['missingEvidence'])}`",
         f"- Executed diagnostic status: `{executed['status']}`",

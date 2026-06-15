@@ -1,7 +1,7 @@
 ---
 id: KGPU-M1-002
 title: "Promote root PM bundle to activation candidate"
-status: proposed
+status: done
 milestone: M1
 priority: P0
 owner_area: validation-pm
@@ -57,9 +57,9 @@ data class PMActivationCandidate(val status: String, val activationDecisionRef: 
 
 ## Acceptance Criteria
 
-- [ ] Manifest distinguishes refusal-first, executed diagnostic, and activation candidate states.
-- [ ] Adapter-backed provenance is explicit.
-- [ ] Existing validators reject product-support wording before approval.
+- [x] Manifest distinguishes refusal-first, executed diagnostic, and activation candidate states.
+- [x] Adapter-backed provenance is explicit.
+- [x] Existing validators reject product-support wording before approval.
 
 ## Required Evidence
 
@@ -87,7 +87,17 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Depends on KGPU-M1-001.
+- `done`: Root PM bundle packaging now reports `ActivationCandidate` with
+  `packagingState=activation-candidate`, while the underlying validation report
+  remains `Incomplete`, `productRouteActivated=false`, `releaseBlocking=false`,
+  and `readinessDelta=0.0`.
+- Fresh evidence:
+  `reports/gpu-renderer/2026-06-14-m1-002-activation-candidate-pm-bundle.md`
+  and `reports/gpu-renderer/2026-06-14-r6-promotion-readiness-boundary.md`.
+- Independent review `019ec714-40ab-73b1-a242-9dc36c3b2694` approved moving
+  the ticket to `done`: no hidden product activation, no release blocking, no
+  readiness movement, adapter-backed evidence remains opt-in, and no widened
+  GPU/WebGPU support claim was found.
 
 ## Linear Labels
 

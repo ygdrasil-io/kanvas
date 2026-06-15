@@ -1,7 +1,7 @@
 ---
 id: KGPU-M1-003
 title: "Add controlled first-route product flag"
-status: proposed
+status: done
 milestone: M1
 priority: P0
 owner_area: gpu-raster-adapter
@@ -57,9 +57,9 @@ data class FirstRouteFlagState(val enabled: Boolean, val routeScope: String)
 
 ## Acceptance Criteria
 
-- [ ] Flag scope is limited to accepted solid `FillRect`.
-- [ ] Legacy fallback remains available and visible.
-- [ ] Unsupported variants keep stable refusals or legacy policy behavior.
+- [x] Flag scope is limited to accepted solid `FillRect`.
+- [x] Legacy fallback remains available and visible.
+- [x] Unsupported variants keep stable refusals or legacy policy behavior.
 
 ## Required Evidence
 
@@ -88,7 +88,16 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Product flag must wait on policy and PM bundle decisions.
+- `done`: Added explicit `kanvas.gpu.renderer.product.fillRect` flag support
+  for the solid `FillRect` first route. The flag is disabled by default, records
+  `ProductFlagged` diagnostics only when explicitly enabled, keeps legacy
+  rendering available, refuses `StrokeAndFill` product expansion, and does not
+  submit GPU renderer work or readback evidence.
+- Fresh evidence:
+  `reports/gpu-renderer/2026-06-14-m1-003-controlled-first-route-flag.md`.
+- Independent review `019ec724-9088-7512-b14c-e5c5090e84dd` approved moving
+  the ticket to `done`: no hidden product activation, release blocking,
+  readiness movement, or broadened route support claim was found.
 
 ## Linear Labels
 

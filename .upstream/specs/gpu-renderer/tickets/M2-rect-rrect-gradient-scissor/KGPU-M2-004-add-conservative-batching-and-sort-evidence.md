@@ -1,7 +1,7 @@
 ---
 id: KGPU-M2-004
 title: "Add conservative batching and sort evidence"
-status: proposed
+status: done
 milestone: M2
 priority: P1
 owner_area: analysis-recording
@@ -87,7 +87,13 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Follows M2 geometry/material/clip routes.
+- `done`: `M2SimpleSceneEvidenceTest` adds deterministic batching evidence
+  for two compatible rrect/linear-gradient/scissor draws and stable split
+  reasons for material-key, clip-stack, and layer/order boundaries. Product
+  activation remains false. Independent review
+  `019ec7aa-f95b-7f40-9f40-1bf80d87d2b9` accepted the evidence as
+  conservative batching proof only and confirmed no payload, resource, layer,
+  or ordering boundary is crossed.
 
 ## Linear Labels
 

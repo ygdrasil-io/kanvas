@@ -226,7 +226,7 @@ REQUIRED_ARTIFACT_SNIPPETS = {
     ],
     "diagnostic-webgpu-first-route-pm-evidence-14-unsupported-route-refusals.txt": [
         "routing:UnsupportedRouteFamilyRefusal:",
-        "unsupportedFamilies=perspective-transform,singular-transform,unsupported-target-format,unsupported-blend,non-simple-clip,layer-filter-destination-read,missing-capability,wgsl-validation-or-abi-mismatch",
+        "unsupportedFamilies=perspective-transform,singular-transform,rrect-scale-transform,rrect-affine-transform,unsupported-target-format,unsupported-blend,non-simple-clip,layer-filter-destination-read,missing-capability,wgsl-validation-or-abi-mismatch",
         "diagnostics=none",
     ],
     "diagnostic-webgpu-first-route-pm-evidence-15-recording-analysis.txt": [

@@ -116,9 +116,29 @@ class GpuRendererR6PmEvidenceValidatorTest(unittest.TestCase):
             _, rows, validated_entry = validator.validate_output(output_dir)
 
         self.assertEqual(14, len(rows))
-        self.assertEqual("Incomplete", validated_entry["status"])
+        self.assertEqual("ActivationCandidate", validated_entry["status"])
+        self.assertEqual("Incomplete", validated_entry["validationReportStatus"])
         self.assertFalse(validated_entry["promotionGatePassed"])
         self.assertFalse(validated_entry["productRouteActivated"])
+
+    def test_validate_output_builds_m1_activation_candidate_entry_without_product_activation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            output_dir = write_fixture_bundle(Path(temp))
+
+            _, _, entry = validator.validate_output(output_dir)
+
+        self.assertEqual("ActivationCandidate", entry["status"])
+        self.assertEqual("activation-candidate", entry["packagingState"])
+        self.assertEqual("Incomplete", entry["validationReportStatus"])
+        self.assertEqual(
+            "reports/gpu-renderer/2026-06-14-m1-promotion-policy-decision.md",
+            entry["activationDecisionRef"],
+        )
+        self.assertEqual("opt-in-adapter-backed-r6-executed-diagnostic", entry["adapterEvidenceProvenance"])
+        self.assertEqual("required-before-product-activation", entry["adapterEvidenceRequirement"])
+        self.assertFalse(entry["productRouteActivated"])
+        self.assertFalse(entry["releaseBlocking"])
+        self.assertEqual(0.0, entry["readinessDelta"])
 
     def test_validate_output_rejects_unmanifested_root_bundle_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
