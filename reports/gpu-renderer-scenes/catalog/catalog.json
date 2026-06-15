@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "sceneCount": 13,
+  "scenes": [
+    {
+      "sceneId": "solid-card-stack",
+      "title": "Solid Card Stack",
+      "description": "Rectangles with alpha values and deterministic draw order.",
+      "tags": ["Rect"],
+      "kgpuMilestones": ["M0","M1"],
+      "rStages": ["R0","R1","R2","R3","R4","R5","R6"],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "rounded-panel-gradient",
+      "title": "Rounded Panel Gradient",
+      "description": "Rounded rect with linear gradient and scissor.",
+      "tags": ["RRect","Gradient","Clip"],
+      "kgpuMilestones": ["M2"],
+      "rStages": ["R1","R2","R3"],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "path-badge-and-stroke",
+      "title": "Path Badge And Stroke",
+      "description": "Rounded badge and rectangular stroke proxy using current command families.",
+      "tags": ["RRect","Rect"],
+      "kgpuMilestones": ["M3"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "clipped-avatar-grid",
+      "title": "Clipped Avatar Grid",
+      "description": "Repeated content through bounded clip variants.",
+      "tags": ["Clip","Image"],
+      "kgpuMilestones": ["M3","M5"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "texture-swatch-board",
+      "title": "Texture Swatch Board",
+      "description": "Already-decoded bitmap swatches represented by bitmap-rect commands.",
+      "tags": ["Image"],
+      "kgpuMilestones": ["M4"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "layered-shadow-card",
+      "title": "Layered Shadow Card",
+      "description": "Layer and filter command markers for bounded route observation.",
+      "tags": ["Layer","Filter"],
+      "kgpuMilestones": ["M5"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "filtered-photo-chip",
+      "title": "Filtered Photo Chip",
+      "description": "Bitmap and filter command markers for bounded route observation.",
+      "tags": ["Filter","Image"],
+      "kgpuMilestones": ["M5"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "receipt-text-run",
+      "title": "Receipt Text Run",
+      "description": "Simple typed text-run path and future A8 atlas route.",
+      "tags": ["Text"],
+      "kgpuMilestones": ["M6"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "runtime-effect-color-tile",
+      "title": "Runtime Effect Color Tile",
+      "description": "Runtime-effect tile command marker with bounded parameter intent.",
+      "tags": ["RuntimeEffect"],
+      "kgpuMilestones": ["M7"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "blend-mode-strip",
+      "title": "Blend Mode Strip",
+      "description": "Rect strip reserved for future explicit blend coverage.",
+      "tags": ["Rect"],
+      "kgpuMilestones": ["M7"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "mesh-ribbon",
+      "title": "Mesh Ribbon",
+      "description": "Draw vertices and mesh-like geometry visibility.",
+      "tags": ["Vertices"],
+      "kgpuMilestones": ["M8"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "cache-pressure-deck",
+      "title": "Cache Pressure Deck",
+      "description": "Repeated rect commands for future cache telemetry observation.",
+      "tags": ["Rect"],
+      "kgpuMilestones": ["M9"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "legacy-route-comparison",
+      "title": "Legacy Route Comparison",
+      "description": "Rect command marker for future legacy-route comparison.",
+      "tags": ["Rect"],
+      "kgpuMilestones": ["M10"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    }
+  ]
+}
