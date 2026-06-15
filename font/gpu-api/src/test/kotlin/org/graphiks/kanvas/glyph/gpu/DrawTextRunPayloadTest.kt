@@ -29,7 +29,7 @@ class DrawTextRunPayloadTest {
         assertContains(json, """"artifactKeyHashes":["sha256:a8-atlas"]""")
         assertContains(json, """"atlasGenerations":[3]""")
         assertContains(json, """"uploadDependencies":[{"id":"550e8400-e29b-41d4-a716-446655441110","label":"upload-a8-page-0"}]""")
-        assertContains(json, """"routeDiagnostics":[]""")
+        assertContains(json, """"diagnostics":[]""")
         assertContains(json, """"routePromotion":"not-promoted"""")
         assertContains(json, """"productActivation":false""")
         assertEquals(
@@ -49,7 +49,7 @@ class DrawTextRunPayloadTest {
         assertContains(leakReport.toCanonicalJson(), """"fieldPath":"uploadDependencies","typeName":"List<GPUTextUploadDependencyRef>"""")
         assertContains(leakReport.toCanonicalJson(), """"fieldPath":"uploadDependencies[0].id","typeName":"GPUTextUploadDependencyID","value":"550e8400-e29b-41d4-a716-446655441110"""")
         assertContains(leakReport.toCanonicalJson(), """"fieldPath":"uploadDependencies[0].label","typeName":"String","value":"upload-a8-page-0"""")
-        assertContains(leakReport.toCanonicalJson(), """"fieldPath":"routeDiagnostics","typeName":"List<GPUTextRouteDiagnosticRef>"""")
+        assertContains(leakReport.toCanonicalJson(), """"fieldPath":"diagnostics","typeName":"List<GPUTextRouteDiagnosticRef>"""")
         listOf("SkFont", "SkTypeface", "SkTextBlob", "SkPaint", "fontBytes", "GPUHandle").forEach { token ->
             assertFalse(json.contains(token), "Payload dump leaked forbidden token $token: $json")
         }
@@ -64,7 +64,7 @@ class DrawTextRunPayloadTest {
                     label = "upload-before-sample:a8-page-0",
                 ),
             ),
-            routeDiagnostics = listOf(
+            diagnostics = listOf(
                 fixtureRouteDiagnosticRef(
                     uuid = "550e8400-e29b-41d4-a716-446655441121",
                     code = "text.gpu.upload-plan-missing",
@@ -78,9 +78,9 @@ class DrawTextRunPayloadTest {
 
         assertEquals("pass", report.status)
         assertEquals(Uuid.parse("550e8400-e29b-41d4-a716-446655441120"), payload.uploadDependencies.single().id.value)
-        assertEquals(Uuid.parse("550e8400-e29b-41d4-a716-446655441121"), payload.routeDiagnostics.single().id.value)
+        assertEquals(Uuid.parse("550e8400-e29b-41d4-a716-446655441121"), payload.diagnostics.single().id.value)
         assertContains(payload.toCanonicalJson(), """"uploadDependencies":[{"id":"550e8400-e29b-41d4-a716-446655441120","label":"upload-before-sample:a8-page-0"}]""")
-        assertContains(payload.toCanonicalJson(), """"routeDiagnostics":[{"id":"550e8400-e29b-41d4-a716-446655441121","code":"text.gpu.upload-plan-missing","message":"Upload plan was not registered for the fixture route."}]""")
+        assertContains(payload.toCanonicalJson(), """"diagnostics":[{"id":"550e8400-e29b-41d4-a716-446655441121","code":"text.gpu.upload-plan-missing","message":"Upload plan was not registered for the fixture route."}]""")
         assertContains(
             reportJson,
             """"fieldPath":"uploadDependencies[0].id","typeName":"GPUTextUploadDependencyID","value":"550e8400-e29b-41d4-a716-446655441120"""",
@@ -91,11 +91,11 @@ class DrawTextRunPayloadTest {
         )
         assertContains(
             reportJson,
-            """"fieldPath":"routeDiagnostics[0].code","typeName":"String","value":"text.gpu.upload-plan-missing"""",
+            """"fieldPath":"diagnostics[0].code","typeName":"String","value":"text.gpu.upload-plan-missing"""",
         )
         assertContains(
             reportJson,
-            """"fieldPath":"routeDiagnostics[0].message","typeName":"String","value":"Upload plan was not registered for the fixture route."""",
+            """"fieldPath":"diagnostics[0].message","typeName":"String","value":"Upload plan was not registered for the fixture route."""",
         )
     }
 
@@ -104,7 +104,7 @@ class DrawTextRunPayloadTest {
         val payload = fixtureDrawTextRunPayload(
             artifactKeyHashes = listOf("fontBytes:sha256:bad"),
             uploadDependencies = listOf(fixtureUploadDependencyRef(label = "GPUHandle:webgpu-texture-7")),
-            routeDiagnostics = listOf(
+            diagnostics = listOf(
                 fixtureRouteDiagnosticRef(message = "SkFont(opaque-stringified-wrapper)"),
                 fixtureRouteDiagnosticRef(
                     uuid = "550e8400-e29b-41d4-a716-446655441131",
@@ -120,8 +120,8 @@ class DrawTextRunPayloadTest {
             listOf(
                 "artifactKeyHashes[0]",
                 "uploadDependencies[0].label",
-                "routeDiagnostics[0].message",
-                "routeDiagnostics[1].message",
+                "diagnostics[0].message",
+                "diagnostics[1].message",
             ),
             report.findings.map { finding -> finding.fieldPath },
         )
@@ -143,13 +143,13 @@ class DrawTextRunPayloadTest {
     @Test
     fun `draw text run leakage report rejects generic SkPath diagnostics`() {
         val payload = fixtureDrawTextRunPayload(
-            routeDiagnostics = listOf(fixtureRouteDiagnosticRef(message = "SkPath(...)")),
+            diagnostics = listOf(fixtureRouteDiagnosticRef(message = "SkPath(...)")),
         )
 
         val report = payload.noSkLeakageReport()
 
         assertEquals("fail", report.status)
-        assertEquals(listOf("routeDiagnostics[0].message"), report.findings.map { finding -> finding.fieldPath })
+        assertEquals(listOf("diagnostics[0].message"), report.findings.map { finding -> finding.fieldPath })
         assertEquals(
             listOf("unsupported.text.sk_type_leaked"),
             report.findings.map { finding -> finding.rendererDiagnostic },
@@ -184,13 +184,13 @@ class DrawTextRunPayloadTest {
     @Test
     fun `draw text run leakage report rejects nondumpable payload markers`() {
         val payload = fixtureDrawTextRunPayload(
-            routeDiagnostics = listOf(fixtureRouteDiagnosticRef(message = "payload_nondumpable: NonDumpableDrawTextRun")),
+            diagnostics = listOf(fixtureRouteDiagnosticRef(message = "payload_nondumpable: NonDumpableDrawTextRun")),
         )
 
         val report = payload.noSkLeakageReport()
 
         assertEquals("fail", report.status)
-        assertEquals(listOf("routeDiagnostics[0].message"), report.findings.map { finding -> finding.fieldPath })
+        assertEquals(listOf("diagnostics[0].message"), report.findings.map { finding -> finding.fieldPath })
         assertEquals(
             listOf("text.gpu.payload-nondumpable"),
             report.findings.map { finding -> finding.handoffDiagnostic },
@@ -232,7 +232,7 @@ class DrawTextRunPayloadTest {
         val artifactKeyHashes = mutableListOf("sha256:a8-atlas")
         val atlasGenerations = mutableListOf(GPUTextArtifactGeneration(3))
         val uploadDependencies = mutableListOf(fixtureUploadDependencyRef(label = "upload-a8-page-0"))
-        val routeDiagnostics = mutableListOf(
+        val diagnostics = mutableListOf(
             fixtureRouteDiagnosticRef(
                 code = "text.gpu.fixture",
                 message = "quote\"slash\\line\nwrapped",
@@ -244,7 +244,7 @@ class DrawTextRunPayloadTest {
             artifactKeyHashes = artifactKeyHashes,
             atlasGenerations = atlasGenerations,
             uploadDependencies = uploadDependencies,
-            routeDiagnostics = routeDiagnostics,
+            diagnostics = diagnostics,
         )
         val json = payload.toCanonicalJson()
 
@@ -259,7 +259,7 @@ class DrawTextRunPayloadTest {
             uuid = "550e8400-e29b-41d4-a716-446655441199",
             label = "GPUHandle",
         )
-        routeDiagnostics += fixtureRouteDiagnosticRef(
+        diagnostics += fixtureRouteDiagnosticRef(
             uuid = "550e8400-e29b-41d4-a716-446655441198",
             message = "SkFont",
         )
@@ -268,7 +268,7 @@ class DrawTextRunPayloadTest {
         assertContains(json, """"glyphIDs":[42,43]""")
         assertContains(json, """"advances":[8.0,9.0]""")
         assertContains(json, """"offsets":[0.0,1.0]""")
-        assertContains(json, """"routeDiagnostics":[{"id":"550e8400-e29b-41d4-a716-446655441130","code":"text.gpu.fixture","message":"quote\"slash\\line\nwrapped"}]""")
+        assertContains(json, """"diagnostics":[{"id":"550e8400-e29b-41d4-a716-446655441130","code":"text.gpu.fixture","message":"quote\"slash\\line\nwrapped"}]""")
         listOf("Injected", "InjectedArtifact", "fontBytes", "GPUHandle", "SkFont").forEach { token ->
             assertFalse(payload.toCanonicalJson().contains(token), "Payload dump changed after source mutation: $token")
         }
@@ -328,7 +328,7 @@ class DrawTextRunPayloadTest {
         artifactKeyHashes: List<String> = listOf("sha256:a8-atlas"),
         atlasGenerations: List<GPUTextArtifactGeneration> = listOf(GPUTextArtifactGeneration(3)),
         uploadDependencies: List<GPUTextUploadDependencyRef> = listOf(fixtureUploadDependencyRef()),
-        routeDiagnostics: List<GPUTextRouteDiagnosticRef> = emptyList(),
+        diagnostics: List<GPUTextRouteDiagnosticRef> = emptyList(),
         routePromotion: String = "not-promoted",
         productActivation: Boolean = false,
     ): DrawTextRunPayload =
@@ -346,7 +346,7 @@ class DrawTextRunPayloadTest {
             artifactKeyHashes = artifactKeyHashes,
             atlasGenerations = atlasGenerations,
             uploadDependencies = uploadDependencies,
-            routeDiagnostics = routeDiagnostics,
+            diagnostics = diagnostics,
             provenance = TextEvidenceProvenance("fixture", "KFONT-M11-003"),
             routePromotion = routePromotion,
             productActivation = productActivation,
@@ -411,7 +411,7 @@ class DrawTextRunPayloadTest {
             "\"artifactKeyHashes\":[\"sha256:a8-atlas\"]," +
             "\"atlasGenerations\":[3]," +
             "\"uploadDependencies\":[{\"id\":\"550e8400-e29b-41d4-a716-446655441110\",\"label\":\"upload-a8-page-0\"}]," +
-            "\"routeDiagnostics\":[]," +
+            "\"diagnostics\":[]," +
             "\"provenance\":{\"source\":\"fixture\",\"ticket\":\"KFONT-M11-003\"}," +
             "\"routePromotion\":\"not-promoted\"," +
             "\"productActivation\":false" +

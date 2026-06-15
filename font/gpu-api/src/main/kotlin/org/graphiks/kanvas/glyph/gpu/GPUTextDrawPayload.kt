@@ -76,7 +76,7 @@ class DrawTextRunPayload(
     artifactKeyHashes: List<String>,
     atlasGenerations: List<GPUTextArtifactGeneration>,
     uploadDependencies: List<GPUTextUploadDependencyRef>,
-    routeDiagnostics: List<GPUTextRouteDiagnosticRef>,
+    diagnostics: List<GPUTextRouteDiagnosticRef>,
     val provenance: TextEvidenceProvenance,
     val routePromotion: String = DRAW_TEXT_RUN_NOT_PROMOTED,
     val productActivation: Boolean = false,
@@ -86,7 +86,7 @@ class DrawTextRunPayload(
     val artifactKeyHashes: List<String> = artifactKeyHashes.toList()
     val atlasGenerations: List<GPUTextArtifactGeneration> = atlasGenerations.toList()
     val uploadDependencies: List<GPUTextUploadDependencyRef> = uploadDependencies.toList()
-    val routeDiagnostics: List<GPUTextRouteDiagnosticRef> = routeDiagnostics.toList()
+    val diagnostics: List<GPUTextRouteDiagnosticRef> = diagnostics.toList()
 
     init {
         require(commandId.isNotBlank()) { "commandId must not be blank." }
@@ -187,15 +187,15 @@ class DrawTextRunPayload(
             )
             fields += TextPayloadField("uploadDependencies[$index].label", "String", dependency.label)
         }
-        fields += TextPayloadField("routeDiagnostics", "List<GPUTextRouteDiagnosticRef>")
-        routeDiagnostics.forEachIndexed { index, diagnostic ->
+        fields += TextPayloadField("diagnostics", "List<GPUTextRouteDiagnosticRef>")
+        diagnostics.forEachIndexed { index, diagnostic ->
             fields += TextPayloadField(
-                "routeDiagnostics[$index].id",
+                "diagnostics[$index].id",
                 "GPUTextRouteDiagnosticID",
                 diagnostic.id.value.toString(),
             )
-            fields += TextPayloadField("routeDiagnostics[$index].code", "String", diagnostic.code)
-            fields += TextPayloadField("routeDiagnostics[$index].message", "String", diagnostic.message)
+            fields += TextPayloadField("diagnostics[$index].code", "String", diagnostic.code)
+            fields += TextPayloadField("diagnostics[$index].message", "String", diagnostic.message)
         }
         fields += TextPayloadField("provenance", "TextEvidenceProvenance")
         fields += TextPayloadField("provenance.source", "String", provenance.source)
@@ -240,8 +240,8 @@ class DrawTextRunPayload(
             comma = true,
         )
         appendDrawTextRunRawJsonField(
-            "routeDiagnostics",
-            routeDiagnostics.joinToString(separator = ",", prefix = "[", postfix = "]") { diagnostic ->
+            "diagnostics",
+            diagnostics.joinToString(separator = ",", prefix = "[", postfix = "]") { diagnostic ->
                 diagnostic.toDrawTextRunCanonicalJson()
             },
             comma = true,
