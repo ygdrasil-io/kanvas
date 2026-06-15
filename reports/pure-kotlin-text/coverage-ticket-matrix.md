@@ -2246,3 +2246,57 @@ rtk ./gradlew --no-daemon :font:gpu-api:test
 Remaining gate: this is telemetry scaffolding only. It does not measure actual
 runtime performance, promote indicative budgets into release gates, synthesize
 GPU upload evidence, or claim GPU text rendering support.
+### KFONT-M1-004: Bundled Source Fixture Manifest
+
+Status: review; independently reviewed after remediation.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontFixtureManifestTest.kt`
+- `reports/pure-kotlin-text/font-fixtures-manifest.json`
+- `reports/pure-kotlin-text/font-source.json`
+- `reports/pure-kotlin-text/typeface-id.json`
+- `reports/pure-kotlin-text/2026-06-15-kfont-m1-004-fixture-manifest.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M1-font-identity-sources/KFONT-M1-004-add-bundled-source-fixture-manifest.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M1-font-identity-sources/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `FontFixtureManifestWriter` emits the checked-in
+  `font-fixtures-manifest.json` canonical JSON byte-for-byte.
+- The manifest records normative bundled fixture rows for Liberation Sans TTF,
+  Source Serif OTF/CFF candidate, and Roboto Flex variable TTF candidate, with
+  license/provenance, SHA-256, byte length, face count, intended coverage tags,
+  and `claimPromotionAllowed=false`.
+- Planned generated TTC, malformed directory, and missing-required-table rows
+  record generator IDs, source parameters, non-normative status, remaining
+  gates, and `font.fixture.generated-bytes-missing`.
+- Host-scanned sources remain non-normative with `font.source.host-dependent`;
+  normative entries missing license/provenance/hash produce
+  `font.fixture.provenance-missing`.
+- `font-source.json` includes `manifestFixtureId` for the bundled source row,
+  and manifest entries link to stable `font-source.json` and `typeface-id.json`
+  labels through report-label arrays.
+- Independent spec review verdict: `ACCEPT` after removing an out-of-scope
+  `font/core/build.gradle.kts` packaging change from the worktree.
+- Independent code-quality review verdict: `ACCEPT_WITH_FIXES`; remediated by
+  adding generated/planned fixture invariants and negative tests, tightening the
+  host-dependent normative diagnostic to uncaptured bytes, and removing unused
+  helper code.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*FixtureManifest*'
+rtk ./gradlew --no-daemon --rerun-tasks :font:core:test --tests '*FixtureManifest*'
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontSourceIdentity*' --tests '*IdentityDump*'
+rtk ./gradlew --no-daemon :font:core:test
+rtk git diff --check
+```
+
+Remaining gate: this is fixture provenance and evidence linkage only. It does
+not claim SFNT parser behavior, CFF support, variable font support, TTC
+support, malformed parser support, fallback behavior, glyph scaling/cache
+support, rendering support, or GPU support.

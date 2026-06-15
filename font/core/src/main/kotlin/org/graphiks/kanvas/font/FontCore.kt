@@ -296,10 +296,14 @@ class FontSourceIdentityPreimage(
 data class FontSourceIdentityReportEntry(
     val label: String,
     val preimage: FontSourceIdentityPreimage,
+    val manifestFixtureId: String? = null,
     val claimPromotionAllowed: Boolean = false,
 ) {
     init {
         require(label.isNotBlank()) { "label must not be blank." }
+        require(manifestFixtureId == null || manifestFixtureId.isStableManifestToken()) {
+            "manifestFixtureId must be a stable manifest token when present."
+        }
         require(!claimPromotionAllowed) {
             "Font source identity evidence cannot promote rendering support claims."
         }
@@ -309,6 +313,9 @@ data class FontSourceIdentityReportEntry(
         append("{")
         appendFontCompactJsonField("label", label, comma = true)
         appendFontCompactJsonField("sourceId", preimage.sourceId().value.toHexDashString(), comma = true)
+        append("manifestFixtureId".evidenceQuoted()).append(":")
+        append(manifestFixtureId.toFontJsonNullableString())
+        append(",")
         append("\"preimage\":")
         append(preimage.toCanonicalJson().trim())
         append(",")
@@ -394,20 +401,29 @@ fun fontSourceIdentityPreimage(
         )
     }
 
+private fun liberationSansManifestSourcePreimage(): FontSourceIdentityPreimage =
+    FontSourceIdentityPreimage(
+        provenance = FontSourceProvenance(
+            kind = FontSourceKind.BUNDLED_FIXTURE,
+            declaredName = "Liberation Sans Regular",
+            licenseId = "SIL-OFL-1.1",
+            originPath = "reports/font/fixtures/fonts/liberation/LiberationSans-Regular.ttf",
+            hostDependent = false,
+        ),
+        contentSha256 = "76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+        byteLength = 410712,
+        faceCount = 1,
+        tableTags = listOf("cmap", "glyf", "head", "name"),
+        parserGeneration = 1,
+    )
+
 fun defaultFontSourceIdentityReport(): FontSourceIdentityReport = FontSourceIdentityReport(
     fixtureName = "font-source.json",
     entries = listOf(
         FontSourceIdentityReportEntry(
             label = "bundled-fixture",
-            preimage = fontSourceIdentityPreimage(
-                kind = FontSourceKind.BUNDLED_FIXTURE,
-                declaredName = "Fixture Sans",
-                licenseId = "OFL-1.1",
-                contentBytes = byteArrayOf(1, 2, 3),
-                faceCount = 1,
-                tableTags = listOf("cmap", "head", "name"),
-                parserGeneration = 1,
-            ),
+            manifestFixtureId = "single-ttf-liberation-sans",
+            preimage = liberationSansManifestSourcePreimage(),
         ),
         FontSourceIdentityReportEntry(
             label = "generated-fixture",
@@ -451,6 +467,398 @@ fun defaultFontSourceIdentityReport(): FontSourceIdentityReport = FontSourceIden
         ),
     ),
 )
+
+enum class FontFixtureNormativeStatus(
+    val serializedName: String,
+) {
+    NORMATIVE("normative"),
+    NON_NORMATIVE("non-normative"),
+    PLANNED_GENERATED("planned-generated"),
+}
+
+data class FontFixtureManifestDiagnostic(
+    val code: String,
+    val detail: String? = null,
+    val fixtureId: String? = null,
+) {
+    init {
+        require(code.isStableDiagnosticCode()) { "code must be a stable one-line diagnostic code." }
+        require(fixtureId == null || fixtureId.isStableManifestToken()) {
+            "fixtureId must be a stable manifest token when present."
+        }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("code", code, comma = true)
+        append("fixtureId".evidenceQuoted()).append(":")
+        append(fixtureId.toFontJsonNullableString())
+        append(",")
+        append("detail".evidenceQuoted()).append(":")
+        append(detail.toFontJsonNullableString())
+        append("}")
+    }
+}
+
+class BundledFontFixtureManifestEntry(
+    val fixtureId: String,
+    val sourceKind: FontSourceKind,
+    val relativePath: String?,
+    val generatorId: String?,
+    generatorParameters: List<String> = emptyList(),
+    val licenseId: String?,
+    val licensePath: String?,
+    val provenance: String?,
+    val contentSha256: String?,
+    val byteLength: Long?,
+    val faceCount: Int,
+    coverageTags: List<String>,
+    val normativeStatus: FontFixtureNormativeStatus,
+    val remainingGate: String?,
+    diagnostics: List<FontFixtureManifestDiagnostic> = emptyList(),
+    fontSourceReportLabels: List<String> = emptyList(),
+    typefaceReportLabels: List<String> = emptyList(),
+    val claimPromotionAllowed: Boolean = false,
+) {
+    val generatorParameters: List<String> = generatorParameters.normalizedManifestStrings("generatorParameters")
+    val coverageTags: List<String> = coverageTags.normalizedManifestStrings("coverageTags")
+    val diagnostics: List<FontFixtureManifestDiagnostic> =
+        diagnostics.sortedWith(compareBy<FontFixtureManifestDiagnostic> { it.code }.thenBy { it.fixtureId.orEmpty() }.thenBy { it.detail.orEmpty() })
+    val fontSourceReportLabels: List<String> = fontSourceReportLabels.normalizedManifestStrings("fontSourceReportLabels")
+    val typefaceReportLabels: List<String> = typefaceReportLabels.normalizedManifestStrings("typefaceReportLabels")
+
+    init {
+        require(fixtureId.isStableManifestToken()) { "fixtureId must be a stable manifest token." }
+        require(relativePath == null || relativePath.isStableManifestString()) {
+            "relativePath must be one stable JSON-line string when present."
+        }
+        require(generatorId == null || generatorId.isStableManifestToken()) {
+            "generatorId must be a stable manifest token when present."
+        }
+        require(licenseId == null || licenseId.isStableManifestToken()) {
+            "licenseId must be a stable manifest token when present."
+        }
+        require(licensePath == null || licensePath.isStableManifestString()) {
+            "licensePath must be one stable JSON-line string when present."
+        }
+        require(provenance == null || provenance.isStableManifestString()) {
+            "provenance must be one stable JSON-line string when present."
+        }
+        require(contentSha256 == null || contentSha256.isLowercaseSha256Hex()) {
+            "contentSha256 must be a lowercase hexadecimal SHA-256 digest."
+        }
+        require(byteLength == null || byteLength >= 0) { "byteLength must be non-negative." }
+        require(faceCount >= 0) { "faceCount must be non-negative." }
+        require(remainingGate == null || remainingGate.isStableManifestString()) {
+            "remainingGate must be one stable JSON-line string when present."
+        }
+        if (sourceKind == FontSourceKind.GENERATED_FIXTURE) {
+            require(generatorId != null) {
+                "generated fixture manifest entries require a generatorId."
+            }
+            require(this.generatorParameters.isNotEmpty()) {
+                "generated fixture manifest entries require generatorParameters."
+            }
+            require(relativePath == null) {
+                "generated fixture manifest entries must not use relativePath until generated bytes are captured."
+            }
+        }
+        if (normativeStatus == FontFixtureNormativeStatus.PLANNED_GENERATED) {
+            require(sourceKind == FontSourceKind.GENERATED_FIXTURE) {
+                "planned generated fixture entries must use GeneratedFixtureFontSource."
+            }
+            require(contentSha256 == null && byteLength == null) {
+                "planned generated fixture entries must not carry captured byte facts."
+            }
+            require(generatorId != null && this.generatorParameters.isNotEmpty()) {
+                "planned generated fixture entries require generator provenance."
+            }
+        }
+        require(!claimPromotionAllowed) {
+            "Font fixture manifest entries cannot promote parser, scaler, rendering, fallback, glyph, or GPU claims."
+        }
+    }
+
+    fun normativeEvidenceDiagnostics(): List<FontFixtureManifestDiagnostic> {
+        if (normativeStatus != FontFixtureNormativeStatus.NORMATIVE) return emptyList()
+        val result = mutableListOf<FontFixtureManifestDiagnostic>()
+        val hasCapturedBytes = contentSha256 != null && byteLength != null && relativePath != null
+        if (sourceKind.isHostDependentByDefault() && !hasCapturedBytes) {
+            result += FontFixtureManifestDiagnostic(
+                code = "font.fixture.host-dependent-normative-refused",
+                fixtureId = fixtureId,
+                detail = "Host-dependent sources cannot be normative without captured bytes.",
+            )
+        }
+        if (
+            licenseId == null ||
+            licensePath == null ||
+            provenance == null ||
+            contentSha256 == null ||
+            byteLength == null ||
+            relativePath == null
+        ) {
+            result += FontFixtureManifestDiagnostic(
+                code = "font.fixture.provenance-missing",
+                fixtureId = fixtureId,
+                detail = "Normative fixture entries require license, provenance, path, SHA-256, and byte length.",
+            )
+        }
+        if (coverageTags.isEmpty()) {
+            result += FontFixtureManifestDiagnostic(
+                code = "font.fixture.coverage-missing",
+                fixtureId = fixtureId,
+                detail = "Normative fixture entries require intended coverage tags.",
+            )
+        }
+        return result.sortedWith(
+            compareBy<FontFixtureManifestDiagnostic> { it.code }
+                .thenBy { it.fixtureId.orEmpty() }
+                .thenBy { it.detail.orEmpty() },
+        )
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("fixtureId", fixtureId, comma = true)
+        appendFontCompactJsonField("sourceKind", sourceKind.serializedName, comma = true)
+        appendFontCompactJsonField("normativeStatus", normativeStatus.serializedName, comma = true)
+        append("relativePath".evidenceQuoted()).append(":")
+        append(relativePath.toFontJsonNullableString())
+        append(",")
+        append("generatorId".evidenceQuoted()).append(":")
+        append(generatorId.toFontJsonNullableString())
+        append(",")
+        appendStringArrayField("generatorParameters", generatorParameters, comma = true)
+        append("licenseId".evidenceQuoted()).append(":")
+        append(licenseId.toFontJsonNullableString())
+        append(",")
+        append("licensePath".evidenceQuoted()).append(":")
+        append(licensePath.toFontJsonNullableString())
+        append(",")
+        append("provenance".evidenceQuoted()).append(":")
+        append(provenance.toFontJsonNullableString())
+        append(",")
+        append("contentSha256".evidenceQuoted()).append(":")
+        append(contentSha256.toFontJsonNullableString())
+        append(",")
+        append("byteLength".evidenceQuoted()).append(":")
+        append(byteLength?.toString() ?: "null")
+        append(",")
+        append("faceCount".evidenceQuoted()).append(":")
+        append(faceCount)
+        append(",")
+        appendStringArrayField("coverageTags", coverageTags, comma = true)
+        appendStringArrayField("fontSourceReportLabels", fontSourceReportLabels, comma = true)
+        appendStringArrayField("typefaceReportLabels", typefaceReportLabels, comma = true)
+        append("diagnostics".evidenceQuoted()).append(":")
+        append(diagnostics.joinToString(prefix = "[", postfix = "]", separator = ",") { it.toCanonicalJson() })
+        append(",")
+        append("remainingGate".evidenceQuoted()).append(":")
+        append(remainingGate.toFontJsonNullableString())
+        append(",")
+        appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+        append("}")
+    }
+}
+
+class FontFixtureManifest(
+    val schemaVersion: Int = 1,
+    val manifestName: String = "font-fixtures-manifest.json",
+    entries: List<BundledFontFixtureManifestEntry>,
+    val dashboardClassification: String = "fixture-gated",
+    nonClaims: List<String> = FontFixtureManifestNonClaims,
+    val claimPromotionAllowed: Boolean = false,
+) {
+    val entries: List<BundledFontFixtureManifestEntry> = entries.sortedBy { it.fixtureId }
+    val nonClaims: List<String> = nonClaims.normalizedManifestStrings("nonClaims")
+
+    init {
+        require(schemaVersion == 1) { "unsupported font fixture manifest schema version." }
+        require(manifestName == "font-fixtures-manifest.json") { "font fixture manifest output name is fixed." }
+        require(dashboardClassification == "fixture-gated") { "font fixture manifest dashboard row must stay fixture-gated." }
+        require(this.entries.map { it.fixtureId }.distinct().size == this.entries.size) {
+            "font fixture manifest entries must have unique fixture IDs."
+        }
+        require(!claimPromotionAllowed) {
+            "Font fixture manifests cannot promote parser, scaler, rendering, fallback, glyph, or GPU claims."
+        }
+    }
+
+    fun normativeEvidenceDiagnostics(): List<FontFixtureManifestDiagnostic> =
+        entries.flatMap { it.normativeEvidenceDiagnostics() }.sortedWith(
+            compareBy<FontFixtureManifestDiagnostic> { it.code }
+                .thenBy { it.fixtureId.orEmpty() }
+                .thenBy { it.detail.orEmpty() },
+        )
+
+    fun toCanonicalJson(): CanonicalFontIdentityJson = CanonicalFontIdentityJson(
+        buildString {
+            append("{")
+            appendFontCompactJsonField("schema", FONT_FIXTURE_MANIFEST_SCHEMA, comma = true)
+            append("schemaVersion".evidenceQuoted()).append(":").append(schemaVersion).append(",")
+            appendFontCompactJsonField("manifestName", manifestName, comma = true)
+            append("dashboardRow".evidenceQuoted()).append(":{")
+            appendFontCompactJsonField("name", "bundled font fixture manifest", comma = true)
+            appendFontCompactJsonField("classification", dashboardClassification, comma = true)
+            appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+            append("},")
+            append("entries".evidenceQuoted()).append(":")
+            append(entries.joinToString(separator = ",", prefix = "[", postfix = "]") { it.toCanonicalJson() })
+            append(",")
+            appendStringArrayField("nonClaims", nonClaims, comma = true)
+            append("normativeEvidenceDiagnostics".evidenceQuoted()).append(":")
+            append(normativeEvidenceDiagnostics().joinToString(prefix = "[", postfix = "]", separator = ",") { it.toCanonicalJson() })
+            append(",")
+            appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+            append("}")
+        },
+    )
+}
+
+fun defaultFontFixtureManifest(): FontFixtureManifest = FontFixtureManifest(
+    entries = listOf(
+        BundledFontFixtureManifestEntry(
+            fixtureId = "single-ttf-liberation-sans",
+            sourceKind = FontSourceKind.BUNDLED_FIXTURE,
+            relativePath = "reports/font/fixtures/fonts/liberation/LiberationSans-Regular.ttf",
+            generatorId = null,
+            generatorParameters = emptyList(),
+            licenseId = "SIL-OFL-1.1",
+            licensePath = "reports/font/fixtures/licenses/liberation-OFL-1.1.txt",
+            provenance = "Liberation Fonts; repo-vendored-existing; kanvas-skia/src/main/resources/fonts/liberation",
+            contentSha256 = "76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+            byteLength = 410712,
+            faceCount = 1,
+            coverageTags = listOf("sfnt-source", "single-ttf", "table:cmap", "table:glyf", "table:head", "table:name"),
+            normativeStatus = FontFixtureNormativeStatus.NORMATIVE,
+            remainingGate = "Parser and scaler evidence must be attached by later tickets before support promotion.",
+            fontSourceReportLabels = listOf("bundled-fixture"),
+            typefaceReportLabels = listOf("single-face-ttf"),
+        ),
+        BundledFontFixtureManifestEntry(
+            fixtureId = "otf-cff-source-serif",
+            sourceKind = FontSourceKind.BUNDLED_FIXTURE,
+            relativePath = "reports/font/fixtures/fonts/scaler/SourceSerif4-Regular.otf",
+            generatorId = null,
+            generatorParameters = emptyList(),
+            licenseId = "SIL-OFL-1.1",
+            licensePath = "reports/font/fixtures/licenses/source-serif-OFL-1.1.txt",
+            provenance = "Source Serif 4.005R; vendored external fixture from Adobe Source Serif release",
+            contentSha256 = "edf160d0d584deee8a3bb2c3371b2a7624ca63580fbe02c57c1f4c91e84d8787",
+            byteLength = 241392,
+            faceCount = 1,
+            coverageTags = listOf("otf-cff-candidate", "sfnt-source", "table:CFF", "table:cmap", "table:name"),
+            normativeStatus = FontFixtureNormativeStatus.NORMATIVE,
+            remainingGate = "CFF parser and scaler tickets must attach separate evidence before support promotion.",
+        ),
+        BundledFontFixtureManifestEntry(
+            fixtureId = "variable-ttf-roboto-flex",
+            sourceKind = FontSourceKind.BUNDLED_FIXTURE,
+            relativePath = "reports/font/fixtures/fonts/scaler/RobotoFlex-Variable.ttf",
+            generatorId = null,
+            generatorParameters = emptyList(),
+            licenseId = "SIL-OFL-1.1",
+            licensePath = "reports/font/fixtures/licenses/roboto-flex-OFL-1.1.txt",
+            provenance = "Roboto Flex; googlefonts/roboto-flex blob 0abe2ee29292f1b39f59103d069feda87cde585e",
+            contentSha256 = "94a7ea95ccee28c54885a507e3cc0a534ce41ec61d413935df0e07261a7ffe63",
+            byteLength = 1775480,
+            faceCount = 1,
+            coverageTags = listOf("sfnt-source", "table:cmap", "table:fvar", "table:glyf", "table:gvar", "variable-font-candidate"),
+            normativeStatus = FontFixtureNormativeStatus.NORMATIVE,
+            remainingGate = "Variable parser and scaler tickets must attach separate evidence before support promotion.",
+            typefaceReportLabels = listOf("variable-axis-change"),
+        ),
+        plannedGeneratedFixtureManifestEntry(
+            fixtureId = "ttc-face-index-planned-generated",
+            generatorId = "kfont.fixture.ttc-face-index.v1",
+            generatorParameters = listOf("container=ttc", "faceCount=2", "outline=glyf", "selectedFaceIndex=1"),
+            faceCount = 2,
+            coverageTags = listOf("collection-index", "sfnt-source", "ttc-face-index"),
+            remainingGate = "Generate and check in deterministic TTC bytes before normative collection evidence.",
+            typefaceReportLabels = listOf("ttc-face-index-variant"),
+        ),
+        plannedGeneratedFixtureManifestEntry(
+            fixtureId = "malformed-directory-planned-generated",
+            generatorId = "kfont.fixture.malformed-directory.v1",
+            generatorParameters = listOf("directory=malformed", "faceCount=0", "tableDirectory=truncated"),
+            faceCount = 0,
+            coverageTags = listOf("malformed-directory", "sfnt-directory-refusal"),
+            remainingGate = "Generate deterministic malformed bytes and refusal dump before normative parser evidence.",
+        ),
+        plannedGeneratedFixtureManifestEntry(
+            fixtureId = "missing-required-table-planned-generated",
+            generatorId = "kfont.fixture.missing-required-table.v1",
+            generatorParameters = listOf("faceCount=0", "missing=head", "requiredTable=head"),
+            faceCount = 0,
+            coverageTags = listOf("missing-required-table", "sfnt-required-table-refusal"),
+            remainingGate = "Generate deterministic missing-required-table bytes and refusal dump before normative parser evidence.",
+        ),
+        BundledFontFixtureManifestEntry(
+            fixtureId = "system-scanned-host-dependent",
+            sourceKind = FontSourceKind.SYSTEM_SCANNED,
+            relativePath = null,
+            generatorId = null,
+            generatorParameters = emptyList(),
+            licenseId = null,
+            licensePath = null,
+            provenance = "Host system scan source without captured fixture bytes; non-normative drift input only.",
+            contentSha256 = null,
+            byteLength = null,
+            faceCount = 0,
+            coverageTags = listOf("host-dependent", "system-scan-non-normative"),
+            normativeStatus = FontFixtureNormativeStatus.NON_NORMATIVE,
+            remainingGate = "Capture source bytes, license, provenance, hash, and byte length before normative evidence use.",
+            diagnostics = listOf(
+                FontFixtureManifestDiagnostic(
+                    code = "font.source.host-dependent",
+                    fixtureId = "system-scanned-host-dependent",
+                    detail = "Host-scanned fonts are non-normative until bytes are captured into the fixture manifest.",
+                ),
+            ),
+            fontSourceReportLabels = listOf("system-scanned-host-dependent"),
+        ),
+    ),
+)
+
+private fun plannedGeneratedFixtureManifestEntry(
+    fixtureId: String,
+    generatorId: String,
+    generatorParameters: List<String>,
+    faceCount: Int,
+    coverageTags: List<String>,
+    remainingGate: String,
+    typefaceReportLabels: List<String> = emptyList(),
+): BundledFontFixtureManifestEntry = BundledFontFixtureManifestEntry(
+    fixtureId = fixtureId,
+    sourceKind = FontSourceKind.GENERATED_FIXTURE,
+    relativePath = null,
+    generatorId = generatorId,
+    generatorParameters = generatorParameters,
+    licenseId = "Kanvas-generated-fixture",
+    licensePath = null,
+    provenance = "Planned pure Kotlin generated fixture; bytes are not checked in yet.",
+    contentSha256 = null,
+    byteLength = null,
+    faceCount = faceCount,
+    coverageTags = coverageTags,
+    normativeStatus = FontFixtureNormativeStatus.PLANNED_GENERATED,
+    remainingGate = remainingGate,
+    diagnostics = listOf(
+        FontFixtureManifestDiagnostic(
+            code = "font.fixture.generated-bytes-missing",
+            fixtureId = fixtureId,
+            detail = "Generated fixture provenance exists, but deterministic bytes are not checked in.",
+        ),
+    ),
+    typefaceReportLabels = typefaceReportLabels,
+)
+
+object FontFixtureManifestWriter {
+    fun writeManifestJson(
+        manifest: FontFixtureManifest = defaultFontFixtureManifest(),
+    ): CanonicalFontIdentityJson = CanonicalFontIdentityJson("${manifest.toCanonicalJson().value}\n")
+}
 
 /**
  * Stable outline family facts included in [TypefaceIdentityPreimage].
@@ -878,15 +1286,7 @@ fun typefaceIdentityPreimage(
 )
 
 fun defaultTypefaceIdentityReport(): TypefaceIdentityReport {
-    val singleFaceSourceId = fontSourceIdentityPreimage(
-        kind = FontSourceKind.BUNDLED_FIXTURE,
-        declaredName = "Fixture Sans TTF",
-        licenseId = "OFL-1.1",
-        contentBytes = byteArrayOf(1, 2, 3),
-        faceCount = 1,
-        tableTags = listOf("cmap", "glyf", "head", "name"),
-        parserGeneration = 1,
-    ).sourceId()
+    val singleFaceSourceId = liberationSansManifestSourcePreimage().sourceId()
     val collectionSourceId = fontSourceIdentityPreimage(
         kind = FontSourceKind.GENERATED_FIXTURE,
         declaredName = "Fixture Collection TTC",
@@ -1235,6 +1635,19 @@ private const val FONT_IDENTITY_DUMP_BUNDLE_SCHEMA =
 
 private const val FONT_IDENTITY_DUMP_DETERMINISM_SCHEMA =
     "org.graphiks.kanvas.font.FontIdentityDumpDeterminismResult.v1"
+
+private const val FONT_FIXTURE_MANIFEST_SCHEMA =
+    "org.graphiks.kanvas.font.FontFixtureManifest.v1"
+
+private val FontFixtureManifestNonClaims: List<String> = listOf(
+    "no-fallback-support-claim",
+    "no-glyph-support-claim",
+    "no-gpu-support-claim",
+    "no-parser-support-claim",
+    "no-rendering-support-claim",
+    "no-scaler-support-claim",
+    "no-shaping-support-claim",
+)
 
 /**
  * Slant axis used by portable font style matching.
@@ -2435,6 +2848,13 @@ private fun List<String>.normalizedTableTags(): List<String> {
     return distinct().sorted()
 }
 
+private fun List<String>.normalizedManifestStrings(fieldName: String): List<String> {
+    for (value in this) {
+        require(value.isStableManifestString()) { "$fieldName must contain stable single-line strings." }
+    }
+    return distinct().sorted()
+}
+
 private fun List<TypefaceVariationCoordinate>.normalizedVariationCoordinates(): List<TypefaceVariationCoordinate> {
     val sorted = sortedBy { coordinate -> coordinate.axisTag }
     require(sorted.map { coordinate -> coordinate.axisTag }.distinct().size == sorted.size) {
@@ -2445,6 +2865,12 @@ private fun List<TypefaceVariationCoordinate>.normalizedVariationCoordinates(): 
 
 private fun String.isStableSfntTableTag(): Boolean =
     length == 4 && all { character -> character.code in 0x20..0x7E }
+
+private fun String.isStableManifestToken(): Boolean =
+    isNotBlank() && all { character -> character.code in 0x21..0x7E }
+
+private fun String.isStableManifestString(): Boolean =
+    isNotBlank() && all { character -> character.code in 0x20..0x7E }
 
 private val FontSlant.typefaceSerializedName: String
     get() = when (this) {

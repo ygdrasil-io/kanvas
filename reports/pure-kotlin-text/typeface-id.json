@@ -1,6 +1,6 @@
-{"schema":"org.graphiks.kanvas.font.TypefaceIdentityReport.v1","fixtureName":"typeface-id.json","legacyGate":"typeface","gateStatus":"open","claimPromotionAllowed":false,"dashboardRow":{"name":"TypefaceID glyph-affecting identity","classification":"tracked-gap","legacyGate":"typeface","gateStatus":"open","claimPromotionAllowed":false},"entries":[{"label":"single-face-ttf","typefaceId":"ec09086b-cfbb-5b19-b1e7-b29aad858733","preimage":{
+{"schema":"org.graphiks.kanvas.font.TypefaceIdentityReport.v1","fixtureName":"typeface-id.json","legacyGate":"typeface","gateStatus":"open","claimPromotionAllowed":false,"dashboardRow":{"name":"TypefaceID glyph-affecting identity","classification":"tracked-gap","legacyGate":"typeface","gateStatus":"open","claimPromotionAllowed":false},"entries":[{"label":"single-face-ttf","typefaceId":"68b0cdcd-e148-5349-9dea-26cee4f35a08","preimage":{
   "schema": "org.graphiks.kanvas.font.TypefaceIdentityPreimage.v1",
-  "sourceId": "88a50f59-d2bb-527a-bcee-ad005ae8dcfc",
+  "sourceId": "831c03a5-238d-5b9c-93a5-90c6414ab1cd",
   "collectionIndex": 0,
   "postScriptName": "FixtureSans-Regular",
   "familyName": "Fixture Sans",
