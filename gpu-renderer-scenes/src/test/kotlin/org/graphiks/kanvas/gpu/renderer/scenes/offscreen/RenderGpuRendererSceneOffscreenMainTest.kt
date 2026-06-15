@@ -46,7 +46,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
-    fun `catalogued rect rrect gradient and clip scenes route to WebGPU offscreen instead of runner subset`() {
+    fun `catalogued rect rrect gradient clip and bitmap scenes route to WebGPU offscreen instead of runner subset`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
         val rectOnlyScenes = listOf(
             RenderedShapeExpectation("blend-mode-strip", fillRectCount = 1),
@@ -63,6 +63,11 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 sceneId = "path-badge-and-stroke",
                 fillRectCount = 1,
                 fillRRectCount = 1,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "texture-swatch-board",
+                fillRectCount = 0,
+                bitmapRectCount = 2,
             ),
         )
 
@@ -107,6 +112,20 @@ class RenderGpuRendererSceneOffscreenMainTest {
         }
 
         assertContains(failure.message ?: "", "at least one FillRect")
+    }
+
+    @Test
+    fun `rect only command preparation rejects bitmap markers without fixture payloads`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            prepareRectOnlyDrawPlan(
+                sceneId = "bitmap-marker-only",
+                commands = listOf(SceneCommand.BitmapRect("marker")),
+                width = 320,
+                height = 200,
+            )
+        }
+
+        assertContains(failure.message ?: "", "fixture-backed BitmapRect payloads: marker")
     }
 
     @Test
@@ -211,6 +230,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
         val fillRRectCount: Int = 0,
         val linearGradientRectCount: Int? = null,
         val clipCount: Int? = null,
+        val bitmapRectCount: Int? = null,
     )
 
     private fun assertRenderedShapeScene(root: Path, expectation: RenderedShapeExpectation) {
@@ -241,6 +261,9 @@ class RenderGpuRendererSceneOffscreenMainTest {
         }
         expectation.clipCount?.let { count ->
             assertContains(runJson, "clipCommands=$count")
+        }
+        expectation.bitmapRectCount?.let { count ->
+            assertContains(runJson, "bitmapRectCommands=$count")
         }
         assertFalse(runJson.contains("runner-subset:$sceneId"), sceneId)
     }

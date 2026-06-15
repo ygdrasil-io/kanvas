@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.scenes.windowed
 
 import java.util.Locale
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSampling
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
@@ -47,6 +48,18 @@ object WindowedRectOnlySceneShader {
                             ${draw.endColor.b.wgslFloat()},
                             ${draw.endColor.a.wgslFloat()}
                         ),
+                        vec4<f32>(
+                            ${draw.bottomLeftColor.r.wgslFloat()},
+                            ${draw.bottomLeftColor.g.wgslFloat()},
+                            ${draw.bottomLeftColor.b.wgslFloat()},
+                            ${draw.bottomLeftColor.a.wgslFloat()}
+                        ),
+                        vec4<f32>(
+                            ${draw.bottomRightColor.r.wgslFloat()},
+                            ${draw.bottomRightColor.g.wgslFloat()},
+                            ${draw.bottomRightColor.b.wgslFloat()},
+                            ${draw.bottomRightColor.a.wgslFloat()}
+                        ),
                         ${draw.paintKind.wgslFloat()}
                     );
                     color = src_over_coverage(color, ${draw.colorName()}, ${draw.coverageName()});
@@ -82,9 +95,33 @@ object WindowedRectOnlySceneShader {
                 return 1.0;
             }
 
-            fn draw_color(pixel: vec2<f32>, rect: vec4<f32>, start_color: vec4<f32>, end_color: vec4<f32>, paint_kind: f32) -> vec4<f32> {
+            fn draw_color(
+                pixel: vec2<f32>,
+                rect: vec4<f32>,
+                start_color: vec4<f32>,
+                end_color: vec4<f32>,
+                bottom_left_color: vec4<f32>,
+                bottom_right_color: vec4<f32>,
+                paint_kind: f32
+            ) -> vec4<f32> {
                 var color = start_color;
-                if (paint_kind >= 0.5) {
+                if (paint_kind >= 2.5) {
+                    let uv = clamp((pixel - rect.xy) / max(rect.zw - rect.xy, vec2<f32>(0.0001)), vec2<f32>(0.0), vec2<f32>(1.0));
+                    let top = mix(start_color, end_color, uv.x);
+                    let bottom = mix(bottom_left_color, bottom_right_color, uv.x);
+                    color = mix(top, bottom, uv.y);
+                } else if (paint_kind >= 1.5) {
+                    let uv = clamp((pixel - rect.xy) / max(rect.zw - rect.xy, vec2<f32>(0.0001)), vec2<f32>(0.0), vec2<f32>(1.0));
+                    if (uv.y >= 0.5) {
+                        if (uv.x >= 0.5) {
+                            color = bottom_right_color;
+                        } else {
+                            color = bottom_left_color;
+                        }
+                    } else if (uv.x >= 0.5) {
+                        color = end_color;
+                    }
+                } else if (paint_kind >= 0.5) {
                     let t = clamp((pixel.y - rect.y) / max(rect.w - rect.y, 0.0001), 0.0, 1.0);
                     color = mix(start_color, end_color, t);
                 }
@@ -120,6 +157,8 @@ private data class WindowedDraw(
     val radius: Float,
     val startColor: SceneColor,
     val endColor: SceneColor,
+    val bottomLeftColor: SceneColor,
+    val bottomRightColor: SceneColor,
     val paintKind: Float,
     val clip: SceneRect?,
 )
@@ -139,6 +178,9 @@ private fun GPURendererScene<*>.draws(): List<WindowedDraw> {
                 is SceneCommand.FillRect,
                 is SceneCommand.FillRRect,
                 is SceneCommand.LinearGradientRect -> add(IndexedWindowedDraw(index, command, activeClip))
+                is SceneCommand.BitmapRect -> if (command.hasFixturePayload) {
+                    add(IndexedWindowedDraw(index, command, activeClip))
+                }
                 else -> Unit
             }
         }
@@ -157,6 +199,8 @@ private fun GPURendererScene<*>.draws(): List<WindowedDraw> {
                     radius = 0f,
                     startColor = command.color,
                     endColor = command.color,
+                    bottomLeftColor = command.color,
+                    bottomRightColor = command.color,
                     paintKind = 0f,
                     clip = clip,
                 )
@@ -166,6 +210,8 @@ private fun GPURendererScene<*>.draws(): List<WindowedDraw> {
                     radius = command.radius,
                     startColor = command.color,
                     endColor = command.color,
+                    bottomLeftColor = command.color,
+                    bottomRightColor = command.color,
                     paintKind = 0f,
                     clip = clip,
                 )
@@ -175,7 +221,24 @@ private fun GPURendererScene<*>.draws(): List<WindowedDraw> {
                     radius = 0f,
                     startColor = command.startColor,
                     endColor = command.endColor,
+                    bottomLeftColor = command.startColor,
+                    bottomRightColor = command.endColor,
                     paintKind = 1f,
+                    clip = clip,
+                )
+                is SceneCommand.BitmapRect -> WindowedDraw(
+                    label = command.label,
+                    rect = command.rect ?: error("BitmapRect requires rect fixture payload: ${command.label}"),
+                    radius = 0f,
+                    startColor = command.source?.topLeft
+                        ?: error("BitmapRect requires source fixture payload: ${command.label}"),
+                    endColor = command.source.topRight,
+                    bottomLeftColor = command.source.bottomLeft,
+                    bottomRightColor = command.source.bottomRight,
+                    paintKind = when (command.sampling) {
+                        SceneBitmapSampling.Nearest -> 2f
+                        SceneBitmapSampling.Linear -> 3f
+                    },
                     clip = clip,
                 )
                 else -> error("Unsupported windowed fill command")
@@ -188,6 +251,7 @@ private fun SceneCommand.paintOrder(): Int =
         is SceneCommand.FillRect -> paintOrder
         is SceneCommand.FillRRect -> paintOrder
         is SceneCommand.LinearGradientRect -> paintOrder
+        is SceneCommand.BitmapRect -> paintOrder
         else -> 0
     }
 

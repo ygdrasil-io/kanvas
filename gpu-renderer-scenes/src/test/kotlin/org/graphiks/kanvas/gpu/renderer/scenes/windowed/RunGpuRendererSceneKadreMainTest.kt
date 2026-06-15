@@ -51,7 +51,7 @@ class RunGpuRendererSceneKadreMainTest {
     }
 
     @Test
-    fun `catalogued rect rrect gradient and clip scenes launch Kadre runner instead of not yet rendered`() {
+    fun `catalogued rect rrect gradient clip and bitmap scenes launch Kadre runner instead of not yet rendered`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-windowed-main")
         val renderableScenes = listOf(
             "cache-pressure-deck" to 17,
@@ -59,6 +59,7 @@ class RunGpuRendererSceneKadreMainTest {
             "legacy-route-comparison" to 19,
             "path-badge-and-stroke" to 20,
             "rounded-panel-gradient" to 21,
+            "texture-swatch-board" to 22,
         )
         val invocations = mutableListOf<RunnerInvocation>()
 
@@ -119,7 +120,14 @@ class RunGpuRendererSceneKadreMainTest {
                     sceneId = "windowed-no-fill",
                     commands = listOf(SceneCommand.Clear(SceneColor(0f, 0f, 0f, 1f))),
                 ),
-                reason = "rect-only windowed render requires at least one FillRect, FillRRect, or LinearGradientRect command",
+                reason = "rect-only windowed render requires at least one FillRect, FillRRect, LinearGradientRect, or BitmapRect command",
+            ),
+            UnsupportedRectOnlyCase(
+                scene = windowedTestScene(
+                    sceneId = "windowed-bitmap-marker",
+                    commands = listOf(SceneCommand.BitmapRect("marker")),
+                ),
+                reason = "rect-only windowed render requires fixture-backed BitmapRect payloads: marker",
             ),
             UnsupportedRectOnlyCase(
                 scene = windowedTestScene(
@@ -169,7 +177,7 @@ class RunGpuRendererSceneKadreMainTest {
         assertContains(sessionJson, "\"status\": \"not-yet-rendered\"")
         assertContains(
             sessionJson,
-            "\"reason\": \"rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families: vertices\"",
+            "\"reason\": \"rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, and fixture-backed bitmap-rect command families: vertices\"",
         )
         assertContains(sessionJson, "\"requestedFrames\": 60")
         assertContains(sessionJson, "\"presentedFrames\": 0")
