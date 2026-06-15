@@ -25,6 +25,9 @@ import org.skia.foundation.SkPaint
  * `Disabled` means no normalized renderer command is created and no planner is
  * called. `Shadow` permits evidence-only normalization and first-route planning
  * without changing pixels, resources, backend submission, or product routing.
+ * `ProductFlag` records a controlled product-route candidate when explicitly
+ * requested, while the legacy draw remains available and still performs the
+ * actual rendering.
  */
 internal enum class GpuRendererShadowMode {
     /** Default mode: legacy rendering remains the only behavior. */
@@ -32,6 +35,26 @@ internal enum class GpuRendererShadowMode {
 
     /** Evidence mode: normalize facts and ask the renderer planner for a route decision. */
     Shadow,
+
+    /** Controlled flag mode: record product-candidate diagnostics without default activation. */
+    ProductFlag,
+}
+
+/** Scoped state for the first-route product flag. */
+internal data class GpuRendererFirstRouteFlagState(
+    val enabled: Boolean,
+    val routeScope: String,
+) {
+    public companion object {
+        public val Disabled: GpuRendererFirstRouteFlagState =
+            GpuRendererFirstRouteFlagState(enabled = false, routeScope = "none")
+
+        public val SolidFillRect: GpuRendererFirstRouteFlagState =
+            GpuRendererFirstRouteFlagState(enabled = true, routeScope = "solid-fill-rect")
+
+        public fun forMode(mode: GpuRendererShadowMode): GpuRendererFirstRouteFlagState =
+            if (mode == GpuRendererShadowMode.ProductFlag) SolidFillRect else Disabled
+    }
 }
 
 /**
@@ -45,27 +68,39 @@ internal enum class GpuRendererShadowMode {
 internal data class GpuRendererShadowConfig(
     val mode: GpuRendererShadowMode = GpuRendererShadowMode.Disabled,
     val capabilities: GPUCapabilities = firstSliceShadowCapabilities(),
+    val productFlag: GpuRendererFirstRouteFlagState = GpuRendererFirstRouteFlagState.forMode(mode),
 ) {
+    init {
+        require(productFlag == GpuRendererFirstRouteFlagState.forMode(mode)) {
+            "GPU renderer first-route product flag state must match mode"
+        }
+    }
+
     public companion object {
         /** System property that can opt a local diagnostic run into shadow evidence. */
         public const val ShadowFillRectProperty: String = "kanvas.gpu.renderer.shadow.fillRect"
+
+        /** System property that opts a local run into the controlled first-route product flag. */
+        public const val ProductFillRectProperty: String = "kanvas.gpu.renderer.product.fillRect"
 
         /**
          * Builds config from system properties without changing the default.
          *
          * Only the literal value `true`, parsed by [String.toBoolean], enables
-         * shadow mode. Missing or false values keep the handoff skipped.
+         * a non-default mode. Missing or false values keep the handoff skipped.
+         * The product flag is intentionally separate from shadow mode and wins
+         * when both local properties are set, so diagnostics cannot be ambiguous.
          */
         public fun fromSystemProperties(
             propertyReader: (String) -> String? = System::getProperty,
-        ): GpuRendererShadowConfig =
-            GpuRendererShadowConfig(
-                mode = if (propertyReader(ShadowFillRectProperty).toBoolean()) {
-                    GpuRendererShadowMode.Shadow
-                } else {
-                    GpuRendererShadowMode.Disabled
-                },
-            )
+        ): GpuRendererShadowConfig {
+            val mode = when {
+                propertyReader(ProductFillRectProperty).toBoolean() -> GpuRendererShadowMode.ProductFlag
+                propertyReader(ShadowFillRectProperty).toBoolean() -> GpuRendererShadowMode.Shadow
+                else -> GpuRendererShadowMode.Disabled
+            }
+            return GpuRendererShadowConfig(mode = mode)
+        }
     }
 }
 
@@ -76,6 +111,8 @@ internal data class GpuRendererShadowConfig(
  * adapter validation or renderer planning found unsupported input and did not
  * invent CPU fallback work. `Native` means the renderer planner produced native
  * route evidence only; it is not backend submission and not product routing.
+ * `ProductFlagged` means the same native route was accepted under the explicit
+ * product flag, with legacy route availability still recorded for rollback.
  */
 internal enum class GpuRendererShadowHandoffStatus {
     /** The adapter did no renderer work because shadow mode was disabled. */
@@ -86,6 +123,9 @@ internal enum class GpuRendererShadowHandoffStatus {
 
     /** The planner returned native route evidence in shadow mode only. */
     Native,
+
+    /** The controlled product flag accepted the first route without default activation. */
+    ProductFlagged,
 }
 
 /**
@@ -213,16 +253,20 @@ internal data class GpuRendererShadowCommandFacts(
  */
 internal data class GpuRendererShadowResult(
     val status: GpuRendererShadowHandoffStatus,
+    val mode: GpuRendererShadowMode,
     val routeLabel: String,
     val diagnosticCode: String?,
+    val productFlag: GpuRendererFirstRouteFlagState,
+    val legacyRouteAvailable: Boolean,
     val commandFacts: GpuRendererShadowCommandFacts?,
     val normalizedCommand: NormalizedDrawCommand.FillRect?,
     val firstRouteDecision: GPURouteDecision?,
 ) {
     /** Returns a deterministic evidence dump suitable for tests and PM logs. */
     public fun dump(): String =
-        "gpuRendererShadow v=1 status=${status.dumpLabel()} route=$routeLabel " +
+        "gpuRendererShadow v=1 status=${status.dumpLabel()} mode=${mode.dumpLabel()} route=$routeLabel " +
             "diagnostic=${diagnosticCode ?: "none"} cpuFallback=false " +
+            "legacyRouteAvailable=$legacyRouteAvailable productFlag=${productFlag.enabled}:${productFlag.routeScope} " +
             "command=${commandFacts?.dump() ?: "none"}"
 }
 
@@ -255,23 +299,29 @@ internal class GpuRendererShadowAdapter(
             return refusedBeforeHandoff(code)
         }
 
-        val command = state.toNormalizedCommand()
+        val command = state.toNormalizedCommand(sourceOperation = config.mode.sourceOperation())
         val commandFacts = command.toShadowFacts()
         val decision = GPUFirstRoutePlanner(config.capabilities).plan(command).routeDecision
 
         return when (decision) {
             is GPURouteDecision.Native -> GpuRendererShadowResult(
-                status = GpuRendererShadowHandoffStatus.Native,
-                routeLabel = decision.route.consumerKind,
+                status = config.mode.nativeStatus(),
+                mode = config.mode,
+                routeLabel = config.mode.nativeRouteLabel(decision.route.consumerKind),
                 diagnosticCode = null,
+                productFlag = config.productFlag,
+                legacyRouteAvailable = true,
                 commandFacts = commandFacts,
                 normalizedCommand = command,
                 firstRouteDecision = decision,
             )
             is GPURouteDecision.Refused -> GpuRendererShadowResult(
                 status = GpuRendererShadowHandoffStatus.Refused,
+                mode = config.mode,
                 routeLabel = "refused.${decision.diagnostic.code}",
                 diagnosticCode = decision.diagnostic.code,
+                productFlag = config.productFlag,
+                legacyRouteAvailable = true,
                 commandFacts = commandFacts,
                 normalizedCommand = command,
                 firstRouteDecision = decision,
@@ -294,8 +344,11 @@ internal class GpuRendererShadowAdapter(
     private fun skipped(): GpuRendererShadowResult =
         GpuRendererShadowResult(
             status = GpuRendererShadowHandoffStatus.Skipped,
+            mode = config.mode,
             routeLabel = "skipped.gpu_renderer_shadow.disabled",
             diagnosticCode = "shadow.disabled",
+            productFlag = config.productFlag,
+            legacyRouteAvailable = true,
             commandFacts = null,
             normalizedCommand = null,
             firstRouteDecision = null,
@@ -304,8 +357,11 @@ internal class GpuRendererShadowAdapter(
     private fun refusedBeforeHandoff(code: String): GpuRendererShadowResult =
         GpuRendererShadowResult(
             status = GpuRendererShadowHandoffStatus.Refused,
+            mode = config.mode,
             routeLabel = "refused.$code",
             diagnosticCode = code,
+            productFlag = config.productFlag,
+            legacyRouteAvailable = true,
             commandFacts = null,
             normalizedCommand = null,
             firstRouteDecision = null,
@@ -319,8 +375,11 @@ internal class GpuRendererShadowAdapter(
     ): GpuRendererShadowResult =
         GpuRendererShadowResult(
             status = GpuRendererShadowHandoffStatus.Refused,
+            mode = config.mode,
             routeLabel = "refused.$code",
             diagnosticCode = code,
+            productFlag = config.productFlag,
+            legacyRouteAvailable = true,
             commandFacts = commandFacts,
             normalizedCommand = command,
             firstRouteDecision = decision,
@@ -413,7 +472,9 @@ private fun GpuRendererShadowClip.refusalCode(): String? =
         is GpuRendererShadowClip.ComplexStack -> null
     }
 
-private fun GpuRendererShadowFillRectState.toNormalizedCommand(): NormalizedDrawCommand.FillRect =
+private fun GpuRendererShadowFillRectState.toNormalizedCommand(
+    sourceOperation: String,
+): NormalizedDrawCommand.FillRect =
     GPUFillRectCommandBuilder.build(
         commandId = GPUDrawCommandID(commandId),
         rect = GPURect(
@@ -434,7 +495,7 @@ private fun GpuRendererShadowFillRectState.toNormalizedCommand(): NormalizedDraw
         paintOrder = paintOrder,
         source = org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource(
             adapter = "GpuRendererShadowAdapter",
-            operation = "legacy.fillRect.shadow",
+            operation = sourceOperation,
         ),
     )
 
@@ -503,7 +564,35 @@ private fun NormalizedDrawCommand.FillRect.toShadowFacts(): GpuRendererShadowCom
 }
 
 private fun GpuRendererShadowHandoffStatus.dumpLabel(): String =
-    name.lowercase()
+    when (this) {
+        GpuRendererShadowHandoffStatus.ProductFlagged -> "product-flagged"
+        else -> name.lowercase()
+    }
+
+private fun GpuRendererShadowMode.dumpLabel(): String =
+    when (this) {
+        GpuRendererShadowMode.Disabled -> "disabled"
+        GpuRendererShadowMode.Shadow -> "shadow"
+        GpuRendererShadowMode.ProductFlag -> "product-flag"
+    }
+
+private fun GpuRendererShadowMode.sourceOperation(): String =
+    when (this) {
+        GpuRendererShadowMode.ProductFlag -> "legacy.fillRect.product_flag"
+        else -> "legacy.fillRect.shadow"
+    }
+
+private fun GpuRendererShadowMode.nativeStatus(): GpuRendererShadowHandoffStatus =
+    when (this) {
+        GpuRendererShadowMode.ProductFlag -> GpuRendererShadowHandoffStatus.ProductFlagged
+        else -> GpuRendererShadowHandoffStatus.Native
+    }
+
+private fun GpuRendererShadowMode.nativeRouteLabel(consumerKind: String): String =
+    when (this) {
+        GpuRendererShadowMode.ProductFlag -> "product_flag.$consumerKind"
+        else -> consumerKind
+    }
 
 private fun firstSliceShadowCapabilities(): GPUCapabilities =
     GPUCapabilities(

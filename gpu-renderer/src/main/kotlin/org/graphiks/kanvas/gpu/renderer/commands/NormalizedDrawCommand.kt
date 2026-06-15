@@ -65,6 +65,8 @@ data class GPUCommandCapture(
 enum class GPUDrawKind {
     /** Filled rectangle command family. */
     FillRect,
+    /** Filled rounded rectangle command family. */
+    FillRRect,
     /** Text run command family with prepared text stack artifacts. */
     DrawTextRun,
 }
@@ -75,6 +77,10 @@ enum class GPUTransformType {
     Identity,
     /** Pure translation transform that keeps rectangles axis-aligned. */
     Translate,
+    /** Axis-aligned scale transform that needs route-specific coverage proof. */
+    Scale,
+    /** Non-perspective affine transform that needs route-specific coverage proof. */
+    Affine,
     /** Perspective transform outside the first native route. */
     Perspective,
     /** Singular transform outside the first native route. */
@@ -105,6 +111,34 @@ data class GPURect(
     val bottom: Float,
 )
 
+/** X/Y radii for one rounded-rectangle corner. */
+data class GPURRectCornerRadii(
+    val x: Float,
+    val y: Float,
+)
+
+/** Rounded rectangle geometry in local command coordinates. */
+data class GPURRect(
+    val rect: GPURect,
+    val topLeft: GPURRectCornerRadii,
+    val topRight: GPURRectCornerRadii = topLeft,
+    val bottomRight: GPURRectCornerRadii = topRight,
+    val bottomLeft: GPURRectCornerRadii = topLeft,
+) {
+    /** Convenience constructor for uniform rrect radii used by first-slice fixtures. */
+    constructor(
+        rect: GPURect,
+        radiusX: Float,
+        radiusY: Float,
+    ) : this(
+        rect = rect,
+        topLeft = GPURRectCornerRadii(x = radiusX, y = radiusY),
+        topRight = GPURRectCornerRadii(x = radiusX, y = radiusY),
+        bottomRight = GPURRectCornerRadii(x = radiusX, y = radiusY),
+        bottomLeft = GPURRectCornerRadii(x = radiusX, y = radiusY),
+    )
+}
+
 /** Conservative command bounds in the coordinate space selected by the caller. */
 data class GPUBounds(
     val left: Float,
@@ -118,6 +152,10 @@ data class GPUTransformFacts(
     val type: GPUTransformType,
     val translateX: Float = 0f,
     val translateY: Float = 0f,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+    val skewX: Float = 0f,
+    val skewY: Float = 0f,
 ) {
     /** Creates identity transform facts for first-slice fixtures. */
     companion object {
@@ -130,6 +168,33 @@ data class GPUTransformFacts(
                 type = GPUTransformType.Translate,
                 translateX = x,
                 translateY = y,
+            )
+
+        /** Returns a scale transform fact record that routes must explicitly accept or refuse. */
+        fun scale(x: Float, y: Float): GPUTransformFacts =
+            GPUTransformFacts(
+                type = GPUTransformType.Scale,
+                scaleX = x,
+                scaleY = y,
+            )
+
+        /** Returns a non-perspective affine transform fact record for route-specific validation. */
+        fun affine(
+            scaleX: Float,
+            skewX: Float,
+            skewY: Float,
+            scaleY: Float,
+            translateX: Float = 0f,
+            translateY: Float = 0f,
+        ): GPUTransformFacts =
+            GPUTransformFacts(
+                type = GPUTransformType.Affine,
+                translateX = translateX,
+                translateY = translateY,
+                scaleX = scaleX,
+                scaleY = scaleY,
+                skewX = skewX,
+                skewY = skewY,
             )
 
         /** Returns a transform fact record with perspective classification. */
@@ -314,6 +379,49 @@ object GPUFillRectCommandBuilder {
     }
 }
 
+/** Builds Kanvas-owned first-expansion FillRRect commands from already-normalized facts. */
+object GPUFillRRectCommandBuilder {
+    /**
+     * Builds an immutable FillRRect command from facts already captured by the caller.
+     *
+     * This mirrors [GPUFillRectCommandBuilder] while keeping rrect radii as
+     * command-owned geometry facts. Radius normalization and route acceptance
+     * remain analysis responsibilities so unsupported rounded rectangles can
+     * refuse with stable diagnostics instead of being approximated.
+     */
+    fun build(
+        commandId: GPUDrawCommandID,
+        rrect: GPURRect,
+        target: GPUTargetFacts,
+        material: GPUMaterialDescriptor,
+        transform: GPUTransformFacts = GPUTransformFacts.identity(),
+        clip: GPUClipFacts? = null,
+        layer: GPULayerFacts? = null,
+        blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        paintOrder: Int = 0,
+        source: GPUCommandSource = GPUCommandSource(adapter = "gpu-renderer", operation = "fillRRect"),
+    ): NormalizedDrawCommand.FillRRect {
+        val bounds = rrect.rect.toBounds()
+        val resolvedClip = clip ?: GPUClipFacts.wideOpen(bounds = bounds)
+        return NormalizedDrawCommand.FillRRect(
+            commandId = commandId,
+            rrect = rrect,
+            transform = transform,
+            clip = resolvedClip,
+            layer = layer ?: GPULayerFacts.root(target = target),
+            material = material,
+            blend = blend,
+            bounds = bounds,
+            ordering = GPUOrderingFacts(
+                paintOrder = paintOrder,
+                dependsOnDestination = false,
+                requiresBarrier = false,
+            ),
+            source = source,
+        )
+    }
+}
+
 /** High-level draw command after legacy state has been captured and normalized. */
 sealed interface NormalizedDrawCommand {
     /** Recording-local command identifier. */
@@ -355,6 +463,22 @@ sealed interface NormalizedDrawCommand {
         override val source: GPUCommandSource,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRect
+    }
+
+    /** First-expansion filled rounded rectangle command with captured state. */
+    data class FillRRect(
+        override val commandId: GPUDrawCommandID,
+        val rrect: GPURRect,
+        override val transform: GPUTransformFacts,
+        override val clip: GPUClipFacts,
+        override val layer: GPULayerFacts,
+        override val material: GPUMaterialDescriptor,
+        override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        override val bounds: GPUBounds,
+        override val ordering: GPUOrderingFacts,
+        override val source: GPUCommandSource,
+    ) : NormalizedDrawCommand {
+        override val drawKind: GPUDrawKind = GPUDrawKind.FillRRect
     }
 
     /**

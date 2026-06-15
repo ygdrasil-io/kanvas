@@ -1,7 +1,7 @@
 ---
 id: KGPU-M2-002
 title: "Add linear-gradient rect and rrect material route"
-status: proposed
+status: done
 milestone: M2
 priority: P0
 owner_area: materials-wgsl
@@ -89,7 +89,14 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Depends on rrect/rect route fixture stability.
+- `done`: `M2SimpleSceneEvidenceTest` adds a deterministic contract-fixture
+  linear-gradient material plan with `material:linear-gradient.clamp.inline2`,
+  `gradient.inline2` payload evidence, fixture-declared WGSL reflection, and
+  stable `unsupported.gradient.tile_mode` refusal evidence. Product activation
+  remains false. Independent review `019ec7aa-f95b-7f40-9f40-1bf80d87d2b9`
+  accepted the evidence as route-planning proof only and confirmed no
+  adapter-backed GPU execution or broad gradient/color-management support is
+  claimed.
 
 ## Linear Labels
 

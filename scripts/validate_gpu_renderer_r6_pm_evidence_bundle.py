@@ -13,6 +13,10 @@ RELEASE_DIR = "release/gpu-renderer-r6-first-route-pm-evidence"
 MANIFEST_ARTIFACT = "gpu-renderer-first-route-pm-evidence-00-manifest.txt"
 OUTPUT_MANIFEST_ENTRY = "pm-bundle-manifest-entry.json"
 
+ACTIVATION_DECISION_REF = "reports/gpu-renderer/2026-06-14-m1-promotion-policy-decision.md"
+ACTIVATION_PACKAGING_STATE = "activation-candidate"
+ADAPTER_EVIDENCE_PROVENANCE = "opt-in-adapter-backed-r6-executed-diagnostic"
+ADAPTER_EVIDENCE_REQUIREMENT = "required-before-product-activation"
 EXPECTED_REPORT_NAME = "gpu-renderer-first-route-pm-evidence"
 EXPECTED_MISSING_EVIDENCE_SEQUENCE = [
     "route",
@@ -105,6 +109,11 @@ EXPECTED_MANIFEST_ENTRY_FIELDS = {
     "key",
     "claimLevel",
     "status",
+    "packagingState",
+    "validationReportStatus",
+    "activationDecisionRef",
+    "adapterEvidenceProvenance",
+    "adapterEvidenceRequirement",
     "validationReportName",
     "promotionGate",
     "promotionGatePassed",
@@ -328,7 +337,12 @@ def build_manifest_entry(fields: dict[str, str], rows: list[dict[str, Any]]) -> 
     return {
         "key": "gpuRendererR6FirstRoutePmEvidence",
         "claimLevel": "gpu-renderer-r6-pm-evidence-only",
-        "status": fields["validation.report.status"],
+        "status": "ActivationCandidate",
+        "packagingState": ACTIVATION_PACKAGING_STATE,
+        "validationReportStatus": fields["validation.report.status"],
+        "activationDecisionRef": ACTIVATION_DECISION_REF,
+        "adapterEvidenceProvenance": ADAPTER_EVIDENCE_PROVENANCE,
+        "adapterEvidenceRequirement": ADAPTER_EVIDENCE_REQUIREMENT,
         "validationReportName": fields["validation.report.name"],
         "promotionGate": fields["validation.gate.name"],
         "promotionGatePassed": False,
@@ -348,16 +362,36 @@ def build_manifest_entry(fields: dict[str, str], rows: list[dict[str, Any]]) -> 
         "nonClaims": [
             "No product route activation.",
             "No WebGPU adapter, Kadre window, or native demo requirement for this bundle.",
-            "No first-route support claim while promotion evidence is missing.",
+            "Activation-candidate PM packaging is not a first-route support claim.",
             "No hidden CPU-rendered texture fallback.",
         ],
-        "notice": "The GPU renderer R6 bundle packages validation-owned first-route PM evidence. The default artifact is refusal-first and incomplete; it is review evidence, not a product support claim.",
+        "notice": "The GPU renderer R6 bundle packages validation-owned first-route PM evidence as an M1 activation candidate. The default artifact remains refusal-first and incomplete; this is PM packaging, not product route activation.",
     }
 
 
 def validate_entry(entry: dict[str, Any], fields: dict[str, str]) -> None:
     require_exact_fields(entry, EXPECTED_MANIFEST_ENTRY_FIELDS, "manifest entry")
-    require(entry["status"] == "Incomplete", "default GPU renderer PM evidence must remain Incomplete")
+    require(entry["status"] == "ActivationCandidate", "default GPU renderer PM evidence must be ActivationCandidate")
+    require(
+        entry["packagingState"] == ACTIVATION_PACKAGING_STATE,
+        "default GPU renderer PM packaging state changed",
+    )
+    require(
+        entry["validationReportStatus"] == "Incomplete",
+        "default GPU renderer validation report status must remain Incomplete",
+    )
+    require(
+        entry["activationDecisionRef"] == ACTIVATION_DECISION_REF,
+        "default GPU renderer activation decision reference changed",
+    )
+    require(
+        entry["adapterEvidenceProvenance"] == ADAPTER_EVIDENCE_PROVENANCE,
+        "default GPU renderer adapter evidence provenance changed",
+    )
+    require(
+        entry["adapterEvidenceRequirement"] == ADAPTER_EVIDENCE_REQUIREMENT,
+        "default GPU renderer adapter evidence requirement changed",
+    )
     require(entry["promotionGatePassed"] is False, "default GPU renderer promotion gate must remain false")
     require(entry["productRouteActivated"] is False, "PM bundle must not activate product routes")
     require(entry["nativeKadreCiRequired"] is False, "PM bundle must not require native Kadre CI")
@@ -365,6 +399,7 @@ def validate_entry(entry: dict[str, Any], fields: dict[str, str]) -> None:
     require(entry["releaseBlocking"] is False, "PM bundle must not add release-blocking gates")
     require_float(entry, "readinessDelta", 0.0, "manifest entry")
     require(fields["validation.bundle.scope"] == "pm-evidence-only", "validation bundle scope must be pm-evidence-only")
+    require(fields["validation.report.status"] == "Incomplete", "validation report status must remain Incomplete")
 
 
 def validate_manifest_entry_sidecar(output_dir: Path, entry: dict[str, Any], fields: dict[str, str]) -> None:

@@ -1,7 +1,7 @@
 ---
 id: KGPU-M2-003
 title: "Add simple scissor clip route"
-status: proposed
+status: done
 milestone: M2
 priority: P0
 owner_area: clips-passes
@@ -86,7 +86,13 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Simple scissor only.
+- `done`: `M2SimpleSceneEvidenceTest` adds a deterministic
+  `GPUClipPlan`-backed device-rect scissor dump for
+  `m2-simple-device-scissor` and stable `unsupported.clip.non_device_rect`
+  refusal evidence. Product activation remains false. Independent review
+  `019ec7aa-f95b-7f40-9f40-1bf80d87d2b9` accepted the evidence as
+  scissor-planning proof only and confirmed no complex clip, stencil, mask,
+  shader clip, or hidden CPU fallback support is claimed.
 
 ## Linear Labels
 

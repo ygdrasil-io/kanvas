@@ -1,7 +1,7 @@
 ---
 id: KGPU-M1-004
 title: "Add first-route rollback and parity validation"
-status: proposed
+status: done
 milestone: M1
 priority: P0
 owner_area: validation-adapter
@@ -56,9 +56,9 @@ data class RollbackEvidence(val legacyChecksum: String, val gpuRendererChecksum:
 
 ## Acceptance Criteria
 
-- [ ] Legacy and `:gpu-renderer` outputs are compared for the accepted scene.
-- [ ] Rollback path restores legacy routing.
-- [ ] PM output records scope and non-claims.
+- [x] Legacy and `:gpu-renderer` outputs are compared for the accepted scene.
+- [x] Rollback path restores legacy routing.
+- [x] PM output records scope and non-claims.
 
 ## Required Evidence
 
@@ -87,7 +87,17 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Requires product flag ticket first.
+- `done`: Added `GpuRendererFirstRouteRollbackParityValidator` and
+  adapter-backed tests comparing legacy-before, product-flagged, and
+  legacy-rollback pixel checksums. The report keeps
+  `productRouteActivated=false`, `releaseBlocking=false`, and
+  `readinessDelta=0.0`, records rollback diagnostics, and proves
+  `StrokeAndFill` remains an unsupported product-flag variant.
+- Fresh evidence:
+  `reports/gpu-renderer/2026-06-14-m1-004-rollback-parity-validation.md`.
+- Independent review `019ec731-4bf3-7e60-9ab6-af513036a6e9` approved moving
+  the ticket to `done`: no hidden product activation, release blocking,
+  readiness movement, or broadened route support claim was found.
 
 ## Linear Labels
 

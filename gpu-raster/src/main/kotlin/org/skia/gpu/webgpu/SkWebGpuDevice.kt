@@ -15223,7 +15223,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
 
     private fun shadowFillRectForGpuRendererEvidence(rect: SkRect, clip: SkIRect, paint: SkPaint) {
         val config = GpuRendererShadowConfig.fromSystemProperties()
-        val commandId = if (config.mode == GpuRendererShadowMode.Shadow) {
+        val commandId = if (config.mode != GpuRendererShadowMode.Disabled) {
             gpuRendererShadowCommandId++
         } else {
             0

@@ -259,6 +259,7 @@ class GPURecorder(
     private fun planCommand(command: NormalizedDrawCommand): GPUFirstRoutePlan =
         when (command) {
             is NormalizedDrawCommand.FillRect -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
+            is NormalizedDrawCommand.FillRRect -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
             is NormalizedDrawCommand.DrawTextRun -> refusedDrawTextRunPlan(command)
         }
 
@@ -701,5 +702,5 @@ private fun GPUCapabilities.featureAssumptions(): List<String> =
 private fun stableHash(prefix: String, lines: List<String>): String =
     "$prefix:${Integer.toUnsignedString(lines.joinToString("|").hashCode(), 16)}"
 
-private const val commandShapeVersionFirstRoute = 1
+private const val commandShapeVersionFirstRoute = 2
 private const val replayPolicyOneShot = "one-shot"

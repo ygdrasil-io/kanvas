@@ -77,9 +77,9 @@ ARTIFACT_LINES = {
     ],
     "diagnostic-webgpu-first-route-pm-evidence-14-unsupported-route-refusals.txt": [
         "routing:UnsupportedRouteFamilyRefusal:diagnostic-webgpu-first-route-pm-evidence "
-        "unsupportedFamilies=perspective-transform,singular-transform,unsupported-target-format,"
-        "unsupported-blend,non-simple-clip,layer-filter-destination-read,missing-capability,"
-        "wgsl-validation-or-abi-mismatch diagnostics=none",
+        "unsupportedFamilies=perspective-transform,singular-transform,rrect-scale-transform,"
+        "rrect-affine-transform,unsupported-target-format,unsupported-blend,non-simple-clip,"
+        "layer-filter-destination-read,missing-capability,wgsl-validation-or-abi-mismatch diagnostics=none",
     ],
     "diagnostic-webgpu-first-route-pm-evidence-15-recording-analysis.txt": [
         "recording:GPUAnalysisDecisionDump:recording recording.webgpu-submit decision:candidate:analysis.fill_rect.42:native.fill_rect.solid",

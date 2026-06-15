@@ -97,7 +97,12 @@ def default_entry(**overrides: object) -> dict:
     entry = {
         "key": "gpuRendererR6FirstRoutePmEvidence",
         "claimLevel": "gpu-renderer-r6-pm-evidence-only",
-        "status": "Incomplete",
+        "status": "ActivationCandidate",
+        "packagingState": "activation-candidate",
+        "validationReportStatus": "Incomplete",
+        "activationDecisionRef": "reports/gpu-renderer/2026-06-14-m1-promotion-policy-decision.md",
+        "adapterEvidenceProvenance": "opt-in-adapter-backed-r6-executed-diagnostic",
+        "adapterEvidenceRequirement": "required-before-product-activation",
         "promotionGate": "first-route-promotion",
         "promotionGatePassed": False,
         "missingEvidence": DEFAULT_MISSING,
@@ -120,13 +125,13 @@ def default_entry(**overrides: object) -> dict:
         "nonClaims": [
             "No product route activation.",
             "No WebGPU adapter, Kadre window, or native demo requirement for this bundle.",
-            "No first-route support claim while promotion evidence is missing.",
+            "Activation-candidate PM packaging is not a first-route support claim.",
             "No hidden CPU-rendered texture fallback.",
         ],
         "notice": (
-            "The GPU renderer R6 bundle packages validation-owned first-route PM evidence. "
-            "The default artifact is refusal-first and incomplete; it is review evidence, "
-            "not a product support claim."
+            "The GPU renderer R6 bundle packages validation-owned first-route PM evidence as an M1 activation candidate. "
+            "The default artifact remains refusal-first and incomplete; this is PM packaging, "
+            "not product route activation."
         ),
     }
     entry.update(overrides)
@@ -326,7 +331,7 @@ class GpuRendererR6PromotionReadinessBoundaryValidatorTest(unittest.TestCase):
             result = validator.validate_boundary(pm_bundle_dir, summary_path)
 
         self.assertEqual("promotion-boundary-held", result["classification"])
-        self.assertEqual("Incomplete", result["rootDefaultBundle"]["status"])
+        self.assertEqual("ActivationCandidate", result["rootDefaultBundle"]["status"])
         self.assertFalse(result["rootDefaultBundle"]["promotionGatePassed"])
         self.assertEqual(DEFAULT_MISSING, result["rootDefaultBundle"]["missingEvidence"])
         self.assertEqual("Passed", result["executedDiagnosticEvidence"]["status"])
@@ -335,7 +340,24 @@ class GpuRendererR6PromotionReadinessBoundaryValidatorTest(unittest.TestCase):
         self.assertFalse(result["productRouteActivated"])
         self.assertFalse(result["releaseBlocking"])
         self.assertEqual(0.0, result["readinessDelta"])
-        self.assertTrue(result["promotionDecisionRequired"])
+        self.assertFalse(result["promotionDecisionRequired"])
+
+    def test_validate_boundary_reports_m1_activation_candidate_without_product_activation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            pm_bundle_dir, summary_path = write_bundle_fixture(
+                Path(temp),
+                summary=executed_summary(),
+            )
+
+            result = validator.validate_boundary(pm_bundle_dir, summary_path)
+
+        self.assertEqual("ActivationCandidate", result["rootDefaultBundle"]["status"])
+        self.assertEqual("activation-candidate", result["rootDefaultBundle"]["packagingState"])
+        self.assertEqual("Incomplete", result["rootDefaultBundle"]["validationReportStatus"])
+        self.assertFalse(result["promotionDecisionRequired"])
+        self.assertFalse(result["productRouteActivated"])
+        self.assertFalse(result["releaseBlocking"])
+        self.assertEqual(0.0, result["readinessDelta"])
 
     def test_validate_boundary_rejects_promoted_root_default_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -345,7 +367,7 @@ class GpuRendererR6PromotionReadinessBoundaryValidatorTest(unittest.TestCase):
                 summary=executed_summary(),
             )
 
-            with self.assertRaisesRegex(validator.ValidationError, "root default PM evidence must remain Incomplete"):
+            with self.assertRaisesRegex(validator.ValidationError, "root default PM evidence must remain ActivationCandidate"):
                 validator.validate_boundary(pm_bundle_dir, summary_path)
 
     def test_validate_boundary_rejects_duplicate_product_route_keys_in_json_evidence_inputs(self) -> None:
@@ -398,6 +420,11 @@ class GpuRendererR6PromotionReadinessBoundaryValidatorTest(unittest.TestCase):
     def test_validate_boundary_rejects_root_manifest_default_entry_claim_drift(self) -> None:
         unsafe_manifest_entries = [
             default_entry(status="Passed"),
+            default_entry(packagingState="release"),
+            default_entry(validationReportStatus="Passed"),
+            default_entry(activationDecisionRef="reports/gpu-renderer/other.md"),
+            default_entry(adapterEvidenceProvenance="silent-root-dependency"),
+            default_entry(adapterEvidenceRequirement="none"),
             default_entry(productRouteActivated=True),
             default_entry(releaseBlocking=True),
             default_entry(readinessDelta=1.0),
@@ -707,7 +734,8 @@ tasks.register("pipelinePmBundle") {
         self.assertIn("Product route activated: `false`", report)
         self.assertIn("Release blocking: `false`", report)
         self.assertIn("Readiness delta: `0.0`", report)
-        self.assertIn("Explicit release/product activation decision", report)
+        self.assertIn("Promotion decision required: `false`", report)
+        self.assertIn("Controlled first-route product flag", report)
 
     def test_gradle_wiring_exposes_adapter_backed_boundary_validation_task(self) -> None:
         build_gradle = (PROJECT_ROOT / "build.gradle.kts").read_text(encoding="utf-8")
