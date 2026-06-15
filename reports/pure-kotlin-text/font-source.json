@@ -1,0 +1,66 @@
+{"schema":"org.graphiks.kanvas.font.FontSourceIdentityReport.v1","fixtureName":"font-source.json","entries":[{"label":"bundled-fixture","sourceId":"afd7874c-0b27-5dab-8aa0-9d6fe171f246","preimage":{
+  "schema": "org.graphiks.kanvas.font.FontSourceIdentityPreimage.v1",
+  "provenance": {
+    "kind": "BundledFontSource",
+    "declaredName": "Fixture Sans",
+    "licenseId": "OFL-1.1",
+    "originPath": null,
+    "hostDependent": false
+  },
+  "contentSha256": "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+  "byteLength": 3,
+  "faceCount": 1,
+  "tableTags": ["cmap", "head", "name"],
+  "parserGeneration": 1,
+  "diagnostics": []
+},"claimPromotionAllowed":false},{"label":"generated-fixture","sourceId":"13da45b2-7cc8-5b13-a8e3-580abd758271","preimage":{
+  "schema": "org.graphiks.kanvas.font.FontSourceIdentityPreimage.v1",
+  "provenance": {
+    "kind": "GeneratedFixtureFontSource",
+    "declaredName": "Generated Minimal",
+    "licenseId": null,
+    "originPath": null,
+    "hostDependent": false
+  },
+  "contentSha256": "787c798e39a5bc1910355bae6d0cd87a36b2e10fd0202a83e3bb6b005da83472",
+  "byteLength": 3,
+  "faceCount": 1,
+  "tableTags": ["cmap", "head"],
+  "parserGeneration": 1,
+  "diagnostics": []
+},"claimPromotionAllowed":false},{"label":"user-data","sourceId":"56a200cb-35a8-5598-9279-02f4a413ee15","preimage":{
+  "schema": "org.graphiks.kanvas.font.FontSourceIdentityPreimage.v1",
+  "provenance": {
+    "kind": "UserDataFontSource",
+    "declaredName": "User Upload",
+    "licenseId": null,
+    "originPath": null,
+    "hostDependent": false
+  },
+  "contentSha256": "66a6757151f8ee55db127716c7e3dce0be8074b64e20eda542e5c1e46ca9c41e",
+  "byteLength": 3,
+  "faceCount": 1,
+  "tableTags": ["cmap"],
+  "parserGeneration": 1,
+  "diagnostics": []
+},"claimPromotionAllowed":false},{"label":"system-scanned-host-dependent","sourceId":"dadf31c7-704e-5a25-9d99-acfdbdbf18d1","preimage":{
+  "schema": "org.graphiks.kanvas.font.FontSourceIdentityPreimage.v1",
+  "provenance": {
+    "kind": "SystemScannedFontSource",
+    "declaredName": "Host Scan Sans",
+    "licenseId": null,
+    "originPath": "system-fonts/HostScanSans.ttf",
+    "hostDependent": true
+  },
+  "contentSha256": null,
+  "byteLength": null,
+  "faceCount": 0,
+  "tableTags": [],
+  "parserGeneration": 1,
+  "diagnostics": [
+    {
+      "code": "font.source.host-dependent",
+      "detail": "System scan entry has no captured fixture bytes."
+    }
+  ]
+},"claimPromotionAllowed":false}]}
