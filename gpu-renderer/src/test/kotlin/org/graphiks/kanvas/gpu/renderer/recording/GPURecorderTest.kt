@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnosticCodes
 
 /** Verifies R5 recording, task-list, ordering, and replay policy evidence for the first FillRect route. */
 class GPURecorderTest {
@@ -155,6 +156,31 @@ class GPURecorderTest {
             "decision:refuse:analysis.draw_text_run.13:unsupported.text.draw_run_route_unavailable",
         )
         assertContains(recording.routeDiagnostics, "refused:unsupported.text.draw_run_route_unavailable")
+    }
+
+    @Test
+    fun `draw text run records stable diagnostics for skia-like payload leakage`() {
+        val recorder = GPURecorder(
+            recordingId = GPURecordingID("recording.text-leak"),
+            capabilities = firstSliceCapabilities(),
+        )
+
+        recorder.record(
+            drawTextRun(commandIdValue = 7).copy(
+                glyphRunDescriptorRefs = listOf("SkTextBlob#7"),
+                uploadDependencyFacts = listOf("cpu-rendered-texture"),
+            ),
+        )
+        val recording = recorder.close()
+
+        assertEquals(
+            listOf(
+                "unsupported.text.draw_run_route_unavailable",
+                GPUTextDiagnosticCodes.SK_TYPE_LEAKED,
+                GPUTextDiagnosticCodes.CPU_RENDERED_TEXTURE_FORBIDDEN,
+            ),
+            recording.analysis.records.single().diagnostics.map { it.code },
+        )
     }
 
     /** First-slice recordings are one-shot even when the target key is otherwise identical. */

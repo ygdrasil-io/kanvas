@@ -83,10 +83,10 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: Depends on KGPU-M6-001 and accepted KFONT-M11-007 resource/upload
-  contracts. Adapter-backed resource, upload, instance, binding, stale
-  generation, budget, and no-`MaterialKey`-leak evidence is required before the
-  text resource plan can support KGPU-M6-002.
+- `blocked`: KGPU-M6-001 is now done, but this ticket still requires accepted
+  KFONT-M11-007 resource/upload contracts plus adapter-backed resource, upload,
+  instance, binding, stale generation, budget, and no-`MaterialKey`-leak
+  evidence before the text resource plan can support KGPU-M6-002.
 
 ## Linear Labels
 
