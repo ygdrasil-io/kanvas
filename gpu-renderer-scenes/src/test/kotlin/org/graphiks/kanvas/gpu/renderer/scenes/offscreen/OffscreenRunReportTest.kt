@@ -86,4 +86,77 @@ class OffscreenRunReportTest {
             )
         }
     }
+
+    @Test
+    fun `constructor rejects blank scene ids and backends`() {
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport(
+                sceneId = " ",
+                runStatus = OffscreenRunStatus.NotYetRendered,
+                backend = "webgpu-offscreen",
+                imagePath = null,
+                width = null,
+                height = null,
+                byteCount = null,
+                nonTransparentPixels = null,
+                diagnostics = listOf("runner-subset"),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport(
+                sceneId = "mesh-ribbon",
+                runStatus = OffscreenRunStatus.RenderFailed,
+                backend = "\n",
+                imagePath = null,
+                width = null,
+                height = null,
+                byteCount = null,
+                nonTransparentPixels = null,
+                diagnostics = listOf("surface unavailable"),
+            )
+        }
+    }
+
+    @Test
+    fun `failure and non rendered statuses reject image outputs and metrics`() {
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport(
+                sceneId = "failed-with-image",
+                runStatus = OffscreenRunStatus.RenderFailed,
+                backend = "webgpu-offscreen",
+                imagePath = "failed.png",
+                width = null,
+                height = null,
+                byteCount = null,
+                nonTransparentPixels = null,
+                diagnostics = listOf("surface unavailable"),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport(
+                sceneId = "failed-with-metrics",
+                runStatus = OffscreenRunStatus.RenderFailed,
+                backend = "webgpu-offscreen",
+                imagePath = null,
+                width = 64,
+                height = 64,
+                byteCount = 4096,
+                nonTransparentPixels = 12,
+                diagnostics = listOf("surface unavailable"),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenRunReport(
+                sceneId = "not-rendered-with-image",
+                runStatus = OffscreenRunStatus.NotYetRendered,
+                backend = "webgpu-offscreen",
+                imagePath = "not-rendered.png",
+                width = null,
+                height = null,
+                byteCount = null,
+                nonTransparentPixels = null,
+                diagnostics = listOf("runner-subset"),
+            )
+        }
+    }
 }

@@ -25,8 +25,25 @@ data class OffscreenRunReport(
     val productRefusal: Boolean get() = false
 
     init {
+        require(sceneId.isNotBlank()) { "sceneId must not be blank" }
+        require(backend.isNotBlank()) { "backend must not be blank" }
         require(diagnostics.isNotEmpty()) { "diagnostics must not be empty" }
         require(diagnostics.all { it.isNotBlank() }) { "diagnostics must not contain blank entries" }
+
+        when (runStatus) {
+            OffscreenRunStatus.NotYetRendered,
+            OffscreenRunStatus.RenderFailed -> requireNoRenderedOutput()
+        }
+    }
+
+    private fun requireNoRenderedOutput() {
+        require(imagePath == null) { "${runStatus.wireName} reports must not include imagePath" }
+        require(width == null) { "${runStatus.wireName} reports must not include width" }
+        require(height == null) { "${runStatus.wireName} reports must not include height" }
+        require(byteCount == null) { "${runStatus.wireName} reports must not include byteCount" }
+        require(nonTransparentPixels == null) {
+            "${runStatus.wireName} reports must not include nonTransparentPixels"
+        }
     }
 
     fun toJson(): String = buildString {
