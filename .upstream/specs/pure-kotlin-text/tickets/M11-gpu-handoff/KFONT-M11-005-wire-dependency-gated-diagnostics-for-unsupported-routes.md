@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-005"
 title: "Wire dependency-gated diagnostics for unsupported routes"
-status: "proposed"
+status: "review"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -62,11 +62,11 @@ data class GPUTextRouteRefusal(
 
 ## Acceptance Criteria
 
-- [ ] Unsupported SDF, outline, color, bitmap, and SVG routes each emit a route-specific `unsupported.text.*` diagnostic.
-- [ ] Unregistered artifacts emit `text.gpu.artifact-unregistered` and `unsupported.text.artifact_unregistered`.
-- [ ] Missing upload plans emit `text.gpu.upload-plan-missing` and `unsupported.text.upload_plan_missing`.
-- [ ] CPU-rendered full text textures always emit `text.gpu.CPU-rendered-texture-forbidden` or `unsupported.text.cpu_rendered_texture_forbidden`.
-- [ ] Dashboard rows classify blockers by real cause and keep legacy gates linked to route-specific refusals.
+- [x] Unsupported SDF, outline, color, bitmap, and SVG routes each emit a route-specific `unsupported.text.*` diagnostic.
+- [x] Unregistered artifacts emit `text.gpu.artifact-unregistered` and `unsupported.text.artifact_unregistered`.
+- [x] Missing upload plans emit `text.gpu.upload-plan-missing` and `unsupported.text.upload_plan_missing`.
+- [x] CPU-rendered full text textures always emit `text.gpu.CPU-rendered-texture-forbidden` or `unsupported.text.cpu_rendered_texture_forbidden`.
+- [x] Dashboard rows classify blockers by real cause and keep legacy gates linked to route-specific refusals.
 
 ## Required Evidence
 
@@ -95,8 +95,9 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*TextRouteRefusal*'
 
 ## Status Notes
 
-- `proposed`: Ensures unsupported text GPU routes remain explicit, auditable blockers.
-- Move to `ready` only after diagnostic mapping and blocker classification are reviewed.
+- `review` (2026-06-15): Added `GPUTextRouteRefusals.kt` plus `GPUTextRouteRefusalTest`; report evidence lives in `reports/pure-kotlin-text/2026-06-15-kfont-m11-005-route-refusals.md`.
+- TDD evidence: red `:font:gpu-api:compileTestKotlin` on missing route-refusal contract, then green `rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*TextRouteRefusal*'` with 4 tests.
+- Remaining gate: this is refusal evidence only; route rendering, A8 atlas proof, subrun/resource/upload/binding plans, WGSL reflection, and CPU/GPU/reference evidence remain in later M11 tickets.
 
 ## Linear Labels
 
