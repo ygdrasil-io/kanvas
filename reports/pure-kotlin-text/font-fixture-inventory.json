@@ -1081,7 +1081,7 @@
           "targetGate": "truetype-gvar-iup",
           "status": "current-positive-evidence",
           "fixtureKind": "synthetic-table-bytes",
-          "generationPolicy": "Generate bounded simple/composite TrueType gvar tuples that prove single-point IUP propagation, wraparound interpolation, untouched contour isolation, horizontal phantom-point advance deltas, avar-normalized coordinates, HVAR-unimplemented warnings, and malformed tuple diagnostics.",
+          "generationPolicy": "Generate bounded simple/composite TrueType gvar tuples that prove single-point IUP propagation, wraparound interpolation, untouched contour isolation, horizontal phantom-point advance deltas, avar-normalized coordinates, bounded HVAR advance-width deltas, bounded MVAR vertical-global metric deltas, and malformed HVAR/MVAR plus tuple diagnostics.",
           "evidencePaths": [
             "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
             "reports/font/fixtures/expected/scaler/truetype-gvar-iup.json",
@@ -1095,13 +1095,16 @@
             "min-default-max phantom metrics dump",
             "avar-normalized outline dump",
             "composite child outline dump",
-            "HVAR-unimplemented warning snapshot",
+            "bounded HVAR advance-width case",
+            "bounded MVAR vertical-global metrics case",
+            "malformed HVAR diagnostic snapshot",
+            "malformed MVAR diagnostic snapshot",
             "malformed tuple diagnostic snapshot"
           ],
           "nonClaims": [
             "no-complete-target-support-claim",
             "no-complete-variable-font-support-claim",
-            "no-hvar-vvar-mvar-metrics-claim",
+            "no-complete-hvar-vvar-mvar-metrics-claim",
             "no-vertical-metrics-claim",
             "no-complete-hinting-vm-claim",
             "no-a8-or-sdf-artifact-claim",
