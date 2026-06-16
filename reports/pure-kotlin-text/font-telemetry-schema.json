@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "font-telemetry-schema",
+  "ownerTickets": ["KFONT-M12-001"],
+  "domains": [
+    {"domain": "parser","requiredDimensions": ["environmentLabel","runtimeLabel","fontSourceSetHash","unicodeDataVersion","cacheState","fixtureId","sampleCount","measurementPhase"],"metricNames": ["parser.scan.time","parser.parse.time","parser.table-cache.hit"],"gpuAdapterRequired": false},
+    {"domain": "scaler","requiredDimensions": ["environmentLabel","runtimeLabel","fontSourceSetHash","unicodeDataVersion","cacheState","fixtureId","sampleCount","measurementPhase"],"metricNames": ["scaler.outline.time","scaler.bounds.time","scaler.variation.time"],"gpuAdapterRequired": false},
+    {"domain": "shaping","requiredDimensions": ["environmentLabel","runtimeLabel","fontSourceSetHash","unicodeDataVersion","cacheState","fixtureId","sampleCount","measurementPhase"],"metricNames": ["shaping.segmentation.time","shaping.fallback.time","shaping.glyph.count"],"gpuAdapterRequired": false},
+    {"domain": "paragraph","requiredDimensions": ["environmentLabel","runtimeLabel","fontSourceSetHash","unicodeDataVersion","cacheState","fixtureId","sampleCount","measurementPhase"],"metricNames": ["paragraph.layout.time","paragraph.line.count","paragraph.hit-test.time"],"gpuAdapterRequired": false},
+    {"domain": "glyph-artifact","requiredDimensions": ["environmentLabel","runtimeLabel","fontSourceSetHash","unicodeDataVersion","cacheState","fixtureId","sampleCount","measurementPhase"],"metricNames": ["glyph-artifact.route.count","glyph-artifact.a8.time","glyph-artifact.cache.bytes"],"gpuAdapterRequired": false},
+    {"domain": "gpu-text-handoff","requiredDimensions": ["environmentLabel","runtimeLabel","fontSourceSetHash","unicodeDataVersion","cacheState","fixtureId","sampleCount","measurementPhase","gpuAdapter","gpuBackend"],"metricNames": ["gpu-text-handoff.registry.lookup.time","gpu-text-handoff.upload.bytes","gpu-text-handoff.route.count"],"gpuAdapterRequired": true}
+  ],
+  "requiredAggregationFields": ["median", "p90", "max", "sampleCount", "cacheState"],
+  "diagnosticCodes": ["font.telemetry.dimension-missing", "font.telemetry.schema-domain-missing", "font.telemetry.single-run-budget-refused"],
+  "dashboardRow": {"label":"Font telemetry schema","classification":"tracked-gap","claimPromotionAllowed":false},
+  "nonClaims": ["no-complete-target-support-claim", "no-performance-release-gate-claim", "no-gpu-route-support-claim", "no-native-engine-oracle-claim"]
+}

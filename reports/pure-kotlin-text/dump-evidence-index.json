@@ -365,6 +365,93 @@
       ]
     },
     {
+      "dumpId": "font-telemetry-schema",
+      "ownerTicket": "KFONT-M12-001",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Measurement Policy"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/font-telemetry-schema.json"
+      ],
+      "expectedFields": [
+        "dashboardRow",
+        "diagnosticCodes",
+        "domains",
+        "gpuAdapterRequired",
+        "metricNames",
+        "nonClaims",
+        "ownerTickets",
+        "requiredAggregationFields",
+        "requiredDimensions",
+        "schemaId",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Telemetry schema dump changes require domain list, dimension policy, refusal diagnostic, and matrix checkpoint review without performance-gate promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim"
+      ]
+    },
+    {
+      "dumpId": "font-telemetry-schema-fixture",
+      "ownerTicket": "KFONT-M12-001",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/font-telemetry-schema-fixture.json"
+      ],
+      "expectedFields": [
+        "cacheState",
+        "diagnosticCode",
+        "dumpId",
+        "environment",
+        "fixtureId",
+        "fontSourceSetHash",
+        "gpuAdapter",
+        "measurementPhase",
+        "metrics",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "sampleCount",
+        "samples",
+        "schemaVersion",
+        "unicodeDataVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Telemetry fixture dump changes require repeated-run aggregation, GPU-dimension conditionality, refusal diagnostic, and matrix checkpoint review without budget or GPU-claim promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim"
+      ]
+    },
+    {
       "dumpId": "glyph-artifact-plan",
       "ownerTicket": "KFONT-M9-002",
       "classification": "golden-gated",
