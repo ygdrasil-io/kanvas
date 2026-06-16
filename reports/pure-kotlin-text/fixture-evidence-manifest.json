@@ -852,6 +852,7 @@
         "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
         "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
         "reports/font/fixtures/expected/scaler/truetype-composite-glyphs.json",
+        "reports/font/fixtures/expected/scaler/truetype-gvar-iup.json",
         "reports/font/fixtures/expected/scaler/truetype-variation-readiness.json"
       ],
       "requiredEvidenceGates": [],
@@ -860,7 +861,7 @@
         "rtk ./gradlew --no-daemon :font:scaler:test"
       ],
       "fixtureCommands": [
-        "Current PKT-04A/KFONT-M3-001 evidence covers TrueType glyf scaler evidence, composite transform/point-matching/component-count evidence, and explicit remaining variation gaps."
+        "Current PKT-04A/KFONT-M3-002 evidence covers TrueType glyf scaler evidence, composite transform/point-matching/component-count evidence, bounded gvar IUP interpolation, avar-normalized variation dumps, and malformed tuple diagnostics while broader phantom/vertical claims remain out of scope."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",

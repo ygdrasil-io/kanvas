@@ -1044,6 +1044,35 @@
           ]
         },
         {
+          "fixtureId": "truetype-scaler-truetype-gvar-iup",
+          "targetGate": "truetype-gvar-iup",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate bounded simple/composite TrueType gvar tuples that prove single-point IUP propagation, wraparound interpolation, untouched contour isolation, avar-normalized coordinates, and malformed tuple diagnostics.",
+          "evidencePaths": [
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/truetype-gvar-iup.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "gvar table bytes",
+            "variation delta dump",
+            "min-default-max outline dump",
+            "avar-normalized outline dump",
+            "composite child outline dump",
+            "malformed tuple diagnostic snapshot"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-variable-font-support-claim",
+            "no-phantom-point-metrics-claim",
+            "no-vertical-metrics-claim",
+            "no-complete-hinting-vm-claim",
+            "no-a8-or-sdf-artifact-claim",
+            "no-gpu-text-route-claim"
+          ]
+        },
+        {
           "fixtureId": "truetype-scaler-truetype-gvar-simple-delta",
           "targetGate": "truetype-gvar-simple-delta",
           "status": "current-positive-evidence",
