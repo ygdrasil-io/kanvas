@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 19,
+  "sceneCount": 27,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -10,6 +10,16 @@
       "kgpuMilestones": ["M0","M1"],
       "ticketIds": [],
       "rStages": ["R0","R1","R2","R3","R4","R5","R6"],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "activation-candidate-boundary-board",
+      "title": "Activation Candidate Boundary Board",
+      "description": "PM activation-candidate policy lanes that keep product routing, release blocking, and readiness movement false.",
+      "tags": ["Rect","Cache","LegacyComparison"],
+      "kgpuMilestones": ["M0","M1"],
+      "ticketIds": ["KGPU-M0-007","KGPU-M1-001","KGPU-M1-002"],
+      "rStages": [],
       "expectation": "ShouldRender"
     },
     {
@@ -33,6 +43,16 @@
       "expectation": "ShouldRender"
     },
     {
+      "sceneId": "rrect-gradient-route-board",
+      "title": "RRect Gradient Route Board",
+      "description": "Native rrect and linear-gradient route planning facts with explicit non-promoted refusal lanes.",
+      "tags": ["Rect","RRect","Gradient","Clip"],
+      "kgpuMilestones": ["M2"],
+      "ticketIds": ["KGPU-M2-001","KGPU-M2-002"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
       "sceneId": "release-gate-progress-board",
       "title": "Release Gate Progress Board",
       "description": "Bounded progress board with a rounded panel, simple scissor clip, and sorted overlay marker.",
@@ -49,6 +69,16 @@
       "tags": ["RRect","Rect"],
       "kgpuMilestones": ["M3"],
       "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "path-coverage-review-board",
+      "title": "Path Coverage Review Board",
+      "description": "Prepared path, stroke, clip, and atlas refusal review lanes without native stencil-cover promotion.",
+      "tags": ["Rect","RRect","Clip","Path","Stroke"],
+      "kgpuMilestones": ["M3"],
+      "ticketIds": ["KGPU-M3-001","KGPU-M3-003","KGPU-M3-004","KGPU-M3-005"],
       "rStages": [],
       "expectation": "ShouldRender"
     },
@@ -79,6 +109,16 @@
       "tags": ["Image","Clip","RRect"],
       "kgpuMilestones": ["M4"],
       "ticketIds": ["KGPU-M4-001","KGPU-M4-002"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "codec-provenance-gate-board",
+      "title": "Codec Provenance Gate Board",
+      "description": "Codec registry provenance and dependency refusal lanes without codec or decode route promotion.",
+      "tags": ["Rect","RRect","Clip","Image"],
+      "kgpuMilestones": ["M4"],
+      "ticketIds": ["KGPU-M4-003"],
       "rStages": [],
       "expectation": "ShouldRender"
     },
@@ -123,6 +163,26 @@
       "expectation": "ShouldRender"
     },
     {
+      "sceneId": "text-handoff-boundary-board",
+      "title": "Text Handoff Boundary Board",
+      "description": "Typed text artifact handoff lanes with explicit non-promoted DrawTextRun route and fallback refusals.",
+      "tags": ["Rect","RRect","Clip","Text"],
+      "kgpuMilestones": ["M6"],
+      "ticketIds": ["KGPU-M6-001"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "text-representation-gate-board",
+      "title": "Text Representation Gate Board",
+      "description": "Text representation dependency gates without atlas, SDF, color glyph, emoji, LCD, or CPU texture route promotion.",
+      "tags": ["Rect","RRect","Clip","Text"],
+      "kgpuMilestones": ["M6"],
+      "ticketIds": ["KGPU-M6-004"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
       "sceneId": "runtime-effect-color-tile",
       "title": "Runtime Effect Color Tile",
       "description": "Registered SimpleRT runtime-effect tile with reflected gColor parameter intent.",
@@ -149,6 +209,16 @@
       "tags": ["Rect","Blend"],
       "kgpuMilestones": ["M7"],
       "ticketIds": ["KGPU-M7-003"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "sdr-color-boundary-board",
+      "title": "SDR Color Boundary Board",
+      "description": "Bounded SDR color value and store facts with terminal HDR, gainmap, profile, untagged, and extended-range refusals.",
+      "tags": ["Rect","RRect","Clip"],
+      "kgpuMilestones": ["M7"],
+      "ticketIds": ["KGPU-M7-004"],
       "rStages": [],
       "expectation": "ShouldRender"
     },
@@ -189,6 +259,16 @@
       "tags": ["Rect"],
       "kgpuMilestones": ["M10"],
       "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "legacy-inventory-hygiene-board",
+      "title": "Legacy Inventory Hygiene Board",
+      "description": "Legacy route inventory and archive hygiene lanes without migration or default-route changes.",
+      "tags": ["Rect","RRect","Clip","LegacyComparison"],
+      "kgpuMilestones": ["M10"],
+      "ticketIds": ["KGPU-M10-001","KGPU-M10-004"],
       "rStages": [],
       "expectation": "ShouldRender"
     }

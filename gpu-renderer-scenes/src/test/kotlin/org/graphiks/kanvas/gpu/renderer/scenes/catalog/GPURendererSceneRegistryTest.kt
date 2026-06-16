@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSampling
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 
 class GPURendererSceneRegistryTest {
@@ -84,6 +85,32 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `activation candidate boundary board is backed by policy gates without product activation`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("activation-candidate-boundary-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.Cache, SceneTag.LegacyComparison), scene.tags)
+        assertEquals(
+            listOf("KGPU-M0-007", "KGPU-M1-001", "KGPU-M1-002"),
+            scene.roadmapLinks.mapNotNull { it.ticketId },
+        )
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertEquals(
+            listOf(
+                "root-activation-candidate",
+                "root-validation-incomplete",
+                "executed-diagnostic-passed",
+                "adapter-backed-opt-in-only",
+                "product-route-activation-false",
+                "release-readiness-unchanged",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..6).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M1-003" || it.ticketId == "KGPU-M1-004" })
+    }
+
+    @Test
     fun `runtime effect color tile is backed by registered SimpleRT scene payload`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("runtime-effect-color-tile")
         val command = assertIs<SceneCommand.RuntimeEffectTile>(scene.commands.single())
@@ -114,6 +141,62 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `rrect gradient route board is backed by native rrect and gradient planning tickets only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("rrect-gradient-route-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+        val rrects = scene.commands.filterIsInstance<SceneCommand.FillRRect>()
+        val gradients = scene.commands.filterIsInstance<SceneCommand.LinearGradientRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Gradient, SceneTag.Clip), scene.tags)
+        assertEquals(listOf("KGPU-M2-001", "KGPU-M2-002"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf("route-board-panel", "solid-rrect-route-candidate"),
+            rrects.map { it.label },
+        )
+        assertEquals(listOf("linear-gradient-inline2-material"), gradients.map { it.label })
+        assertEquals(
+            listOf(
+                "per-corner-radii-facts-preserved",
+                "tile-mode-refusal",
+                "scale-affine-transform-refusal",
+                "payload-excluded-from-key",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..4).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M2-003" || it.ticketId == "KGPU-M2-004" })
+    }
+
+    @Test
+    fun `path coverage review board is backed by prepared M3 contracts and atlas refusal only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("path-coverage-review-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Path, SceneTag.Stroke), scene.tags)
+        assertEquals(
+            listOf("KGPU-M3-001", "KGPU-M3-003", "KGPU-M3-004", "KGPU-M3-005"),
+            scene.roadmapLinks.mapNotNull { it.ticketId },
+        )
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf(
+                "path-fill-prepared-contract",
+                "simple-stroke-prepared-contract",
+                "bounded-clip-prepared-contract",
+                "atlas-policy-refusal-gate",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals(listOf(1, 2, 3, 4), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M3-002" })
+    }
+
+    @Test
     fun `translucent card overlap is backed by bounded SrcOver alpha rectangles`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("translucent-card-overlap")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -123,6 +206,36 @@ class GPURendererSceneRegistryTest {
         assertEquals(3, fills.size)
         assertTrue(fills.all { it.color.a < 1f })
         assertEquals(listOf(1, 2, 3), fills.map { it.paintOrder })
+    }
+
+    @Test
+    fun `sdr color boundary board is backed by bounded sdr facts and color refusals only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("sdr-color-boundary-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip), scene.tags)
+        assertEquals(listOf("KGPU-M7-004"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf(
+                "finite-srgb-store-plan",
+                "hdr-transfer-refusal",
+                "gainmap-refusal",
+                "icc-v4-profile-refusal",
+                "cicp-profile-refusal",
+                "untagged-policy-refusal",
+                "extended-range-refusal",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..7).toList(), fills.map { it.paintOrder })
+        assertTrue(
+            scene.roadmapLinks.none {
+                it.ticketId == "KGPU-M7-001" || it.ticketId == "KGPU-M7-002" || it.ticketId == "KGPU-M7-003"
+            },
+        )
     }
 
     @Test
@@ -139,6 +252,62 @@ class GPURendererSceneRegistryTest {
         assertIs<SceneCommand.Clip>(scene.commands[2])
         assertIs<SceneCommand.BitmapRect>(scene.commands[3])
         assertIs<SceneCommand.BitmapRect>(scene.commands[4])
+    }
+
+    @Test
+    fun `codec provenance gate board is backed by M4 dependency refusals only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("codec-provenance-gate-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Image), scene.tags)
+        assertEquals(listOf("KGPU-M4-003"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertIs<SceneCommand.BitmapRect>(scene.commands[3])
+        assertEquals(
+            listOf(
+                "codec-registry-snapshot",
+                "dependency-codec-refusal",
+                "missing-provenance-refusal",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals(listOf(2, 3, 4), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M4-004" })
+    }
+
+    @Test
+    fun `sampler boundary gate board is backed by M4 sampler refusals only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("sampler-boundary-gate-board")
+        val bitmaps = scene.commands.filterIsInstance<SceneCommand.BitmapRect>()
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Image), scene.tags)
+        assertEquals(listOf("KGPU-M4-004"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf("nearest-sampler-fixture", "linear-sampler-fixture"),
+            bitmaps.map { it.label },
+        )
+        assertEquals(
+            listOf(SceneBitmapSampling.Nearest, SceneBitmapSampling.Linear),
+            bitmaps.map { it.sampling },
+        )
+        assertEquals(
+            listOf(
+                "tile-mode-boundary",
+                "mipmap-native-gate",
+                "cubic-aniso-perspective-refusal",
+                "no-color-managed-decode",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((3..6).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M4-001" || it.ticketId == "KGPU-M4-002" })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M4-003" })
     }
 
     @Test
@@ -160,6 +329,35 @@ class GPURendererSceneRegistryTest {
             fills.map { it.label },
         )
         assertEquals(listOf(1, 2, 3, 4, 5), fills.map { it.paintOrder })
+    }
+
+    @Test
+    fun `legacy inventory hygiene board is backed by inventory and archive hygiene tickets only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("legacy-inventory-hygiene-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.LegacyComparison), scene.tags)
+        assertEquals(
+            listOf("KGPU-M10-001", "KGPU-M10-004"),
+            scene.roadmapLinks.mapNotNull { it.ticketId },
+        )
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf(
+                "legacy-route-ownership-inventoried",
+                "replacement-status-inventoried",
+                "archive-historical-only",
+                "legacy-default-active",
+                "shadow-parity-blocked",
+                "retirement-blocked",
+                "no-product-activation",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals(listOf(1, 2, 3, 4, 5, 6, 7), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M10-002" || it.ticketId == "KGPU-M10-003" })
     }
 
     @Test
@@ -213,6 +411,56 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `text handoff boundary board is backed by typed artifacts and refused route gates only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("text-handoff-boundary-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Text), scene.tags)
+        assertEquals(listOf("KGPU-M6-001"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf(
+                "typed-artifact-reference",
+                "renderer-payload-accepted",
+                "draw-text-run-route-refused",
+                "cpu-texture-fallback-refused",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals(listOf(1, 2, 3, 4), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M6-002" || it.ticketId == "KGPU-M6-003" })
+    }
+
+    @Test
+    fun `text representation gate board is backed by dependency refusals only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("text-representation-gate-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Text), scene.tags)
+        assertEquals(listOf("KGPU-M6-004"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf(
+                "a8-mask-atlas-gated",
+                "sdf-mask-atlas-refusal",
+                "colr-color-glyph-refusal",
+                "bitmap-glyph-refusal",
+                "svg-glyph-refusal",
+                "emoji-color-refusal",
+                "lcd-mask-refusal",
+                "cpu-rendered-text-texture-refusal",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..8).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M6-002" || it.ticketId == "KGPU-M6-003" })
+    }
+
+    @Test
     fun `mesh ribbon is backed by bounded ribbon strip payload`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("mesh-ribbon")
         assertIs<SceneCommand.Clear>(scene.commands[0])
@@ -253,6 +501,24 @@ class GPURendererSceneRegistryTest {
                 ),
             ),
             SceneExpectationRow(
+                sceneId = "activation-candidate-boundary-board",
+                tags = setOf(SceneTag.Rect, SceneTag.Cache, SceneTag.LegacyComparison),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M0", ticketId = "KGPU-M0-007"),
+                    RoadmapExpectation("M1", ticketId = "KGPU-M1-001"),
+                    RoadmapExpectation("M1", ticketId = "KGPU-M1-002"),
+                ),
+            ),
+            SceneExpectationRow(
                 sceneId = "first-route-rollback-panel",
                 tags = setOf(SceneTag.Rect, SceneTag.LegacyComparison),
                 commandFamilies = listOf("clear", "fill-rect", "fill-rect", "fill-rect", "fill-rect"),
@@ -272,6 +538,25 @@ class GPURendererSceneRegistryTest {
                 ),
             ),
             SceneExpectationRow(
+                sceneId = "rrect-gradient-route-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Gradient, SceneTag.Clip),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "linear-gradient-rect",
+                    "fill-rrect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M2", ticketId = "KGPU-M2-001"),
+                    RoadmapExpectation("M2", ticketId = "KGPU-M2-002"),
+                ),
+            ),
+            SceneExpectationRow(
                 sceneId = "release-gate-progress-board",
                 tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Gradient, SceneTag.Clip),
                 commandFamilies = listOf("clear", "fill-rrect", "clip", "linear-gradient-rect", "fill-rect"),
@@ -285,6 +570,25 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.RRect, SceneTag.Rect),
                 commandFamilies = listOf("fill-rrect", "fill-rect"),
                 roadmapLinks = listOf(RoadmapExpectation("M3")),
+            ),
+            SceneExpectationRow(
+                sceneId = "path-coverage-review-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Path, SceneTag.Stroke),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M3", ticketId = "KGPU-M3-001"),
+                    RoadmapExpectation("M3", ticketId = "KGPU-M3-003"),
+                    RoadmapExpectation("M3", ticketId = "KGPU-M3-004"),
+                    RoadmapExpectation("M3", ticketId = "KGPU-M3-005"),
+                ),
             ),
             SceneExpectationRow(
                 sceneId = "clipped-avatar-grid",
@@ -306,6 +610,36 @@ class GPURendererSceneRegistryTest {
                     RoadmapExpectation("M4", ticketId = "KGPU-M4-001"),
                     RoadmapExpectation("M4", ticketId = "KGPU-M4-002"),
                 ),
+            ),
+            SceneExpectationRow(
+                sceneId = "codec-provenance-gate-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Image),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "bitmap-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M4", ticketId = "KGPU-M4-003")),
+            ),
+            SceneExpectationRow(
+                sceneId = "sampler-boundary-gate-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Image),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "bitmap-rect",
+                    "bitmap-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M4", ticketId = "KGPU-M4-004")),
             ),
             SceneExpectationRow(
                 sceneId = "layered-shadow-card",
@@ -339,6 +673,38 @@ class GPURendererSceneRegistryTest {
                 roadmapLinks = listOf(RoadmapExpectation("M6")),
             ),
             SceneExpectationRow(
+                sceneId = "text-handoff-boundary-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Text),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M6", ticketId = "KGPU-M6-001")),
+            ),
+            SceneExpectationRow(
+                sceneId = "text-representation-gate-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Text),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M6", ticketId = "KGPU-M6-004")),
+            ),
+            SceneExpectationRow(
                 sceneId = "runtime-effect-color-tile",
                 tags = setOf(SceneTag.RuntimeEffect),
                 commandFamilies = listOf("runtime-effect"),
@@ -355,6 +721,23 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.Rect, SceneTag.Blend),
                 commandFamilies = listOf("clear", "fill-rect", "fill-rect", "fill-rect"),
                 roadmapLinks = listOf(RoadmapExpectation("M7", ticketId = "KGPU-M7-003")),
+            ),
+            SceneExpectationRow(
+                sceneId = "sdr-color-boundary-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M7", ticketId = "KGPU-M7-004")),
             ),
             SceneExpectationRow(
                 sceneId = "mesh-ribbon",
@@ -386,6 +769,26 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.Rect),
                 commandFamilies = listOf("fill-rect"),
                 roadmapLinks = listOf(RoadmapExpectation("M10")),
+            ),
+            SceneExpectationRow(
+                sceneId = "legacy-inventory-hygiene-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.LegacyComparison),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M10", ticketId = "KGPU-M10-001"),
+                    RoadmapExpectation("M10", ticketId = "KGPU-M10-004"),
+                ),
             ),
         )
     }
