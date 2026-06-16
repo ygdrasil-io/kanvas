@@ -10,6 +10,7 @@
 | `release-gate-progress-board` | Release Gate Progress Board | Rect,RRect,Gradient,Clip | KGPU M2 | `KGPU-M2-003`,`KGPU-M2-004` |  | `ShouldRender` |
 | `path-badge-and-stroke` | Path Badge And Stroke | RRect,Rect | KGPU M3 |  |  | `ShouldRender` |
 | `path-coverage-review-board` | Path Coverage Review Board | Rect,RRect,Clip,Path,Stroke | KGPU M3 | `KGPU-M3-001`,`KGPU-M3-003`,`KGPU-M3-004`,`KGPU-M3-005` |  | `ShouldRender` |
+| `path-stencil-cover-gate-board` | Path Stencil Cover Gate Board | Rect,RRect,Clip,Path,Stroke | KGPU M3 | `KGPU-M3-002` |  | `ShouldRender` |
 | `clipped-avatar-grid` | Clipped Avatar Grid | Clip,Image | KGPU M3,M5 |  |  | `ShouldRender` |
 | `texture-swatch-board` | Texture Swatch Board | Image | KGPU M4 |  |  | `ShouldRender` |
 | `asset-intake-thumbnail-grid` | Asset Intake Thumbnail Grid | Image,Clip,RRect | KGPU M4 | `KGPU-M4-001`,`KGPU-M4-002` |  | `ShouldRender` |

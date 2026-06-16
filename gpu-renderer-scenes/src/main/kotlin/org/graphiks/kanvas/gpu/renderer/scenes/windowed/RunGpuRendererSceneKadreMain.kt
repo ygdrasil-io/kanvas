@@ -10,6 +10,7 @@ import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.a8GlyphAtlasGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.legacyRetirementBlockerDiagnostics
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.pathStencilCoverGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.pmReadinessFreezeDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.runtimeEffectRefusalGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.textResourceBindingGateDiagnostics
@@ -511,6 +512,7 @@ internal fun GPURendererScene<*>.windowedSceneDiagnostics(): List<String> {
     val textResourceBindingDiagnostics = textResourceBindingGateDiagnostics()
     val pmReadinessFreezeDiagnostics = pmReadinessFreezeDiagnostics()
     val legacyRetirementBlockerDiagnostics = legacyRetirementBlockerDiagnostics()
+    val pathStencilCoverGateDiagnostics = pathStencilCoverGateDiagnostics()
     if (
         textRunDiagnostics.isEmpty() &&
         saveLayers.isEmpty() &&
@@ -519,7 +521,8 @@ internal fun GPURendererScene<*>.windowedSceneDiagnostics(): List<String> {
         a8GlyphAtlasDiagnostics.isEmpty() &&
         textResourceBindingDiagnostics.isEmpty() &&
         pmReadinessFreezeDiagnostics.isEmpty() &&
-        legacyRetirementBlockerDiagnostics.isEmpty()
+        legacyRetirementBlockerDiagnostics.isEmpty() &&
+        pathStencilCoverGateDiagnostics.isEmpty()
     ) {
         return emptyList()
     }
@@ -533,6 +536,15 @@ internal fun GPURendererScene<*>.windowedSceneDiagnostics(): List<String> {
         addAll(textResourceBindingDiagnostics)
         addAll(pmReadinessFreezeDiagnostics)
         addAll(legacyRetirementBlockerDiagnostics)
+        if (pathStencilCoverGateDiagnostics.isNotEmpty()) {
+            add("clearCommands=${commands.count { it is SceneCommand.Clear }}")
+            add("fillRectCommands=${commands.count { it is SceneCommand.FillRect }}")
+            add("fillRRectCommands=${commands.count { it is SceneCommand.FillRRect }}")
+            add("linearGradientRectCommands=${commands.count { it is SceneCommand.LinearGradientRect }}")
+            add("clipCommands=${commands.count { it is SceneCommand.Clip }}")
+            add("bitmapRectCommands=${commands.count { it is SceneCommand.BitmapRect }}")
+        }
+        addAll(pathStencilCoverGateDiagnostics)
         addAll(textRunDiagnostics)
         if (saveLayers.isNotEmpty()) {
             add("saveLayerCommands=${saveLayers.size}")
