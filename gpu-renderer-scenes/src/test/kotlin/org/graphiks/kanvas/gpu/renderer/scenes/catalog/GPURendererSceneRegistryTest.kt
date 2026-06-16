@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSampling
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 
 class GPURendererSceneRegistryTest {
@@ -274,6 +275,39 @@ class GPURendererSceneRegistryTest {
         )
         assertEquals(listOf(2, 3, 4), fills.map { it.paintOrder })
         assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M4-004" })
+    }
+
+    @Test
+    fun `sampler boundary gate board is backed by M4 sampler refusals only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("sampler-boundary-gate-board")
+        val bitmaps = scene.commands.filterIsInstance<SceneCommand.BitmapRect>()
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Image), scene.tags)
+        assertEquals(listOf("KGPU-M4-004"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf("nearest-sampler-fixture", "linear-sampler-fixture"),
+            bitmaps.map { it.label },
+        )
+        assertEquals(
+            listOf(SceneBitmapSampling.Nearest, SceneBitmapSampling.Linear),
+            bitmaps.map { it.sampling },
+        )
+        assertEquals(
+            listOf(
+                "tile-mode-boundary",
+                "mipmap-native-gate",
+                "cubic-aniso-perspective-refusal",
+                "no-color-managed-decode",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((3..6).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M4-001" || it.ticketId == "KGPU-M4-002" })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M4-003" })
     }
 
     @Test
@@ -590,6 +624,22 @@ class GPURendererSceneRegistryTest {
                     "fill-rect",
                 ),
                 roadmapLinks = listOf(RoadmapExpectation("M4", ticketId = "KGPU-M4-003")),
+            ),
+            SceneExpectationRow(
+                sceneId = "sampler-boundary-gate-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Image),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "bitmap-rect",
+                    "bitmap-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M4", ticketId = "KGPU-M4-004")),
             ),
             SceneExpectationRow(
                 sceneId = "layered-shadow-card",
