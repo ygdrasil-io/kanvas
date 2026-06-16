@@ -372,6 +372,59 @@
       ]
     },
     {
+      "dumpId": "fallback-decision-trace",
+      "ownerTicket": "KFONT-M7-002",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Fallback Runs"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FallbackDecisionDumpTest.kt",
+        "reports/font/fixtures/expected/fallback/fallback-decision-trace.json"
+      ],
+      "expectedFields": [
+        "candidateFamilies",
+        "candidates",
+        "cases",
+        "codePoint",
+        "covered",
+        "diagnosticCode",
+        "dumpId",
+        "fixtureId",
+        "genericFamily",
+        "locales",
+        "nonClaims",
+        "ownerTickets",
+        "reason",
+        "reasons",
+        "requestedFamilies",
+        "schemaVersion",
+        "script",
+        "selectedFamily",
+        "selectedTypefaceId",
+        "styleDistance",
+        "textRange"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecisionDump*'",
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecision*'",
+        "rtk ./gradlew --no-daemon :font:core:test",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Fallback trace golden changes require candidate-order, script/locale/emoji reason, refusal diagnostic, and matrix checkpoint review without fallback support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-cluster-safe-fallback-claim",
+        "no-platform-font-fallback-claim",
+        "no-emoji-rendering-claim"
+      ]
+    },
+    {
       "dumpId": "font-catalog",
       "ownerTicket": "KFONT-M7-001",
       "classification": "golden-gated",
@@ -1012,6 +1065,52 @@
         "producer-only",
         "no-complete-png-bitmap-glyph-routing-claim",
         "no-gpu-bitmap-glyph-route-claim"
+      ]
+    },
+    {
+      "dumpId": "resolved-font-runs",
+      "ownerTicket": "KFONT-M7-002",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Fallback Runs"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FallbackDecisionDumpTest.kt",
+        "reports/font/fixtures/expected/fallback/resolved-font-runs.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "clusterRange",
+        "diagnosticCode",
+        "diagnostics",
+        "dumpId",
+        "fallbackReason",
+        "familyName",
+        "fixtureId",
+        "hostDependent",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion",
+        "textRange",
+        "typefaceId"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecisionDump*'",
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecision*'",
+        "rtk ./gradlew --no-daemon :font:core:test",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Resolved fallback run golden changes require cluster-range, selected typeface, fallback-reason, refusal diagnostic, and matrix checkpoint review without shaping or fallback support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-cluster-safe-fallback-claim",
+        "no-platform-font-fallback-claim",
+        "no-shaping-engine-claim"
       ]
     },
     {

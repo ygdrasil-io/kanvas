@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M7-002"
 title: "Add fallback decision trace"
-status: "proposed"
+status: "review"
 milestone: "M7"
 priority: "P0"
 owner_area: "fallback"
@@ -71,10 +71,10 @@ data class ResolvedFontRun(
 
 ## Acceptance Criteria
 
-- [ ] Missing glyph fixture records every attempted typeface, coverage check, score reason, selected fallback, and final resolved run.
-- [ ] Requested family and generic family fixtures distinguish family fallback from glyph fallback.
-- [ ] Script and locale hints influence candidate ranking and appear in the trace.
-- [ ] Emoji preference is recorded as a candidate fact without claiming emoji rendering.
+- [x] Missing glyph fixture records every attempted typeface, coverage check, score reason, selected fallback, and final resolved run.
+- [x] Requested family and generic family fixtures distinguish family fallback from glyph fallback.
+- [x] Script and locale hints influence candidate ranking and appear in the trace.
+- [x] Emoji preference is recorded as a candidate fact without claiming emoji rendering.
 - [ ] Complete miss emits `font.fallback-glyph-unavailable` or `font.fallback-family-unavailable` with the affected text and cluster range.
 
 ## Required Evidence
@@ -100,13 +100,19 @@ data class ResolvedFontRun(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test --tests '*FallbackDecision*'
+rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecisionDump*'
+rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecision*'
+rtk ./gradlew --no-daemon :font:core:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 ```
 
 ## Status Notes
 
 - `proposed`: Decision trace builds on the bundled catalog and M6 shaping contract.
 - Move to `ready` only after scoring fields and dump schemas are reviewed.
+- `review`: `fallback-decision-trace.json` and `resolved-font-runs.json` now cover deterministic generic-family, script, locale, emoji, missing-glyph, and family-unavailable cases with stable candidate reasons and refusal diagnostics, but complete-miss cluster ranges, shaping-trace propagation, dedicated per-fixture assets, and broader fallback promotion gates remain open before `done`.
 
 ## Linear Labels
 

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "dumpId": "resolved-font-runs",
+  "ownerTickets": ["KFONT-M7-002"],
+  "cases": [
+    {"fixtureId":"fallback-emoji-preference","request":{"text":"😀","locale":null,"preferredFamilies":["Alpha Sans"],"style":{"weight":400,"width":5,"slant":"upright"}},"runs":[{"textRange":"0..1","clusterRange":"0..0","typefaceId":"550e8400-e29b-41d4-a716-446655440906","familyName":"Noto Color Emoji","hostDependent":false,"fallbackReason":"emoji-preference","diagnosticCode":null}],"diagnostics":[]},
+    {"fixtureId":"fallback-family-generic","request":{"text":"x","locale":null,"preferredFamilies":["serif"],"style":{"weight":400,"width":5,"slant":"upright"}},"runs":[{"textRange":"0..0","clusterRange":"0..0","typefaceId":"550e8400-e29b-41d4-a716-446655440900","familyName":"Fallback Serif","hostDependent":false,"fallbackReason":"generic-family","diagnosticCode":null}],"diagnostics":[]},
+    {"fixtureId":"fallback-family-unavailable","request":{"text":"ა","locale":null,"preferredFamilies":["Missing Sans"],"style":{"weight":400,"width":5,"slant":"upright"}},"runs":[],"diagnostics":["font.fallback-family-unavailable","text.shaping.script-unsupported"]},
+    {"fixtureId":"fallback-locale-serbian","request":{"text":"A","locale":"sr-Cyrl-RS","preferredFamilies":["Missing Sans"],"style":{"weight":400,"width":5,"slant":"upright"}},"runs":[{"textRange":"0..0","clusterRange":"0..0","typefaceId":"550e8400-e29b-41d4-a716-446655440904","familyName":"Serbian Sans","hostDependent":false,"fallbackReason":"locale-hint","diagnosticCode":null}],"diagnostics":[]},
+    {"fixtureId":"fallback-missing-glyph","request":{"text":"x","locale":null,"preferredFamilies":["Requested Sans"],"style":{"weight":400,"width":5,"slant":"upright"}},"runs":[{"textRange":"0..0","clusterRange":"0..0","typefaceId":"550e8400-e29b-41d4-a716-446655440907","familyName":"Requested Sans","hostDependent":false,"fallbackReason":"missing-glyph","diagnosticCode":"text.shaping.fallback-missing"}],"diagnostics":["font.fallback-glyph-unavailable","text.shaping.fallback-missing"]},
+    {"fixtureId":"fallback-script-arabic","request":{"text":"ا","locale":null,"preferredFamilies":["Alpha Sans"],"style":{"weight":400,"width":5,"slant":"upright"}},"runs":[{"textRange":"0..0","clusterRange":"0..0","typefaceId":"550e8400-e29b-41d4-a716-446655440902","familyName":"Arabic Naskh","hostDependent":false,"fallbackReason":"script-fallback","diagnosticCode":null}],"diagnostics":[]}
+  ],
+  "nonClaims": ["no-complete-target-support-claim", "no-cluster-safe-fallback-claim", "no-platform-font-fallback-claim", "no-shaping-engine-claim"]
+}

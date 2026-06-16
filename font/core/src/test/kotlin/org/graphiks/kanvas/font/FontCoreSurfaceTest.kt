@@ -451,6 +451,7 @@ class FontCoreSurfaceTest {
 
         assertEquals(
             "start=0 end=1 codePoint=U+0078 requestedFamilies=[Requested Sans] " +
+                "genericFamily=sans-serif script=latin locales=[] " +
                 "candidateFamilies=[Requested Sans,Fallback Sans] selectedFamily=\"Fallback Sans\" " +
                 "selectedTypefaceId=550e8400-e29b-41d4-a716-446655440081 covered=true diagnostic=none",
             trace.dump(),
