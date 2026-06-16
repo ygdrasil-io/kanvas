@@ -169,6 +169,13 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 runtimeEffectCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "runtime-effect-descriptor-gate-board",
+                fillRectCount = 6,
+                fillRRectCount = 1,
+                clipCount = 1,
+                runtimeEffectCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "sdr-color-boundary-board",
                 fillRectCount = 7,
                 fillRRectCount = 1,

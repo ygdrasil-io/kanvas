@@ -125,6 +125,52 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `runtime effect descriptor gate board is backed by M7 descriptor refusals only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("runtime-effect-descriptor-gate-board")
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.RuntimeEffect), scene.tags)
+        assertEquals(listOf("KGPU-M7-001"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        val runtimeEffect = assertIs<SceneCommand.RuntimeEffectTile>(scene.commands[3])
+        assertTrue(runtimeEffect.hasFixturePayload)
+        assertTrue(runtimeEffect.isRegisteredSimpleRt)
+        assertEquals("registered-simple-rt-descriptor-fixture", runtimeEffect.label)
+        assertEquals(1, runtimeEffect.paintOrder)
+        assertEquals("runtime.simple_rt", runtimeEffect.stableId)
+        assertEquals("wgsl/runtime_simple_rt", runtimeEffect.wgslImplementationId)
+        assertEquals("kotlin/simple_rt", runtimeEffect.cpuImplementationId)
+        assertEquals("gColor", runtimeEffect.uniformName)
+        assertEquals("kFloat4", runtimeEffect.uniformType)
+        assertEquals(0, runtimeEffect.uniformOffset)
+        assertEquals(16, runtimeEffect.uniformSize)
+        assertEquals(
+            "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+            runtimeEffect.pipelineKey,
+        )
+
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+        assertEquals(
+            listOf(
+                "wgsl4k-reflection-report-shape",
+                "kotlin-cpu-oracle-linkage-gate",
+                "gpu-renderer-route-integration-blocked",
+                "adapter-readback-evidence-blocked",
+                "unregistered-descriptor-refusal",
+                "dynamic-sksl-refusal",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((2..7).toList(), fills.map { it.paintOrder })
+        assertTrue(
+            scene.roadmapLinks.none {
+                it.ticketId == "KGPU-M7-002" || it.ticketId == "KGPU-M7-003" || it.ticketId == "KGPU-M7-004"
+            },
+        )
+    }
+
+    @Test
     fun `release gate progress board is backed by bounded rrect scissor and gradient payloads`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("release-gate-progress-board")
 
@@ -709,6 +755,23 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.RuntimeEffect),
                 commandFamilies = listOf("runtime-effect"),
                 roadmapLinks = listOf(RoadmapExpectation("M7")),
+            ),
+            SceneExpectationRow(
+                sceneId = "runtime-effect-descriptor-gate-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.RuntimeEffect),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "runtime-effect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M7", ticketId = "KGPU-M7-001")),
             ),
             SceneExpectationRow(
                 sceneId = "blend-mode-strip",

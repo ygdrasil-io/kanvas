@@ -22,6 +22,7 @@
 | `text-handoff-boundary-board` | Text Handoff Boundary Board | Rect,RRect,Clip,Text | KGPU M6 | `KGPU-M6-001` |  | `ShouldRender` |
 | `text-representation-gate-board` | Text Representation Gate Board | Rect,RRect,Clip,Text | KGPU M6 | `KGPU-M6-004` |  | `ShouldRender` |
 | `runtime-effect-color-tile` | Runtime Effect Color Tile | RuntimeEffect | KGPU M7 |  |  | `ShouldRender` |
+| `runtime-effect-descriptor-gate-board` | Runtime Effect Descriptor Gate Board | Rect,RRect,Clip,RuntimeEffect | KGPU M7 | `KGPU-M7-001` |  | `ShouldRender` |
 | `blend-mode-strip` | Blend Mode Strip | Rect | KGPU M7 |  |  | `ShouldRender` |
 | `translucent-card-overlap` | Translucent Card Overlap | Rect,Blend | KGPU M7 | `KGPU-M7-003` |  | `ShouldRender` |
 | `sdr-color-boundary-board` | SDR Color Boundary Board | Rect,RRect,Clip | KGPU M7 | `KGPU-M7-004` |  | `ShouldRender` |
