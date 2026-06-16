@@ -1605,6 +1605,7 @@ class SFNTSurfaceTest {
         assertTrue(actual.contains("\"format\": 0"))
         assertTrue(actual.contains("\"code\": \"font.sfnt.cmap-format-unsupported\""))
         assertTrue(actual.contains("\"code\": \"font.sfnt.cmap-unusable\""))
+        assertTrue(actual.contains("\"entryId\": \"malformed-generated-format13-refused\""))
         assertTrue(actual.contains("\"glyphId\": 0"))
         assertTrue(actual.contains("\"claimPromotionAllowed\": false"))
         listOf("GPU", "Skia", "HarfBuzz", "FreeType", "Fontations", "CoreText", "DirectWrite").forEach { token ->
@@ -2871,8 +2872,20 @@ class SFNTSurfaceTest {
                 ),
             ),
         )
+        val malformedUnsupported = OpenTypeCMapTableParser.parse(
+            cmapTable(
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 10,
+                    subtable = malformedFormat13Subtable(),
+                ),
+            ),
+        )
 
         val unsupportedDiagnostics = unsupported.diagnostics.joinToString(",\n") { diagnostic ->
+            """{"code": "${diagnostic.code}", "format": ${diagnostic.format?.toString() ?: "null"}, "platformId": ${diagnostic.platformId?.toString() ?: "null"}, "encodingId": ${diagnostic.encodingId?.toString() ?: "null"}, "offset": ${diagnostic.offset?.toString() ?: "null"}, "message": "${diagnostic.message.jsonEscapedForTest()}"}"""
+        }.replace("\n", "\n                    ")
+        val malformedUnsupportedDiagnostics = malformedUnsupported.diagnostics.joinToString(",\n") { diagnostic ->
             """{"code": "${diagnostic.code}", "format": ${diagnostic.format?.toString() ?: "null"}, "platformId": ${diagnostic.platformId?.toString() ?: "null"}, "encodingId": ${diagnostic.encodingId?.toString() ?: "null"}, "offset": ${diagnostic.offset?.toString() ?: "null"}, "message": "${diagnostic.message.jsonEscapedForTest()}"}"""
         }.replace("\n", "\n                    ")
 
@@ -2969,6 +2982,18 @@ class SFNTSurfaceTest {
                   "diagnostics": [
                     $unsupportedDiagnostics
                   ]
+                },
+                {
+                  "entryId": "malformed-generated-format13-refused",
+                  "fixtureId": "malformed-sfnt-unsupported-cmap-format13-generated",
+                  "fixtureKind": "GeneratedFixtureFontSource",
+                  "sourceFaceId": "generated-unsupported-cmap-format13",
+                  "selectedSubtable": null,
+                  "mappedRanges": [],
+                  "lookupFacts": [{"codePoint": "U+0041", "variationSelector": null, "glyphId": ${malformedUnsupported.lookupGlyphId(0x0041)}}],
+                  "diagnostics": [
+                    $malformedUnsupportedDiagnostics
+                  ]
                 }
               ]
             }
@@ -2982,6 +3007,17 @@ class SFNTSurfaceTest {
         table.writeUInt32(4, table.size)
         table.writeUInt32(8, 0)
         table.writeUInt32(12, 0)
+        return table
+    }
+
+    private fun malformedFormat13Subtable(): ByteArray {
+        val table = ByteArray(28)
+        table.writeUInt16(0, 13)
+        table.writeUInt32(4, table.size)
+        table.writeUInt32(12, 1)
+        table.writeUInt32(16, 0x0041)
+        table.writeUInt32(20, 0x0041)
+        table.writeUInt32(24, 5)
         return table
     }
 

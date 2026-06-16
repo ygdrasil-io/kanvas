@@ -822,7 +822,7 @@ coverage, malformed glyph isolation suite completion, CFF/CFF2 support, A8/SDF
 artifact support, or GPU glyph route support.
 ### PKT-04C: TrueType Variation Fixture Goldens
 
-Status: implemented; independent review pending.
+Status: done; independently reviewed and freshly validated.
 
 Files:
 
@@ -980,7 +980,7 @@ yet been routed through CFF INDEX/top-dict/private-dict parsing or public
 generated fixtures only; complete CFF/CFF2 target support remains tracked.
 ### PKT-05B: CFF INDEX/DICT Fixture Pack And Refusal Goldens
 
-Status: implemented; independent review pending.
+Status: done; independently reviewed and freshly validated.
 
 Files:
 
@@ -2660,3 +2660,62 @@ Remaining gate: none for KFONT-M2-004. This is metadata-only table evidence;
 it does not claim shaping, scaler, CFF/CFF2 outline, color glyph, bitmap/SVG
 rendering, native engine parity, fallback, paragraph layout, or GPU text-route
 support.
+
+### KFONT-M2-005: Malformed SFNT Fixture Suite
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTParserEntryPointTest.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/MalformedSFNTFixtureSuiteTest.kt`
+- `reports/pure-kotlin-text/sfnt-directory.json`
+- `reports/pure-kotlin-text/cmap-map.json`
+- `reports/pure-kotlin-text/malformed-sfnt-fixtures.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m2-005-malformed-sfnt-fixtures.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `.upstream/specs/pure-kotlin-text/tickets/M2-sfnt-opentype-parser/KFONT-M2-005-add-malformed-sfnt-fixture-suite.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M2-sfnt-opentype-parser/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `malformed-sfnt-fixtures.json` covers bad SFNT version, truncated header,
+  invalid TTC index, out-of-bounds table record, overlapping tables, duplicate
+  tag, missing required table, malformed optional table, and unsupported `cmap`
+  format.
+- Every row records fixture ID, generator ID, sorted generator parameters,
+  byte length, content SHA-256, primary expected diagnostic, expected outcome,
+  linked evidence path, linked evidence entry ID, and diagnostics.
+- The suite links cases to `sfnt-directory.json`, `sfnt-tables.json`, or
+  `cmap-map.json` evidence without adding raw fixture byte payloads.
+- Focused tests prove deterministic generation, byte-for-byte golden stability,
+  linked evidence resolution, fixture/hash consistency, primary diagnostic
+  coverage, stable hashes, and absence of external/native/GPU support tokens.
+- `fixture-evidence-manifest.json` now links the malformed SFNT family to the
+  suite while keeping remaining format-14 fixture gates explicit.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test --tests '*MalformedSFNT*' --tests '*SFNTParser*' --tests '*CMap*' --tests '*TableFactDump*' --rerun-tasks
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Review: independent spec review accepted after linked evidence IDs, hashes,
+status counts, and no-`__pycache__` status were verified. Independent code
+review accepted with no findings.
+
+Remaining gate: none for KFONT-M2-005. This is fixture-suite evidence only; it
+does not claim malformed recovery support, complete SFNT conformance, scaler,
+shaping, color glyph rendering, native engine parity, fallback, paragraph
+layout, or GPU text-route support. Remaining format-14 family fixture gates stay
+explicit in `fixture-evidence-manifest.json`.

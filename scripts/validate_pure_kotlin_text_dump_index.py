@@ -26,6 +26,7 @@ REQUIRED_DUMPS = {
     "font-source-liberation-scan-root",
     "glyph-atlas-lifecycle",
     "latin-gsub-gpos-goldens",
+    "malformed-sfnt-fixtures",
     "paragraph-input-goldens",
     "paragraph-layout-result",
     "png-glyph-image",
