@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M5-003"
 title: "Replace basic bidi resolver"
-status: "proposed"
+status: "done"
 milestone: "M5"
 priority: "P0"
 owner_area: "unicode"
@@ -70,16 +70,16 @@ data class BidiTraceEvent(
 
 ## Acceptance Criteria
 
-- [ ] Mixed Latin/Hebrew, Latin/Arabic, numbers inside RTL text, neutral punctuation, and isolate-control fixtures produce stable logical bidi runs.
-- [ ] `bidi-runs.json` records Unicode version, paragraph direction, embedding levels, source controls, and per-rule trace facts.
-- [ ] Single-run shaping requests for text that needs paragraph-level ordering emit a diagnostic without pretending paragraph layout was performed.
-- [ ] Bidi run ranges align to grapheme cluster boundaries from KFONT-M5-002.
-- [ ] Invalid or unbalanced bidi controls produce stable diagnostics and do not corrupt following text ranges.
+- [x] Mixed Latin/Hebrew, Latin/Arabic, numbers inside RTL text, neutral punctuation, and isolate-control fixtures produce stable logical bidi runs.
+- [x] `bidi-runs.json` records Unicode version, paragraph direction, embedding levels, source controls, and per-rule trace facts.
+- [x] Single-run shaping requests for text that needs paragraph-level ordering emit a diagnostic without pretending paragraph layout was performed.
+- [x] Bidi run ranges align to grapheme cluster boundaries from KFONT-M5-002.
+- [x] Invalid or unbalanced bidi controls produce stable diagnostics and do not corrupt following text ranges.
 
 ## Required Evidence
 
 - `bidi-runs.json` with input hash, Unicode version, cluster references, resolved bidi classes, embedding levels, run directions, paragraph direction, and diagnostics.
-- Fixtures: `bidi-hebrew-latin.txt`, `bidi-arabic-number-neutral.txt`, `bidi-isolate-controls.txt`, `bidi-unbalanced-controls.txt`, `bidi-single-run-needs-paragraph.txt`.
+- Fixtures: `bidi-hebrew-latin.txt`, `bidi-arabic-number-neutral.txt`, `bidi-isolate-controls.txt`, `bidi-embedding-override-controls.txt`, `bidi-unbalanced-controls.txt`, `bidi-single-run-needs-paragraph.txt`.
 - Diagnostics asserted in tests: `text.shaping.unicode-data-version-mismatch`, `text.shaping.paragraph-bidi-required`, `text.unicode.bidi-control-unbalanced`.
 - Review note labeling any external UAX #9 conformance comparison as drift-only.
 
@@ -104,8 +104,29 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*Bidi*'
 
 ## Status Notes
 
-- `proposed`: Bidi run facts are owned by M5; visual line ordering remains M8.
-- Move to `ready` only after bidi control handling and fixture texts are reviewed.
+- `done`: `DefaultBidiResolver` and the default `BasicBidiResolver()` path now
+  emit bounded M5 run-level bidi facts backed by
+  `reports/font/fixtures/expected/unicode/bidi-runs.json`.
+- The default shaping path propagates
+  `text.shaping.paragraph-bidi-required` when detailed bidi resolution detects
+  mixed-direction text that still requires M8 paragraph ordering.
+- The bounded fixture matrix includes isolates plus explicit
+  `LRE`/`RLE`/`LRO`/`RLO` and `PDF` controls. Paired bracket facts are not
+  available in the current generated `UnicodeDataSet` evidence, so this ticket
+  makes no paired bracket resolution claim.
+- Quality review remediation added regression coverage for malformed UTF-16,
+  text ranges that split surrogate pairs, and mixed embedding/isolate closer
+  families; the code-quality re-review verdict is `ACCEPT`.
+- Evidence report:
+  `reports/pure-kotlin-text/2026-06-16-kfont-m5-003-bidi-resolver.md`.
+- Fresh validation:
+  `rtk ./gradlew --no-daemon :font:text:test --tests '*Bidi*'`,
+  `rtk ./gradlew --no-daemon :font:text:test`,
+  `rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py`,
+  `rtk python3 scripts/validate_pure_kotlin_text_dump_index.py`, and
+  `rtk git diff --check`.
+- No external UAX #9 comparison was used as normative evidence; future external
+  comparisons remain drift-only.
 
 ## Linear Labels
 

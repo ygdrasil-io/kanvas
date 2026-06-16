@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.text.shaping
 
+import java.security.MessageDigest
 import org.graphiks.kanvas.font.FallbackRequest
 import org.graphiks.kanvas.font.FontResolver
 import org.graphiks.kanvas.font.ResolvedFontRun
@@ -261,21 +262,110 @@ public interface BidiResolver {
 }
 
 /**
- * Resolves a bounded set of LTR/RTL runs for the pure Kotlin text stack.
+ * Resolves bounded bidi runs for the pure Kotlin text stack.
  *
- * This resolver is intentionally not a complete Unicode Bidirectional
- * Algorithm (UAX #9) implementation. It recognizes basic strong LTR/RTL
- * classes, uses [ShapingRequest.paragraphDirection] for the base direction,
- * and attaches neutral text to adjacent strong runs when possible.
- *
- * @param unicodeData Unicode data source used for bidi classification.
+ * The default constructor delegates to the pinned KFONT-M5-003 resolver. The
+ * [UnicodeData] constructor keeps the previous conservative resolver available
+ * for callers that explicitly request a bounded legacy Unicode data source.
  */
 public class BasicBidiResolver(
+    private val delegate: BidiResolver = DefaultBidiResolver(PinnedUnicodeDataSetResources.load()),
+) : DetailedBidiResolver {
+    public constructor(unicodeData: UnicodeData) : this(LegacyBasicBidiResolver(unicodeData))
+
+    /**
+     * Resolves bidi runs for [request].
+     */
+    override fun resolve(request: ShapingRequest): List<BidiRun> =
+        delegate.resolve(request)
+
+    /**
+     * Resolves detailed bidi facts when the delegate supports them.
+     */
+    override fun resolveDetailed(
+        request: ShapingRequest,
+        requireParagraphOrdering: Boolean,
+    ): BidiResolution =
+        (delegate as? DetailedBidiResolver)?.resolveDetailed(request, requireParagraphOrdering)
+            ?: legacyDetailedResolution(request, requireParagraphOrdering)
+
+    private fun legacyDetailedResolution(
+        request: ShapingRequest,
+        requireParagraphOrdering: Boolean,
+    ): BidiResolution {
+        val runs = delegate.resolve(request)
+        val paragraphDirection = legacyParagraphDirectionFor(request, runs)
+        val detailedRuns = runs.map { run ->
+            ResolvedBidiRun(
+                logicalUtf16Range = run.textRange,
+                clusterRange = 0..0,
+                embeddingLevel = run.level,
+                direction = if (run.isRightToLeft) "R" else "L",
+                paragraphDirection = paragraphDirection,
+                resolvedBidiClasses = emptyList(),
+                sourceControls = emptyList(),
+            )
+        }
+        val diagnostics = if (
+            !requireParagraphOrdering &&
+            detailedRuns.any { run -> run.direction != legacyBaseDirectionCode(paragraphDirection) }
+        ) {
+            listOf(
+                ShapingDiagnostic(
+                    code = TEXT_SHAPING_PARAGRAPH_BIDI_REQUIRED_DIAGNOSTIC_CODE,
+                    message = "Paragraph-level visual bidi ordering is required for mixed-direction text; M8 owns line ordering.",
+                    textRange = request.textRange,
+                ),
+            )
+        } else {
+            emptyList()
+        }
+        return BidiResolution(
+            unicodeVersion = PinnedUnicodeDataGenerator.PinnedUnicodeVersion,
+            sourceTextHash = request.scopedTextForLegacyBidi().legacyBidiSourceTextHash(),
+            paragraphDirection = paragraphDirection,
+            clusters = emptyList(),
+            runs = detailedRuns,
+            sourceControls = emptyList(),
+            trace = emptyList(),
+            diagnostics = diagnostics,
+        )
+    }
+
+    private fun legacyParagraphDirectionFor(request: ShapingRequest, runs: List<BidiRun>): String =
+        when {
+            request.paragraphDirection < 0 -> "RightToLeft"
+            request.paragraphDirection > 0 -> "LeftToRight"
+            runs.firstOrNull()?.isRightToLeft == true -> "RightToLeft"
+            else -> "LeftToRight"
+        }
+
+    private fun legacyBaseDirectionCode(paragraphDirection: String): String =
+        if (paragraphDirection == "RightToLeft") "R" else "L"
+
+    private fun ShapingRequest.scopedTextForLegacyBidi(): String {
+        if (text.isEmpty()) return ""
+        val first = textRange.first.coerceAtLeast(0)
+        val last = textRange.last.coerceAtMost(text.lastIndex)
+        return if (first <= last) text.substring(first..last) else ""
+    }
+
+    private fun String.legacyBidiSourceTextHash(): String {
+        val bytes = ByteArray(length * 2)
+        forEachIndexed { index, char ->
+            val value = char.code
+            bytes[index * 2] = (value ushr 8).toByte()
+            bytes[index * 2 + 1] = value.toByte()
+        }
+        return MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { byte ->
+            "%02x".format(byte.toInt() and 0xFF)
+        }
+    }
+}
+
+private class LegacyBasicBidiResolver(
     private val unicodeData: UnicodeData = BasicUnicodeData,
 ) : BidiResolver {
-    /**
-     * Resolves coarse bidi runs for [request].
-     */
     override fun resolve(request: ShapingRequest): List<BidiRun> {
         val codePoints = codePointRangesFor(request)
         if (codePoints.isEmpty()) return emptyList()
@@ -528,11 +618,19 @@ public class BasicOpenTypeShapingEngine(
         val textRange = clusterSafeTextRange(request.text, requestedTextRange)
         val scopedRequest = request.copy(textRange = textRange)
         val scriptRuns = scriptItemizer.itemize(scopedRequest)
-        val bidiRuns = bidiResolver.resolve(scopedRequest)
+        val bidiResolution = (bidiResolver as? DetailedBidiResolver)
+            ?.resolveDetailed(scopedRequest, requireParagraphOrdering = false)
+        val bidiRuns = bidiResolution?.runs?.map { run ->
+            BidiRun(
+                textRange = run.logicalUtf16Range,
+                level = run.embeddingLevel,
+                isRightToLeft = run.direction == "R",
+            )
+        } ?: bidiResolver.resolve(scopedRequest)
         val shapingClusters = shapingClustersFor(request.text, textRange, scriptRuns, bidiRuns)
-        if (shapingClusters.isEmpty()) return ShapingResult()
+        val diagnostics = bidiResolution?.diagnostics.orEmpty().toMutableList()
+        if (shapingClusters.isEmpty()) return ShapingResult(diagnostics = diagnostics)
 
-        val diagnostics = mutableListOf<ShapingDiagnostic>()
         val glyphRuns = shapingClusters
             .groupByShapingState()
             .map { group -> shapeGroup(request, group, diagnostics) }
