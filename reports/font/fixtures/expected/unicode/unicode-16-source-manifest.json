@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "dumpId": "unicode-16-source-manifest",
-  "ownerTickets": ["PKT-06D", "KFONT-M5-001"],
+  "ownerTickets": ["PKT-06D", "KFONT-M5-001", "KFONT-M5-002"],
   "unicodeVersion": "16.0.0",
   "officialSource": "https://www.unicode.org/Public/16.0.0/ucd/",
   "sourceFiles": [
@@ -25,7 +25,7 @@
     "no-complete-uax9-claim",
     "no-complete-uax14-claim",
     "no-complete-uax29-claim",
-    "no-segmentation-or-bidi-replacement-claim",
+    "no-bidi-or-script-itemizer-replacement-claim",
     "no-shaping-support-promotion",
     "no-paragraph-support-claim",
     "no-gpu-text-route-claim"

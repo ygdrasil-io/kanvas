@@ -209,20 +209,30 @@ public interface TextSegmenter {
 }
 
 /**
- * Segments text into conservative UTF-16 code point clusters for early shaping.
+ * Segments text into pinned KFONT-M5-002 grapheme clusters for early shaping.
  *
- * The segmenter does not implement Unicode Text Segmentation (UAX #29). It
- * avoids splitting surrogate pairs and attaches combining marks and common
- * default ignorables to the previous cluster when a previous cluster exists.
+ * The default constructor delegates to [DefaultGraphemeTextSegmenter]. The
+ * [UnicodeData] constructor keeps the previous conservative code point
+ * clustering available for compatibility in callers that explicitly request a
+ * bounded legacy Unicode data source.
  *
- * @param unicodeData Unicode data source used for default-ignorable checks.
+ * @param delegate Text segmenter used by this compatibility facade.
  */
 public class BasicTextSegmenter(
-    private val unicodeData: UnicodeData = BasicUnicodeData,
+    private val delegate: TextSegmenter = DefaultGraphemeTextSegmenter,
 ) : TextSegmenter {
+    public constructor(unicodeData: UnicodeData) : this(LegacyCodePointTextSegmenter(unicodeData))
+
     /**
-     * Returns inclusive UTF-16 ranges for conservative code point clusters.
+     * Returns inclusive UTF-16 ranges for grapheme clusters.
      */
+    override fun segment(text: String): List<IntRange> =
+        delegate.segment(text)
+}
+
+private class LegacyCodePointTextSegmenter(
+    private val unicodeData: UnicodeData,
+) : TextSegmenter {
     override fun segment(text: String): List<IntRange> {
         val ranges = mutableListOf<IntRange>()
         for (codePointRange in codePointRanges(text)) {
