@@ -1,42 +1,15 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 
-import io.ygdrasil.webgpu.ArrayBuffer
-import io.ygdrasil.webgpu.BindGroupDescriptor
-import io.ygdrasil.webgpu.BindGroupEntry
-import io.ygdrasil.webgpu.BindGroupLayoutDescriptor
-import io.ygdrasil.webgpu.BindGroupLayoutEntry
-import io.ygdrasil.webgpu.BlendComponent
-import io.ygdrasil.webgpu.BlendState
-import io.ygdrasil.webgpu.BufferBinding
-import io.ygdrasil.webgpu.BufferBindingLayout
-import io.ygdrasil.webgpu.BufferDescriptor
-import io.ygdrasil.webgpu.Color
-import io.ygdrasil.webgpu.ColorTargetState
-import io.ygdrasil.webgpu.FragmentState
-import io.ygdrasil.webgpu.GPUBindGroup
-import io.ygdrasil.webgpu.GPUBindGroupLayout
-import io.ygdrasil.webgpu.GPUBlendFactor
-import io.ygdrasil.webgpu.GPUBlendOperation
-import io.ygdrasil.webgpu.GPUBufferBindingType
-import io.ygdrasil.webgpu.GPUBufferUsage
-import io.ygdrasil.webgpu.GPULoadOp
-import io.ygdrasil.webgpu.GPUShaderStage
-import io.ygdrasil.webgpu.GPUStoreOp
-import io.ygdrasil.webgpu.GPUTextureFormat
-import io.ygdrasil.webgpu.PipelineLayoutDescriptor
-import io.ygdrasil.webgpu.RenderPassColorAttachment
-import io.ygdrasil.webgpu.RenderPassDescriptor
-import io.ygdrasil.webgpu.RenderPipelineDescriptor
-import io.ygdrasil.webgpu.ShaderModuleDescriptor
-import io.ygdrasil.webgpu.VertexState
-import io.ygdrasil.webgpu.beginRenderPass
 import java.awt.image.BufferedImage
 import java.nio.file.Path
 import javax.imageio.ImageIO
 import kotlin.io.path.createDirectories
 import kotlin.math.ceil
 import kotlin.math.floor
-import kotlinx.coroutines.runBlocking
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
+import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.a8GlyphAtlasGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.legacyRetirementBlockerDiagnostics
@@ -51,8 +24,6 @@ import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneFilterKind
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.textRunRouteUnavailableReason
-import org.skia.gpu.webgpu.HeadlessTarget
-import org.skia.gpu.webgpu.WebGpuContext
 
 private const val BYTES_PER_PIXEL: Int = 4
 
@@ -67,23 +38,26 @@ class RectOnlyOffscreenRenderer {
             height = scene.dimensions.height,
         )
 
-        val context = WebGpuContext.createOrNull()
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
             ?: return OffscreenRunReport.failed(sceneId, "webgpu-context-unavailable")
 
-        context.use { ctx ->
-            HeadlessTarget(
-                context = ctx,
-                width = scene.dimensions.width,
-                height = scene.dimensions.height,
-                format = GPUTextureFormat.RGBA8Unorm,
+        runtime.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(
+                    width = scene.dimensions.width,
+                    height = scene.dimensions.height,
+                    colorFormat = OFFSCREEN_COLOR_FORMAT,
+                ),
             ).use { target ->
-                val pixels = renderToPixels(ctx, target, drawPlan)
+                val pixels = renderToPixels(target, drawPlan)
                 val nonTransparentPixels = pixels.countNonTransparentPixels()
                 val imagePath = outputDir.resolve(RENDER_FILE_NAME)
-                writePng(pixels, target.width, target.height, imagePath)
+                val width = target.target.descriptor.width
+                val height = target.target.descriptor.height
+                writePng(pixels, width, height, imagePath)
                 val baseDiagnostics = rectOnlyRenderedDiagnostics(
                     sceneId = sceneId,
-                    adapterInfo = ctx.adapterInfo,
+                    adapterInfo = session.adapterInfo?.summary,
                     clearCount = drawPlan.clearCount,
                     fillRectCount = drawPlan.fillRectCount,
                     fillRRectCount = drawPlan.fillRRectCount,
@@ -106,9 +80,9 @@ class RectOnlyOffscreenRenderer {
                 return OffscreenRunReport.rendered(
                     sceneId = sceneId,
                     imagePath = RENDER_FILE_NAME,
-                    width = target.width,
-                    height = target.height,
-                    byteCount = rectOnlyRawRgbaByteCount(pixels, target.width, target.height),
+                    width = width,
+                    height = height,
+                    byteCount = rectOnlyRawRgbaByteCount(pixels, width, height),
                     nonTransparentPixels = nonTransparentPixels,
                     diagnostics = diagnostics,
                 )
@@ -117,121 +91,42 @@ class RectOnlyOffscreenRenderer {
     }
 
     private fun renderToPixels(
-        context: WebGpuContext,
-        target: HeadlessTarget,
+        target: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget,
         drawPlan: RectOnlyDrawPlan,
     ): ByteArray {
-        GpuResourceScope().use { gpuResources ->
-            val bindGroupLayout = gpuResources.track(
-                context.device.createBindGroupLayout(
-                    BindGroupLayoutDescriptor(
-                        entries = listOf(
-                            BindGroupLayoutEntry(
-                                binding = 0u,
-                                visibility = GPUShaderStage.Fragment,
-                                buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
-                            ),
-                        ),
-                    ),
-                ),
-            ) { it.close() }
-            val shader = gpuResources.track(
-                context.device.createShaderModule(ShaderModuleDescriptor(code = SOLID_RECT_WGSL)),
-            ) { it.close() }
-            val pipelineLayout = gpuResources.track(
-                context.device.createPipelineLayout(
-                    PipelineLayoutDescriptor(bindGroupLayouts = listOf(bindGroupLayout)),
-                ),
-            ) { it.close() }
-            val pipeline = gpuResources.track(
-                context.device.createRenderPipeline(
-                    RenderPipelineDescriptor(
-                        layout = pipelineLayout,
-                        vertex = VertexState(module = shader, entryPoint = "vs_main"),
-                        fragment = FragmentState(
-                            module = shader,
-                            entryPoint = "fs_main",
-                            targets = listOf(
-                                ColorTargetState(
-                                    format = target.format,
-                                    blend = srcOverBlendState(),
-                                ),
-                            ),
-                        ),
-                    ),
-                ),
-            ) { it.close() }
-            val view = gpuResources.track(target.colorTexture.createView()) { it.close() }
-            val drawResources = drawPlan.fills.map { fill ->
-                createDrawResource(context, bindGroupLayout, gpuResources, fill)
-            }
-            val encoder = gpuResources.trackIfAutoCloseable(context.device.createCommandEncoder())
-            encoder.beginRenderPass(
-                RenderPassDescriptor(
-                    colorAttachments = listOf(
-                        RenderPassColorAttachment(
-                            view = view,
-                            loadOp = GPULoadOp.Clear,
-                            clearValue = drawPlan.clearColor.toWebGpuColor(),
-                            storeOp = GPUStoreOp.Store,
-                        ),
-                    ),
-                ),
-            ) {
-                setPipeline(pipeline)
-                drawResources.forEach { resource ->
-                    setBindGroup(0u, resource.bindGroup)
-                    setScissorRect(
-                        x = resource.scissorX.toUInt(),
-                        y = resource.scissorY.toUInt(),
-                        width = resource.scissorWidth.toUInt(),
-                        height = resource.scissorHeight.toUInt(),
+        target.encode(clearColor = drawPlan.clearColor.toGpuClearColor()) {
+            drawFullscreenPass(
+                wgsl = SOLID_RECT_WGSL,
+                colorFormat = OFFSCREEN_COLOR_FORMAT,
+                draws = drawPlan.fills.map { fill ->
+                    GPUBackendRectDraw(
+                        rgbaPremul = fill.toPremulColorArray(),
+                        scissorX = fill.scissorX,
+                        scissorY = fill.scissorY,
+                        scissorWidth = fill.scissorWidth,
+                        scissorHeight = fill.scissorHeight,
                     )
-                    draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
-                }
-                end()
-            }
-            target.encodeCopyToStaging(encoder)
-            val commandBuffer = gpuResources.trackIfAutoCloseable(encoder.finish())
-            context.queue.submit(listOf(commandBuffer))
-            return runBlocking { target.readPixels() }
+                },
+            )
         }
+        return target.readRgba()
     }
 
-    private fun createDrawResource(
-        context: WebGpuContext,
-        layout: GPUBindGroupLayout,
-        gpuResources: GpuResourceScope,
-        fill: RectOnlyFillDraw,
-    ): DrawResource {
-        val uniform = gpuResources.track(
-            context.device.createBuffer(
-                BufferDescriptor(
-                    size = COLOR_UNIFORM_SIZE_BYTES,
-                    usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
-                    label = "RectOnlyOffscreenRenderer.shape",
-                ),
-            ),
-        ) { it.close() }
-        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(fill.toUniformFloatArray()))
-        val bindGroup = gpuResources.track(
-            context.device.createBindGroup(
-                BindGroupDescriptor(
-                    layout = layout,
-                    entries = listOf(
-                        BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
-                    ),
-                ),
-            ),
-        ) { it.close() }
-        return DrawResource(
-            bindGroup = bindGroup,
-            scissorX = fill.scissorX,
-            scissorY = fill.scissorY,
-            scissorWidth = fill.scissorWidth,
-            scissorHeight = fill.scissorHeight,
+    private fun SceneColor.toGpuClearColor(): GPUClearColor =
+        GPUClearColor(
+            red = (r * a).toDouble(),
+            green = (g * a).toDouble(),
+            blue = (b * a).toDouble(),
+            alpha = a.toDouble(),
         )
-    }
+
+    private fun RectOnlyFillDraw.toPremulColorArray(): FloatArray =
+        floatArrayOf(
+            startColor.r * startColor.a,
+            startColor.g * startColor.a,
+            startColor.b * startColor.a,
+            startColor.a,
+        )
 
     private fun writePng(pixels: ByteArray, width: Int, height: Int, path: Path) {
         require(pixels.size == width * height * BYTES_PER_PIXEL) {
@@ -251,59 +146,13 @@ class RectOnlyOffscreenRenderer {
         }
     }
 
-    private data class DrawResource(
-        val bindGroup: GPUBindGroup,
-        val scissorX: Int,
-        val scissorY: Int,
-        val scissorWidth: Int,
-        val scissorHeight: Int,
-    )
-
-    private class GpuResourceScope : AutoCloseable {
-        private val closeActions = ArrayDeque<() -> Unit>()
-
-        fun <T> track(resource: T, close: (T) -> Unit): T {
-            closeActions.addFirst { close(resource) }
-            return resource
-        }
-
-        fun <T> trackIfAutoCloseable(resource: T): T {
-            if (resource is AutoCloseable) {
-                track(resource) { it.close() }
-            }
-            return resource
-        }
-
-        override fun close() {
-            var firstFailure: Throwable? = null
-            while (closeActions.isNotEmpty()) {
-                try {
-                    closeActions.removeFirst().invoke()
-                } catch (failure: Throwable) {
-                    if (firstFailure == null) {
-                        firstFailure = failure
-                    } else {
-                        firstFailure.addSuppressed(failure)
-                    }
-                }
-            }
-            firstFailure?.let { throw it }
-        }
-    }
-
     private companion object {
         const val RENDER_FILE_NAME: String = "render.png"
-        const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
-        const val COLOR_UNIFORM_SIZE_BYTES: ULong = 96uL
+        const val OFFSCREEN_COLOR_FORMAT: String = "rgba8unorm"
 
         val SOLID_RECT_WGSL: String = """
             struct Uniforms {
-                color0: vec4f,
-                color1: vec4f,
-                color2: vec4f,
-                color3: vec4f,
-                rect: vec4f,
-                radius_and_kind: vec4f,
+                color: vec4f,
             };
 
             @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -315,146 +164,11 @@ class RectOnlyOffscreenRenderer {
                 return vec4f(x, y, 0.0, 1.0);
             }
 
-            fn rounded_rect_coverage(pixel: vec2f, rect: vec4f, radius: f32) -> f32 {
-                if (pixel.x < rect.x || pixel.x >= rect.z || pixel.y < rect.y || pixel.y >= rect.w) {
-                    return 0.0;
-                }
-                if (radius <= 0.0) {
-                    return 1.0;
-                }
-                let clamped_radius = min(radius, min((rect.z - rect.x) * 0.5, (rect.w - rect.y) * 0.5));
-                let center = clamp(pixel, rect.xy + vec2f(clamped_radius), rect.zw - vec2f(clamped_radius));
-                let edge_distance = length(pixel - center) - clamped_radius;
-                return clamp(0.5 - edge_distance, 0.0, 1.0);
-            }
-
-            fn mesh_ribbon_coverage(pixel: vec2f, rect: vec4f, half_thickness: f32) -> f32 {
-                if (pixel.x < rect.x || pixel.x >= rect.z || pixel.y < rect.y || pixel.y >= rect.w) {
-                    return 0.0;
-                }
-                let start = vec2f(rect.x, rect.w);
-                let end = vec2f(rect.z, rect.y);
-                let line = end - start;
-                let t = clamp(dot(pixel - start, line) / max(dot(line, line), 0.0001), 0.0, 1.0);
-                let closest = start + line * t;
-                let edge_distance = length(pixel - closest) - max(half_thickness, 0.0);
-                return clamp(0.5 - edge_distance, 0.0, 1.0);
-            }
-
-            fn shape_coverage(pixel: vec2f, rect: vec4f, radius: f32, paint_kind: f32) -> f32 {
-                if (paint_kind >= 4.5) {
-                    return mesh_ribbon_coverage(pixel, rect, radius);
-                }
-                return rounded_rect_coverage(pixel, rect, radius);
-            }
-
             @fragment
-            fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
-                let coverage = shape_coverage(
-                    position.xy,
-                    uniforms.rect,
-                    uniforms.radius_and_kind.x,
-                    uniforms.radius_and_kind.y
-                );
-                var color = uniforms.color0;
-                if (uniforms.radius_and_kind.y >= 4.5) {
-                    let uv = clamp(
-                        (position.xy - uniforms.rect.xy) / max(uniforms.rect.zw - uniforms.rect.xy, vec2f(0.0001)),
-                        vec2f(0.0),
-                        vec2f(1.0)
-                    );
-                    color = mix(uniforms.color0, uniforms.color1, uv.x);
-                } else if (uniforms.radius_and_kind.y >= 3.5) {
-                    color = vec4f(
-                        position.x * (1.0 / 255.0),
-                        position.y * (1.0 / 255.0),
-                        uniforms.color0.b,
-                        1.0
-                    );
-                } else if (uniforms.radius_and_kind.y >= 2.5) {
-                    let uv = clamp(
-                        (position.xy - uniforms.rect.xy) / max(uniforms.rect.zw - uniforms.rect.xy, vec2f(0.0001)),
-                        vec2f(0.0),
-                        vec2f(1.0)
-                    );
-                    let top = mix(uniforms.color0, uniforms.color1, uv.x);
-                    let bottom = mix(uniforms.color2, uniforms.color3, uv.x);
-                    color = mix(top, bottom, uv.y);
-                } else if (uniforms.radius_and_kind.y >= 1.5) {
-                    let uv = clamp(
-                        (position.xy - uniforms.rect.xy) / max(uniforms.rect.zw - uniforms.rect.xy, vec2f(0.0001)),
-                        vec2f(0.0),
-                        vec2f(1.0)
-                    );
-                    if (uv.y >= 0.5) {
-                        if (uv.x >= 0.5) {
-                            color = uniforms.color3;
-                        } else {
-                            color = uniforms.color2;
-                        }
-                    } else if (uv.x >= 0.5) {
-                        color = uniforms.color1;
-                    }
-                } else if (uniforms.radius_and_kind.y >= 0.5) {
-                    let t = clamp(
-                        (position.y - uniforms.rect.y) / max(uniforms.rect.w - uniforms.rect.y, 0.0001),
-                        0.0,
-                        1.0
-                    );
-                    color = mix(uniforms.color0, uniforms.color1, t);
-                }
-                if (uniforms.radius_and_kind.z >= 0.5) {
-                    let luma = dot(color.rgb, vec3f(0.2126, 0.7152, 0.0722));
-                    let luma_tint = clamp(vec3f(luma * 1.08, luma * 0.78, luma * 0.42), vec3f(0.0), vec3f(1.0));
-                    color = vec4f(
-                        mix(color.rgb, luma_tint, clamp(uniforms.radius_and_kind.w, 0.0, 1.0)),
-                        color.a
-                    );
-                }
-                let alpha = color.a * coverage;
-                return vec4f(color.rgb * alpha, alpha);
+            fn fs_main() -> @location(0) vec4f {
+                return uniforms.color;
             }
         """.trimIndent()
-
-        fun srcOverBlendState(): BlendState {
-            val component = BlendComponent(
-                operation = GPUBlendOperation.Add,
-                srcFactor = GPUBlendFactor.One,
-                dstFactor = GPUBlendFactor.OneMinusSrcAlpha,
-            )
-            return BlendState(color = component, alpha = component)
-        }
-
-        fun SceneColor.toWebGpuColor(): Color =
-            Color(r.toDouble() * a.toDouble(), g.toDouble() * a.toDouble(), b.toDouble() * a.toDouble(), a.toDouble())
-
-        fun RectOnlyFillDraw.toUniformFloatArray(): FloatArray =
-            floatArrayOf(
-                startColor.r,
-                startColor.g,
-                startColor.b,
-                startColor.a,
-                endColor.r,
-                endColor.g,
-                endColor.b,
-                endColor.a,
-                bottomLeftColor.r,
-                bottomLeftColor.g,
-                bottomLeftColor.b,
-                bottomLeftColor.a,
-                bottomRightColor.r,
-                bottomRightColor.g,
-                bottomRightColor.b,
-                bottomRightColor.a,
-                left,
-                top,
-                right,
-                bottom,
-                radius,
-                paintKind,
-                filterKind,
-                filterStrength,
-            )
 
         fun ByteArray.countNonTransparentPixels(): Int {
             require(size % BYTES_PER_PIXEL == 0) { "RGBA buffer size must be a multiple of $BYTES_PER_PIXEL" }

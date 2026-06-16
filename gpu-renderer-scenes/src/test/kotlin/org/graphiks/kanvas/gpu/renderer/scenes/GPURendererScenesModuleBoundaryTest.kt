@@ -13,6 +13,29 @@ import kotlin.test.fail
 
 class GPURendererScenesModuleBoundaryTest {
     @Test
+    fun `scene module build and sources stay decoupled from gpu raster internals`() {
+        val buildFile = repoPath("gpu-renderer-scenes/build.gradle.kts").readText()
+        assertFalse(
+            "implementation(project(\":gpu-raster\"))" in buildFile,
+            "gpu-renderer-scenes must not depend on :gpu-raster directly",
+        )
+
+        val srcRoot = repoPath("gpu-renderer-scenes/src/main")
+        val sceneSourceFiles = Files.walk(srcRoot).filter { Files.isRegularFile(it) }.toList()
+        val sceneSource = sceneSourceFiles.joinToString("\n") { it.readText() }
+
+        assertFalse("org.skia.gpu.webgpu" in sceneSource)
+        assertFalse(
+            sceneSourceFiles.any { file ->
+                file.readText().lineSequence().any { line ->
+                    line.trim().startsWith("import io.ygdrasil.webgpu")
+                }
+            },
+            "gpu-renderer-scenes/src must not import io.ygdrasil.webgpu directly",
+        )
+    }
+
+    @Test
     fun `catalog packages do not import Kadre or gpu raster`() {
         val root = repoPath("gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/catalog")
         val source = Files.walk(root).filter { Files.isRegularFile(it) }.toList().joinToString("\n") { it.readText() }
