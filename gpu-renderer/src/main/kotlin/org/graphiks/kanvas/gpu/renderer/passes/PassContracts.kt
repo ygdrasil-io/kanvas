@@ -52,6 +52,176 @@ data class GPUDrawInsertion(
     val reasonCode: String,
 )
 
+/**
+ * One render-step vertex or instance attribute before backend buffer allocation.
+ *
+ * Attribute facts are layout evidence only. They name WGSL-visible value classes and byte ranges,
+ * but do not own concrete buffers, mapped memory, or backend vertex-state objects.
+ */
+data class GPURenderStepAttribute(
+    val name: String,
+    val valueClass: String,
+    val sourceClass: String,
+    val byteOffset: Long,
+    val byteSize: Long,
+) {
+    init {
+        require(name.isNotBlank()) { "GPURenderStepAttribute.name must not be blank" }
+        require(valueClass.isNotBlank()) { "GPURenderStepAttribute.valueClass must not be blank" }
+        require(sourceClass.isNotBlank()) { "GPURenderStepAttribute.sourceClass must not be blank" }
+        require(byteOffset >= 0L) { "GPURenderStepAttribute.byteOffset must be non-negative" }
+        require(byteSize > 0L) { "GPURenderStepAttribute.byteSize must be positive" }
+    }
+}
+
+/**
+ * Vertex and instance layout metadata for a render step.
+ *
+ * Static and append attributes are copied at construction so caller mutation cannot rewrite
+ * pipeline-key preimage evidence after the render-step descriptor is built.
+ */
+class GPURenderStepVertexLayout(
+    val layoutHash: String,
+    val primitiveTopology: String,
+    staticAttributes: List<GPURenderStepAttribute>,
+    appendAttributes: List<GPURenderStepAttribute>,
+    val instanceStepRate: String,
+) {
+    /** Static vertex attributes copied in declaration order. */
+    val staticAttributes: List<GPURenderStepAttribute> = staticAttributes.toList()
+
+    /** Append or instance attributes copied in declaration order. */
+    val appendAttributes: List<GPURenderStepAttribute> = appendAttributes.toList()
+
+    /** Static attribute names in declaration order. */
+    val staticAttributeNames: List<String>
+        get() = staticAttributes.map { attribute -> attribute.name }
+
+    /** Append attribute names in declaration order. */
+    val appendAttributeNames: List<String>
+        get() = appendAttributes.map { attribute -> attribute.name }
+
+    init {
+        require(layoutHash.isNotBlank()) { "GPURenderStepVertexLayout.layoutHash must not be blank" }
+        require(primitiveTopology.isNotBlank()) {
+            "GPURenderStepVertexLayout.primitiveTopology must not be blank"
+        }
+        require(instanceStepRate.isNotBlank()) { "GPURenderStepVertexLayout.instanceStepRate must not be blank" }
+    }
+}
+
+/**
+ * Payload and bind-group layout metadata required by a render step.
+ *
+ * This contract names layout hashes and dynamic-offset policy only. Concrete bind groups, buffers,
+ * and offsets remain owned by resource materialization and command encoding.
+ */
+data class GPURenderStepPayloadLayout(
+    val bindingLayoutHash: String,
+    val uniformLayoutHash: String,
+    val resourceLayoutHash: String? = null,
+    val dynamicOffsetPolicy: String,
+) {
+    init {
+        require(bindingLayoutHash.isNotBlank()) {
+            "GPURenderStepPayloadLayout.bindingLayoutHash must not be blank"
+        }
+        require(uniformLayoutHash.isNotBlank()) {
+            "GPURenderStepPayloadLayout.uniformLayoutHash must not be blank"
+        }
+        require(resourceLayoutHash == null || resourceLayoutHash.isNotBlank()) {
+            "GPURenderStepPayloadLayout.resourceLayoutHash must not be blank"
+        }
+        require(dynamicOffsetPolicy.isNotBlank()) {
+            "GPURenderStepPayloadLayout.dynamicOffsetPolicy must not be blank"
+        }
+    }
+}
+
+/**
+ * Fixed render-state metadata contributed by a render step.
+ *
+ * The state hash is suitable for pipeline-key preimages. The split hashes keep blend, sample,
+ * depth/stencil, target, and coverage-function evidence reviewable without backend objects.
+ */
+data class GPURenderStepFixedState(
+    val stateHash: String,
+    val blendStateHash: String,
+    val sampleStateHash: String,
+    val depthStencilStateHash: String,
+    val targetStateClass: String,
+    val coverageFunctionIdentity: String,
+) {
+    init {
+        require(stateHash.isNotBlank()) { "GPURenderStepFixedState.stateHash must not be blank" }
+        require(blendStateHash.isNotBlank()) { "GPURenderStepFixedState.blendStateHash must not be blank" }
+        require(sampleStateHash.isNotBlank()) { "GPURenderStepFixedState.sampleStateHash must not be blank" }
+        require(depthStencilStateHash.isNotBlank()) {
+            "GPURenderStepFixedState.depthStencilStateHash must not be blank"
+        }
+        require(targetStateClass.isNotBlank()) { "GPURenderStepFixedState.targetStateClass must not be blank" }
+        require(coverageFunctionIdentity.isNotBlank()) {
+            "GPURenderStepFixedState.coverageFunctionIdentity must not be blank"
+        }
+    }
+}
+
+/**
+ * Backend-neutral descriptor for one concrete render step.
+ *
+ * A descriptor is the bridge between route analysis and pipeline-key construction. It records
+ * topology, vertex/append layout, payload ABI, fixed state, WGSL entry points, and diagnostics
+ * without creating shader modules, buffers, pipelines, or command encoders.
+ */
+class GPURenderStepDescriptor(
+    val stepId: GPURenderStepID,
+    val version: Int,
+    val geometryClass: String,
+    val coverageClass: String,
+    val vertexLayout: GPURenderStepVertexLayout,
+    val payloadLayout: GPURenderStepPayloadLayout,
+    val fixedState: GPURenderStepFixedState,
+    val wgslVertexEntryPoint: String,
+    val wgslFragmentEntryPoint: String,
+    val wgslModuleHash: String,
+    diagnostics: List<GPUPassDiagnostic> = emptyList(),
+) {
+    /** Diagnostics copied from descriptor production. */
+    val diagnostics: List<GPUPassDiagnostic> = diagnostics.toList()
+
+    init {
+        require(version >= 0) { "GPURenderStepDescriptor.version must be non-negative" }
+        require(geometryClass.isNotBlank()) { "GPURenderStepDescriptor.geometryClass must not be blank" }
+        require(coverageClass.isNotBlank()) { "GPURenderStepDescriptor.coverageClass must not be blank" }
+        require(wgslVertexEntryPoint.isNotBlank()) {
+            "GPURenderStepDescriptor.wgslVertexEntryPoint must not be blank"
+        }
+        require(wgslFragmentEntryPoint.isNotBlank()) {
+            "GPURenderStepDescriptor.wgslFragmentEntryPoint must not be blank"
+        }
+        require(wgslModuleHash.isNotBlank()) { "GPURenderStepDescriptor.wgslModuleHash must not be blank" }
+    }
+
+    /** Projects this descriptor into the existing render-step plan contract. */
+    fun toPlan(): GPURenderStepPlan =
+        GPURenderStepPlan(
+            stepId = stepId,
+            geometryClass = geometryClass,
+            coverageClass = coverageClass,
+            vertexLayoutHash = vertexLayout.layoutHash,
+            fixedStateHash = fixedState.stateHash,
+            wgslFragmentHash = "$wgslModuleHash#$wgslFragmentEntryPoint",
+            pipelineAxes = mapOf(
+                "bindingLayoutHash" to payloadLayout.bindingLayoutHash,
+                "coverageFunctionIdentity" to fixedState.coverageFunctionIdentity,
+                "fragmentEntryPoint" to wgslFragmentEntryPoint,
+                "primitiveTopology" to vertexLayout.primitiveTopology,
+                "targetStateClass" to fixedState.targetStateClass,
+                "vertexEntryPoint" to wgslVertexEntryPoint,
+            ),
+        )
+}
+
 /** Stable identifier for one pass-local draw packet. */
 @JvmInline
 value class GPUDrawPacketID(val value: String) {
@@ -385,6 +555,89 @@ class GPUPassCommandStream(
     }
 }
 
+/** Emits deterministic render-step evidence lines without backend objects. */
+fun GPURenderStepDescriptor.dumpLines(): List<String> =
+    listOf(
+        "passes.render-step id=${stepId.value} " +
+            "version=$version " +
+            "geometry=$geometryClass " +
+            "coverage=$coverageClass " +
+            "topology=${vertexLayout.primitiveTopology} " +
+            "vertexLayout=${vertexLayout.layoutHash} " +
+            "payloadLayout=${payloadLayout.bindingLayoutHash} " +
+            "fixedState=${fixedState.stateHash} " +
+            "wgsl=$wgslModuleHash " +
+            "vertexEntry=$wgslVertexEntryPoint " +
+            "fragmentEntry=$wgslFragmentEntryPoint " +
+            "diagnostics=${diagnostics.dumpCodes()}",
+        "passes.render-step.attributes " +
+            "static=${vertexLayout.staticAttributes.dumpAttributes()} " +
+            "append=${vertexLayout.appendAttributes.dumpAttributes()}",
+        "passes.render-step.payload " +
+            "binding=${payloadLayout.bindingLayoutHash} " +
+            "uniform=${payloadLayout.uniformLayoutHash} " +
+            "resource=${payloadLayout.resourceLayoutHash ?: NONE_DUMP_VALUE} " +
+            "dynamicOffsets=${payloadLayout.dynamicOffsetPolicy}",
+        "passes.render-step.state " +
+            "blend=${fixedState.blendStateHash} " +
+            "sample=${fixedState.sampleStateHash} " +
+            "depthStencil=${fixedState.depthStencilStateHash} " +
+            "target=${fixedState.targetStateClass} " +
+            "coverageFn=${fixedState.coverageFunctionIdentity}",
+    ) + diagnostics.dumpLines()
+
+/** Emits deterministic packet evidence lines for one pass-local packet. */
+fun GPUDrawPacket.dumpLines(): List<String> =
+    listOf(
+        "passes.packet id=${packetId.value} " +
+            "command=$commandIdValue " +
+            "analysis=$analysisRecordId " +
+            "pass=$passId " +
+            "layer=$layerId " +
+            "bindingList=$bindingListId " +
+            "role=$role " +
+            "step=${renderStepId.value}@$renderStepVersion " +
+            "renderPipeline=${renderPipelineKey?.value ?: NONE_DUMP_VALUE} " +
+            "computePipeline=${computePipelineKey?.value ?: NONE_DUMP_VALUE} " +
+            "bindingLayout=$bindingLayoutHash " +
+            "uniformSlot=${uniformSlot?.slotId?.value ?: NONE_DUMP_VALUE} " +
+            "resourceSlot=${resourceSlot?.slotId?.value ?: NONE_DUMP_VALUE} " +
+            "vertex=$vertexSourceLabel " +
+            "scissor=${scissorBoundsHash ?: NONE_DUMP_VALUE} " +
+            "target=$targetStateHash " +
+            "order=$originalPaintOrder " +
+            "resourceGeneration=$resourceGeneration " +
+            "diagnostics=${diagnostics.dumpCodes()}",
+        "passes.packet.sort id=${packetId.value} " +
+            "sortKey=$sortKey " +
+            "preimage=$sortKeyPreimage " +
+            "insertion=$insertionReasonCode " +
+            "provenance=$provenanceLabel",
+    ) + diagnostics.dumpLines()
+
+/** Emits deterministic packet-stream evidence in stream order. */
+fun GPUDrawPacketStream.dumpLines(): List<String> =
+    listOf(
+        "passes.packet-stream id=$streamId " +
+            "pass=$passId " +
+            "packets=${packetIds.map { packetId -> packetId.value }.dumpSequence()} " +
+            "commands=${commandIds.map { commandId -> commandId.toString() }.dumpSequence()} " +
+            "sortKeys=${sortKeys.map { sortKey -> sortKey.toString() }.dumpSequence()} " +
+            "pipelines=${renderPipelineKeys.map { pipelineKey -> pipelineKey.value }.dumpSequence()} " +
+            "diagnostics=${diagnostics.dumpCodes()}",
+    ) + packets.flatMap { packet -> packet.dumpLines() } + diagnostics.dumpLines()
+
+/** Emits deterministic pass-command stream evidence before backend encoding. */
+fun GPUPassCommandStream.dumpLines(): List<String> =
+    listOf(
+        "passes.command-stream id=$streamId " +
+            "packetStream=$packetStreamId " +
+            "pass=$passId " +
+            "commands=${commandLabels.dumpSequence()} " +
+            "packets=${sourcePacketIds.map { packetId -> packetId.value }.dumpSequence()} " +
+            "diagnostics=${diagnostics.dumpCodes()}",
+    ) + commands.map { command -> command.dumpLine() } + diagnostics.dumpLines()
+
 /** Draw pass descriptor close to GPU submission. */
 data class GPUDrawPass(
     val passId: String,
@@ -465,6 +718,58 @@ data class GPUPassDiagnostic(
     val invocationId: String? = null,
     val terminal: Boolean,
 )
+
+private const val NONE_DUMP_VALUE = "none"
+
+private fun GPUPassCommand.dumpLine(): String =
+    when (this) {
+        is GPUPassCommand.BeginRenderPass ->
+            "passes.command beginRenderPass target=$targetStateHash loadStore=$loadStoreLabel"
+        is GPUPassCommand.SetRenderPipeline ->
+            "passes.command setRenderPipeline packet=${packetId.value} pipeline=${pipelineKey.value}"
+        is GPUPassCommand.SetBindGroup ->
+            "passes.command setBindGroup " +
+                "packet=${packetId.value} " +
+                "bindingLayout=$bindingLayoutHash " +
+                "uniformSlot=${uniformSlot?.slotId?.value ?: NONE_DUMP_VALUE} " +
+                "resourceSlot=${resourceSlot?.slotId?.value ?: NONE_DUMP_VALUE}"
+        is GPUPassCommand.SetScissor ->
+            "passes.command setScissor packet=${packetId.value} scissor=$scissorBoundsHash"
+        is GPUPassCommand.Draw ->
+            "passes.command draw packet=${packetId.value} vertex=$vertexSourceLabel"
+        is GPUPassCommand.EndRenderPass ->
+            "passes.command endRenderPass pass=$passId"
+    }
+
+private fun List<GPURenderStepAttribute>.dumpAttributes(): String =
+    if (isEmpty()) {
+        NONE_DUMP_VALUE
+    } else {
+        joinToString(",") { attribute ->
+            "${attribute.name}:${attribute.valueClass}@${attribute.byteOffset}+${attribute.byteSize}"
+        }
+    }
+
+private fun List<String>.dumpSequence(): String =
+    if (isEmpty()) NONE_DUMP_VALUE else joinToString(",")
+
+private fun List<GPUPassDiagnostic>.dumpCodes(): String =
+    if (isEmpty()) NONE_DUMP_VALUE else map { diagnostic -> diagnostic.code }.sorted().joinToString(",")
+
+private fun List<GPUPassDiagnostic>.dumpLines(): List<String> =
+    toList().sortedWith(
+        compareBy<GPUPassDiagnostic> { it.code }
+            .thenBy { it.passId ?: "" }
+            .thenBy { it.invocationId ?: "" }
+            .thenBy { it.terminal.toString() },
+    )
+        .map { diagnostic ->
+            "passes.diagnostic " +
+                "code=${diagnostic.code} " +
+                "pass=${diagnostic.passId ?: NONE_DUMP_VALUE} " +
+                "invocation=${diagnostic.invocationId ?: NONE_DUMP_VALUE} " +
+                "terminal=${diagnostic.terminal}"
+        }
 
 /** Builds first-route pass descriptors whose contents remain pre-materialization planning records. */
 object GPUFirstRoutePassBuilder {
