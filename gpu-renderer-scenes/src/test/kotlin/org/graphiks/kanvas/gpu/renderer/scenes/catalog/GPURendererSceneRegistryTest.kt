@@ -958,6 +958,25 @@ class GPURendererSceneRegistryTest {
                 ),
             ),
             SceneExpectationRow(
+                sceneId = "product-route-smoke-lanes",
+                tags = setOf(SceneTag.Rect, SceneTag.LegacyComparison),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M0"),
+                    RoadmapExpectation("M1"),
+                ),
+            ),
+            SceneExpectationRow(
                 sceneId = "rounded-panel-gradient",
                 tags = setOf(SceneTag.RRect, SceneTag.Gradient, SceneTag.Clip),
                 commandFamilies = listOf("fill-rrect", "clip", "linear-gradient-rect"),
@@ -1100,6 +1119,20 @@ class GPURendererSceneRegistryTest {
                     "fill-rect",
                 ),
                 roadmapLinks = listOf(RoadmapExpectation("M4", ticketId = "KGPU-M4-004")),
+            ),
+            SceneExpectationRow(
+                sceneId = "bitmap-sampler-matrix",
+                tags = setOf(SceneTag.Image, SceneTag.Clip, SceneTag.RRect),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "bitmap-rect",
+                    "bitmap-rect",
+                    "bitmap-rect",
+                    "bitmap-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M4")),
             ),
             SceneExpectationRow(
                 sceneId = "savelayer-isolation-gate-board",
@@ -1280,6 +1313,20 @@ class GPURendererSceneRegistryTest {
                 roadmapLinks = listOf(RoadmapExpectation("M7", ticketId = "KGPU-M7-002")),
             ),
             SceneExpectationRow(
+                sceneId = "runtime-effect-uniform-ladder",
+                tags = setOf(SceneTag.RuntimeEffect, SceneTag.RRect, SceneTag.Clip),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "runtime-effect",
+                    "runtime-effect",
+                    "runtime-effect",
+                    "runtime-effect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M7")),
+            ),
+            SceneExpectationRow(
                 sceneId = "blend-mode-strip",
                 tags = setOf(SceneTag.Rect),
                 commandFamilies = listOf("fill-rect"),
@@ -1334,6 +1381,19 @@ class GPURendererSceneRegistryTest {
                     RoadmapExpectation("M8", ticketId = "KGPU-M8-002"),
                     RoadmapExpectation("M8", ticketId = "KGPU-M8-003"),
                 ),
+            ),
+            SceneExpectationRow(
+                sceneId = "mesh-ribbon-depth-stack",
+                tags = setOf(SceneTag.Vertices, SceneTag.RRect, SceneTag.Clip),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "vertices",
+                    "vertices",
+                    "vertices",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M8")),
             ),
             SceneExpectationRow(
                 sceneId = "cache-pressure-deck",
@@ -1444,6 +1504,25 @@ class GPURendererSceneRegistryTest {
                     "fill-rect",
                 ),
                 roadmapLinks = listOf(RoadmapExpectation("M10", ticketId = "KGPU-M10-003")),
+            ),
+            SceneExpectationRow(
+                sceneId = "legacy-parity-snapshot-board",
+                tags = setOf(SceneTag.LegacyComparison, SceneTag.Rect, SceneTag.RRect),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M10")),
             ),
         )
     }

@@ -2019,7 +2019,6 @@ data class GlyphRouteDiagnostic(
                 message = "Outline glyph representation is unavailable for glyph $glyphId.",
                 severity = "warning",
             )
-
         /**
          * Builds a stable A8 rasterization refusal diagnostic with reason and strike-key hash.
          *
@@ -3437,7 +3436,6 @@ private fun appendA8GlyphMaskEvidenceJson(masks: List<A8GlyphMaskArtifactEvidenc
     }
     append("]")
 }
-
 /**
  * Serializes atlas placements into a stable JSON array.
  */

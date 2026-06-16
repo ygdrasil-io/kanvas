@@ -11,7 +11,7 @@ M3 supplies stable TrueType outlines and metrics. M6 supplies shaped glyph runs.
 ## Exit Criteria
 
 - [ ] `GlyphStrikeKey` includes every rendering-affecting fact and excludes live handles, atlas coordinates, GPU resources, and object identity.
-- [ ] `GlyphArtifactPlan` records selected route, rejected alternatives, fallback policy, and diagnostics for outline, A8, SDF, color, bitmap, SVG, and unsupported routes.
+- [x] `GlyphArtifactPlan` records selected route, rejected alternatives, fallback policy, and diagnostics for outline, A8, SDF, color, bitmap, SVG, and unsupported routes.
 - [ ] A8 and SDF CPU artifacts have deterministic bounds, hashes, key preimages, and refusal evidence.
 - [ ] Atlas artifacts expose entry refs, generation, invalidation tokens, eviction traces, source hashes, and budget diagnostics.
 - [ ] Cache inventory and telemetry dumps separate generation, packing, eviction, invalidation, and upload-preparation costs.
