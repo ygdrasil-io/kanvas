@@ -2661,6 +2661,71 @@ it does not claim shaping, scaler, CFF/CFF2 outline, color glyph, bitmap/SVG
 rendering, native engine parity, fallback, paragraph layout, or GPU text-route
 support.
 
+### KFONT-M3-001: TrueType Composite Glyph Transform Coverage
+
+Status: done; independently reviewed.
+
+Files:
+
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/font/fixtures/expected/scaler/truetype-composite-glyphs.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m3-001-composite-glyphs.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M3-truetype-glyf/KFONT-M3-001-complete-composite-glyph-transform-coverage.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M3-truetype-glyf/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `ParsedTrueTypeGlyphScaler` now resolves composites through an internal result
+  that carries both outline commands and resolved TrueType points. Point
+  matching computes component offsets from resolved points rather than
+  serialized path strings.
+- Existing composite translation, uniform scale, non-uniform scale, two-by-two
+  transforms, scaled/unscaled offsets, nested components, and component `gvar`
+  behavior are covered by the focused scaler tests.
+- Invalid point indices still refuse with stable
+  `font.outline-format-unsupported` / `truetype.composite-point-index`
+  diagnostics.
+- Cycle/recursion and invalid component glyph IDs are captured in
+  `scaledGlyphEvidence` diagnostics with stable details
+  `truetype.composite-recursion-depth` and
+  `truetype.composite-component-glyph-id`.
+- Excessive composite component lists are bounded during parsing and captured
+  in `scaledGlyphEvidence` diagnostics with stable detail
+  `truetype.composite-component-count`.
+- `truetype-composite-glyphs.json` records outline commands, bounds, metrics,
+  component trace, `USE_MY_METRICS` facts, path hash/stat artifacts, diagnostic
+  snapshots, and explicit non-claims.
+- `USE_MY_METRICS` is proven by behavior, not only by a flag: composite
+  `metrics()` and `scaledGlyphEvidence().metrics` use the first component with
+  the bit set as the metrics source, and the golden records component glyph 1's
+  `advanceX` for the supported composite fixture.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*CompositeGlyph*' --tests '*Glyf*'
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk git diff --check
+```
+
+Review:
+
+- Independent spec review verdict: `SPEC_ACCEPTED`.
+- Independent quality review verdict: `QUALITY_ACCEPTED`.
+
+Remaining gate: no remaining gate for KFONT-M3-001. This slice does not claim
+A8/SDF glyph artifacts, GPU text routes, CFF/CFF2 outlines, native scaler
+oracle behavior, full TrueType hinting VM behavior, shaping, fallback,
+paragraph layout, full IUP interpolation, phantom-point metrics, vertical
+metrics, or complete variable font support.
+
 ### KFONT-M2-005: Malformed SFNT Fixture Suite
 
 Status: implemented; independent review pending.

@@ -624,6 +624,53 @@
       ]
     },
     {
+      "dumpId": "truetype-composite-glyphs",
+      "ownerTicket": "KFONT-M3-001",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "TrueType glyf"
+      },
+      "producerPaths": [
+        "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+        "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+        "reports/font/fixtures/expected/scaler/truetype-composite-glyphs.json"
+      ],
+      "expectedFields": [
+        "diagnosticSnapshots",
+        "dumpId",
+        "fixtureIds",
+        "nonClaims",
+        "ownerTickets",
+        "pathHashArtifacts",
+        "requiredEvidence",
+        "schemaVersion",
+        "supportedCompositeEvidence",
+        "useMyMetricsFacts"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:scaler:test --tests '*CompositeGlyph*' --tests '*Glyf*'",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "TrueType composite glyph golden changes require point-matching, transform, recursion, invalid component, component-count, metrics, and non-claim review before any claim promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-a8-or-sdf-artifact-claim",
+        "no-gpu-text-route-claim",
+        "no-native-scaler-oracle-claim",
+        "no-cff-or-cff2-outline-claim",
+        "no-hinting-vm-claim",
+        "no-full-iup-interpolation-claim",
+        "no-phantom-point-metrics-claim",
+        "no-vertical-metrics-claim",
+        "no-complete-variable-font-support-claim",
+        "no-shaping-fallback-or-paragraph-claim"
+      ]
+    },
+    {
       "dumpId": "truetype-variation-readiness",
       "ownerTicket": "PKT-04C",
       "classification": "golden-gated",

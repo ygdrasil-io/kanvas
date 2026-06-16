@@ -19,7 +19,7 @@ M2 parser facts, `cmap` coverage, OpenType table fact dumps, and malformed SFNT 
 
 | Ticket | Status | Priority | Claim Impact | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|
-| [KFONT-M3-001 - Complete composite glyph transform coverage](KFONT-M3-001-complete-composite-glyph-transform-coverage.md) | `proposed` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M2-004` | - |
+| [KFONT-M3-001 - Complete composite glyph transform coverage](KFONT-M3-001-complete-composite-glyph-transform-coverage.md) | `done` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M2-004` | - |
 | [KFONT-M3-002 - Implement TrueType IUP interpolation tests](KFONT-M3-002-implement-truetype-iup-interpolation-tests.md) | `proposed` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M3-001` | - |
 | [KFONT-M3-003 - Add phantom point and advance delta support](KFONT-M3-003-add-phantom-point-and-advance-delta-support.md) | `proposed` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M3-002` | - |
 | [KFONT-M3-004 - Add vertical metric coverage](KFONT-M3-004-add-vertical-metric-coverage.md) | `proposed` | `P1` | `tracked-gap` | `font-scaler` | `KFONT-M2-004`, `KFONT-M3-003` | - |
