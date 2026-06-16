@@ -1093,6 +1093,7 @@ Files:
 - `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
 - `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
 - `reports/font/fixtures/expected/scaler/truetype-gvar-iup.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m3-003-phantom-metrics.md`
 - `reports/pure-kotlin-text/dump-evidence-index.json`
 - `reports/pure-kotlin-text/fixture-evidence-manifest.json`
 - `reports/pure-kotlin-text/font-fixture-inventory.json`
@@ -1108,13 +1109,16 @@ Evidence:
 - `reports/font/fixtures/expected/scaler/truetype-gvar-iup.json` captures
   deterministic `variation-deltas.json` style evidence for one explicit point,
   wraparound interpolation, untouched-contour isolation, `avar`-mapped
-  coordinates, composite child-outline propagation, and malformed tuple
-  diagnostics.
+  coordinates, composite child-outline propagation, horizontal phantom-point
+  metrics min/default/max positions, `HVAR`-unimplemented warnings, and
+  malformed tuple diagnostics.
 - Tests prove that a single explicit point propagates to the whole contour,
   wraparound interpolation derives deltas for the untouched segment, contours
   with no referenced points remain unchanged, `TrueTypeGlyfScaler` applies
-  `avar` remapping before requesting `gvar` deltas, and composite outlines
-  inherit interpolated child deltas.
+  `avar` remapping before requesting `gvar` deltas, composite outlines inherit
+  interpolated child deltas, and bounded phantom-point deltas now adjust
+  `advanceX` without changing the fallback route for unsupported metrics
+  variation tables.
 - Malformed tuple payloads now emit `font.variation-data-malformed` with
   `truetype.gvar-malformed` while preserving the default outline route when the
   fallback remains semantically valid.
@@ -1129,7 +1133,7 @@ rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 ```
 
 Remaining gate: this is a bounded TrueType `gvar` IUP slice only. It does not
-claim phantom-point metrics, HVAR/VVAR/MVAR support, vertical metrics, complete
+claim complete `HVAR`/`VVAR`/`MVAR` application, vertical metrics, complete
 variable-font parity, hinting VM parity, or GPU glyph route support.
 ### PKT-05A: CFF/CFF2 CharString Fixture Evidence
 

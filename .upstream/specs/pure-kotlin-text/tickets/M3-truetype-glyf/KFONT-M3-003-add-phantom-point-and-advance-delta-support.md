@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M3-003"
 title: "Add phantom point and advance delta support"
-status: "proposed"
+status: "review"
 milestone: "M3"
 priority: "P0"
 owner_area: "font-scaler"
@@ -68,17 +68,17 @@ class TrueTypeAdvanceDeltaResolver {
 
 ## Acceptance Criteria
 
-- [ ] Horizontal advance changes caused by phantom points are reflected in `glyph-metrics.json`.
+- [x] Horizontal advance changes caused by phantom points are reflected in `glyph-metrics.json`.
 - [ ] `HVAR`, `VVAR`, and `MVAR` data are applied when fixtures provide them and diagnosed when required data is malformed or unavailable.
-- [ ] Variation coordinates are included in relevant scaler identity or cache keys.
-- [ ] Default coordinates match base `hmtx`/`vmtx` metrics when no deltas apply.
-- [ ] Missing variation metrics emit `font.metrics-variation-unavailable` or `font.variation-data-malformed` as appropriate.
+- [x] Variation coordinates are included in relevant scaler identity or cache keys.
+- [x] Default coordinates match base `hmtx`/`vmtx` metrics when no deltas apply.
+- [x] Missing variation metrics emit `font.metrics-variation-unavailable` or `font.variation-data-malformed` as appropriate.
 
 ## Required Evidence
 
 - `glyph-metrics.json` for base/default and varied min/max positions showing advances, side bearings, phantom points, and applied deltas.
 - `variation-deltas.json` entries that include phantom point deltas.
-- Diagnostic snapshot for malformed `HVAR`, `VVAR`, or `MVAR` data.
+- Diagnostic snapshot for unavailable or malformed `HVAR`, `VVAR`, or `MVAR` data.
 - Determinism diff for repeated metric dump generation.
 
 ## Fallback / Refusal Behavior
@@ -101,8 +101,10 @@ rtk ./gradlew --no-daemon :font:scaler:test --tests '*PhantomPoint*' --tests '*A
 
 ## Status Notes
 
-- `proposed`: Phantom and advance-delta evidence is specified, but no metrics dump is attached yet.
-- Move to `ready` after IUP interpolation tests establish variation delta handling.
+- `review`: bounded horizontal phantom-point `gvar` metrics evidence is attached in
+  `reports/font/fixtures/expected/scaler/truetype-gvar-iup.json` and summarized in
+  `reports/pure-kotlin-text/2026-06-16-kfont-m3-003-phantom-metrics.md`.
+- Remaining gate before `done`: parse and apply `HVAR`/`VVAR`/`MVAR` deltas when present, and attach a malformed-table diagnostic snapshot instead of the current unimplemented-table warning.
 
 ## Linear Labels
 
