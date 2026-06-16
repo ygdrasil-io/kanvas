@@ -177,6 +177,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 clipCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "a8-glyph-atlas-gate-board",
+                fillRectCount = 6,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "text-resource-binding-gate-board",
                 fillRectCount = 6,
                 fillRRectCount = 1,
@@ -571,6 +577,14 @@ class RenderGpuRendererSceneOffscreenMainTest {
             assertContains(runJson, "pmTextResourceBindingClassification=TargetPrepared")
             assertContains(runJson, "textUploadPlanPromoted=false")
             assertContains(runJson, "glyphAtlasRoutePromoted=false")
+        }
+        if (expectation.sceneId == "a8-glyph-atlas-gate-board") {
+            assertContains(runJson, "a8GlyphAtlasRefusalMatrix=atlas-descriptor:TargetPrepared:unsupported.text.atlas_descriptor_unaccepted,atlas-page:RefuseRequired:unsupported.text.atlas_page_unavailable,atlas-entry:RefuseRequired:unsupported.text.atlas_entry_missing,atlas-generation:RefuseRequired:unsupported.text.atlas_generation_stale,a8-route:TargetPrepared:unsupported.text.a8_atlas_route_unavailable,instance-buffer:RefuseRequired:unsupported.text.instance_buffer_budget_exceeded")
+            assertContains(runJson, "pmA8GlyphAtlasRow=gpu-renderer.text.a8-atlas")
+            assertContains(runJson, "pmA8GlyphAtlasClassification=TargetPrepared")
+            assertContains(runJson, "a8GlyphAtlasRoutePromoted=false")
+            assertContains(runJson, "uploadBeforeSampleOrderingProven=false")
+            assertContains(runJson, "cpuRenderedTextTextureFallback=false")
         }
         expectation.meshRibbonCount?.let { count ->
             assertContains(runJson, "meshRibbonCommands=$count")

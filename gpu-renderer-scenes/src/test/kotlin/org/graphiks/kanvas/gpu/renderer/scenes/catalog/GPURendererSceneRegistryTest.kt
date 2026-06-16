@@ -625,6 +625,36 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `a8 glyph atlas gate board is backed by atlas sampling refusals only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("a8-glyph-atlas-gate-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Text), scene.tags)
+        assertEquals(listOf("KGPU-M6-002"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertTrue(scene.commands.none { it is SceneCommand.TextRun })
+        assertEquals(
+            listOf(
+                "atlas-descriptor-unaccepted-refusal",
+                "atlas-page-unavailable-refusal",
+                "atlas-entry-missing-refusal",
+                "atlas-generation-stale-refusal",
+                "a8-route-unavailable-refusal",
+                "instance-buffer-budget-refusal",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..6).toList(), fills.map { it.paintOrder })
+        assertTrue(
+            scene.roadmapLinks.none {
+                it.ticketId == "KGPU-M6-001" || it.ticketId == "KGPU-M6-003" || it.ticketId == "KGPU-M6-004"
+            },
+        )
+    }
+
+    @Test
     fun `text resource binding gate board is backed by missing stale and budget refusals only`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("text-resource-binding-gate-board")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -993,6 +1023,22 @@ class GPURendererSceneRegistryTest {
                     "fill-rect",
                 ),
                 roadmapLinks = listOf(RoadmapExpectation("M6", ticketId = "KGPU-M6-003")),
+            ),
+            SceneExpectationRow(
+                sceneId = "a8-glyph-atlas-gate-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Text),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M6", ticketId = "KGPU-M6-002")),
             ),
             SceneExpectationRow(
                 sceneId = "text-representation-gate-board",

@@ -124,6 +124,7 @@ class RunGpuRendererSceneKadreMainTest {
             "filtered-photo-chip" to 28,
             "layered-shadow-card" to 29,
             "text-handoff-boundary-board" to 36,
+            "a8-glyph-atlas-gate-board" to 50,
             "text-resource-binding-gate-board" to 49,
             "text-representation-gate-board" to 37,
             "runtime-effect-color-tile" to 30,
@@ -178,6 +179,13 @@ class RunGpuRendererSceneKadreMainTest {
                     assertContains(sessionJson, "pmTextResourceBindingClassification=TargetPrepared")
                     assertContains(sessionJson, "textUploadPlanPromoted=false")
                     assertContains(sessionJson, "glyphAtlasRoutePromoted=false")
+                } else if (sceneId == "a8-glyph-atlas-gate-board") {
+                    assertContains(sessionJson, "a8GlyphAtlasRefusalMatrix=atlas-descriptor:TargetPrepared:unsupported.text.atlas_descriptor_unaccepted,atlas-page:RefuseRequired:unsupported.text.atlas_page_unavailable,atlas-entry:RefuseRequired:unsupported.text.atlas_entry_missing,atlas-generation:RefuseRequired:unsupported.text.atlas_generation_stale,a8-route:TargetPrepared:unsupported.text.a8_atlas_route_unavailable,instance-buffer:RefuseRequired:unsupported.text.instance_buffer_budget_exceeded")
+                    assertContains(sessionJson, "pmA8GlyphAtlasRow=gpu-renderer.text.a8-atlas")
+                    assertContains(sessionJson, "pmA8GlyphAtlasClassification=TargetPrepared")
+                    assertContains(sessionJson, "a8GlyphAtlasRoutePromoted=false")
+                    assertContains(sessionJson, "uploadBeforeSampleOrderingProven=false")
+                    assertContains(sessionJson, "cpuRenderedTextTextureFallback=false")
                 }
                 assertFalse(sessionJson.contains("\"status\": \"not-yet-rendered\""), sceneId)
             }

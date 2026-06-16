@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 36,
+  "sceneCount": 37,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -209,6 +209,16 @@
       "tags": ["Rect","RRect","Clip","Text"],
       "kgpuMilestones": ["M6"],
       "ticketIds": ["KGPU-M6-003"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "a8-glyph-atlas-gate-board",
+      "title": "A8 Glyph Atlas Gate Board",
+      "description": "A8 glyph atlas descriptor, page, entry, stale generation, route, and instance-buffer gates without promoted atlas sampling or CPU-rendered text texture fallback.",
+      "tags": ["Rect","RRect","Clip","Text"],
+      "kgpuMilestones": ["M6"],
+      "ticketIds": ["KGPU-M6-002"],
       "rStages": [],
       "expectation": "ShouldRender"
     },
