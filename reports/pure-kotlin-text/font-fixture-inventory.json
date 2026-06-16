@@ -251,6 +251,32 @@
           ]
         },
         {
+          "fixtureId": "cff-cff2-scaler-cff-subroutine-safety",
+          "targetGate": "cff-subroutine-safety",
+          "status": "current-positive-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Generate deterministic local, global, and nested Type 2 subroutine fixtures plus refusal cases for out-of-range indexes, depth limits, missing return, and instruction budgets.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/cff-subroutine-trace.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "serialized execution limits",
+            "nested subroutine call trace",
+            "out-of-range refusal diagnostic",
+            "depth-limit refusal diagnostic",
+            "missing-return refusal diagnostic",
+            "instruction-limit refusal diagnostic"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-cff-rendering-support-claim",
+            "no-complete-cff2-variation-support-claim"
+          ]
+        },
+        {
           "fixtureId": "cff-cff2-scaler-cff-type2-line-curve-flex",
           "targetGate": "cff-type2-line-curve-flex",
           "status": "current-positive-evidence",

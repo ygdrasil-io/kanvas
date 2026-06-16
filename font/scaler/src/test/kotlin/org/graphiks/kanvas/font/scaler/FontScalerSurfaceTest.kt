@@ -1798,17 +1798,199 @@ class FontScalerSurfaceTest {
                     scope = "local",
                     encodedIndex = -107,
                     resolvedIndex = 0,
+                    bias = 107,
+                    callerByteOffset = 4,
+                    returnByteOffset = 3,
+                    instructionBudgetRemaining = 1016,
+                    expandedByteBudgetRemaining = 4088,
                 ),
                 CFFCharStringCallTrace(
                     depth = 0,
                     scope = "global",
                     encodedIndex = -107,
                     resolvedIndex = 0,
+                    bias = 107,
+                    callerByteOffset = 6,
+                    returnByteOffset = 3,
+                    instructionBudgetRemaining = 1010,
+                    expandedByteBudgetRemaining = 4082,
                 ),
             ),
             evidence.callTrace,
         )
         assertTrue(evidence.toCanonicalJson().contains("\"callTrace\""))
+    }
+
+    @Test
+    fun cffType2FixtureInterpreterRecordsNestedSubroutineOffsets() {
+        val interpreter = CFFType2CharStringInterpreter(
+            localSubroutines = listOf(
+                type2CharString(
+                    type2Number(25),
+                    type2Number(0),
+                    type2Operator(5),
+                    type2Number(-106),
+                    type2Operator(10),
+                    type2Operator(11),
+                ),
+                type2CharString(
+                    type2Number(0),
+                    type2Number(25),
+                    type2Operator(5),
+                    type2Operator(11),
+                ),
+            ),
+        )
+        val evidence = interpreter.interpretEvidence(
+            charString = type2CharString(
+                type2Number(0),
+                type2Number(0),
+                type2Operator(21),
+                type2Number(-107),
+                type2Operator(10),
+                type2Operator(14),
+            ),
+            glyphId = 19u,
+            format = "cff",
+        )
+
+        assertEquals(
+            listOf(
+                "M 0.0 0.0",
+                "L 25.0 0.0",
+                "L 25.0 25.0",
+                "Z",
+            ),
+            evidence.outlineCommands,
+        )
+        assertEquals(2, evidence.callTrace.size)
+        assertTrue(evidence.toCanonicalJson().contains("\"callerByteOffset\""))
+        assertTrue(evidence.toCanonicalJson().contains("\"returnByteOffset\""))
+        assertTrue(evidence.toCanonicalJson().contains("\"instructionBudgetRemaining\""))
+        assertTrue(evidence.toCanonicalJson().contains("\"expandedByteBudgetRemaining\""))
+    }
+
+    @Test
+    fun cffType2FixtureInterpreterRejectsInvalidSubroutinePathsWithDedicatedDiagnostics() {
+        val outOfRangeInterpreter = CFFType2CharStringInterpreter(
+            localSubroutines = listOf(
+                type2CharString(
+                    type2Number(25),
+                    type2Number(0),
+                    type2Operator(5),
+                    type2Operator(11),
+                ),
+            ),
+        )
+        val outOfRangeFailure = assertFailsWith<FontScalerRefusalException> {
+            outOfRangeInterpreter.interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(-106),
+                    type2Operator(10),
+                    type2Operator(14),
+                ),
+                glyphId = 20u,
+                format = "cff",
+            )
+        }
+        assertEquals("font.scaler.cff.subr-out-of-range", outOfRangeFailure.diagnostic.code)
+        assertEquals("cff.subr-out-of-range", outOfRangeFailure.diagnostic.detail)
+        assertEquals("charstring", outOfRangeFailure.diagnostic.operation)
+        assertEquals(20u, outOfRangeFailure.diagnostic.glyphId)
+
+        val recursiveInterpreter = CFFType2CharStringInterpreter(
+            localSubroutines = listOf(
+                type2CharString(
+                    type2Number(-107),
+                    type2Operator(10),
+                    type2Operator(11),
+                ),
+            ),
+        )
+        val depthFailure = assertFailsWith<FontScalerRefusalException> {
+            recursiveInterpreter.interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(-107),
+                    type2Operator(10),
+                    type2Operator(14),
+                ),
+                glyphId = 21u,
+                format = "cff",
+            )
+        }
+        assertEquals("font.scaler.cff.subr-depth-limit", depthFailure.diagnostic.code)
+        assertEquals("cff.subr-depth-limit", depthFailure.diagnostic.detail)
+        assertEquals("charstring", depthFailure.diagnostic.operation)
+        assertEquals(21u, depthFailure.diagnostic.glyphId)
+
+        val missingReturnInterpreter = CFFType2CharStringInterpreter(
+            localSubroutines = listOf(
+                type2CharString(
+                    type2Number(25),
+                    type2Number(0),
+                    type2Operator(5),
+                ),
+            ),
+        )
+        val missingReturnFailure = assertFailsWith<FontScalerRefusalException> {
+            missingReturnInterpreter.interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(-107),
+                    type2Operator(10),
+                    type2Operator(14),
+                ),
+                glyphId = 22u,
+                format = "cff",
+            )
+        }
+        assertEquals(FontScalerDiagnosticCodes.CFF_STACK_MALFORMED, missingReturnFailure.diagnostic.code)
+        assertEquals("cff.subr-missing-return", missingReturnFailure.diagnostic.detail)
+        assertEquals("charstring", missingReturnFailure.diagnostic.operation)
+        assertEquals(22u, missingReturnFailure.diagnostic.glyphId)
+
+        val instructionLimitInterpreter = CFFType2CharStringInterpreter(
+            localSubroutines = listOf(
+                type2CharString(
+                    type2Number(25),
+                    type2Number(0),
+                    type2Operator(5),
+                    type2Operator(11),
+                ),
+            ),
+            limits = Type2ExecutionLimits(
+                maxOperandStack = 48,
+                maxCallDepth = 16,
+                maxInstructionCount = 8,
+                maxExpandedBytes = 64,
+            ),
+        )
+        val instructionLimitFailure = assertFailsWith<FontScalerRefusalException> {
+            instructionLimitInterpreter.interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(-107),
+                    type2Operator(10),
+                    type2Operator(14),
+                ),
+                glyphId = 23u,
+                format = "cff",
+            )
+        }
+        assertEquals("font.scaler.cff.instruction-limit", instructionLimitFailure.diagnostic.code)
+        assertEquals("cff.instruction-limit", instructionLimitFailure.diagnostic.detail)
+        assertEquals("charstring", instructionLimitFailure.diagnostic.operation)
+        assertEquals(23u, instructionLimitFailure.diagnostic.glyphId)
     }
 
     @Test
@@ -2134,6 +2316,15 @@ class FontScalerSurfaceTest {
         ).trimEnd()
 
         assertEquals(expected, cffCharStringTraceDump())
+    }
+
+    @Test
+    fun cffSubroutineTraceGoldenMatchesGeneratedEvidence() {
+        val expected = Files.readString(
+            kanvasProjectRoot().resolve("reports/font/fixtures/expected/scaler/cff-subroutine-trace.json"),
+        ).trimEnd()
+
+        assertEquals(expected, cffSubroutineTraceDump())
     }
 
     @Test
@@ -3417,6 +3608,241 @@ class FontScalerSurfaceTest {
                 "generated-fixture-evidence-only",
                 "no-complete-type2-operator-coverage-claim",
                 "no-cff-rendering-support-claim",
+                "no-native-scaler-oracle-claim"
+              ]
+            }
+        """.trimIndent()
+    }
+
+    private fun cffSubroutineTraceDump(): String {
+        fun limitsJson(limits: Type2ExecutionLimits): String =
+            """
+                {
+                  "maxOperandStack": ${limits.maxOperandStack},
+                  "maxCallDepth": ${limits.maxCallDepth},
+                  "maxInstructionCount": ${limits.maxInstructionCount},
+                  "maxExpandedBytes": ${limits.maxExpandedBytes}
+                }
+            """.trimIndent()
+
+        fun refusalSnapshot(block: () -> Unit): String {
+            val failure = assertFailsWith<FontScalerRefusalException>(block = block)
+            return failure.diagnostic.toCanonicalJson()
+        }
+
+        val defaultLimits = Type2ExecutionLimits()
+        val instructionLimitFixture = Type2ExecutionLimits(
+            maxOperandStack = 48,
+            maxCallDepth = 16,
+            maxInstructionCount = 8,
+            maxExpandedBytes = 64,
+        )
+        val localEvidence = CFFType2CharStringInterpreter(
+            localSubroutines = listOf(
+                type2CharString(
+                    type2Number(25),
+                    type2Number(0),
+                    type2Operator(5),
+                    type2Operator(11),
+                ),
+            ),
+        ).interpretEvidence(
+            charString = type2CharString(
+                type2Number(0),
+                type2Number(0),
+                type2Operator(21),
+                type2Number(-107),
+                type2Operator(10),
+                type2Operator(14),
+            ),
+            glyphId = 19u,
+            format = "cff",
+        )
+        val globalEvidence = CFFType2CharStringInterpreter(
+            globalSubroutines = listOf(
+                type2CharString(
+                    type2Number(0),
+                    type2Number(25),
+                    type2Operator(5),
+                    type2Operator(11),
+                ),
+            ),
+        ).interpretEvidence(
+            charString = type2CharString(
+                type2Number(0),
+                type2Number(0),
+                type2Operator(21),
+                type2Number(-107),
+                type2Operator(29),
+                type2Operator(14),
+            ),
+            glyphId = 24u,
+            format = "cff",
+        )
+        val nestedEvidence = CFFType2CharStringInterpreter(
+            localSubroutines = listOf(
+                type2CharString(
+                    type2Number(25),
+                    type2Number(0),
+                    type2Operator(5),
+                    type2Number(-106),
+                    type2Operator(10),
+                    type2Operator(11),
+                ),
+                type2CharString(
+                    type2Number(0),
+                    type2Number(25),
+                    type2Operator(5),
+                    type2Operator(11),
+                ),
+            ),
+        ).interpretEvidence(
+            charString = type2CharString(
+                type2Number(0),
+                type2Number(0),
+                type2Operator(21),
+                type2Number(-107),
+                type2Operator(10),
+                type2Operator(14),
+            ),
+            glyphId = 25u,
+            format = "cff",
+        )
+        val outOfRange = refusalSnapshot {
+            CFFType2CharStringInterpreter(
+                localSubroutines = listOf(
+                    type2CharString(
+                        type2Number(25),
+                        type2Number(0),
+                        type2Operator(5),
+                        type2Operator(11),
+                    ),
+                ),
+            ).interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(-106),
+                    type2Operator(10),
+                    type2Operator(14),
+                ),
+                glyphId = 20u,
+                format = "cff",
+            )
+        }
+        val depthLimit = refusalSnapshot {
+            CFFType2CharStringInterpreter(
+                localSubroutines = listOf(
+                    type2CharString(
+                        type2Number(-107),
+                        type2Operator(10),
+                        type2Operator(11),
+                    ),
+                ),
+            ).interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(-107),
+                    type2Operator(10),
+                    type2Operator(14),
+                ),
+                glyphId = 21u,
+                format = "cff",
+            )
+        }
+        val missingReturn = refusalSnapshot {
+            CFFType2CharStringInterpreter(
+                localSubroutines = listOf(
+                    type2CharString(
+                        type2Number(25),
+                        type2Number(0),
+                        type2Operator(5),
+                    ),
+                ),
+            ).interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(-107),
+                    type2Operator(10),
+                    type2Operator(14),
+                ),
+                glyphId = 22u,
+                format = "cff",
+            )
+        }
+        val instructionLimit = refusalSnapshot {
+            CFFType2CharStringInterpreter(
+                localSubroutines = listOf(
+                    type2CharString(
+                        type2Number(25),
+                        type2Number(0),
+                        type2Operator(5),
+                        type2Operator(11),
+                    ),
+                ),
+                limits = instructionLimitFixture,
+            ).interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Number(-107),
+                    type2Operator(10),
+                    type2Operator(14),
+                ),
+                glyphId = 23u,
+                format = "cff",
+            )
+        }
+
+        return """
+            {
+              "schemaVersion": 1,
+              "dumpId": "cff-subroutine-trace",
+              "ownerTickets": [
+                "KFONT-M4-003"
+              ],
+              "fixtureIds": [
+                "cff-subr-local.otf",
+                "cff-subr-global.otf",
+                "cff-subr-nested.otf",
+                "cff-subr-recursive.otf",
+                "cff-subr-out-of-range.otf",
+                "cff-subr-missing-return.otf"
+              ],
+              "executionLimits": {
+                "default": ${limitsJson(defaultLimits).prependIndent("                  ").trimStart()},
+                "instructionLimitFixture": ${limitsJson(instructionLimitFixture).prependIndent("                  ").trimStart()}
+              },
+              "positiveFixtures": [
+                {
+                  "fixtureId": "cff-subr-local.otf",
+                  "evidence": ${localEvidence.toCanonicalJson().prependIndent("                    ").trimStart()}
+                },
+                {
+                  "fixtureId": "cff-subr-global.otf",
+                  "evidence": ${globalEvidence.toCanonicalJson().prependIndent("                    ").trimStart()}
+                },
+                {
+                  "fixtureId": "cff-subr-nested.otf",
+                  "evidence": ${nestedEvidence.toCanonicalJson().prependIndent("                    ").trimStart()}
+                }
+              ],
+              "diagnosticSnapshots": {
+                "subrOutOfRange": $outOfRange,
+                "subrDepthLimit": $depthLimit,
+                "subrMissingReturn": $missingReturn,
+                "instructionLimit": $instructionLimit
+              },
+              "nonClaims": [
+                "generated-fixture-evidence-only",
+                "no-complete-cff-rendering-support-claim",
+                "no-complete-cff2-variation-support-claim",
                 "no-native-scaler-oracle-claim"
               ]
             }

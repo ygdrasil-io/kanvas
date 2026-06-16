@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M4-003"
 title: "Add CFF subroutine limits and diagnostics"
-status: "proposed"
+status: "done"
 milestone: "M4"
 priority: "P0"
 owner_area: "font-scaler"
@@ -70,11 +70,11 @@ data class Type2ExecutionLimits(
 
 ## Acceptance Criteria
 
-- [ ] Local and global subroutines execute with the correct bias for small, medium, and large INDEX counts.
-- [ ] Nested subroutine fixture records every call and return in a stable trace.
-- [ ] Recursive and over-budget subroutine fixtures refuse with the configured limit name and current call frame.
-- [ ] Out-of-range subroutine indexes and missing `return` opcodes refuse the glyph without crashing the face parser.
-- [ ] Diagnostics include enough source data to reproduce the failing subroutine path from the trace dump.
+- [x] Local and global subroutines execute with the correct bias for small, medium, and large INDEX counts.
+- [x] Nested subroutine fixture records every call and return in a stable trace.
+- [x] Recursive and over-budget subroutine fixtures refuse with the configured limit name and current call frame.
+- [x] Out-of-range subroutine indexes and missing `return` opcodes refuse the glyph without crashing the face parser.
+- [x] Diagnostics include enough source data to reproduce the failing subroutine path from the trace dump.
 
 ## Required Evidence
 
@@ -104,8 +104,7 @@ rtk ./gradlew --no-daemon :font:scaler:test --tests '*CffSubr*' --tests '*CffDia
 
 ## Status Notes
 
-- `proposed`: This ticket hardens execution safety before path output is promoted.
-- Move to `ready` only after budget constants and diagnostic names are reviewed.
+- `done`: `cff-subroutine-trace.json` now serializes fixed execution limits, local/global/nested call traces, and deterministic refusal diagnostics for out-of-range, depth-limit, missing-return, and instruction-limit paths.
 
 ## Linear Labels
 

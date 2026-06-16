@@ -60,6 +60,7 @@ REQUIRED_FONT_FAMILY_GATES = {
     "cff-cff2-scaler": [
         "cff-type2-line-curve-flex",
         "cff-local-global-subroutines",
+        "cff-subroutine-safety",
         "cff-malformed-stack-refusal",
         "cff-unsupported-operator-refusal",
         "cff2-blend-vsindex",

@@ -195,6 +195,10 @@ object FontScalerDiagnosticCodes {
     const val CFF_TABLE_MALFORMED: String = "font.cff-table-malformed"
     const val CFF_STACK_OVERFLOW: String = "font.scaler.cff.stack-overflow"
     const val CFF_TRAILING_BYTES: String = "font.scaler.cff.trailing-bytes"
+    const val CFF_SUBROUTINE_OUT_OF_RANGE: String = "font.scaler.cff.subr-out-of-range"
+    const val CFF_SUBROUTINE_DEPTH_LIMIT: String = "font.scaler.cff.subr-depth-limit"
+    const val CFF_INSTRUCTION_LIMIT: String = "font.scaler.cff.instruction-limit"
+    const val CFF_EXPANDED_BYTE_LIMIT: String = "font.scaler.cff.expanded-byte-limit"
     const val CFF_INDEX_BOUNDS: String = "font.scaler.cff.index-bounds"
     const val CFF_INDEX_OFFSIZE_UNSUPPORTED: String = "font.scaler.cff.index-offsize-unsupported"
     const val CFF_DICT_OPERAND_MALFORMED: String = "font.scaler.cff.dict-operand-malformed"
@@ -260,11 +264,29 @@ data class CFFCharStringCallTrace(
     val scope: String,
     val encodedIndex: Int,
     val resolvedIndex: Int,
+    val bias: Int? = null,
+    val callerByteOffset: Int? = null,
+    val returnByteOffset: Int? = null,
+    val instructionBudgetRemaining: Int? = null,
+    val expandedByteBudgetRemaining: Int? = null,
 ) {
     init {
         require(depth >= 0) { "CFF call trace depth must be non-negative." }
         require(scope.isStableToken()) { "CFF call trace scope must be stable." }
         require(resolvedIndex >= 0) { "CFF call trace resolvedIndex must be non-negative." }
+        require(bias == null || bias >= 0) { "CFF call trace bias must be non-negative when present." }
+        require(callerByteOffset == null || callerByteOffset >= 0) {
+            "CFF call trace callerByteOffset must be non-negative when present."
+        }
+        require(returnByteOffset == null || returnByteOffset >= 0) {
+            "CFF call trace returnByteOffset must be non-negative when present."
+        }
+        require(instructionBudgetRemaining == null || instructionBudgetRemaining >= 0) {
+            "CFF call trace instructionBudgetRemaining must be non-negative when present."
+        }
+        require(expandedByteBudgetRemaining == null || expandedByteBudgetRemaining >= 0) {
+            "CFF call trace expandedByteBudgetRemaining must be non-negative when present."
+        }
     }
 
     internal fun toCanonicalJson(): String = buildString {
@@ -273,7 +295,39 @@ data class CFFCharStringCallTrace(
         append(scalerJsonString("scope")).append(": ").append(scalerJsonString(scope)).append(", ")
         append(scalerJsonString("encodedIndex")).append(": ").append(encodedIndex).append(", ")
         append(scalerJsonString("resolvedIndex")).append(": ").append(resolvedIndex)
+        bias?.let { value ->
+            append(", ").append(scalerJsonString("bias")).append(": ").append(value)
+        }
+        callerByteOffset?.let { value ->
+            append(", ").append(scalerJsonString("callerByteOffset")).append(": ").append(value)
+        }
+        returnByteOffset?.let { value ->
+            append(", ").append(scalerJsonString("returnByteOffset")).append(": ").append(value)
+        }
+        instructionBudgetRemaining?.let { value ->
+            append(", ").append(scalerJsonString("instructionBudgetRemaining")).append(": ").append(value)
+        }
+        expandedByteBudgetRemaining?.let { value ->
+            append(", ").append(scalerJsonString("expandedByteBudgetRemaining")).append(": ").append(value)
+        }
         append("}")
+    }
+}
+
+/**
+ * Deterministic Type 2 execution limits. These bounds are fixed configuration, never host-derived.
+ */
+data class Type2ExecutionLimits(
+    val maxOperandStack: Int = MAX_CFF_OPERAND_STACK_DEPTH,
+    val maxCallDepth: Int = MAX_CFF_SUBROUTINE_DEPTH,
+    val maxInstructionCount: Int = MAX_CFF_INSTRUCTION_COUNT,
+    val maxExpandedBytes: Int = MAX_CFF_EXPANDED_BYTES,
+) {
+    init {
+        require(maxOperandStack > 0) { "Type 2 maxOperandStack must be positive." }
+        require(maxCallDepth > 0) { "Type 2 maxCallDepth must be positive." }
+        require(maxInstructionCount > 0) { "Type 2 maxInstructionCount must be positive." }
+        require(maxExpandedBytes > 0) { "Type 2 maxExpandedBytes must be positive." }
     }
 }
 
@@ -4638,6 +4692,7 @@ class CFFType2CharStringInterpreter(
     globalSubroutines: List<ByteArray> = emptyList(),
     blendAxisTagsByVsIndex: Map<Int, List<String>> = emptyMap(),
     private val blendScalarProvider: ((Int, VariationPosition) -> List<Double>)? = null,
+    private val limits: Type2ExecutionLimits = Type2ExecutionLimits(),
 ) : CFFCharStringInterpreter {
     private val localSubroutines: List<ByteArray> = localSubroutines.map { it.copyOf() }
     private val globalSubroutines: List<ByteArray> = globalSubroutines.map { it.copyOf() }
@@ -4724,7 +4779,7 @@ class CFFType2CharStringInterpreter(
         glyphId: UInt,
         position: VariationPosition,
     ): CFFType2ExecutionState {
-        val state = CFFType2ExecutionState()
+        val state = CFFType2ExecutionState(limits = limits)
         execute(
             data = charString,
             state = state,
@@ -4743,43 +4798,49 @@ class CFFType2CharStringInterpreter(
         position: VariationPosition,
         depth: Int,
         allowReturn: Boolean,
-    ): CFFType2Signal {
+    ): CFFType2SignalResult {
         var offset = 0
         while (offset < data.size) {
             val operatorOffset = offset
             val byte = data[offset++].toInt() and 0xff
-            when {
+            val signal = when {
                 byte == 28 -> {
                     requireAvailable(data, offset, 2, glyphId, "shortint", operatorOffset)
                     state.push(readInt16(data, offset).toDouble(), glyphId, operatorOffset)
                     offset += 2
+                    CFFType2Signal.CONTINUE
                 }
                 byte == 255 -> {
                     requireAvailable(data, offset, 4, glyphId, "fixed16dot16", operatorOffset)
                     state.push(readInt32(data, offset) / 65536.0, glyphId, operatorOffset)
                     offset += 4
+                    CFFType2Signal.CONTINUE
                 }
-                byte in 32..246 -> state.push((byte - 139).toDouble(), glyphId, operatorOffset)
+                byte in 32..246 -> {
+                    state.push((byte - 139).toDouble(), glyphId, operatorOffset)
+                    CFFType2Signal.CONTINUE
+                }
                 byte in 247..250 -> {
                     requireAvailable(data, offset, 1, glyphId, "positive-number", operatorOffset)
                     val value = (byte - 247) * 256 + (data[offset++].toInt() and 0xff) + 108
                     state.push(value.toDouble(), glyphId, operatorOffset)
+                    CFFType2Signal.CONTINUE
                 }
                 byte in 251..254 -> {
                     requireAvailable(data, offset, 1, glyphId, "negative-number", operatorOffset)
                     val value = -((byte - 251) * 256) - (data[offset++].toInt() and 0xff) - 108
                     state.push(value.toDouble(), glyphId, operatorOffset)
+                    CFFType2Signal.CONTINUE
                 }
                 byte == 12 -> {
                     requireAvailable(data, offset, 1, glyphId, "escaped-operator", operatorOffset)
                     val escapedOperator = data[offset++].toInt() and 0xff
-                    val signal = handleEscapedOperator(
+                    handleEscapedOperator(
                         operator = escapedOperator,
                         operatorOffset = operatorOffset,
                         state = state,
                         glyphId = glyphId,
                     )
-                    if (signal != CFFType2Signal.CONTINUE) return signal
                 }
                 byte == 19 || byte == 20 -> {
                     offset = handleHintMaskOperator(
@@ -4789,9 +4850,9 @@ class CFFType2CharStringInterpreter(
                         glyphId = glyphId,
                         operatorOffset = operatorOffset,
                     )
+                    CFFType2Signal.CONTINUE
                 }
-                else -> {
-                    val signal = handleOperator(
+                else -> handleOperator(
                         data = data,
                         operator = byte,
                         operatorOffset = operatorOffset,
@@ -4801,11 +4862,20 @@ class CFFType2CharStringInterpreter(
                         depth = depth,
                         allowReturn = allowReturn,
                     )
-                    if (signal != CFFType2Signal.CONTINUE) return signal
-                }
+            }
+            state.recordExecution(
+                consumedBytes = offset - operatorOffset,
+                glyphId = glyphId,
+                operatorOffset = operatorOffset,
+            )
+            if (signal != CFFType2Signal.CONTINUE) {
+                return CFFType2SignalResult(signal = signal, signalOffset = operatorOffset)
             }
         }
-        return CFFType2Signal.CONTINUE
+        if (allowReturn) {
+            malformedCFFStack(glyphId, "cff.subr-missing-return", data.size)
+        }
+        return CFFType2SignalResult(signal = CFFType2Signal.CONTINUE, signalOffset = data.size)
     }
 
     private fun handleOperator(
@@ -4992,21 +5062,15 @@ class CFFType2CharStringInterpreter(
         operatorOffset: Int,
     ): CFFType2Signal {
         val encodedIndex = state.popInt(glyphId, operatorOffset)
-        val resolvedIndex = encodedIndex + subroutineBias(subroutines.size)
+        val bias = subroutineBias(subroutines.size)
+        val resolvedIndex = encodedIndex + bias
         if (resolvedIndex !in subroutines.indices) {
-            malformedCFFStack(glyphId, "cff.subroutine-index", operatorOffset)
+            outOfRangeCFFSubroutine(glyphId, operatorOffset)
         }
-        if (depth >= MAX_CFF_SUBROUTINE_DEPTH) {
-            malformedCFFStack(glyphId, "cff.subroutine-recursion", operatorOffset)
+        if (depth >= limits.maxCallDepth) {
+            depthLimitedCFFSubroutine(glyphId, operatorOffset)
         }
-        state.callTrace += CFFCharStringCallTrace(
-            depth = depth,
-            scope = scope,
-            encodedIndex = encodedIndex,
-            resolvedIndex = resolvedIndex,
-        )
-        return when (
-            execute(
+        val signalResult = execute(
                 data = subroutines[resolvedIndex],
                 state = state,
                 glyphId = glyphId,
@@ -5014,7 +5078,21 @@ class CFFType2CharStringInterpreter(
                 depth = depth + 1,
                 allowReturn = true,
             )
-        ) {
+        state.callTrace += CFFCharStringCallTrace(
+            depth = depth,
+            scope = scope,
+            encodedIndex = encodedIndex,
+            resolvedIndex = resolvedIndex,
+            bias = bias,
+            callerByteOffset = operatorOffset,
+            returnByteOffset = when (signalResult.signal) {
+                CFFType2Signal.RETURN -> signalResult.signalOffset
+                else -> null
+            },
+            instructionBudgetRemaining = state.remainingInstructionBudget(),
+            expandedByteBudgetRemaining = state.remainingExpandedByteBudget(),
+        )
+        return when (signalResult.signal) {
             CFFType2Signal.END -> CFFType2Signal.END
             CFFType2Signal.RETURN,
             CFFType2Signal.CONTINUE -> CFFType2Signal.CONTINUE
@@ -5056,7 +5134,9 @@ class CFFType2CharStringInterpreter(
     }
 }
 
-private class CFFType2ExecutionState {
+private class CFFType2ExecutionState(
+    private val limits: Type2ExecutionLimits,
+) {
     val stack: MutableList<Double> = mutableListOf()
     val commands: MutableList<OutlineCommand> = mutableListOf()
     val callTrace: MutableList<CFFCharStringCallTrace> = mutableListOf()
@@ -5066,14 +5146,35 @@ private class CFFType2ExecutionState {
     var width: Double? = null
     var stemHintCount: Int = 0
     var hintMaskByteCount: Int = 0
+    private var instructionCount: Int = 0
+    private var expandedByteCount: Int = 0
     private var pathOpen: Boolean = false
 
     fun push(value: Double, glyphId: UInt, operatorOffset: Int) {
-        if (stack.size >= MAX_CFF_OPERAND_STACK_DEPTH) {
+        if (stack.size >= limits.maxOperandStack) {
             overflowedCFFStack(glyphId, operatorOffset)
         }
         stack += value
     }
+
+    fun recordExecution(
+        consumedBytes: Int,
+        glyphId: UInt,
+        operatorOffset: Int,
+    ) {
+        instructionCount += 1
+        if (instructionCount > limits.maxInstructionCount) {
+            instructionLimitedCFFExecution(glyphId, operatorOffset)
+        }
+        expandedByteCount += consumedBytes
+        if (expandedByteCount > limits.maxExpandedBytes) {
+            expandedByteLimitedCFFExecution(glyphId, operatorOffset)
+        }
+    }
+
+    fun remainingInstructionBudget(): Int = max(0, limits.maxInstructionCount - instructionCount)
+
+    fun remainingExpandedByteBudget(): Int = max(0, limits.maxExpandedBytes - expandedByteCount)
 
     fun takeMoveArguments(
         count: Int,
@@ -5203,6 +5304,11 @@ private enum class CFFType2Signal {
     RETURN,
     END,
 }
+
+private data class CFFType2SignalResult(
+    val signal: CFFType2Signal,
+    val signalOffset: Int,
+)
 
 private fun drawLines(
     operands: List<Double>,
@@ -5572,6 +5678,62 @@ private fun trailingCFFBytes(
         message = "CFF Type 2 charstring has trailing bytes after endchar at operator offset $operatorOffset for glyphId $glyphId.",
     )
 
+private fun outOfRangeCFFSubroutine(
+    glyphId: UInt,
+    operatorOffset: Int,
+): Nothing =
+    throw FontScalerRefusalException(
+        diagnostic = FontScalerDiagnostic(
+            code = FontScalerDiagnosticCodes.CFF_SUBROUTINE_OUT_OF_RANGE,
+            detail = "cff.subr-out-of-range",
+            operation = "charstring",
+            glyphId = glyphId,
+        ),
+        message = "CFF Type 2 subroutine index is out of range at operator offset $operatorOffset for glyphId $glyphId.",
+    )
+
+private fun depthLimitedCFFSubroutine(
+    glyphId: UInt,
+    operatorOffset: Int,
+): Nothing =
+    throw FontScalerRefusalException(
+        diagnostic = FontScalerDiagnostic(
+            code = FontScalerDiagnosticCodes.CFF_SUBROUTINE_DEPTH_LIMIT,
+            detail = "cff.subr-depth-limit",
+            operation = "charstring",
+            glyphId = glyphId,
+        ),
+        message = "CFF Type 2 subroutine depth limit exceeded at operator offset $operatorOffset for glyphId $glyphId.",
+    )
+
+private fun instructionLimitedCFFExecution(
+    glyphId: UInt,
+    operatorOffset: Int,
+): Nothing =
+    throw FontScalerRefusalException(
+        diagnostic = FontScalerDiagnostic(
+            code = FontScalerDiagnosticCodes.CFF_INSTRUCTION_LIMIT,
+            detail = "cff.instruction-limit",
+            operation = "charstring",
+            glyphId = glyphId,
+        ),
+        message = "CFF Type 2 instruction budget exceeded at operator offset $operatorOffset for glyphId $glyphId.",
+    )
+
+private fun expandedByteLimitedCFFExecution(
+    glyphId: UInt,
+    operatorOffset: Int,
+): Nothing =
+    throw FontScalerRefusalException(
+        diagnostic = FontScalerDiagnostic(
+            code = FontScalerDiagnosticCodes.CFF_EXPANDED_BYTE_LIMIT,
+            detail = "cff.expanded-byte-limit",
+            operation = "charstring",
+            glyphId = glyphId,
+        ),
+        message = "CFF Type 2 expanded-byte budget exceeded at operator offset $operatorOffset for glyphId $glyphId.",
+    )
+
 private fun malformedCFFVariation(
     glyphId: UInt,
     detail: String,
@@ -5596,6 +5758,8 @@ private fun subroutineBias(subroutineCount: Int): Int =
 
 private const val MAX_CFF_OPERAND_STACK_DEPTH = 48
 private const val MAX_CFF_SUBROUTINE_DEPTH = 16
+private const val MAX_CFF_INSTRUCTION_COUNT = 1024
+private const val MAX_CFF_EXPANDED_BYTES = 4096
 
 /**
  * User-space position in a variable font design space.
