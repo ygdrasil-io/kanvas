@@ -61,6 +61,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
     fun `catalogued rect rrect gradient clip and bitmap scenes route to WebGPU offscreen instead of runner subset`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
         val rectOnlyScenes = listOf(
+            RenderedShapeExpectation("activation-candidate-boundary-board", fillRectCount = 6),
             RenderedShapeExpectation("first-route-rollback-panel", fillRectCount = 4),
             RenderedShapeExpectation("blend-mode-strip", fillRectCount = 1),
             RenderedShapeExpectation("translucent-card-overlap", fillRectCount = 3),
@@ -68,9 +69,22 @@ class RenderGpuRendererSceneOffscreenMainTest {
             RenderedShapeExpectation("cache-source-ledger-board", fillRectCount = 5),
             RenderedShapeExpectation("legacy-route-comparison", fillRectCount = 1),
             RenderedShapeExpectation(
+                sceneId = "legacy-inventory-hygiene-board",
+                fillRectCount = 7,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "rounded-panel-gradient",
                 fillRectCount = 0,
                 fillRRectCount = 1,
+                linearGradientRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "rrect-gradient-route-board",
+                fillRectCount = 4,
+                fillRRectCount = 2,
                 linearGradientRectCount = 1,
                 clipCount = 1,
             ),
@@ -87,6 +101,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 fillRRectCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "path-coverage-review-board",
+                fillRectCount = 4,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "texture-swatch-board",
                 fillRectCount = 0,
                 bitmapRectCount = 2,
@@ -94,6 +114,20 @@ class RenderGpuRendererSceneOffscreenMainTest {
             RenderedShapeExpectation(
                 sceneId = "asset-intake-thumbnail-grid",
                 fillRectCount = 0,
+                fillRRectCount = 1,
+                clipCount = 1,
+                bitmapRectCount = 2,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "codec-provenance-gate-board",
+                fillRectCount = 3,
+                fillRRectCount = 1,
+                clipCount = 1,
+                bitmapRectCount = 1,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "sampler-boundary-gate-board",
+                fillRectCount = 4,
                 fillRRectCount = 1,
                 clipCount = 1,
                 bitmapRectCount = 2,
@@ -118,9 +152,27 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 filterNodeCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "text-handoff-boundary-board",
+                fillRectCount = 4,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "text-representation-gate-board",
+                fillRectCount = 8,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "runtime-effect-color-tile",
                 fillRectCount = 0,
                 runtimeEffectCount = 1,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "sdr-color-boundary-board",
+                fillRectCount = 7,
+                fillRRectCount = 1,
+                clipCount = 1,
             ),
             RenderedShapeExpectation(
                 sceneId = "mesh-ribbon",
