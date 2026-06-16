@@ -132,6 +132,69 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
+    fun `offscreen frame sample report serializes raw samples with adapter provenance`() {
+        val report = OffscreenFrameSampleReport.sampled(
+            sceneId = "frame-gate-blocker-board",
+            adapterInfo = "AdapterInfo(device=Apple M2 Max, isFallbackAdapter=false)",
+            warmupFrames = 2,
+            samples = listOf(13_000_000L, 12_000_000L, 10_000_000L, 10_500_000L),
+            diagnostics = listOf("sampled frame-gate-blocker-board via WebGPU offscreen render+readback"),
+        )
+
+        val json = report.toJson()
+
+        assertContains(json, "\"schemaVersion\": 1")
+        assertContains(json, "\"sceneId\": \"frame-gate-blocker-board\"")
+        assertContains(json, "\"status\": \"sampled\"")
+        assertContains(json, "\"backend\": \"webgpu-offscreen\"")
+        assertContains(json, "\"metricName\": \"frame-time-ms\"")
+        assertContains(json, "\"metricSource\": \"wall-clock-offscreen-render-readback\"")
+        assertContains(json, "\"adapterInfo\": \"AdapterInfo(device=Apple M2 Max, isFallbackAdapter=false)\"")
+        assertContains(json, "\"rawSampleCount\": 4")
+        assertContains(json, "\"warmupFrames\": 2")
+        assertContains(json, "\"stableFrames\": 2")
+        assertContains(
+            json,
+            "{\"frameIndex\": 1, \"phase\": \"warmup\", \"durationNanos\": 13000000, \"durationMs\": 13.0000}",
+        )
+        assertContains(
+            json,
+            "{\"frameIndex\": 3, \"phase\": \"stable\", \"durationNanos\": 10000000, \"durationMs\": 10.0000}",
+        )
+    }
+
+    @Test
+    fun `offscreen frame sample report rejects invalid sample evidence`() {
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenFrameSampleReport.sampled(
+                sceneId = "frame-gate-blocker-board",
+                adapterInfo = "adapter",
+                warmupFrames = 1,
+                samples = emptyList(),
+                diagnostics = listOf("sampled"),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenFrameSampleReport.sampled(
+                sceneId = "frame-gate-blocker-board",
+                adapterInfo = "adapter",
+                warmupFrames = 2,
+                samples = listOf(1L, 2L),
+                diagnostics = listOf("sampled"),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenFrameSampleReport.sampled(
+                sceneId = "frame-gate-blocker-board",
+                adapterInfo = "adapter",
+                warmupFrames = 1,
+                samples = listOf(1L, 0L),
+                diagnostics = listOf("sampled"),
+            )
+        }
+    }
+
+    @Test
     fun `rect only command preparation rejects scenes without fill rectangles`() {
         val failure = assertFailsWith<IllegalArgumentException> {
             prepareRectOnlyDrawPlan(
