@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-004"
 title: "Implement GPOS single/pair positioning"
-status: "proposed"
+status: "review"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
@@ -15,6 +15,13 @@ legacy_gate: null
 ## PM Note
 
 Ce ticket apporte le kerning et les ajustements de position de base avec des preuves numeriques stables.
+
+## 2026-06-16 Implementation Slice
+
+- `font/sfnt` parse maintenant un slice borne de GPOS LookupType 1 single positioning et conserve les `ValueRecord` utiles pour LookupType 2 pair positioning formats 1 et 2.
+- `font/text` applique `xPlacement`, `yPlacement` et `xAdvance` sur `BasicOpenTypeShapingEngine`, y compris les `firstValueRecord`/`secondValueRecord` des pairs.
+- Les pair adjustments sont maintenant explicitement desactives quand `FeatureSet["kern"] == 0`, avec preservation du comportement legacy `kern`.
+- Cette vague ne promeut aucun support claim complet GPOS: elle couvre uniquement le slice deterministe verifie par les tests de surface ci-dessous.
 
 ## Problem
 
@@ -97,12 +104,15 @@ data class GposPairAdjustment(
 
 ```bash
 rtk git diff --check
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest
 rtk ./gradlew --no-daemon :font:text:test --tests '*GposPair*' --tests '*Kerning*'
 ```
 
 ## Status Notes
 
 - `proposed`: Base GPOS positioning depends on shaping contract and parsed table facts.
+- `review`: bounded single/pair positioning parser and `BasicOpenTypeShapingEngine` application are implemented and freshly validated; remaining gate stays on `gpos-trace.json`, `shaped-glyph-run.json`, malformed lookup diagnostics at the layout-contract layer, and fixture-backed claim evidence.
 - Move to `ready` only after value-format coverage and kerning fixtures are reviewed.
 
 ## Linear Labels
