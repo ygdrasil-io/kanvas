@@ -38,6 +38,7 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.runtimeEffectRefusalGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSampling
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSource
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
@@ -75,6 +76,19 @@ class RectOnlyOffscreenRenderer {
                 val nonTransparentPixels = pixels.countNonTransparentPixels()
                 val imagePath = outputDir.resolve(RENDER_FILE_NAME)
                 writePng(pixels, target.width, target.height, imagePath)
+                val diagnostics = rectOnlyRenderedDiagnostics(
+                    sceneId = sceneId,
+                    adapterInfo = ctx.adapterInfo,
+                    fillRectCount = drawPlan.fillRectCount,
+                    fillRRectCount = drawPlan.fillRRectCount,
+                    linearGradientRectCount = drawPlan.linearGradientRectCount,
+                    clipCount = drawPlan.clipCount,
+                    bitmapRectCount = drawPlan.bitmapRectCount,
+                    filters = drawPlan.filters,
+                    saveLayers = drawPlan.saveLayers,
+                    runtimeEffects = drawPlan.runtimeEffects,
+                    meshRibbons = drawPlan.meshRibbons,
+                ) + scene.runtimeEffectRefusalGateDiagnostics()
                 return OffscreenRunReport.rendered(
                     sceneId = sceneId,
                     imagePath = RENDER_FILE_NAME,
@@ -82,19 +96,7 @@ class RectOnlyOffscreenRenderer {
                     height = target.height,
                     byteCount = rectOnlyRawRgbaByteCount(pixels, target.width, target.height),
                     nonTransparentPixels = nonTransparentPixels,
-                    diagnostics = rectOnlyRenderedDiagnostics(
-                        sceneId = sceneId,
-                        adapterInfo = ctx.adapterInfo,
-                        fillRectCount = drawPlan.fillRectCount,
-                        fillRRectCount = drawPlan.fillRRectCount,
-                        linearGradientRectCount = drawPlan.linearGradientRectCount,
-                        clipCount = drawPlan.clipCount,
-                        bitmapRectCount = drawPlan.bitmapRectCount,
-                        filters = drawPlan.filters,
-                        saveLayers = drawPlan.saveLayers,
-                        runtimeEffects = drawPlan.runtimeEffects,
-                        meshRibbons = drawPlan.meshRibbons,
-                    ),
+                    diagnostics = diagnostics,
                 )
             }
         }

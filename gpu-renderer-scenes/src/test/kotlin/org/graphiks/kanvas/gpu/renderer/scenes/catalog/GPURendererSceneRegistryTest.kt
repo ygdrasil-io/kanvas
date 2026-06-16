@@ -171,6 +171,29 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `runtime effect refusal gate board is backed by child source and placement refusals only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("runtime-effect-refusal-gate-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.RuntimeEffect), scene.tags)
+        assertEquals(listOf("KGPU-M7-002"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertTrue(scene.commands.none { it is SceneCommand.RuntimeEffectTile })
+        assertEquals(
+            listOf(
+                "arbitrary-source-refusal",
+                "child-slot-refusal",
+                "unsupported-placement-refusal",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..3).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M7-001" || it.ticketId == "KGPU-M7-003" })
+    }
+
+    @Test
     fun `release gate progress board is backed by bounded rrect scissor and gradient payloads`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("release-gate-progress-board")
 
@@ -965,6 +988,19 @@ class GPURendererSceneRegistryTest {
                     "fill-rect",
                 ),
                 roadmapLinks = listOf(RoadmapExpectation("M7", ticketId = "KGPU-M7-001")),
+            ),
+            SceneExpectationRow(
+                sceneId = "runtime-effect-refusal-gate-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.RuntimeEffect),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M7", ticketId = "KGPU-M7-002")),
             ),
             SceneExpectationRow(
                 sceneId = "blend-mode-strip",

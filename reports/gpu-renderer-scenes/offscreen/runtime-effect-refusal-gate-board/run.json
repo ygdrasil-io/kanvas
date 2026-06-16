@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sceneId": "runtime-effect-refusal-gate-board",
+  "status": "rendered",
+  "productRefusal": false,
+  "backend": "webgpu-offscreen",
+  "imagePath": "render.png",
+  "width": 320,
+  "height": 200,
+  "byteCount": 256000,
+  "nonTransparentPixels": 64000,
+  "diagnostics": ["rendered runtime-effect-refusal-gate-board via WebGPU offscreen","adapter=Apple M2 Max","fillRectCommands=3","fillRRectCommands=1","linearGradientRectCommands=0","clipCommands=1","bitmapRectCommands=0","runtimeEffectRefusalMatrix=arbitrary-source:RefuseRequired:unsupported.runtime_effect.dynamic_sksl_forbidden,child-slot:RefuseRequired:unsupported.runtime_effect.child_count,unsupported-placement:RefuseRequired:unsupported.runtime_effect.route_unaccepted","pmRuntimeEffectRefusalRow=gpu-renderer.runtime-effect-refusals","pmRuntimeEffectRefusalClassification=RefuseRequired","dynamicSourceCompilation=false","childRuntimeEffectSupport=false"]
+}

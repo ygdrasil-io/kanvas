@@ -195,6 +195,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 runtimeEffectCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "runtime-effect-refusal-gate-board",
+                fillRectCount = 3,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "sdr-color-boundary-board",
                 fillRectCount = 7,
                 fillRRectCount = 1,
@@ -545,6 +551,13 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 "runtimeEffectParserEvidence=RuntimeEffectDescriptorWebGpuTest#runtime SimpleRT descriptor WGSL parses and reflects uniforms",
             )
             assertContains(runJson, "fallbackReason=none")
+        }
+        if (expectation.sceneId == "runtime-effect-refusal-gate-board") {
+            assertContains(runJson, "runtimeEffectRefusalMatrix=arbitrary-source:RefuseRequired:unsupported.runtime_effect.dynamic_sksl_forbidden,child-slot:RefuseRequired:unsupported.runtime_effect.child_count,unsupported-placement:RefuseRequired:unsupported.runtime_effect.route_unaccepted")
+            assertContains(runJson, "pmRuntimeEffectRefusalRow=gpu-renderer.runtime-effect-refusals")
+            assertContains(runJson, "pmRuntimeEffectRefusalClassification=RefuseRequired")
+            assertContains(runJson, "dynamicSourceCompilation=false")
+            assertContains(runJson, "childRuntimeEffectSupport=false")
         }
         expectation.meshRibbonCount?.let { count ->
             assertContains(runJson, "meshRibbonCommands=$count")
