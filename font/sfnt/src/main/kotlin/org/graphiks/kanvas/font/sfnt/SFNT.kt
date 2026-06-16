@@ -1707,6 +1707,19 @@ class DefaultOpenTypeFaceParser(
                 null
             }
         }
+        val gsub = rawTableBytes[GSUB_TABLE_TAG]?.let { table ->
+            runCatching { OpenTypeGsubTableParser.parse(table).takeIf { it.lookups.isNotEmpty() } }
+                .getOrElse { error ->
+                diagnostics += tableDiagnostic(
+                    source = source,
+                    table = GSUB_TABLE_TAG,
+                    message = "Unable to parse OpenType table ${GSUB_TABLE_TAG.value}.",
+                    causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
+                    cause = error,
+                )
+                null
+            }
+        }
         val gposPairs = rawTableBytes[GPOS_TABLE_TAG]?.let { table ->
             runCatching {
                 OpenTypeGposPairTableParser.parse(
@@ -1728,6 +1741,7 @@ class DefaultOpenTypeFaceParser(
         return OpenTypeLayoutTables(
             tables = layoutTables,
             kern = kern,
+            gsub = gsub,
             gposPairs = gposPairs,
         )
     }
@@ -4594,7 +4608,7 @@ private val TRUE_TYPE_REQUIRED_TABLE_TAGS = setOf(
     GLYF_TABLE_TAG,
 )
 private val METRIC_TABLE_TAGS = listOf(HEAD_TABLE_TAG, HHEA_TABLE_TAG, MAXP_TABLE_TAG, HMTX_TABLE_TAG)
-private val LAYOUT_TABLE_TAGS = setOf(KERN_TABLE_TAG, GPOS_TABLE_TAG)
+private val LAYOUT_TABLE_TAGS = setOf(KERN_TABLE_TAG, GSUB_TABLE_TAG, GPOS_TABLE_TAG)
 private val COLOR_FONT_TABLE_TAGS = setOf(COLR_TABLE_TAG, CPAL_TABLE_TAG, CBDT_TABLE_TAG, CBLC_TABLE_TAG, SBIX_TABLE_TAG, SVG_TABLE_TAG)
 private const val OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC = "font.sfnt.optional-table-malformed"
 private val OPEN_TYPE_TABLE_FACT_ROLES = setOf(
@@ -5806,6 +5820,839 @@ object OpenTypeKernTableParser {
 }
 
 /**
+ * Parsed bounded GSUB lookup table subset in feature traversal order.
+ *
+ * The current slice preserves only the simple substitution lookup classes
+ * needed by KFONT-M6-002: single, multiple, and ligature substitutions.
+ *
+ * @property lookups Parsed GSUB lookups in active feature traversal order.
+ */
+data class OpenTypeGsubTable(
+    val lookups: List<OpenTypeGsubLookup> = emptyList(),
+)
+
+/**
+ * One parsed bounded GSUB lookup tied to the feature that activates it.
+ */
+sealed interface OpenTypeGsubLookup {
+    val featureTag: String
+    val lookupType: Int
+}
+
+/**
+ * Parsed GSUB single substitution lookup.
+ */
+data class OpenTypeGsubSingleSubstitutionLookup(
+    override val featureTag: String,
+    val substitutions: List<OpenTypeGsubSingleSubstitution> = emptyList(),
+) : OpenTypeGsubLookup {
+    override val lookupType: Int = GSUB_SINGLE_SUBSTITUTION_LOOKUP_TYPE
+}
+
+/**
+ * One one-to-one GSUB glyph replacement.
+ */
+data class OpenTypeGsubSingleSubstitution(
+    val inputGlyphId: Int,
+    val replacementGlyphId: Int,
+) {
+    init {
+        require(inputGlyphId in OPENTYPE_GLYPH_ID_RANGE) {
+            "OpenType GSUB input glyph ID $inputGlyphId is outside range 0..65535."
+        }
+        require(replacementGlyphId in OPENTYPE_GLYPH_ID_RANGE) {
+            "OpenType GSUB replacement glyph ID $replacementGlyphId is outside range 0..65535."
+        }
+    }
+}
+
+/**
+ * Parsed GSUB multiple substitution lookup.
+ */
+data class OpenTypeGsubMultipleSubstitutionLookup(
+    override val featureTag: String,
+    val substitutions: List<OpenTypeGsubMultipleSubstitution> = emptyList(),
+) : OpenTypeGsubLookup {
+    override val lookupType: Int = GSUB_MULTIPLE_SUBSTITUTION_LOOKUP_TYPE
+}
+
+/**
+ * One one-to-many GSUB glyph replacement.
+ */
+data class OpenTypeGsubMultipleSubstitution(
+    val inputGlyphId: Int,
+    val replacementGlyphIds: List<Int>,
+) {
+    init {
+        require(inputGlyphId in OPENTYPE_GLYPH_ID_RANGE) {
+            "OpenType GSUB input glyph ID $inputGlyphId is outside range 0..65535."
+        }
+        require(replacementGlyphIds.isNotEmpty()) {
+            "OpenType GSUB multiple substitution for glyph $inputGlyphId must contain at least one replacement glyph."
+        }
+        replacementGlyphIds.forEach { glyphId ->
+            require(glyphId in OPENTYPE_GLYPH_ID_RANGE) {
+                "OpenType GSUB replacement glyph ID $glyphId is outside range 0..65535."
+            }
+        }
+    }
+}
+
+/**
+ * Parsed GSUB ligature substitution lookup.
+ */
+data class OpenTypeGsubLigatureSubstitutionLookup(
+    override val featureTag: String,
+    val substitutions: List<OpenTypeGsubLigatureSubstitution> = emptyList(),
+) : OpenTypeGsubLookup {
+    override val lookupType: Int = GSUB_LIGATURE_SUBSTITUTION_LOOKUP_TYPE
+}
+
+/**
+ * One many-to-one GSUB ligature replacement.
+ */
+data class OpenTypeGsubLigatureSubstitution(
+    val inputGlyphIds: List<Int>,
+    val replacementGlyphId: Int,
+) {
+    init {
+        require(inputGlyphIds.size >= 2) {
+            "OpenType GSUB ligature substitution must consume at least two glyphs."
+        }
+        inputGlyphIds.forEach { glyphId ->
+            require(glyphId in OPENTYPE_GLYPH_ID_RANGE) {
+                "OpenType GSUB input glyph ID $glyphId is outside range 0..65535."
+            }
+        }
+        require(replacementGlyphId in OPENTYPE_GLYPH_ID_RANGE) {
+            "OpenType GSUB ligature glyph ID $replacementGlyphId is outside range 0..65535."
+        }
+    }
+}
+
+/**
+ * Parser for the Kanvas-supported subset of OpenType GSUB simple lookups.
+ */
+object OpenTypeGsubTableParser {
+    fun parse(table: ByteArray): OpenTypeGsubTable {
+        table.requireRange(0, GPOS_HEADER_SIZE, "OpenType GSUB header")
+
+        val majorVersion = table.readUInt16BE(0, "OpenType GSUB majorVersion")
+        val minorVersion = table.readUInt16BE(2, "OpenType GSUB minorVersion")
+        require(majorVersion == 1 && minorVersion in 0..1) {
+            "OpenType GSUB table version $majorVersion.$minorVersion is not supported; expected 1.0 or 1.1."
+        }
+
+        val scriptListStart = table.checkedOffset(
+            base = 0,
+            offset = table.readUInt16BE(4, "OpenType GSUB ScriptList offset"),
+            label = "OpenType GSUB ScriptList",
+        )
+        val featureListStart = table.checkedOffset(
+            base = 0,
+            offset = table.readUInt16BE(6, "OpenType GSUB FeatureList offset"),
+            label = "OpenType GSUB FeatureList",
+        )
+        val lookupListStart = table.checkedOffset(
+            base = 0,
+            offset = table.readUInt16BE(8, "OpenType GSUB LookupList offset"),
+            label = "OpenType GSUB LookupList",
+        )
+        val featureLookups = parseActiveFeatureLookups(
+            table = table,
+            scriptListStart = scriptListStart,
+            featureListStart = featureListStart,
+        )
+        if (featureLookups.isEmpty()) {
+            return OpenTypeGsubTable()
+        }
+
+        table.requireRange(lookupListStart, UINT16_BYTE_LENGTH, "OpenType GSUB LookupList header")
+        val lookupCount = table.readUInt16BE(lookupListStart, "OpenType GSUB LookupList lookupCount")
+        table.requireArrayRange(
+            offset = table.checkedOffset(lookupListStart, UINT16_BYTE_LENGTH, "OpenType GSUB LookupList offsets"),
+            count = lookupCount,
+            recordSize = UINT16_BYTE_LENGTH,
+            label = "OpenType GSUB LookupList offsets",
+        )
+
+        val lookups = mutableListOf<OpenTypeGsubLookup>()
+        featureLookups.forEach { featureLookup ->
+            require(featureLookup.lookupIndex in 0 until lookupCount) {
+                "OpenType GSUB lookup index ${featureLookup.lookupIndex} is outside LookupList range 0 until $lookupCount."
+            }
+            val lookupOffset = table.readUInt16BE(
+                lookupListStart + UINT16_BYTE_LENGTH + featureLookup.lookupIndex * UINT16_BYTE_LENGTH,
+                "OpenType GSUB LookupList offset[${featureLookup.lookupIndex}]",
+            )
+            parseLookup(
+                table = table,
+                lookupStart = table.checkedOffset(
+                    base = lookupListStart,
+                    offset = lookupOffset,
+                    label = "OpenType GSUB lookup ${featureLookup.lookupIndex}",
+                ),
+                featureTag = featureLookup.featureTag,
+            )?.let(lookups::add)
+        }
+
+        return OpenTypeGsubTable(lookups = lookups)
+    }
+
+    private fun parseActiveFeatureLookups(
+        table: ByteArray,
+        scriptListStart: Int,
+        featureListStart: Int,
+    ): List<OpenTypeGsubFeatureLookupRef> {
+        val activeFeatureIndices = parseActiveFeatureIndices(table, scriptListStart)
+        if (activeFeatureIndices.isEmpty()) {
+            return emptyList()
+        }
+
+        table.requireRange(featureListStart, UINT16_BYTE_LENGTH, "OpenType GSUB FeatureList header")
+        val featureCount = table.readUInt16BE(featureListStart, "OpenType GSUB FeatureList featureCount")
+        table.requireArrayRange(
+            offset = table.checkedOffset(featureListStart, UINT16_BYTE_LENGTH, "OpenType GSUB FeatureRecords"),
+            count = featureCount,
+            recordSize = GPOS_FEATURE_RECORD_SIZE,
+            label = "OpenType GSUB FeatureRecords",
+        )
+
+        val lookups = mutableListOf<OpenTypeGsubFeatureLookupRef>()
+        repeat(featureCount) { featureIndex ->
+            val record = featureListStart + UINT16_BYTE_LENGTH + featureIndex * GPOS_FEATURE_RECORD_SIZE
+            val tag = table.readTag(record, "OpenType GSUB FeatureRecord $featureIndex tag")
+            val featureOffset = table.readUInt16BE(
+                record + SFNT_TAG_BYTE_LENGTH,
+                "OpenType GSUB FeatureRecord $featureIndex offset",
+            )
+            if (featureIndex !in activeFeatureIndices) {
+                return@repeat
+            }
+
+            val featureStart = table.checkedOffset(
+                base = featureListStart,
+                offset = featureOffset,
+                label = "OpenType GSUB FeatureTable $featureIndex",
+            )
+            table.requireRange(featureStart, GPOS_FEATURE_HEADER_SIZE, "OpenType GSUB FeatureTable $featureIndex")
+            val lookupIndexCount = table.readUInt16BE(
+                featureStart + UINT16_BYTE_LENGTH,
+                "OpenType GSUB FeatureTable $featureIndex lookupIndexCount",
+            )
+            table.requireArrayRange(
+                offset = table.checkedOffset(featureStart, GPOS_FEATURE_HEADER_SIZE, "OpenType GSUB Feature lookup indices"),
+                count = lookupIndexCount,
+                recordSize = UINT16_BYTE_LENGTH,
+                label = "OpenType GSUB FeatureTable $featureIndex lookup indices",
+            )
+            repeat(lookupIndexCount) { lookupIndexRecord ->
+                lookups += OpenTypeGsubFeatureLookupRef(
+                    featureTag = tag,
+                    lookupIndex = table.readUInt16BE(
+                        featureStart + GPOS_FEATURE_HEADER_SIZE + lookupIndexRecord * UINT16_BYTE_LENGTH,
+                        "OpenType GSUB FeatureTable $featureIndex lookupListIndex[$lookupIndexRecord]",
+                    ),
+                )
+            }
+        }
+
+        return lookups
+    }
+
+    private fun parseActiveFeatureIndices(
+        table: ByteArray,
+        scriptListStart: Int,
+    ): Set<Int> {
+        table.requireRange(scriptListStart, UINT16_BYTE_LENGTH, "OpenType GSUB ScriptList header")
+        val scriptCount = table.readUInt16BE(scriptListStart, "OpenType GSUB ScriptList scriptCount")
+        table.requireArrayRange(
+            offset = table.checkedOffset(scriptListStart, UINT16_BYTE_LENGTH, "OpenType GSUB ScriptRecords"),
+            count = scriptCount,
+            recordSize = GPOS_SCRIPT_RECORD_SIZE,
+            label = "OpenType GSUB ScriptRecords",
+        )
+
+        val features = LinkedHashSet<Int>()
+        repeat(scriptCount) { scriptIndex ->
+            val record = scriptListStart + UINT16_BYTE_LENGTH + scriptIndex * GPOS_SCRIPT_RECORD_SIZE
+            val tag = table.readTag(record, "OpenType GSUB ScriptRecord $scriptIndex tag")
+            val scriptOffset = table.readUInt16BE(
+                record + SFNT_TAG_BYTE_LENGTH,
+                "OpenType GSUB ScriptRecord $scriptIndex offset",
+            )
+            if (tag == "DFLT" || tag == "latn") {
+                collectScriptFeatureIndices(
+                    table = table,
+                    scriptStart = table.checkedOffset(
+                        base = scriptListStart,
+                        offset = scriptOffset,
+                        label = "OpenType GSUB ScriptTable $tag",
+                    ),
+                    features = features,
+                )
+            }
+        }
+
+        return features
+    }
+
+    private fun collectScriptFeatureIndices(
+        table: ByteArray,
+        scriptStart: Int,
+        features: MutableSet<Int>,
+    ) {
+        table.requireRange(scriptStart, 4, "OpenType GSUB ScriptTable header")
+        val defaultLangSysOffset = table.readUInt16BE(
+            scriptStart,
+            "OpenType GSUB ScriptTable defaultLangSys offset",
+        )
+        val langSysCount = table.readUInt16BE(
+            scriptStart + UINT16_BYTE_LENGTH,
+            "OpenType GSUB ScriptTable langSysCount",
+        )
+
+        if (defaultLangSysOffset != 0) {
+            collectLangSysFeatureIndices(
+                table = table,
+                langSysStart = table.checkedOffset(
+                    base = scriptStart,
+                    offset = defaultLangSysOffset,
+                    label = "OpenType GSUB default LangSys",
+                ),
+                features = features,
+            )
+        }
+
+        table.requireArrayRange(
+            offset = table.checkedOffset(scriptStart, 4, "OpenType GSUB LangSysRecords"),
+            count = langSysCount,
+            recordSize = GPOS_LANG_SYS_RECORD_SIZE,
+            label = "OpenType GSUB LangSysRecords",
+        )
+        repeat(langSysCount) { langSysIndex ->
+            val record = scriptStart + 4 + langSysIndex * GPOS_LANG_SYS_RECORD_SIZE
+            val langSysOffset = table.readUInt16BE(
+                record + SFNT_TAG_BYTE_LENGTH,
+                "OpenType GSUB LangSysRecord $langSysIndex offset",
+            )
+            collectLangSysFeatureIndices(
+                table = table,
+                langSysStart = table.checkedOffset(
+                    base = scriptStart,
+                    offset = langSysOffset,
+                    label = "OpenType GSUB LangSysRecord $langSysIndex",
+                ),
+                features = features,
+            )
+        }
+    }
+
+    private fun collectLangSysFeatureIndices(
+        table: ByteArray,
+        langSysStart: Int,
+        features: MutableSet<Int>,
+    ) {
+        table.requireRange(langSysStart, GPOS_LANG_SYS_HEADER_SIZE, "OpenType GSUB LangSys table")
+        val requiredFeatureIndex = table.readUInt16BE(
+            langSysStart + UINT16_BYTE_LENGTH,
+            "OpenType GSUB LangSys requiredFeatureIndex",
+        )
+        if (requiredFeatureIndex != GPOS_REQUIRED_FEATURE_NONE) {
+            features += requiredFeatureIndex
+        }
+
+        val featureIndexCount = table.readUInt16BE(
+            langSysStart + UINT16_BYTE_LENGTH * 2,
+            "OpenType GSUB LangSys featureIndexCount",
+        )
+        table.requireArrayRange(
+            offset = table.checkedOffset(langSysStart, GPOS_LANG_SYS_HEADER_SIZE, "OpenType GSUB LangSys feature indices"),
+            count = featureIndexCount,
+            recordSize = UINT16_BYTE_LENGTH,
+            label = "OpenType GSUB LangSys feature indices",
+        )
+        repeat(featureIndexCount) { featureIndexRecord ->
+            features += table.readUInt16BE(
+                langSysStart + GPOS_LANG_SYS_HEADER_SIZE + featureIndexRecord * UINT16_BYTE_LENGTH,
+                "OpenType GSUB LangSys featureIndex[$featureIndexRecord]",
+            )
+        }
+    }
+
+    private fun parseLookup(
+        table: ByteArray,
+        lookupStart: Int,
+        featureTag: String,
+    ): OpenTypeGsubLookup? {
+        table.requireRange(lookupStart, GPOS_LOOKUP_HEADER_SIZE, "OpenType GSUB LookupTable header")
+        val lookupType = table.readUInt16BE(lookupStart, "OpenType GSUB LookupTable lookupType")
+        val subtableCount = table.readUInt16BE(
+            lookupStart + UINT16_BYTE_LENGTH * 2,
+            "OpenType GSUB LookupTable subTableCount",
+        )
+        table.requireArrayRange(
+            offset = table.checkedOffset(lookupStart, GPOS_LOOKUP_HEADER_SIZE, "OpenType GSUB LookupTable subtable offsets"),
+            count = subtableCount,
+            recordSize = UINT16_BYTE_LENGTH,
+            label = "OpenType GSUB LookupTable subtable offsets",
+        )
+
+        return when (lookupType) {
+            GSUB_SINGLE_SUBSTITUTION_LOOKUP_TYPE -> parseSingleLookup(table, lookupStart, subtableCount, featureTag)
+            GSUB_MULTIPLE_SUBSTITUTION_LOOKUP_TYPE -> parseMultipleLookup(table, lookupStart, subtableCount, featureTag)
+            GSUB_LIGATURE_SUBSTITUTION_LOOKUP_TYPE -> parseLigatureLookup(table, lookupStart, subtableCount, featureTag)
+            else -> null
+        }
+    }
+
+    private fun parseSingleLookup(
+        table: ByteArray,
+        lookupStart: Int,
+        subtableCount: Int,
+        featureTag: String,
+    ): OpenTypeGsubSingleSubstitutionLookup? {
+        val substitutions = LinkedHashMap<Int, Int>()
+        repeat(subtableCount) { subtableIndex ->
+            val subtableOffset = table.readUInt16BE(
+                lookupStart + GPOS_LOOKUP_HEADER_SIZE + subtableIndex * UINT16_BYTE_LENGTH,
+                "OpenType GSUB LookupTable subtableOffset[$subtableIndex]",
+            )
+            parseSingleSubtable(
+                table = table,
+                subtableStart = table.checkedOffset(
+                    base = lookupStart,
+                    offset = subtableOffset,
+                    label = "OpenType GSUB SingleSubst subtable $subtableIndex",
+                ),
+                substitutions = substitutions,
+            )
+        }
+        return substitutions.takeUnless { it.isEmpty() }?.let { parsed ->
+            OpenTypeGsubSingleSubstitutionLookup(
+                featureTag = featureTag,
+                substitutions = parsed.map { (inputGlyphId, replacementGlyphId) ->
+                    OpenTypeGsubSingleSubstitution(inputGlyphId = inputGlyphId, replacementGlyphId = replacementGlyphId)
+                },
+            )
+        }
+    }
+
+    private fun parseSingleSubtable(
+        table: ByteArray,
+        subtableStart: Int,
+        substitutions: MutableMap<Int, Int>,
+    ) {
+        table.requireRange(subtableStart, 6, "OpenType GSUB SingleSubst subtable header")
+        val substFormat = table.readUInt16BE(subtableStart, "OpenType GSUB SingleSubst substFormat")
+        val coverageOffset = table.readUInt16BE(
+            subtableStart + UINT16_BYTE_LENGTH,
+            "OpenType GSUB SingleSubst coverageOffset",
+        )
+        val coverage = parseCoverageTable(
+            table = table,
+            coverageStart = table.checkedOffset(
+                base = subtableStart,
+                offset = coverageOffset,
+                label = "OpenType GSUB SingleSubst coverage",
+            ),
+        )
+
+        when (substFormat) {
+            1 -> {
+                val deltaGlyphId = table.readInt16BE(
+                    subtableStart + UINT16_BYTE_LENGTH * 2,
+                    "OpenType GSUB SingleSubst deltaGlyphID",
+                )
+                coverage.forEach { glyphId ->
+                    substitutions[glyphId] = (glyphId + deltaGlyphId) and UINT16_MAX
+                }
+            }
+            2 -> {
+                val glyphCount = table.readUInt16BE(
+                    subtableStart + UINT16_BYTE_LENGTH * 2,
+                    "OpenType GSUB SingleSubst glyphCount",
+                )
+                require(glyphCount == coverage.size) {
+                    "OpenType GSUB SingleSubst format 2 glyphCount $glyphCount must equal coverage glyph count ${coverage.size}."
+                }
+                val substitutesStart = table.checkedOffset(
+                    subtableStart,
+                    6,
+                    "OpenType GSUB SingleSubst substitutes",
+                )
+                table.requireArrayRange(
+                    offset = substitutesStart,
+                    count = glyphCount,
+                    recordSize = UINT16_BYTE_LENGTH,
+                    label = "OpenType GSUB SingleSubst substitutes",
+                )
+                repeat(glyphCount) { glyphIndex ->
+                    substitutions[coverage[glyphIndex]] = table.readUInt16BE(
+                        substitutesStart + glyphIndex * UINT16_BYTE_LENGTH,
+                        "OpenType GSUB SingleSubst substituteGlyphID[$glyphIndex]",
+                    )
+                }
+            }
+            else -> throw IllegalArgumentException("OpenType GSUB SingleSubst format $substFormat is not supported.")
+        }
+    }
+
+    private fun parseMultipleLookup(
+        table: ByteArray,
+        lookupStart: Int,
+        subtableCount: Int,
+        featureTag: String,
+    ): OpenTypeGsubMultipleSubstitutionLookup? {
+        val substitutions = LinkedHashMap<Int, List<Int>>()
+        repeat(subtableCount) { subtableIndex ->
+            val subtableOffset = table.readUInt16BE(
+                lookupStart + GPOS_LOOKUP_HEADER_SIZE + subtableIndex * UINT16_BYTE_LENGTH,
+                "OpenType GSUB LookupTable subtableOffset[$subtableIndex]",
+            )
+            parseMultipleSubtable(
+                table = table,
+                subtableStart = table.checkedOffset(
+                    base = lookupStart,
+                    offset = subtableOffset,
+                    label = "OpenType GSUB MultipleSubst subtable $subtableIndex",
+                ),
+                substitutions = substitutions,
+            )
+        }
+        return substitutions.takeUnless { it.isEmpty() }?.let { parsed ->
+            OpenTypeGsubMultipleSubstitutionLookup(
+                featureTag = featureTag,
+                substitutions = parsed.map { (inputGlyphId, replacementGlyphIds) ->
+                    OpenTypeGsubMultipleSubstitution(inputGlyphId = inputGlyphId, replacementGlyphIds = replacementGlyphIds)
+                },
+            )
+        }
+    }
+
+    private fun parseMultipleSubtable(
+        table: ByteArray,
+        subtableStart: Int,
+        substitutions: MutableMap<Int, List<Int>>,
+    ) {
+        table.requireRange(subtableStart, 6, "OpenType GSUB MultipleSubst subtable header")
+        val substFormat = table.readUInt16BE(subtableStart, "OpenType GSUB MultipleSubst substFormat")
+        require(substFormat == 1) {
+            "OpenType GSUB MultipleSubst format $substFormat is not supported."
+        }
+        val coverageOffset = table.readUInt16BE(
+            subtableStart + UINT16_BYTE_LENGTH,
+            "OpenType GSUB MultipleSubst coverageOffset",
+        )
+        val coverage = parseCoverageTable(
+            table = table,
+            coverageStart = table.checkedOffset(
+                base = subtableStart,
+                offset = coverageOffset,
+                label = "OpenType GSUB MultipleSubst coverage",
+            ),
+        )
+        val sequenceCount = table.readUInt16BE(
+            subtableStart + UINT16_BYTE_LENGTH * 2,
+            "OpenType GSUB MultipleSubst sequenceCount",
+        )
+        require(sequenceCount == coverage.size) {
+            "OpenType GSUB MultipleSubst sequenceCount $sequenceCount must equal coverage glyph count ${coverage.size}."
+        }
+        val offsetsStart = table.checkedOffset(
+            subtableStart,
+            6,
+            "OpenType GSUB MultipleSubst sequence offsets",
+        )
+        table.requireArrayRange(
+            offset = offsetsStart,
+            count = sequenceCount,
+            recordSize = UINT16_BYTE_LENGTH,
+            label = "OpenType GSUB MultipleSubst sequence offsets",
+        )
+        repeat(sequenceCount) { sequenceIndex ->
+            val sequenceOffset = table.readUInt16BE(
+                offsetsStart + sequenceIndex * UINT16_BYTE_LENGTH,
+                "OpenType GSUB MultipleSubst sequenceOffset[$sequenceIndex]",
+            )
+            val sequenceStart = table.checkedOffset(
+                base = subtableStart,
+                offset = sequenceOffset,
+                label = "OpenType GSUB MultipleSubst Sequence $sequenceIndex",
+            )
+            table.requireRange(sequenceStart, UINT16_BYTE_LENGTH, "OpenType GSUB MultipleSubst Sequence $sequenceIndex header")
+            val glyphCount = table.readUInt16BE(
+                sequenceStart,
+                "OpenType GSUB MultipleSubst Sequence $sequenceIndex glyphCount",
+            )
+            require(glyphCount > 0) {
+                "OpenType GSUB MultipleSubst Sequence $sequenceIndex glyphCount must be positive."
+            }
+            val glyphArrayStart = table.checkedOffset(
+                sequenceStart,
+                UINT16_BYTE_LENGTH,
+                "OpenType GSUB MultipleSubst Sequence $sequenceIndex substitutes",
+            )
+            table.requireArrayRange(
+                offset = glyphArrayStart,
+                count = glyphCount,
+                recordSize = UINT16_BYTE_LENGTH,
+                label = "OpenType GSUB MultipleSubst Sequence $sequenceIndex substitutes",
+            )
+            substitutions[coverage[sequenceIndex]] = List(glyphCount) { glyphIndex ->
+                table.readUInt16BE(
+                    glyphArrayStart + glyphIndex * UINT16_BYTE_LENGTH,
+                    "OpenType GSUB MultipleSubst Sequence $sequenceIndex substituteGlyphID[$glyphIndex]",
+                )
+            }
+        }
+    }
+
+    private fun parseLigatureLookup(
+        table: ByteArray,
+        lookupStart: Int,
+        subtableCount: Int,
+        featureTag: String,
+    ): OpenTypeGsubLigatureSubstitutionLookup? {
+        val substitutions = mutableListOf<OpenTypeGsubLigatureSubstitution>()
+        repeat(subtableCount) { subtableIndex ->
+            val subtableOffset = table.readUInt16BE(
+                lookupStart + GPOS_LOOKUP_HEADER_SIZE + subtableIndex * UINT16_BYTE_LENGTH,
+                "OpenType GSUB LookupTable subtableOffset[$subtableIndex]",
+            )
+            parseLigatureSubtable(
+                table = table,
+                subtableStart = table.checkedOffset(
+                    base = lookupStart,
+                    offset = subtableOffset,
+                    label = "OpenType GSUB LigatureSubst subtable $subtableIndex",
+                ),
+                substitutions = substitutions,
+            )
+        }
+        return substitutions.takeUnless { it.isEmpty() }?.let { parsed ->
+            OpenTypeGsubLigatureSubstitutionLookup(featureTag = featureTag, substitutions = parsed)
+        }
+    }
+
+    private fun parseLigatureSubtable(
+        table: ByteArray,
+        subtableStart: Int,
+        substitutions: MutableList<OpenTypeGsubLigatureSubstitution>,
+    ) {
+        table.requireRange(subtableStart, 6, "OpenType GSUB LigatureSubst subtable header")
+        val substFormat = table.readUInt16BE(subtableStart, "OpenType GSUB LigatureSubst substFormat")
+        require(substFormat == 1) {
+            "OpenType GSUB LigatureSubst format $substFormat is not supported."
+        }
+        val coverageOffset = table.readUInt16BE(
+            subtableStart + UINT16_BYTE_LENGTH,
+            "OpenType GSUB LigatureSubst coverageOffset",
+        )
+        val coverage = parseCoverageTable(
+            table = table,
+            coverageStart = table.checkedOffset(
+                base = subtableStart,
+                offset = coverageOffset,
+                label = "OpenType GSUB LigatureSubst coverage",
+            ),
+        )
+        val ligSetCount = table.readUInt16BE(
+            subtableStart + UINT16_BYTE_LENGTH * 2,
+            "OpenType GSUB LigatureSubst ligSetCount",
+        )
+        require(ligSetCount == coverage.size) {
+            "OpenType GSUB LigatureSubst ligSetCount $ligSetCount must equal coverage glyph count ${coverage.size}."
+        }
+        val ligSetOffsetsStart = table.checkedOffset(
+            subtableStart,
+            6,
+            "OpenType GSUB LigatureSubst ligature set offsets",
+        )
+        table.requireArrayRange(
+            offset = ligSetOffsetsStart,
+            count = ligSetCount,
+            recordSize = UINT16_BYTE_LENGTH,
+            label = "OpenType GSUB LigatureSubst ligature set offsets",
+        )
+        repeat(ligSetCount) { ligSetIndex ->
+            val ligSetOffset = table.readUInt16BE(
+                ligSetOffsetsStart + ligSetIndex * UINT16_BYTE_LENGTH,
+                "OpenType GSUB LigatureSubst ligatureSetOffset[$ligSetIndex]",
+            )
+            val ligSetStart = table.checkedOffset(
+                base = subtableStart,
+                offset = ligSetOffset,
+                label = "OpenType GSUB LigatureSubst LigatureSet $ligSetIndex",
+            )
+            table.requireRange(ligSetStart, UINT16_BYTE_LENGTH, "OpenType GSUB LigatureSubst LigatureSet $ligSetIndex header")
+            val ligatureCount = table.readUInt16BE(
+                ligSetStart,
+                "OpenType GSUB LigatureSubst LigatureSet $ligSetIndex ligatureCount",
+            )
+            val ligatureOffsetsStart = table.checkedOffset(
+                ligSetStart,
+                UINT16_BYTE_LENGTH,
+                "OpenType GSUB LigatureSubst LigatureSet $ligSetIndex offsets",
+            )
+            table.requireArrayRange(
+                offset = ligatureOffsetsStart,
+                count = ligatureCount,
+                recordSize = UINT16_BYTE_LENGTH,
+                label = "OpenType GSUB LigatureSubst LigatureSet $ligSetIndex offsets",
+            )
+            repeat(ligatureCount) { ligatureIndex ->
+                val ligatureOffset = table.readUInt16BE(
+                    ligatureOffsetsStart + ligatureIndex * UINT16_BYTE_LENGTH,
+                    "OpenType GSUB LigatureSubst LigatureSet $ligSetIndex ligatureOffset[$ligatureIndex]",
+                )
+                val ligatureStart = table.checkedOffset(
+                    base = ligSetStart,
+                    offset = ligatureOffset,
+                    label = "OpenType GSUB LigatureSubst Ligature $ligSetIndex/$ligatureIndex",
+                )
+                table.requireRange(ligatureStart, 4, "OpenType GSUB LigatureSubst Ligature $ligSetIndex/$ligatureIndex header")
+                val ligGlyph = table.readUInt16BE(
+                    ligatureStart,
+                    "OpenType GSUB LigatureSubst Ligature $ligSetIndex/$ligatureIndex ligGlyph",
+                )
+                val compCount = table.readUInt16BE(
+                    ligatureStart + UINT16_BYTE_LENGTH,
+                    "OpenType GSUB LigatureSubst Ligature $ligSetIndex/$ligatureIndex compCount",
+                )
+                require(compCount >= 2) {
+                    "OpenType GSUB LigatureSubst Ligature $ligSetIndex/$ligatureIndex compCount $compCount must be at least 2."
+                }
+                table.requireArrayRange(
+                    offset = table.checkedOffset(
+                        ligatureStart,
+                        4,
+                        "OpenType GSUB LigatureSubst Ligature $ligSetIndex/$ligatureIndex component array",
+                    ),
+                    count = compCount - 1,
+                    recordSize = UINT16_BYTE_LENGTH,
+                    label = "OpenType GSUB LigatureSubst Ligature $ligSetIndex/$ligatureIndex component array",
+                )
+                val inputGlyphIds = buildList(compCount) {
+                    add(coverage[ligSetIndex])
+                    repeat(compCount - 1) { componentIndex ->
+                        add(
+                            table.readUInt16BE(
+                                ligatureStart + 4 + componentIndex * UINT16_BYTE_LENGTH,
+                                "OpenType GSUB LigatureSubst Ligature $ligSetIndex/$ligatureIndex componentGlyphID[$componentIndex]",
+                            ),
+                        )
+                    }
+                }
+                substitutions += OpenTypeGsubLigatureSubstitution(
+                    inputGlyphIds = inputGlyphIds,
+                    replacementGlyphId = ligGlyph,
+                )
+            }
+        }
+    }
+
+    private fun parseCoverageTable(table: ByteArray, coverageStart: Int): List<Int> {
+        table.requireRange(coverageStart, 4, "OpenType GSUB coverage table header")
+        return when (val format = table.readUInt16BE(coverageStart, "OpenType GSUB coverage format")) {
+            1 -> {
+                val glyphCount = table.readUInt16BE(
+                    coverageStart + UINT16_BYTE_LENGTH,
+                    "OpenType GSUB coverage format 1 glyphCount",
+                )
+                table.requireArrayRange(
+                    offset = table.checkedOffset(
+                        coverageStart,
+                        GPOS_COVERAGE_FORMAT1_HEADER_SIZE,
+                        "OpenType GSUB coverage format 1 glyph array",
+                    ),
+                    count = glyphCount,
+                    recordSize = UINT16_BYTE_LENGTH,
+                    label = "OpenType GSUB coverage format 1 glyph array",
+                )
+                List(glyphCount) { glyphIndex ->
+                    table.readUInt16BE(
+                        coverageStart + GPOS_COVERAGE_FORMAT1_HEADER_SIZE + glyphIndex * UINT16_BYTE_LENGTH,
+                        "OpenType GSUB coverage format 1 glyphArray[$glyphIndex]",
+                    )
+                }
+            }
+            2 -> {
+                val rangeCount = table.readUInt16BE(
+                    coverageStart + UINT16_BYTE_LENGTH,
+                    "OpenType GSUB coverage format 2 rangeCount",
+                )
+                table.requireArrayRange(
+                    offset = table.checkedOffset(
+                        coverageStart,
+                        GPOS_COVERAGE_FORMAT2_HEADER_SIZE,
+                        "OpenType GSUB coverage format 2 range records",
+                    ),
+                    count = rangeCount,
+                    recordSize = GPOS_COVERAGE_RANGE_RECORD_SIZE,
+                    label = "OpenType GSUB coverage format 2 range records",
+                )
+                val glyphs = ArrayList<Int>()
+                repeat(rangeCount) { rangeIndex ->
+                    val rangeStart = coverageStart + GPOS_COVERAGE_FORMAT2_HEADER_SIZE +
+                        rangeIndex * GPOS_COVERAGE_RANGE_RECORD_SIZE
+                    val startGlyphId = table.readUInt16BE(
+                        rangeStart,
+                        "OpenType GSUB coverage format 2 range $rangeIndex startGlyphID",
+                    )
+                    val endGlyphId = table.readUInt16BE(
+                        rangeStart + UINT16_BYTE_LENGTH,
+                        "OpenType GSUB coverage format 2 range $rangeIndex endGlyphID",
+                    )
+                    require(endGlyphId >= startGlyphId) {
+                        "OpenType GSUB coverage format 2 range $rangeIndex endGlyphID $endGlyphId is before startGlyphID $startGlyphId."
+                    }
+                    val glyphCount = endGlyphId - startGlyphId + 1
+                    require(glyphs.size + glyphCount <= GPOS_MAX_COVERAGE_GLYPHS) {
+                        "OpenType GSUB coverage table expands beyond $GPOS_MAX_COVERAGE_GLYPHS glyphs."
+                    }
+                    for (glyphId in startGlyphId..endGlyphId) {
+                        glyphs += glyphId
+                    }
+                }
+                glyphs
+            }
+            else -> throw IllegalArgumentException("OpenType GSUB coverage format $format is not supported.")
+        }
+    }
+
+    private fun ByteArray.checkedOffset(base: Int, offset: Int, label: String): Int {
+        val absolute = base.toLong() + offset.toLong()
+        require(absolute in 0..Int.MAX_VALUE.toLong()) {
+            "$label offset $offset from base $base is outside addressable Int range."
+        }
+        return absolute.toInt()
+    }
+
+    private fun ByteArray.requireArrayRange(
+        offset: Int,
+        count: Int,
+        recordSize: Int,
+        label: String,
+    ) {
+        val length = count.toLong() * recordSize.toLong()
+        require(length <= Int.MAX_VALUE.toLong()) {
+            "$label byte length $length exceeds addressable Int range."
+        }
+        requireRange(offset, length.toInt(), label)
+    }
+
+    private data class OpenTypeGsubFeatureLookupRef(
+        val featureTag: String,
+        val lookupIndex: Int,
+    )
+}
+
+private const val GSUB_SINGLE_SUBSTITUTION_LOOKUP_TYPE = 1
+private const val GSUB_MULTIPLE_SUBSTITUTION_LOOKUP_TYPE = 2
+private const val GSUB_LIGATURE_SUBSTITUTION_LOOKUP_TYPE = 4
+
+/**
  * Parsed bounded subset of OpenType GPOS pair-position kerning.
  *
  * This model intentionally exposes only direct glyph-pair `xAdvance`
@@ -6889,12 +7736,15 @@ object OpenTypeAvarTableParser {
  * as immutable byte values.
  * @property kern Parsed legacy `kern` table data when a bounded version `0`
  * table with horizontal format `0` subtables is present.
+ * @property gsub Parsed bounded GSUB simple substitution lookups when
+ * supported substitution subtables are present.
  * @property gposPairs Parsed GPOS pair-position `kern` feature adjustments
  * when supported pair-position subtables are present.
  */
 data class OpenTypeLayoutTables(
     val tables: Map<SFNTTableTag, List<Int>> = emptyMap(),
     val kern: OpenTypeKernTable? = null,
+    val gsub: OpenTypeGsubTable? = null,
     val gposPairs: OpenTypeGposPairTable? = null,
 )
 

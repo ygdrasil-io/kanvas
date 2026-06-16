@@ -1,6 +1,6 @@
 # Pure Kotlin Text Coverage And Ticket Matrix
 
-Date: 2026-06-14
+Date: 2026-06-16
 Status: coordination evidence
 
 This report maps `.upstream/specs/pure-kotlin-text/` to implementation slices.
@@ -31,7 +31,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 |---|---|---|---|
 | `00-architecture-and-module-boundaries.md` | Module ownership, dependency direction, boundary contracts, serializable diagnostics. | `font/core`, `font/sfnt`, `font/scaler`, `font/text`, `font/glyph`, `font/gpu-api`, `gpu-renderer/text`. | Boundary tests, no forbidden dependencies, dumps with no object identity. |
 | `01-font-source-sfnt-and-scalers.md` | Font sources, TTC/OTC, `cmap`, TrueType `glyf`, CFF/CFF2, variations, fallback catalog. | `font/core`, `font/sfnt`, `font/scaler`, current `kanvas-skia` OpenType backend. | TTF/TTC/malformed fixtures, path/metric dumps, variation fixtures, stable `font.*` diagnostics. |
-| `02-opentype-layout-shaping-engine.md` | Unicode data, bidi, script itemization, GSUB/GPOS/GDEF, clusters, fallback runs, script matrix. | `font/text` basic segmentation/bidi/script, bounded kerning and GPOS pair slice. | One positive and one refusal fixture per required script row, shaping dumps, `text.shaping.*` diagnostics. |
+| `02-opentype-layout-shaping-engine.md` | Unicode data, bidi, script itemization, GSUB/GPOS/GDEF, clusters, fallback runs, script matrix. | `font/text` basic segmentation/bidi/script, bounded GSUB single/multiple/ligature plus bounded kerning and GPOS pair slices. | One positive and one refusal fixture per required script row, shaping dumps, `text.shaping.*` diagnostics. |
 | `03-paragraph-engine.md` | Paragraph builder, style runs, wrapping, bidi lines, ellipsis, placeholders, selection, hit testing. | `font/text` paragraph skeleton and deterministic simple line breaker. | Layout dumps, paragraph fixtures, hit-test/selection evidence. |
 | `04-glyph-representation-and-artifacts.md` | Outline, A8, SDF, atlas, strike keys, cache, invalidation, CPUPreparedGPU artifacts. | `font/glyph`, `font/gpu-api`, current `SkCpuGlyphCache` prototype. | Mask/SDF hashes, atlas dumps, stale/capacity refusals, `text.glyph.*` diagnostics. |
 | `05-color-fonts-bitmap-svg-emoji.md` | COLR/CPAL, COLRv1 graph, PNG bitmap glyphs, SVG-in-OpenType, emoji dispatch. | `font/glyph/color`, `font/sfnt` metadata, current OpenType color metadata. | COLR/PNG/SVG/emoji fixtures, budget/security refusals, non-PNG refusal evidence. |
@@ -50,7 +50,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | PKT-04 TrueType `glyf` and variation evidence | Implementable now | Simple/composite outlines, component transforms, variation metadata and metrics dumps. | `font/scaler/src/main`, `font/scaler/src/test`. | Path hashes, bounds, variation delta fixtures. |
 | PKT-05 CFF/CFF2 vertical | Tracked-gap; generated fixture parser/scaler/operator/table/variation-store slices implemented | CFF INDEX/dicts/Type 2 operators/CFF2 variation. | `font/scaler/src/main`, `font/scaler/src/test`. | Generated CFF/CFF2 tables now reach public scalers with deterministic table evidence, malformed-table refusals, and minimal CFF2 VariationStore region lookup; complete support still needs broader real-font corpus coverage. |
 | PKT-06 Unicode data and script matrix seed | Implementable now | Pinned Unicode version surface, basic segmentation/bidi/script dumps. | `font/text/src/main/.../shaping`, `font/text/src/test`. | Script/bidi/grapheme tests and explicit unsupported-script diagnostics. |
-| PKT-07 GSUB/GPOS simple script shaping | Dependency-gated | Latin/Greek/Cyrillic/Hebrew defaults, features, clusters, fallback runs. | `font/text`, `font/sfnt`. | Requires parsed layout table fixtures and feature ordering evidence. |
+| PKT-07 GSUB/GPOS simple script shaping | Partially implementable; bounded GSUB/GPOS simple slices in review | Latin/Greek/Cyrillic/Hebrew defaults, features, clusters, fallback runs. | `font/text`, `font/sfnt`. | Requires parsed layout table fixtures and feature ordering evidence. |
 | PKT-08 complex shaping rows | Dependency-gated | Arabic, Devanagari, Thai, CJK, emoji shaping support/refusals. | `font/text`. | Requires PKT-07 and per-row positive/refusal fixtures. |
 | PKT-09 paragraph semantic layout | Partially implementable; full claim gated | Rich styles, bidi visual lines, placeholders, ellipsis, selection, hit testing. | `font/text/src/main/.../paragraph`, `font/text/src/test`. | Layout dumps; full claim waits on shaping/fallback support. |
 | PKT-10 A8/SDF glyph artifact planner | Implementable now | Route policy, key preimage, A8/SDF generation, atlas capacity/stale diagnostics. | `font/glyph`, `font/gpu-api`. | Mask/SDF hashes, atlas dump tests, stable `text.glyph.*` refusals. |
@@ -1634,6 +1634,51 @@ Remaining gate: this is contract and dump evidence only. It does not implement
 GSUB or GPOS lookup behavior, required script support, font fallback policy,
 paragraph layout, glyph artifacts, CPU oracle support promotion, or any GPU
 text route.
+
+### KFONT-M6-002: GSUB Single/Multiple/Ligature Lookup Slice
+
+Status: implemented as a bounded review slice; independent review pending.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m6-002-gsub-simple-lookups.md`
+
+Evidence:
+
+- `OpenTypeLayoutTables` now exposes parsed `gsub` facts while keeping the row
+  `tracked-gap` and without promoting broader shaping support claims.
+- `OpenTypeGsubTableParser` parses GSUB LookupType 1 single substitution,
+  LookupType 2 multiple substitution, and LookupType 4 ligature substitution
+  for active `DFLT`/`latn` feature traversal and supported coverage formats.
+- `BasicOpenTypeShapingEngine` applies parsed single, multiple, and ligature
+  substitutions while preserving cluster ranges across one-to-one, one-to-many,
+  and many-to-one changes.
+- Explicit feature disable remains supported for this slice via
+  `FeatureSet.values[tag] == 0`, including `liga=0`, while full default feature
+  policy remains owned by `KFONT-M6-006`.
+- `SFNTSurfaceTest` asserts deterministic extraction of parsed GSUB lookups
+  from a synthetic font table alongside preserved raw `GSUB` bytes.
+- `TextStackSurfaceTest` asserts glyph IDs, cluster ranges, and advances for
+  single substitution, multiple substitution, ligature formation, and disabled
+  ligature behavior.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserExposesParsedGsubSingleMultipleAndLigatureLookupsInLayout
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesParsedGsubSingleMultipleAndLigatureLookups --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineRespectsDisabledParsedGsubLigatureFeature
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest
+```
+
+Remaining gate: this slice does not yet promote `gsub-trace.json` or
+`shaped-glyph-run.json` contract evidence, does not add malformed/refusal GSUB
+fixture coverage with stable diagnostics, and does not prove explicit
+`ShapingPlan`-driven feature ordering or broader script-policy support.
 
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 

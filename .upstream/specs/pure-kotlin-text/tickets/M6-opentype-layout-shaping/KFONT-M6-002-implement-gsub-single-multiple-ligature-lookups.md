@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-002"
 title: "Implement GSUB single/multiple/ligature lookups"
-status: "proposed"
+status: "review"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
@@ -70,6 +70,12 @@ data class GsubTraceEvent(
 - [ ] Malformed coverage, invalid sequence length, and invalid ligature component fixtures emit `text.shaping.lookup-malformed`.
 - [ ] Substitution output is deterministic and independent of external shaping engines.
 
+## Current Slice
+
+- Parsed `GSUB` table facts now surface LookupType 1 single substitution, LookupType 2 multiple substitution, and LookupType 4 ligature substitution through `OpenTypeLayoutTables`.
+- `BasicOpenTypeShapingEngine` now applies those parsed lookups in active feature traversal order, preserves cluster ranges across one-to-one, one-to-many, and many-to-one substitutions, and honors explicit feature disable requests such as `liga=0`.
+- This slice does not yet promote `OpenTypeLayoutEngineContract` trace dumps, malformed/refusal fixtures, or full `ShapingPlan`-driven feature-order behavior.
+
 ## Required Evidence
 
 - `gsub-trace.json` for single, multiple, ligature, no-match, and malformed lookup fixtures.
@@ -93,12 +99,16 @@ data class GsubTraceEvent(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test --tests '*GsubBasic*' --tests '*Ligature*'
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserExposesParsedGsubSingleMultipleAndLigatureLookupsInLayout
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesParsedGsubSingleMultipleAndLigatureLookups --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineRespectsDisabledParsedGsubLigatureFeature
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest
 ```
 
 ## Status Notes
 
 - `proposed`: Basic GSUB behavior depends on the M6 contract and M2 table facts.
+- `review`: Bounded parser/runtime support for GSUB LookupType 1/2/4 is implemented and freshly validated in `font/sfnt` and `font/text` surface tests. Remaining gates: promote `gsub-trace.json` and `shaped-glyph-run.json` contract evidence, add malformed/refusal fixture coverage with stable diagnostics, and prove explicit `ShapingPlan`-driven feature ordering plus script-policy boundaries before `done`.
 - Move to `ready` only after fixture fonts and trace fields are reviewed.
 
 ## Linear Labels
