@@ -2168,7 +2168,56 @@ rtk git diff --check
 
 Remaining gate: this checkpoint does not claim GPU upload execution, WebGPU
 texture ownership, GPU sampling validation, or `dftext` retirement. Next gates
-remain `KFONT-M9-006` and the M11 GPU text handoff chain.
+remain the M11 GPU text handoff chain and any future M12 budget-promotion
+policy.
+
+### KFONT-M9-006: Add glyph cache telemetry
+
+Status: done; freshly validated.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/glyph/glyph-cache-inventory.json`
+- `reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m9-006-glyph-cache-telemetry.md`
+- `reports/pure-kotlin-text/font-diagnostic-taxonomy.json`
+
+Evidence:
+
+- `GlyphCacheInventoryDump` now records resident and evicted cache rows with
+  stable key preimages, preimage hashes, route-specific strike-key hashes,
+  resident bytes, generation, and invalidation tokens.
+- `GlyphCacheTelemetryDump` records deterministic cold and warm advisory
+  samples with route counts, cache hit/miss, eviction/invalidation counters,
+  resident bytes, upload-preparation bytes, and fixture timing counters.
+- `GlyphCacheBudgetRefusal` records cache-domain budget overruns with stable
+  `text.glyph.artifact-budget-exceeded` linkage and key-hash evidence.
+- `GlyphRouteDiagnostic.telemetryUnavailable(...)` now exposes the stable
+  `text.glyph.telemetry-unavailable` refusal so missing telemetry keeps the row
+  blocked instead of fabricating support.
+- Dump index, fixture manifest, fixture inventory, dashboard, and diagnostic
+  taxonomy now classify cache telemetry as CPU-only advisory evidence and keep
+  GPU text claims plus `dftext` retirement explicitly gated elsewhere.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*GlyphCache*'
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk git diff --check
+```
+
+Remaining gate: this checkpoint does not claim runtime GPU upload execution,
+WebGPU timing, blocking performance budgets, renderer resource ownership, or
+`dftext` retirement. Next gates remain the M11 GPU text handoff chain and any
+future M12 promotion of advisory cache budgets.
 
 ### PKT-10B: Glyph Artifact Plan Decision Trace Dump
 

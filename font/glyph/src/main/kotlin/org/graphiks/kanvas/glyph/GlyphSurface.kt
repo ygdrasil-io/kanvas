@@ -2518,6 +2518,435 @@ data class GlyphRunCacheInventory(
 }
 
 /**
+ * One resident or evicted glyph cache artifact captured for deterministic cache evidence.
+ *
+ * The entry preserves the stable strike preimage used for cache addressing, the route-specific
+ * strike hash, memory accounting, and optional lifecycle tokens without retaining JVM or GPU
+ * handles.
+ */
+data class GlyphCacheInventoryEntry(
+    val artifactType: String,
+    val glyphId: Int,
+    val keyPreimage: String,
+    val keyPreimageSha256: String,
+    val strikeKeySha256: String,
+    val residentBytes: Long,
+    val lifecycleState: String,
+    val generation: Long? = null,
+    val invalidationToken: String? = null,
+) {
+    init {
+        require(artifactType.isNotBlank()) { "artifactType must not be blank." }
+        require(glyphId >= 0) { "glyphId must be non-negative." }
+        require(keyPreimage.isNotBlank()) { "keyPreimage must not be blank." }
+        require(keyPreimageSha256.matches(Regex("[0-9a-f]{64}"))) {
+            "keyPreimageSha256 must be lowercase hexadecimal."
+        }
+        require(strikeKeySha256.matches(Regex("[0-9a-f]{64}"))) {
+            "strikeKeySha256 must be lowercase hexadecimal."
+        }
+        require(residentBytes >= 0L) { "residentBytes must be non-negative." }
+        require(lifecycleState == ResidentState || lifecycleState == EvictedState) {
+            "lifecycleState must be resident or evicted."
+        }
+        generation?.let { require(it >= 0L) { "generation must be non-negative." } }
+        invalidationToken?.let { require(it.isNotBlank()) { "invalidationToken must not be blank." } }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("artifactType", artifactType, comma = true)
+        appendGlyphJsonField("glyphId", glyphId, comma = true)
+        appendGlyphJsonField("keyPreimage", keyPreimage, comma = true)
+        appendGlyphJsonField("keyPreimageSha256", keyPreimageSha256, comma = true)
+        appendGlyphJsonField("strikeKeySha256", strikeKeySha256, comma = true)
+        appendGlyphJsonField("residentBytes", residentBytes, comma = true)
+        appendGlyphJsonField("lifecycleState", lifecycleState, comma = true)
+        appendGlyphJsonNullableField("generation", generation, comma = true)
+        appendGlyphJsonNullableField("invalidationToken", invalidationToken, comma = false)
+        append("}")
+    }
+
+    companion object {
+        const val ResidentState: String = "resident"
+        const val EvictedState: String = "evicted"
+
+        fun fromRepresentation(
+            strikeKey: GlyphStrikeKey,
+            representation: GlyphRepresentation,
+            lifecycleState: String,
+            generation: Long? = null,
+            invalidationToken: String? = null,
+        ): GlyphCacheInventoryEntry {
+            val keyPreimage = strikeKey.canonicalPreimage(representation.glyphId).trimEnd()
+            val route = strikeKey.representationRoute.trim().ifEmpty {
+                representation.inventoryArtifactType()
+            }
+            return GlyphCacheInventoryEntry(
+                artifactType = representation.inventoryArtifactType(),
+                glyphId = representation.glyphId,
+                keyPreimage = keyPreimage,
+                keyPreimageSha256 = glyphSha256(keyPreimage.toByteArray(Charsets.UTF_8)),
+                strikeKeySha256 = strikeKey.artifactPlanKeySha256(representation.glyphId, route),
+                residentBytes = representation.approximateCacheBytes(),
+                lifecycleState = lifecycleState,
+                generation = generation,
+                invalidationToken = invalidationToken,
+            )
+        }
+    }
+}
+
+/**
+ * Deterministic cache inventory dump for `glyph-cache-inventory.json`.
+ */
+class GlyphCacheInventoryDump(
+    val dumpId: String,
+    ownerTickets: List<String>,
+    fixtureIds: List<String>,
+    val budgetBytes: Long,
+    val maxEntries: Int,
+    residentEntries: List<GlyphCacheInventoryEntry>,
+    evictedEntries: List<GlyphCacheInventoryEntry>,
+    requiredDiagnostics: List<String>,
+    nonClaims: List<String>,
+) {
+    val ownerTickets: List<String> = ownerTickets.toList()
+    val fixtureIds: List<String> = fixtureIds.toList()
+    val residentEntries: List<GlyphCacheInventoryEntry> = residentEntries.toList()
+    val evictedEntries: List<GlyphCacheInventoryEntry> = evictedEntries.toList()
+    val requiredDiagnostics: List<String> = requiredDiagnostics.toList()
+    val nonClaims: List<String> = nonClaims.toList()
+
+    init {
+        require(dumpId.isNotBlank()) { "dumpId must not be blank." }
+        require(ownerTickets.isNotEmpty()) { "ownerTickets must be non-empty." }
+        require(fixtureIds.isNotEmpty()) { "fixtureIds must be non-empty." }
+        require(budgetBytes >= 0L) { "budgetBytes must be non-negative." }
+        require(maxEntries >= 0) { "maxEntries must be non-negative." }
+        require(this.residentEntries.all { entry -> entry.lifecycleState == GlyphCacheInventoryEntry.ResidentState }) {
+            "residentEntries must use lifecycleState resident."
+        }
+        require(this.evictedEntries.all { entry -> entry.lifecycleState == GlyphCacheInventoryEntry.EvictedState }) {
+            "evictedEntries must use lifecycleState evicted."
+        }
+    }
+
+    val entryCount: Int
+        get() = residentEntries.size + evictedEntries.size
+
+    val residentBytes: Long
+        get() = residentEntries.sumOf { entry -> entry.residentBytes }
+
+    val evictedBytes: Long
+        get() = evictedEntries.sumOf { entry -> entry.residentBytes }
+
+    val dumpSha256: String
+        get() = glyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    fun toCanonicalJson(): String = canonicalJson(includeDumpSha256 = true)
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("schemaVersion", 1, comma = true)
+        appendGlyphJsonField("dumpId", dumpId, comma = true)
+        append("  \"ownerTickets\": ")
+        appendGlyphStringArrayMultilineJson(ownerTickets, indent = "  ")
+        append(",\n")
+        append("  \"fixtureIds\": ")
+        appendGlyphStringArrayMultilineJson(fixtureIds, indent = "  ")
+        append(",\n")
+        appendGlyphJsonField("budgetBytes", budgetBytes, comma = true)
+        appendGlyphJsonField("maxEntries", maxEntries, comma = true)
+        appendGlyphJsonField("entryCount", entryCount, comma = true)
+        appendGlyphJsonField("residentBytes", residentBytes, comma = true)
+        appendGlyphJsonField("evictedBytes", evictedBytes, comma = true)
+        append("  \"residentEntries\": ")
+        appendGlyphCacheInventoryEntriesJson(residentEntries)
+        append(",\n")
+        append("  \"evictedEntries\": ")
+        appendGlyphCacheInventoryEntriesJson(evictedEntries)
+        append(",\n")
+        append("  \"requiredDiagnostics\": ")
+        appendGlyphStringArrayMultilineJson(requiredDiagnostics, indent = "  ")
+        append(",\n")
+        append("  \"nonClaims\": ")
+        appendGlyphStringArrayMultilineJson(nonClaims, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+}
+
+/**
+ * Sample metadata for advisory glyph cache telemetry.
+ */
+data class GlyphCacheTelemetryMetadata(
+    val environmentLabel: String,
+    val fontSourceSet: String,
+    val unicodeVersion: String,
+    val cacheState: String,
+    val sampleLabel: String,
+    val sampleCount: Int,
+    val timingMode: String = "fixture-counter",
+    val releaseGatePromoted: Boolean = false,
+) {
+    init {
+        require(environmentLabel.isNotBlank()) { "environmentLabel must not be blank." }
+        require(fontSourceSet.isNotBlank()) { "fontSourceSet must not be blank." }
+        require(unicodeVersion.isNotBlank()) { "unicodeVersion must not be blank." }
+        require(cacheState.isNotBlank()) { "cacheState must not be blank." }
+        require(sampleLabel.isNotBlank()) { "sampleLabel must not be blank." }
+        require(sampleCount >= 0) { "sampleCount must be non-negative." }
+        require(timingMode.isNotBlank()) { "timingMode must not be blank." }
+        require(!releaseGatePromoted) {
+            "Glyph cache telemetry is advisory-only and must not promote a release gate."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("environmentLabel", environmentLabel, comma = true)
+        appendGlyphJsonField("fontSourceSet", fontSourceSet, comma = true)
+        appendGlyphJsonField("unicodeVersion", unicodeVersion, comma = true)
+        appendGlyphJsonField("cacheState", cacheState, comma = true)
+        appendGlyphJsonField("sampleLabel", sampleLabel, comma = true)
+        appendGlyphJsonField("sampleCount", sampleCount, comma = true)
+        appendGlyphJsonField("timingMode", timingMode, comma = true)
+        appendGlyphJsonField("releaseGatePromoted", releaseGatePromoted, comma = false)
+        append("\n}")
+    }
+}
+
+/**
+ * One route-count observation in a glyph cache telemetry sample.
+ */
+data class GlyphCacheRouteCount(
+    val route: String,
+    val count: Int,
+) {
+    init {
+        require(route.isNotBlank()) { "route must not be blank." }
+        require(count >= 0) { "count must be non-negative." }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("route", route, comma = true)
+        appendGlyphJsonField("count", count, comma = false)
+        append("\n}")
+    }
+}
+
+/**
+ * Deterministic timing summary in advisory fixture ticks.
+ */
+data class GlyphCacheTimingStats(
+    val metricName: String,
+    val sampleCount: Int,
+    val median: Long,
+    val p90: Long,
+    val max: Long,
+    val unit: String = "fixture-ticks",
+) {
+    init {
+        require(metricName.isNotBlank()) { "metricName must not be blank." }
+        require(sampleCount >= 0) { "sampleCount must be non-negative." }
+        require(median >= 0L) { "median must be non-negative." }
+        require(p90 >= 0L) { "p90 must be non-negative." }
+        require(max >= 0L) { "max must be non-negative." }
+        require(median <= p90 && p90 <= max) { "median <= p90 <= max must hold." }
+        require(unit.isNotBlank()) { "unit must not be blank." }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("metricName", metricName, comma = true)
+        appendGlyphJsonField("sampleCount", sampleCount, comma = true)
+        appendGlyphJsonField("median", median, comma = true)
+        appendGlyphJsonField("p90", p90, comma = true)
+        appendGlyphJsonField("max", max, comma = true)
+        appendGlyphJsonField("unit", unit, comma = false)
+        append("\n}")
+    }
+}
+
+/**
+ * Advisory budget-refusal record tied to one strike-key preimage.
+ */
+data class GlyphCacheBudgetRefusal(
+    val diagnosticCode: String,
+    val cacheDomain: String,
+    val keyPreimageSha256: String,
+    val observedBytes: Long,
+    val advisoryLimitBytes: Long,
+) {
+    init {
+        require(diagnosticCode.isNotBlank()) { "diagnosticCode must not be blank." }
+        require(cacheDomain.isNotBlank()) { "cacheDomain must not be blank." }
+        require(keyPreimageSha256.matches(Regex("[0-9a-f]{64}"))) {
+            "keyPreimageSha256 must be lowercase hexadecimal."
+        }
+        require(observedBytes >= 0L) { "observedBytes must be non-negative." }
+        require(advisoryLimitBytes >= 0L) { "advisoryLimitBytes must be non-negative." }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("diagnosticCode", diagnosticCode, comma = true)
+        appendGlyphJsonField("cacheDomain", cacheDomain, comma = true)
+        appendGlyphJsonField("keyPreimageSha256", keyPreimageSha256, comma = true)
+        appendGlyphJsonField("observedBytes", observedBytes, comma = true)
+        appendGlyphJsonField("advisoryLimitBytes", advisoryLimitBytes, comma = false)
+        append("\n}")
+    }
+
+    companion object {
+        fun fromStrikeKey(
+            strikeKey: GlyphStrikeKey,
+            cacheDomain: String,
+            observedBytes: Long,
+            advisoryLimitBytes: Long,
+        ): GlyphCacheBudgetRefusal {
+            require(strikeKey.glyphId != null) { "Glyph strike key must include glyphId for budget refusals." }
+            val keyPreimage = strikeKey.canonicalPreimage().trimEnd()
+            return GlyphCacheBudgetRefusal(
+                diagnosticCode = GlyphArtifactBudgetExceededDiagnosticRoute,
+                cacheDomain = cacheDomain,
+                keyPreimageSha256 = glyphSha256(keyPreimage.toByteArray(Charsets.UTF_8)),
+                observedBytes = observedBytes,
+                advisoryLimitBytes = advisoryLimitBytes,
+            )
+        }
+    }
+}
+
+/**
+ * One advisory telemetry sample for cold or warm glyph cache evidence.
+ */
+class GlyphCacheTelemetrySample(
+    val metadata: GlyphCacheTelemetryMetadata,
+    routeCounts: List<GlyphCacheRouteCount>,
+    timings: List<GlyphCacheTimingStats>,
+    val cacheHitCount: Int,
+    val cacheMissCount: Int,
+    val evictionCount: Int,
+    val invalidationCount: Int,
+    val residentBytes: Long,
+    val uploadPreparationBytes: Long,
+    val artifactBudgetRefusalCount: Int,
+    budgetRefusals: List<GlyphCacheBudgetRefusal>,
+) {
+    val routeCounts: List<GlyphCacheRouteCount> =
+        routeCounts.sortedWith(compareBy({ it.route }, { it.count }))
+    val timings: List<GlyphCacheTimingStats> =
+        timings.sortedWith(compareBy({ it.metricName }, { it.sampleCount }, { it.median }, { it.p90 }, { it.max }, { it.unit }))
+    val budgetRefusals: List<GlyphCacheBudgetRefusal> =
+        budgetRefusals.sortedWith(compareBy({ it.cacheDomain }, { it.keyPreimageSha256 }, { it.observedBytes }, { it.advisoryLimitBytes }))
+
+    init {
+        require(cacheHitCount >= 0) { "cacheHitCount must be non-negative." }
+        require(cacheMissCount >= 0) { "cacheMissCount must be non-negative." }
+        require(evictionCount >= 0) { "evictionCount must be non-negative." }
+        require(invalidationCount >= 0) { "invalidationCount must be non-negative." }
+        require(residentBytes >= 0L) { "residentBytes must be non-negative." }
+        require(uploadPreparationBytes >= 0L) { "uploadPreparationBytes must be non-negative." }
+        require(artifactBudgetRefusalCount >= 0) { "artifactBudgetRefusalCount must be non-negative." }
+        require(artifactBudgetRefusalCount == this.budgetRefusals.size) {
+            "artifactBudgetRefusalCount must match budgetRefusals.size."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  \"metadata\": ")
+        append(metadata.toCanonicalJson().prependIndent("  ").trimStart())
+        append(",\n")
+        append("  \"routeCounts\": ")
+        appendGlyphCacheRouteCountsJson(routeCounts)
+        append(",\n")
+        append("  \"timings\": ")
+        appendGlyphCacheTimingStatsJson(timings)
+        append(",\n")
+        appendGlyphJsonField("cacheHitCount", cacheHitCount, comma = true)
+        appendGlyphJsonField("cacheMissCount", cacheMissCount, comma = true)
+        appendGlyphJsonField("evictionCount", evictionCount, comma = true)
+        appendGlyphJsonField("invalidationCount", invalidationCount, comma = true)
+        appendGlyphJsonField("residentBytes", residentBytes, comma = true)
+        appendGlyphJsonField("uploadPreparationBytes", uploadPreparationBytes, comma = true)
+        appendGlyphJsonField("artifactBudgetRefusalCount", artifactBudgetRefusalCount, comma = true)
+        append("  \"budgetRefusals\": ")
+        appendGlyphCacheBudgetRefusalsJson(budgetRefusals)
+        append("\n}")
+    }
+}
+
+/**
+ * Deterministic advisory cache telemetry dump for `glyph-cache-telemetry.json`.
+ */
+class GlyphCacheTelemetryDump(
+    val dumpId: String,
+    ownerTickets: List<String>,
+    fixtureIds: List<String>,
+    samples: List<GlyphCacheTelemetrySample>,
+    requiredDiagnostics: List<String>,
+    nonClaims: List<String>,
+) {
+    val ownerTickets: List<String> = ownerTickets.toList()
+    val fixtureIds: List<String> = fixtureIds.toList()
+    val samples: List<GlyphCacheTelemetrySample> = samples.toList()
+    val requiredDiagnostics: List<String> = requiredDiagnostics.toList()
+    val nonClaims: List<String> = nonClaims.toList()
+
+    init {
+        require(dumpId.isNotBlank()) { "dumpId must not be blank." }
+        require(ownerTickets.isNotEmpty()) { "ownerTickets must be non-empty." }
+        require(fixtureIds.isNotEmpty()) { "fixtureIds must be non-empty." }
+        require(this.samples.isNotEmpty()) { "samples must be non-empty." }
+    }
+
+    val sampleCount: Int
+        get() = samples.size
+
+    val dumpSha256: String
+        get() = glyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    fun toCanonicalJson(): String = canonicalJson(includeDumpSha256 = true)
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("schemaVersion", 1, comma = true)
+        appendGlyphJsonField("dumpId", dumpId, comma = true)
+        append("  \"ownerTickets\": ")
+        appendGlyphStringArrayMultilineJson(ownerTickets, indent = "  ")
+        append(",\n")
+        append("  \"fixtureIds\": ")
+        appendGlyphStringArrayMultilineJson(fixtureIds, indent = "  ")
+        append(",\n")
+        appendGlyphJsonField("sampleCount", sampleCount, comma = true)
+        append("  \"samples\": ")
+        appendGlyphCacheTelemetrySamplesJson(samples)
+        append(",\n")
+        append("  \"requiredDiagnostics\": ")
+        appendGlyphStringArrayMultilineJson(requiredDiagnostics, indent = "  ")
+        append(",\n")
+        append("  \"nonClaims\": ")
+        appendGlyphStringArrayMultilineJson(nonClaims, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+}
+
+/**
  * Deterministic in-memory implementation of [GlyphCache] for module-local glyph planning.
  *
  * The cache keys entries by every strike input that can affect representation reuse: typeface,
@@ -2633,6 +3062,24 @@ data class GlyphRouteDiagnostic(
                 message = "Glyph atlas generation is stale for glyph $glyphLabel: " +
                     "artifactGeneration=$artifactGeneration, currentGeneration=$currentGeneration, " +
                     "invalidationToken=$normalizedToken.",
+                severity = "warning",
+            )
+        }
+
+        /**
+         * Builds an advisory telemetry-unavailable diagnostic for cache evidence generation.
+         */
+        fun telemetryUnavailable(
+            cacheDomain: String,
+            detail: String,
+        ): GlyphRouteDiagnostic {
+            val normalizedDomain = cacheDomain.trim().ifEmpty { "glyph-cache" }
+            val normalizedDetail = detail.trim().ifEmpty { "unspecified" }
+            return GlyphRouteDiagnostic(
+                glyphId = null,
+                route = GlyphTelemetryUnavailableDiagnosticRoute,
+                message = "Glyph cache telemetry is unavailable for cacheDomain=$normalizedDomain: " +
+                    "detail=$normalizedDetail.",
                 severity = "warning",
             )
         }
@@ -2802,6 +3249,7 @@ private const val GlyphSDFTransformUnsupportedDiagnosticRoute = "text.glyph.SDF-
 private const val GlyphA8GenerationFailedDiagnosticRoute = "text.glyph.A8-generation-failed"
 private const val GlyphSDFGenerationFailedDiagnosticRoute = "text.glyph.SDF-generation-failed"
 private const val GlyphArtifactBudgetExceededDiagnosticRoute = "text.glyph.artifact-budget-exceeded"
+private const val GlyphTelemetryUnavailableDiagnosticRoute = "text.glyph.telemetry-unavailable"
 private const val FallbackPolicySelectedFirstRequestedRoute = "selected-first-requested-route"
 private const val FallbackPolicyFallbackSelectedAfterRejections = "fallback-selected-after-rejections"
 private const val FallbackPolicyRefuseNoRequestedRepresentation = "refuse-no-requested-representation"
@@ -3988,6 +4436,21 @@ private fun GlyphStrikeKey.artifactPlanKeySha256(glyphId: Int, route: String): S
     ).preimageSha256(glyphId)
 
 /**
+ * Returns a stable artifact-type label for cache inventory evidence.
+ */
+private fun GlyphRepresentation.inventoryArtifactType(): String =
+    when (this) {
+        is OutlineGlyphRepresentation -> "OutlineGlyphRepresentation"
+        is A8GlyphMask -> "A8GlyphMask"
+        is SDFGlyphMask -> "SDFGlyphMask"
+        is GlyphArtifactPlanRef -> "GlyphArtifactPlanRef"
+        is ColorGlyphPlanRef -> "ColorGlyphPlanRef"
+        is BitmapGlyphPlanRef -> "BitmapGlyphPlanRef"
+        is SVGGlyphPlanRef -> "SVGGlyphPlanRef"
+        else -> this::class.simpleName ?: "GlyphRepresentation"
+    }
+
+/**
  * Estimates cache memory for a representation without depending on JVM object layout.
  *
  * @return approximate byte cost charged to [GlyphCacheBudget.maxBytes].
@@ -4323,6 +4786,71 @@ private fun StringBuilder.appendGlyphStringArrayMultilineJson(values: List<Strin
 }
 
 /**
+ * Serializes glyph cache inventory entries.
+ */
+private fun StringBuilder.appendGlyphCacheInventoryEntriesJson(entries: List<GlyphCacheInventoryEntry>) {
+    if (entries.isEmpty()) {
+        append("[]")
+        return
+    }
+    append("[\n")
+    append(entries.joinToString(",\n") { entry -> entry.toCanonicalJson().prependIndent("    ") })
+    append("\n  ]")
+}
+
+/**
+ * Serializes glyph cache route counts.
+ */
+private fun StringBuilder.appendGlyphCacheRouteCountsJson(counts: List<GlyphCacheRouteCount>) {
+    if (counts.isEmpty()) {
+        append("[]")
+        return
+    }
+    append("[\n")
+    append(counts.joinToString(",\n") { count -> count.toCanonicalJson().prependIndent("    ") })
+    append("\n  ]")
+}
+
+/**
+ * Serializes glyph cache timing summaries.
+ */
+private fun StringBuilder.appendGlyphCacheTimingStatsJson(stats: List<GlyphCacheTimingStats>) {
+    if (stats.isEmpty()) {
+        append("[]")
+        return
+    }
+    append("[\n")
+    append(stats.joinToString(",\n") { item -> item.toCanonicalJson().prependIndent("    ") })
+    append("\n  ]")
+}
+
+/**
+ * Serializes advisory budget-refusal rows.
+ */
+private fun StringBuilder.appendGlyphCacheBudgetRefusalsJson(refusals: List<GlyphCacheBudgetRefusal>) {
+    if (refusals.isEmpty()) {
+        append("[]")
+        return
+    }
+    append("[\n")
+    append(refusals.joinToString(",\n") { refusal -> refusal.toCanonicalJson().prependIndent("    ") })
+    append("\n  ]")
+}
+
+/**
+ * Serializes glyph cache telemetry samples.
+ */
+private fun StringBuilder.appendGlyphCacheTelemetrySamplesJson(samples: List<GlyphCacheTelemetrySample>) {
+    if (samples.isEmpty()) {
+        append("[]")
+        return
+    }
+    append("[\n")
+    append(samples.joinToString(",\n") { sample -> sample.toCanonicalJson().prependIndent("    ") })
+    append("\n  ]")
+}
+
+/**
  * Serializes strike-key route preimage records.
  */
 private fun StringBuilder.appendGlyphRoutePreimagesJson(records: List<GlyphStrikeKeyRoutePreimage>) {
@@ -4378,9 +4906,37 @@ private fun StringBuilder.appendGlyphJsonNullableField(name: String, value: Int?
 }
 
 /**
+ * Appends a stable nullable long JSON field.
+ */
+private fun StringBuilder.appendGlyphJsonNullableField(name: String, value: Long?, comma: Boolean) {
+    append("  ").append(glyphJsonString(name)).append(": ")
+    append(value?.toString() ?: "null")
+    if (comma) append(",")
+    append("\n")
+}
+
+/**
  * Appends a stable integer JSON field.
  */
 private fun StringBuilder.appendGlyphJsonField(name: String, value: Int, comma: Boolean) {
+    append("  ").append(glyphJsonString(name)).append(": ").append(value)
+    if (comma) append(",")
+    append("\n")
+}
+
+/**
+ * Appends a stable long JSON field.
+ */
+private fun StringBuilder.appendGlyphJsonField(name: String, value: Long, comma: Boolean) {
+    append("  ").append(glyphJsonString(name)).append(": ").append(value)
+    if (comma) append(",")
+    append("\n")
+}
+
+/**
+ * Appends a stable boolean JSON field.
+ */
+private fun StringBuilder.appendGlyphJsonField(name: String, value: Boolean, comma: Boolean) {
     append("  ").append(glyphJsonString(name)).append(": ").append(value)
     if (comma) append(",")
     append("\n")
