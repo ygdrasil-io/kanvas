@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M3-005"
 title: "Add glyf malformed isolation suite"
-status: "proposed"
+status: "done"
 milestone: "M3"
 priority: "P0"
 owner_area: "fixtures"
@@ -65,11 +65,11 @@ data class MalformedGlyfFixture(
 
 ## Acceptance Criteria
 
-- [ ] Each malformed `glyf` fixture has one primary diagnostic and expected isolation action.
-- [ ] Safe glyphs in the same face remain dumpable when `GlyphFailureAction.RefuseGlyph` or `.notdef` substitution is expected.
-- [ ] Composite cycle and missing component cases are diagnosed separately.
-- [ ] Malformed variation data uses `font.variation-data-malformed` or a more precise scaler diagnostic.
-- [ ] The suite stays `fixture-gated` until all listed malformed cases have manifest and dump evidence.
+- [x] Each malformed `glyf` fixture has one primary diagnostic and expected isolation action.
+- [x] Safe glyphs in the same face remain dumpable when `GlyphFailureAction.RefuseGlyph` or `.notdef` substitution is expected.
+- [x] Composite cycle and missing component cases are diagnosed separately.
+- [x] Malformed variation data uses `font.variation-data-malformed` or a more precise scaler diagnostic.
+- [x] The suite stays `fixture-gated` until all listed malformed cases have manifest and dump evidence.
 
 ## Required Evidence
 
@@ -94,13 +94,17 @@ data class MalformedGlyfFixture(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:scaler:test --tests '*MalformedGlyf*' --tests '*GlyphFailurePolicy*'
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*MalformedGlyf*' --tests '*GlyphFailurePolicy*' --tests '*CompositeGlyph*' --tests '*Gvar*'
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py
 ```
 
 ## Status Notes
 
 - `proposed`: Malformed `glyf` cases are specified, but no suite evidence is attached yet.
-- Move to `ready` after composite coverage and phantom/advance delta behavior define scaler refusal boundaries.
+- `done`: `truetype-malformed-glyf-isolation.json` now captures face-level `loca` refusal, per-glyph `glyf` malformed isolation snapshots, positive-control safe glyph dumps, and malformed `gvar` diagnostics while keeping `.notdef` substitution as an explicit non-claim for the current runtime slice.
 
 ## Linear Labels
 
