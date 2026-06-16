@@ -1,8 +1,10 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class GPUBackendRuntimeWgpuSmokeTest {
     @Test
@@ -89,5 +91,63 @@ class GPUBackendRuntimeWgpuSmokeTest {
                 request = request,
             ),
         )
+    }
+
+    @Test
+    fun `backend runtime offscreen encode and read rgba when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(
+                    width = 4,
+                    height = 4,
+                    colorFormat = "rgba8unorm",
+                ),
+            ).use { target ->
+                target.encode(
+                    clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                ) {
+                    drawFullscreenPass(
+                        wgsl = """
+                            struct Uniforms {
+                                color: vec4f,
+                            };
+
+                            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+                            @vertex
+                            fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+                                let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+                                let y = f32(idx & 2u) * 2.0 - 1.0;
+                                return vec4f(x, y, 0.0, 1.0);
+                            }
+
+                            @fragment
+                            fn fs_main() -> @location(0) vec4f {
+                                return uniforms.color;
+                            }
+                        """.trimIndent(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(
+                                rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                    )
+                }
+
+                val rgba = target.readRgba()
+
+                assertEquals(4 * 4 * 4, rgba.size)
+                assertContentEquals(byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()), rgba.copyOfRange(0, 4))
+                assertTrue(rgba.asList().chunked(4).all { pixel -> pixel[3] == 0xFF.toByte() })
+            }
+        }
     }
 }
