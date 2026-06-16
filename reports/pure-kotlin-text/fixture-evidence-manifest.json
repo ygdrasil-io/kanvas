@@ -871,13 +871,13 @@
         "rtk ./gradlew --no-daemon :font:scaler:test"
       ],
       "fixtureCommands": [
-        "Current PKT-04 evidence covers TrueType glyf scaler evidence, composite transform/point-matching/component-count evidence, bounded gvar IUP interpolation, horizontal phantom-point advance deltas, avar-normalized variation dumps, explicit vertical metric present/fallback/diagnostic states, bounded VVAR advance-height deltas, malformed loca/glyf isolation evidence, HVAR-unimplemented warnings, and malformed tuple diagnostics while broader HVAR/MVAR parity and vertical layout claims remain out of scope."
+        "Current PKT-04 evidence covers TrueType glyf scaler evidence, composite transform/point-matching/component-count evidence, bounded gvar IUP interpolation, horizontal phantom-point advance deltas, bounded HVAR advance-width deltas, avar-normalized variation dumps, explicit vertical metric present/fallback/diagnostic states, bounded VVAR advance-height deltas, bounded MVAR vertical global-metric deltas, malformed loca/glyf isolation evidence, and malformed HVAR/MVAR/tuple diagnostics while broader parity and vertical layout claims remain out of scope."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",
         "no-complete-variable-font-support-claim",
         "no-full-iup-interpolation-claim",
-        "no-hvar-vvar-mvar-metrics-claim",
+        "no-complete-hvar-vvar-mvar-parity-claim",
         "no-vertical-layout-claim",
         "no-complete-hinting-vm-claim",
         "no-pixel-perfect-native-scaler-parity-claim",

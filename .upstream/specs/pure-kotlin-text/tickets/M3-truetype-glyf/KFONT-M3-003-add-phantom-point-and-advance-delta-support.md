@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M3-003"
 title: "Add phantom point and advance delta support"
-status: "review"
+status: "done"
 milestone: "M3"
 priority: "P0"
 owner_area: "font-scaler"
@@ -69,7 +69,7 @@ class TrueTypeAdvanceDeltaResolver {
 ## Acceptance Criteria
 
 - [x] Horizontal advance changes caused by phantom points are reflected in `glyph-metrics.json`.
-- [ ] `HVAR`, `VVAR`, and `MVAR` data are applied when fixtures provide them and diagnosed when required data is malformed or unavailable.
+- [x] `HVAR`, `VVAR`, and `MVAR` data are applied when fixtures provide them and diagnosed when required data is malformed or unavailable.
 - [x] Variation coordinates are included in relevant scaler identity or cache keys.
 - [x] Default coordinates match base `hmtx`/`vmtx` metrics when no deltas apply.
 - [x] Missing variation metrics emit `font.metrics-variation-unavailable` or `font.variation-data-malformed` as appropriate.
@@ -96,15 +96,18 @@ class TrueTypeAdvanceDeltaResolver {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:scaler:test --tests '*PhantomPoint*' --tests '*AdvanceDelta*' --tests '*HVAR*'
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*PhantomPoint*' --tests '*AdvanceDelta*' --tests '*Hvar*' --tests '*Mvar*' --tests '*Vvar*'
 ```
 
 ## Status Notes
 
-- `review`: bounded horizontal phantom-point `gvar` metrics evidence is attached in
-  `reports/font/fixtures/expected/scaler/truetype-gvar-iup.json` and summarized in
-  `reports/pure-kotlin-text/2026-06-16-kfont-m3-003-phantom-metrics.md`.
-- Remaining gate before `done`: parse and apply `HVAR`/`VVAR`/`MVAR` deltas when present, and attach a malformed-table diagnostic snapshot instead of the current unimplemented-table warning.
+- `done`: bounded horizontal phantom-point `gvar` metrics evidence remains attached in
+  `reports/font/fixtures/expected/scaler/truetype-gvar-iup.json`; the dump now also records
+  bounded `HVAR` advance-width application plus malformed `HVAR` diagnostics, while
+  `reports/font/fixtures/expected/scaler/truetype-vertical-metrics.json` records bounded
+  `VVAR` advance-height deltas, bounded `MVAR` vertical global-metric deltas, and malformed
+  `MVAR` diagnostics. Fresh validation covers focused `Hvar`/`Mvar`/`Vvar` tests plus the
+  checked-in scaler goldens.
 
 ## Linear Labels
 

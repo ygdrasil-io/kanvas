@@ -1111,15 +1111,15 @@ Evidence:
   deterministic `variation-deltas.json` style evidence for one explicit point,
   wraparound interpolation, untouched-contour isolation, `avar`-mapped
   coordinates, composite child-outline propagation, horizontal phantom-point
-  metrics min/default/max positions, `HVAR`-unimplemented warnings, and
-  malformed tuple diagnostics.
+  metrics min/default/max positions, bounded `HVAR` advance application,
+  malformed `HVAR` diagnostics, and malformed tuple diagnostics.
 - Tests prove that a single explicit point propagates to the whole contour,
   wraparound interpolation derives deltas for the untouched segment, contours
   with no referenced points remain unchanged, `TrueTypeGlyfScaler` applies
   `avar` remapping before requesting `gvar` deltas, composite outlines inherit
-  interpolated child deltas, and bounded phantom-point deltas now adjust
-  `advanceX` without changing the fallback route for unsupported metrics
-  variation tables.
+  interpolated child deltas, bounded phantom-point deltas now adjust
+  `advanceX`, and bounded `HVAR` deltas now stack on top of the phantom-point
+  metrics slice while malformed `HVAR` bytes fail closed with a stable warning.
 - Malformed tuple payloads now emit `font.variation-data-malformed` with
   `truetype.gvar-malformed` while preserving the default outline route when the
   fallback remains semantically valid.
@@ -1133,8 +1133,8 @@ rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 ```
 
-Remaining gate: this is a bounded TrueType `gvar` IUP slice only. It does not
-claim complete `HVAR`/`VVAR`/`MVAR` application, vertical shaping/layout, complete
+Remaining gate: this is a bounded TrueType `gvar`/phantom/HVAR slice only. It does not
+claim complete `HVAR`/`VVAR`/`MVAR` parity, vertical shaping/layout, complete
 variable-font parity, hinting VM parity, or GPU glyph route support.
 ### PKT-04G: TrueType Vertical Metric Evidence
 
@@ -1169,7 +1169,8 @@ Evidence:
   diagnostics instead of silently implying vertical layout support.
 - `reports/font/fixtures/expected/scaler/truetype-vertical-metrics.json`
   captures positive `vhea`/`vmtx` evidence, absent-table fallback evidence,
-  bounded `VVAR` advance-height deltas, and malformed `VVAR` diagnostics.
+  bounded `VVAR` advance-height deltas, bounded `MVAR` vertical global-metric
+  deltas, and malformed `VVAR`/`MVAR` diagnostics.
 - `reports/font/fixtures/expected/scaler/truetype-gvar-iup.json` now keeps the
   existing bounded IUP/phantom evidence while recording the explicit vertical
   fallback state for variation dumps that still have no vertical tables.
@@ -1187,8 +1188,8 @@ rtk git diff --check
 
 Remaining gate: this is vertical metric extraction evidence only. It does not
 claim vertical shaping, vertical glyph substitution, line layout, paragraph
-layout, complete HVAR/MVAR parity, native scaler parity, or GPU glyph route
-support.
+layout, complete `HVAR`/`VVAR`/`MVAR` parity, native scaler parity, or GPU glyph
+route support.
 ### KFONT-M3-005: Malformed glyf isolation suite
 
 Status: implemented.

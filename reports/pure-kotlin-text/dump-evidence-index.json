@@ -1679,17 +1679,17 @@
         "wraparoundCase"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:scaler:test --tests '*IUP*' --tests '*Gvar*' --tests '*PhantomPoint*'",
+        "rtk ./gradlew --no-daemon :font:scaler:test --tests '*IUP*' --tests '*Gvar*' --tests '*PhantomPoint*' --tests '*Hvar*'",
         "rtk python3 scripts/validate_font_fixture_assets.py",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "TrueType gvar IUP golden changes require simple-contour explicit/inferred delta review, wraparound verification, contour-isolation coverage, avar normalization evidence, composite child evidence, phantom-point advance review, malformed tuple diagnostics, and non-claim review before any claim promotion.",
+      "updatePolicy": "TrueType gvar IUP golden changes require simple-contour explicit/inferred delta review, wraparound verification, contour-isolation coverage, avar normalization evidence, composite child evidence, phantom-point advance review, bounded HVAR advance review, malformed HVAR/tuple diagnostics, and non-claim review before any claim promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-target-support-claim",
         "no-complete-variable-font-support-claim",
-        "no-hvar-vvar-mvar-metrics-claim",
+        "no-complete-hvar-vvar-mvar-parity-claim",
         "no-vertical-metrics-claim",
         "no-complete-hinting-vm-claim",
         "no-a8-or-sdf-artifact-claim",
@@ -1802,12 +1802,12 @@
       ],
       "validationCommands": [
         "rtk ./gradlew --no-daemon :font:sfnt:test",
-        "rtk ./gradlew --no-daemon :font:scaler:test --tests '*VerticalMetric*' --tests '*VVAR*'",
+        "rtk ./gradlew --no-daemon :font:scaler:test --tests '*VerticalMetric*' --tests '*Vvar*' --tests '*Mvar*'",
         "rtk python3 scripts/validate_font_fixture_assets.py",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "TrueType vertical metric golden changes require vhea/vmtx parsing review, fallback diagnostic review, bounded VVAR advance-height review, malformed-table diagnostic review, and non-claim review before any claim promotion.",
+      "updatePolicy": "TrueType vertical metric golden changes require vhea/vmtx parsing review, fallback diagnostic review, bounded VVAR advance-height review, bounded MVAR vertical-metric review, malformed-table diagnostic review, and non-claim review before any claim promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-target-support-claim",

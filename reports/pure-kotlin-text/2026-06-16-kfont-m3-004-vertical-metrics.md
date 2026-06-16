@@ -29,8 +29,8 @@ Evidence:
   `diagnostic` states, plus stable absent/malformed diagnostics.
 - `reports/font/fixtures/expected/scaler/truetype-vertical-metrics.json`
   records positive `vhea`/`vmtx` evidence, explicit absent-table fallback
-  evidence, bounded `VVAR` advance-height deltas, and malformed `VVAR`
-  diagnostic snapshots.
+  evidence, bounded `VVAR` advance-height deltas, bounded `MVAR` vertical
+  global-metric deltas, plus malformed `VVAR` and `MVAR` diagnostic snapshots.
 - `reports/font/fixtures/expected/scaler/truetype-gvar-iup.json` now shows the
   explicit vertical fallback state on the bounded variation dump that still has
   no vertical tables.
@@ -50,5 +50,5 @@ Remaining gate:
 
 - This slice proves bounded vertical metric extraction and diagnostics only.
 - It does not claim vertical shaping, vertical substitution, line layout,
-  paragraph layout, complete HVAR/MVAR parity, native scaler parity, or GPU
+  paragraph layout, complete `HVAR`/`VVAR`/`MVAR` parity, native scaler parity, or GPU
   text routing.

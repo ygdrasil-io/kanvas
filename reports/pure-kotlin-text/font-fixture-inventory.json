@@ -1081,7 +1081,7 @@
           "targetGate": "truetype-gvar-iup",
           "status": "current-positive-evidence",
           "fixtureKind": "synthetic-table-bytes",
-          "generationPolicy": "Generate bounded simple/composite TrueType gvar tuples that prove single-point IUP propagation, wraparound interpolation, untouched contour isolation, horizontal phantom-point advance deltas, avar-normalized coordinates, HVAR-unimplemented warnings, and malformed tuple diagnostics.",
+          "generationPolicy": "Generate bounded simple/composite TrueType gvar tuples that prove single-point IUP propagation, wraparound interpolation, untouched contour isolation, horizontal phantom-point advance deltas, avar-normalized coordinates, bounded HVAR advance-width application, and malformed HVAR/tuple diagnostics.",
           "evidencePaths": [
             "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
             "reports/font/fixtures/expected/scaler/truetype-gvar-iup.json",
@@ -1095,13 +1095,14 @@
             "min-default-max phantom metrics dump",
             "avar-normalized outline dump",
             "composite child outline dump",
-            "HVAR-unimplemented warning snapshot",
+            "HVAR-applied advance snapshot",
+            "malformed HVAR diagnostic snapshot",
             "malformed tuple diagnostic snapshot"
           ],
           "nonClaims": [
             "no-complete-target-support-claim",
             "no-complete-variable-font-support-claim",
-            "no-hvar-vvar-mvar-metrics-claim",
+            "no-complete-hvar-vvar-mvar-parity-claim",
             "no-vertical-metrics-claim",
             "no-complete-hinting-vm-claim",
             "no-a8-or-sdf-artifact-claim",
@@ -1191,7 +1192,7 @@
           "targetGate": "truetype-vertical-metrics",
           "status": "current-positive-evidence",
           "fixtureKind": "synthetic-table-bytes",
-          "generationPolicy": "Generate bounded TrueType `vhea`/`vmtx`/`VVAR` bytes that prove vertical metric dumps, absent-table fallback facts, bounded advance-height deltas, and malformed `VVAR` diagnostics without claiming vertical layout.",
+          "generationPolicy": "Generate bounded TrueType `vhea`/`vmtx`/`VVAR`/`MVAR` bytes that prove vertical metric dumps, absent-table fallback facts, bounded advance-height deltas, bounded vertical global-metric deltas, and malformed `VVAR`/`MVAR` diagnostics without claiming vertical layout.",
           "evidencePaths": [
             "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
             "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
@@ -1203,9 +1204,11 @@
             "vhea table bytes",
             "vmtx table bytes",
             "vvar table bytes",
+            "mvar table bytes",
             "vertical glyph metrics dump",
             "vertical fallback diagnostic snapshot",
-            "malformed VVAR diagnostic snapshot"
+            "malformed VVAR diagnostic snapshot",
+            "malformed MVAR diagnostic snapshot"
           ],
           "nonClaims": [
             "no-complete-target-support-claim",

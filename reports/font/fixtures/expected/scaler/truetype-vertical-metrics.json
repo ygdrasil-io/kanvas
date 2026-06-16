@@ -103,9 +103,9 @@
     "verticalAdvance": 720.0,
     "topSideBearing": 40.0,
     "verticalOriginY": 140.0,
-    "ascender": 850.0,
-    "descender": -320.0,
-    "lineGap": 60.0,
+    "ascender": 860.0,
+    "descender": -325.0,
+    "lineGap": 62.0,
     "maxAdvanceHeight": 760.0,
     "diagnostics": []
   }
@@ -118,6 +118,10 @@
     "malformedVvar": [
       {"code": "font.variation-axis-unsupported", "detail": "truetype.gvar-unavailable", "operation": "variation", "glyphId": 0, "severity": "warning"},
       {"code": "font.variation-data-malformed", "detail": "truetype.vvar-table-malformed", "operation": "metrics", "glyphId": 0, "severity": "warning"}
+    ],
+    "malformedMvar": [
+      {"code": "font.variation-axis-unsupported", "detail": "truetype.gvar-unavailable", "operation": "variation", "glyphId": 0, "severity": "warning"},
+      {"code": "font.variation-data-malformed", "detail": "truetype.mvar-table-malformed", "operation": "metrics", "glyphId": 0, "severity": "warning"}
     ]
   },
   "nonClaims": [
