@@ -27,7 +27,167 @@ public data class ResolvedFeatureSet(
     public val requested: List<ShapingFeatureRequest> = emptyList(),
     public val enabled: List<ShapingFeatureRequest> = emptyList(),
     public val disabled: List<ShapingFeatureRequest> = emptyList(),
+    public val defaulted: List<ShapingFeatureRequest> = emptyList(),
+    public val unsupported: List<ShapingFeatureRequest> = emptyList(),
+    public val languageSystem: String? = null,
 )
+
+public const val DEFAULT_OPEN_TYPE_LANGUAGE_SYSTEM: String = "dflt"
+
+public data class ScriptFeaturePolicy(
+    public val scriptFamily: String,
+    public val selectedScripts: List<String>,
+    public val openTypeScriptTags: List<String>,
+    public val requiredDefaults: List<String>,
+    public val optionalFeatures: List<String> = emptyList(),
+    public val refusalWhenMissing: List<String> = emptyList(),
+)
+
+public object RequiredScriptFeaturePolicies {
+    public val rows: List<ScriptFeaturePolicy> = listOf(
+        ScriptFeaturePolicy(
+            scriptFamily = "Latin",
+            selectedScripts = listOf("Latn"),
+            openTypeScriptTags = listOf("latn"),
+            requiredDefaults = listOf("ccmp", "locl", "liga", "rlig", "clig", "calt", "kern", "mark", "mkmk"),
+        ),
+        ScriptFeaturePolicy(
+            scriptFamily = "Greek",
+            selectedScripts = listOf("Grek"),
+            openTypeScriptTags = listOf("grek"),
+            requiredDefaults = listOf("ccmp", "locl", "liga", "rlig", "clig", "calt", "kern", "mark", "mkmk"),
+        ),
+        ScriptFeaturePolicy(
+            scriptFamily = "Cyrillic",
+            selectedScripts = listOf("Cyrl"),
+            openTypeScriptTags = listOf("cyrl"),
+            requiredDefaults = listOf("ccmp", "locl", "liga", "rlig", "clig", "calt", "kern", "mark", "mkmk"),
+        ),
+        ScriptFeaturePolicy(
+            scriptFamily = "Hebrew",
+            selectedScripts = listOf("Hebr"),
+            openTypeScriptTags = listOf("hebr"),
+            requiredDefaults = listOf("ccmp", "locl", "mark", "mkmk", "kern"),
+        ),
+        ScriptFeaturePolicy(
+            scriptFamily = "Arabic",
+            selectedScripts = listOf("Arab"),
+            openTypeScriptTags = listOf("arab"),
+            requiredDefaults = listOf("init", "medi", "fina", "isol", "rlig", "liga", "calt", "mark", "mkmk"),
+            refusalWhenMissing = listOf("mark", "mkmk", "cursive-attachment"),
+        ),
+        ScriptFeaturePolicy(
+            scriptFamily = "Devanagari",
+            selectedScripts = listOf("Deva"),
+            openTypeScriptTags = listOf("deva", "dev2"),
+            requiredDefaults = listOf(
+                "nukt", "akhn", "rphf", "blwf", "half", "pstf", "vatu",
+                "pres", "abvs", "blws", "psts", "haln", "dist", "abvm", "blwm",
+            ),
+        ),
+        ScriptFeaturePolicy(
+            scriptFamily = "Thai",
+            selectedScripts = listOf("Thai"),
+            openTypeScriptTags = listOf("thai"),
+            requiredDefaults = listOf("ccmp", "locl", "mark", "mkmk", "kern"),
+        ),
+        ScriptFeaturePolicy(
+            scriptFamily = "CJK",
+            selectedScripts = listOf("Hani", "Hira", "Kana", "Hang"),
+            openTypeScriptTags = listOf("hani", "hira", "kana", "hang"),
+            requiredDefaults = listOf("locl"),
+            optionalFeatures = listOf("vert", "vrt2"),
+        ),
+        ScriptFeaturePolicy(
+            scriptFamily = "Emoji",
+            selectedScripts = listOf("Zsye", "Zsym"),
+            openTypeScriptTags = listOf("Zsye", "Zsym"),
+            requiredDefaults = emptyList(),
+            refusalWhenMissing = listOf("variation-selectors", "emoji-modifiers", "zwj-sequences"),
+        ),
+    )
+
+    public fun resolve(
+        scriptRun: ScriptItemizationRun,
+        requested: List<ShapingFeatureRequest>,
+    ): ResolvedFeatureSet {
+        val normalizedRequested = requested.distinctBy { it.tag }
+        val policy = rows.firstOrNull { row ->
+            scriptRun.selectedScript in row.selectedScripts ||
+                scriptRun.openTypeScriptTags.any { tag -> tag in row.openTypeScriptTags }
+        }
+        if (policy == null) {
+            return ResolvedFeatureSet(
+                requested = normalizedRequested,
+                languageSystem = DEFAULT_OPEN_TYPE_LANGUAGE_SYSTEM,
+            )
+        }
+
+        val requestedByTag = normalizedRequested.associateBy { it.tag }
+        val requestedEnabledTags = normalizedRequested.filter { it.value > 0 }.map { it.tag }.toSet()
+        val supportedTags = (policy.requiredDefaults + policy.optionalFeatures).toSet()
+        val explicitDisabled = normalizedRequested.filter { it.value <= 0 }
+        val unsupported = normalizedRequested.filter { it.value > 0 && it.tag !in supportedTags }
+        val defaulted = policy.requiredDefaults
+            .filter { tag -> tag !in requestedByTag }
+            .map { tag -> ShapingFeatureRequest(tag, 1) }
+        val enabled = buildList {
+            policy.requiredDefaults.forEach { tag ->
+                if (requestedByTag[tag]?.value != 0) {
+                    add(ShapingFeatureRequest(tag, requestedByTag[tag]?.value ?: 1))
+                }
+            }
+            normalizedRequested
+                .filter { feature ->
+                    feature.value > 0 &&
+                        feature.tag in supportedTags &&
+                        feature.tag !in policy.requiredDefaults &&
+                        feature.tag in requestedEnabledTags
+                }
+                .forEach(::add)
+        }
+        val disabled = buildList {
+            addAll(explicitDisabled)
+            unsupported.forEach { feature ->
+                if (none { it.tag == feature.tag }) {
+                    add(feature)
+                }
+            }
+        }
+
+        return ResolvedFeatureSet(
+            requested = normalizedRequested,
+            enabled = enabled,
+            disabled = disabled,
+            defaulted = defaulted,
+            unsupported = unsupported,
+            languageSystem = DEFAULT_OPEN_TYPE_LANGUAGE_SYSTEM,
+        )
+    }
+
+    public fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  \"schemaVersion\": 1,\n")
+        append("  \"dumpId\": \"feature-policy-matrix\",\n")
+        append("  \"ownerTickets\": [\"KFONT-M6-006\"],\n")
+        append("  \"rows\": [\n")
+        append(rows.joinToString(",\n") { row -> row.toCanonicalJson().prependIndent("    ") })
+        append("\n  ],\n")
+        append(
+            "  \"nonClaims\": " +
+                jsonStringList(
+                    listOf(
+                        "no-complete-target-support-claim",
+                        "no-complete-feature-policy-claim",
+                        "no-native-shaper-oracle-claim",
+                        "no-gpu-text-route-claim",
+                    ),
+                ) +
+                "\n",
+        )
+        append("}\n")
+    }
+}
 
 public data class OpenTypeTableAvailability(
     public val gdef: Boolean = true,
@@ -69,6 +229,7 @@ public data class OpenTypeShapingPlan(
     public val scriptRun: ScriptItemizationRun,
     public val bidiLevel: Int,
     public val direction: String,
+    public val languageSystem: String?,
     public val features: ResolvedFeatureSet,
     public val gsubTraceRef: String,
     public val gposTraceRef: String,
@@ -210,6 +371,7 @@ public class OpenTypeLayoutEngineContract(
             scriptRun = input.scriptRun,
             bidiLevel = input.bidiLevel,
             direction = input.direction,
+            languageSystem = input.features.languageSystem ?: input.scriptRun.languageHint ?: DEFAULT_OPEN_TYPE_LANGUAGE_SYSTEM,
             features = input.features,
             gsubTraceRef = "gsub-trace",
             gposTraceRef = "gpos-trace",
@@ -531,6 +693,7 @@ private fun OpenTypeShapingPlan.toCanonicalJson(diagnostics: List<ShapingDiagnos
     appendJsonField("typefaceId", typefaceId?.value?.toString(), comma = true)
     append("  \"scriptRun\": ${scriptRun.toPlanJson()},\n")
     append("  \"bidi\": {\"level\": $bidiLevel, \"direction\": ${jsonString(direction)}},\n")
+    appendJsonField("languageSystem", languageSystem, comma = true)
     append("  \"features\": ${features.toCanonicalJson()},\n")
     append("  \"traceRefs\": {\"gsub\": ${jsonString(gsubTraceRef)}, \"gpos\": ${jsonString(gposTraceRef)}},\n")
     appendJsonField("fallbackRun", fallbackRun, comma = true)
@@ -549,6 +712,7 @@ private fun OpenTypeShapingPlanCase.toCanonicalJson(): String = buildString {
     appendJsonField("typefaceId", plan.typefaceId?.value?.toString(), comma = true)
     append("  \"scriptRun\": ${plan.scriptRun.toPlanJson()},\n")
     append("  \"bidi\": {\"level\": ${plan.bidiLevel}, \"direction\": ${jsonString(plan.direction)}},\n")
+    appendJsonField("languageSystem", plan.languageSystem, comma = true)
     append("  \"features\": ${plan.features.toCanonicalJson()},\n")
     append("  \"traceRefs\": {\"gsub\": ${jsonString(plan.gsubTraceRef)}, \"gpos\": ${jsonString(plan.gposTraceRef)}},\n")
     appendJsonField("fallbackRun", plan.fallbackRun, comma = true)
@@ -606,11 +770,24 @@ private fun ScriptItemizationRun.toPlanJson(): String = buildString {
     append("}")
 }
 
+private fun ScriptFeaturePolicy.toCanonicalJson(): String = buildString {
+    append("{")
+    append(jsonPair("scriptFamily", scriptFamily)).append(", ")
+    append(jsonString("selectedScripts")).append(": ").append(jsonStringList(selectedScripts)).append(", ")
+    append(jsonString("openTypeScriptTags")).append(": ").append(jsonStringList(openTypeScriptTags)).append(", ")
+    append(jsonString("requiredDefaults")).append(": ").append(jsonStringList(requiredDefaults)).append(", ")
+    append(jsonString("optionalFeatures")).append(": ").append(jsonStringList(optionalFeatures)).append(", ")
+    append(jsonString("refusalWhenMissing")).append(": ").append(jsonStringList(refusalWhenMissing))
+    append("}")
+}
+
 private fun ResolvedFeatureSet.toCanonicalJson(): String = buildString {
     append("{")
     append(jsonString("requested")).append(": ").append(requested.toFeatureArrayJson()).append(", ")
     append(jsonString("enabled")).append(": ").append(enabled.toFeatureArrayJson()).append(", ")
-    append(jsonString("disabled")).append(": ").append(disabled.toFeatureArrayJson())
+    append(jsonString("disabled")).append(": ").append(disabled.toFeatureArrayJson()).append(", ")
+    append(jsonString("defaulted")).append(": ").append(defaulted.toFeatureArrayJson()).append(", ")
+    append(jsonString("unsupported")).append(": ").append(unsupported.toFeatureArrayJson())
     append("}")
 }
 
