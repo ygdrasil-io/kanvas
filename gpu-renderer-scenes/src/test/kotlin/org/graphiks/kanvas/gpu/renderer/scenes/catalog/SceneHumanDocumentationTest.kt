@@ -31,7 +31,7 @@ class SceneHumanDocumentationTest {
     }
 
     @Test
-    fun `candidate scenes are separated from executable scenes and cover KGPU M0 through M10`() {
+    fun `candidate scenes are separated from executable scenes and keep only blocked backlog milestones`() {
         val executableIds = GPURendererSceneRegistry.scenes.map { it.sceneId.value }.toSet()
         val candidateIds = GPURendererSceneHumanDocs.candidateScenes.map { it.sceneId.value }
         val candidateMilestones = GPURendererSceneHumanDocs.candidateScenes
@@ -41,18 +41,13 @@ class SceneHumanDocumentationTest {
         assertTrue(candidateIds.none { it in executableIds })
         assertEquals(candidateIds.size, candidateIds.toSet().size)
         assertEquals(
-            setOf("M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M10"),
+            setOf("M2", "M3", "M5", "M6", "M9"),
             candidateMilestones,
         )
     }
 
     @Test
-    fun `candidate scenes expose pipeline statuses and French review text`() {
-        assertTrue(
-            CandidateSceneStatus.entries.all { status ->
-                GPURendererSceneHumanDocs.candidateScenes.any { it.status == status }
-            },
-        )
+    fun `candidate scenes expose blocked pipeline statuses and French review text`() {
         GPURendererSceneHumanDocs.candidateScenes.forEach { candidate ->
             assertTrue(candidate.title.isNotBlank(), candidate.sceneId.value)
             assertTrue(candidate.tags.isNotEmpty(), candidate.sceneId.value)
@@ -61,5 +56,35 @@ class SceneHumanDocumentationTest {
             assertTrue(candidate.french.nonClaims.length >= 24, candidate.sceneId.value)
             assertTrue(candidate.french.rationale.length >= 24, candidate.sceneId.value)
         }
+    }
+
+    @Test
+    fun `ready candidates promoted to executable scenes leave only blocked backlog candidates`() {
+        val promotedSceneIds = setOf(
+            "product-route-smoke-lanes",
+            "bitmap-sampler-matrix",
+            "runtime-effect-uniform-ladder",
+            "mesh-ribbon-depth-stack",
+            "legacy-parity-snapshot-board",
+        )
+        val executableIds = GPURendererSceneRegistry.scenes.map { it.sceneId.value }.toSet()
+        val candidateIds = GPURendererSceneHumanDocs.candidateScenes.map { it.sceneId.value }.toSet()
+        val candidateStatuses = GPURendererSceneHumanDocs.candidateScenes.map { it.status }.toSet()
+
+        assertTrue(promotedSceneIds.all { it in executableIds })
+        assertTrue(promotedSceneIds.none { it in candidateIds })
+        assertTrue(
+            promotedSceneIds.all { promotedId ->
+                GPURendererSceneHumanDocs.docs.any { it.sceneId.value == promotedId }
+            },
+        )
+        assertEquals(
+            setOf(
+                CandidateSceneStatus.RunnerGap,
+                CandidateSceneStatus.DependencyGated,
+                CandidateSceneStatus.ProductRefusalExpected,
+            ),
+            candidateStatuses,
+        )
     }
 }
