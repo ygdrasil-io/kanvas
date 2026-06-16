@@ -210,6 +210,7 @@
         "fixtureProvenance": [],
         "deterministicDumps": [
           "reports/pure-kotlin-text/dump-evidence-index.json",
+          "reports/font/fixtures/expected/shaping/feature-policy-matrix.json",
           "reports/font/fixtures/expected/shaping/shaping-plan.json",
           "reports/font/fixtures/expected/shaping/gsub-trace.json",
           "reports/font/fixtures/expected/shaping/gpos-trace.json",
