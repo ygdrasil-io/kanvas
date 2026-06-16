@@ -291,6 +291,29 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `text handoff boundary board is backed by typed artifacts and refused route gates only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("text-handoff-boundary-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Text), scene.tags)
+        assertEquals(listOf("KGPU-M6-001"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf(
+                "typed-artifact-reference",
+                "renderer-payload-accepted",
+                "draw-text-run-route-refused",
+                "cpu-texture-fallback-refused",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals(listOf(1, 2, 3, 4), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M6-002" || it.ticketId == "KGPU-M6-003" })
+    }
+
+    @Test
     fun `mesh ribbon is backed by bounded ribbon strip payload`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("mesh-ribbon")
         assertIs<SceneCommand.Clear>(scene.commands[0])
@@ -448,6 +471,20 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.Text),
                 commandFamilies = listOf("text-run"),
                 roadmapLinks = listOf(RoadmapExpectation("M6")),
+            ),
+            SceneExpectationRow(
+                sceneId = "text-handoff-boundary-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Text),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M6", ticketId = "KGPU-M6-001")),
             ),
             SceneExpectationRow(
                 sceneId = "runtime-effect-color-tile",

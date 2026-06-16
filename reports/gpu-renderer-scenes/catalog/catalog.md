@@ -16,6 +16,7 @@
 | `filtered-photo-chip` | Filtered Photo Chip | Filter,Image | KGPU M5 |  |  | `ShouldRender` |
 | `filter-dag-refusal-board` | Filter DAG Refusal Board | Rect,Filter | KGPU M5 | `KGPU-M5-004` |  | `ShouldRender` |
 | `receipt-text-run` | Receipt Text Run | Text | KGPU M6 |  |  | `ShouldRender` |
+| `text-handoff-boundary-board` | Text Handoff Boundary Board | Rect,RRect,Clip,Text | KGPU M6 | `KGPU-M6-001` |  | `ShouldRender` |
 | `runtime-effect-color-tile` | Runtime Effect Color Tile | RuntimeEffect | KGPU M7 |  |  | `ShouldRender` |
 | `blend-mode-strip` | Blend Mode Strip | Rect | KGPU M7 |  |  | `ShouldRender` |
 | `translucent-card-overlap` | Translucent Card Overlap | Rect,Blend | KGPU M7 | `KGPU-M7-003` |  | `ShouldRender` |

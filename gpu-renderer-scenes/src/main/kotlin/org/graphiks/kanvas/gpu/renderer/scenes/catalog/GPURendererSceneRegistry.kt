@@ -487,6 +487,50 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "text-handoff-boundary-board",
+            title = "Text Handoff Boundary Board",
+            description = "Typed text artifact handoff lanes with explicit non-promoted DrawTextRun route and fallback refusals.",
+            tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Text),
+            links = listOf(SceneRoadmapLink.ticket("KGPU-M6-001")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.036f, 0.040f, 0.050f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "text-handoff-panel",
+                    rect = SceneRect(24f, 26f, 296f, 174f),
+                    radius = 18f,
+                    color = SceneColor(0.11f, 0.13f, 0.16f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "text-handoff-window",
+                    rect = SceneRect(40f, 44f, 280f, 158f),
+                ),
+                SceneCommand.FillRect(
+                    label = "typed-artifact-reference",
+                    rect = SceneRect(48f, 52f, 92f, 154f),
+                    color = SceneColor.green(0.90f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "renderer-payload-accepted",
+                    rect = SceneRect(108f, 70f, 152f, 154f),
+                    color = SceneColor.blue(0.86f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "draw-text-run-route-refused",
+                    rect = SceneRect(168f, 88f, 212f, 154f),
+                    color = SceneColor.amber(0.94f),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "cpu-texture-fallback-refused",
+                    rect = SceneRect(228f, 106f, 268f, 154f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.92f),
+                    paintOrder = 4,
+                ),
+            ),
+        ),
+        scene(
             id = "runtime-effect-color-tile",
             title = "Runtime Effect Color Tile",
             description = "Registered SimpleRT runtime-effect tile with reflected gColor parameter intent.",

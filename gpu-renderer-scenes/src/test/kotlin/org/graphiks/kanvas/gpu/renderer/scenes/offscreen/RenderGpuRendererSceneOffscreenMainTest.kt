@@ -137,6 +137,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 filterNodeCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "text-handoff-boundary-board",
+                fillRectCount = 4,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "runtime-effect-color-tile",
                 fillRectCount = 0,
                 runtimeEffectCount = 1,

@@ -73,6 +73,7 @@ class RunGpuRendererSceneKadreMainTest {
             "clipped-avatar-grid" to 27,
             "filtered-photo-chip" to 28,
             "layered-shadow-card" to 29,
+            "text-handoff-boundary-board" to 36,
             "runtime-effect-color-tile" to 30,
             "mesh-ribbon" to 31,
             "filter-dag-refusal-board" to 32,

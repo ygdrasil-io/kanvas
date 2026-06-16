@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneId": "codec-provenance-gate-board",
+  "sceneId": "text-handoff-boundary-board",
   "status": "presented",
   "productRefusal": false,
   "reason": "kadre-windowed-presented-frames",

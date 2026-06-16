@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 22,
+  "sceneCount": 23,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -139,6 +139,16 @@
       "tags": ["Text"],
       "kgpuMilestones": ["M6"],
       "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "text-handoff-boundary-board",
+      "title": "Text Handoff Boundary Board",
+      "description": "Typed text artifact handoff lanes with explicit non-promoted DrawTextRun route and fallback refusals.",
+      "tags": ["Rect","RRect","Clip","Text"],
+      "kgpuMilestones": ["M6"],
+      "ticketIds": ["KGPU-M6-001"],
       "rStages": [],
       "expectation": "ShouldRender"
     },
