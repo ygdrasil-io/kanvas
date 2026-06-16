@@ -1820,6 +1820,55 @@ class SFNTSurfaceTest {
     }
 
     @Test
+    fun metricsTableParserParsesOptionalVerticalMetricsFromVheaAndVmtx() {
+        val metrics = OpenTypeMetricsTableParser.parse(
+            head = headTable(
+                unitsPerEm = 1000,
+                bounds = OpenTypeFontBounds(xMin = -40, yMin = -200, xMax = 980, yMax = 840),
+                indexToLocFormat = 1,
+            ),
+            hhea = hheaTable(
+                ascender = 820,
+                descender = -180,
+                lineGap = 40,
+                numberOfHMetrics = 1,
+            ),
+            maxp = maxpTable(numGlyphs = 3),
+            hmtx = hmtxTable(
+                metric(advanceWidth = 500, leftSideBearing = -20),
+                extraLeftSideBearing(7),
+                extraLeftSideBearing(11),
+            ),
+            vhea = vheaTable(
+                ascender = 910,
+                descender = -320,
+                lineGap = 70,
+                maxAdvanceHeight = 760,
+                numberOfVMetrics = 2,
+            ),
+            vmtx = vmtxTable(
+                verticalMetric(advanceHeight = 700, topSideBearing = 40),
+                verticalMetric(advanceHeight = 680, topSideBearing = -15),
+                extraTopSideBearing(22),
+            ),
+        )
+
+        assertEquals(910, metrics.verticalAscender)
+        assertEquals(-320, metrics.verticalDescender)
+        assertEquals(70, metrics.verticalLineGap)
+        assertEquals(760, metrics.maxAdvanceHeight)
+        assertEquals(2, metrics.numberOfVMetrics)
+        assertEquals(
+            listOf(
+                VerticalGlyphMetric(glyphId = 0, advanceHeight = 700, topSideBearing = 40),
+                VerticalGlyphMetric(glyphId = 1, advanceHeight = 680, topSideBearing = -15),
+                VerticalGlyphMetric(glyphId = 2, advanceHeight = 680, topSideBearing = 22),
+            ),
+            metrics.verticalMetrics,
+        )
+    }
+
+    @Test
     fun defaultOpenTypeFaceParserExposesOptionalTypographicMetricsWhenTablesExist() {
         val source = memoryFontSource(
             sfntFont(
@@ -1863,6 +1912,65 @@ class SFNTSurfaceTest {
         assertEquals(-96, metrics.underlinePosition)
         assertEquals(51, metrics.strikeoutThickness)
         assertEquals(262, metrics.strikeoutPosition)
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserKeepsHorizontalMetricsWhenOptionalVerticalMetricsAreMalformed() {
+        val malformedVhea = ByteArray(35)
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = -40, yMin = -200, xMax = 980, yMax = 840),
+                    indexToLocFormat = 1,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 820,
+                    descender = -180,
+                    lineGap = 40,
+                    numberOfHMetrics = 2,
+                ),
+                "maxp" to maxpTable(numGlyphs = 3),
+                "hmtx" to hmtxTable(
+                    metric(advanceWidth = 500, leftSideBearing = -20),
+                    metric(advanceWidth = 450, leftSideBearing = 7),
+                    extraLeftSideBearing(11),
+                ),
+                "vhea" to malformedVhea,
+                "vmtx" to vmtxTable(
+                    verticalMetric(advanceHeight = 700, topSideBearing = 40),
+                    verticalMetric(advanceHeight = 680, topSideBearing = -15),
+                    extraTopSideBearing(22),
+                ),
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+        val diagnostic = parsed.diagnostics.single()
+
+        assertEquals(
+            listOf(
+                HorizontalGlyphMetric(glyphId = 0, advanceWidth = 500, leftSideBearing = -20),
+                HorizontalGlyphMetric(glyphId = 1, advanceWidth = 450, leftSideBearing = 7),
+                HorizontalGlyphMetric(glyphId = 2, advanceWidth = 450, leftSideBearing = 11),
+            ),
+            parsed.metrics.horizontalMetrics,
+        )
+        assertEquals(SFNTTableTag("vhea"), diagnostic.table)
+        assertEquals("font.sfnt.optional-table-malformed", diagnostic.causeCode)
+        assertTrue(
+            diagnostic.causeMessage.orEmpty().contains("OpenType vhea table must contain at least 36 bytes"),
+            "Unexpected diagnostic: $diagnostic",
+        )
+        assertEquals(null, parsed.metrics.verticalAscender)
+        assertEquals(null, parsed.metrics.verticalDescender)
+        assertEquals(null, parsed.metrics.verticalLineGap)
+        assertEquals(null, parsed.metrics.maxAdvanceHeight)
+        assertEquals(null, parsed.metrics.numberOfVMetrics)
+        assertEquals(emptyList(), parsed.metrics.verticalMetrics)
+        assertEquals(malformedVhea.toUnsignedByteList(), parsed.rawTables.getValue(SFNTTableTag("vhea")))
     }
 
     @Test
@@ -2595,6 +2703,11 @@ class SFNTSurfaceTest {
         val leftSideBearing: Int,
     )
 
+    private data class TestVerticalMetric(
+        val advanceHeight: Int?,
+        val topSideBearing: Int,
+    )
+
     private data class TestKernPair(
         val leftGlyphId: Int,
         val rightGlyphId: Int,
@@ -3130,6 +3243,37 @@ class SFNTSurfaceTest {
         return table
     }
 
+    private fun vheaTable(
+        ascender: Int,
+        descender: Int,
+        lineGap: Int,
+        maxAdvanceHeight: Int = 0,
+        numberOfVMetrics: Int,
+    ): ByteArray {
+        val table = ByteArray(36)
+        table.writeInt16(4, ascender)
+        table.writeInt16(6, descender)
+        table.writeInt16(8, lineGap)
+        table.writeUInt16(10, maxAdvanceHeight)
+        table.writeUInt16(34, numberOfVMetrics)
+        return table
+    }
+
+    private fun vmtxTable(vararg metrics: TestVerticalMetric): ByteArray {
+        val length = metrics.sumOf { if (it.advanceHeight == null) 2 else 4 }
+        val table = ByteArray(length)
+        var offset = 0
+        metrics.forEach { metric ->
+            if (metric.advanceHeight != null) {
+                table.writeUInt16(offset, metric.advanceHeight)
+                offset += 2
+            }
+            table.writeInt16(offset, metric.topSideBearing)
+            offset += 2
+        }
+        return table
+    }
+
     private fun os2Table(
         averageCharWidth: Int,
         xHeight: Int,
@@ -3613,10 +3757,24 @@ class SFNTSurfaceTest {
         leftSideBearing = leftSideBearing,
     )
 
+    private fun verticalMetric(
+        advanceHeight: Int,
+        topSideBearing: Int,
+    ): TestVerticalMetric = TestVerticalMetric(
+        advanceHeight = advanceHeight,
+        topSideBearing = topSideBearing,
+    )
+
     private fun extraLeftSideBearing(leftSideBearing: Int): TestHorizontalMetric =
         TestHorizontalMetric(
             advanceWidth = null,
             leftSideBearing = leftSideBearing,
+        )
+
+    private fun extraTopSideBearing(topSideBearing: Int): TestVerticalMetric =
+        TestVerticalMetric(
+            advanceHeight = null,
+            topSideBearing = topSideBearing,
         )
 
     private fun testKernPair(

@@ -177,17 +177,31 @@
     ],
                   "outlineCommands": ["M 15.0 -7.5", "L 115.0 -7.5", "L 115.0 92.5", "L 15.0 92.5", "Z"],
                   "outlineCommandDumpSha256": "3d993f9b745450efd2c52f5a26369b5fd0079e8415b3913c2fa83ba48c2b3641",
-                  "metrics": {
-      "advanceX": 600.0,
-      "advanceY": 0.0,
-      "bounds": {
-        "left": 0.0,
-        "top": 0.0,
-        "right": 100.0,
-        "bottom": 100.0
-      }
-    },
-                  "diagnostics": []
+                  "metrics":           {
+                "advanceX": 600.0,
+                "advanceY": 0.0,
+                "bounds": {
+                  "left": 0.0,
+                  "top": 0.0,
+                  "right": 100.0,
+                  "bottom": 100.0
+                },
+    "verticalMetrics": {
+      "state": "fallback",
+      "source": "horizontal-fallback-fact",
+      "verticalAdvance": null,
+      "topSideBearing": null,
+      "verticalOriginY": null,
+      "ascender": null,
+      "descender": null,
+      "lineGap": null,
+      "maxAdvanceHeight": null,
+      "diagnostics": ["truetype.vertical-metrics-absent"]
+    }
+              },
+                  "diagnostics": [
+                    {"code": "font.vertical-metrics-unavailable", "detail": "truetype.vertical-metrics-absent", "operation": "metrics", "glyphId": 0, "severity": "warning"}
+                  ]
                 }
   },
   "compositeCase": {
@@ -313,18 +327,31 @@
     ],
                   "outlineCommands": ["M 0.0 0.0", "L 100.0 0.0", "L 100.0 100.0", "L 0.0 100.0", "Z"],
                   "outlineCommandDumpSha256": "e36274c57d14d44010e74b51a0bacc3aca0da365087f8b7311db0238ea88ce7b",
-                  "metrics": {
-      "advanceX": 640.0,
-      "advanceY": 0.0,
-      "bounds": {
-        "left": 0.0,
-        "top": 0.0,
-        "right": 100.0,
-        "bottom": 100.0
-      }
-    },
+                  "metrics":           {
+                "advanceX": 640.0,
+                "advanceY": 0.0,
+                "bounds": {
+                  "left": 0.0,
+                  "top": 0.0,
+                  "right": 100.0,
+                  "bottom": 100.0
+                },
+    "verticalMetrics": {
+      "state": "fallback",
+      "source": "horizontal-fallback-fact",
+      "verticalAdvance": null,
+      "topSideBearing": null,
+      "verticalOriginY": null,
+      "ascender": null,
+      "descender": null,
+      "lineGap": null,
+      "maxAdvanceHeight": null,
+      "diagnostics": ["truetype.vertical-metrics-absent"]
+    }
+              },
                   "diagnostics": [
-                    {"code": "font.metrics-variation-unavailable", "detail": "truetype.metrics-variation-table-unavailable", "operation": "metrics", "glyphId": 0, "severity": "warning"}
+                    {"code": "font.metrics-variation-unavailable", "detail": "truetype.metrics-variation-table-unavailable", "operation": "metrics", "glyphId": 0, "severity": "warning"},
+                    {"code": "font.vertical-metrics-unavailable", "detail": "truetype.vertical-metrics-absent", "operation": "metrics", "glyphId": 0, "severity": "warning"}
                   ]
                 }
   },

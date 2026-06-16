@@ -781,9 +781,9 @@ rtk ./gradlew --no-daemon :font:scaler:test
 ```
 
 Remaining gate: this is current TrueType `glyf` evidence hardening only. It
-does not claim complete CFF/CFF2 support, full IUP interpolation, phantom-point
-metrics, HVAR/VVAR/MVAR support, complete variable-font support, native engine
-parity, or pixel-perfect hinting.
+does not claim complete CFF/CFF2 support, full IUP interpolation, full
+HVAR/VVAR/MVAR parity, complete variable-font support, native engine parity,
+vertical shaping/layout support, or pixel-perfect hinting.
 ### PKT-04B: TrueType Composite Component Trace Evidence
 
 Status: implemented; independent review pending because the current tool policy
@@ -896,8 +896,8 @@ Evidence:
   `truetype.avar-unapplied` diagnostic.
 - The font fixture inventory marks `truetype-avar-coordinate-mapping` as
   current positive evidence; the broader TrueType scaler row still retains
-  explicit non-claims for phantom-point metrics, vertical metrics, and complete
-  variable-font parity outside the bounded IUP slice.
+  explicit non-claims for phantom-point metrics, vertical layout support, and
+  complete variable-font parity outside the bounded IUP slice.
 
 Validation:
 
@@ -990,8 +990,61 @@ rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 ```
 
 Remaining gate: this is a bounded TrueType `gvar` IUP slice only. It does not
-claim complete `HVAR`/`VVAR`/`MVAR` application, vertical metrics, complete
-variable-font parity, hinting VM parity, or GPU glyph route support.
+claim complete `HVAR`/`VVAR`/`MVAR` application, vertical shaping/layout,
+complete variable-font parity, hinting VM parity, or GPU glyph route support.
+### PKT-04G: TrueType Vertical Metric Evidence
+
+Status: done; freshly validated with deterministic evidence.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/font/fixtures/expected/scaler/truetype-gvar-iup.json`
+- `reports/font/fixtures/expected/scaler/truetype-vertical-metrics.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m3-004-vertical-metrics.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+
+Evidence:
+
+- `OpenTypeMetricsTableParser` now parses bounded optional `vhea`/`vmtx` facts
+  into `MetricsTables` while preserving required horizontal metrics and
+  surfacing malformed optional-table diagnostics through
+  `DefaultOpenTypeFaceParser`.
+- `TrueTypeGlyfScaler.scaledGlyphEvidence(...)` now emits `glyph-metrics.json`
+  vertical metric facts with explicit `present`, `fallback`, and `diagnostic`
+  states, including vertical advance, top side bearing, derived vertical
+  origin, and `vhea` global metrics.
+- Missing vertical tables are visible as bounded fallback facts only:
+  evidence records `horizontal-fallback-fact` plus stable
+  `font.vertical-metrics-unavailable` / `truetype.vertical-metrics-absent`
+  diagnostics instead of silently implying vertical layout support.
+- `reports/font/fixtures/expected/scaler/truetype-vertical-metrics.json`
+  captures positive `vhea`/`vmtx` evidence, absent-table fallback evidence,
+  bounded `VVAR` advance-height deltas, and malformed `VVAR` diagnostics.
+- `reports/font/fixtures/expected/scaler/truetype-gvar-iup.json` now keeps the
+  existing bounded IUP/phantom evidence while recording the explicit vertical
+  fallback state for variation dumps that still have no vertical tables.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test
+rtk ./gradlew --no-daemon :font:scaler:test
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this is vertical metric extraction evidence only. It does not
+claim vertical shaping, vertical glyph substitution, line layout, paragraph
+layout, complete HVAR/MVAR parity, native scaler parity, or GPU glyph route
+support.
 ### PKT-05A: CFF/CFF2 CharString Fixture Evidence
 
 Status: implemented; independent review pending because the current tool policy

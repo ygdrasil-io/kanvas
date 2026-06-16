@@ -2275,7 +2275,7 @@ class DefaultOpenTypeFaceParser(
             return MetricsTables()
         }
 
-        return runCatching {
+        val baseMetrics = runCatching {
             OpenTypeMetricsTableParser.parse(
                 head = rawTableBytes.getValue(HEAD_TABLE_TAG),
                 hhea = rawTableBytes.getValue(HHEA_TABLE_TAG),
@@ -2294,6 +2294,50 @@ class DefaultOpenTypeFaceParser(
             )
             MetricsTables()
         }
+
+        val vhea = rawTableBytes[VHEA_TABLE_TAG] ?: return baseMetrics
+        val verticalHeader = runCatching {
+            OpenTypeMetricsTableParser.parseVerticalHeader(vhea)
+        }.getOrElse { error ->
+            diagnostics += tableDiagnostic(
+                source = source,
+                table = VHEA_TABLE_TAG,
+                message = "Unable to parse OpenType table ${VHEA_TABLE_TAG.value}.",
+                causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
+                cause = error,
+            )
+            return baseMetrics
+        }
+        var metrics = baseMetrics.copy(
+            verticalAscender = verticalHeader.verticalAscender,
+            verticalDescender = verticalHeader.verticalDescender,
+            verticalLineGap = verticalHeader.verticalLineGap,
+            maxAdvanceHeight = verticalHeader.maxAdvanceHeight,
+            numberOfVMetrics = verticalHeader.numberOfVMetrics,
+        )
+
+        val vmtx = rawTableBytes[VMTX_TABLE_TAG] ?: return metrics
+        val numGlyphs = metrics.numGlyphs ?: return metrics
+        val numberOfVMetrics = metrics.numberOfVMetrics ?: return metrics
+        val verticalMetrics = runCatching {
+            OpenTypeMetricsTableParser.parseVerticalMetrics(
+                table = vmtx,
+                numGlyphs = numGlyphs,
+                numberOfVMetrics = numberOfVMetrics,
+            )
+        }.getOrElse { error ->
+            diagnostics += tableDiagnostic(
+                source = source,
+                table = VMTX_TABLE_TAG,
+                message = "Unable to parse OpenType table ${VMTX_TABLE_TAG.value}.",
+                causeCode = OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC,
+                cause = error,
+            )
+            return metrics
+        }
+
+        metrics = metrics.copy(verticalMetrics = verticalMetrics)
+        return metrics
     }
 
     private fun parseStyle(
@@ -2317,6 +2361,8 @@ class DefaultOpenTypeFaceParser(
             message.contains("OpenType hhea ") -> HHEA_TABLE_TAG
             message.contains("OpenType maxp ") -> MAXP_TABLE_TAG
             message.contains("OpenType hmtx ") -> HMTX_TABLE_TAG
+            message.contains("OpenType vhea ") -> VHEA_TABLE_TAG
+            message.contains("OpenType vmtx ") -> VMTX_TABLE_TAG
             message.contains("OpenType OS/2 ") -> OS_2_TABLE_TAG
             message.contains("OpenType post ") -> POST_TABLE_TAG
             else -> null
@@ -4672,6 +4718,8 @@ private val CURRENT_METADATA_PARSED_TABLE_TAGS = setOf(
     HEAD_TABLE_TAG,
     HHEA_TABLE_TAG,
     HMTX_TABLE_TAG,
+    VHEA_TABLE_TAG,
+    VMTX_TABLE_TAG,
     MAXP_TABLE_TAG,
     OS_2_TABLE_TAG,
     POST_TABLE_TAG,
@@ -5247,6 +5295,12 @@ private fun ByteArray.decodeNameString(
  * @property lineGap Typographic line gap in font units when known.
  * @property numberOfHMetrics Count of long horizontal metric records from `hhea` when known.
  * @property horizontalMetrics Horizontal metrics indexed by glyph ID.
+ * @property verticalAscender Vertical typographic ascender from `vhea` when known.
+ * @property verticalDescender Vertical typographic descender from `vhea` when known.
+ * @property verticalLineGap Vertical typographic line gap from `vhea` when known.
+ * @property maxAdvanceHeight Maximum vertical advance from `vhea.advanceHeightMax` when known.
+ * @property numberOfVMetrics Count of long vertical metric records from `vhea` when known.
+ * @property verticalMetrics Vertical metrics indexed by glyph ID from `vmtx` when known.
  * @property xHeight Lowercase x-height from `OS/2.sxHeight` in font units when known.
  * @property capHeight Uppercase cap height from `OS/2.sCapHeight` in font units when known.
  * @property averageCharWidth Average character width from `OS/2.xAvgCharWidth` in font units when known.
@@ -5269,6 +5323,12 @@ data class MetricsTables(
     val lineGap: Int? = null,
     val numberOfHMetrics: Int? = null,
     val horizontalMetrics: List<HorizontalGlyphMetric> = emptyList(),
+    val verticalAscender: Int? = null,
+    val verticalDescender: Int? = null,
+    val verticalLineGap: Int? = null,
+    val maxAdvanceHeight: Int? = null,
+    val numberOfVMetrics: Int? = null,
+    val verticalMetrics: List<VerticalGlyphMetric> = emptyList(),
     val xHeight: Int? = null,
     val capHeight: Int? = null,
     val averageCharWidth: Int? = null,
@@ -5313,6 +5373,19 @@ data class HorizontalGlyphMetric(
 )
 
 /**
+ * Vertical metric for one glyph ID from the OpenType `vmtx` table.
+ *
+ * @property glyphId Zero-based glyph identifier.
+ * @property advanceHeight Unsigned vertical advance height in font units.
+ * @property topSideBearing Signed top side bearing in font units.
+ */
+data class VerticalGlyphMetric(
+    val glyphId: Int,
+    val advanceHeight: Int,
+    val topSideBearing: Int,
+)
+
+/**
  * Parser for the required OpenType metric tables `head`, `hhea`, `maxp`, and `hmtx`.
  */
 object OpenTypeMetricsTableParser {
@@ -5330,6 +5403,8 @@ object OpenTypeMetricsTableParser {
         hhea: ByteArray,
         maxp: ByteArray,
         hmtx: ByteArray,
+        vhea: ByteArray? = null,
+        vmtx: ByteArray? = null,
         os2: ByteArray? = null,
         post: ByteArray? = null,
     ): MetricsTables {
@@ -5344,6 +5419,16 @@ object OpenTypeMetricsTableParser {
         val os2Metrics = os2?.let(::parseOs2)
         val postMetrics = post?.let(::parsePost)
         val typographicMetrics = os2Metrics?.takeIf { it.useTypographicLineMetrics }
+        val verticalHeaderMetrics = vhea?.let(::parseVerticalHeader)
+        val verticalMetrics = if (verticalHeaderMetrics != null && vmtx != null) {
+            parseVerticalMetrics(
+                table = vmtx,
+                numGlyphs = numGlyphs,
+                numberOfVMetrics = requireNotNull(verticalHeaderMetrics.numberOfVMetrics),
+            )
+        } else {
+            emptyList()
+        }
 
         return MetricsTables(
             unitsPerEm = headMetrics.unitsPerEm,
@@ -5355,6 +5440,12 @@ object OpenTypeMetricsTableParser {
             lineGap = typographicMetrics?.typoLineGap ?: hheaMetrics.lineGap,
             numberOfHMetrics = hheaMetrics.numberOfHMetrics,
             horizontalMetrics = horizontalMetrics,
+            verticalAscender = verticalHeaderMetrics?.verticalAscender,
+            verticalDescender = verticalHeaderMetrics?.verticalDescender,
+            verticalLineGap = verticalHeaderMetrics?.verticalLineGap,
+            maxAdvanceHeight = verticalHeaderMetrics?.maxAdvanceHeight,
+            numberOfVMetrics = verticalHeaderMetrics?.numberOfVMetrics,
+            verticalMetrics = verticalMetrics,
             xHeight = os2Metrics?.xHeight,
             capHeight = os2Metrics?.capHeight,
             averageCharWidth = os2Metrics?.averageCharWidth,
@@ -5368,6 +5459,27 @@ object OpenTypeMetricsTableParser {
             fsSelection = os2Metrics?.fsSelection,
         )
     }
+
+    fun parseVerticalHeader(table: ByteArray): MetricsTables {
+        val verticalHeader = parseVhea(table)
+        return MetricsTables(
+            verticalAscender = verticalHeader.verticalAscender,
+            verticalDescender = verticalHeader.verticalDescender,
+            verticalLineGap = verticalHeader.verticalLineGap,
+            maxAdvanceHeight = verticalHeader.maxAdvanceHeight,
+            numberOfVMetrics = verticalHeader.numberOfVMetrics,
+        )
+    }
+
+    fun parseVerticalMetrics(
+        table: ByteArray,
+        numGlyphs: Int,
+        numberOfVMetrics: Int,
+    ): List<VerticalGlyphMetric> = parseVmtx(
+        table = table,
+        numGlyphs = numGlyphs,
+        numberOfVMetrics = numberOfVMetrics,
+    )
 
     private fun parseHead(table: ByteArray): ParsedHeadMetrics {
         require(table.size >= HEAD_TABLE_SIZE) {
@@ -5406,6 +5518,20 @@ object OpenTypeMetricsTableParser {
             lineGap = table.readInt16BE(8, "OpenType hhea lineGap"),
             advanceWidthMax = table.readUInt16BE(10, "OpenType hhea advanceWidthMax"),
             numberOfHMetrics = table.readUInt16BE(34, "OpenType hhea numberOfHMetrics"),
+        )
+    }
+
+    private fun parseVhea(table: ByteArray): ParsedVheaMetrics {
+        require(table.size >= VHEA_TABLE_SIZE) {
+            "OpenType vhea table must contain at least $VHEA_TABLE_SIZE bytes, was ${table.size}."
+        }
+
+        return ParsedVheaMetrics(
+            verticalAscender = table.readInt16BE(4, "OpenType vhea ascender"),
+            verticalDescender = table.readInt16BE(6, "OpenType vhea descender"),
+            verticalLineGap = table.readInt16BE(8, "OpenType vhea lineGap"),
+            maxAdvanceHeight = table.readUInt16BE(10, "OpenType vhea advanceHeightMax"),
+            numberOfVMetrics = table.readUInt16BE(34, "OpenType vhea numberOfVMetrics"),
         )
     }
 
@@ -5489,6 +5615,57 @@ object OpenTypeMetricsTableParser {
         }
     }
 
+    private fun parseVmtx(
+        table: ByteArray,
+        numGlyphs: Int,
+        numberOfVMetrics: Int,
+    ): List<VerticalGlyphMetric> {
+        require(numberOfVMetrics <= numGlyphs) {
+            "OpenType vhea numberOfVMetrics $numberOfVMetrics exceeds maxp numGlyphs $numGlyphs."
+        }
+        require(numGlyphs == 0 || numberOfVMetrics > 0) {
+            "OpenType vhea numberOfVMetrics must be positive when maxp numGlyphs is $numGlyphs."
+        }
+
+        val requiredLength = numberOfVMetrics * LONG_VERTICAL_METRIC_SIZE +
+            (numGlyphs - numberOfVMetrics) * UINT16_BYTE_LENGTH
+        require(table.size >= requiredLength) {
+            "OpenType vmtx table length ${table.size} is shorter than required $requiredLength bytes for $numGlyphs glyphs and $numberOfVMetrics vertical metrics."
+        }
+
+        var lastAdvanceHeight = 0
+        return List(numGlyphs) { glyphId ->
+            if (glyphId < numberOfVMetrics) {
+                val metricOffset = glyphId * LONG_VERTICAL_METRIC_SIZE
+                val advanceHeight = table.readUInt16BE(
+                    metricOffset,
+                    "OpenType vmtx advanceHeight[$glyphId]",
+                )
+                val topSideBearing = table.readInt16BE(
+                    metricOffset + UINT16_BYTE_LENGTH,
+                    "OpenType vmtx topSideBearing[$glyphId]",
+                )
+                lastAdvanceHeight = advanceHeight
+                VerticalGlyphMetric(
+                    glyphId = glyphId,
+                    advanceHeight = advanceHeight,
+                    topSideBearing = topSideBearing,
+                )
+            } else {
+                val bearingOffset = numberOfVMetrics * LONG_VERTICAL_METRIC_SIZE +
+                    (glyphId - numberOfVMetrics) * UINT16_BYTE_LENGTH
+                VerticalGlyphMetric(
+                    glyphId = glyphId,
+                    advanceHeight = lastAdvanceHeight,
+                    topSideBearing = table.readInt16BE(
+                        bearingOffset,
+                        "OpenType vmtx topSideBearing[$glyphId]",
+                    ),
+                )
+            }
+        }
+    }
+
     private data class ParsedHeadMetrics(
         val unitsPerEm: Int,
         val bounds: OpenTypeFontBounds,
@@ -5501,6 +5678,14 @@ object OpenTypeMetricsTableParser {
         val lineGap: Int,
         val advanceWidthMax: Int,
         val numberOfHMetrics: Int,
+    )
+
+    private data class ParsedVheaMetrics(
+        val verticalAscender: Int,
+        val verticalDescender: Int,
+        val verticalLineGap: Int,
+        val maxAdvanceHeight: Int,
+        val numberOfVMetrics: Int,
     )
 
     private data class ParsedOs2Metrics(
@@ -5530,8 +5715,10 @@ object OpenTypeMetricsTableParser {
 
     private const val HEAD_TABLE_SIZE = 54
     private const val HHEA_TABLE_SIZE = 36
+    private const val VHEA_TABLE_SIZE = 36
     private const val MAXP_TABLE_SIZE = 6
     private const val LONG_HORIZONTAL_METRIC_SIZE = 4
+    private const val LONG_VERTICAL_METRIC_SIZE = 4
 }
 
 /**
