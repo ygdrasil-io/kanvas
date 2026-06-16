@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 35,
+  "sceneCount": 36,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -199,6 +199,16 @@
       "tags": ["Rect","RRect","Clip","Text"],
       "kgpuMilestones": ["M6"],
       "ticketIds": ["KGPU-M6-001"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "text-resource-binding-gate-board",
+      "title": "Text Resource Binding Gate Board",
+      "description": "Text upload, binding, stale generation, artifact registration, and budget refusal gates without glyph atlas route or CPU-rendered text texture promotion.",
+      "tags": ["Rect","RRect","Clip","Text"],
+      "kgpuMilestones": ["M6"],
+      "ticketIds": ["KGPU-M6-003"],
       "rStages": [],
       "expectation": "ShouldRender"
     },
