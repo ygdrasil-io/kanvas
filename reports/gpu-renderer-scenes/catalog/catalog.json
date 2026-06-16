@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 15,
+  "sceneCount": 16,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -59,6 +59,16 @@
       "tags": ["Image"],
       "kgpuMilestones": ["M4"],
       "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "asset-intake-thumbnail-grid",
+      "title": "Asset Intake Thumbnail Grid",
+      "description": "Already-decoded asset thumbnails clipped inside an intake tray with upload-ready fixture payloads.",
+      "tags": ["Image","Clip","RRect"],
+      "kgpuMilestones": ["M4"],
+      "ticketIds": ["KGPU-M4-001","KGPU-M4-002"],
       "rStages": [],
       "expectation": "ShouldRender"
     },

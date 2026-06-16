@@ -90,6 +90,13 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 bitmapRectCount = 2,
             ),
             RenderedShapeExpectation(
+                sceneId = "asset-intake-thumbnail-grid",
+                fillRectCount = 0,
+                fillRRectCount = 1,
+                clipCount = 1,
+                bitmapRectCount = 2,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "clipped-avatar-grid",
                 fillRectCount = 0,
                 clipCount = 1,

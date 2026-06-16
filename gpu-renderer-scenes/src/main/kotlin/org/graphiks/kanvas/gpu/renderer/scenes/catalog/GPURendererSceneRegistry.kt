@@ -193,6 +193,53 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "asset-intake-thumbnail-grid",
+            title = "Asset Intake Thumbnail Grid",
+            description = "Already-decoded asset thumbnails clipped inside an intake tray with upload-ready fixture payloads.",
+            tags = setOf(SceneTag.Image, SceneTag.Clip, SceneTag.RRect),
+            links = listOf(
+                SceneRoadmapLink.ticket("KGPU-M4-001"),
+                SceneRoadmapLink.ticket("KGPU-M4-002"),
+            ),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.035f, 0.038f, 0.044f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "asset-intake-tray",
+                    rect = SceneRect(28f, 24f, 292f, 176f),
+                    radius = 18f,
+                    color = SceneColor(0.12f, 0.14f, 0.16f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "thumbnail-grid-viewport",
+                    rect = SceneRect(44f, 42f, 276f, 158f),
+                ),
+                SceneCommand.BitmapRect(
+                    label = "hero-upload-thumb",
+                    rect = SceneRect(50f, 48f, 160f, 152f),
+                    source = SceneBitmapSource(
+                        topLeft = SceneColor(0.18f, 0.40f, 0.86f, 1f),
+                        topRight = SceneColor(0.22f, 0.72f, 0.48f, 1f),
+                        bottomLeft = SceneColor(0.96f, 0.70f, 0.18f, 1f),
+                        bottomRight = SceneColor(0.92f, 0.26f, 0.22f, 1f),
+                    ),
+                    sampling = SceneBitmapSampling.Linear,
+                    paintOrder = 1,
+                ),
+                SceneCommand.BitmapRect(
+                    label = "secondary-upload-thumb",
+                    rect = SceneRect(176f, 54f, 270f, 146f),
+                    source = SceneBitmapSource(
+                        topLeft = SceneColor(0.94f, 0.88f, 0.60f, 1f),
+                        topRight = SceneColor(0.24f, 0.54f, 0.88f, 1f),
+                        bottomLeft = SceneColor(0.16f, 0.68f, 0.54f, 1f),
+                        bottomRight = SceneColor(0.38f, 0.24f, 0.76f, 1f),
+                    ),
+                    sampling = SceneBitmapSampling.Nearest,
+                    paintOrder = 2,
+                ),
+            ),
+        ),
+        scene(
             id = "layered-shadow-card",
             title = "Layered Shadow Card",
             description = "Bounded shadow-card layer fixture with explicit drop-shadow filter route.",

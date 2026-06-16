@@ -103,6 +103,22 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `asset intake thumbnail grid is backed by decoded bitmap fixtures and upload ownership tickets`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("asset-intake-thumbnail-grid")
+
+        assertEquals(setOf(SceneTag.Image, SceneTag.Clip, SceneTag.RRect), scene.tags)
+        assertEquals(
+            listOf("KGPU-M4-001", "KGPU-M4-002"),
+            scene.roadmapLinks.mapNotNull { it.ticketId },
+        )
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertIs<SceneCommand.BitmapRect>(scene.commands[3])
+        assertIs<SceneCommand.BitmapRect>(scene.commands[4])
+    }
+
+    @Test
     fun `layered shadow card is backed by bounded shadow layer and drop shadow payloads`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("layered-shadow-card")
         assertIs<SceneCommand.Clear>(scene.commands[0])
@@ -207,6 +223,15 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.Image),
                 commandFamilies = listOf("bitmap-rect", "bitmap-rect"),
                 roadmapLinks = listOf(RoadmapExpectation("M4")),
+            ),
+            SceneExpectationRow(
+                sceneId = "asset-intake-thumbnail-grid",
+                tags = setOf(SceneTag.Image, SceneTag.Clip, SceneTag.RRect),
+                commandFamilies = listOf("clear", "fill-rrect", "clip", "bitmap-rect", "bitmap-rect"),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M4", ticketId = "KGPU-M4-001"),
+                    RoadmapExpectation("M4", ticketId = "KGPU-M4-002"),
+                ),
             ),
             SceneExpectationRow(
                 sceneId = "layered-shadow-card",
