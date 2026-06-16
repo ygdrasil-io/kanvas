@@ -36,6 +36,8 @@
 | `cache-pressure-deck` | Cache Pressure Deck | Rect | KGPU M9 |  |  | `ShouldRender` |
 | `cache-source-ledger-board` | Cache Source Ledger Board | Rect,Cache | KGPU M9 | `KGPU-M9-001` |  | `ShouldRender` |
 | `frame-gate-blocker-board` | Frame Gate Blocker Board | Rect | KGPU M9 | `KGPU-M9-002` |  | `ShouldRender` |
+| `pm-readiness-freeze-board` | PM Readiness Freeze Board | Rect,RRect,Clip,Cache | KGPU M9 | `KGPU-M9-003` |  | `ShouldRender` |
 | `legacy-route-comparison` | Legacy Route Comparison | Rect | KGPU M10 |  |  | `ShouldRender` |
 | `legacy-inventory-hygiene-board` | Legacy Inventory Hygiene Board | Rect,RRect,Clip,LegacyComparison | KGPU M10 | `KGPU-M10-001`,`KGPU-M10-004` |  | `ShouldRender` |
 | `shadow-parity-migration-gate-board` | Shadow Parity Migration Gate Board | Rect,RRect,Clip,LegacyComparison | KGPU M10 | `KGPU-M10-002` |  | `ShouldRender` |
+| `legacy-retirement-blocker-board` | Legacy Retirement Blocker Board | Rect,RRect,Clip,LegacyComparison | KGPU M10 | `KGPU-M10-003` |  | `ShouldRender` |

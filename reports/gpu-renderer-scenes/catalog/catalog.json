@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 37,
+  "sceneCount": 39,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -343,6 +343,16 @@
       "expectation": "ShouldRender"
     },
     {
+      "sceneId": "pm-readiness-freeze-board",
+      "title": "PM Readiness Freeze Board",
+      "description": "PM readiness dashboard separation lanes for correctness, activation, performance, cache, and release state without readiness movement or product activation.",
+      "tags": ["Rect","RRect","Clip","Cache"],
+      "kgpuMilestones": ["M9"],
+      "ticketIds": ["KGPU-M9-003"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
       "sceneId": "legacy-route-comparison",
       "title": "Legacy Route Comparison",
       "description": "Rect command marker for future legacy-route comparison.",
@@ -369,6 +379,16 @@
       "tags": ["Rect","RRect","Clip","LegacyComparison"],
       "kgpuMilestones": ["M10"],
       "ticketIds": ["KGPU-M10-002"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "legacy-retirement-blocker-board",
+      "title": "Legacy Retirement Blocker Board",
+      "description": "Route-specific legacy retirement gates that keep gpu-raster defaults active until promoted replacement, activation, rollback, and PM evidence are accepted.",
+      "tags": ["Rect","RRect","Clip","LegacyComparison"],
+      "kgpuMilestones": ["M10"],
+      "ticketIds": ["KGPU-M10-003"],
       "rStages": [],
       "expectation": "ShouldRender"
     }
