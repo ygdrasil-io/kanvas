@@ -374,6 +374,46 @@
       ]
     },
     {
+      "familyId": "opentype-layout-contract",
+      "familyName": "OpenType layout engine contract",
+      "classification": "tracked-gap",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Shaping Pipeline"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "reports/pure-kotlin-text/dump-evidence-index.json",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/OpenTypeLayoutContract.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt",
+        "reports/font/fixtures/expected/shaping/shaping-plan.json",
+        "reports/font/fixtures/expected/shaping/gsub-trace.json",
+        "reports/font/fixtures/expected/shaping/gpos-trace.json",
+        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json"
+      ],
+      "requiredEvidenceGates": [
+        "Implement bounded GSUB lookup behavior before claiming OpenType substitution support.",
+        "Implement bounded GPOS positioning behavior before claiming OpenType positioning support.",
+        "Add per-script positive and refusal fixtures from the required script matrix before broad shaping promotion.",
+        "Add CPU oracle evidence for promoted glyph ID, cluster, and position behavior before target-supported classification."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests '*OpenTypeLayoutEngineContractTest*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "fixtureCommands": [
+        "KFONT-M6-001 contract goldens are checked in under reports/font/fixtures/expected/shaping and asserted byte-for-byte by OpenTypeLayoutEngineContractTest."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complex-shaping-support-claim",
+        "no-complete-gsub-gpos-claim",
+        "no-native-shaper-oracle-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
       "familyId": "paragraph",
       "familyName": "Paragraph",
       "classification": "current-supported",
