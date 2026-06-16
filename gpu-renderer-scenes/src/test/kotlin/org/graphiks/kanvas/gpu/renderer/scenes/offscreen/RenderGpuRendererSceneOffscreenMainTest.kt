@@ -189,6 +189,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 filterNodeCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "notification-shadow-stack",
+                fillRectCount = 0,
+                saveLayerCount = 2,
+                filterNodeCount = 2,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "text-handoff-boundary-board",
                 fillRectCount = 4,
                 fillRRectCount = 1,
@@ -550,7 +556,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             assertContains(runJson, "saveLayerCommands=$count")
             assertContains(runJson, "saveLayerKinds=bounded-shadow-card")
             assertContains(runJson, "saveLayerRoute=scene-fixture.bounded-shadow-card")
-            assertContains(runJson, "saveLayerMaterializedDraws=2")
+            assertContains(runJson, "saveLayerMaterializedDraws=${count * 2}")
             assertContains(runJson, "saveLayerFallbackReason=none")
             assertContains(runJson, "filterRoutes=scene-fixture.bounded-drop-shadow")
             assertContains(runJson, "generalSaveLayerSupport=false")
@@ -561,6 +567,10 @@ class RenderGpuRendererSceneOffscreenMainTest {
             if (expectation.sceneId == "layered-shadow-card") {
                 assertContains(runJson, "filterKinds=drop-shadow")
                 assertContains(runJson, "filterInputs=shadow-card-layer")
+            } else if (expectation.sceneId == "notification-shadow-stack") {
+                assertContains(runJson, "filterKinds=drop-shadow, drop-shadow")
+                assertContains(runJson, "filterInputs=primary-notification-layer, secondary-notification-layer")
+                assertContains(runJson, "saveLayerFilterKinds=drop-shadow, drop-shadow")
             } else {
                 assertContains(runJson, "filterKinds=luma-tint")
                 assertContains(runJson, "filterInputs=photo")
