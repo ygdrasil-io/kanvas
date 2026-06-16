@@ -987,6 +987,44 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "runtime-effect-refusal-gate-board",
+            title = "Runtime Effect Refusal Gate Board",
+            description = "Runtime-effect child, arbitrary source, unsupported placement, and PM RefuseRequired gates without dynamic source compilation or child runtime-effect support claims.",
+            tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.RuntimeEffect),
+            links = listOf(SceneRoadmapLink.ticket("KGPU-M7-002")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.034f, 0.036f, 0.044f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "runtime-effect-refusal-panel",
+                    rect = SceneRect(24f, 26f, 296f, 174f),
+                    radius = 18f,
+                    color = SceneColor(0.10f, 0.12f, 0.16f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "runtime-effect-refusal-window",
+                    rect = SceneRect(40f, 44f, 280f, 158f),
+                ),
+                SceneCommand.FillRect(
+                    label = "arbitrary-source-refusal",
+                    rect = SceneRect(48f, 54f, 76f, 154f),
+                    color = SceneColor.red(),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "child-slot-refusal",
+                    rect = SceneRect(88f, 66f, 116f, 154f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "unsupported-placement-refusal",
+                    rect = SceneRect(128f, 78f, 156f, 154f),
+                    color = SceneColor.blue(0.84f),
+                    paintOrder = 3,
+                ),
+            ),
+        ),
+        scene(
             id = "blend-mode-strip",
             title = "Blend Mode Strip",
             description = "Rect strip reserved for future explicit blend coverage.",
