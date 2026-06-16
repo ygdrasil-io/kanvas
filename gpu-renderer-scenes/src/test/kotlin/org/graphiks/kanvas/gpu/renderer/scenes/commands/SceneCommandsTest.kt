@@ -89,6 +89,27 @@ class SceneCommandsTest {
     }
 
     @Test
+    fun `text run fixture payload names real font and explicit unpromoted GPU routes`() {
+        val command = SceneCommand.TextRun(
+            label = "receipt-line",
+            text = "TOTAL 42.00",
+            baselineX = 42f,
+            baselineY = 118f,
+            fontSourceId = "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf",
+            fontFamily = "Liberation Sans",
+            fontSize = 28f,
+            color = SceneColor(0.08f, 0.09f, 0.10f, 1f),
+        )
+
+        assertTrue(command.hasFixturePayload)
+        assertEquals("simple-latin", command.shapingMode)
+        assertEquals("font.glyph.outline-path", command.glyphRoute)
+        assertEquals("webgpu.text.glyph-atlas.simple-latin", command.webGpuCandidateRoute)
+        assertEquals("unsupported.text.draw_run_route_unavailable", command.fallbackReason)
+        assertEquals(0, command.paintOrder)
+    }
+
+    @Test
     fun `save layer fixture payload names the bounded shadow card contract`() {
         val command = SceneCommand.SaveLayer(
             label = "shadow-card-layer",
@@ -168,6 +189,7 @@ class SceneCommandsTest {
         assertFailsWith<IllegalArgumentException> { SceneCommand.Clip("", SceneRect(0f, 0f, 8f, 8f)) }
         assertFailsWith<IllegalArgumentException> { SceneCommand.BitmapRect(" ") }
         assertFailsWith<IllegalArgumentException> { SceneCommand.SaveLayer(" ") }
+        assertFailsWith<IllegalArgumentException> { SceneCommand.TextRun(" ") }
         assertFailsWith<IllegalArgumentException> {
             SceneCommand.FilterNode(
                 label = "filter",
@@ -211,6 +233,56 @@ class SceneCommandsTest {
                 bounds = SceneRect(32f, 28f, 288f, 172f),
                 contentRect = SceneRect(48f, 44f, 270f, 154f),
                 contentColor = SceneColor(0.98f, 0.98f, 0.94f, 1f),
+            )
+        }
+    }
+
+    @Test
+    fun `text run fixture payload requires text position font and color together`() {
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.TextRun(
+                label = "receipt-line",
+                baselineX = 42f,
+                baselineY = 118f,
+                fontSourceId = "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf",
+                fontFamily = "Liberation Sans",
+                fontSize = 28f,
+                color = SceneColor(0.08f, 0.09f, 0.10f, 1f),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.TextRun(
+                label = "receipt-line",
+                text = "TOTAL 42.00",
+                baselineY = 118f,
+                fontSourceId = "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf",
+                fontFamily = "Liberation Sans",
+                fontSize = 28f,
+                color = SceneColor(0.08f, 0.09f, 0.10f, 1f),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.TextRun(
+                label = "receipt-line",
+                text = "TOTAL 42.00",
+                baselineX = 42f,
+                baselineY = 118f,
+                fontSourceId = " ",
+                fontFamily = "Liberation Sans",
+                fontSize = 28f,
+                color = SceneColor(0.08f, 0.09f, 0.10f, 1f),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.TextRun(
+                label = "receipt-line",
+                text = "TOTAL 42.00",
+                baselineX = 42f,
+                baselineY = 118f,
+                fontSourceId = "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf",
+                fontFamily = "Liberation Sans",
+                fontSize = 0f,
+                color = SceneColor(0.08f, 0.09f, 0.10f, 1f),
             )
         }
     }

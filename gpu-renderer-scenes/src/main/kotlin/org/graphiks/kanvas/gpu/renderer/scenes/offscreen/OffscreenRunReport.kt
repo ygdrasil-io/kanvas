@@ -105,7 +105,11 @@ class OffscreenRunReport(
         private const val DEFAULT_RENDER_IMAGE_FILE_NAME: String = "render.png"
         private const val RAW_RGBA_BYTES_PER_PIXEL: Long = 4L
 
-        fun notYetRendered(sceneId: String, reason: String): OffscreenRunReport =
+        fun notYetRendered(
+            sceneId: String,
+            reason: String,
+            diagnostics: List<String> = singleDiagnostic(reason),
+        ): OffscreenRunReport =
             OffscreenRunReport(
                 sceneId = sceneId,
                 runStatus = OffscreenRunStatus.NotYetRendered,
@@ -115,7 +119,7 @@ class OffscreenRunReport(
                 height = null,
                 byteCount = null,
                 nonTransparentPixels = null,
-                diagnostics = singleDiagnostic(reason),
+                diagnostics = diagnostics,
             )
 
         fun failed(sceneId: String, reason: String, backend: String = "webgpu-offscreen"): OffscreenRunReport =

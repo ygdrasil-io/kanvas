@@ -214,7 +214,18 @@ object GPURendererSceneRegistry {
             description = "Simple typed text-run path and future A8 atlas route.",
             tags = setOf(SceneTag.Text),
             links = listOf(SceneRoadmapLink.milestone("M6")),
-            commands = listOf(SceneCommand.TextRun("receipt-line")),
+            commands = listOf(
+                SceneCommand.TextRun(
+                    label = "receipt-line",
+                    text = "TOTAL 42.00",
+                    baselineX = 42f,
+                    baselineY = 118f,
+                    fontSourceId = "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf",
+                    fontFamily = "Liberation Sans",
+                    fontSize = 28f,
+                    color = SceneColor(0.08f, 0.09f, 0.10f, 1f),
+                ),
+            ),
         ),
         scene(
             id = "runtime-effect-color-tile",

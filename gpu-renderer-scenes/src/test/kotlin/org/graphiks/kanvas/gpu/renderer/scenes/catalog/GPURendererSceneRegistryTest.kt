@@ -89,6 +89,21 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `receipt text run names real font inputs and unpromoted text routes`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("receipt-text-run")
+        val command = assertIs<SceneCommand.TextRun>(scene.commands.single())
+
+        assertTrue(command.hasFixturePayload)
+        assertEquals("TOTAL 42.00", command.text)
+        assertEquals("Liberation Sans", command.fontFamily)
+        assertEquals("kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf", command.fontSourceId)
+        assertEquals("simple-latin", command.shapingMode)
+        assertEquals("font.glyph.outline-path", command.glyphRoute)
+        assertEquals("webgpu.text.glyph-atlas.simple-latin", command.webGpuCandidateRoute)
+        assertEquals("unsupported.text.draw_run_route_unavailable", command.fallbackReason)
+    }
+
+    @Test
     fun `mesh ribbon is backed by bounded ribbon strip payload`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("mesh-ribbon")
         assertIs<SceneCommand.Clear>(scene.commands[0])
