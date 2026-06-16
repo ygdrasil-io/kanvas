@@ -1,0 +1,13 @@
+rendered a8-glyph-atlas-gate-board via WebGPU offscreen
+adapter=Apple M2 Max
+fillRectCommands=6
+fillRRectCommands=1
+linearGradientRectCommands=0
+clipCommands=1
+bitmapRectCommands=0
+a8GlyphAtlasRefusalMatrix=atlas-descriptor:TargetPrepared:unsupported.text.atlas_descriptor_unaccepted,atlas-page:RefuseRequired:unsupported.text.atlas_page_unavailable,atlas-entry:RefuseRequired:unsupported.text.atlas_entry_missing,atlas-generation:RefuseRequired:unsupported.text.atlas_generation_stale,a8-route:TargetPrepared:unsupported.text.a8_atlas_route_unavailable,instance-buffer:RefuseRequired:unsupported.text.instance_buffer_budget_exceeded
+pmA8GlyphAtlasRow=gpu-renderer.text.a8-atlas
+pmA8GlyphAtlasClassification=TargetPrepared
+a8GlyphAtlasRoutePromoted=false
+uploadBeforeSampleOrderingProven=false
+cpuRenderedTextTextureFallback=false
