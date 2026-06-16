@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 32,
+  "sceneCount": 33,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -299,6 +299,16 @@
       "tags": ["Rect","Cache"],
       "kgpuMilestones": ["M9"],
       "ticketIds": ["KGPU-M9-001"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "frame-gate-blocker-board",
+      "title": "Frame Gate Blocker Board",
+      "description": "Reporting-only frame gate blockers for M9 without release-blocking timing, readiness movement, product activation, or PM dashboard integration claims.",
+      "tags": ["Rect"],
+      "kgpuMilestones": ["M9"],
+      "ticketIds": ["KGPU-M9-002"],
       "rStages": [],
       "expectation": "ShouldRender"
     },

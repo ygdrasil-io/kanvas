@@ -1233,6 +1233,52 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "frame-gate-blocker-board",
+            title = "Frame Gate Blocker Board",
+            description = "Reporting-only frame gate blockers for M9 without release-blocking timing, readiness movement, product activation, or PM dashboard integration claims.",
+            tags = setOf(SceneTag.Rect),
+            links = listOf(SceneRoadmapLink.ticket("KGPU-M9-002")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.036f, 0.040f, 0.048f, 1f)),
+                SceneCommand.FillRect(
+                    label = "owned-adapter-frame-samples-missing",
+                    rect = SceneRect(34f, 50f, 78f, 154f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.92f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "warmup-variance-policy-gated",
+                    rect = SceneRect(88f, 64f, 132f, 154f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "quarantine-rebaseline-policy-gated",
+                    rect = SceneRect(142f, 78f, 186f, 154f),
+                    color = SceneColor(0.44f, 0.34f, 0.86f, 0.92f),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "negative-threshold-fixture-required",
+                    rect = SceneRect(196f, 92f, 240f, 154f),
+                    color = SceneColor.blue(0.88f),
+                    paintOrder = 4,
+                ),
+                SceneCommand.FillRect(
+                    label = "skipped-lane-diagnostics-required",
+                    rect = SceneRect(250f, 106f, 294f, 154f),
+                    color = SceneColor.green(0.86f),
+                    paintOrder = 5,
+                ),
+                SceneCommand.FillRect(
+                    label = "reporting-only-not-release-blocking",
+                    rect = SceneRect(34f, 148f, 294f, 158f),
+                    color = SceneColor(0.84f, 0.88f, 0.94f, 0.92f),
+                    paintOrder = 6,
+                ),
+            ),
+        ),
+        scene(
             id = "legacy-route-comparison",
             title = "Legacy Route Comparison",
             description = "Rect command marker for future legacy-route comparison.",

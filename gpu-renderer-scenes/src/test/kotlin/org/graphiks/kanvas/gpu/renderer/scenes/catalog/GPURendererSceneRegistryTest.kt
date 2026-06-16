@@ -449,6 +449,30 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `frame gate blocker board is backed by M9 reporting only frame policy blockers`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("frame-gate-blocker-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect), scene.tags)
+        assertEquals(listOf("KGPU-M9-002"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertEquals(
+            listOf(
+                "owned-adapter-frame-samples-missing",
+                "warmup-variance-policy-gated",
+                "quarantine-rebaseline-policy-gated",
+                "negative-threshold-fixture-required",
+                "skipped-lane-diagnostics-required",
+                "reporting-only-not-release-blocking",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..6).toList(), fills.map { it.paintOrder })
+        assertTrue(SceneTag.Cache !in scene.tags)
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M9-001" || it.ticketId == "KGPU-M9-003" })
+    }
+
+    @Test
     fun `legacy inventory hygiene board is backed by inventory and archive hygiene tickets only`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("legacy-inventory-hygiene-board")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -989,6 +1013,20 @@ class GPURendererSceneRegistryTest {
                     "fill-rect",
                 ),
                 roadmapLinks = listOf(RoadmapExpectation("M9", ticketId = "KGPU-M9-001")),
+            ),
+            SceneExpectationRow(
+                sceneId = "frame-gate-blocker-board",
+                tags = setOf(SceneTag.Rect),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M9", ticketId = "KGPU-M9-002")),
             ),
             SceneExpectationRow(
                 sceneId = "legacy-route-comparison",

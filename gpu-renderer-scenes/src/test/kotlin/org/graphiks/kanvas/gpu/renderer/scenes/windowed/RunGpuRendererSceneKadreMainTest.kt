@@ -105,6 +105,7 @@ class RunGpuRendererSceneKadreMainTest {
             "blend-mode-strip" to 18,
             "translucent-card-overlap" to 19,
             "cache-source-ledger-board" to 20,
+            "frame-gate-blocker-board" to 46,
             "legacy-route-comparison" to 21,
             "legacy-inventory-hygiene-board" to 33,
             "path-badge-and-stroke" to 22,
