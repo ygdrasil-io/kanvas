@@ -435,7 +435,7 @@
         ]
       },
       "requiredEvidenceGates": [
-        "KFONT-M9-005 now lands CPU atlas generation/eviction evidence; KFONT-M9-006 cache telemetry and the M11 GPU handoff chain still gate any GPU atlas support claim.",
+        "KFONT-M9-005 and KFONT-M9-006 now land CPU atlas generation/eviction and cache telemetry evidence; the M11 GPU handoff chain still gates any GPU atlas support claim.",
         "Legacy dftext remains open until explicit M11 upload-before-sample and GPU route replacement evidence are linked."
       ],
       "legacyGates": [
@@ -444,6 +444,52 @@
       "nonClaims": [
         "no-complete-target-support-claim",
         "no-gpu-text-route-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "surfaceId": "glyph-cache-telemetry",
+      "label": "Glyph cache telemetry",
+      "classification": "tracked-gap",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Cache Budgets"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/dump-evidence-index.json",
+          "reports/font/fixtures/expected/glyph/glyph-cache-inventory.json",
+          "reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json"
+        ],
+        "cpuOracle": [
+          "reports/font/fixtures/expected/glyph/glyph-cache-inventory.json",
+          "reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json"
+        ],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "KFONT-M9-006 now lands CPU cache inventory and advisory telemetry evidence; keep any GPU text-route or upload-execution claim gated on M11.",
+        "Keep advisory cache budgets non-blocking until an explicit M12 acceptance update promotes named baselines and variance policy."
+      ],
+      "legacyGates": [
+        "dftext"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-gpu-text-route-claim",
+        "no-hidden-performance-gate",
         "no-dftext-retirement"
       ]
     },
