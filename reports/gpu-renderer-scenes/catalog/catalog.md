@@ -5,6 +5,7 @@
 | `solid-card-stack` | Solid Card Stack | Rect | KGPU M0,M1 |  | R0,R1,R2,R3,R4,R5,R6 | `ShouldRender` |
 | `activation-candidate-boundary-board` | Activation Candidate Boundary Board | Rect,Cache,LegacyComparison | KGPU M0,M1 | `KGPU-M0-007`,`KGPU-M1-001`,`KGPU-M1-002` |  | `ShouldRender` |
 | `first-route-rollback-panel` | First Route Rollback Panel | Rect,LegacyComparison | KGPU M1 | `KGPU-M1-003`,`KGPU-M1-004` |  | `ShouldRender` |
+| `product-route-smoke-lanes` | Product Route Smoke Lanes | Rect,LegacyComparison | KGPU M0,M1 |  |  | `ShouldRender` |
 | `rounded-panel-gradient` | Rounded Panel Gradient | RRect,Gradient,Clip | KGPU M2 |  | R1,R2,R3 | `ShouldRender` |
 | `rrect-gradient-route-board` | RRect Gradient Route Board | Rect,RRect,Gradient,Clip | KGPU M2 | `KGPU-M2-001`,`KGPU-M2-002` |  | `ShouldRender` |
 | `release-gate-progress-board` | Release Gate Progress Board | Rect,RRect,Gradient,Clip | KGPU M2 | `KGPU-M2-003`,`KGPU-M2-004` |  | `ShouldRender` |
@@ -17,6 +18,7 @@
 | `photo-contact-sheet` | Photo Contact Sheet | Image,Clip,RRect | KGPU M4 |  |  | `ShouldRender` |
 | `codec-provenance-gate-board` | Codec Provenance Gate Board | Rect,RRect,Clip,Image | KGPU M4 | `KGPU-M4-003` |  | `ShouldRender` |
 | `sampler-boundary-gate-board` | Sampler Boundary Gate Board | Rect,RRect,Clip,Image | KGPU M4 | `KGPU-M4-004` |  | `ShouldRender` |
+| `bitmap-sampler-matrix` | Bitmap Sampler Matrix | Image,Clip,RRect | KGPU M4 |  |  | `ShouldRender` |
 | `savelayer-isolation-gate-board` | SaveLayer Isolation Gate Board | Rect,RRect,Clip,Layer | KGPU M5 | `KGPU-M5-001` |  | `ShouldRender` |
 | `destination-read-strategy-gate-board` | Destination Read Strategy Gate Board | Rect,RRect,Clip,Blend | KGPU M5 | `KGPU-M5-002` |  | `ShouldRender` |
 | `layered-shadow-card` | Layered Shadow Card | Layer,Filter | KGPU M5 |  |  | `ShouldRender` |
@@ -32,11 +34,13 @@
 | `runtime-effect-color-tile` | Runtime Effect Color Tile | RuntimeEffect | KGPU M7 |  |  | `ShouldRender` |
 | `runtime-effect-descriptor-gate-board` | Runtime Effect Descriptor Gate Board | Rect,RRect,Clip,RuntimeEffect | KGPU M7 | `KGPU-M7-001` |  | `ShouldRender` |
 | `runtime-effect-refusal-gate-board` | Runtime Effect Refusal Gate Board | Rect,RRect,Clip,RuntimeEffect | KGPU M7 | `KGPU-M7-002` |  | `ShouldRender` |
+| `runtime-effect-uniform-ladder` | Runtime Effect Uniform Ladder | RuntimeEffect,RRect,Clip | KGPU M7 |  |  | `ShouldRender` |
 | `blend-mode-strip` | Blend Mode Strip | Rect | KGPU M7 |  |  | `ShouldRender` |
 | `translucent-card-overlap` | Translucent Card Overlap | Rect,Blend | KGPU M7 | `KGPU-M7-003` |  | `ShouldRender` |
 | `sdr-color-boundary-board` | SDR Color Boundary Board | Rect,RRect,Clip | KGPU M7 | `KGPU-M7-004` |  | `ShouldRender` |
 | `mesh-ribbon` | Mesh Ribbon | Vertices | KGPU M8 |  |  | `ShouldRender` |
 | `vertices-route-gate-board` | Vertices Route Gate Board | Rect,RRect,Clip,Vertices | KGPU M8 | `KGPU-M8-001`,`KGPU-M8-002`,`KGPU-M8-003` |  | `ShouldRender` |
+| `mesh-ribbon-depth-stack` | Mesh Ribbon Depth Stack | Vertices,RRect,Clip | KGPU M8 |  |  | `ShouldRender` |
 | `cache-pressure-deck` | Cache Pressure Deck | Rect | KGPU M9 |  |  | `ShouldRender` |
 | `cache-source-ledger-board` | Cache Source Ledger Board | Rect,Cache | KGPU M9 | `KGPU-M9-001` |  | `ShouldRender` |
 | `frame-gate-blocker-board` | Frame Gate Blocker Board | Rect | KGPU M9 | `KGPU-M9-002` |  | `ShouldRender` |
@@ -45,3 +49,4 @@
 | `legacy-inventory-hygiene-board` | Legacy Inventory Hygiene Board | Rect,RRect,Clip,LegacyComparison | KGPU M10 | `KGPU-M10-001`,`KGPU-M10-004` |  | `ShouldRender` |
 | `shadow-parity-migration-gate-board` | Shadow Parity Migration Gate Board | Rect,RRect,Clip,LegacyComparison | KGPU M10 | `KGPU-M10-002` |  | `ShouldRender` |
 | `legacy-retirement-blocker-board` | Legacy Retirement Blocker Board | Rect,RRect,Clip,LegacyComparison | KGPU M10 | `KGPU-M10-003` |  | `ShouldRender` |
+| `legacy-parity-snapshot-board` | Legacy Parity Snapshot Board | LegacyComparison,Rect,RRect | KGPU M10 |  |  | `ShouldRender` |

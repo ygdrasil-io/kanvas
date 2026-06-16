@@ -1707,12 +1707,14 @@ class DefaultOpenTypeFaceParser(
                 null
             }
         }
-        val gposPairs = rawTableBytes[GPOS_TABLE_TAG]?.let { table ->
+        val gposParseResult = rawTableBytes[GPOS_TABLE_TAG]?.let { table ->
             runCatching {
-                OpenTypeGposPairTableParser.parse(
+                val singles = OpenTypeGposPairTableParser.parseSingles(table).takeIf { it.adjustments.isNotEmpty() }
+                val pairs = OpenTypeGposPairTableParser.parse(
                     table = table,
                     numGlyphs = metrics.numGlyphs ?: 0,
                 ).takeIf { it.pairs.isNotEmpty() }
+                singles to pairs
             }.getOrElse { error ->
                 diagnostics += tableDiagnostic(
                     source = source,
@@ -1728,7 +1730,8 @@ class DefaultOpenTypeFaceParser(
         return OpenTypeLayoutTables(
             tables = layoutTables,
             kern = kern,
-            gposPairs = gposPairs,
+            gposSingles = gposParseResult?.first,
+            gposPairs = gposParseResult?.second,
         )
     }
 
@@ -4777,6 +4780,7 @@ private const val GPOS_COVERAGE_RANGE_RECORD_SIZE = 6
 private const val GPOS_CLASS_DEF_FORMAT1_HEADER_SIZE = 6
 private const val GPOS_CLASS_DEF_FORMAT2_HEADER_SIZE = 4
 private const val GPOS_CLASS_RANGE_RECORD_SIZE = 6
+private const val GPOS_SINGLE_ADJUSTMENT_LOOKUP_TYPE = 1
 private const val GPOS_PAIR_ADJUSTMENT_LOOKUP_TYPE = 2
 private const val GPOS_VALUE_X_PLACEMENT = 0x0001
 private const val GPOS_VALUE_Y_PLACEMENT = 0x0002
@@ -5806,21 +5810,78 @@ object OpenTypeKernTableParser {
 }
 
 /**
+ * Parsed bounded subset of OpenType GPOS value-record fields.
+ *
+ * Only the fields currently consumed by the pure Kotlin text shaping slice are
+ * surfaced. Missing fields default to `0` and unsupported bits are ignored
+ * after bounded traversal has advanced past them.
+ *
+ * @property xPlacement Signed horizontal placement adjustment in font design units.
+ * @property yPlacement Signed vertical placement adjustment in font design units.
+ * @property xAdvance Signed horizontal advance adjustment in font design units.
+ */
+data class OpenTypeGposValueRecord(
+    val xPlacement: Int = 0,
+    val yPlacement: Int = 0,
+    val xAdvance: Int = 0,
+)
+
+/**
+ * One GPOS single-position adjustment associated with a glyph ID.
+ *
+ * @property glyphId Glyph ID that receives the value record.
+ * @property valueRecord Parsed placement/advance adjustments in font design units.
+ */
+data class OpenTypeGposSingleAdjustment(
+    val glyphId: Int,
+    val valueRecord: OpenTypeGposValueRecord,
+) {
+    init {
+        require(glyphId in OPENTYPE_GLYPH_ID_RANGE) {
+            "OpenType GPOS glyph ID $glyphId is outside range 0..65535."
+        }
+    }
+}
+
+/**
+ * Parsed bounded subset of OpenType GPOS single positioning.
+ *
+ * @property adjustments Parsed glyph adjustments in table traversal order.
+ */
+data class OpenTypeGposSingleTable(
+    val adjustments: List<OpenTypeGposSingleAdjustment> = emptyList(),
+) {
+    private val adjustmentsByGlyphId: Map<Int, OpenTypeGposValueRecord> =
+        adjustments.associate { adjustment -> adjustment.glyphId to adjustment.valueRecord }
+
+    /**
+     * Returns the parsed value record for [glyphId], or `null` when absent.
+     *
+     * @throws IllegalArgumentException when [glyphId] is outside the unsigned
+     * 16-bit OpenType glyph ID range.
+     */
+    fun lookupAdjustment(glyphId: Int): OpenTypeGposValueRecord? {
+        require(glyphId in OPENTYPE_GLYPH_ID_RANGE) {
+            "OpenType GPOS glyph ID $glyphId is outside range 0..65535."
+        }
+        return adjustmentsByGlyphId[glyphId]
+    }
+}
+
+/**
  * Parsed bounded subset of OpenType GPOS pair-position kerning.
  *
- * This model intentionally exposes only direct glyph-pair `xAdvance`
- * adjustments in font design units. It is meant for consumers that need the
- * migrated Kanvas pair-kerning behavior without depending on the full OpenType
- * Layout AST.
+ * This model intentionally preserves only the value-record fields currently
+ * consumed by the pure Kotlin text shaping slice.
  *
  * @property pairs Parsed glyph-pair adjustments in table traversal order.
  */
 data class OpenTypeGposPairTable(
     val pairs: List<OpenTypeGposPairAdjustment> = emptyList(),
 ) {
-    private val pairAdjustmentsByKey: Map<Int, Int> =
+    private val pairAdjustmentsByKey: Map<Int, OpenTypeGposPairAdjustment> =
         pairs.associate { pair ->
-            openTypeGlyphPairKey(pair.leftGlyphId, pair.rightGlyphId) to pair.xAdvance
+            openTypeGlyphPairKey(pair.leftGlyphId, pair.rightGlyphId) to pair
         }
 
     /**
@@ -5840,21 +5901,36 @@ data class OpenTypeGposPairTable(
         require(rightGlyphId in OPENTYPE_GLYPH_ID_RANGE) {
             "OpenType GPOS right glyph ID $rightGlyphId is outside range 0..65535."
         }
-        return pairAdjustmentsByKey[openTypeGlyphPairKey(leftGlyphId, rightGlyphId)] ?: 0
+        return lookupAdjustment(leftGlyphId, rightGlyphId)?.xAdvance ?: 0
+    }
+
+    /**
+     * Returns the parsed pair adjustment for a glyph pair, or `null` when absent.
+     */
+    fun lookupAdjustment(leftGlyphId: Int, rightGlyphId: Int): OpenTypeGposPairAdjustment? {
+        require(leftGlyphId in OPENTYPE_GLYPH_ID_RANGE) {
+            "OpenType GPOS left glyph ID $leftGlyphId is outside range 0..65535."
+        }
+        require(rightGlyphId in OPENTYPE_GLYPH_ID_RANGE) {
+            "OpenType GPOS right glyph ID $rightGlyphId is outside range 0..65535."
+        }
+        return pairAdjustmentsByKey[openTypeGlyphPairKey(leftGlyphId, rightGlyphId)]
     }
 }
 
 /**
- * One GPOS pair-position `xAdvance` adjustment.
+ * One GPOS pair-position adjustment.
  *
  * @property leftGlyphId Glyph ID of the leading glyph in the pair.
  * @property rightGlyphId Glyph ID of the trailing glyph in the pair.
- * @property xAdvance Signed horizontal advance adjustment in font design units.
+ * @property firstValueRecord Value record applied to the leading glyph.
+ * @property secondValueRecord Value record applied to the trailing glyph.
  */
 data class OpenTypeGposPairAdjustment(
     val leftGlyphId: Int,
     val rightGlyphId: Int,
-    val xAdvance: Int,
+    val firstValueRecord: OpenTypeGposValueRecord = OpenTypeGposValueRecord(),
+    val secondValueRecord: OpenTypeGposValueRecord = OpenTypeGposValueRecord(),
 ) {
     init {
         require(leftGlyphId in OPENTYPE_GLYPH_ID_RANGE) {
@@ -5864,12 +5940,92 @@ data class OpenTypeGposPairAdjustment(
             "OpenType GPOS right glyph ID $rightGlyphId is outside range 0..65535."
         }
     }
+
+    val xAdvance: Int
+        get() = firstValueRecord.xAdvance
+
+    constructor(leftGlyphId: Int, rightGlyphId: Int, xAdvance: Int) : this(
+        leftGlyphId = leftGlyphId,
+        rightGlyphId = rightGlyphId,
+        firstValueRecord = OpenTypeGposValueRecord(xAdvance = xAdvance),
+    )
 }
 
 /**
  * Parser for the Kanvas-supported subset of OpenType GPOS pair positioning.
  */
 object OpenTypeGposPairTableParser {
+    /**
+     * Parses GPOS version `1.0` or `1.1` single adjustment lookups.
+     *
+     * The parser follows the same active `DFLT`/`latn` plus `kern` feature
+     * selection as the bounded pair parser.
+     */
+    fun parseSingles(table: ByteArray): OpenTypeGposSingleTable {
+        table.requireRange(0, GPOS_HEADER_SIZE, "OpenType GPOS header")
+
+        val majorVersion = table.readUInt16BE(0, "OpenType GPOS majorVersion")
+        val minorVersion = table.readUInt16BE(2, "OpenType GPOS minorVersion")
+        require(majorVersion == 1 && minorVersion in 0..1) {
+            "OpenType GPOS table version $majorVersion.$minorVersion is not supported; expected 1.0 or 1.1."
+        }
+
+        val scriptListStart = table.checkedOffset(
+            base = 0,
+            offset = table.readUInt16BE(4, "OpenType GPOS ScriptList offset"),
+            label = "OpenType GPOS ScriptList",
+        )
+        val featureListStart = table.checkedOffset(
+            base = 0,
+            offset = table.readUInt16BE(6, "OpenType GPOS FeatureList offset"),
+            label = "OpenType GPOS FeatureList",
+        )
+        val lookupListStart = table.checkedOffset(
+            base = 0,
+            offset = table.readUInt16BE(8, "OpenType GPOS LookupList offset"),
+            label = "OpenType GPOS LookupList",
+        )
+        val kernLookupIndices = parseGposKernLookupIndices(
+            table = table,
+            scriptListStart = scriptListStart,
+            featureListStart = featureListStart,
+        )
+        if (kernLookupIndices.isEmpty()) {
+            return OpenTypeGposSingleTable()
+        }
+
+        table.requireRange(lookupListStart, UINT16_BYTE_LENGTH, "OpenType GPOS LookupList header")
+        val lookupCount = table.readUInt16BE(lookupListStart, "OpenType GPOS LookupList lookupCount")
+        table.requireArrayRange(
+            offset = table.checkedOffset(lookupListStart, UINT16_BYTE_LENGTH, "OpenType GPOS LookupList offsets"),
+            count = lookupCount,
+            recordSize = UINT16_BYTE_LENGTH,
+            label = "OpenType GPOS LookupList offsets",
+        )
+
+        val adjustments = LinkedHashMap<Int, OpenTypeGposSingleAdjustment>()
+        for (lookupIndex in kernLookupIndices) {
+            require(lookupIndex in 0 until lookupCount) {
+                "OpenType GPOS kern lookup index $lookupIndex is outside LookupList range 0 until $lookupCount."
+            }
+            val lookupOffset = table.readUInt16BE(
+                lookupListStart + UINT16_BYTE_LENGTH + lookupIndex * UINT16_BYTE_LENGTH,
+                "OpenType GPOS LookupList offset[$lookupIndex]",
+            )
+            parseGposSingleLookup(
+                table = table,
+                lookupStart = table.checkedOffset(
+                    base = lookupListStart,
+                    offset = lookupOffset,
+                    label = "OpenType GPOS lookup $lookupIndex",
+                ),
+                adjustments = adjustments,
+            )
+        }
+
+        return OpenTypeGposSingleTable(adjustments = adjustments.values.toList())
+    }
+
     /**
      * Parses GPOS version `1.0` or `1.1` pair adjustment lookups.
      *
@@ -6012,6 +6168,156 @@ object OpenTypeGposPairTableParser {
         }
 
         return lookups
+    }
+
+    private fun parseGposSingleLookup(
+        table: ByteArray,
+        lookupStart: Int,
+        adjustments: MutableMap<Int, OpenTypeGposSingleAdjustment>,
+    ) {
+        table.requireRange(lookupStart, GPOS_LOOKUP_HEADER_SIZE, "OpenType GPOS LookupTable header")
+        val lookupType = table.readUInt16BE(lookupStart, "OpenType GPOS LookupTable lookupType")
+        val subtableCount = table.readUInt16BE(
+            lookupStart + UINT16_BYTE_LENGTH * 2,
+            "OpenType GPOS LookupTable subTableCount",
+        )
+        table.requireArrayRange(
+            offset = table.checkedOffset(lookupStart, GPOS_LOOKUP_HEADER_SIZE, "OpenType GPOS LookupTable subtable offsets"),
+            count = subtableCount,
+            recordSize = UINT16_BYTE_LENGTH,
+            label = "OpenType GPOS LookupTable subtable offsets",
+        )
+        if (lookupType != GPOS_SINGLE_ADJUSTMENT_LOOKUP_TYPE) {
+            return
+        }
+
+        repeat(subtableCount) { subtableIndex ->
+            val subtableOffset = table.readUInt16BE(
+                lookupStart + GPOS_LOOKUP_HEADER_SIZE + subtableIndex * UINT16_BYTE_LENGTH,
+                "OpenType GPOS LookupTable subtableOffset[$subtableIndex]",
+            )
+            parseGposSingleSubtable(
+                table = table,
+                subtableStart = table.checkedOffset(
+                    base = lookupStart,
+                    offset = subtableOffset,
+                    label = "OpenType GPOS SinglePos subtable $subtableIndex",
+                ),
+                adjustments = adjustments,
+            )
+        }
+    }
+
+    private fun parseGposSingleSubtable(
+        table: ByteArray,
+        subtableStart: Int,
+        adjustments: MutableMap<Int, OpenTypeGposSingleAdjustment>,
+    ) {
+        table.requireRange(subtableStart, 6, "OpenType GPOS SinglePos subtable header")
+        val posFormat = table.readUInt16BE(subtableStart, "OpenType GPOS SinglePos posFormat")
+        val coverageOffset = table.readUInt16BE(
+            subtableStart + UINT16_BYTE_LENGTH,
+            "OpenType GPOS SinglePos coverageOffset",
+        )
+        val valueFormat = table.readUInt16BE(
+            subtableStart + UINT16_BYTE_LENGTH * 2,
+            "OpenType GPOS SinglePos valueFormat",
+        )
+        val coverage = parseCoverageTable(
+            table = table,
+            coverageStart = table.checkedOffset(
+                base = subtableStart,
+                offset = coverageOffset,
+                label = "OpenType GPOS SinglePos coverage",
+            ),
+        )
+        when (posFormat) {
+            1 -> parseGposSingleFormat1(
+                table = table,
+                subtableStart = subtableStart,
+                coverage = coverage,
+                valueFormat = valueFormat,
+                adjustments = adjustments,
+            )
+            2 -> parseGposSingleFormat2(
+                table = table,
+                subtableStart = subtableStart,
+                coverage = coverage,
+                valueFormat = valueFormat,
+                adjustments = adjustments,
+            )
+        }
+    }
+
+    private fun parseGposSingleFormat1(
+        table: ByteArray,
+        subtableStart: Int,
+        coverage: List<Int>,
+        valueFormat: Int,
+        adjustments: MutableMap<Int, OpenTypeGposSingleAdjustment>,
+    ) {
+        val valueRecordStart = table.checkedOffset(
+            subtableStart,
+            6,
+            "OpenType GPOS SinglePos format 1 value record",
+        )
+        val recordSize = valueRecordSize(valueFormat)
+        table.requireRange(valueRecordStart, recordSize, "OpenType GPOS SinglePos format 1 value record")
+        val valueRecord = readGposValueRecord(
+            table = table,
+            valueStart = valueRecordStart,
+            valueFormat = valueFormat,
+            label = "OpenType GPOS SinglePos format 1 valueRecord",
+        )
+        if (valueRecord == OpenTypeGposValueRecord()) {
+            return
+        }
+        coverage.forEach { glyphId ->
+            adjustments[glyphId] = OpenTypeGposSingleAdjustment(glyphId = glyphId, valueRecord = valueRecord)
+        }
+    }
+
+    private fun parseGposSingleFormat2(
+        table: ByteArray,
+        subtableStart: Int,
+        coverage: List<Int>,
+        valueFormat: Int,
+        adjustments: MutableMap<Int, OpenTypeGposSingleAdjustment>,
+    ) {
+        table.requireRange(subtableStart, 8, "OpenType GPOS SinglePos format 2 header")
+        val valueCount = table.readUInt16BE(
+            subtableStart + 6,
+            "OpenType GPOS SinglePos format 2 valueCount",
+        )
+        require(valueCount == coverage.size) {
+            "OpenType GPOS SinglePos format 2 valueCount $valueCount must equal coverage glyph count ${coverage.size}."
+        }
+        val recordSize = valueRecordSize(valueFormat)
+        val valuesStart = table.checkedOffset(
+            subtableStart,
+            8,
+            "OpenType GPOS SinglePos format 2 value records",
+        )
+        table.requireArrayRange(
+            offset = valuesStart,
+            count = valueCount,
+            recordSize = recordSize,
+            label = "OpenType GPOS SinglePos format 2 value records",
+        )
+        repeat(valueCount) { index ->
+            val valueRecord = readGposValueRecord(
+                table = table,
+                valueStart = valuesStart + index * recordSize,
+                valueFormat = valueFormat,
+                label = "OpenType GPOS SinglePos format 2 valueRecord[$index]",
+            )
+            if (valueRecord != OpenTypeGposValueRecord()) {
+                adjustments[coverage[index]] = OpenTypeGposSingleAdjustment(
+                    glyphId = coverage[index],
+                    valueRecord = valueRecord,
+                )
+            }
+        }
     }
 
     private fun parseGposActiveFeatureIndices(
@@ -6294,16 +6600,23 @@ object OpenTypeGposPairTableParser {
                     pairValueStart,
                     "OpenType GPOS pair adjustment format 1 PairSet $pairSetIndex secondGlyph[$pairValueIndex]",
                 )
-                val xAdvance = readGposXAdvance(
+                val firstValueRecord = readGposValueRecord(
                     table = table,
                     valueStart = pairValueStart + GPOS_PAIR_VALUE_RECORD_GLYPH_SIZE,
                     valueFormat = valueFormat1,
                     label = "OpenType GPOS pair adjustment format 1 PairSet $pairSetIndex valueRecord1[$pairValueIndex]",
                 )
+                val secondValueRecord = readGposValueRecord(
+                    table = table,
+                    valueStart = pairValueStart + GPOS_PAIR_VALUE_RECORD_GLYPH_SIZE + value1Size,
+                    valueFormat = valueFormat2,
+                    label = "OpenType GPOS pair adjustment format 1 PairSet $pairSetIndex valueRecord2[$pairValueIndex]",
+                )
                 pairs.putGposPair(
                     leftGlyphId = coverage[pairSetIndex],
                     rightGlyphId = rightGlyphId,
-                    xAdvance = xAdvance,
+                    firstValueRecord = firstValueRecord,
+                    secondValueRecord = secondValueRecord,
                 )
             }
         }
@@ -6374,7 +6687,7 @@ object OpenTypeGposPairTableParser {
             recordSize = recordSize,
             label = "OpenType GPOS pair adjustment format 2 class records",
         )
-        if (valueFormat1 and GPOS_VALUE_X_ADVANCE == 0 || recordSize == 0) {
+        if (recordSize == 0) {
             return
         }
 
@@ -6382,13 +6695,19 @@ object OpenTypeGposPairTableParser {
         var expandedPairCount = 0L
         for (class1 in 0 until class1Count) {
             for (class2 in 0 until class2Count) {
-                val xAdvance = readGposXAdvance(
+                val firstValueRecord = readGposValueRecord(
                     table = table,
                     valueStart = recordStart,
                     valueFormat = valueFormat1,
                     label = "OpenType GPOS pair adjustment format 2 classValueRecord[$class1][$class2] valueRecord1",
                 )
-                if (xAdvance != 0) {
+                val secondValueRecord = readGposValueRecord(
+                    table = table,
+                    valueStart = recordStart + value1Size,
+                    valueFormat = valueFormat2,
+                    label = "OpenType GPOS pair adjustment format 2 classValueRecord[$class1][$class2] valueRecord2",
+                )
+                if (firstValueRecord != OpenTypeGposValueRecord() || secondValueRecord != OpenTypeGposValueRecord()) {
                     val leftGlyphs = coverage.filter { classDef1.classOf(it) == class1 }
                     val rightGlyphCount = classDef2.glyphCountForClass(class2, numGlyphs)
                     val addedPairCount = leftGlyphs.size.toLong() * rightGlyphCount.toLong()
@@ -6403,7 +6722,8 @@ object OpenTypeGposPairTableParser {
                             pairs.putGposPair(
                                 leftGlyphId = leftGlyphId,
                                 rightGlyphId = rightGlyphId,
-                                xAdvance = xAdvance,
+                                firstValueRecord = firstValueRecord,
+                                secondValueRecord = secondValueRecord,
                             )
                         }
                     }
@@ -6570,24 +6890,37 @@ object OpenTypeGposPairTableParser {
         return OpenTypeGposClassDef(classes)
     }
 
-    private fun readGposXAdvance(
+    private fun readGposValueRecord(
         table: ByteArray,
         valueStart: Int,
         valueFormat: Int,
         label: String,
-    ): Int {
-        if (valueFormat and GPOS_VALUE_X_ADVANCE == 0) {
-            return 0
-        }
-
+    ): OpenTypeGposValueRecord {
         var valueOffset = valueStart
-        if (valueFormat and GPOS_VALUE_X_PLACEMENT != 0) {
-            valueOffset += UINT16_BYTE_LENGTH
+        val xPlacement = if (valueFormat and GPOS_VALUE_X_PLACEMENT != 0) {
+            table.readInt16BE(valueOffset, "$label xPlacement").also {
+                valueOffset += UINT16_BYTE_LENGTH
+            }
+        } else {
+            0
         }
-        if (valueFormat and GPOS_VALUE_Y_PLACEMENT != 0) {
-            valueOffset += UINT16_BYTE_LENGTH
+        val yPlacement = if (valueFormat and GPOS_VALUE_Y_PLACEMENT != 0) {
+            table.readInt16BE(valueOffset, "$label yPlacement").also {
+                valueOffset += UINT16_BYTE_LENGTH
+            }
+        } else {
+            0
         }
-        return table.readInt16BE(valueOffset, "$label xAdvance")
+        val xAdvance = if (valueFormat and GPOS_VALUE_X_ADVANCE != 0) {
+            table.readInt16BE(valueOffset, "$label xAdvance")
+        } else {
+            0
+        }
+        return OpenTypeGposValueRecord(
+            xPlacement = xPlacement,
+            yPlacement = yPlacement,
+            xAdvance = xAdvance,
+        )
     }
 
     private fun valueRecordSize(valueFormat: Int): Int =
@@ -6596,13 +6929,15 @@ object OpenTypeGposPairTableParser {
     private fun MutableMap<Int, OpenTypeGposPairAdjustment>.putGposPair(
         leftGlyphId: Int,
         rightGlyphId: Int,
-        xAdvance: Int,
+        firstValueRecord: OpenTypeGposValueRecord,
+        secondValueRecord: OpenTypeGposValueRecord,
     ) {
-        if (xAdvance != 0) {
+        if (firstValueRecord != OpenTypeGposValueRecord() || secondValueRecord != OpenTypeGposValueRecord()) {
             this[openTypeGlyphPairKey(leftGlyphId, rightGlyphId)] = OpenTypeGposPairAdjustment(
                 leftGlyphId = leftGlyphId,
                 rightGlyphId = rightGlyphId,
-                xAdvance = xAdvance,
+                firstValueRecord = firstValueRecord,
+                secondValueRecord = secondValueRecord,
             )
         }
     }
@@ -6889,12 +7224,15 @@ object OpenTypeAvarTableParser {
  * as immutable byte values.
  * @property kern Parsed legacy `kern` table data when a bounded version `0`
  * table with horizontal format `0` subtables is present.
+ * @property gposSingles Parsed GPOS single-position `kern` feature adjustments
+ * when supported single-position subtables are present.
  * @property gposPairs Parsed GPOS pair-position `kern` feature adjustments
  * when supported pair-position subtables are present.
  */
 data class OpenTypeLayoutTables(
     val tables: Map<SFNTTableTag, List<Int>> = emptyMap(),
     val kern: OpenTypeKernTable? = null,
+    val gposSingles: OpenTypeGposSingleTable? = null,
     val gposPairs: OpenTypeGposPairTable? = null,
 )
 

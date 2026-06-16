@@ -26,6 +26,7 @@
           "generationPolicy": "Use synthetic A8 masks with fixed bounds, padding, row stride, atlas size, placement order, and atlas byte hash.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-atlas.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -47,6 +48,7 @@
           "generationPolicy": "Use a bounded atlas request that exceeds capacity before placement and records the stable refusal.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-atlas.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -61,19 +63,87 @@
           ]
         },
         {
+          "fixtureId": "a8-sdf-artifacts-cache-budget-refusal",
+          "targetGate": "cache-budget-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Use fixed cold/warm cache telemetry samples with advisory memory and upload-preparation budget overruns tied to strike-key hashes.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.glyph.artifact-budget-exceeded diagnostic code",
+            "cache-domain refusal facts",
+            "advisory byte limits"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-hidden-performance-gate",
+            "no-gpu-upload-execution-claim"
+          ]
+        },
+        {
+          "fixtureId": "a8-sdf-artifacts-cache-inventory",
+          "targetGate": "cache-inventory",
+          "status": "current-positive-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Use fixed A8 and SDF resident entries plus one evicted A8 entry and assert stable key preimages, hashes, resident bytes, and lifecycle tokens.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-cache-inventory.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "resident cache entry dump",
+            "evicted cache entry dump",
+            "resident/evicted byte accounting"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-gpu-text-route-claim",
+            "no-live-cache-ownership-claim"
+          ]
+        },
+        {
+          "fixtureId": "a8-sdf-artifacts-cache-telemetry",
+          "targetGate": "cache-telemetry",
+          "status": "current-positive-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Use deterministic cold and warm cache samples with fixture timing counters, route counts, hit/miss, eviction, invalidation, resident bytes, and upload-preparation bytes.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "cold cache telemetry sample",
+            "warm cache telemetry sample",
+            "advisory timing counters"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-hidden-performance-gate",
+            "no-gpu-upload-execution-claim"
+          ]
+        },
+        {
           "fixtureId": "a8-sdf-artifacts-sdf-normalization",
           "targetGate": "sdf-normalization",
           "status": "current-positive-evidence",
           "fixtureKind": "structured-dump",
-          "generationPolicy": "Use a closed rectangle outline with fixed spread and assert inside, edge, outside, and mask hash facts.",
+          "generationPolicy": "Use a closed rectangle outline with the stabilized default spread plus an explicit widened spread, then assert inside/edge/outside facts, padding growth, normalization version, and stable CPU-only SDF hashes in the checked-in dump.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
             "sdf mask sample grid",
             "distance range facts",
-            "sdf mask hash"
+            "sdf mask hash",
+            "default/wide spread SDF dump entries"
           ],
           "nonClaims": [
             "no-complete-target-support-claim",
@@ -109,6 +179,7 @@
           "generationPolicy": "Use mismatched artifact/current generation values and assert stable invalidation-token evidence.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [

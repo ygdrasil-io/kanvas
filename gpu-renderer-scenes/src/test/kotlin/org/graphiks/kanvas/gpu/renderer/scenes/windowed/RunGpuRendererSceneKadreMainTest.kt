@@ -39,7 +39,7 @@ class RunGpuRendererSceneKadreMainTest {
     @Test
     fun `candidate scenes are not accepted by Kadre windowed runner`() {
         val candidate = GPURendererSceneHumanDocs.candidateScenes.single {
-            it.sceneId.value == "runtime-effect-uniform-ladder"
+            it.sceneId.value == "gradient-tile-mode-boundary"
         }
         val output = Files.createTempDirectory("gpu-renderer-scenes-candidate-windowed")
             .resolve("session.json")
@@ -47,7 +47,7 @@ class RunGpuRendererSceneKadreMainTest {
             runGpuRendererSceneKadre(arrayOf(candidate.sceneId.value, "0", output.toString()))
         }
 
-        assertContains(failure.message.orEmpty(), "Unknown GPU renderer scene: runtime-effect-uniform-ladder")
+        assertContains(failure.message.orEmpty(), "Unknown GPU renderer scene: gradient-tile-mode-boundary")
     }
 
     @Test

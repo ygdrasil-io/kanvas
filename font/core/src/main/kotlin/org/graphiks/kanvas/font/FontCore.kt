@@ -4728,7 +4728,6 @@ private fun fallbackTestCoverage(vararg entries: Pair<TypefaceID, Set<Int>>): Fo
         supported[typefaceId]?.contains(codePoint) == true
     }
 }
-
 private fun List<Pair<String, CanonicalFontIdentityJson>>.toDumpBytePreimage(): String =
     joinToString(separator = "\n") { (label, json) ->
         "$label\n${json.value}"
