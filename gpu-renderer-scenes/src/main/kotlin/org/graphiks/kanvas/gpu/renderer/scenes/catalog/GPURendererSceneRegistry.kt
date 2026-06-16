@@ -1,7 +1,10 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.catalog
 
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSampling
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSource
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneFilterKind
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
 
 object GPURendererSceneRegistry {
@@ -53,9 +56,23 @@ object GPURendererSceneRegistry {
                 SceneRoadmapLink.milestone("M2", RStage.R3),
             ),
             commands = listOf(
-                SceneCommand.FillRRect("rounded-panel"),
-                SceneCommand.LinearGradientRect("panel-gradient"),
-                SceneCommand.Clip("panel-scissor"),
+                SceneCommand.FillRRect(
+                    label = "rounded-panel",
+                    rect = SceneRect(40f, 30f, 280f, 170f),
+                    radius = 24f,
+                    color = SceneColor.blue(0.70f),
+                ),
+                SceneCommand.Clip(
+                    label = "panel-scissor",
+                    rect = SceneRect(64f, 46f, 256f, 154f),
+                ),
+                SceneCommand.LinearGradientRect(
+                    label = "panel-gradient",
+                    rect = SceneRect(40f, 30f, 280f, 170f),
+                    startColor = SceneColor.amber(0.92f),
+                    endColor = SceneColor.green(0.72f),
+                    paintOrder = 1,
+                ),
             ),
         ),
         scene(
@@ -65,11 +82,17 @@ object GPURendererSceneRegistry {
             tags = setOf(SceneTag.RRect, SceneTag.Rect),
             links = listOf(SceneRoadmapLink.milestone("M3")),
             commands = listOf(
-                SceneCommand.FillRRect("badge-fill"),
+                SceneCommand.FillRRect(
+                    label = "badge-fill",
+                    rect = SceneRect(56f, 52f, 248f, 132f),
+                    radius = 32f,
+                    color = SceneColor.green(0.86f),
+                ),
                 SceneCommand.FillRect(
                     "stroke-proxy",
                     SceneRect(72f, 72f, 220f, 84f),
                     SceneColor.red(),
+                    paintOrder = 1,
                 ),
             ),
         ),
@@ -83,8 +106,22 @@ object GPURendererSceneRegistry {
                 SceneRoadmapLink.milestone("M5"),
             ),
             commands = listOf(
-                SceneCommand.Clip("avatar-rrect-clip"),
-                SceneCommand.BitmapRect("avatar-cell"),
+                SceneCommand.Clip(
+                    label = "avatar-rrect-clip",
+                    rect = SceneRect(36f, 28f, 284f, 172f),
+                ),
+                SceneCommand.BitmapRect(
+                    label = "avatar-cell",
+                    rect = SceneRect(24f, 20f, 296f, 180f),
+                    source = SceneBitmapSource(
+                        topLeft = SceneColor.blue(0.95f),
+                        topRight = SceneColor.green(0.88f),
+                        bottomLeft = SceneColor.amber(0.92f),
+                        bottomRight = SceneColor.red(),
+                    ),
+                    sampling = SceneBitmapSampling.Linear,
+                    paintOrder = 1,
+                ),
             ),
         ),
         scene(
@@ -94,19 +131,55 @@ object GPURendererSceneRegistry {
             tags = setOf(SceneTag.Image),
             links = listOf(SceneRoadmapLink.milestone("M4")),
             commands = listOf(
-                SceneCommand.BitmapRect("nearest-swatch"),
-                SceneCommand.BitmapRect("linear-swatch"),
+                SceneCommand.BitmapRect(
+                    label = "nearest-swatch",
+                    rect = SceneRect(36f, 42f, 148f, 154f),
+                    source = SceneBitmapSource(
+                        topLeft = SceneColor.red(),
+                        topRight = SceneColor.blue(),
+                        bottomLeft = SceneColor.green(),
+                        bottomRight = SceneColor.amber(),
+                    ),
+                    sampling = SceneBitmapSampling.Nearest,
+                ),
+                SceneCommand.BitmapRect(
+                    label = "linear-swatch",
+                    rect = SceneRect(172f, 42f, 284f, 154f),
+                    source = SceneBitmapSource(
+                        topLeft = SceneColor.amber(),
+                        topRight = SceneColor.green(),
+                        bottomLeft = SceneColor.blue(),
+                        bottomRight = SceneColor.red(),
+                    ),
+                    sampling = SceneBitmapSampling.Linear,
+                    paintOrder = 1,
+                ),
             ),
         ),
         scene(
             id = "layered-shadow-card",
             title = "Layered Shadow Card",
-            description = "Layer and filter command markers for bounded route observation.",
+            description = "Bounded shadow-card layer fixture with explicit drop-shadow filter route.",
             tags = setOf(SceneTag.Layer, SceneTag.Filter),
             links = listOf(SceneRoadmapLink.milestone("M5")),
             commands = listOf(
-                SceneCommand.SaveLayer("card-layer"),
-                SceneCommand.FilterNode("shadow-blur"),
+                SceneCommand.Clear(SceneColor(0.16f, 0.17f, 0.18f, 1f)),
+                SceneCommand.SaveLayer(
+                    label = "shadow-card-layer",
+                    bounds = SceneRect(32f, 28f, 288f, 172f),
+                    contentRect = SceneRect(48f, 44f, 270f, 154f),
+                    radius = 20f,
+                    contentColor = SceneColor(0.98f, 0.98f, 0.94f, 1f),
+                    shadowColor = SceneColor(0.02f, 0.04f, 0.07f, 0.44f),
+                    shadowOffsetX = 10f,
+                    shadowOffsetY = 12f,
+                ),
+                SceneCommand.FilterNode(
+                    label = "shadow-blur",
+                    inputLabel = "shadow-card-layer",
+                    kind = SceneFilterKind.DropShadow,
+                    strength = 0.72f,
+                ),
             ),
         ),
         scene(
@@ -116,8 +189,23 @@ object GPURendererSceneRegistry {
             tags = setOf(SceneTag.Filter, SceneTag.Image),
             links = listOf(SceneRoadmapLink.milestone("M5")),
             commands = listOf(
-                SceneCommand.BitmapRect("photo"),
-                SceneCommand.FilterNode("chip-filter"),
+                SceneCommand.BitmapRect(
+                    label = "photo",
+                    rect = SceneRect(48f, 34f, 272f, 166f),
+                    source = SceneBitmapSource(
+                        topLeft = SceneColor.red(),
+                        topRight = SceneColor.blue(0.92f),
+                        bottomLeft = SceneColor.green(0.90f),
+                        bottomRight = SceneColor.amber(),
+                    ),
+                    sampling = SceneBitmapSampling.Linear,
+                ),
+                SceneCommand.FilterNode(
+                    label = "chip-filter",
+                    inputLabel = "photo",
+                    kind = SceneFilterKind.LumaTint,
+                    strength = 0.72f,
+                ),
             ),
         ),
         scene(
@@ -131,10 +219,18 @@ object GPURendererSceneRegistry {
         scene(
             id = "runtime-effect-color-tile",
             title = "Runtime Effect Color Tile",
-            description = "Runtime-effect tile command marker with bounded parameter intent.",
+            description = "Registered SimpleRT runtime-effect tile with reflected gColor parameter intent.",
             tags = setOf(SceneTag.RuntimeEffect),
             links = listOf(SceneRoadmapLink.milestone("M7")),
-            commands = listOf(SceneCommand.RuntimeEffectTile("simple-rt-color")),
+            commands = listOf(
+                SceneCommand.RuntimeEffectTile(
+                    label = "simple-rt-color",
+                    rect = SceneRect(48f, 36f, 272f, 164f),
+                    stableId = "runtime.simple_rt",
+                    wgslImplementationId = "wgsl/runtime_simple_rt",
+                    uniformColor = SceneColor(0.18f, 0.42f, 0.72f, 1f),
+                ),
+            ),
         ),
         scene(
             id = "blend-mode-strip",
@@ -153,10 +249,19 @@ object GPURendererSceneRegistry {
         scene(
             id = "mesh-ribbon",
             title = "Mesh Ribbon",
-            description = "Draw vertices and mesh-like geometry visibility.",
+            description = "Bounded ribbon-strip fixture for vertices visibility without broad DrawVertices promotion.",
             tags = setOf(SceneTag.Vertices),
             links = listOf(SceneRoadmapLink.milestone("M8")),
-            commands = listOf(SceneCommand.MeshRibbon("ribbon")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.05f, 0.07f, 0.09f, 1f)),
+                SceneCommand.MeshRibbon(
+                    label = "ribbon",
+                    bounds = SceneRect(36f, 42f, 284f, 158f),
+                    startColor = SceneColor(0.10f, 0.52f, 0.86f, 1f),
+                    endColor = SceneColor(0.98f, 0.62f, 0.18f, 1f),
+                    thickness = 28f,
+                ),
+            ),
         ),
         scene(
             id = "cache-pressure-deck",

@@ -4,9 +4,9 @@ All tickets start as `proposed`. Move a ticket to `ready` only after its scope, 
 
 | Milestone | Proposed | Ready | In Progress | Blocked | Review | Done |
 |---|---:|---:|---:|---:|---:|---:|
-| M0 | 0 | 0 | 0 | 0 | 5 | 0 |
-| M1 | 0 | 0 | 0 | 0 | 4 | 0 |
-| M2 | 3 | 0 | 0 | 0 | 2 | 0 |
+| M0 | 0 | 0 | 0 | 0 | 0 | 5 |
+| M1 | 0 | 0 | 0 | 0 | 0 | 4 |
+| M2 | 1 | 0 | 0 | 0 | 0 | 4 |
 | M3 | 5 | 0 | 0 | 0 | 0 | 0 |
 | M4 | 5 | 0 | 0 | 0 | 0 | 0 |
 | M5 | 5 | 0 | 0 | 0 | 0 | 0 |
@@ -15,10 +15,10 @@ All tickets start as `proposed`. Move a ticket to `ready` only after its scope, 
 | M8 | 6 | 0 | 0 | 0 | 0 | 0 |
 | M9 | 6 | 0 | 0 | 0 | 0 | 0 |
 | M10 | 10 | 0 | 0 | 0 | 0 | 0 |
-| M11 | 6 | 0 | 0 | 0 | 4 | 0 |
+| M11 | 6 | 0 | 0 | 0 | 0 | 4 |
 | M12 | 5 | 0 | 0 | 0 | 0 | 0 |
 | M13 | 5 | 0 | 0 | 0 | 0 | 0 |
-| **Total** | **75** | **0** | **0** | **0** | **11** | **0** |
+| **Total** | **69** | **0** | **0** | **0** | **0** | **17** |
 
 ## Status Update Rule
 

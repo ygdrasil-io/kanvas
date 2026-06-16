@@ -1,0 +1,10 @@
+rendered filtered-photo-chip via WebGPU offscreen
+adapter=Apple M2 Max
+fillRectCommands=0
+fillRRectCommands=0
+linearGradientRectCommands=0
+clipCommands=0
+bitmapRectCommands=1
+filterNodeCommands=1
+filterKinds=luma-tint
+filterInputs=photo

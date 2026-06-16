@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M0-003"
 title: "Freeze module/package layout for the pure Kotlin font core"
-status: "review"
+status: "done"
 milestone: "M0"
 priority: "P0"
 owner_area: "font-architecture"
@@ -99,6 +99,7 @@ rtk ./gradlew --no-daemon :font:core:test --tests '*ModuleBoundary*'
 
 ## Status Notes
 
+- `done`: Merged into `master` by PR #1661 (`3fb53af78`) and revalidated on 2026-06-15 in `reports/pure-kotlin-text/2026-06-15-kfont-review-closeout.md`. Remaining non-claims and later gates stay active.
 - `review`: `reports/pure-kotlin-text/boundary-contracts.json` and
   `scripts/validate_pure_kotlin_text_boundary_contracts.py` provide package
   root and import-boundary evidence. The M0 CI lane now invokes the boundary

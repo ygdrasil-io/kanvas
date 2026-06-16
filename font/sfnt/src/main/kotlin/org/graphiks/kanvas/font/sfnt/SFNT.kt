@@ -931,6 +931,395 @@ object SFNTDirectoryReportWriter {
 }
 
 /**
+ * Deterministic link to the KFONT-M2-003 `cmap-map.json` evidence bundle.
+ *
+ * The table fact report links only metadata-level `cmap` selection facts. It
+ * does not duplicate glyph mapping payloads or promote shaping/scaler support.
+ */
+data class OpenTypeTableFactCMapLink(
+    val reportPath: String,
+    val linkedTicketIds: List<String>,
+    val linkedEntryIds: List<String>,
+    val linkage: String,
+) {
+    init {
+        require(reportPath == "reports/pure-kotlin-text/cmap-map.json") {
+            "OpenType table fact cmap link must point at reports/pure-kotlin-text/cmap-map.json."
+        }
+        require(linkedTicketIds == linkedTicketIds.sorted()) {
+            "OpenType table fact cmap linkedTicketIds must be sorted."
+        }
+        require(linkedEntryIds == linkedEntryIds.sorted()) {
+            "OpenType table fact cmap linkedEntryIds must be sorted."
+        }
+        require(linkage == "metadata-only-cmap-facts") {
+            "OpenType table fact cmap link must remain metadata-only."
+        }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("reportPath", reportPath, indent = "  ", comma = true)
+        appendStringArrayField("linkedTicketIds", linkedTicketIds, indent = "  ", comma = true)
+        appendStringArrayField("linkedEntryIds", linkedEntryIds, indent = "  ", comma = true)
+        appendSFNTJsonField("linkage", linkage, indent = "  ", comma = false)
+        append("}")
+    }
+}
+
+/**
+ * Bounded byte range for a present SFNT table.
+ */
+data class OpenTypeTableByteRange(
+    val offset: Long,
+    val length: Long,
+    val endExclusive: Long,
+    val sourceLength: Long,
+) {
+    init {
+        require(offset >= 0L) { "OpenType table byte range offset must be non-negative." }
+        require(length >= 0L) { "OpenType table byte range length must be non-negative." }
+        require(endExclusive == offset + length) {
+            "OpenType table byte range endExclusive must equal offset + length."
+        }
+        require(sourceLength >= 0L) { "OpenType table byte range sourceLength must be non-negative." }
+        require(endExclusive <= sourceLength) {
+            "OpenType table byte range must fit within the bounded source length."
+        }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("offset", offset, indent = "  ", comma = true)
+        appendSFNTJsonField("length", this@OpenTypeTableByteRange.length, indent = "  ", comma = true)
+        appendSFNTJsonField("endExclusive", endExclusive, indent = "  ", comma = true)
+        appendSFNTJsonField("sourceLength", sourceLength, indent = "  ", comma = false)
+        append("}")
+    }
+}
+
+/**
+ * Stable table-specific diagnostic embedded in `sfnt-tables.json`.
+ */
+data class OpenTypeTableFactDiagnostic(
+    val source: String,
+    val code: String,
+    val table: String?,
+    val offset: Long?,
+    val length: Long?,
+    val sourceLength: Long?,
+    val causeCode: String?,
+    val message: String,
+    val causeMessage: String?,
+) {
+    init {
+        require(source == "directory" || source == "face-parser") {
+            "OpenType table fact diagnostic source must be directory or face-parser."
+        }
+        require(code.startsWith("font.") && code.isStableSFNTDiagnosticToken()) {
+            "OpenType table fact diagnostic code must be a stable font.* diagnostic token."
+        }
+        require(table == null || table.isStableSFNTTableTag()) {
+            "OpenType table fact diagnostic table must be a four-character printable ASCII SFNT tag."
+        }
+        require(offset == null || offset >= 0L) { "OpenType table fact diagnostic offset must be non-negative." }
+        require(length == null || length >= 0L) { "OpenType table fact diagnostic length must be non-negative." }
+        require(sourceLength == null || sourceLength >= 0L) {
+            "OpenType table fact diagnostic sourceLength must be non-negative."
+        }
+        require(causeCode == null || causeCode.isStableSFNTDiagnosticToken()) {
+            "OpenType table fact diagnostic causeCode must be stable."
+        }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("source", source, indent = "  ", comma = true)
+        appendSFNTJsonField("code", code, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("table", table, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("offset", offset, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("length", this@OpenTypeTableFactDiagnostic.length, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("sourceLength", sourceLength, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("causeCode", causeCode, indent = "  ", comma = true)
+        appendSFNTJsonField("message", message, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("causeMessage", causeMessage, indent = "  ", comma = false)
+        append("}")
+    }
+
+    companion object {
+        fun fromDirectory(diagnostic: SFNTTableDirectoryDiagnostic): OpenTypeTableFactDiagnostic =
+            OpenTypeTableFactDiagnostic(
+                source = "directory",
+                code = diagnostic.code,
+                table = diagnostic.tag?.value,
+                offset = diagnostic.offset,
+                length = diagnostic.length,
+                sourceLength = diagnostic.sourceLength,
+                causeCode = null,
+                message = diagnostic.message,
+                causeMessage = null,
+            )
+
+        fun fromFaceParser(diagnostic: OpenTypeParseDiagnosticEvidence): OpenTypeTableFactDiagnostic =
+            OpenTypeTableFactDiagnostic(
+                source = "face-parser",
+                code = diagnostic.causeCode?.takeIf { it.startsWith("font.") } ?: "font.sfnt.table-parse-diagnostic",
+                table = diagnostic.table?.value,
+                offset = null,
+                length = null,
+                sourceLength = null,
+                causeCode = diagnostic.causeCode,
+                message = diagnostic.message,
+                causeMessage = diagnostic.causeMessage,
+            )
+    }
+}
+
+/**
+ * Canonical fact for one required or high-value OpenType table tag.
+ */
+data class OpenTypeTableFact(
+    val tag: String,
+    val role: String,
+    val supportClassification: String,
+    val present: Boolean,
+    val byteRange: OpenTypeTableByteRange?,
+    val checksum: String?,
+    val rawSha256: String?,
+    val parserStatus: String,
+    val diagnostics: List<OpenTypeTableFactDiagnostic>,
+    val claimPromotionAllowed: Boolean = false,
+) {
+    init {
+        require(tag.isStableSFNTTableTag()) {
+            "OpenType table fact tag must be a four-character printable ASCII SFNT tag."
+        }
+        require(role in OPEN_TYPE_TABLE_FACT_ROLES) {
+            "OpenType table fact role must be one of the canonical table roles."
+        }
+        require(supportClassification.startsWith("metadata-")) {
+            "OpenType table fact supportClassification must remain metadata-only."
+        }
+        require(present == (byteRange != null)) {
+            "OpenType table fact byteRange must be present only when the table is present."
+        }
+        require((present && checksum != null) || (!present && checksum == null)) {
+            "OpenType table fact checksum must be present only when the table is present."
+        }
+        require(checksum == null || checksum.matches(SFNT_HEX_UINT32_PATTERN)) {
+            "OpenType table fact checksum must be lowercase hexadecimal uint32 text."
+        }
+        require(rawSha256 == null || rawSha256.matches(SFNT_SHA256_PATTERN)) {
+            "OpenType table fact rawSha256 must be lowercase SHA-256 text."
+        }
+        require(parserStatus in OPEN_TYPE_TABLE_FACT_PARSER_STATUSES) {
+            "OpenType table fact parserStatus must be canonical."
+        }
+        require(diagnostics == diagnostics.sortedWith(OPEN_TYPE_TABLE_FACT_DIAGNOSTIC_ORDER)) {
+            "OpenType table fact diagnostics must be sorted."
+        }
+        require(!claimPromotionAllowed) {
+            "OpenType table facts cannot promote support claims."
+        }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("tag", tag, indent = "  ", comma = true)
+        appendSFNTJsonField("role", role, indent = "  ", comma = true)
+        appendSFNTJsonField("supportClassification", supportClassification, indent = "  ", comma = true)
+        appendSFNTJsonField("present", present, indent = "  ", comma = true)
+        append("  \"byteRange\": ")
+        append(byteRange?.toCanonicalJson()?.prependIndent("  ")?.trimStart() ?: "null")
+        append(",\n")
+        appendSFNTJsonNullableField("checksum", checksum, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("rawSha256", rawSha256, indent = "  ", comma = true)
+        appendSFNTJsonField("parserStatus", parserStatus, indent = "  ", comma = true)
+        appendSFNTJsonField("claimPromotionAllowed", claimPromotionAllowed, indent = "  ", comma = true)
+        append("  \"diagnostics\": [")
+        if (diagnostics.isNotEmpty()) {
+            append("\n")
+            append(diagnostics.joinToString(",\n") { diagnostic -> diagnostic.toCanonicalJson().prependIndent("    ") })
+            append("\n  ")
+        }
+        append("]\n")
+        append("}")
+    }
+}
+
+/**
+ * One face row in the canonical KFONT-M2-004 OpenType table fact dump.
+ */
+data class OpenTypeTableFactReportEntry(
+    val entryId: String,
+    val fixtureId: String,
+    val fixtureKind: String,
+    val sourceId: FontSourceID,
+    val typefaceId: TypefaceID,
+    val fontSourceReportLabel: String?,
+    val typefaceReportLabel: String?,
+    val sourceKind: FontSourceKind,
+    val displayName: String,
+    val faceIndex: Int,
+    val parserGeneration: Int,
+    val sourceByteLength: Int,
+    val sourceSha256: String,
+    val scalerType: String,
+    val scalerTypeLabel: String,
+    val tableFacts: List<OpenTypeTableFact>,
+    val claimPromotionAllowed: Boolean = false,
+) {
+    init {
+        require(entryId.isNotBlank()) { "OpenType table fact report entryId must be non-blank." }
+        require(fixtureId.isNotBlank()) { "OpenType table fact report fixtureId must be non-blank." }
+        require(fixtureKind.isNotBlank()) { "OpenType table fact report fixtureKind must be non-blank." }
+        require(faceIndex >= 0) { "OpenType table fact report faceIndex must be non-negative." }
+        require(parserGeneration >= 0) { "OpenType table fact report parserGeneration must be non-negative." }
+        require(sourceByteLength >= 0) { "OpenType table fact report sourceByteLength must be non-negative." }
+        require(sourceSha256.matches(SFNT_SHA256_PATTERN)) {
+            "OpenType table fact report sourceSha256 must be lowercase SHA-256 text."
+        }
+        require(scalerType.matches(SFNT_HEX_UINT32_PATTERN)) {
+            "OpenType table fact report scalerType must be lowercase hexadecimal uint32 text."
+        }
+        require(tableFacts.map { it.tag } == OpenTypeTableFactReport.canonicalTableTags) {
+            "OpenType table fact report entries must use canonical table ordering."
+        }
+        require(!claimPromotionAllowed) {
+            "OpenType table fact report entries cannot promote support claims."
+        }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("entryId", entryId, indent = "  ", comma = true)
+        appendSFNTJsonField("fixtureId", fixtureId, indent = "  ", comma = true)
+        appendSFNTJsonField("fixtureKind", fixtureKind, indent = "  ", comma = true)
+        appendSFNTJsonField("sourceId", sourceId.value.toString(), indent = "  ", comma = true)
+        appendSFNTJsonField("typefaceId", typefaceId.value.toString(), indent = "  ", comma = true)
+        appendSFNTJsonNullableField("fontSourceReportLabel", fontSourceReportLabel, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("typefaceReportLabel", typefaceReportLabel, indent = "  ", comma = true)
+        appendSFNTJsonField("sourceKind", sourceKind.name, indent = "  ", comma = true)
+        appendSFNTJsonField("displayName", displayName, indent = "  ", comma = true)
+        appendSFNTJsonField("faceIndex", faceIndex, indent = "  ", comma = true)
+        appendSFNTJsonField("parserGeneration", parserGeneration, indent = "  ", comma = true)
+        appendSFNTJsonField("sourceByteLength", sourceByteLength, indent = "  ", comma = true)
+        appendSFNTJsonField("sourceSha256", sourceSha256, indent = "  ", comma = true)
+        appendSFNTJsonField("scalerType", scalerType, indent = "  ", comma = true)
+        appendSFNTJsonField("scalerTypeLabel", scalerTypeLabel, indent = "  ", comma = true)
+        appendSFNTJsonField("claimPromotionAllowed", claimPromotionAllowed, indent = "  ", comma = true)
+        append("  \"tableFacts\": [\n")
+        append(tableFacts.joinToString(",\n") { fact -> fact.toCanonicalJson().prependIndent("    ") })
+        append("\n  ]\n")
+        append("}")
+    }
+
+    companion object {
+        fun fromFaceData(
+            entryId: String,
+            fixtureId: String,
+            fixtureKind: String,
+            face: OpenTypeFaceData,
+            requiredTables: Set<SFNTTableTag>,
+            fontSourceReportLabel: String? = null,
+            typefaceReportLabel: String? = null,
+            typefaceId: TypefaceID = face.id,
+            parserGeneration: Int = 1,
+        ): OpenTypeTableFactReportEntry {
+            val evidence = face.faceEvidence(requiredTables = requiredTables)
+            return OpenTypeTableFactReportEntry(
+                entryId = entryId,
+                fixtureId = fixtureId,
+                fixtureKind = fixtureKind,
+                sourceId = face.source.id,
+                typefaceId = typefaceId,
+                fontSourceReportLabel = fontSourceReportLabel,
+                typefaceReportLabel = typefaceReportLabel,
+                sourceKind = face.source.kind,
+                displayName = face.source.displayName,
+                faceIndex = face.faceIndex,
+                parserGeneration = parserGeneration,
+                sourceByteLength = face.source.bytes.size,
+                sourceSha256 = face.source.bytes.sfntSha256Hex(),
+                scalerType = evidence.scalerType,
+                scalerTypeLabel = evidence.scalerTypeLabel,
+                tableFacts = buildOpenTypeTableFacts(
+                    evidence = evidence,
+                    requiredTables = requiredTables,
+                    sourceLength = face.source.bytes.size.toLong(),
+                ),
+            )
+        }
+    }
+}
+
+/**
+ * Canonical `reports/pure-kotlin-text/sfnt-tables.json` report.
+ */
+data class OpenTypeTableFactReport(
+    val entries: List<OpenTypeTableFactReportEntry>,
+    val cmapMapLink: OpenTypeTableFactCMapLink,
+    val schemaVersion: Int = 1,
+    val ticketIds: List<String> = listOf("KFONT-M2-004"),
+    val dashboardClassification: String = "tracked-gap",
+    val claimPromotionAllowed: Boolean = false,
+    val nonClaims: List<String> = OPEN_TYPE_TABLE_FACT_NON_CLAIMS,
+) {
+    init {
+        require(schemaVersion == 1) { "OpenType table fact report schemaVersion must be 1." }
+        require(ticketIds == listOf("KFONT-M2-004")) {
+            "OpenType table fact report ticketIds must contain only KFONT-M2-004."
+        }
+        require(entries.map { it.entryId }.toSet().size == entries.size) {
+            "OpenType table fact report entries must have unique entryIds."
+        }
+        require(dashboardClassification == "tracked-gap") {
+            "OpenType table fact report must remain tracked-gap."
+        }
+        require(!claimPromotionAllowed) {
+            "OpenType table fact report cannot promote support claims."
+        }
+        require(nonClaims == OPEN_TYPE_TABLE_FACT_NON_CLAIMS) {
+            "OpenType table fact report nonClaims must stay canonical."
+        }
+    }
+
+    companion object {
+        val canonicalTableTags: List<String>
+            get() = OPEN_TYPE_TABLE_FACT_SPECS.map { it.tag.value }
+
+        val trueTypeRequiredTableTags: Set<SFNTTableTag>
+            get() = TRUE_TYPE_REQUIRED_TABLE_TAGS
+    }
+}
+
+/**
+ * Canonical writer for `reports/pure-kotlin-text/sfnt-tables.json`.
+ */
+object OpenTypeTableFactReportWriter {
+    fun write(report: OpenTypeTableFactReport): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("schema", "org.graphiks.kanvas.font.sfnt.OpenTypeTableFactReport.v1", indent = "  ", comma = true)
+        appendSFNTJsonField("schemaVersion", report.schemaVersion, indent = "  ", comma = true)
+        appendStringArrayField("ticketIds", report.ticketIds, indent = "  ", comma = true)
+        appendSFNTJsonField("dashboardClassification", report.dashboardClassification, indent = "  ", comma = true)
+        appendSFNTJsonField("claimPromotionAllowed", report.claimPromotionAllowed, indent = "  ", comma = true)
+        appendStringArrayField("nonClaims", report.nonClaims, indent = "  ", comma = true)
+        append("  \"cmapMapLink\": ")
+        append(report.cmapMapLink.toCanonicalJson().prependIndent("  ").trimStart())
+        append(",\n")
+        append("  \"entries\": [")
+        if (report.entries.isNotEmpty()) {
+            append("\n")
+            append(report.entries.sortedBy { it.entryId }.joinToString(",\n") { entry -> entry.toCanonicalJson().prependIndent("    ") })
+            append("\n  ")
+        }
+        append("]\n")
+        append("}\n")
+    }
+}
+
+/**
  * Default parser for OpenType or TrueType SFNT faces.
  *
  * Single-face SFNT sources continue to flow through [SFNTReader]. TrueType or
@@ -2162,6 +2551,8 @@ fun OpenTypeFaceData.faceEvidence(
  * @property encodingRecords Encoding records in table order.
  * @property mappings Parsed format-specific mappings in table order.
  * @property preferredSubtable Preferred Unicode subtable used for lookups.
+ * @property variationSubtable Parsed format 14 variation-selector subtable, when present.
+ * @property diagnostics Non-fatal `cmap` support/refusal diagnostics.
  */
 data class CMapTable(
     val subtables: Map<String, List<Int>> = emptyMap(),
@@ -2169,17 +2560,39 @@ data class CMapTable(
     val encodingRecords: List<CMapEncodingRecord> = emptyList(),
     val mappings: List<CMapSubtable> = emptyList(),
     val preferredSubtable: CMapSubtable? = mappings.preferredUnicodeCMapSubtable(),
+    val variationSubtable: CMapSubtable? = mappings.firstOrNull { it.mapping is CMapFormat14Mapping },
+    val diagnostics: List<CMapDiagnostic> = emptyList(),
 ) {
     /**
      * Returns the glyph ID for [codePoint] from the preferred Unicode subtable.
      *
+     * Missing code points return stable glyph ID `0`. When [variationSelector]
+     * is supplied and a format 14 subtable contains a non-default mapping, the
+     * explicit variation glyph ID wins; default variation ranges preserve the
+     * base mapping semantics.
+     *
      * @throws IllegalArgumentException when [codePoint] is outside the Unicode scalar range.
      */
-    fun lookupGlyphId(codePoint: Int): Int? {
+    fun lookupGlyphId(codePoint: Int, variationSelector: Int? = null): Int? {
         require(codePoint in UNICODE_CODE_POINT_RANGE) {
             "Unicode code point $codePoint is outside range 0..0x10ffff."
         }
-        return preferredSubtable?.lookupGlyphId(codePoint)
+        require(variationSelector == null || variationSelector in UNICODE_CODE_POINT_RANGE) {
+            "Unicode variation selector $variationSelector is outside range 0..0x10ffff."
+        }
+
+        val baseGlyphId = preferredSubtable?.lookupGlyphId(codePoint) ?: 0
+        if (variationSelector == null) {
+            return baseGlyphId
+        }
+
+        val variationGlyphId = variationSubtable
+            ?.lookupVariationGlyphId(
+                codePoint = codePoint,
+                variationSelector = variationSelector,
+                baseGlyphId = baseGlyphId,
+            )
+        return variationGlyphId ?: baseGlyphId
     }
 }
 
@@ -2197,6 +2610,52 @@ data class CMapEncodingRecord(
     val offset: Int,
     val format: Int? = null,
 )
+
+/**
+ * Non-fatal diagnostic produced while parsing an OpenType `cmap` table.
+ *
+ * @property code Stable diagnostic code from the pure Kotlin text taxonomy.
+ * @property format `cmap` format associated with the diagnostic, when known.
+ * @property platformId Encoding record platform ID associated with the diagnostic.
+ * @property encodingId Encoding record encoding ID associated with the diagnostic.
+ * @property offset Byte offset of the subtable from the start of the `cmap` table.
+ * @property message Deterministic human-readable detail.
+ */
+data class CMapDiagnostic(
+    val code: String,
+    val format: Int?,
+    val platformId: Int?,
+    val encodingId: Int?,
+    val offset: Int?,
+    val message: String,
+) {
+    init {
+        require(code.startsWith("font.") && code.isStableSFNTDiagnosticToken()) {
+            "OpenType cmap diagnostic code must be a stable font.* diagnostic token."
+        }
+        require(format == null || format >= 0) { "OpenType cmap diagnostic format must be non-negative." }
+        require(platformId == null || platformId >= 0) { "OpenType cmap diagnostic platformId must be non-negative." }
+        require(encodingId == null || encodingId >= 0) { "OpenType cmap diagnostic encodingId must be non-negative." }
+        require(offset == null || offset >= 0) { "OpenType cmap diagnostic offset must be non-negative." }
+    }
+
+    /**
+     * Serializes the diagnostic as one stable line for `cmap` evidence.
+     */
+    fun dump(): String = buildString {
+        append(code)
+        append(" format=")
+        append(format ?: "none")
+        append(" platformId=")
+        append(platformId ?: "none")
+        append(" encodingId=")
+        append(encodingId ?: "none")
+        append(" offset=")
+        append(offset ?: "none")
+        append(" message=")
+        append(message.sfntEvidenceQuoted())
+    }
+}
 
 /**
  * Parsed OpenType `cmap` subtable with its platform metadata and mapping body.
@@ -2416,13 +2875,69 @@ data class CMapFormat12Group(
 )
 
 /**
+ * Parsed OpenType `cmap` format 14 variation-selector mapping.
+ *
+ * @property records Variation selector records in subtable order.
+ */
+data class CMapFormat14Mapping(
+    val records: List<CMapVariationSelectorRecord>,
+) : CMapMapping {
+    override fun lookupGlyphId(codePoint: Int): Int? = null
+
+    /**
+     * Returns the variation glyph ID for a Unicode variation sequence.
+     *
+     * Non-default mappings return their explicit glyph ID. Default variation
+     * ranges return the supplied base glyph ID, preserving base cmap semantics.
+     * A missing variation sequence returns `null` so callers can apply their
+     * fallback policy.
+     */
+    fun lookupGlyphId(
+        codePoint: Int,
+        variationSelector: Int,
+        baseGlyphId: Int,
+    ): Int? {
+        val record = records.firstOrNull { it.variationSelector == variationSelector } ?: return null
+        val explicitGlyphId = record.nonDefaultMappings[codePoint]
+        if (explicitGlyphId != null) {
+            return explicitGlyphId.takeIf { it != 0 } ?: 0
+        }
+        if (record.defaultRanges.any { codePoint in it.startCodePoint..it.endCodePoint }) {
+            return baseGlyphId
+        }
+        return null
+    }
+}
+
+/**
+ * One format 14 variation selector record.
+ *
+ * @property variationSelector Unicode variation selector scalar value.
+ * @property defaultRanges Code point ranges that keep the base `cmap` glyph.
+ * @property nonDefaultMappings Explicit Unicode variation sequence glyph IDs.
+ */
+data class CMapVariationSelectorRecord(
+    val variationSelector: Int,
+    val defaultRanges: List<CMapUnicodeRange> = emptyList(),
+    val nonDefaultMappings: Map<Int, Int> = emptyMap(),
+)
+
+/**
+ * Inclusive Unicode range from a format 14 default UVS table.
+ */
+data class CMapUnicodeRange(
+    val startCodePoint: Int,
+    val endCodePoint: Int,
+)
+
+/**
  * Parser for raw OpenType `cmap` table bytes.
  */
 object OpenTypeCMapTableParser {
     /**
      * Parses raw OpenType `cmap` bytes into a typed [CMapTable].
      *
-     * Supported mapping bodies are format 4 and format 12. Unsupported formats
+     * Supported mapping bodies are formats 0, 4, 6, 12, and 14. Unsupported formats
      * remain visible through [CMapTable.encodingRecords] but are not added to
      * [CMapTable.mappings].
      *
@@ -2457,12 +2972,29 @@ object OpenTypeCMapTableParser {
             )
         }
 
+        val diagnostics = mutableListOf<CMapDiagnostic>()
         val mappings = encodingRecords.mapIndexedNotNull { index, record ->
-            parseSubtable(table = table, recordIndex = index, record = record)
+            parseSubtable(
+                table = table,
+                recordIndex = index,
+                record = record,
+                diagnostics = diagnostics,
+            )
         }
         val legacySubtables = mappings.associate { subtable ->
             "${subtable.platformId}:${subtable.encodingId}:${subtable.format}" to
                 table.unsignedBytes(subtable.offset, subtable.offset + subtable.length)
+        }
+        val preferredSubtable = mappings.preferredUnicodeCMapSubtable()
+        if (preferredSubtable == null) {
+            diagnostics += CMapDiagnostic(
+                code = "font.sfnt.cmap-unusable",
+                format = null,
+                platformId = null,
+                encodingId = null,
+                offset = null,
+                message = "No usable Unicode cmap subtable was parsed.",
+            )
         }
 
         return CMapTable(
@@ -2470,7 +3002,9 @@ object OpenTypeCMapTableParser {
             version = version,
             encodingRecords = encodingRecords,
             mappings = mappings,
-            preferredSubtable = mappings.preferredUnicodeCMapSubtable(),
+            preferredSubtable = preferredSubtable,
+            variationSubtable = mappings.firstOrNull { it.mapping is CMapFormat14Mapping },
+            diagnostics = diagnostics,
         )
     }
 
@@ -2478,13 +3012,25 @@ object OpenTypeCMapTableParser {
         table: ByteArray,
         recordIndex: Int,
         record: CMapEncodingRecord,
+        diagnostics: MutableList<CMapDiagnostic>,
     ): CMapSubtable? =
         when (record.format) {
             0 -> parseFormat0(table, recordIndex, record)
             6 -> parseFormat6(table, recordIndex, record)
             4 -> parseFormat4(table, recordIndex, record)
             12 -> parseFormat12(table, recordIndex, record)
-            else -> null
+            14 -> parseFormat14(table, recordIndex, record)
+            else -> {
+                diagnostics += CMapDiagnostic(
+                    code = "font.sfnt.cmap-format-unsupported",
+                    format = record.format,
+                    platformId = record.platformId,
+                    encodingId = record.encodingId,
+                    offset = record.offset,
+                    message = "Unsupported cmap format ${record.format} is not selected for Unicode lookup.",
+                )
+                null
+            }
         }
 
     private fun parseFormat0(
@@ -2707,6 +3253,180 @@ object OpenTypeCMapTableParser {
             format = 12,
             mapping = CMapFormat12Mapping(groups),
         )
+    }
+
+    private fun parseFormat14(
+        table: ByteArray,
+        recordIndex: Int,
+        record: CMapEncodingRecord,
+    ): CMapSubtable {
+        val offset = record.offset
+        table.requireRange(offset, FORMAT14_HEADER_SIZE, "OpenType cmap format 14 header for record $recordIndex")
+        val length = table.readUInt32BE(offset + 2, "OpenType cmap format 14 length for record $recordIndex")
+        require(length <= Int.MAX_VALUE && length >= FORMAT14_HEADER_SIZE) {
+            "OpenType cmap format 14 record $recordIndex length $length must be between $FORMAT14_HEADER_SIZE and ${Int.MAX_VALUE}."
+        }
+        table.requireRange(offset, length.toInt(), "OpenType cmap format 14 subtable for record $recordIndex")
+
+        val recordCount = table.readUInt32BE(offset + 6, "OpenType cmap format 14 numVarSelectorRecords for record $recordIndex")
+        require(recordCount <= Int.MAX_VALUE) {
+            "OpenType cmap format 14 record $recordIndex selector count $recordCount exceeds ${Int.MAX_VALUE}."
+        }
+        val recordsEnd = FORMAT14_HEADER_SIZE.toLong() + recordCount * FORMAT14_SELECTOR_RECORD_SIZE
+        require(recordsEnd <= length) {
+            "OpenType cmap format 14 selector records for record $recordIndex end at $recordsEnd but declared length is $length."
+        }
+
+        val records = List(recordCount.toInt()) { selectorIndex ->
+            val selectorOffset = offset + FORMAT14_HEADER_SIZE + selectorIndex * FORMAT14_SELECTOR_RECORD_SIZE
+            val variationSelector = table.readUInt24BE(
+                selectorOffset,
+                "OpenType cmap format 14 varSelector[$selectorIndex] for record $recordIndex",
+            )
+            require(variationSelector in UNICODE_CODE_POINT_RANGE) {
+                "OpenType cmap format 14 varSelector[$selectorIndex] $variationSelector exceeds 0x10ffff."
+            }
+            val defaultUVSOffset = table.readUInt32BE(
+                selectorOffset + FORMAT14_UINT24_BYTE_LENGTH,
+                "OpenType cmap format 14 defaultUVSOffset[$selectorIndex] for record $recordIndex",
+            )
+            val nonDefaultUVSOffset = table.readUInt32BE(
+                selectorOffset + FORMAT14_UINT24_BYTE_LENGTH + UINT32_BYTE_LENGTH,
+                "OpenType cmap format 14 nonDefaultUVSOffset[$selectorIndex] for record $recordIndex",
+            )
+            CMapVariationSelectorRecord(
+                variationSelector = variationSelector,
+                defaultRanges = parseFormat14DefaultRanges(
+                    table = table,
+                    subtableOffset = offset,
+                    subtableLength = length.toInt(),
+                    defaultUVSOffset = defaultUVSOffset,
+                    recordIndex = recordIndex,
+                    selectorIndex = selectorIndex,
+                ),
+                nonDefaultMappings = parseFormat14NonDefaultMappings(
+                    table = table,
+                    subtableOffset = offset,
+                    subtableLength = length.toInt(),
+                    nonDefaultUVSOffset = nonDefaultUVSOffset,
+                    recordIndex = recordIndex,
+                    selectorIndex = selectorIndex,
+                ),
+            )
+        }
+
+        return CMapSubtable(
+            platformId = record.platformId,
+            encodingId = record.encodingId,
+            offset = offset,
+            length = length.toInt(),
+            format = 14,
+            mapping = CMapFormat14Mapping(records),
+        )
+    }
+
+    private fun parseFormat14DefaultRanges(
+        table: ByteArray,
+        subtableOffset: Int,
+        subtableLength: Int,
+        defaultUVSOffset: Long,
+        recordIndex: Int,
+        selectorIndex: Int,
+    ): List<CMapUnicodeRange> {
+        if (defaultUVSOffset == 0L) {
+            return emptyList()
+        }
+        val tableOffset = table.cmapSubtableRelativeOffset(
+            subtableOffset = subtableOffset,
+            subtableLength = subtableLength,
+            relativeOffset = defaultUVSOffset,
+            requiredLength = UINT32_BYTE_LENGTH.toLong(),
+            label = "OpenType cmap format 14 default UVS table for record $recordIndex selector $selectorIndex",
+        )
+        val rangeCount = table.readUInt32BE(
+            tableOffset,
+            "OpenType cmap format 14 default UVS count for record $recordIndex selector $selectorIndex",
+        )
+        require(rangeCount <= Int.MAX_VALUE) {
+            "OpenType cmap format 14 default UVS count $rangeCount exceeds ${Int.MAX_VALUE}."
+        }
+        table.cmapSubtableRelativeOffset(
+            subtableOffset = subtableOffset,
+            subtableLength = subtableLength,
+            relativeOffset = defaultUVSOffset,
+            requiredLength = UINT32_BYTE_LENGTH.toLong() + rangeCount * FORMAT14_DEFAULT_RANGE_RECORD_SIZE.toLong(),
+            label = "OpenType cmap format 14 default UVS ranges for record $recordIndex selector $selectorIndex",
+        )
+
+        return List(rangeCount.toInt()) { rangeIndex ->
+            val rangeOffset = tableOffset + UINT32_BYTE_LENGTH + rangeIndex * FORMAT14_DEFAULT_RANGE_RECORD_SIZE
+            val startUnicodeValue = table.readUInt24BE(
+                rangeOffset,
+                "OpenType cmap format 14 default UVS startUnicodeValue[$rangeIndex]",
+            )
+            val additionalCount = table.readUInt8(
+                rangeOffset + FORMAT14_UINT24_BYTE_LENGTH,
+                "OpenType cmap format 14 default UVS additionalCount[$rangeIndex]",
+            )
+            val endUnicodeValue = startUnicodeValue + additionalCount
+            require(endUnicodeValue <= UNICODE_CODE_POINT_MAX) {
+                "OpenType cmap format 14 default UVS range $rangeIndex ending at $endUnicodeValue exceeds 0x10ffff."
+            }
+            CMapUnicodeRange(
+                startCodePoint = startUnicodeValue,
+                endCodePoint = endUnicodeValue,
+            )
+        }
+    }
+
+    private fun parseFormat14NonDefaultMappings(
+        table: ByteArray,
+        subtableOffset: Int,
+        subtableLength: Int,
+        nonDefaultUVSOffset: Long,
+        recordIndex: Int,
+        selectorIndex: Int,
+    ): Map<Int, Int> {
+        if (nonDefaultUVSOffset == 0L) {
+            return emptyMap()
+        }
+        val tableOffset = table.cmapSubtableRelativeOffset(
+            subtableOffset = subtableOffset,
+            subtableLength = subtableLength,
+            relativeOffset = nonDefaultUVSOffset,
+            requiredLength = UINT32_BYTE_LENGTH.toLong(),
+            label = "OpenType cmap format 14 non-default UVS table for record $recordIndex selector $selectorIndex",
+        )
+        val mappingCount = table.readUInt32BE(
+            tableOffset,
+            "OpenType cmap format 14 non-default UVS count for record $recordIndex selector $selectorIndex",
+        )
+        require(mappingCount <= Int.MAX_VALUE) {
+            "OpenType cmap format 14 non-default UVS count $mappingCount exceeds ${Int.MAX_VALUE}."
+        }
+        table.cmapSubtableRelativeOffset(
+            subtableOffset = subtableOffset,
+            subtableLength = subtableLength,
+            relativeOffset = nonDefaultUVSOffset,
+            requiredLength = UINT32_BYTE_LENGTH.toLong() + mappingCount * FORMAT14_NON_DEFAULT_RECORD_SIZE.toLong(),
+            label = "OpenType cmap format 14 non-default UVS mappings for record $recordIndex selector $selectorIndex",
+        )
+
+        return List(mappingCount.toInt()) { mappingIndex ->
+            val mappingOffset = tableOffset + UINT32_BYTE_LENGTH + mappingIndex * FORMAT14_NON_DEFAULT_RECORD_SIZE
+            val unicodeValue = table.readUInt24BE(
+                mappingOffset,
+                "OpenType cmap format 14 non-default UVS unicodeValue[$mappingIndex]",
+            )
+            val glyphId = table.readUInt16BE(
+                mappingOffset + FORMAT14_UINT24_BYTE_LENGTH,
+                "OpenType cmap format 14 non-default UVS glyphID[$mappingIndex]",
+            )
+            require(unicodeValue in UNICODE_CODE_POINT_RANGE) {
+                "OpenType cmap format 14 non-default UVS unicodeValue[$mappingIndex] $unicodeValue exceeds 0x10ffff."
+            }
+            unicodeValue to glyphId
+        }.toMap()
     }
 }
 
@@ -2981,6 +3701,7 @@ private fun CMapMapping.evidenceKind(): String =
         is CMapFormat6Mapping -> "format6-trimmed-array"
         is CMapFormat4Mapping -> "format4-segments"
         is CMapFormat12Mapping -> "format12-segmented-coverage"
+        is CMapFormat14Mapping -> "format14-variation-sequences"
     }
 
 private fun CMapMapping.evidenceEntryCount(): Int =
@@ -2989,6 +3710,7 @@ private fun CMapMapping.evidenceEntryCount(): Int =
         is CMapFormat6Mapping -> glyphIds.size
         is CMapFormat4Mapping -> segments.size
         is CMapFormat12Mapping -> groups.size
+        is CMapFormat14Mapping -> records.size
     }
 
 private fun MetricsTables.toEvidence(): OpenTypeMetricsEvidence =
@@ -3165,6 +3887,71 @@ private fun sfntJsonString(value: String): String = buildString {
 }
 
 private fun String.sfntEvidenceQuoted(): String = sfntJsonString(this)
+
+private fun buildOpenTypeTableFacts(
+    evidence: OpenTypeFaceEvidence,
+    requiredTables: Set<SFNTTableTag>,
+    sourceLength: Long,
+): List<OpenTypeTableFact> {
+    val recordsByTag = evidence.tableRecords.groupBy { record -> record.tag }
+    val directoryDiagnosticsByTag = evidence.directoryDiagnostics
+        .map(OpenTypeTableFactDiagnostic::fromDirectory)
+        .groupBy { diagnostic -> diagnostic.table }
+    val faceDiagnosticsByTag = evidence.diagnostics
+        .map(OpenTypeTableFactDiagnostic::fromFaceParser)
+        .groupBy { diagnostic -> diagnostic.table }
+
+    return OPEN_TYPE_TABLE_FACT_SPECS.map { spec ->
+        val tag = spec.tag.value
+        val record = recordsByTag[tag].orEmpty().minWithOrNull(SFNT_TABLE_EVIDENCE_ORDER)
+        val diagnostics = (
+            directoryDiagnosticsByTag[tag].orEmpty() +
+                faceDiagnosticsByTag[tag].orEmpty()
+            ).sortedWith(OPEN_TYPE_TABLE_FACT_DIAGNOSTIC_ORDER)
+        val present = record != null
+        val role = if (spec.tag in requiredTables) "required" else spec.role
+        val parserStatus = tableFactParserStatus(
+            tag = spec.tag,
+            present = present,
+            role = role,
+            diagnostics = diagnostics,
+        )
+
+        OpenTypeTableFact(
+            tag = tag,
+            role = role,
+            supportClassification = spec.supportClassification,
+            present = present,
+            byteRange = record?.let {
+                OpenTypeTableByteRange(
+                    offset = it.offset,
+                    length = it.length,
+                    endExclusive = it.offset + it.length,
+                    sourceLength = sourceLength,
+                )
+            },
+            checksum = record?.checksum,
+            rawSha256 = record?.rawSha256,
+            parserStatus = parserStatus,
+            diagnostics = diagnostics,
+        )
+    }
+}
+
+private fun tableFactParserStatus(
+    tag: SFNTTableTag,
+    present: Boolean,
+    role: String,
+    diagnostics: List<OpenTypeTableFactDiagnostic>,
+): String =
+    when {
+        diagnostics.any { it.code == "font.sfnt.required-table-missing" } -> "missing-required"
+        diagnostics.any { it.code == OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC } -> "malformed-optional"
+        !present && role == "required" -> "missing-required"
+        !present -> "not-present"
+        tag in CURRENT_METADATA_PARSED_TABLE_TAGS -> "parsed-current-metadata"
+        else -> "metadata-only"
+    }
 
 private fun SFNTParseRequest.diagnosticResult(
     boundedBytes: ByteArray,
@@ -3578,6 +4365,15 @@ private val SFNT_DIAGNOSTIC_EVIDENCE_ORDER = compareBy<OpenTypeParseDiagnosticEv
     { it.message },
     { it.causeMessage.orEmpty() },
 )
+private val OPEN_TYPE_TABLE_FACT_DIAGNOSTIC_ORDER = compareBy<OpenTypeTableFactDiagnostic>(
+    { it.table.orEmpty() },
+    { it.source },
+    { it.code },
+    { it.offset ?: -1L },
+    { it.length ?: -1L },
+    { it.message },
+    { it.causeMessage.orEmpty() },
+)
 private val NAME_TABLE_TAG = SFNTTableTag("name")
 private val CMAP_TABLE_TAG = SFNTTableTag("cmap")
 private val HEAD_TABLE_TAG = SFNTTableTag("head")
@@ -3586,20 +4382,127 @@ private val MAXP_TABLE_TAG = SFNTTableTag("maxp")
 private val HMTX_TABLE_TAG = SFNTTableTag("hmtx")
 private val OS_2_TABLE_TAG = SFNTTableTag("OS/2")
 private val POST_TABLE_TAG = SFNTTableTag("post")
+private val LOCA_TABLE_TAG = SFNTTableTag("loca")
+private val GLYF_TABLE_TAG = SFNTTableTag("glyf")
+private val CFF_TABLE_TAG = SFNTTableTag("CFF ")
+private val CFF2_TABLE_TAG = SFNTTableTag("CFF2")
+private val VHEA_TABLE_TAG = SFNTTableTag("vhea")
+private val VMTX_TABLE_TAG = SFNTTableTag("vmtx")
+private val GDEF_TABLE_TAG = SFNTTableTag("GDEF")
+private val GSUB_TABLE_TAG = SFNTTableTag("GSUB")
 private val KERN_TABLE_TAG = SFNTTableTag("kern")
+private val BASE_TABLE_TAG = SFNTTableTag("BASE")
 private val GPOS_TABLE_TAG = SFNTTableTag("GPOS")
 private val FVAR_TABLE_TAG = SFNTTableTag("fvar")
 private val AVAR_TABLE_TAG = SFNTTableTag("avar")
+private val GVAR_TABLE_TAG = SFNTTableTag("gvar")
+private val HVAR_TABLE_TAG = SFNTTableTag("HVAR")
+private val VVAR_TABLE_TAG = SFNTTableTag("VVAR")
+private val MVAR_TABLE_TAG = SFNTTableTag("MVAR")
 private val COLR_TABLE_TAG = SFNTTableTag("COLR")
 private val CPAL_TABLE_TAG = SFNTTableTag("CPAL")
 private val CBDT_TABLE_TAG = SFNTTableTag("CBDT")
 private val CBLC_TABLE_TAG = SFNTTableTag("CBLC")
 private val SBIX_TABLE_TAG = SFNTTableTag("sbix")
 private val SVG_TABLE_TAG = SFNTTableTag("SVG ")
+private val TRUE_TYPE_REQUIRED_TABLE_TAGS = setOf(
+    CMAP_TABLE_TAG,
+    HEAD_TABLE_TAG,
+    HHEA_TABLE_TAG,
+    HMTX_TABLE_TAG,
+    MAXP_TABLE_TAG,
+    NAME_TABLE_TAG,
+    OS_2_TABLE_TAG,
+    POST_TABLE_TAG,
+    LOCA_TABLE_TAG,
+    GLYF_TABLE_TAG,
+)
 private val METRIC_TABLE_TAGS = listOf(HEAD_TABLE_TAG, HHEA_TABLE_TAG, MAXP_TABLE_TAG, HMTX_TABLE_TAG)
 private val LAYOUT_TABLE_TAGS = setOf(KERN_TABLE_TAG, GPOS_TABLE_TAG)
 private val COLOR_FONT_TABLE_TAGS = setOf(COLR_TABLE_TAG, CPAL_TABLE_TAG, CBDT_TABLE_TAG, CBLC_TABLE_TAG, SBIX_TABLE_TAG, SVG_TABLE_TAG)
 private const val OPTIONAL_TABLE_MALFORMED_DIAGNOSTIC = "font.sfnt.optional-table-malformed"
+private val OPEN_TYPE_TABLE_FACT_ROLES = setOf(
+    "required",
+    "required-cff-outline",
+    "required-cff2-outline",
+    "optional-shaping",
+    "optional-vertical",
+    "optional-variation",
+    "optional-color",
+    "optional-bitmap",
+    "optional-svg",
+)
+private val OPEN_TYPE_TABLE_FACT_PARSER_STATUSES = setOf(
+    "parsed-current-metadata",
+    "metadata-only",
+    "missing-required",
+    "not-present",
+    "malformed-optional",
+)
+private val OPEN_TYPE_TABLE_FACT_NON_CLAIMS = listOf(
+    "table-presence-is-metadata-only",
+    "no-shaping-support-claim",
+    "no-scaler-support-claim",
+    "no-color-glyph-rendering-claim",
+    "no-native-engine-oracle",
+    "no-gpu-support-claim",
+)
+private val CURRENT_METADATA_PARSED_TABLE_TAGS = setOf(
+    CMAP_TABLE_TAG,
+    NAME_TABLE_TAG,
+    HEAD_TABLE_TAG,
+    HHEA_TABLE_TAG,
+    HMTX_TABLE_TAG,
+    MAXP_TABLE_TAG,
+    OS_2_TABLE_TAG,
+    POST_TABLE_TAG,
+    KERN_TABLE_TAG,
+    GPOS_TABLE_TAG,
+    FVAR_TABLE_TAG,
+    AVAR_TABLE_TAG,
+    SVG_TABLE_TAG,
+    CBDT_TABLE_TAG,
+    CBLC_TABLE_TAG,
+    SBIX_TABLE_TAG,
+)
+private data class OpenTypeTableFactSpec(
+    val tag: SFNTTableTag,
+    val role: String,
+    val supportClassification: String,
+)
+private val OPEN_TYPE_TABLE_FACT_SPECS = listOf(
+    OpenTypeTableFactSpec(CMAP_TABLE_TAG, "required", "metadata-required-table"),
+    OpenTypeTableFactSpec(HEAD_TABLE_TAG, "required", "metadata-required-table"),
+    OpenTypeTableFactSpec(HHEA_TABLE_TAG, "required", "metadata-required-table"),
+    OpenTypeTableFactSpec(HMTX_TABLE_TAG, "required", "metadata-required-table"),
+    OpenTypeTableFactSpec(MAXP_TABLE_TAG, "required", "metadata-required-table"),
+    OpenTypeTableFactSpec(NAME_TABLE_TAG, "required", "metadata-required-table"),
+    OpenTypeTableFactSpec(OS_2_TABLE_TAG, "required", "metadata-required-table"),
+    OpenTypeTableFactSpec(POST_TABLE_TAG, "required", "metadata-required-table"),
+    OpenTypeTableFactSpec(LOCA_TABLE_TAG, "required", "metadata-required-table"),
+    OpenTypeTableFactSpec(GLYF_TABLE_TAG, "required", "metadata-required-table"),
+    OpenTypeTableFactSpec(CFF_TABLE_TAG, "required-cff-outline", "metadata-conditional-outline-table"),
+    OpenTypeTableFactSpec(CFF2_TABLE_TAG, "required-cff2-outline", "metadata-conditional-outline-table"),
+    OpenTypeTableFactSpec(VHEA_TABLE_TAG, "optional-vertical", "metadata-vertical-table"),
+    OpenTypeTableFactSpec(VMTX_TABLE_TAG, "optional-vertical", "metadata-vertical-table"),
+    OpenTypeTableFactSpec(GDEF_TABLE_TAG, "optional-shaping", "metadata-shaping-table"),
+    OpenTypeTableFactSpec(GSUB_TABLE_TAG, "optional-shaping", "metadata-shaping-table"),
+    OpenTypeTableFactSpec(GPOS_TABLE_TAG, "optional-shaping", "metadata-shaping-table"),
+    OpenTypeTableFactSpec(BASE_TABLE_TAG, "optional-shaping", "metadata-shaping-table"),
+    OpenTypeTableFactSpec(KERN_TABLE_TAG, "optional-shaping", "metadata-shaping-table"),
+    OpenTypeTableFactSpec(FVAR_TABLE_TAG, "optional-variation", "metadata-variation-table"),
+    OpenTypeTableFactSpec(AVAR_TABLE_TAG, "optional-variation", "metadata-variation-table"),
+    OpenTypeTableFactSpec(GVAR_TABLE_TAG, "optional-variation", "metadata-variation-table"),
+    OpenTypeTableFactSpec(HVAR_TABLE_TAG, "optional-variation", "metadata-variation-table"),
+    OpenTypeTableFactSpec(VVAR_TABLE_TAG, "optional-variation", "metadata-variation-table"),
+    OpenTypeTableFactSpec(MVAR_TABLE_TAG, "optional-variation", "metadata-variation-table"),
+    OpenTypeTableFactSpec(COLR_TABLE_TAG, "optional-color", "metadata-color-table"),
+    OpenTypeTableFactSpec(CPAL_TABLE_TAG, "optional-color", "metadata-color-table"),
+    OpenTypeTableFactSpec(CBDT_TABLE_TAG, "optional-bitmap", "metadata-bitmap-table"),
+    OpenTypeTableFactSpec(CBLC_TABLE_TAG, "optional-bitmap", "metadata-bitmap-table"),
+    OpenTypeTableFactSpec(SBIX_TABLE_TAG, "optional-bitmap", "metadata-bitmap-table"),
+    OpenTypeTableFactSpec(SVG_TABLE_TAG, "optional-svg", "metadata-svg-table"),
+)
 private const val CMAP_HEADER_SIZE = 4
 private const val CMAP_ENCODING_RECORD_SIZE = 8
 private const val FORMAT0_HEADER_SIZE = 6
@@ -3609,6 +4512,11 @@ private const val FORMAT6_HEADER_SIZE = 10
 private const val FORMAT4_HEADER_SIZE = 14
 private const val FORMAT12_HEADER_SIZE = 16
 private const val FORMAT12_GROUP_SIZE = 12
+private const val FORMAT14_HEADER_SIZE = 10
+private const val FORMAT14_SELECTOR_RECORD_SIZE = 11
+private const val FORMAT14_UINT24_BYTE_LENGTH = 3
+private const val FORMAT14_DEFAULT_RANGE_RECORD_SIZE = 4
+private const val FORMAT14_NON_DEFAULT_RECORD_SIZE = 5
 private const val SVG_TABLE_HEADER_SIZE = 10
 private const val SVG_DOCUMENT_RECORD_SIZE = 12
 private const val MAX_SVG_DOCUMENT_RECORDS = 8192
@@ -3899,6 +4807,17 @@ private fun CMapSubtable.unicodePreferencePriority(): Int =
         else -> Int.MAX_VALUE
     }
 
+private fun CMapSubtable.lookupVariationGlyphId(
+    codePoint: Int,
+    variationSelector: Int,
+    baseGlyphId: Int,
+): Int? =
+    (mapping as? CMapFormat14Mapping)?.lookupGlyphId(
+        codePoint = codePoint,
+        variationSelector = variationSelector,
+        baseGlyphId = baseGlyphId,
+    )
+
 private fun CMapEncodingRecord.characterEncoding(): CMapCharacterEncoding =
     if (platformId == MACINTOSH_PLATFORM_ID && encodingId == MACINTOSH_ROMAN_ENCODING_ID) {
         CMapCharacterEncoding.MAC_ROMAN
@@ -4016,9 +4935,40 @@ private fun ByteArray.readUInt32BE(offset: Int, label: String): Long {
         (this[offset + 3].toLong() and 0xff)
 }
 
+private fun ByteArray.readUInt24BE(offset: Int, label: String): Int {
+    requireRange(offset, FORMAT14_UINT24_BYTE_LENGTH, label)
+    return ((this[offset].toInt() and 0xff) shl 16) or
+        ((this[offset + 1].toInt() and 0xff) shl 8) or
+        (this[offset + 2].toInt() and 0xff)
+}
+
 private fun ByteArray.unsignedBytes(start: Int, end: Int): List<Int> {
     requireRange(start, end - start, "OpenType cmap compatibility subtable bytes")
     return copyOfRange(start, end).map { it.toInt() and 0xff }
+}
+
+private fun ByteArray.cmapSubtableRelativeOffset(
+    subtableOffset: Int,
+    subtableLength: Int,
+    relativeOffset: Long,
+    requiredLength: Long,
+    label: String,
+): Int {
+    val relativeEnd = relativeOffset + requiredLength
+    require(
+        subtableLength >= 0 &&
+            relativeOffset >= 0 &&
+            requiredLength >= 0 &&
+            relativeEnd <= subtableLength.toLong(),
+    ) {
+        "$label relative range [$relativeOffset, $relativeEnd) exceeds cmap subtable length $subtableLength."
+    }
+    val absoluteOffset = subtableOffset.toLong() + relativeOffset
+    require(absoluteOffset <= Int.MAX_VALUE && requiredLength <= Int.MAX_VALUE) {
+        "$label absolute range [$absoluteOffset, ${absoluteOffset + requiredLength}) exceeds addressable Int range."
+    }
+    requireRange(absoluteOffset.toInt(), requiredLength.toInt(), label)
+    return absoluteOffset.toInt()
 }
 
 private fun ByteArray.requireRange(offset: Int, length: Int, label: String) {

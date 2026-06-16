@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M2-002"
 title: "Add bounded table directory diagnostics"
-status: "review"
+status: "done"
 milestone: "M2"
 priority: "P0"
 owner_area: "font-sfnt"
@@ -105,8 +105,9 @@ rtk git diff --check
 
 ## Status Notes
 
+- `done`: Merged into `master` by PR #1664 (`0c7f69ed6`) and revalidated on 2026-06-15 in `reports/pure-kotlin-text/2026-06-15-kfont-review-closeout.md`. Search-field formula validation, checksum verification, and the complete malformed SFNT suite remain later gates.
 - `review`: Bounded directory diagnostics, required-table flow, malformed optional-table diagnostics, fixture source hash, intended diagnostic, and taxonomy alignment have fresh local evidence in `reports/pure-kotlin-text/2026-06-15-kfont-m2-002-bounded-directory-diagnostics.md`.
-- Remaining gate: PR validation and merge. Independent spec and quality reviews were accepted after remediation. Search-field formula validation and checksum verification are still future hardening. KFONT-M2-005 still owns the complete malformed SFNT fixture suite.
+- Remaining gate: Search-field formula validation and checksum verification remain future hardening. KFONT-M2-005 still owns the complete malformed SFNT fixture suite.
 
 ## Linear Labels
 

@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M2-004"
 title: "Add OpenType table fact dumps"
-status: "proposed"
+status: "done"
 milestone: "M2"
 priority: "P0"
 owner_area: "validation"
@@ -66,11 +66,11 @@ data class OpenTypeFactDump(
 
 ## Acceptance Criteria
 
-- [ ] `sfnt-tables.json` lists required, optional shaping, vertical, variation, and color/bitmap/SVG table facts with stable ordering.
-- [ ] Table presence is classified as metadata evidence only unless a later owner ticket supplies payload support evidence.
-- [ ] Missing required tables and malformed optional tables carry stable diagnostics in the dump.
-- [ ] Dumps include source and typeface IDs from M1.
-- [ ] Repeated dump generation over the same fixture is byte-identical.
+- [x] `sfnt-tables.json` lists required, optional shaping, vertical, variation, and color/bitmap/SVG table facts with stable ordering.
+- [x] Table presence is classified as metadata evidence only unless a later owner ticket supplies payload support evidence.
+- [x] Missing required tables and malformed optional tables carry stable diagnostics in the dump.
+- [x] Dumps include source and typeface IDs from M1.
+- [x] Repeated dump generation over the same fixture is byte-identical.
 
 ## Required Evidence
 
@@ -101,6 +101,8 @@ rtk ./gradlew --no-daemon :font:sfnt:test --tests '*TableFactDump*' --tests '*CM
 
 - `proposed`: Dump contents are specified, but no `sfnt-tables.json` evidence is attached yet.
 - Move to `ready` after identity dumps, parser entry points, and `cmap` coverage are available.
+- `review`: `sfnt-tables.json`, focused TableFactDump coverage, dump-index coverage, and metadata-only non-claims were implemented for independent review.
+- `done` (2026-06-16): Independent spec review accepted the table fact dump evidence with no remediations, code review accepted with non-blocking notes, and fresh validation remained green. Evidence: `reports/pure-kotlin-text/2026-06-16-kfont-m2-004-table-fact-dumps.md`.
 
 ## Linear Labels
 

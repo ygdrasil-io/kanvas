@@ -59,6 +59,17 @@ class FontDiagnosticTaxonomyTest {
             "tableTag",
         )
         assertRequiredFields(
+            taxonomy.code("font.sfnt.cmap-format-unsupported"),
+            "sourceId",
+            "format",
+            "platformId",
+            "encodingId",
+        )
+        assertRequiredFields(
+            taxonomy.code("font.sfnt.cmap-unusable"),
+            "sourceId",
+        )
+        assertRequiredFields(
             taxonomy.code("font.sfnt.table-out-of-bounds"),
             "sourceId",
             "tableTag",
@@ -154,6 +165,7 @@ class FontDiagnosticTaxonomyTest {
 
         assertEquals("font.source.bytes-unavailable", samples.getValue("source-failure").code)
         assertEquals("font.sfnt.required-table-missing", samples.getValue("sfnt-failure").code)
+        assertEquals("font.sfnt.cmap-format-unsupported", samples.getValue("sfnt-cmap-refusal").code)
         assertEquals("font.scaler.outline-unavailable", samples.getValue("scaler-failure").code)
         assertEquals("text.shaping.emoji-sequence-unsupported", samples.getValue("shaping-refusal").code)
         assertEquals("unsupported.text.artifact_unregistered", samples.getValue("gpu-text-route-refusal").code)

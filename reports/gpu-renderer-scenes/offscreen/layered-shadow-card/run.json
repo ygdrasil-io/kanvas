@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sceneId": "layered-shadow-card",
+  "status": "rendered",
+  "productRefusal": false,
+  "backend": "webgpu-offscreen",
+  "imagePath": "render.png",
+  "width": 320,
+  "height": 200,
+  "byteCount": 256000,
+  "nonTransparentPixels": 64000,
+  "diagnostics": ["rendered layered-shadow-card via WebGPU offscreen","adapter=Apple M2 Max","fillRectCommands=0","fillRRectCommands=0","linearGradientRectCommands=0","clipCommands=0","bitmapRectCommands=0","saveLayerCommands=1","saveLayerKinds=bounded-shadow-card","saveLayerRoute=scene-fixture.bounded-shadow-card","saveLayerMaterializedDraws=2","saveLayerFilterKinds=drop-shadow","saveLayerFallbackReason=none","filterRoutes=scene-fixture.bounded-drop-shadow","generalSaveLayerSupport=false","imageFilterDagSupport=false","filterNodeCommands=1","filterKinds=drop-shadow","filterInputs=shadow-card-layer"]
+}

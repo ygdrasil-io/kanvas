@@ -9,6 +9,8 @@ import kotlin.io.path.createDirectories
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneFilterKind
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
 import org.graphiks.kanvas.gpu.renderer.scenes.reports.json
 
 private const val KADRE_RUNNER_CLASS =
@@ -134,6 +136,7 @@ data class WindowedSceneSessionReport(
     val surface: WindowedSceneSurface,
     val adapterInfo: String?,
     val error: String?,
+    val diagnostics: List<String> = emptyList(),
 ) {
     val manualValidation: Boolean = true
     val productRefusal: Boolean = false
@@ -148,6 +151,7 @@ data class WindowedSceneSessionReport(
             "presentedFrames must not exceed requestedFrames"
         }
         require(error == null || error.isNotBlank()) { "error must not be blank" }
+        require(diagnostics.all { it.isNotBlank() }) { "diagnostics must not contain blank entries" }
         requireStatusInvariants()
     }
 
@@ -193,7 +197,8 @@ data class WindowedSceneSessionReport(
         appendLine("    \"format\": ${surface.format?.json() ?: "null"}")
         appendLine("  },")
         appendLine("  \"adapterInfo\": ${adapterInfo?.json() ?: "null"},")
-        appendLine("  \"error\": ${error?.json() ?: "null"}")
+        appendLine("  \"error\": ${error?.json() ?: "null"},")
+        appendLine("  \"diagnostics\": [${diagnostics.joinToString(",") { it.json() }}]")
         appendLine("}")
     }
 
@@ -229,6 +234,7 @@ data class WindowedSceneSessionReport(
                 surface = scene.surface(format = null),
                 adapterInfo = null,
                 error = null,
+                diagnostics = scene.windowedSceneDiagnostics(),
             )
 
         fun notYetRendered(
@@ -245,6 +251,7 @@ data class WindowedSceneSessionReport(
                 surface = scene.surface(format = null),
                 adapterInfo = null,
                 error = null,
+                diagnostics = scene.windowedSceneDiagnostics(),
             )
 
         fun blocked(
@@ -265,6 +272,7 @@ data class WindowedSceneSessionReport(
                 surface = scene.surface(format = surfaceFormat),
                 adapterInfo = adapterInfo,
                 error = error,
+                diagnostics = scene.windowedSceneDiagnostics(),
             )
 
         fun presented(
@@ -282,6 +290,7 @@ data class WindowedSceneSessionReport(
                 surface = scene.surface(format = surfaceFormat),
                 adapterInfo = adapterInfo,
                 error = null,
+                diagnostics = scene.windowedSceneDiagnostics(),
             )
     }
 }
@@ -298,27 +307,212 @@ internal fun GPURendererScene<*>.kadreWindowedRectOnlyUnsupportedReason(): Strin
         .mapNotNull { command ->
             when (command) {
                 is SceneCommand.Clear,
-                is SceneCommand.FillRect -> null
+                is SceneCommand.FillRect,
+                is SceneCommand.FillRRect,
+                is SceneCommand.LinearGradientRect,
+                is SceneCommand.Clip,
+                is SceneCommand.BitmapRect,
+                is SceneCommand.SaveLayer,
+                is SceneCommand.FilterNode,
+                is SceneCommand.RuntimeEffectTile,
+                is SceneCommand.MeshRibbon -> null
                 is SceneCommand -> command.family
                 else -> command::class.simpleName ?: "unknown-command"
             }
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only windowed render supports only clear and fill-rect command families: " +
+        return "rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed save-layer, fixture-backed filter-node, fixture-backed runtime-effect, and fixture-backed mesh-ribbon command families: " +
             unsupportedFamilies.joinToString()
     }
 
-    if (commands.none { it is SceneCommand.FillRect }) {
-        return "rect-only windowed render requires at least one FillRect command"
+    val bitmapMarkers = commands.filterIsInstance<SceneCommand.BitmapRect>()
+        .filterNot { it.hasFixturePayload }
+        .map { it.label }
+    if (bitmapMarkers.isNotEmpty()) {
+        return "rect-only windowed render requires fixture-backed BitmapRect payloads: " +
+            bitmapMarkers.joinToString()
+    }
+
+    val saveLayerMarkers = commands.filterIsInstance<SceneCommand.SaveLayer>()
+        .filterNot { it.hasFixturePayload }
+        .map { it.label }
+    if (saveLayerMarkers.isNotEmpty()) {
+        return "rect-only windowed render requires fixture-backed SaveLayer payloads: " +
+            saveLayerMarkers.joinToString()
+    }
+
+    val filterMarkers = commands.filterIsInstance<SceneCommand.FilterNode>()
+        .filterNot { it.hasFixturePayload }
+        .map { it.label }
+    if (filterMarkers.isNotEmpty()) {
+        return "rect-only windowed render requires fixture-backed FilterNode payloads: " +
+            filterMarkers.joinToString()
+    }
+
+    val runtimeEffectMarkers = commands.filterIsInstance<SceneCommand.RuntimeEffectTile>()
+        .filterNot { it.hasFixturePayload }
+        .map { it.label }
+    if (runtimeEffectMarkers.isNotEmpty()) {
+        return "rect-only windowed render requires fixture-backed RuntimeEffectTile payloads: " +
+            runtimeEffectMarkers.joinToString()
+    }
+
+    val meshRibbonMarkers = commands.filterIsInstance<SceneCommand.MeshRibbon>()
+        .filterNot { it.hasFixturePayload }
+        .map { it.label }
+    if (meshRibbonMarkers.isNotEmpty()) {
+        return "rect-only windowed render requires fixture-backed MeshRibbon payloads: " +
+            meshRibbonMarkers.joinToString()
+    }
+
+    val unsupportedRuntimeEffects = commands.filterIsInstance<SceneCommand.RuntimeEffectTile>()
+        .filter { it.hasFixturePayload && !it.isRegisteredSimpleRt }
+        .map { it.label }
+    if (unsupportedRuntimeEffects.isNotEmpty()) {
+        return "rect-only windowed render supports only registered runtime.simple_rt RuntimeEffectTile payloads: " +
+            unsupportedRuntimeEffects.joinToString()
+    }
+
+    val fixtureBitmapLabels = commands.filterIsInstance<SceneCommand.BitmapRect>()
+        .filter { it.hasFixturePayload }
+        .map { it.label }
+        .toSet()
+    val fixtureSaveLayerLabels = commands.filterIsInstance<SceneCommand.SaveLayer>()
+        .filter { it.hasFixturePayload }
+        .map { it.label }
+        .toSet()
+    val filters = commands.filterIsInstance<SceneCommand.FilterNode>()
+        .filter { it.hasFixturePayload }
+    val invalidFilterInputs = filters
+        .mapNotNull { filter ->
+            val inputLabel = filter.inputLabel
+            when (filter.kind) {
+                SceneFilterKind.LumaTint -> if (inputLabel !in fixtureBitmapLabels) {
+                    "${filter.label}->${filter.inputLabel}:luma-tint requires BitmapRect"
+                } else {
+                    null
+                }
+                SceneFilterKind.DropShadow -> if (inputLabel !in fixtureSaveLayerLabels) {
+                    "${filter.label}->${filter.inputLabel}:drop-shadow requires SaveLayer"
+                } else {
+                    null
+                }
+                null -> null
+            }
+        }
+    if (invalidFilterInputs.isNotEmpty()) {
+        return "rect-only windowed render requires FilterNode inputs to reference compatible fixture-backed labels: " +
+            invalidFilterInputs.joinToString()
+    }
+
+    val missingDropShadowLayers = fixtureSaveLayerLabels
+        .filter { label ->
+            filters.none { filter -> filter.inputLabel == label && filter.kind == SceneFilterKind.DropShadow }
+        }
+    if (missingDropShadowLayers.isNotEmpty()) {
+        return "rect-only windowed render requires fixture-backed SaveLayer inputs to have one DropShadow FilterNode: " +
+            missingDropShadowLayers.joinToString()
+    }
+
+    val duplicateFilterInputs = filters
+        .mapNotNull { it.inputLabel }
+        .groupingBy { it }
+        .eachCount()
+        .filterValues { it > 1 }
+        .keys
+    if (duplicateFilterInputs.isNotEmpty()) {
+        return "rect-only windowed render supports at most one FilterNode per fixture input: " +
+            duplicateFilterInputs.joinToString()
+    }
+
+    val outOfBoundsSaveLayerDraws = commands.filterIsInstance<SceneCommand.SaveLayer>()
+        .filter { it.hasFixturePayload }
+        .flatMap { layer ->
+            listOf(
+                "${layer.label}-shadow" to layer.shadowRect,
+                "${layer.label}-content" to layer.contentRect,
+            )
+        }
+        .filter { (_, rect) -> rect == null || !rect.isInsideTarget(dimensions.width, dimensions.height) }
+        .map { (label, _) -> label }
+    if (outOfBoundsSaveLayerDraws.isNotEmpty()) {
+        return "rect-only windowed render requires SaveLayer materialized draws inside positive bounds: " +
+            outOfBoundsSaveLayerDraws.joinToString()
+    }
+
+    val outOfBoundsMeshRibbons = commands.filterIsInstance<SceneCommand.MeshRibbon>()
+        .filter { it.hasFixturePayload }
+        .filter { ribbon ->
+            val bounds = ribbon.bounds
+            bounds == null || !bounds.isInsideTarget(dimensions.width, dimensions.height)
+        }
+        .map { it.label }
+    if (outOfBoundsMeshRibbons.isNotEmpty()) {
+        return "rect-only windowed render requires MeshRibbon bounds inside positive target: " +
+            outOfBoundsMeshRibbons.joinToString()
+    }
+
+    if (commands.none {
+            it is SceneCommand.FillRect ||
+                it is SceneCommand.FillRRect ||
+                it is SceneCommand.LinearGradientRect ||
+                it is SceneCommand.BitmapRect ||
+                it is SceneCommand.SaveLayer ||
+                it is SceneCommand.RuntimeEffectTile ||
+                it is SceneCommand.MeshRibbon
+        }
+    ) {
+        return "rect-only windowed render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, RuntimeEffectTile, or MeshRibbon command"
     }
 
     val clearIndices = commands.withIndex()
         .filter { (_, command) -> command is SceneCommand.Clear }
         .map { it.index }
     if (clearIndices.size > 1 || clearIndices.any { it != 0 }) {
-        return "rect-only windowed render supports zero or one initial Clear before FillRect commands"
+        return "rect-only windowed render supports zero or one initial Clear before drawable commands"
     }
 
     return null
 }
+
+internal fun GPURendererScene<*>.windowedSceneDiagnostics(): List<String> {
+    val saveLayers = commands.filterIsInstance<SceneCommand.SaveLayer>()
+        .filter { it.hasFixturePayload }
+    val meshRibbons = commands.filterIsInstance<SceneCommand.MeshRibbon>()
+        .filter { it.hasFixturePayload }
+    if (saveLayers.isEmpty() && meshRibbons.isEmpty()) return emptyList()
+
+    val saveLayerLabels = saveLayers.map { it.label }.toSet()
+    val filters = commands.filterIsInstance<SceneCommand.FilterNode>()
+        .filter { it.hasFixturePayload && it.inputLabel in saveLayerLabels }
+    return buildList {
+        if (saveLayers.isNotEmpty()) {
+            add("saveLayerCommands=${saveLayers.size}")
+            add("saveLayerKinds=${saveLayers.joinToString { it.layerKind }}")
+            add("saveLayerRoute=scene-fixture.bounded-shadow-card")
+            add("saveLayerMaterializedDraws=${saveLayers.size * 2}")
+            if (filters.isNotEmpty()) {
+                add("filterRoutes=scene-fixture.bounded-drop-shadow")
+            }
+            add("generalSaveLayerSupport=false")
+            add("imageFilterDagSupport=false")
+        }
+        if (meshRibbons.isNotEmpty()) {
+            add("meshRibbonCommands=${meshRibbons.size}")
+            add("meshRibbonKinds=${meshRibbons.joinToString { it.meshKind }}")
+            add("meshRibbonRoute=scene-fixture.bounded-ribbon-strip")
+            add("meshRibbonFallbackReason=none")
+            add("generalVerticesSupport=false")
+            add("vertexIndexBufferSupport=false")
+        }
+    }
+}
+
+private fun SceneRect.isInsideTarget(width: Int, height: Int): Boolean =
+    left >= 0f &&
+        top >= 0f &&
+        right <= width.toFloat() &&
+        bottom <= height.toFloat() &&
+        right > left &&
+        bottom > top
