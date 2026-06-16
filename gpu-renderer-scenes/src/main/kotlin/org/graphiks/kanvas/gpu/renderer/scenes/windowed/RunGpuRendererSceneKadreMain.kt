@@ -9,6 +9,7 @@ import kotlin.io.path.createDirectories
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.a8GlyphAtlasGateDiagnostics
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.legacyRetirementBlockerDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.pmReadinessFreezeDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.runtimeEffectRefusalGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.textResourceBindingGateDiagnostics
@@ -509,6 +510,7 @@ internal fun GPURendererScene<*>.windowedSceneDiagnostics(): List<String> {
     val a8GlyphAtlasDiagnostics = a8GlyphAtlasGateDiagnostics()
     val textResourceBindingDiagnostics = textResourceBindingGateDiagnostics()
     val pmReadinessFreezeDiagnostics = pmReadinessFreezeDiagnostics()
+    val legacyRetirementBlockerDiagnostics = legacyRetirementBlockerDiagnostics()
     if (
         textRunDiagnostics.isEmpty() &&
         saveLayers.isEmpty() &&
@@ -516,7 +518,8 @@ internal fun GPURendererScene<*>.windowedSceneDiagnostics(): List<String> {
         runtimeEffectRefusalDiagnostics.isEmpty() &&
         a8GlyphAtlasDiagnostics.isEmpty() &&
         textResourceBindingDiagnostics.isEmpty() &&
-        pmReadinessFreezeDiagnostics.isEmpty()
+        pmReadinessFreezeDiagnostics.isEmpty() &&
+        legacyRetirementBlockerDiagnostics.isEmpty()
     ) {
         return emptyList()
     }
@@ -529,6 +532,7 @@ internal fun GPURendererScene<*>.windowedSceneDiagnostics(): List<String> {
         addAll(a8GlyphAtlasDiagnostics)
         addAll(textResourceBindingDiagnostics)
         addAll(pmReadinessFreezeDiagnostics)
+        addAll(legacyRetirementBlockerDiagnostics)
         addAll(textRunDiagnostics)
         if (saveLayers.isNotEmpty()) {
             add("saveLayerCommands=${saveLayers.size}")

@@ -1631,6 +1631,68 @@ object GPURendererSceneRegistry {
                 ),
             ),
         ),
+        scene(
+            id = "legacy-retirement-blocker-board",
+            title = "Legacy Retirement Blocker Board",
+            description = "Route-specific legacy retirement gates that keep gpu-raster defaults active until promoted replacement, activation, rollback, and PM evidence are accepted.",
+            tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.LegacyComparison),
+            links = listOf(SceneRoadmapLink.ticket("KGPU-M10-003")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.034f, 0.038f, 0.046f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "legacy-retirement-panel",
+                    rect = SceneRect(22f, 24f, 298f, 176f),
+                    radius = 18f,
+                    color = SceneColor(0.10f, 0.12f, 0.15f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "legacy-retirement-window",
+                    rect = SceneRect(38f, 42f, 282f, 158f),
+                ),
+                SceneCommand.FillRect(
+                    label = "accepted-replacement-ticket-missing",
+                    rect = SceneRect(46f, 52f, 76f, 154f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.92f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "activation-decision-missing",
+                    rect = SceneRect(84f, 66f, 114f, 154f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "rollback-evidence-missing",
+                    rect = SceneRect(122f, 80f, 152f, 154f),
+                    color = SceneColor.blue(0.86f),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "pm-evidence-missing",
+                    rect = SceneRect(160f, 94f, 190f, 154f),
+                    color = SceneColor(0.44f, 0.34f, 0.86f, 0.92f),
+                    paintOrder = 4,
+                ),
+                SceneCommand.FillRect(
+                    label = "archived-evidence-preserved",
+                    rect = SceneRect(198f, 108f, 228f, 154f),
+                    color = SceneColor.green(0.88f),
+                    paintOrder = 5,
+                ),
+                SceneCommand.FillRect(
+                    label = "generic-migration-retirement-refused",
+                    rect = SceneRect(236f, 122f, 266f, 154f),
+                    color = SceneColor(0.84f, 0.88f, 0.94f, 0.92f),
+                    paintOrder = 6,
+                ),
+                SceneCommand.FillRect(
+                    label = "legacy-route-remains-active",
+                    rect = SceneRect(46f, 148f, 266f, 158f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.74f),
+                    paintOrder = 7,
+                ),
+            ),
+        ),
     )
 
     val registry: SceneRegistry<SceneCommand> = SceneRegistry(scenes)

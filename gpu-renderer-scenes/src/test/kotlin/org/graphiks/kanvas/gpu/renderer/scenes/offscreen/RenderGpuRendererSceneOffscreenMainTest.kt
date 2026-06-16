@@ -88,6 +88,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 clipCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "legacy-retirement-blocker-board",
+                fillRectCount = 7,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "rounded-panel-gradient",
                 fillRectCount = 0,
                 fillRRectCount = 1,
@@ -603,6 +609,21 @@ class RenderGpuRendererSceneOffscreenMainTest {
             assertContains(runJson, "reportingOnlyGatesVisible=true")
             assertContains(runJson, "pipelinePmBundleUpdated=false")
             assertContains(runJson, "nonClaims=no-product-activation,no-release-blocking-gate,no-readiness-delta,no-performance-readiness-from-correctness,no-dashboard-row-promotes-readiness,no-derived-cache-as-observed")
+        }
+        if (expectation.sceneId == "legacy-retirement-blocker-board") {
+            assertContains(runJson, "legacyRetirementRow=gpu-renderer.legacy-retirement")
+            assertContains(runJson, "legacyRetirementClassification=PolicyGated")
+            assertContains(runJson, "legacyRouteRetired=false")
+            assertContains(runJson, "legacyDefaultActive=true")
+            assertContains(runJson, "productRouteActivated=false")
+            assertContains(runJson, "acceptedReplacementLinked=false")
+            assertContains(runJson, "activationDecisionLinked=false")
+            assertContains(runJson, "rollbackEvidenceLinked=false")
+            assertContains(runJson, "pmEvidenceLinked=false")
+            assertContains(runJson, "oldPathUsageEvidenceLinked=false")
+            assertContains(runJson, "archivedEvidencePreserved=true")
+            assertContains(runJson, "genericMigrationRetirement=false")
+            assertContains(runJson, "missingGate=KGPU-M10-002")
         }
         expectation.meshRibbonCount?.let { count ->
             assertContains(runJson, "meshRibbonCommands=$count")

@@ -4,6 +4,7 @@ private const val RUNTIME_EFFECT_REFUSAL_SCENE_ID = "runtime-effect-refusal-gate
 private const val A8_GLYPH_ATLAS_SCENE_ID = "a8-glyph-atlas-gate-board"
 private const val TEXT_RESOURCE_BINDING_SCENE_ID = "text-resource-binding-gate-board"
 private const val PM_READINESS_FREEZE_SCENE_ID = "pm-readiness-freeze-board"
+private const val LEGACY_RETIREMENT_BLOCKER_SCENE_ID = "legacy-retirement-blocker-board"
 
 internal fun GPURendererScene<*>.runtimeEffectRefusalGateDiagnostics(): List<String> {
     if (sceneId.value != RUNTIME_EFFECT_REFUSAL_SCENE_ID) return emptyList()
@@ -67,5 +68,25 @@ internal fun GPURendererScene<*>.pmReadinessFreezeDiagnostics(): List<String> {
         "reportingOnlyGatesVisible=true",
         "pipelinePmBundleUpdated=false",
         "nonClaims=no-product-activation,no-release-blocking-gate,no-readiness-delta,no-performance-readiness-from-correctness,no-dashboard-row-promotes-readiness,no-derived-cache-as-observed",
+    )
+}
+
+internal fun GPURendererScene<*>.legacyRetirementBlockerDiagnostics(): List<String> {
+    if (sceneId.value != LEGACY_RETIREMENT_BLOCKER_SCENE_ID) return emptyList()
+    return listOf(
+        "legacyRetirementRow=gpu-renderer.legacy-retirement",
+        "legacyRetirementClassification=PolicyGated",
+        "legacyRouteRetired=false",
+        "legacyDefaultActive=true",
+        "productRouteActivated=false",
+        "acceptedReplacementLinked=false",
+        "activationDecisionLinked=false",
+        "rollbackEvidenceLinked=false",
+        "pmEvidenceLinked=false",
+        "oldPathUsageEvidenceLinked=false",
+        "archivedEvidencePreserved=true",
+        "genericMigrationRetirement=false",
+        "missingGate=KGPU-M10-002",
+        "replacementGate=route-specific-accepted-replacement-required",
     )
 }

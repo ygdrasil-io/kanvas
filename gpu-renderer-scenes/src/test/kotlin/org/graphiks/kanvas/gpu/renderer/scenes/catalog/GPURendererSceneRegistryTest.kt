@@ -577,6 +577,32 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `legacy retirement blocker board is backed by route specific replacement gates only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("legacy-retirement-blocker-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.LegacyComparison), scene.tags)
+        assertEquals(listOf("KGPU-M10-003"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf(
+                "accepted-replacement-ticket-missing",
+                "activation-decision-missing",
+                "rollback-evidence-missing",
+                "pm-evidence-missing",
+                "archived-evidence-preserved",
+                "generic-migration-retirement-refused",
+                "legacy-route-remains-active",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..7).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M10-001" || it.ticketId == "KGPU-M10-002" })
+    }
+
+    @Test
     fun `layered shadow card is backed by bounded shadow layer and drop shadow payloads`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("layered-shadow-card")
         assertIs<SceneCommand.Clear>(scene.commands[0])
@@ -1267,6 +1293,23 @@ class GPURendererSceneRegistryTest {
                     "fill-rect",
                 ),
                 roadmapLinks = listOf(RoadmapExpectation("M10", ticketId = "KGPU-M10-002")),
+            ),
+            SceneExpectationRow(
+                sceneId = "legacy-retirement-blocker-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.LegacyComparison),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M10", ticketId = "KGPU-M10-003")),
             ),
         )
     }
