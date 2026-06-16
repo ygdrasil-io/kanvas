@@ -1582,6 +1582,50 @@
       ]
     },
     {
+      "dumpId": "truetype-malformed-glyf-isolation",
+      "ownerTicket": "KFONT-M3-005",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "TrueType glyf"
+      },
+      "producerPaths": [
+        "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+        "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+        "reports/font/fixtures/expected/scaler/truetype-malformed-glyf-isolation.json"
+      ],
+      "expectedFields": [
+        "dumpId",
+        "faceRefusalCases",
+        "fixtureIds",
+        "glyphIsolationCases",
+        "nonClaims",
+        "ownerTickets",
+        "requiredEvidence",
+        "schemaVersion",
+        "variationCases"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:scaler:test --tests '*MalformedGlyf*' --tests '*GlyphFailurePolicy*' --tests '*CompositeGlyph*' --tests '*Gvar*'",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py"
+      ],
+      "updatePolicy": "Malformed glyf isolation golden changes require face-versus-glyph refusal review, safe-glyph positive-control review, stable diagnostic review, and explicit non-claims before any claim promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-notdef-substitution-runtime-claim",
+        "no-complete-variable-font-support-claim",
+        "no-hvar-vvar-mvar-metrics-claim",
+        "no-vertical-metrics-claim",
+        "no-complete-hinting-vm-claim",
+        "no-a8-or-sdf-artifact-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
       "dumpId": "truetype-variation-readiness",
       "ownerTicket": "PKT-04C",
       "classification": "golden-gated",
