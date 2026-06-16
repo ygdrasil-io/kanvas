@@ -63,6 +63,20 @@ class FallbackDecisionDumpTest {
         )
     }
 
+    @Test
+    fun `per fixture fallback assets match repo goldens`() {
+        val bundle = defaultFallbackEvidenceBundle()
+
+        fallbackFixtureIds().forEach { fixtureId ->
+            val expected = Files.readString(projectRoot().resolve("reports/font/fixtures/expected/fallback/$fixtureId.json"))
+            val actual = bundle.fixtureJsonById.getValue(fixtureId)
+
+            assertEquals(expected.trimEnd(), actual.trimEnd())
+            assertContains(actual, """"dumpId":"fallback-fixture"""")
+            assertContains(actual, """"fixtureId":"$fixtureId"""")
+        }
+    }
+
     private fun projectRoot(): Path {
         var current = Path.of("").toAbsolutePath().normalize()
         while (current.parent != null && !Files.isDirectory(current.resolve("reports/pure-kotlin-text"))) {
@@ -70,4 +84,13 @@ class FallbackDecisionDumpTest {
         }
         return current
     }
+
+    private fun fallbackFixtureIds(): List<String> = listOf(
+        "fallback-emoji-preference",
+        "fallback-family-generic",
+        "fallback-family-unavailable",
+        "fallback-locale-serbian",
+        "fallback-missing-glyph",
+        "fallback-script-arabic",
+    )
 }
