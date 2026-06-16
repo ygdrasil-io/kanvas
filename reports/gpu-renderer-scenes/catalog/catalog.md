@@ -19,6 +19,7 @@
 | `savelayer-isolation-gate-board` | SaveLayer Isolation Gate Board | Rect,RRect,Clip,Layer | KGPU M5 | `KGPU-M5-001` |  | `ShouldRender` |
 | `destination-read-strategy-gate-board` | Destination Read Strategy Gate Board | Rect,RRect,Clip,Blend | KGPU M5 | `KGPU-M5-002` |  | `ShouldRender` |
 | `layered-shadow-card` | Layered Shadow Card | Layer,Filter | KGPU M5 |  |  | `ShouldRender` |
+| `notification-shadow-stack` | Notification Shadow Stack | Layer,Filter | KGPU M5 |  |  | `ShouldRender` |
 | `filtered-photo-chip` | Filtered Photo Chip | Filter,Image | KGPU M5 |  |  | `ShouldRender` |
 | `filter-dag-refusal-board` | Filter DAG Refusal Board | Rect,Filter | KGPU M5 | `KGPU-M5-004` |  | `ShouldRender` |
 | `receipt-text-run` | Receipt Text Run | Text | KGPU M6 |  |  | `ShouldRender` |

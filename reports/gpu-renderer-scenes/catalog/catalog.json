@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 40,
+  "sceneCount": 41,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -166,6 +166,16 @@
       "sceneId": "layered-shadow-card",
       "title": "Layered Shadow Card",
       "description": "Bounded shadow-card layer fixture with explicit drop-shadow filter route.",
+      "tags": ["Layer","Filter"],
+      "kgpuMilestones": ["M5"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "notification-shadow-stack",
+      "title": "Notification Shadow Stack",
+      "description": "Two bounded notification card layers with explicit drop-shadow filter routes.",
       "tags": ["Layer","Filter"],
       "kgpuMilestones": ["M5"],
       "ticketIds": [],
