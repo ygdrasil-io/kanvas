@@ -565,11 +565,29 @@ class RenderGpuRendererSceneOffscreenMainTest {
             assertContains(runJson, "clearCommands=1")
             assertContains(runJson, "pathStencilCoverRow=gpu-renderer.path.stencil-cover")
             assertContains(runJson, "pathStencilCoverTicket=KGPU-M3-002")
-            assertContains(runJson, "pathStencilCoverTicketStatus=blocked")
+            assertContains(runJson, "pathStencilCoverTicketStatus=done")
+            assertContains(
+                runJson,
+                "pathStencilCoverClosure=contract-gate-complete-no-product-promotion",
+            )
             assertContains(runJson, "pathStencilCoverClassification=TargetNative")
             assertContains(runJson, "pathStencilCoverRouteKind=GPUNative")
             assertContains(runJson, "pathStencilCoverAdapterRequired=true")
-            assertContains(runJson, "pathStencilCoverRefusalMatrix=depth-stencil-capability:RefuseRequired:coverage.stencil-cover-unavailable,stencil-route-unavailable:RefuseRequired:unsupported.geometry.stencil_cover_unavailable,producer-cover-ordering:RefuseRequired:unsupported.geometry.stencil_cover_ordering_illegal")
+            assertContains(
+                runJson,
+                "pathStencilCoverRefusalMatrix=" +
+                    "depth-stencil-capability:RefuseRequired:coverage.stencil-cover-unavailable," +
+                    "depth-stencil-evidence:RefuseRequired:unsupported.geometry.stencil_cover_unavailable," +
+                    "sample-count-evidence:RefuseRequired:unsupported.geometry.stencil_cover_unavailable," +
+                    "target-state:RefuseRequired:unsupported.geometry.stencil_cover_target," +
+                    "clip-state:RefuseRequired:unsupported.clip.stencil_cover," +
+                    "stencil-route-unavailable:RefuseRequired:unsupported.geometry.stencil_cover_unavailable," +
+                    "producer-cover-ordering:RefuseRequired:unsupported.geometry.stencil_cover_ordering_illegal," +
+                    "pass-resource-evidence:RefuseRequired:unsupported.geometry.stencil_cover_pass_resources_missing," +
+                    "readback-evidence:RefuseRequired:unsupported.execution.readback_unavailable",
+            )
+            assertContains(runJson, "stencilCoverContractEvidenceLinked=true")
+            assertContains(runJson, "explicitSkippedLaneDiagnosticsLinked=true")
             assertContains(runJson, "adapterBackedStencilEvidenceLinked=false")
             assertContains(runJson, "passResourceReadbackArtifactsLinked=false")
             assertContains(runJson, "producerBeforeCoverOrderingProven=false")

@@ -89,6 +89,25 @@ data class GPUStencilCoverPlan(
     val coverStepLabel: String,
     val fillRule: String,
     val requiresMSAA: Boolean,
+    val depthStencilFormat: String = "",
+    val depthStencilEvidenceLabel: String? = null,
+    val sampleCount: Int = 0,
+    val sampleCountEvidenceLabel: String? = null,
+    val stencilStateLabel: String = "",
+    val producerBoundsLabel: String = "",
+    val coverBoundsLabel: String = "",
+    val clearLoadStorePolicy: String = "",
+    val atomicGroupLabel: String = "",
+    val orderingToken: String = "",
+    val sortWindowPolicy: String = "",
+    val adapterEvidenceLabel: String? = null,
+    val passResourceEvidenceLabel: String? = null,
+    val readbackEvidenceLabel: String? = null,
+    val targetStateLabel: String = "",
+    val targetEvidenceLabel: String? = null,
+    val targetSupportsStencilCover: Boolean = true,
+    val clipStateLabel: String = "",
+    val clipSupportsStencilCover: Boolean = true,
 )
 
 /** Prepared geometry artifact plan. */
@@ -183,6 +202,25 @@ data class GPUGeometryDiagnostic(
     val geometryLabel: String,
     val message: String,
     val terminal: Boolean,
+    val facts: Map<String, String> = emptyMap(),
+)
+
+/** Adapter-backed evidence required before a stencil-cover candidate can be dumpable. */
+data class GPUStencilCoverEvidence(
+    val adapterEvidenceLabel: String?,
+    val depthStencilCapability: Boolean,
+    val depthStencilEvidenceLabel: String? = null,
+    val sampleCount: Int,
+    val sampleCountEvidenceLabel: String? = null,
+    val stencilStateLabel: String,
+    val producerBeforeCoverOrdering: Boolean,
+    val passResourceEvidenceLabel: String?,
+    val readbackEvidenceLabel: String?,
+    val targetStateLabel: String,
+    val targetEvidenceLabel: String? = null,
+    val targetSupportsStencilCover: Boolean = true,
+    val clipStateLabel: String = "",
+    val clipSupportsStencilCover: Boolean = true,
 )
 
 /** Atlas policy request used to prove refusal gates without atlas activation. */
@@ -457,6 +495,90 @@ class GPUSimpleStrokePreparedPlanner(
     }
 }
 
+/** Builds the M3 native stencil-cover gate evidence without product activation. */
+class GPUStencilCoverGatePlanner(
+    private val maxEdges: Int = 256,
+) {
+    /**
+     * Plans one bounded path fill as a stencil-cover candidate only when every
+     * adapter-backed evidence gate is named. Missing gates remain stable
+     * refusals with skipped-lane diagnostics.
+     */
+    fun plan(
+        descriptor: GPUShapeDescriptor,
+        path: GPUPathDescriptor,
+        evidence: GPUStencilCoverEvidence,
+    ): GPUGeometryPlan {
+        val refusalCode =
+            descriptor.stencilCoverRefusalCode() ?: path.stencilCoverPathRefusalCode(maxEdges) ?: evidence.refusalCode()
+        if (refusalCode != null) {
+            val diagnostic = GPUGeometryDiagnostic(
+                code = refusalCode,
+                geometryLabel = stencilCoverGeometryLabel,
+                message = "Stencil-cover route refused: $refusalCode",
+                terminal = true,
+                facts = evidence.dumpFacts(),
+            )
+            return GPUGeometryPlan(
+                descriptor = descriptor,
+                path = path,
+                route = GPUGeometryRoute.Refused(diagnostic),
+                diagnostics = listOf(diagnostic),
+            )
+        }
+
+        val plan = GPUStencilCoverPlan(
+            stencilStepLabel = stencilProducerStep,
+            coverStepLabel = coverConsumerStep,
+            fillRule = path.fillRule,
+            requiresMSAA = evidence.sampleCount > 1,
+            depthStencilFormat = depthStencilFormat,
+            depthStencilEvidenceLabel = evidence.depthStencilEvidenceLabel,
+            sampleCount = evidence.sampleCount,
+            sampleCountEvidenceLabel = evidence.sampleCountEvidenceLabel,
+            stencilStateLabel = evidence.stencilStateLabel,
+            producerBoundsLabel = descriptor.boundsLabel,
+            coverBoundsLabel = descriptor.boundsLabel,
+            clearLoadStorePolicy = clearLoadStorePolicy,
+            atomicGroupLabel = "atomic-group:path-stencil-cover:${path.pathKey.sanitizeForArtifactKey()}",
+            orderingToken = stencilCoverOrderingToken,
+            sortWindowPolicy = sortWindowPolicy,
+            adapterEvidenceLabel = evidence.adapterEvidenceLabel,
+            passResourceEvidenceLabel = evidence.passResourceEvidenceLabel,
+            readbackEvidenceLabel = evidence.readbackEvidenceLabel,
+            targetStateLabel = evidence.targetStateLabel,
+            targetEvidenceLabel = evidence.targetEvidenceLabel,
+            targetSupportsStencilCover = evidence.targetSupportsStencilCover,
+            clipStateLabel = evidence.clipStateLabel,
+            clipSupportsStencilCover = evidence.clipSupportsStencilCover,
+        )
+        return GPUGeometryPlan(
+            descriptor = descriptor,
+            path = path,
+            route = GPUGeometryRoute.StencilCover(plan),
+            diagnostics = listOf(
+                GPUGeometryDiagnostic(
+                    code = "geometry:stencil-cover.candidate",
+                    geometryLabel = stencilCoverGeometryLabel,
+                    message = "Stencil-cover candidate evidence is complete but not product-promoted",
+                    terminal = false,
+                    facts = evidence.dumpFacts(),
+                ),
+            ),
+        )
+    }
+
+    private companion object {
+        const val stencilCoverGeometryLabel = "path-stencil-cover"
+        const val stencilProducerStep = "path-fill.stencil-producer"
+        const val coverConsumerStep = "path-fill.cover-consumer"
+        const val depthStencilFormat = "Depth24PlusStencil8"
+        const val clearLoadStorePolicy = "clear-stencil-store-color-discard-stencil"
+        const val stencilCoverOrderingToken = "producer-before-cover"
+        const val sortWindowPolicy = "atomic-no-interleave"
+    }
+}
+
 /** Emits stable M3 path-fill evidence lines for reports and tests. */
 fun GPUGeometryPlan.dumpLines(): List<String> =
     when (val selectedRoute = route) {
@@ -503,17 +625,57 @@ fun GPUGeometryPlan.dumpLines(): List<String> =
                 )
             }
         }
-        is GPUGeometryRoute.Refused -> listOf(
-            if (stroke != null) {
-                "geometry:stroke.refused reason=${selectedRoute.diagnostic.code}"
+        is GPUGeometryRoute.Refused -> {
+            if (selectedRoute.diagnostic.geometryLabel == "path-stencil-cover") {
+                listOf(
+                    "geometry:stencil-cover.refused row=gpu-renderer.path.stencil-cover " +
+                        "classification=TargetNative routeKind=GPUNative reason=${selectedRoute.diagnostic.code}",
+                    selectedRoute.diagnostic.stencilCoverSkippedLine(),
+                    stencilCoverRefusalNonClaimLine,
+                )
+            } else if (stroke != null) {
+                listOf(
+                    "geometry:stroke.refused reason=${selectedRoute.diagnostic.code}",
+                    strokeNonClaimLine,
+                )
             } else {
-                "geometry:path-fill.refused reason=${selectedRoute.diagnostic.code}"
-            },
-            if (stroke != null) strokeNonClaimLine else pathFillNonClaimLine,
-        )
+                listOf(
+                    "geometry:path-fill.refused reason=${selectedRoute.diagnostic.code}",
+                    pathFillNonClaimLine,
+                )
+            }
+        }
+        is GPUGeometryRoute.StencilCover -> {
+            val pathDescriptor = requireNotNull(path) { "stencil-cover dump requires a path descriptor" }
+            val plan = selectedRoute.stencilPlan
+            listOf(
+                "geometry:stencil-cover.candidate row=gpu-renderer.path.stencil-cover " +
+                    "routeKind=GPUNative classification=TargetNative promoted=false",
+                "path:descriptor key=${pathDescriptor.pathKey} verbs=${pathDescriptor.verbCount} " +
+                    "points=${pathDescriptor.pointCount} fillRule=${pathDescriptor.fillRule} " +
+                    "inverse=${pathDescriptor.inverseFill} transform=${pathDescriptor.transformClass} " +
+                    "edges=${pathDescriptor.edgeCount} finite=${pathDescriptor.finiteProof} " +
+                    "volatility=${pathDescriptor.volatility}",
+                "stencil-cover:steps producer=${plan.stencilStepLabel} cover=${plan.coverStepLabel} " +
+                    "fillRule=${plan.fillRule} msaa=${plan.requiresMSAA} sampleCount=${plan.sampleCount} " +
+                    "depthStencil=${plan.depthStencilFormat} state=${plan.stencilStateLabel}",
+                "stencil-cover:ordering atomicGroup=${plan.atomicGroupLabel} token=${plan.orderingToken} " +
+                    "sortWindow=${plan.sortWindowPolicy}",
+                "stencil-cover:bounds producer=${plan.producerBoundsLabel} cover=${plan.coverBoundsLabel} " +
+                    "clearLoadStore=${plan.clearLoadStorePolicy}",
+                "stencil-cover:clip state=${plan.clipStateLabel} supported=${plan.clipSupportsStencilCover}",
+                "stencil-cover:evidence adapter=${plan.adapterEvidenceLabel ?: "missing"} " +
+                    "depthStencil=${plan.depthStencilEvidenceLabel ?: "missing"} " +
+                    "samples=${plan.sampleCountEvidenceLabel ?: "missing"} " +
+                    "target=${plan.targetEvidenceLabel ?: "missing"} " +
+                    "targetSupported=${plan.targetSupportsStencilCover} " +
+                    "passResources=${plan.passResourceEvidenceLabel ?: "missing"} " +
+                    "readback=${plan.readbackEvidenceLabel ?: "missing"}",
+                stencilCoverCandidateNonClaimLine,
+            )
+        }
         is GPUGeometryRoute.Analytic,
         is GPUGeometryRoute.Tessellation,
-        is GPUGeometryRoute.StencilCover,
         is GPUGeometryRoute.PathAtlas,
         is GPUGeometryRoute.CoverageMask,
         -> listOf(
@@ -613,6 +775,83 @@ private fun Float.stableLabel(): String =
 private const val strokeNonClaimLine =
     "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback " +
         "no-broad-stroke-parity no-hairline no-dash no-round-cap-join"
+
+private fun GPUShapeDescriptor.stencilCoverRefusalCode(): String? =
+    when {
+        shapeKind != "path-fill" -> "unsupported.geometry.shape_kind"
+        boundsLabel.isBlank() -> "unsupported.bounds.path"
+        antiAliasMode !in setOf("coverage-aa", "none") -> "unsupported.path.aa_mode"
+        else -> null
+    }
+
+private fun GPUPathDescriptor.stencilCoverPathRefusalCode(maxEdges: Int): String? =
+    when {
+        !pathKey.isCanonicalPathKey() -> "unsupported.geometry.path_key_nondeterministic"
+        verbCount <= 0 || pointCount <= 0 -> "unsupported.geometry.descriptor_invalid"
+        fillRule !in setOf("NonZero", "EvenOdd") -> "unsupported.geometry.path_fill_rule"
+        inverseFill -> "unsupported.geometry.path_empty_inverse_unbounded"
+        transformClass == "perspective" -> "unsupported.geometry.perspective_path"
+        transformClass !in setOf("identity", "translate") -> "unsupported.transform.path_class"
+        edgeCount < 0 || edgeCount > maxEdges -> "unsupported.geometry.path_edge_budget_exceeded"
+        finiteProof != "finite" -> "unsupported.geometry.path_nonfinite"
+        volatility != "immutable" -> "unsupported.geometry.path_mutable"
+        else -> null
+    }
+
+private fun GPUStencilCoverEvidence.refusalCode(): String? =
+    when {
+        adapterEvidenceLabel.isNullOrBlank() -> "unsupported.geometry.stencil_cover_unavailable"
+        !depthStencilCapability -> "unsupported.geometry.stencil_cover_unavailable"
+        depthStencilEvidenceLabel.isNullOrBlank() -> "unsupported.geometry.stencil_cover_unavailable"
+        sampleCount <= 0 -> "unsupported.geometry.stencil_cover_unavailable"
+        sampleCountEvidenceLabel.isNullOrBlank() -> "unsupported.geometry.stencil_cover_unavailable"
+        targetStateLabel.isBlank() -> "unsupported.geometry.stencil_cover_target"
+        targetEvidenceLabel.isNullOrBlank() -> "unsupported.geometry.stencil_cover_target"
+        !targetSupportsStencilCover -> "unsupported.geometry.stencil_cover_target"
+        stencilStateLabel.isBlank() -> "unsupported.geometry.stencil_cover_unavailable"
+        clipStateLabel.isBlank() -> "unsupported.clip.stencil_cover"
+        !clipSupportsStencilCover -> "unsupported.clip.stencil_cover"
+        !producerBeforeCoverOrdering -> "unsupported.geometry.stencil_cover_ordering_illegal"
+        passResourceEvidenceLabel.isNullOrBlank() -> "unsupported.geometry.stencil_cover_pass_resources_missing"
+        readbackEvidenceLabel.isNullOrBlank() -> "unsupported.execution.readback_unavailable"
+        else -> null
+    }
+
+private fun GPUStencilCoverEvidence.dumpFacts(): Map<String, String> =
+    mapOf(
+        "adapterEvidenceLabel" to (adapterEvidenceLabel ?: "missing"),
+        "depthStencilEvidenceLabel" to (depthStencilEvidenceLabel ?: "missing"),
+        "sampleCountEvidenceLabel" to (sampleCountEvidenceLabel ?: "missing"),
+        "targetEvidenceLabel" to (targetEvidenceLabel ?: "missing"),
+        "targetSupportsStencilCover" to targetSupportsStencilCover.toString(),
+        "stencilStateLabel" to stencilStateLabel.ifBlank { "missing" },
+        "clipStateLabel" to clipStateLabel.ifBlank { "missing" },
+        "clipSupportsStencilCover" to clipSupportsStencilCover.toString(),
+        "passResourceEvidenceLabel" to (passResourceEvidenceLabel ?: "missing"),
+        "readbackEvidenceLabel" to (readbackEvidenceLabel ?: "missing"),
+        "producerBeforeCoverOrdering" to producerBeforeCoverOrdering.toString(),
+    )
+
+private fun GPUGeometryDiagnostic.stencilCoverSkippedLine(): String =
+    "stencil-cover:skipped adapter=${facts["adapterEvidenceLabel"] ?: "missing"} " +
+        "depthStencil=${facts["depthStencilEvidenceLabel"] ?: "missing"} " +
+        "samples=${facts["sampleCountEvidenceLabel"] ?: "missing"} " +
+        "target=${facts["targetEvidenceLabel"] ?: "missing"} " +
+        "targetSupported=${facts["targetSupportsStencilCover"] ?: "false"} " +
+        "stencilState=${facts["stencilStateLabel"] ?: "missing"} " +
+        "clip=${facts["clipStateLabel"] ?: "missing"} " +
+        "clipSupported=${facts["clipSupportsStencilCover"] ?: "false"} " +
+        "passResources=${facts["passResourceEvidenceLabel"] ?: "missing"} " +
+        "readback=${facts["readbackEvidenceLabel"] ?: "missing"} " +
+        "ordering=${facts["producerBeforeCoverOrdering"] ?: "false"}"
+
+private const val stencilCoverCandidateNonClaimLine =
+    "nonclaim:no-product-activation no-release-blocking-gate no-broad-path-aa no-graphite-port " +
+        "no-cpu-prepared-continuation-as-support"
+
+private const val stencilCoverRefusalNonClaimLine =
+    "nonclaim:no-native-stencil-cover-support no-product-activation no-release-blocking-gate " +
+        "no-cpu-prepared-continuation-as-support no-refusal-only-selector-as-support"
 
 private fun String.isCanonicalAtlasContentKey(): Boolean =
     isNotBlank() &&
