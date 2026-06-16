@@ -81,11 +81,14 @@
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
         "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
         "reports/font/fixtures/expected/glyph/a8-sdf-atlas-lifecycle.json",
+        "reports/font/fixtures/expected/glyph/glyph-atlas.json",
+        "reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json",
         "reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json",
-        "reports/pure-kotlin-text/2026-06-16-kfont-m9-004-sdf-generator-boundaries.md"
+        "reports/pure-kotlin-text/2026-06-16-kfont-m9-004-sdf-generator-boundaries.md",
+        "reports/pure-kotlin-text/2026-06-16-kfont-m9-005-atlas-lifecycle.md"
       ],
       "requiredEvidenceGates": [
-        "KFONT-M9-004 now lands checked-in CPU SDF artifact evidence with spread/source-resolution/padding/hash facts; keep atlas lifecycle and cache invalidation promotion gated on KFONT-M9-005.",
+        "KFONT-M9-004 and KFONT-M9-005 now land checked-in CPU SDF and atlas lifecycle evidence; keep GPU text-route, upload-ordering, and renderer-ownership promotion gated on M11.",
         "Do not claim GPU text routes, LCD support, or dftext retirement from CPU-only SDF and atlas fixture evidence without M11 GPU handoff artifacts."
       ],
       "validationCommands": [

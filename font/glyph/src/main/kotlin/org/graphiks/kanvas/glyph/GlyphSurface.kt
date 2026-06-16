@@ -1262,6 +1262,509 @@ class SDFGlyphArtifactEvidenceDump(
 }
 
 /**
+ * Deterministic atlas entry evidence for one packed glyph mask.
+ *
+ * @property glyphId glyph identifier placed in the atlas.
+ * @property strikeKeySha256 strike-specific hash that selected the source mask.
+ * @property x left atlas coordinate in pixels.
+ * @property y top atlas coordinate in pixels.
+ * @property width placed atlas width in pixels.
+ * @property height placed atlas height in pixels.
+ * @property sourceLeft source-mask origin relative to the glyph origin.
+ * @property sourceTop source-mask origin relative to the glyph origin.
+ * @property sourceWidth source-mask addressable width.
+ * @property sourceHeight source-mask addressable height.
+ * @property paddingPx padding reserved around this entry inside the atlas plan.
+ * @property sourceMaskSha256 SHA-256 over the source mask addressable samples.
+ */
+data class GlyphAtlasArtifactEvidenceEntry(
+    val glyphId: Int,
+    val strikeKeySha256: String,
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
+    val sourceLeft: Int,
+    val sourceTop: Int,
+    val sourceWidth: Int,
+    val sourceHeight: Int,
+    val paddingPx: Int,
+    val sourceMaskSha256: String,
+) {
+    init {
+        require(strikeKeySha256.matches(Regex("[0-9a-f]{64}"))) {
+            "Atlas entry strikeKeySha256 must be lowercase hexadecimal for glyph $glyphId."
+        }
+        require(sourceMaskSha256.matches(Regex("[0-9a-f]{64}"))) {
+            "Atlas entry sourceMaskSha256 must be lowercase hexadecimal for glyph $glyphId."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("glyphId", glyphId, comma = true)
+        appendGlyphJsonField("strikeKeySha256", strikeKeySha256, comma = true)
+        append("  \"rect\": {")
+        append(glyphJsonString("x")).append(": ").append(x).append(", ")
+        append(glyphJsonString("y")).append(": ").append(y).append(", ")
+        append(glyphJsonString("width")).append(": ").append(width).append(", ")
+        append(glyphJsonString("height")).append(": ").append(height)
+        append("},\n")
+        append("  \"sourceBounds\": {")
+        append(glyphJsonString("left")).append(": ").append(sourceLeft).append(", ")
+        append(glyphJsonString("top")).append(": ").append(sourceTop).append(", ")
+        append(glyphJsonString("width")).append(": ").append(sourceWidth).append(", ")
+        append(glyphJsonString("height")).append(": ").append(sourceHeight)
+        append("},\n")
+        appendGlyphJsonField("paddingPx", paddingPx, comma = true)
+        appendGlyphJsonField("sourceMaskSha256", sourceMaskSha256, comma = false)
+        append("\n}")
+    }
+}
+
+/**
+ * Deterministic CPU-only atlas artifact evidence for A8 and SDF atlas build results.
+ *
+ * @property artifactType `GlyphAtlasArtifact` or `SDFGlyphAtlasArtifact`.
+ * @property artifactKeySha256 compact atlas key hash derived from strike, mask, and placement facts.
+ * @property generation monotonic atlas generation carried by the artifact dump.
+ * @property textureFormat CPU upload texel format expected by downstream consumers.
+ * @property width atlas width in pixels.
+ * @property height atlas height in pixels.
+ * @property rowStride atlas row stride in samples.
+ * @property memoryBudgetClass stable budget classification.
+ * @property lifetimeClass stable lifetime classification.
+ * @property invalidationToken stable invalidation token for stale-generation checks.
+ * @property entries atlas entry facts in placement order.
+ * @property sourceMaskHashes source mask hashes in placement order.
+ * @property uploadByteSha256 SHA-256 over atlas upload bytes in row-major order.
+ * @property diagnostics stable diagnostics attached to this artifact dump.
+ * @property distanceRange optional shared distance range for SDF atlas artifacts.
+ */
+data class GlyphAtlasArtifactEvidence(
+    val artifactType: String,
+    val artifactKeySha256: String,
+    val generation: Long,
+    val textureFormat: String,
+    val width: Int,
+    val height: Int,
+    val rowStride: Int,
+    val memoryBudgetClass: String,
+    val lifetimeClass: String,
+    val invalidationToken: String,
+    val entries: List<GlyphAtlasArtifactEvidenceEntry>,
+    val sourceMaskHashes: List<String>,
+    val uploadByteSha256: String,
+    val diagnostics: List<GlyphRouteDiagnostic> = emptyList(),
+    val distanceRange: Float? = null,
+) {
+    val entryCount: Int
+        get() = entries.size
+
+    val dumpSha256: String by lazy {
+        glyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+    }
+
+    init {
+        require(artifactType == "GlyphAtlasArtifact" || artifactType == "SDFGlyphAtlasArtifact") {
+            "Unsupported glyph atlas artifact type '$artifactType'."
+        }
+        require(artifactKeySha256.matches(Regex("[0-9a-f]{64}"))) {
+            "Atlas artifactKeySha256 must be lowercase hexadecimal."
+        }
+        require(uploadByteSha256.matches(Regex("[0-9a-f]{64}"))) {
+            "Atlas uploadByteSha256 must be lowercase hexadecimal."
+        }
+        require(generation >= 0L) { "Atlas generation must be non-negative." }
+        require(width >= 0 && height >= 0 && rowStride >= 0) { "Atlas dimensions must be non-negative." }
+        require(sourceMaskHashes.all { it.matches(Regex("[0-9a-f]{64}")) }) {
+            "Atlas sourceMaskHashes must be lowercase hexadecimal."
+        }
+        require(memoryBudgetClass.isNotBlank()) { "memoryBudgetClass must not be blank." }
+        require(lifetimeClass.isNotBlank()) { "lifetimeClass must not be blank." }
+        require(invalidationToken.isNotBlank()) { "invalidationToken must not be blank." }
+    }
+
+    fun toCanonicalJson(): String = canonicalJson(includeDumpSha256 = true)
+
+    companion object {
+        fun fromA8(
+            buildResult: GlyphAtlasBuildResult,
+            masks: List<A8GlyphMask>,
+            strikeKeysByGlyphId: Map<Int, GlyphStrikeKey>,
+            generation: Long,
+            invalidationToken: String,
+            memoryBudgetClass: String,
+            lifetimeClass: String,
+            paddingPx: Int = 0,
+            diagnostics: List<GlyphRouteDiagnostic> = emptyList(),
+        ): GlyphAtlasArtifactEvidence {
+            val masksByGlyphId = masks.associateUniqueA8Masks()
+            val entries = buildResult.placements.map { placement ->
+                val mask = requireNotNull(masksByGlyphId[placement.glyphId]) {
+                    "Missing A8 source mask for glyph ${placement.glyphId}."
+                }
+                val strikeKey = requireNotNull(strikeKeysByGlyphId[placement.glyphId]) {
+                    "Missing strikeKey for atlas glyph ${placement.glyphId}."
+                }
+                GlyphAtlasArtifactEvidenceEntry(
+                    glyphId = placement.glyphId,
+                    strikeKeySha256 = strikeKey.artifactPlanKeySha256(mask.glyphId, "text.glyph.mask.A8"),
+                    x = placement.x,
+                    y = placement.y,
+                    width = placement.width,
+                    height = placement.height,
+                    sourceLeft = mask.left,
+                    sourceTop = mask.top,
+                    sourceWidth = mask.width,
+                    sourceHeight = mask.height,
+                    paddingPx = paddingPx,
+                    sourceMaskSha256 = GlyphMaskSummary.fromA8Mask(mask).sha256,
+                )
+            }
+            return fromCommon(
+                artifactType = "GlyphAtlasArtifact",
+                textureFormat = "A8",
+                width = buildResult.width,
+                height = buildResult.height,
+                rowStride = buildResult.width,
+                generation = generation,
+                invalidationToken = invalidationToken,
+                memoryBudgetClass = memoryBudgetClass,
+                lifetimeClass = lifetimeClass,
+                entries = entries,
+                sourceMaskHashes = entries.map { it.sourceMaskSha256 },
+                uploadByteSha256 = buildResult.pixels.pixelSha256(
+                    checkedAtlasPixelCount(buildResult.width, buildResult.height, "A8"),
+                ),
+                diagnostics = diagnostics,
+                distanceRange = null,
+            )
+        }
+
+        fun fromSdf(
+            buildResult: SDFGlyphAtlasBuildResult,
+            masks: List<SDFGlyphMask>,
+            strikeKeysByGlyphId: Map<Int, GlyphStrikeKey>,
+            generation: Long,
+            invalidationToken: String,
+            memoryBudgetClass: String,
+            lifetimeClass: String,
+            paddingPx: Int = 0,
+            diagnostics: List<GlyphRouteDiagnostic> = emptyList(),
+        ): GlyphAtlasArtifactEvidence {
+            val masksByGlyphId = masks.associateUniqueSDFMasks()
+            val entries = buildResult.placements.map { placement ->
+                val mask = requireNotNull(masksByGlyphId[placement.glyphId]) {
+                    "Missing SDF source mask for glyph ${placement.glyphId}."
+                }
+                val strikeKey = requireNotNull(strikeKeysByGlyphId[placement.glyphId]) {
+                    "Missing strikeKey for atlas glyph ${placement.glyphId}."
+                }
+                GlyphAtlasArtifactEvidenceEntry(
+                    glyphId = placement.glyphId,
+                    strikeKeySha256 = strikeKey.artifactPlanKeySha256(mask.glyphId, "text.glyph.mask.SDF"),
+                    x = placement.x,
+                    y = placement.y,
+                    width = placement.width,
+                    height = placement.height,
+                    sourceLeft = mask.left,
+                    sourceTop = mask.top,
+                    sourceWidth = mask.width,
+                    sourceHeight = mask.height,
+                    paddingPx = paddingPx,
+                    sourceMaskSha256 = mask.pixels.pixelSha256(mask.width * mask.height),
+                )
+            }
+            return fromCommon(
+                artifactType = "SDFGlyphAtlasArtifact",
+                textureFormat = "R8Unorm",
+                width = buildResult.width,
+                height = buildResult.height,
+                rowStride = buildResult.width,
+                generation = generation,
+                invalidationToken = invalidationToken,
+                memoryBudgetClass = memoryBudgetClass,
+                lifetimeClass = lifetimeClass,
+                entries = entries,
+                sourceMaskHashes = entries.map { it.sourceMaskSha256 },
+                uploadByteSha256 = buildResult.pixels.pixelSha256(
+                    checkedAtlasPixelCount(buildResult.width, buildResult.height, "SDF"),
+                ),
+                diagnostics = diagnostics,
+                distanceRange = buildResult.distanceRange,
+            )
+        }
+
+        private fun fromCommon(
+            artifactType: String,
+            textureFormat: String,
+            width: Int,
+            height: Int,
+            rowStride: Int,
+            generation: Long,
+            invalidationToken: String,
+            memoryBudgetClass: String,
+            lifetimeClass: String,
+            entries: List<GlyphAtlasArtifactEvidenceEntry>,
+            sourceMaskHashes: List<String>,
+            uploadByteSha256: String,
+            diagnostics: List<GlyphRouteDiagnostic>,
+            distanceRange: Float?,
+        ): GlyphAtlasArtifactEvidence {
+            val artifactKeySha256 = glyphSha256(
+                canonicalArtifactKeyJson(
+                    artifactType = artifactType,
+                    textureFormat = textureFormat,
+                    width = width,
+                    height = height,
+                    rowStride = rowStride,
+                    generation = generation,
+                    invalidationToken = invalidationToken,
+                    entries = entries,
+                    sourceMaskHashes = sourceMaskHashes,
+                    distanceRange = distanceRange,
+                ).toByteArray(Charsets.UTF_8),
+            )
+            return GlyphAtlasArtifactEvidence(
+                artifactType = artifactType,
+                artifactKeySha256 = artifactKeySha256,
+                generation = generation,
+                textureFormat = textureFormat,
+                width = width,
+                height = height,
+                rowStride = rowStride,
+                memoryBudgetClass = memoryBudgetClass,
+                lifetimeClass = lifetimeClass,
+                invalidationToken = invalidationToken,
+                entries = entries,
+                sourceMaskHashes = sourceMaskHashes,
+                uploadByteSha256 = uploadByteSha256,
+                diagnostics = diagnostics,
+                distanceRange = distanceRange,
+            )
+        }
+
+        private fun canonicalArtifactKeyJson(
+            artifactType: String,
+            textureFormat: String,
+            width: Int,
+            height: Int,
+            rowStride: Int,
+            generation: Long,
+            invalidationToken: String,
+            entries: List<GlyphAtlasArtifactEvidenceEntry>,
+            sourceMaskHashes: List<String>,
+            distanceRange: Float?,
+        ): String = buildString {
+            append("{\n")
+            appendGlyphJsonField("artifactType", artifactType, comma = true)
+            appendGlyphJsonField("textureFormat", textureFormat, comma = true)
+            appendGlyphJsonField("width", width, comma = true)
+            appendGlyphJsonField("height", height, comma = true)
+            appendGlyphJsonField("rowStride", rowStride, comma = true)
+            appendGlyphJsonField("generation", generation.toInt(), comma = true)
+            appendGlyphJsonField("invalidationToken", invalidationToken, comma = true)
+            append("  \"entries\": ")
+            append(appendGlyphAtlasArtifactEvidenceEntriesJson(entries))
+            append(",\n")
+            append("  \"sourceMaskHashes\": ")
+            appendGlyphStringArrayInlineJson(sourceMaskHashes)
+            if (distanceRange != null) {
+                append(",\n")
+                appendGlyphJsonField("distanceRange", distanceRange, comma = false)
+            } else {
+                append("\n")
+            }
+            append("}\n")
+        }
+    }
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("schema", GlyphAtlasArtifactEvidenceSchema, comma = true)
+        appendGlyphJsonField("artifactType", artifactType, comma = true)
+        appendGlyphJsonField("artifactKeySha256", artifactKeySha256, comma = true)
+        appendGlyphJsonField("generation", generation.toInt(), comma = true)
+        appendGlyphJsonField("textureFormat", textureFormat, comma = true)
+        appendGlyphJsonField("width", width, comma = true)
+        appendGlyphJsonField("height", height, comma = true)
+        appendGlyphJsonField("rowStride", rowStride, comma = true)
+        appendGlyphJsonField("memoryBudgetClass", memoryBudgetClass, comma = true)
+        appendGlyphJsonField("lifetimeClass", lifetimeClass, comma = true)
+        appendGlyphJsonField("invalidationToken", invalidationToken, comma = true)
+        appendGlyphJsonField("entryCount", entryCount, comma = true)
+        if (distanceRange != null) {
+            appendGlyphJsonField("distanceRange", distanceRange, comma = true)
+        }
+        append("  \"entries\": ")
+        append(appendGlyphAtlasArtifactEvidenceEntriesJson(entries))
+        append(",\n")
+        append("  \"sourceMaskHashes\": ")
+        appendGlyphStringArrayInlineJson(sourceMaskHashes)
+        append(",\n")
+        appendGlyphJsonField("uploadByteSha256", uploadByteSha256, comma = true)
+        append("  \"diagnostics\": ")
+        append(appendGlyphRouteDiagnosticsInlineJson(diagnostics))
+        if (includeDumpSha256) {
+            append(",\n")
+            appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+}
+
+/**
+ * Aggregate deterministic evidence dump for `glyph-atlas.json`.
+ */
+class GlyphAtlasArtifactEvidenceDump(
+    val dumpId: String,
+    ownerTickets: List<String>,
+    fixtureIds: List<String>,
+    artifacts: List<GlyphAtlasArtifactEvidence>,
+    requiredDiagnostics: List<String>,
+    nonClaims: List<String>,
+) {
+    val ownerTickets: List<String> = ownerTickets.toList()
+    val fixtureIds: List<String> = fixtureIds.toList()
+    val artifacts: List<GlyphAtlasArtifactEvidence> = artifacts.toList()
+    val requiredDiagnostics: List<String> = requiredDiagnostics.toList()
+    val nonClaims: List<String> = nonClaims.toList()
+
+    val dumpSha256: String
+        get() = glyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    fun toCanonicalJson(): String = canonicalJson(includeDumpSha256 = true)
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("schemaVersion", 1, comma = true)
+        appendGlyphJsonField("dumpId", dumpId, comma = true)
+        append("  \"ownerTickets\": ")
+        appendGlyphStringArrayMultilineJson(ownerTickets, indent = "  ")
+        append(",\n")
+        append("  \"fixtureIds\": ")
+        appendGlyphStringArrayMultilineJson(fixtureIds, indent = "  ")
+        append(",\n")
+        appendGlyphJsonField("artifactCount", artifacts.size, comma = true)
+        append("  \"artifacts\": ")
+        append(appendGlyphAtlasArtifactEvidenceJson(artifacts))
+        append(",\n")
+        append("  \"requiredDiagnostics\": ")
+        appendGlyphStringArrayMultilineJson(requiredDiagnostics, indent = "  ")
+        append(",\n")
+        append("  \"nonClaims\": ")
+        appendGlyphStringArrayMultilineJson(nonClaims, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+}
+
+/**
+ * One deterministic eviction event captured while rotating atlas generations.
+ *
+ * @property strikeKeySha256 strike-key hash whose resident atlas entries were evicted.
+ * @property glyphIds glyph identifiers evicted in order for this strike.
+ * @property bytesFreed approximate resident bytes released by this event.
+ */
+data class GlyphAtlasEvictionTraceEntry(
+    val strikeKeySha256: String,
+    val glyphIds: List<Int>,
+    val bytesFreed: Long,
+) {
+    init {
+        require(strikeKeySha256.matches(Regex("[0-9a-f]{64}"))) {
+            "GlyphAtlasEvictionTraceEntry strikeKeySha256 must be lowercase hexadecimal."
+        }
+        require(bytesFreed >= 0L) { "GlyphAtlasEvictionTraceEntry bytesFreed must be non-negative." }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("strikeKeySha256", strikeKeySha256, comma = true)
+        append("  \"glyphIds\": ")
+        append(appendGlyphIntArrayInlineJson(glyphIds))
+        append(",\n")
+        appendGlyphJsonField("bytesFreed", bytesFreed.toInt(), comma = false)
+        append("\n}")
+    }
+}
+
+/**
+ * Deterministic eviction and invalidation trace for `glyph-atlas-eviction-trace.json`.
+ */
+class GlyphAtlasEvictionTrace(
+    val dumpId: String,
+    ownerTickets: List<String>,
+    fixtureIds: List<String>,
+    val artifactType: String,
+    val previousGeneration: Long,
+    val nextGeneration: Long,
+    val invalidationTokenBefore: String,
+    val invalidationTokenAfter: String,
+    val budgetBytes: Long,
+    val residentBytesBefore: Long,
+    val residentBytesAfter: Long,
+    evictions: List<GlyphAtlasEvictionTraceEntry>,
+    requiredDiagnostics: List<String>,
+    nonClaims: List<String>,
+) {
+    val ownerTickets: List<String> = ownerTickets.toList()
+    val fixtureIds: List<String> = fixtureIds.toList()
+    val evictions: List<GlyphAtlasEvictionTraceEntry> = evictions.toList()
+    val requiredDiagnostics: List<String> = requiredDiagnostics.toList()
+    val nonClaims: List<String> = nonClaims.toList()
+
+    val dumpSha256: String
+        get() = glyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    fun toCanonicalJson(): String = canonicalJson(includeDumpSha256 = true)
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("schemaVersion", 1, comma = true)
+        appendGlyphJsonField("dumpId", dumpId, comma = true)
+        append("  \"ownerTickets\": ")
+        appendGlyphStringArrayMultilineJson(ownerTickets, indent = "  ")
+        append(",\n")
+        append("  \"fixtureIds\": ")
+        appendGlyphStringArrayMultilineJson(fixtureIds, indent = "  ")
+        append(",\n")
+        appendGlyphJsonField("artifactType", artifactType, comma = true)
+        appendGlyphJsonField("previousGeneration", previousGeneration.toInt(), comma = true)
+        appendGlyphJsonField("nextGeneration", nextGeneration.toInt(), comma = true)
+        appendGlyphJsonField("invalidationTokenBefore", invalidationTokenBefore, comma = true)
+        appendGlyphJsonField("invalidationTokenAfter", invalidationTokenAfter, comma = true)
+        appendGlyphJsonField("budgetBytes", budgetBytes.toInt(), comma = true)
+        appendGlyphJsonField("residentBytesBefore", residentBytesBefore.toInt(), comma = true)
+        appendGlyphJsonField("residentBytesAfter", residentBytesAfter.toInt(), comma = true)
+        appendGlyphJsonField("evictionCount", evictions.size, comma = true)
+        append("  \"evictions\": ")
+        append(appendGlyphAtlasEvictionTraceEntriesJson(evictions))
+        append(",\n")
+        append("  \"requiredDiagnostics\": ")
+        appendGlyphStringArrayMultilineJson(requiredDiagnostics, indent = "  ")
+        append(",\n")
+        append("  \"nonClaims\": ")
+        appendGlyphStringArrayMultilineJson(nonClaims, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+}
+
+/**
  * Selects pure Kotlin glyph representations for a run from the caller's available route request.
  *
  * The planner is deterministic: glyphs are considered in run order, routes are considered in the
@@ -2285,6 +2788,7 @@ private const val DefaultSDFDistanceRange = 8f
 private const val OutlineGlyphSourceSchema = "org.graphiks.kanvas.glyph.OutlineGlyphRepresentation.source.v1"
 private const val A8GlyphMaskArtifactEvidenceSchema = "org.graphiks.kanvas.glyph.A8GlyphMaskArtifactEvidence.v1"
 private const val SDFGlyphArtifactEvidenceSchema = "org.graphiks.kanvas.glyph.SDFGlyphArtifactEvidence.v1"
+private const val GlyphAtlasArtifactEvidenceSchema = "org.graphiks.kanvas.glyph.GlyphAtlasArtifactEvidence.v1"
 private const val GlyphArtifactPlanSchema = "org.graphiks.kanvas.glyph.GlyphArtifactPlan.v1"
 private const val GlyphAtlasPackingResultSchema = "org.graphiks.kanvas.glyph.GlyphAtlasPackingResult.v1"
 private const val SDFNormalizationFormulaVersion = "sdf-normalization-r8unorm-v1"
@@ -3633,6 +4137,48 @@ private fun appendSdfGlyphArtifactEvidenceJson(artifacts: List<SDFGlyphArtifactE
         })
         append("\n  ")
     }
+    append("]")
+}
+
+private fun appendGlyphAtlasArtifactEvidenceJson(artifacts: List<GlyphAtlasArtifactEvidence>): String = buildString {
+    append("[")
+    if (artifacts.isNotEmpty()) {
+        append("\n")
+        append(artifacts.joinToString(",\n") { artifact ->
+            artifact.toCanonicalJson().trimEnd().prependIndent("    ")
+        })
+        append("\n  ")
+    }
+    append("]")
+}
+
+private fun appendGlyphAtlasArtifactEvidenceEntriesJson(entries: List<GlyphAtlasArtifactEvidenceEntry>): String = buildString {
+    append("[")
+    if (entries.isNotEmpty()) {
+        append("\n")
+        append(entries.joinToString(",\n") { entry ->
+            entry.toCanonicalJson().trimEnd().prependIndent("    ")
+        })
+        append("\n  ")
+    }
+    append("]")
+}
+
+private fun appendGlyphAtlasEvictionTraceEntriesJson(entries: List<GlyphAtlasEvictionTraceEntry>): String = buildString {
+    append("[")
+    if (entries.isNotEmpty()) {
+        append("\n")
+        append(entries.joinToString(",\n") { entry ->
+            entry.toCanonicalJson().trimEnd().prependIndent("    ")
+        })
+        append("\n  ")
+    }
+    append("]")
+}
+
+private fun appendGlyphIntArrayInlineJson(values: List<Int>): String = buildString {
+    append("[")
+    append(values.joinToString(", "))
     append("]")
 }
 
