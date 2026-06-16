@@ -52,6 +52,7 @@ class PureKotlinTextFixtureManifestTest(unittest.TestCase):
         self.assertEqual(
             {
                 "a8-sdf-artifacts",
+                "bidi-run-segmentation",
                 "cff-cff2-scaler",
                 "color-glyphs",
                 "complex-script-fixture-matrix",
@@ -60,6 +61,7 @@ class PureKotlinTextFixtureManifestTest(unittest.TestCase):
                 "font-source-system-scan",
                 "gpu-handoff",
                 "latin-gsub-gpos-fixtures",
+                "opentype-layout-contract",
                 "paragraph",
                 "paragraph-fixture-goldens",
                 "png-bitmap-glyphs",
@@ -68,6 +70,7 @@ class PureKotlinTextFixtureManifestTest(unittest.TestCase):
                 "svg-glyphs",
                 "truetype-scaler",
                 "unicode-data-generation",
+                "unicode-grapheme-segmentation",
             },
             set(family_ids),
         )

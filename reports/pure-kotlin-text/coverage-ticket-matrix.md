@@ -1491,7 +1491,7 @@ GSUB/GPOS shaping, script itemization, or GPU text support.
 
 ### KFONT-M5-004: Add Script_Extensions Itemizer
 
-Status: implemented; independent review pending.
+Status: done; independently reviewed and freshly validated.
 
 Files:
 
@@ -1569,6 +1569,71 @@ Remaining gate: none for bounded KFONT-M5-004 script itemization closeout.
 This remains itemization evidence only and does not claim complete UCD
 coverage, GSUB/GPOS shaping, default feature policy, font fallback, glyph
 mapping, paragraph layout, emoji rendering, or GPU text route support.
+
+### KFONT-M6-001: Define `OpenTypeLayoutEngine` Contract And Dumps
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/OpenTypeLayoutContract.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt`
+- `reports/font/fixtures/expected/shaping/shaping-plan.json`
+- `reports/font/fixtures/expected/shaping/gsub-trace.json`
+- `reports/font/fixtures/expected/shaping/gpos-trace.json`
+- `reports/font/fixtures/expected/shaping/shaped-glyph-run.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m6-001-opentype-layout-contract.md`
+
+Evidence:
+
+- `OpenTypeLayoutEngineContract` adds a typed no-op OpenType layout boundary
+  around `OpenTypeRunInput`, `ResolvedFeatureSet`, table availability, lookup
+  trace requests, direct glyph input, shaping plans, GSUB/GPOS traces, shaped
+  glyph runs, glyph positions, and cluster mappings.
+- The simple Latin contract fixture produces deterministic glyph IDs while
+  preserving cluster ranges, Unicode version, source text hash, typeface ID,
+  script tag, requested/enabled feature state, fallback facts, trace refs, and
+  byte-for-byte checked goldens.
+- Direct glyph ID input explicitly bypasses GSUB and GPOS while preserving
+  synthetic cluster facts, while still requiring a deterministic `TypefaceID`
+  and diagnosing mismatched glyph/range cluster facts.
+- Direct glyph ID input does not emit missing GSUB/GPOS/GDEF table diagnostics;
+  GSUB/GPOS trace dumps carry only stage-specific table or lookup diagnostics.
+- Tests assert stable refusals for
+  `text.shaping.engine-contract-missing`,
+  `text.shaping.script-unsupported`,
+  `text.shaping.feature-unsupported`,
+  `text.shaping.lookup-type-unsupported`,
+  `text.shaping.lookup-malformed`,
+  `text.shaping.cluster-invariant-failed`, and
+  `text.shaping.fallback-missing`.
+- `dump-evidence-index.json`, `fixture-evidence-manifest.json`, and
+  `font-claim-dashboard.json` link the new contract evidence while keeping
+  `complex-shaping` dependency-gated and `claimPromotionAllowed=false`.
+- Independent spec review verdict: `ACCEPT`.
+- Independent code-quality review verdict: initial `REJECT` for direct glyph
+  validation and trace diagnostic precision, remediated and re-reviewed as
+  `ACCEPT`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon --rerun-tasks :font:text:test --tests '*OpenTypeLayoutEngineContractTest*'
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py scripts/test_validate_pure_kotlin_text_fixture_manifest.py scripts/test_validate_pure_kotlin_text_claim_dashboard.py
+rtk ./gradlew --no-daemon :font:text:test --tests '*OpenTypeLayoutEngine*' --tests '*TextStackSurface*' --tests '*ScriptItem*'
+rtk git diff --check
+```
+
+Remaining gate: this is contract and dump evidence only. It does not implement
+GSUB or GPOS lookup behavior, required script support, font fallback policy,
+paragraph layout, glyph artifacts, CPU oracle support promotion, or any GPU
+text route.
 
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 

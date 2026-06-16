@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-001"
 title: "Define `OpenTypeLayoutEngine` contract and dumps"
-status: "proposed"
+status: "done"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
@@ -105,8 +105,11 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*OpenTypeLayoutEngine*'
 
 ## Status Notes
 
-- `proposed`: Contract and dump schema ticket; behavior tickets depend on this shape.
-- Move to `ready` only after schema fields and diagnostic names are reviewed.
+- `done`: Contract and dump schema implementation has fresh
+  `OpenTypeLayoutEngineContractTest`, dump-index, fixture-manifest,
+  claim-dashboard, independent spec review, and independent code-quality
+  review evidence. This remains no-op GSUB/GPOS plumbing only and does not
+  promote complex shaping support.
 
 ## Linear Labels
 

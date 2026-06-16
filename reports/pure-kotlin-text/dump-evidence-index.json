@@ -400,6 +400,108 @@
       ]
     },
     {
+      "dumpId": "gpos-trace",
+      "ownerTicket": "KFONT-M6-001",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "GPOS Target"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/OpenTypeLayoutContract.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt",
+        "reports/font/fixtures/expected/shaping/gpos-trace.json"
+      ],
+      "expectedFields": [
+        "decision",
+        "diagnosticCode",
+        "diagnostics",
+        "disabled",
+        "dumpId",
+        "enabled",
+        "events",
+        "featureTags",
+        "features",
+        "lookupId",
+        "lookupType",
+        "nonClaims",
+        "openTypeScriptTags",
+        "ownerTickets",
+        "requested",
+        "schemaVersion",
+        "scriptRun",
+        "selectedScript",
+        "sourceTextHash",
+        "sourceTextHashAlgorithm",
+        "stage",
+        "typefaceId",
+        "unicodeVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests '*OpenTypeLayoutEngineContractTest*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "GPOS trace golden changes require contract review and stable diagnostic review without GPOS lookup implementation or support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-gsub-gpos-lookup-implementation-claim",
+        "no-native-shaper-oracle-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
+      "dumpId": "gsub-trace",
+      "ownerTicket": "KFONT-M6-001",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "GSUB Target"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/OpenTypeLayoutContract.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt",
+        "reports/font/fixtures/expected/shaping/gsub-trace.json"
+      ],
+      "expectedFields": [
+        "decision",
+        "diagnosticCode",
+        "diagnostics",
+        "disabled",
+        "dumpId",
+        "enabled",
+        "events",
+        "featureTags",
+        "features",
+        "lookupId",
+        "lookupType",
+        "nonClaims",
+        "openTypeScriptTags",
+        "ownerTickets",
+        "requested",
+        "schemaVersion",
+        "scriptRun",
+        "selectedScript",
+        "sourceTextHash",
+        "sourceTextHashAlgorithm",
+        "stage",
+        "typefaceId",
+        "unicodeVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests '*OpenTypeLayoutEngineContractTest*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "GSUB trace golden changes require contract review and stable diagnostic review without GSUB lookup implementation or support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-gsub-gpos-lookup-implementation-claim",
+        "no-native-shaper-oracle-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
       "dumpId": "latin-gsub-gpos-goldens",
       "ownerTicket": "PKT-07B",
       "classification": "golden-gated",
@@ -732,6 +834,101 @@
         "no-color-glyph-rendering-claim",
         "no-external-engine-oracle-claim",
         "no-gpu-support-claim"
+      ]
+    },
+    {
+      "dumpId": "shaped-glyph-run",
+      "ownerTicket": "KFONT-M6-001",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Clusters"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/OpenTypeLayoutContract.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt",
+        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json"
+      ],
+      "expectedFields": [
+        "clusters",
+        "diagnostics",
+        "direction",
+        "dumpId",
+        "glyphId",
+        "glyphRange",
+        "glyphs",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion",
+        "script",
+        "source",
+        "sourceTextHash",
+        "sourceTextHashAlgorithm",
+        "sourceUtf16Range",
+        "synthetic",
+        "typefaceId",
+        "unicodeVersion",
+        "xAdvance",
+        "xOffset",
+        "yOffset"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests '*OpenTypeLayoutEngineContractTest*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Shaped glyph run golden changes require cluster, glyph, diagnostic, and no-native-oracle review without support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-complex-shaping-support-claim",
+        "no-gsub-gpos-lookup-implementation-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
+      "dumpId": "shaping-plan",
+      "ownerTicket": "KFONT-M6-001",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Shaping Pipeline"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/OpenTypeLayoutContract.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt",
+        "reports/font/fixtures/expected/shaping/shaping-plan.json"
+      ],
+      "expectedFields": [
+        "bidi",
+        "caseId",
+        "cases",
+        "diagnostics",
+        "directGlyphInput",
+        "dumpId",
+        "fallbackRun",
+        "features",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion",
+        "scriptRun",
+        "sourceTextHash",
+        "sourceTextHashAlgorithm",
+        "textRange",
+        "traceRefs",
+        "typefaceId",
+        "unicodeVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests '*OpenTypeLayoutEngineContractTest*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Shaping plan golden changes require schema, required case coverage, and diagnostic review without feature, fallback, paragraph, or GPU text support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-complex-shaping-support-claim",
+        "no-gsub-gpos-lookup-implementation-claim",
+        "no-gpu-text-route-claim"
       ]
     },
     {
