@@ -20,6 +20,7 @@ REQUIRED_DUMPS = {
     "a8-sdf-atlas-lifecycle",
     "arabic-seed-readiness",
     "cff-cff2-readiness",
+    "cff-index-dict",
     "cmap-contract",
     "color-svg-emoji-goldens",
     "fallback-catalog-build",

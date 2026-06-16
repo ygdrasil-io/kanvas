@@ -231,6 +231,10 @@ object FontScalerDiagnosticCodes {
     const val CFF_OPERATOR_UNSUPPORTED: String = "font.cff-operator-unsupported"
     const val CFF_STACK_MALFORMED: String = "font.cff-stack-malformed"
     const val CFF_TABLE_MALFORMED: String = "font.cff-table-malformed"
+    const val CFF_INDEX_BOUNDS: String = "font.scaler.cff.index-bounds"
+    const val CFF_INDEX_OFFSIZE_UNSUPPORTED: String = "font.scaler.cff.index-offsize-unsupported"
+    const val CFF_DICT_OPERAND_MALFORMED: String = "font.scaler.cff.dict-operand-malformed"
+    const val CFF_REQUIRED_OPERATOR_MISSING: String = "font.scaler.cff.required-operator-missing"
     const val VARIATION_DATA_MALFORMED: String = "font.variation-data-malformed"
     const val VARIATION_AXIS_UNSUPPORTED: String = "font.variation-axis-unsupported"
     const val METRICS_VARIATION_UNAVAILABLE: String = "font.metrics-variation-unavailable"
@@ -382,18 +386,202 @@ data class CFFCharStringEvidence(
 }
 
 /**
+ * Byte range evidence for one bounded CFF parser slice.
+ */
+data class CFFByteRangeEvidence(
+    val start: Int,
+    val endExclusive: Int,
+) {
+    init {
+        require(start >= 0) { "CFF byte range start must be non-negative." }
+        require(endExclusive >= start) { "CFF byte range endExclusive must be >= start." }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(scalerJsonString("start")).append(": ").append(start).append(", ")
+        append(scalerJsonString("endExclusive")).append(": ").append(endExclusive).append(", ")
+        append(scalerJsonString("byteLength")).append(": ").append(endExclusive - start)
+        append("}")
+    }
+}
+
+/**
+ * Deterministic CFF INDEX facts.
+ */
+data class CFFIndexEvidence(
+    val name: String,
+    val count: Int,
+    val offSize: Int,
+    val objectRanges: List<CFFByteRangeEvidence>,
+) {
+    init {
+        require(name.isNotEmpty()) { "CFF INDEX name must not be empty." }
+        require(count >= 0) { "CFF INDEX count must be non-negative." }
+        require(offSize in 0..4) { "CFF INDEX offSize must be within 0..4." }
+        require(objectRanges.size == count) { "CFF INDEX objectRanges must match count." }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(scalerJsonString("name")).append(": ").append(scalerJsonString(name)).append(", ")
+        append(scalerJsonString("count")).append(": ").append(count).append(", ")
+        append(scalerJsonString("offSize")).append(": ").append(offSize).append(", ")
+        append(scalerJsonString("objectRanges")).append(": ").append(objectRanges.toCFFByteRangeJsonArray())
+        append("}")
+    }
+}
+
+/**
+ * Typed DICT operator evidence for one CFF/CFF2 dict record.
+ */
+data class CFFDictOperatorEvidence(
+    val name: String,
+    val operands: List<Int>,
+    val byteRange: CFFByteRangeEvidence,
+) {
+    init {
+        require(name.isStableToken()) { "CFF DICT operator name must be stable." }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(scalerJsonString("name")).append(": ").append(scalerJsonString(name)).append(", ")
+        append(scalerJsonString("operands")).append(": ").append(operands.toIntJsonArray()).append(", ")
+        append(scalerJsonString("byteRange")).append(": ").append(byteRange.toCanonicalJson())
+        append("}")
+    }
+}
+
+/**
+ * Deterministic DICT evidence for one top dict or FDArray font dict.
+ */
+data class CFFDictEvidence(
+    val section: String,
+    val objectIndex: Int?,
+    val byteRange: CFFByteRangeEvidence,
+    val operators: List<CFFDictOperatorEvidence>,
+    val unknownOperators: List<String>,
+) {
+    init {
+        require(section.isNotEmpty()) { "CFF dict section must not be empty." }
+        require(unknownOperators == unknownOperators.sorted()) { "CFF dict unknownOperators must be sorted." }
+        require(unknownOperators.all { operator -> operator.isStableToken() }) {
+            "CFF dict unknownOperators must be stable."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(scalerJsonString("section")).append(": ").append(scalerJsonString(section)).append(", ")
+        objectIndex?.let {
+            append(scalerJsonString("objectIndex")).append(": ").append(it).append(", ")
+        }
+        append(scalerJsonString("byteRange")).append(": ").append(byteRange.toCanonicalJson()).append(", ")
+        append(scalerJsonString("operators")).append(": ").append(operators.toCFFDictOperatorJsonArray()).append(", ")
+        append(scalerJsonString("unknownOperators")).append(": ").append(unknownOperators.toJsonStringArray())
+        append("}")
+    }
+}
+
+/**
+ * Deterministic Private DICT evidence with optional local subroutine metadata.
+ */
+data class CFFPrivateDictEvidence(
+    val owner: String,
+    val byteRange: CFFByteRangeEvidence,
+    val operators: List<CFFDictOperatorEvidence>,
+    val localSubroutineIndex: CFFIndexEvidence? = null,
+) {
+    init {
+        require(owner.isNotEmpty()) { "CFF private dict owner must not be empty." }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(scalerJsonString("owner")).append(": ").append(scalerJsonString(owner)).append(", ")
+        append(scalerJsonString("byteRange")).append(": ").append(byteRange.toCanonicalJson()).append(", ")
+        append(scalerJsonString("operators")).append(": ").append(operators.toCFFDictOperatorJsonArray()).append(", ")
+        append(scalerJsonString("localSubroutineIndex")).append(": ")
+            .append(localSubroutineIndex?.toCanonicalJson() ?: "null")
+        append("}")
+    }
+}
+
+/**
+ * Deterministic FDSelect routing facts for CID-keyed CFF fixtures.
+ */
+data class CFFFDSelectEvidence(
+    val format: Int,
+    val glyphToFontDict: List<Int>,
+) {
+    init {
+        require(format >= 0) { "CFF FDSelect format must be non-negative." }
+        require(glyphToFontDict.all { index -> index >= 0 }) { "CFF FDSelect indexes must be non-negative." }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(scalerJsonString("format")).append(": ").append(format).append(", ")
+        append(scalerJsonString("glyphToFontDict")).append(": ").append(glyphToFontDict.toIntJsonArray())
+        append("}")
+    }
+}
+
+/**
+ * Deterministic table-local diagnostic evidence for bounded CFF parsing.
+ */
+data class CFFTableDiagnosticEvidence(
+    val code: String,
+    val detail: String,
+    val section: String,
+    val byteRange: CFFByteRangeEvidence? = null,
+    val objectIndex: Int? = null,
+    val operatorName: String? = null,
+) {
+    init {
+        require(code.isStableToken()) { "CFF table diagnostic code must be stable." }
+        require(detail.isStableToken()) { "CFF table diagnostic detail must be stable." }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(scalerJsonString("code")).append(": ").append(scalerJsonString(code)).append(", ")
+        append(scalerJsonString("detail")).append(": ").append(scalerJsonString(detail)).append(", ")
+        append(scalerJsonString("section")).append(": ").append(scalerJsonString(section))
+        byteRange?.let { append(", ").append(scalerJsonString("byteRange")).append(": ").append(it.toCanonicalJson()) }
+        objectIndex?.let { append(", ").append(scalerJsonString("objectIndex")).append(": ").append(it) }
+        operatorName?.let {
+            append(", ").append(scalerJsonString("operatorName")).append(": ").append(scalerJsonString(it))
+        }
+        append("}")
+    }
+}
+
+/**
  * Deterministic provenance evidence for the bounded CFF/CFF2 table parser.
  */
 data class CFFTableEvidence(
+    val sourceId: String,
+    val typefaceId: String,
     val format: String,
     val charStringCount: Int,
     val localSubroutineCount: Int,
     val globalSubroutineCount: Int,
     val hasPrivateDict: Boolean,
     val topDictOperators: List<String>,
+    val names: List<String> = emptyList(),
+    val indexes: List<CFFIndexEvidence> = emptyList(),
+    val topDicts: List<CFFDictEvidence> = emptyList(),
+    val privateDicts: List<CFFPrivateDictEvidence> = emptyList(),
+    val fdArray: List<CFFDictEvidence> = emptyList(),
+    val fdSelect: CFFFDSelectEvidence? = null,
+    val diagnostics: List<CFFTableDiagnosticEvidence> = emptyList(),
     val variationAxisTags: List<String> = emptyList(),
 ) {
     init {
+        require(sourceId.isStableToken()) { "CFF table evidence sourceId must be stable." }
+        require(typefaceId.isStableToken()) { "CFF table evidence typefaceId must be stable." }
         require(format.isStableToken()) { "CFF table evidence format must be stable." }
         require(charStringCount > 0) { "CFF table evidence charStringCount must be positive." }
         require(localSubroutineCount >= 0) { "CFF table evidence localSubroutineCount must be non-negative." }
@@ -417,6 +605,10 @@ data class CFFTableEvidence(
 
     fun toCanonicalJson(): String = buildString {
         append("{\n")
+        append("  ").append(scalerJsonString("sourceId")).append(": ")
+            .append(scalerJsonString(sourceId)).append(",\n")
+        append("  ").append(scalerJsonString("typefaceId")).append(": ")
+            .append(scalerJsonString(typefaceId)).append(",\n")
         append("  ").append(scalerJsonString("format")).append(": ")
             .append(scalerJsonString(format)).append(",\n")
         append("  ").append(scalerJsonString("charStringCount")).append(": ")
@@ -429,6 +621,20 @@ data class CFFTableEvidence(
             .append(hasPrivateDict).append(",\n")
         append("  ").append(scalerJsonString("topDictOperators")).append(": ")
             .append(topDictOperators.toJsonStringArray()).append(",\n")
+        append("  ").append(scalerJsonString("names")).append(": ")
+            .append(names.toJsonStringArray()).append(",\n")
+        append("  ").append(scalerJsonString("indexes")).append(": ")
+            .append(indexes.toCFFIndexJsonArray()).append(",\n")
+        append("  ").append(scalerJsonString("topDicts")).append(": ")
+            .append(topDicts.toCFFDictJsonArray()).append(",\n")
+        append("  ").append(scalerJsonString("privateDicts")).append(": ")
+            .append(privateDicts.toCFFPrivateDictJsonArray()).append(",\n")
+        append("  ").append(scalerJsonString("fdArray")).append(": ")
+            .append(fdArray.toCFFDictJsonArray()).append(",\n")
+        append("  ").append(scalerJsonString("fdSelect")).append(": ")
+            .append(fdSelect?.toCanonicalJson() ?: "null").append(",\n")
+        append("  ").append(scalerJsonString("diagnostics")).append(": ")
+            .append(diagnostics.toCFFTableDiagnosticJsonArray()).append(",\n")
         append("  ").append(scalerJsonString("variationAxisTags")).append(": ")
             .append(variationAxisTags.toJsonStringArray()).append("\n")
         append("}")
@@ -2827,6 +3033,27 @@ private fun List<VariationCoordinateEvidence>.toCoordinateJson(): String =
 private fun List<String>.toJsonStringArray(): String =
     joinToString(prefix = "[", postfix = "]") { value -> scalerJsonString(value) }
 
+private fun List<Int>.toIntJsonArray(): String =
+    joinToString(prefix = "[", postfix = "]")
+
+private fun List<CFFByteRangeEvidence>.toCFFByteRangeJsonArray(): String =
+    joinToString(prefix = "[", postfix = "]") { range -> range.toCanonicalJson() }
+
+private fun List<CFFIndexEvidence>.toCFFIndexJsonArray(): String =
+    joinToString(prefix = "[", postfix = "]") { index -> index.toCanonicalJson() }
+
+private fun List<CFFDictOperatorEvidence>.toCFFDictOperatorJsonArray(): String =
+    joinToString(prefix = "[", postfix = "]") { operator -> operator.toCanonicalJson() }
+
+private fun List<CFFDictEvidence>.toCFFDictJsonArray(): String =
+    joinToString(prefix = "[", postfix = "]") { evidence -> evidence.toCanonicalJson() }
+
+private fun List<CFFPrivateDictEvidence>.toCFFPrivateDictJsonArray(): String =
+    joinToString(prefix = "[", postfix = "]") { evidence -> evidence.toCanonicalJson() }
+
+private fun List<CFFTableDiagnosticEvidence>.toCFFTableDiagnosticJsonArray(): String =
+    joinToString(prefix = "[", postfix = "]") { diagnostic -> diagnostic.toCanonicalJson() }
+
 private fun List<TrueTypeCompositeComponentEvidence>.toCompositeComponentJson(): String =
     joinToString(prefix = "[", postfix = "]") { component -> component.toCanonicalJson() }
 
@@ -4165,6 +4392,7 @@ private data class ParsedCFFProgram(
     val globalSubroutines: List<ByteArray>,
     val hasPrivateDict: Boolean,
     val topDictOperators: List<String>,
+    val tableFacts: ParsedCFFTableFacts,
     val variationStore: CFF2VariationStore? = null,
 ) {
     init {
@@ -4184,6 +4412,16 @@ private data class ParsedCFFProgram(
     }
 }
 
+private data class ParsedCFFTableFacts(
+    val names: List<String>,
+    val indexes: List<CFFIndexEvidence>,
+    val topDicts: List<CFFDictEvidence>,
+    val privateDicts: List<CFFPrivateDictEvidence>,
+    val fdArray: List<CFFDictEvidence>,
+    val fdSelect: CFFFDSelectEvidence?,
+    val diagnostics: List<CFFTableDiagnosticEvidence> = emptyList(),
+)
+
 private fun parseCFFTable(data: ByteArray): ParsedCFFProgram {
     requireCFFAvailable(data, offset = 0, byteCount = 4, section = "header")
     require(data[0].toInt() and 0xff == 1) { "CFF header major version must be 1." }
@@ -4196,30 +4434,106 @@ private fun parseCFFTable(data: ByteArray): ParsedCFFProgram {
     require(topDictIndex.objects.size == 1) { "CFF Top DICT INDEX must contain exactly one dict." }
     val stringIndex = readCFFIndex(data, topDictIndex.nextOffset, "String INDEX")
     val globalSubrIndex = readCFFIndex(data, stringIndex.nextOffset, "Global Subr INDEX")
-    val topDict = parseCFFDict(topDictIndex.objects.single(), "Top DICT")
+    val topDict = parseCFFDict(
+        data = topDictIndex.objects.single(),
+        section = "Top DICT",
+        baseOffset = topDictIndex.objectRanges.single().start,
+        objectIndex = 0,
+    )
     val charStringsOffset = topDict.singleOperand(CFF_DICT_CHAR_STRINGS)
-        ?: throw IllegalArgumentException("CFF Top DICT missing CharStrings offset.")
+        ?: throw cffRequiredOperatorMissing(
+            section = "Top DICT",
+            operatorName = "CharStrings",
+            byteRange = topDict.byteRange,
+            objectIndex = topDict.objectIndex,
+            message = "CFF Top DICT missing CharStrings offset.",
+        )
+    val indexes = mutableListOf(
+        nameIndex.evidence(),
+        topDictIndex.evidence(),
+        stringIndex.evidence(),
+        globalSubrIndex.evidence(),
+    )
+    val privateDicts = mutableListOf<CFFPrivateDictEvidence>()
+    val localSubroutines = mutableListOf<ByteArray>()
     val privateLocation = topDict.privateLocation()
-    val localSubroutines = if (privateLocation != null) {
+    if (privateLocation != null) {
         val (privateSize, privateOffset) = privateLocation
-        requireCFFAvailable(data, privateOffset, privateSize, "Private DICT")
-        val privateDict = parseCFFDict(data.copyOfRange(privateOffset, privateOffset + privateSize), "Private DICT")
-        val subrsOffset = privateDict.singleOperand(CFF_DICT_SUBRS)
-        if (subrsOffset == null) {
-            emptyList()
-        } else {
-            readCFFIndex(data, privateOffset + subrsOffset, "Local Subr INDEX").objects
+        requireCFFIndexAvailable(data, privateOffset, privateSize, "Private DICT")
+        val privateDict = parseCFFDict(
+            data = data.copyOfRange(privateOffset, privateOffset + privateSize),
+            section = "Private DICT",
+            baseOffset = privateOffset,
+            objectIndex = null,
+        )
+        val localSubrIndex = privateDict.singleOperand(CFF_DICT_SUBRS)?.let { subrsOffset ->
+            readCFFIndex(data, privateOffset + subrsOffset, "Local Subr INDEX")
         }
-    } else {
-        emptyList()
+        localSubrIndex?.let { index ->
+            indexes += index.evidence()
+            localSubroutines += index.objects
+        }
+        privateDicts += privateDict.toPrivateDictEvidence(
+            owner = "Top DICT",
+            byteRange = CFFByteRangeEvidence(privateOffset, privateOffset + privateSize),
+            localSubroutineIndex = localSubrIndex?.evidence(),
+        )
     }
+    val fdArray = topDict.singleOperand(CFF_DICT_FD_ARRAY)?.let { fdArrayOffset ->
+        val fdArrayIndex = readCFFIndex(data, fdArrayOffset, "FDArray INDEX")
+        indexes += fdArrayIndex.evidence()
+        fdArrayIndex.objects.mapIndexed { index, objectBytes ->
+            val fontDict = parseCFFDict(
+                data = objectBytes,
+                section = "FDArray Font DICT",
+                baseOffset = fdArrayIndex.objectRanges[index].start,
+                objectIndex = index,
+            )
+            fontDict.privateLocation()?.let { (privateSize, privateOffset) ->
+                requireCFFIndexAvailable(data, privateOffset, privateSize, "FDArray[$index] Private DICT")
+                val privateDict = parseCFFDict(
+                    data = data.copyOfRange(privateOffset, privateOffset + privateSize),
+                    section = "FDArray Private DICT",
+                    baseOffset = privateOffset,
+                    objectIndex = index,
+                )
+                val localSubrIndex = privateDict.singleOperand(CFF_DICT_SUBRS)?.let { subrsOffset ->
+                    readCFFIndex(data, privateOffset + subrsOffset, "FDArray[$index] Local Subr INDEX")
+                }
+                localSubrIndex?.let { subrIndex -> indexes += subrIndex.evidence() }
+                privateDicts += privateDict.toPrivateDictEvidence(
+                    owner = "FDArray[$index]",
+                    byteRange = CFFByteRangeEvidence(privateOffset, privateOffset + privateSize),
+                    localSubroutineIndex = localSubrIndex?.evidence(),
+                )
+            }
+            fontDict
+        }
+    } ?: emptyList()
     val charStringsIndex = readCFFIndex(data, charStringsOffset, "CharStrings INDEX")
+    indexes += charStringsIndex.evidence()
+    val fdSelect = topDict.singleOperand(CFF_DICT_FD_SELECT)?.let { fdSelectOffset ->
+        parseCFFFDSelect(
+            data = data,
+            offset = fdSelectOffset,
+            glyphCount = charStringsIndex.objects.size,
+            fontDictCount = fdArray.size,
+        )
+    }
     return ParsedCFFProgram(
         charStrings = charStringsIndex.objects,
         localSubroutines = localSubroutines,
         globalSubroutines = globalSubrIndex.objects,
         hasPrivateDict = privateLocation != null,
         topDictOperators = topDict.operatorNames(),
+        tableFacts = ParsedCFFTableFacts(
+            names = nameIndex.objects.map { bytes -> bytes.toString(Charsets.US_ASCII) },
+            indexes = indexes,
+            topDicts = listOf(topDict.toEvidence()),
+            privateDicts = privateDicts,
+            fdArray = fdArray.map(CFFDict::toEvidence),
+            fdSelect = fdSelect,
+        ),
     )
 }
 
@@ -4232,19 +4546,65 @@ private fun parseCFF2Table(data: ByteArray): ParsedCFFProgram {
     val topDictLength = readUInt16(data, 3)
     val topDictOffset = headerSize
     requireCFFAvailable(data, topDictOffset, topDictLength, "CFF2 Top DICT")
-    val topDict = parseCFFDict(data.copyOfRange(topDictOffset, topDictOffset + topDictLength), "CFF2 Top DICT")
+    val topDict = parseCFFDict(
+        data = data.copyOfRange(topDictOffset, topDictOffset + topDictLength),
+        section = "CFF2 Top DICT",
+        baseOffset = topDictOffset,
+        objectIndex = 0,
+    )
     val globalSubrIndex = readCFFIndex(data, topDictOffset + topDictLength, "CFF2 Global Subr INDEX")
     val charStringsOffset = topDict.singleOperand(CFF_DICT_CHAR_STRINGS)
-        ?: throw IllegalArgumentException("CFF2 Top DICT missing CharStrings offset.")
+        ?: throw cffRequiredOperatorMissing(
+            section = "CFF2 Top DICT",
+            operatorName = "CharStrings",
+            byteRange = topDict.byteRange,
+            objectIndex = topDict.objectIndex,
+            message = "CFF2 Top DICT missing CharStrings offset.",
+        )
+    val indexes = mutableListOf(globalSubrIndex.evidence())
+    val privateDicts = mutableListOf<CFFPrivateDictEvidence>()
+    val localSubroutines = mutableListOf<ByteArray>()
+    val privateLocation = topDict.privateLocation()
+    if (privateLocation != null) {
+        val (privateSize, privateOffset) = privateLocation
+        requireCFFIndexAvailable(data, privateOffset, privateSize, "CFF2 Private DICT")
+        val privateDict = parseCFFDict(
+            data = data.copyOfRange(privateOffset, privateOffset + privateSize),
+            section = "CFF2 Private DICT",
+            baseOffset = privateOffset,
+            objectIndex = null,
+        )
+        val localSubrIndex = privateDict.singleOperand(CFF_DICT_SUBRS)?.let { subrsOffset ->
+            readCFFIndex(data, privateOffset + subrsOffset, "CFF2 Local Subr INDEX")
+        }
+        localSubrIndex?.let { index ->
+            indexes += index.evidence()
+            localSubroutines += index.objects
+        }
+        privateDicts += privateDict.toPrivateDictEvidence(
+            owner = "CFF2 Top DICT",
+            byteRange = CFFByteRangeEvidence(privateOffset, privateOffset + privateSize),
+            localSubroutineIndex = localSubrIndex?.evidence(),
+        )
+    }
     val variationStore = topDict.singleOperand(CFF_DICT_CFF2_VARIATION_STORE)
         ?.let { offset -> parseCFF2VariationStore(data, offset) }
     val charStringsIndex = readCFFIndex(data, charStringsOffset, "CFF2 CharStrings INDEX")
+    indexes += charStringsIndex.evidence()
     return ParsedCFFProgram(
         charStrings = charStringsIndex.objects,
-        localSubroutines = emptyList(),
+        localSubroutines = localSubroutines,
         globalSubroutines = globalSubrIndex.objects,
-        hasPrivateDict = false,
+        hasPrivateDict = privateLocation != null,
         topDictOperators = topDict.operatorNames(),
+        tableFacts = ParsedCFFTableFacts(
+            names = emptyList(),
+            indexes = indexes,
+            topDicts = listOf(topDict.toEvidence()),
+            privateDicts = privateDicts,
+            fdArray = emptyList(),
+            fdSelect = null,
+        ),
         variationStore = variationStore,
     )
 }
@@ -4427,56 +4787,127 @@ private fun cffTableEvidence(
 ): CFFTableEvidence {
     val parsed = try {
         programProvider()
+    } catch (error: CFFParseException) {
+        throw FontScalerRefusalException(
+            diagnostic = FontScalerDiagnostic(
+                code = error.diagnosticCode,
+                detail = error.diagnosticDetail,
+                operation = "table",
+                glyphId = 0u,
+            ),
+            message = cffParseFailureMessage(error),
+        )
     } catch (error: IllegalArgumentException) {
         malformedCFFTable(format = format, displayFormat = displayFormat, error = error)
     } ?: unsupportedCFFGlyph(displayFormat, "table", face, 0u, VariationPosition())
     return CFFTableEvidence(
+        sourceId = face.source.id.value.toString(),
+        typefaceId = face.id.value.toString(),
         format = format,
         charStringCount = parsed.charStrings.size,
         localSubroutineCount = parsed.localSubroutines.size,
         globalSubroutineCount = parsed.globalSubroutines.size,
         hasPrivateDict = parsed.hasPrivateDict,
         topDictOperators = parsed.topDictOperators,
+        names = parsed.tableFacts.names,
+        indexes = parsed.tableFacts.indexes,
+        topDicts = parsed.tableFacts.topDicts,
+        privateDicts = parsed.tableFacts.privateDicts,
+        fdArray = parsed.tableFacts.fdArray,
+        fdSelect = parsed.tableFacts.fdSelect,
+        diagnostics = parsed.tableFacts.diagnostics,
         variationAxisTags = variationAxisTags,
     )
 }
 
 private data class CFFIndexReadResult(
+    val name: String,
+    val count: Int,
+    val offSize: Int,
     val objects: List<ByteArray>,
+    val objectRanges: List<CFFByteRangeEvidence>,
     val nextOffset: Int,
-)
+) {
+    fun evidence(): CFFIndexEvidence = CFFIndexEvidence(
+        name = name,
+        count = count,
+        offSize = offSize,
+        objectRanges = objectRanges,
+    )
+}
+
+private class CFFParseException(
+    val diagnosticCode: String,
+    val diagnosticDetail: String,
+    val section: String,
+    val byteRange: CFFByteRangeEvidence? = null,
+    val objectIndex: Int? = null,
+    val operatorName: String? = null,
+    message: String,
+) : IllegalArgumentException(message)
 
 private fun readCFFIndex(
     data: ByteArray,
     offset: Int,
     section: String,
 ): CFFIndexReadResult {
-    requireCFFAvailable(data, offset, 2, section)
+    requireCFFIndexAvailable(data, offset, 2, section)
     val count = readUInt16(data, offset)
     if (count == 0) {
-        return CFFIndexReadResult(objects = emptyList(), nextOffset = offset + 2)
+        return CFFIndexReadResult(
+            name = section,
+            count = 0,
+            offSize = 0,
+            objects = emptyList(),
+            objectRanges = emptyList(),
+            nextOffset = offset + 2,
+        )
     }
-    requireCFFAvailable(data, offset + 2, 1, section)
+    requireCFFIndexAvailable(data, offset + 2, 1, section)
     val offSize = data[offset + 2].toInt() and 0xff
-    require(offSize in 1..4) { "$section offSize must be in 1..4." }
+    if (offSize !in 1..4) {
+        throw CFFParseException(
+            diagnosticCode = FontScalerDiagnosticCodes.CFF_INDEX_OFFSIZE_UNSUPPORTED,
+            diagnosticDetail = "cff.index-offsize-unsupported",
+            section = section,
+            byteRange = CFFByteRangeEvidence(offset + 2, offset + 3),
+            message = "$section offSize must be in 1..4.",
+        )
+    }
     val offsetsStart = offset + 3
     val offsetCount = count + 1
-    requireCFFAvailable(data, offsetsStart, offsetCount * offSize, section)
+    requireCFFIndexAvailable(data, offsetsStart, offsetCount * offSize, section)
     val offsets = (0 until offsetCount).map { index ->
         readCFFOffset(data, offsetsStart + index * offSize, offSize)
     }
-    require(offsets.first() == 1) { "$section first object offset must be 1." }
-    require(offsets.zipWithNext().all { (left, right) -> right >= left }) {
-        "$section offsets must be monotonic."
+    if (offsets.first() != 1 || offsets.any { value -> value < 1 }) {
+        throw cffIndexBounds(section, CFFByteRangeEvidence(offsetsStart, offsetsStart + offsetCount * offSize)) {
+            "$section first object offset must be 1."
+        }
+    }
+    if (!offsets.zipWithNext().all { (left, right) -> right >= left }) {
+        throw cffIndexBounds(section, CFFByteRangeEvidence(offsetsStart, offsetsStart + offsetCount * offSize)) {
+            "$section offsets must be monotonic."
+        }
     }
     val objectDataStart = offsetsStart + offsetCount * offSize
     val objectDataLength = offsets.last() - 1
-    requireCFFAvailable(data, objectDataStart, objectDataLength, section)
-    val objects = offsets.zipWithNext().map { (start, end) ->
-        data.copyOfRange(objectDataStart + start - 1, objectDataStart + end - 1)
+    if (objectDataLength < 0) {
+        throw cffIndexBounds(section, CFFByteRangeEvidence(offsetsStart, offsetsStart + offsetCount * offSize)) {
+            "$section object data length must be non-negative."
+        }
     }
+    requireCFFIndexAvailable(data, objectDataStart, objectDataLength, section)
+    val objectRanges = offsets.zipWithNext().map { (start, end) ->
+        CFFByteRangeEvidence(objectDataStart + start - 1, objectDataStart + end - 1)
+    }
+    val objects = objectRanges.map { range -> data.copyOfRange(range.start, range.endExclusive) }
     return CFFIndexReadResult(
+        name = section,
+        count = count,
+        offSize = offSize,
         objects = objects,
+        objectRanges = objectRanges,
         nextOffset = objectDataStart + objectDataLength,
     )
 }
@@ -4489,47 +4920,136 @@ private fun readCFFOffset(data: ByteArray, offset: Int, offSize: Int): Int {
     return result
 }
 
+private data class CFFDictEntry(
+    val operator: Int,
+    val operands: List<Int>,
+    val byteRange: CFFByteRangeEvidence,
+)
+
 private data class CFFDict(
-    val entries: Map<Int, List<List<Int>>>,
+    val section: String,
+    val objectIndex: Int?,
+    val byteRange: CFFByteRangeEvidence,
+    val entries: List<CFFDictEntry>,
 ) {
+    private val entriesByOperator: Map<Int, List<CFFDictEntry>> = entries.groupBy(CFFDictEntry::operator)
+
     fun singleOperand(operator: Int): Int? =
-        entries[operator]?.lastOrNull()?.lastOrNull()
+        entriesByOperator[operator]?.lastOrNull()?.operands?.lastOrNull()
 
     fun operatorNames(): List<String> =
-        entries.keys.map(::cffDictOperatorName).sorted()
+        entriesByOperator.keys.map(::cffDictOperatorName).sorted()
+
+    fun toEvidence(): CFFDictEvidence = CFFDictEvidence(
+        section = section,
+        objectIndex = objectIndex,
+        byteRange = byteRange,
+        operators = entries.map { entry ->
+            CFFDictOperatorEvidence(
+                name = cffDictOperatorName(entry.operator),
+                operands = entry.operands,
+                byteRange = entry.byteRange,
+            )
+        },
+        unknownOperators = entries.mapNotNull { entry ->
+            cffDictOperatorName(entry.operator).takeUnless { isKnownCFFDictOperator(entry.operator) }
+        }.distinct().sorted(),
+    )
+
+    fun toPrivateDictEvidence(
+        owner: String,
+        byteRange: CFFByteRangeEvidence,
+        localSubroutineIndex: CFFIndexEvidence?,
+    ): CFFPrivateDictEvidence = CFFPrivateDictEvidence(
+        owner = owner,
+        byteRange = byteRange,
+        operators = entries.map { entry ->
+            CFFDictOperatorEvidence(
+                name = cffDictOperatorName(entry.operator),
+                operands = entry.operands,
+                byteRange = entry.byteRange,
+            )
+        },
+        localSubroutineIndex = localSubroutineIndex,
+    )
 
     fun privateLocation(): Pair<Int, Int>? {
-        val operands = entries[CFF_DICT_PRIVATE]?.lastOrNull() ?: return null
-        require(operands.size >= 2) { "CFF Private operator requires size and offset operands." }
+        val operands = entriesByOperator[CFF_DICT_PRIVATE]?.lastOrNull()?.operands ?: return null
+        if (operands.size < 2) {
+            throw CFFParseException(
+                diagnosticCode = FontScalerDiagnosticCodes.CFF_DICT_OPERAND_MALFORMED,
+                diagnosticDetail = "cff.dict-operand-malformed",
+                section = section,
+                byteRange = byteRange,
+                objectIndex = objectIndex,
+                operatorName = cffDictOperatorName(CFF_DICT_PRIVATE),
+                message = "CFF Private operator requires size and offset operands.",
+            )
+        }
         return operands[operands.size - 2] to operands[operands.size - 1]
     }
 }
 
-private fun parseCFFDict(data: ByteArray, section: String): CFFDict {
-    val entries = linkedMapOf<Int, MutableList<List<Int>>>()
+private fun parseCFFDict(
+    data: ByteArray,
+    section: String,
+    baseOffset: Int,
+    objectIndex: Int?,
+): CFFDict {
+    val entries = mutableListOf<CFFDictEntry>()
     val operands = mutableListOf<Int>()
     var offset = 0
     while (offset < data.size) {
+        val operatorStart = offset
         val byte = data[offset++].toInt() and 0xff
         when {
             byte == 12 -> {
-                requireCFFAvailable(data, offset, 1, section)
+                if (offset >= data.size) {
+                    throw CFFParseException(
+                        diagnosticCode = FontScalerDiagnosticCodes.CFF_DICT_OPERAND_MALFORMED,
+                        diagnosticDetail = "cff.dict-operand-malformed",
+                        section = section,
+                        byteRange = CFFByteRangeEvidence(baseOffset + operatorStart, baseOffset + offset),
+                        objectIndex = objectIndex,
+                        message = "$section contains truncated escaped DICT operator.",
+                    )
+                }
                 val escaped = data[offset++].toInt() and 0xff
-                entries.getOrPut(0x0c00 + escaped) { mutableListOf() } += operands.toList()
+                entries += CFFDictEntry(
+                    operator = 0x0c00 + escaped,
+                    operands = operands.toList(),
+                    byteRange = CFFByteRangeEvidence(baseOffset + operatorStart, baseOffset + offset),
+                )
                 operands.clear()
             }
             byte in 0..27 -> {
-                entries.getOrPut(byte) { mutableListOf() } += operands.toList()
+                entries += CFFDictEntry(
+                    operator = byte,
+                    operands = operands.toList(),
+                    byteRange = CFFByteRangeEvidence(baseOffset + operatorStart, baseOffset + offset),
+                )
                 operands.clear()
             }
             else -> {
-                val number = readCFFDictNumber(data, byte, offset, section)
+                val number = readCFFDictNumber(
+                    data = data,
+                    firstByte = byte,
+                    offsetAfterFirstByte = offset,
+                    section = section,
+                    baseOffset = baseOffset,
+                    objectIndex = objectIndex,
+                )
                 operands += number.value
                 offset = number.nextOffset
             }
         }
     }
-    return CFFDict(entries = entries)
+    return CFFDict(
+        section = section,
+        objectIndex = objectIndex,
+        byteRange = CFFByteRangeEvidence(baseOffset, baseOffset + data.size),
+        entries = entries,
+    )
 }
 
 private data class CFFDictNumberReadResult(
@@ -4542,17 +5062,19 @@ private fun readCFFDictNumber(
     firstByte: Int,
     offsetAfterFirstByte: Int,
     section: String,
+    baseOffset: Int,
+    objectIndex: Int?,
 ): CFFDictNumberReadResult =
     when (firstByte) {
         28 -> {
-            requireCFFAvailable(data, offsetAfterFirstByte, 2, section)
+            requireCFFDictAvailable(data, offsetAfterFirstByte, 2, section, baseOffset, objectIndex)
             CFFDictNumberReadResult(
                 value = readInt16(data, offsetAfterFirstByte),
                 nextOffset = offsetAfterFirstByte + 2,
             )
         }
         29 -> {
-            requireCFFAvailable(data, offsetAfterFirstByte, 4, section)
+            requireCFFDictAvailable(data, offsetAfterFirstByte, 4, section, baseOffset, objectIndex)
             CFFDictNumberReadResult(
                 value = readInt32(data, offsetAfterFirstByte),
                 nextOffset = offsetAfterFirstByte + 4,
@@ -4563,20 +5085,27 @@ private fun readCFFDictNumber(
             nextOffset = offsetAfterFirstByte,
         )
         in 247..250 -> {
-            requireCFFAvailable(data, offsetAfterFirstByte, 1, section)
+            requireCFFDictAvailable(data, offsetAfterFirstByte, 1, section, baseOffset, objectIndex)
             CFFDictNumberReadResult(
                 value = (firstByte - 247) * 256 + (data[offsetAfterFirstByte].toInt() and 0xff) + 108,
                 nextOffset = offsetAfterFirstByte + 1,
             )
         }
         in 251..254 -> {
-            requireCFFAvailable(data, offsetAfterFirstByte, 1, section)
+            requireCFFDictAvailable(data, offsetAfterFirstByte, 1, section, baseOffset, objectIndex)
             CFFDictNumberReadResult(
                 value = -((firstByte - 251) * 256) - (data[offsetAfterFirstByte].toInt() and 0xff) - 108,
                 nextOffset = offsetAfterFirstByte + 1,
             )
         }
-        else -> throw IllegalArgumentException("$section contains unsupported DICT number byte $firstByte.")
+        else -> throw CFFParseException(
+            diagnosticCode = FontScalerDiagnosticCodes.CFF_DICT_OPERAND_MALFORMED,
+            diagnosticDetail = "cff.dict-operand-malformed",
+            section = section,
+            byteRange = CFFByteRangeEvidence(baseOffset + offsetAfterFirstByte - 1, baseOffset + offsetAfterFirstByte),
+            objectIndex = objectIndex,
+            message = "$section contains unsupported DICT number byte $firstByte.",
+        )
     }
 
 private fun requireCFFAvailable(
@@ -4592,20 +5121,179 @@ private fun requireCFFAvailable(
     }
 }
 
+private fun requireCFFIndexAvailable(
+    data: ByteArray,
+    offset: Int,
+    byteCount: Int,
+    section: String,
+) {
+    if (offset < 0 || byteCount < 0 || offset > data.size || byteCount > data.size - offset) {
+        throw cffIndexBounds(
+            section = section,
+            byteRange = CFFByteRangeEvidence(offset.coerceAtLeast(0), (offset + byteCount).coerceAtMost(data.size)),
+        ) { "$section is truncated: need $byteCount bytes at offset $offset, table length ${data.size}." }
+    }
+}
+
+private fun requireCFFDictAvailable(
+    data: ByteArray,
+    offset: Int,
+    byteCount: Int,
+    section: String,
+    baseOffset: Int,
+    objectIndex: Int?,
+) {
+    if (offset < 0 || byteCount < 0 || offset > data.size || byteCount > data.size - offset) {
+        throw CFFParseException(
+            diagnosticCode = FontScalerDiagnosticCodes.CFF_DICT_OPERAND_MALFORMED,
+            diagnosticDetail = "cff.dict-operand-malformed",
+            section = section,
+            byteRange = CFFByteRangeEvidence(
+                (baseOffset + offset).coerceAtLeast(baseOffset),
+                (baseOffset + offset + byteCount).coerceAtMost(baseOffset + data.size),
+            ),
+            objectIndex = objectIndex,
+            message = "$section is truncated: need $byteCount bytes at offset $offset, table length ${data.size}.",
+        )
+    }
+}
+
+private fun cffIndexBounds(
+    section: String,
+    byteRange: CFFByteRangeEvidence,
+    message: () -> String,
+): CFFParseException =
+    CFFParseException(
+        diagnosticCode = FontScalerDiagnosticCodes.CFF_INDEX_BOUNDS,
+        diagnosticDetail = "cff.index-bounds",
+        section = section,
+        byteRange = byteRange,
+        message = message(),
+    )
+
+private fun cffRequiredOperatorMissing(
+    section: String,
+    operatorName: String,
+    byteRange: CFFByteRangeEvidence,
+    objectIndex: Int?,
+    message: String,
+): CFFParseException =
+    CFFParseException(
+        diagnosticCode = FontScalerDiagnosticCodes.CFF_REQUIRED_OPERATOR_MISSING,
+        diagnosticDetail = "cff.required-operator-missing",
+        section = section,
+        byteRange = byteRange,
+        objectIndex = objectIndex,
+        operatorName = operatorName,
+        message = message,
+    )
+
+private fun cffParseFailureMessage(error: CFFParseException): String = buildString {
+    append(error.section)
+    error.objectIndex?.let { append(" objectIndex=").append(it) }
+    error.operatorName?.let { append(" operator=").append(it) }
+    error.byteRange?.let {
+        append(" range=").append(it.start).append("..").append(it.endExclusive)
+    }
+    append(": ").append(error.message.orEmpty())
+}
+
+private fun parseCFFFDSelect(
+    data: ByteArray,
+    offset: Int,
+    glyphCount: Int,
+    fontDictCount: Int,
+): CFFFDSelectEvidence {
+    requireCFFIndexAvailable(data, offset, 1, "FDSelect")
+    val format = data[offset].toInt() and 0xff
+    val glyphToFontDict = when (format) {
+        0 -> {
+            requireCFFIndexAvailable(data, offset + 1, glyphCount, "FDSelect")
+            (0 until glyphCount).map { index -> data[offset + 1 + index].toInt() and 0xff }
+        }
+        3 -> {
+            requireCFFIndexAvailable(data, offset + 1, 2, "FDSelect")
+            val rangeCount = readUInt16(data, offset + 1)
+            val rangesOffset = offset + 3
+            requireCFFIndexAvailable(data, rangesOffset, rangeCount * 3 + 2, "FDSelect")
+            val mapping = MutableList(glyphCount) { 0 }
+            var cursorGlyph = 0
+            repeat(rangeCount) { rangeIndex ->
+                val entryOffset = rangesOffset + rangeIndex * 3
+                val firstGlyph = readUInt16(data, entryOffset)
+                val fdIndex = data[entryOffset + 2].toInt() and 0xff
+                val nextFirstGlyph = if (rangeIndex == rangeCount - 1) {
+                    readUInt16(data, rangesOffset + rangeCount * 3)
+                } else {
+                    readUInt16(data, entryOffset + 3)
+                }
+                if (firstGlyph > nextFirstGlyph || nextFirstGlyph > glyphCount) {
+                    throw cffIndexBounds("FDSelect", CFFByteRangeEvidence(entryOffset, entryOffset + 3)) {
+                        "FDSelect range $rangeIndex exceeds glyph count $glyphCount."
+                    }
+                }
+                while (cursorGlyph < nextFirstGlyph && cursorGlyph < glyphCount) {
+                    mapping[cursorGlyph] = fdIndex
+                    cursorGlyph += 1
+                }
+            }
+            mapping
+        }
+        else -> throw cffIndexBounds("FDSelect", CFFByteRangeEvidence(offset, offset + 1)) {
+            "FDSelect format $format is unsupported."
+        }
+    }
+    if (glyphToFontDict.any { index -> index >= fontDictCount }) {
+        throw cffIndexBounds("FDSelect", CFFByteRangeEvidence(offset, offset + 1 + glyphCount)) {
+            "FDSelect font dict index exceeds FDArray count $fontDictCount."
+        }
+    }
+    return CFFFDSelectEvidence(format = format, glyphToFontDict = glyphToFontDict)
+}
+
 private const val CFF_DICT_CHAR_STRINGS = 17
+private const val CFF_DICT_CHARSET = 15
+private const val CFF_DICT_ENCODING = 16
 private const val CFF_DICT_PRIVATE = 18
 private const val CFF_DICT_SUBRS = 19
 private const val CFF_DICT_CFF2_VARIATION_STORE = 24
+private const val CFF_DICT_DEFAULT_WIDTH_X = 20
+private const val CFF_DICT_NOMINAL_WIDTH_X = 21
+private const val CFF_DICT_ROS = 0x0c1e
+private const val CFF_DICT_FD_ARRAY = 0x0c24
+private const val CFF_DICT_FD_SELECT = 0x0c25
 
 private fun cffDictOperatorName(operator: Int): String =
     when (operator) {
+        CFF_DICT_CHARSET -> "cff.dict.charset"
+        CFF_DICT_ENCODING -> "cff.dict.encoding"
         CFF_DICT_CHAR_STRINGS -> "cff.dict.charstrings"
         CFF_DICT_PRIVATE -> "cff.dict.private"
         CFF_DICT_SUBRS -> "cff.dict.subrs"
+        CFF_DICT_DEFAULT_WIDTH_X -> "cff.dict.default-width-x"
+        CFF_DICT_NOMINAL_WIDTH_X -> "cff.dict.nominal-width-x"
         CFF_DICT_CFF2_VARIATION_STORE -> "cff.dict.variation-store"
+        CFF_DICT_ROS -> "cff.dict.ros"
+        CFF_DICT_FD_ARRAY -> "cff.dict.fdarray"
+        CFF_DICT_FD_SELECT -> "cff.dict.fdselect"
         in 0x0c00..0x0cff -> "cff.dict.escaped-${operator and 0xff}"
         else -> "cff.dict.operator-$operator"
     }
+
+private fun isKnownCFFDictOperator(operator: Int): Boolean =
+    operator in setOf(
+        CFF_DICT_CHARSET,
+        CFF_DICT_ENCODING,
+        CFF_DICT_CHAR_STRINGS,
+        CFF_DICT_PRIVATE,
+        CFF_DICT_SUBRS,
+        CFF_DICT_DEFAULT_WIDTH_X,
+        CFF_DICT_NOMINAL_WIDTH_X,
+        CFF_DICT_CFF2_VARIATION_STORE,
+        CFF_DICT_ROS,
+        CFF_DICT_FD_ARRAY,
+        CFF_DICT_FD_SELECT,
+    )
 
 private fun malformedCFFTable(
     format: String,

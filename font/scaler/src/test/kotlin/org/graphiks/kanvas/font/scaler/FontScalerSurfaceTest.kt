@@ -2834,6 +2834,75 @@ class FontScalerSurfaceTest {
     }
 
     @Test
+    fun cffIndexDictGoldenMatchesGeneratedEvidence() {
+        val expected = Files.readString(
+            kanvasProjectRoot().resolve("reports/font/fixtures/expected/scaler/cff-index-dict.json"),
+        ).trimEnd()
+
+        assertEquals(expected, cffIndexDictDump())
+    }
+
+    @Test
+    fun cffTableEvidenceUsesStableSpecificCffParseDiagnostics() {
+        val invalidOffSize = bytes(
+            0x01,
+            0x00,
+            0x04,
+            0x01,
+            0x00,
+            0x01,
+            0x00,
+        )
+        val invalidIndexBounds = bytes(
+            0x01,
+            0x00,
+            0x04,
+            0x01,
+        ) + bytes(
+            0x00,
+            0x01,
+            0x01,
+            0x01,
+            0x05,
+            0x42,
+        )
+        val malformedDictOperand = bytes(0x01, 0x00, 0x04, 0x01) +
+            cffIndex(listOf("Broken".toByteArray(Charsets.US_ASCII))) +
+            cffIndex(listOf(bytes(0x1c, 0x01))) +
+            cffIndex(emptyList()) +
+            cffIndex(emptyList())
+        val missingRequiredOperator = bytes(0x01, 0x00, 0x04, 0x01) +
+            cffIndex(listOf("Broken".toByteArray(Charsets.US_ASCII))) +
+            cffIndex(listOf(byteArrayOf())) +
+            cffIndex(emptyList()) +
+            cffIndex(emptyList())
+
+        val cases = listOf(
+            Triple(invalidOffSize, "font.scaler.cff.index-offsize-unsupported", "Name INDEX"),
+            Triple(invalidIndexBounds, "font.scaler.cff.index-bounds", "Name INDEX"),
+            Triple(malformedDictOperand, "font.scaler.cff.dict-operand-malformed", "Top DICT"),
+            Triple(missingRequiredOperator, "font.scaler.cff.required-operator-missing", "CharStrings"),
+        )
+
+        cases.forEach { (tableBytes, expectedCode, expectedContext) ->
+            val failure = assertFailsWith<FontScalerRefusalException> {
+                CFFScaler(
+                    face = syntheticCFFFace(
+                        scalerType = 0x4f54544fu,
+                        tableTag = "CFF ",
+                        tableBytes = tableBytes,
+                    ),
+                ).tableEvidence()
+            }
+
+            assertEquals(expectedCode, failure.diagnostic.code)
+            assertEquals("table", failure.diagnostic.operation)
+            assertEquals(0u, failure.diagnostic.glyphId)
+            assertTrue(failure.message.orEmpty().contains(expectedContext))
+        }
+    }
+
+    @Test
     fun cffTableEvidenceRefusesMalformedIndexAndDictDeterministically() {
         val malformedIndex = bytes(
             0x01,
@@ -2859,7 +2928,7 @@ class FontScalerSurfaceTest {
                 ),
             ).tableEvidence()
         }
-        val missingDictFailure = assertFailsWith<FontScalerRefusalException> {
+        val missingRequiredOperatorFailure = assertFailsWith<FontScalerRefusalException> {
             CFFScaler(
                 face = syntheticCFFFace(
                     scalerType = 0x4f54544fu,
@@ -2869,12 +2938,15 @@ class FontScalerSurfaceTest {
             ).tableEvidence()
         }
 
-        listOf(malformedIndexFailure, missingDictFailure).forEach { failure ->
-            assertEquals(FontScalerDiagnosticCodes.CFF_TABLE_MALFORMED, failure.diagnostic.code)
-            assertEquals("cff.table-malformed", failure.diagnostic.detail)
-            assertEquals("table", failure.diagnostic.operation)
-            assertTrue(failure.message.orEmpty().contains("CFF table malformed"))
-        }
+        assertEquals("font.scaler.cff.index-offsize-unsupported", malformedIndexFailure.diagnostic.code)
+        assertEquals("cff.index-offsize-unsupported", malformedIndexFailure.diagnostic.detail)
+        assertEquals("table", malformedIndexFailure.diagnostic.operation)
+        assertTrue(malformedIndexFailure.message.orEmpty().contains("Name INDEX"))
+
+        assertEquals("font.scaler.cff.required-operator-missing", missingRequiredOperatorFailure.diagnostic.code)
+        assertEquals("cff.required-operator-missing", missingRequiredOperatorFailure.diagnostic.detail)
+        assertEquals("table", missingRequiredOperatorFailure.diagnostic.operation)
+        assertTrue(missingRequiredOperatorFailure.message.orEmpty().contains("CharStrings"))
     }
 
     @Test
@@ -4263,6 +4335,62 @@ class FontScalerSurfaceTest {
             cffIndex(charStrings)
     }
 
+    private fun generatedCidKeyedCFFTable(): ByteArray {
+        val header = bytes(0x01, 0x00, 0x04, 0x01)
+        val nameIndex = cffIndex(listOf("KanvasCID".toByteArray(Charsets.US_ASCII)))
+        val stringIndex = cffIndex(emptyList())
+        val globalSubrIndex = cffIndex(emptyList())
+        val fdSelect = bytes(0x00, 0x00, 0x01)
+        val charStrings = cffIndex(
+            listOf(
+                type2CharString(type2Number(0), type2Number(0), type2Operator(21), type2Operator(14)),
+                type2CharString(type2Number(0), type2Number(0), type2Operator(21), type2Operator(14)),
+            ),
+        )
+        val privateDict0 = bytes(*(cffDictNumber(400) + intArrayOf(20)))
+        val privateDict1 = bytes(*(cffDictNumber(450) + intArrayOf(20)))
+
+        var topDict = byteArrayOf()
+        var fdDict0 = byteArrayOf()
+        var fdDict1 = byteArrayOf()
+        repeat(8) {
+            val topDictIndex = cffIndex(listOf(topDict))
+            val prefixSize = header.size + nameIndex.size + topDictIndex.size + stringIndex.size + globalSubrIndex.size
+            val provisionalFdArray = cffIndex(listOf(fdDict0, fdDict1))
+            val private0Offset = prefixSize + provisionalFdArray.size
+            val private1Offset = private0Offset + privateDict0.size
+            fdDict0 = bytes(*(cffDictNumber(privateDict0.size) + cffDictNumber(private0Offset) + intArrayOf(18)))
+            fdDict1 = bytes(*(cffDictNumber(privateDict1.size) + cffDictNumber(private1Offset) + intArrayOf(18)))
+
+            val fdArray = cffIndex(listOf(fdDict0, fdDict1))
+            val fdArrayOffset = prefixSize
+            val fdSelectOffset = fdArrayOffset + fdArray.size + privateDict0.size + privateDict1.size
+            val charStringsOffset = fdSelectOffset + fdSelect.size
+            topDict = bytes(
+                *(cffDictNumber(charStringsOffset) + intArrayOf(17) +
+                    cffDictNumber(fdArrayOffset) + intArrayOf(12, 36) +
+                    cffDictNumber(fdSelectOffset) + intArrayOf(12, 37) +
+                    cffDictNumber(0) + cffDictNumber(1) + cffDictNumber(0) + intArrayOf(12, 30)),
+            )
+        }
+
+        val finalTopDictIndex = cffIndex(listOf(topDict))
+        val prefixSize = header.size + nameIndex.size + finalTopDictIndex.size + stringIndex.size + globalSubrIndex.size
+        val fdArray = cffIndex(listOf(fdDict0, fdDict1))
+        check(prefixSize + fdArray.size + privateDict0.size + privateDict1.size + fdSelect.size == readGeneratedCidCharStringsOffset(topDict))
+
+        return header +
+            nameIndex +
+            finalTopDictIndex +
+            stringIndex +
+            globalSubrIndex +
+            fdArray +
+            privateDict0 +
+            privateDict1 +
+            fdSelect +
+            charStrings
+    }
+
     private fun generatedCFF2Table(
         charStrings: List<ByteArray>,
         globalSubroutines: List<ByteArray> = emptyList(),
@@ -4285,6 +4413,37 @@ class FontScalerSurfaceTest {
             (topDict.size ushr 8) and 0xff,
             topDict.size and 0xff,
         ) + topDict + globalSubrIndex + (variationStore ?: byteArrayOf()) + cffIndex(charStrings)
+    }
+
+    private fun generatedCFF2TableWithPrivateDict(
+        charStrings: List<ByteArray>,
+        localSubroutines: List<ByteArray>,
+    ): ByteArray {
+        val globalSubrIndex = cffIndex(emptyList())
+        val localSubrIndex = cffIndex(localSubroutines)
+
+        var privateDict = cffDictNumber(0) + intArrayOf(19)
+        repeat(4) {
+            privateDict = cffDictNumber(privateDict.size) + intArrayOf(19)
+        }
+
+        var topDict = byteArrayOf()
+        repeat(6) {
+            val privateOffset = 5 + topDict.size + globalSubrIndex.size
+            val charStringsOffset = privateOffset + privateDict.size + localSubrIndex.size
+            topDict = bytes(
+                *(cffDictNumber(charStringsOffset) + intArrayOf(17) +
+                    cffDictNumber(privateDict.size) + cffDictNumber(privateOffset) + intArrayOf(18)),
+            )
+        }
+
+        return bytes(
+            0x02,
+            0x00,
+            0x05,
+            (topDict.size ushr 8) and 0xff,
+            topDict.size and 0xff,
+        ) + topDict + globalSubrIndex + bytes(*privateDict) + localSubrIndex + cffIndex(charStrings)
     }
 
     private fun generatedCFF2VariationStoreOneAxis(
@@ -4450,6 +4609,137 @@ class FontScalerSurfaceTest {
         variations = variations,
         rawTables = mapOf(SFNTTableTag(tableTag) to tableBytes.toUnsignedByteList()),
     )
+
+    private fun cffIndexDictDump(): String {
+        val minimalFace = syntheticCFFFace(
+            scalerType = 0x4f54544fu,
+            tableTag = "CFF ",
+            tableBytes = generatedCFFTable(
+                charStrings = listOf(
+                    type2CharString(type2Number(0), type2Number(0), type2Operator(21), type2Operator(14)),
+                ),
+                localSubroutines = listOf(type2CharString(type2Operator(11))),
+            ),
+        )
+        val cidFace = syntheticCFFFace(
+            scalerType = 0x4f54544fu,
+            tableTag = "CFF ",
+            tableBytes = generatedCidKeyedCFFTable(),
+            metrics = sfntMetricsForFactory(
+                horizontalMetrics = listOf(
+                    HorizontalGlyphMetric(glyphId = 0, advanceWidth = 500, leftSideBearing = 0),
+                    HorizontalGlyphMetric(glyphId = 1, advanceWidth = 520, leftSideBearing = 0),
+                ),
+            ),
+        )
+        val cff2Face = syntheticCFFFace(
+            scalerType = 0x43464632u,
+            tableTag = "CFF2",
+            tableBytes = generatedCFF2TableWithPrivateDict(
+                charStrings = listOf(
+                    type2CharString(type2Number(0), type2Number(0), type2Operator(21), type2Operator(14)),
+                ),
+                localSubroutines = listOf(type2CharString(type2Operator(11))),
+            ),
+        )
+
+        val minimalEvidence = CFFScaler(minimalFace).tableEvidence().toCanonicalJson()
+        val cidEvidence = CFFScaler(cidFace).tableEvidence().toCanonicalJson()
+        val cff2Evidence = CFF2Scaler(cff2Face).tableEvidence().toCanonicalJson()
+
+        return """
+            {
+              "schemaVersion": 1,
+              "dumpId": "cff-index-dict",
+              "ownerTickets": [
+                "KFONT-M4-001"
+              ],
+              "fixtureIds": [
+                "cff-minimal.otf",
+                "cff-cid-keyed.otf",
+                "cff2-minimal.otf"
+              ],
+              "fixtures": [
+                {
+                  "fixtureId": "cff-minimal.otf",
+                  "sourceId": "${minimalFace.source.id.value}",
+                  "typefaceId": "${minimalFace.id.value}",
+                  "tableEvidence": ${minimalEvidence.prependIndent("                  ").trimStart()}
+                },
+                {
+                  "fixtureId": "cff-cid-keyed.otf",
+                  "sourceId": "${cidFace.source.id.value}",
+                  "typefaceId": "${cidFace.id.value}",
+                  "tableEvidence": ${cidEvidence.prependIndent("                  ").trimStart()}
+                },
+                {
+                  "fixtureId": "cff2-minimal.otf",
+                  "sourceId": "${cff2Face.source.id.value}",
+                  "typefaceId": "${cff2Face.id.value}",
+                  "tableEvidence": ${cff2Evidence.prependIndent("                  ").trimStart()}
+                }
+              ],
+              "nonClaims": [
+                "generated-fixture-evidence-only",
+                "no-cff-rendering-support-claim",
+                "no-cff2-variation-output-claim",
+                "no-host-font-oracle-claim"
+              ]
+            }
+        """.trimIndent()
+    }
+
+    private fun readGeneratedCidCharStringsOffset(topDict: ByteArray): Int {
+        var index = 0
+        val operands = mutableListOf<Int>()
+        while (index < topDict.size) {
+            when (val byte = topDict[index++].toInt() and 0xff) {
+                12 -> {
+                    index += 1
+                    operands.clear()
+                }
+                in 0..27 -> {
+                    if (byte == 17) return operands.last()
+                    operands.clear()
+                }
+                else -> {
+                    val read = readGeneratedTestCffDictNumber(topDict, byte, index)
+                    operands += read.first
+                    index = read.second
+                }
+            }
+        }
+        error("Generated CID top dict missing CharStrings operator.")
+    }
+
+    private fun readGeneratedTestCffDictNumber(
+        data: ByteArray,
+        firstByte: Int,
+        offsetAfterFirstByte: Int,
+    ): Pair<Int, Int> =
+        when (firstByte) {
+            28 -> ((readGeneratedTestInt16(data, offsetAfterFirstByte)) to (offsetAfterFirstByte + 2))
+            29 -> ((readGeneratedTestInt32(data, offsetAfterFirstByte)) to (offsetAfterFirstByte + 4))
+            in 32..246 -> ((firstByte - 139) to offsetAfterFirstByte)
+            in 247..250 -> (
+                ((firstByte - 247) * 256 + (data[offsetAfterFirstByte].toInt() and 0xff) + 108) to
+                    (offsetAfterFirstByte + 1)
+                )
+            in 251..254 -> (
+                (-((firstByte - 251) * 256) - (data[offsetAfterFirstByte].toInt() and 0xff) - 108) to
+                    (offsetAfterFirstByte + 1)
+                )
+            else -> error("Unsupported generated CFF DICT number byte $firstByte.")
+        }
+
+    private fun readGeneratedTestInt16(data: ByteArray, offset: Int): Int =
+        ((data[offset].toInt() and 0xff) shl 8) or (data[offset + 1].toInt() and 0xff)
+
+    private fun readGeneratedTestInt32(data: ByteArray, offset: Int): Int =
+        ((data[offset].toInt() and 0xff) shl 24) or
+            ((data[offset + 1].toInt() and 0xff) shl 16) or
+            ((data[offset + 2].toInt() and 0xff) shl 8) or
+            (data[offset + 3].toInt() and 0xff)
 
     private fun variableTrueTypeGlyfScaler(
         simpleSquare: ByteArray,
