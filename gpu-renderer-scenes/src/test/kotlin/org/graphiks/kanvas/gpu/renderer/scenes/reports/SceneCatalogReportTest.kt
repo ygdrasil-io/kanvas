@@ -20,6 +20,7 @@ class SceneCatalogReportTest {
         val markdown = SceneCatalogReport(GPURendererSceneRegistry.scenes).toMarkdown()
         assertContains(markdown, "| `solid-card-stack` | Solid Card Stack |")
         assertContains(markdown, "KGPU M0,M1")
+        assertContains(markdown, "`KGPU-M1-003`,`KGPU-M1-004`")
         assertContains(markdown, "`KGPU-M2-003`,`KGPU-M2-004`")
         assertContains(markdown, "`KGPU-M4-001`,`KGPU-M4-002`")
         assertContains(markdown, "`KGPU-M7-003`")
@@ -35,6 +36,7 @@ class SceneCatalogReportTest {
 
         assertTrue(root.resolve("catalog.md").readText().contains("GPU Renderer Scene Catalog"))
         assertTrue(root.resolve("catalog.json").readText().contains("\"sceneId\": \"solid-card-stack\""))
+        assertTrue(root.resolve("catalog.json").readText().contains("\"ticketIds\": [\"KGPU-M1-003\",\"KGPU-M1-004\"]"))
         assertTrue(root.resolve("catalog.json").readText().contains("\"ticketIds\": [\"KGPU-M4-001\",\"KGPU-M4-002\"]"))
         assertTrue(root.resolve("catalog.json").readText().contains("\"ticketIds\": [\"KGPU-M7-003\"]"))
         assertTrue(root.resolve("catalog.json").readText().contains("\"ticketIds\": [\"KGPU-M9-001\"]"))

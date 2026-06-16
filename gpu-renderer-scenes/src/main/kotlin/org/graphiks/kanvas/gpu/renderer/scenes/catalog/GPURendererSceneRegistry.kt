@@ -46,6 +46,43 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "first-route-rollback-panel",
+            title = "First Route Rollback Panel",
+            description = "Controlled FillRect flag and rollback lanes without default product activation.",
+            tags = setOf(SceneTag.Rect, SceneTag.LegacyComparison),
+            links = listOf(
+                SceneRoadmapLink.ticket("KGPU-M1-003"),
+                SceneRoadmapLink.ticket("KGPU-M1-004"),
+            ),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.038f, 0.042f, 0.048f, 1f)),
+                SceneCommand.FillRect(
+                    label = "legacy-before-route",
+                    rect = SceneRect(34f, 48f, 92f, 154f),
+                    color = SceneColor(0.52f, 0.58f, 0.66f, 1f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "product-flagged-fillrect-route",
+                    rect = SceneRect(106f, 36f, 164f, 154f),
+                    color = SceneColor.green(0.92f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "legacy-rollback-route",
+                    rect = SceneRect(178f, 58f, 236f, 154f),
+                    color = SceneColor.amber(0.90f),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "unsupported-variant-refusal",
+                    rect = SceneRect(250f, 82f, 296f, 154f),
+                    color = SceneColor.red(),
+                    paintOrder = 4,
+                ),
+            ),
+        ),
+        scene(
             id = "rounded-panel-gradient",
             title = "Rounded Panel Gradient",
             description = "Rounded rect with linear gradient and scissor.",

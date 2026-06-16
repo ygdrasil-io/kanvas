@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 17,
+  "sceneCount": 18,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -10,6 +10,16 @@
       "kgpuMilestones": ["M0","M1"],
       "ticketIds": [],
       "rStages": ["R0","R1","R2","R3","R4","R5","R6"],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "first-route-rollback-panel",
+      "title": "First Route Rollback Panel",
+      "description": "Controlled FillRect flag and rollback lanes without default product activation.",
+      "tags": ["Rect","LegacyComparison"],
+      "kgpuMilestones": ["M1"],
+      "ticketIds": ["KGPU-M1-003","KGPU-M1-004"],
+      "rStages": [],
       "expectation": "ShouldRender"
     },
     {

@@ -61,6 +61,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
     fun `catalogued rect rrect gradient clip and bitmap scenes route to WebGPU offscreen instead of runner subset`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
         val rectOnlyScenes = listOf(
+            RenderedShapeExpectation("first-route-rollback-panel", fillRectCount = 4),
             RenderedShapeExpectation("blend-mode-strip", fillRectCount = 1),
             RenderedShapeExpectation("translucent-card-overlap", fillRectCount = 3),
             RenderedShapeExpectation("cache-pressure-deck", fillRectCount = 2),

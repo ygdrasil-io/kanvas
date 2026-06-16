@@ -61,6 +61,29 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `first route rollback panel is backed by controlled flag and rollback lanes`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("first-route-rollback-panel")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.LegacyComparison), scene.tags)
+        assertEquals(
+            listOf("KGPU-M1-003", "KGPU-M1-004"),
+            scene.roadmapLinks.mapNotNull { it.ticketId },
+        )
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertEquals(
+            listOf(
+                "legacy-before-route",
+                "product-flagged-fillrect-route",
+                "legacy-rollback-route",
+                "unsupported-variant-refusal",
+            ),
+            fills.map { it.label },
+        )
+        assertTrue(fills.all { it.paintOrder > 0 })
+    }
+
+    @Test
     fun `runtime effect color tile is backed by registered SimpleRT scene payload`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("runtime-effect-color-tile")
         val command = assertIs<SceneCommand.RuntimeEffectTile>(scene.commands.single())
@@ -206,6 +229,15 @@ class GPURendererSceneRegistryTest {
                     RoadmapExpectation("M1", RStage.R4),
                     RoadmapExpectation("M1", RStage.R5),
                     RoadmapExpectation("M1", RStage.R6),
+                ),
+            ),
+            SceneExpectationRow(
+                sceneId = "first-route-rollback-panel",
+                tags = setOf(SceneTag.Rect, SceneTag.LegacyComparison),
+                commandFamilies = listOf("clear", "fill-rect", "fill-rect", "fill-rect", "fill-rect"),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M1", ticketId = "KGPU-M1-003"),
+                    RoadmapExpectation("M1", ticketId = "KGPU-M1-004"),
                 ),
             ),
             SceneExpectationRow(
