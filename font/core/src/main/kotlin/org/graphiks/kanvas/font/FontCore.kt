@@ -3465,6 +3465,30 @@ class CatalogFontResolver(
     fun trace(request: FallbackRequest): FallbackResolutionTrace =
         FallbackResolutionTrace(decisions = resolveDecisions(request).map { it.trace })
 
+    fun evidenceCase(
+        fixtureId: String,
+        request: FallbackRequest,
+        additionalDiagnostics: List<String> = emptyList(),
+    ): FallbackEvidenceCase {
+        require(fixtureId.isStableManifestToken()) { "fixtureId must be a stable manifest token." }
+        val decisions = resolveDecisions(request)
+        val traces = decisions.map { it.trace }
+        val runs = buildEvidenceRuns(decisions)
+        val diagnostics = linkedSetOf<String>()
+        traces.mapNotNullTo(diagnostics) { it.diagnosticCode }
+        additionalDiagnostics.forEach { diagnostic ->
+            require(diagnostic.isStableDiagnosticCode()) { "additionalDiagnostics must use stable one-line codes." }
+            diagnostics += diagnostic
+        }
+        return FallbackEvidenceCase(
+            fixtureId = fixtureId,
+            request = request,
+            decisions = traces,
+            runs = runs,
+            diagnostics = diagnostics.toList(),
+        )
+    }
+
     private fun resolveDecisions(request: FallbackRequest): List<ResolvedFallbackDecision> {
         if (request.text.isEmpty()) return emptyList()
 
@@ -3502,22 +3526,46 @@ class CatalogFontResolver(
             availableFamilyNames = availableFamilyNames,
             plannedFamilies = plan.orderedFamilies,
         )
+        val genericChain = policy.genericFallbackChains[plan.genericFamily].orEmpty()
+        val localeChains = plan.locales.flatMap { locale -> policy.localeFallbackChains[locale].orEmpty() }
+        val scriptChain = policy.scriptFallbackChains[plan.script].orEmpty()
         var firstPlannedFace: FontFace? = null
         var firstPlannedFamily: String? = null
+        val candidates = mutableListOf<FallbackCandidateTrace>()
         for (family in candidateFamilies) {
             for (face in catalog.families[family]?.faces.orEmpty().orderedByStyleDistance(request.style)) {
+                val covered = coverage.supports(face.typeface.id, codePoint)
+                val reasons = buildList {
+                    if (familyMatchesRequested(family, request.preferredFamilies)) add("requested-family")
+                    if (family in localeChains) add("locale-hint")
+                    if (family in scriptChain) add("script-fallback")
+                    if (plan.script == "emoji" && family in policy.emojiPreferredFamilies) add("emoji-preference")
+                    if (family in genericChain) add("generic-family")
+                    if (covered) add("glyph-coverage")
+                }
+                candidates += FallbackCandidateTrace(
+                    familyName = family,
+                    typefaceId = face.typeface.id,
+                    covered = covered,
+                    styleDistance = face.typeface.style.distanceTo(request.style),
+                    reasons = reasons.ifEmpty { listOf("catalog-order") },
+                )
                 if (firstPlannedFace == null) {
                     firstPlannedFace = face
                     firstPlannedFamily = family
                 }
-                if (coverage.supports(face.typeface.id, codePoint)) {
+                if (covered) {
                     return ResolvedFallbackDecision(
                         trace = FallbackDecisionTrace(
                             start = start,
                             end = end,
                             codePoint = codePoint,
                             requestedFamilies = request.preferredFamilies,
+                            genericFamily = plan.genericFamily,
+                            script = plan.script,
+                            locales = plan.locales,
                             candidateFamilies = candidateFamilies,
+                            candidates = candidates.markSelected(face.typeface.id, null),
                             selectedFamily = family,
                             selectedTypefaceId = face.typeface.id,
                             covered = true,
@@ -3534,7 +3582,11 @@ class CatalogFontResolver(
                     end = end,
                     codePoint = codePoint,
                     requestedFamilies = request.preferredFamilies,
+                    genericFamily = plan.genericFamily,
+                    script = plan.script,
+                    locales = plan.locales,
                     candidateFamilies = candidateFamilies,
+                    candidates = candidates.markSelected(firstPlannedFace.typeface.id, "glyph-missing"),
                     selectedFamily = firstPlannedFamily,
                     selectedTypefaceId = firstPlannedFace.typeface.id,
                     covered = false,
@@ -3549,7 +3601,11 @@ class CatalogFontResolver(
                     end = end,
                     codePoint = codePoint,
                     requestedFamilies = request.preferredFamilies,
+                    genericFamily = plan.genericFamily,
+                    script = plan.script,
+                    locales = plan.locales,
                     candidateFamilies = candidateFamilies,
+                    candidates = candidates,
                     selectedFamily = null,
                     selectedTypefaceId = null,
                     covered = false,
@@ -3582,6 +3638,41 @@ class CatalogFontResolver(
         preferredFamilies.forEach(::addAvailableFamily)
         plannedFamilies.forEach(::addAvailableFamily)
         return ordered
+    }
+
+    private fun buildEvidenceRuns(decisions: List<ResolvedFallbackDecision>): List<ResolvedFontRunEvidence> {
+        if (decisions.isEmpty()) return emptyList()
+        val runs = mutableListOf<ResolvedFontRunEvidence>()
+        var codePointIndex = 0
+        while (codePointIndex < decisions.size) {
+            val decision = decisions[codePointIndex]
+            val face = decision.face
+            if (face == null) {
+                codePointIndex += 1
+                continue
+            }
+            var endDecisionIndex = codePointIndex
+            var utf16End = decision.trace.end
+            while (endDecisionIndex + 1 < decisions.size) {
+                val next = decisions[endDecisionIndex + 1]
+                if (next.face != face || next.trace.start != utf16End) break
+                utf16End = next.trace.end
+                endDecisionIndex += 1
+            }
+            runs += ResolvedFontRunEvidence(
+                start = decision.trace.start,
+                end = utf16End,
+                clusterStart = codePointIndex,
+                clusterEnd = endDecisionIndex,
+                typefaceId = face.typeface.id,
+                familyName = face.typeface.familyName.trim(),
+                hostDependent = face.typeface.source.kind.isHostDependentByDefault(),
+                fallbackReason = decision.trace.primaryFallbackReason(),
+                diagnosticCode = decision.trace.shapingDiagnosticCode(),
+            )
+            codePointIndex = endDecisionIndex + 1
+        }
+        return runs
     }
 
     private data class ResolvedFallbackDecision(
@@ -3882,6 +3973,44 @@ data class ResolvedFontRun(
     val face: FontFace,
 )
 
+data class ResolvedFontRunEvidence(
+    val start: Int,
+    val end: Int,
+    val clusterStart: Int,
+    val clusterEnd: Int,
+    val typefaceId: TypefaceID,
+    val familyName: String,
+    val hostDependent: Boolean,
+    val fallbackReason: String?,
+    val diagnosticCode: String?,
+) {
+    init {
+        require(start >= 0) { "start must be non-negative." }
+        require(end > start) { "end must be greater than start." }
+        require(clusterStart >= 0) { "clusterStart must be non-negative." }
+        require(clusterEnd >= clusterStart) { "clusterEnd must be greater than or equal to clusterStart." }
+        require(familyName.isNotBlank()) { "familyName must not be blank." }
+        require(fallbackReason == null || fallbackReason.isStableDiagnosticCode()) {
+            "fallbackReason must be a stable one-line token when present."
+        }
+        require(diagnosticCode == null || diagnosticCode.isStableDiagnosticCode()) {
+            "diagnosticCode must be a stable one-line diagnostic code when present."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("textRange", "$start..${end - 1}", comma = true)
+        appendFontCompactJsonField("clusterRange", "$clusterStart..$clusterEnd", comma = true)
+        appendFontCompactJsonField("typefaceId", typefaceId.value.toHexDashString(), comma = true)
+        appendFontCompactJsonField("familyName", familyName, comma = true)
+        appendFontCompactJsonField("hostDependent", hostDependent, comma = true)
+        append("fallbackReason".evidenceQuoted()).append(":").append(fallbackReason.toFontJsonNullableString()).append(",")
+        append("diagnosticCode".evidenceQuoted()).append(":").append(diagnosticCode.toFontJsonNullableString())
+        append("}")
+    }
+}
+
 /**
  * Deterministic trace for the catalog fallback decisions used by [CatalogFontResolver].
  *
@@ -3920,7 +4049,11 @@ data class FallbackDecisionTrace(
     val end: Int,
     val codePoint: Int,
     val requestedFamilies: List<String>,
+    val genericFamily: String = "sans-serif",
+    val script: String = "default",
+    val locales: List<String> = emptyList(),
     val candidateFamilies: List<String>,
+    val candidates: List<FallbackCandidateTrace> = emptyList(),
     val selectedFamily: String?,
     val selectedTypefaceId: TypefaceID?,
     val covered: Boolean,
@@ -3936,6 +4069,8 @@ data class FallbackDecisionTrace(
         require((selectedFamily == null) == (selectedTypefaceId == null)) {
             "selectedFamily and selectedTypefaceId must both be present or both be absent."
         }
+        require(genericFamily.isNotBlank()) { "genericFamily must not be blank." }
+        require(script.isNotBlank()) { "script must not be blank." }
     }
 
     /**
@@ -3952,6 +4087,12 @@ data class FallbackDecisionTrace(
         append(codePoint.toCodePointEvidence())
         append(" requestedFamilies=")
         append(requestedFamilies.joinToString(prefix = "[", postfix = "]", separator = ","))
+        append(" genericFamily=")
+        append(genericFamily)
+        append(" script=")
+        append(script)
+        append(" locales=")
+        append(locales.joinToString(prefix = "[", postfix = "]", separator = ","))
         append(" candidateFamilies=")
         append(candidateFamilies.joinToString(prefix = "[", postfix = "]", separator = ","))
         append(" selectedFamily=")
@@ -3964,6 +4105,204 @@ data class FallbackDecisionTrace(
         append(diagnosticCode ?: "none")
     }
 }
+
+data class FallbackCandidateTrace(
+    val familyName: String,
+    val typefaceId: TypefaceID,
+    val covered: Boolean,
+    val styleDistance: Int,
+    val reasons: List<String>,
+    val selected: Boolean = false,
+    val rejectionReason: String? = null,
+) {
+    init {
+        require(familyName.isNotBlank()) { "familyName must not be blank." }
+        require(styleDistance >= 0) { "styleDistance must be non-negative." }
+        require(reasons.isNotEmpty()) { "reasons must not be empty." }
+        require(reasons.all { it.isStableDiagnosticCode() }) {
+            "reasons must use stable one-line tokens."
+        }
+        require(rejectionReason == null || rejectionReason.isStableDiagnosticCode()) {
+            "rejectionReason must use a stable one-line token when present."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("familyName", familyName, comma = true)
+        appendFontCompactJsonField("typefaceId", typefaceId.value.toHexDashString(), comma = true)
+        appendFontCompactJsonField("covered", covered, comma = true)
+        append("styleDistance".evidenceQuoted()).append(":").append(styleDistance).append(",")
+        appendFontCompactJsonField("reason", primaryReason(), comma = true)
+        appendStringArrayField("reasons", reasons, comma = true)
+        appendFontCompactJsonField("selected", selected, comma = true)
+        append("rejectionReason".evidenceQuoted()).append(":").append(rejectionReason.toFontJsonNullableString())
+        append("}")
+    }
+
+    private fun primaryReason(): String =
+        reasons.firstOrNull { it != "glyph-coverage" } ?: reasons.first()
+}
+
+data class FallbackEvidenceCase(
+    val fixtureId: String,
+    val request: FallbackRequest,
+    val decisions: List<FallbackDecisionTrace>,
+    val runs: List<ResolvedFontRunEvidence>,
+    val diagnostics: List<String>,
+)
+
+data class FallbackEvidenceBundle(
+    val fallbackDecisionTraceJson: String,
+    val resolvedFontRunsJson: String,
+)
+
+private data class FallbackRequestSummary(
+    val text: String,
+    val locale: String?,
+    val preferredFamilies: List<String>,
+    val style: FontStyle,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("text", text, comma = true)
+        append("locale".evidenceQuoted()).append(":").append(locale.toFontJsonNullableString()).append(",")
+        appendStringArrayField("preferredFamilies", preferredFamilies, comma = true)
+        append("style".evidenceQuoted()).append(":{")
+        append("weight".evidenceQuoted()).append(":").append(style.weight).append(",")
+        append("width".evidenceQuoted()).append(":").append(style.width).append(",")
+        appendFontCompactJsonField("slant", style.slant.typefaceSerializedName, comma = false)
+        append("}")
+        append("}")
+    }
+}
+
+private data class FallbackDecisionCaseDump(
+    val fixtureId: String,
+    val request: FallbackRequestSummary,
+    val decisions: List<FallbackDecisionTrace>,
+    val diagnostics: List<String>,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("fixtureId", fixtureId, comma = true)
+        append("request".evidenceQuoted()).append(":").append(request.toCanonicalJson()).append(",")
+        append("decisions".evidenceQuoted()).append(":")
+        append(decisions.joinToString(prefix = "[", postfix = "]", separator = ",") { decision ->
+            decision.toCanonicalJson()
+        })
+        append(",")
+        appendStringArrayField("diagnostics", diagnostics, comma = false)
+        append("}")
+    }
+}
+
+private data class ResolvedFontRunsCaseDump(
+    val fixtureId: String,
+    val request: FallbackRequestSummary,
+    val runs: List<ResolvedFontRunEvidence>,
+    val diagnostics: List<String>,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("fixtureId", fixtureId, comma = true)
+        append("request".evidenceQuoted()).append(":").append(request.toCanonicalJson()).append(",")
+        append("runs".evidenceQuoted()).append(":")
+        append(runs.joinToString(prefix = "[", postfix = "]", separator = ",") { run -> run.toCanonicalJson() })
+        append(",")
+        appendStringArrayField("diagnostics", diagnostics, comma = false)
+        append("}")
+    }
+}
+
+fun FallbackDecisionTrace.toCanonicalJson(): String = buildString {
+    append("{")
+    appendFontCompactJsonField("textRange", "$start..${end - 1}", comma = true)
+    appendFontCompactJsonField("codePoint", codePoint.toCodePointEvidence(), comma = true)
+    appendStringArrayField("requestedFamilies", requestedFamilies, comma = true)
+    appendFontCompactJsonField("genericFamily", genericFamily, comma = true)
+    appendFontCompactJsonField("script", script, comma = true)
+    appendStringArrayField("locales", locales, comma = true)
+    appendStringArrayField("candidateFamilies", candidateFamilies, comma = true)
+    append("candidates".evidenceQuoted()).append(":")
+    append(candidates.joinToString(prefix = "[", postfix = "]", separator = ",") { candidate -> candidate.toCanonicalJson() })
+    append(",")
+    append("selectedFamily".evidenceQuoted()).append(":").append(selectedFamily.toFontJsonNullableString()).append(",")
+    append("selectedTypefaceId".evidenceQuoted()).append(":").append(selectedTypefaceId?.value?.toHexDashString()?.evidenceQuoted() ?: "null").append(",")
+    appendFontCompactJsonField("covered", covered, comma = true)
+    append("diagnosticCode".evidenceQuoted()).append(":").append(diagnosticCode.toFontJsonNullableString())
+    append("}")
+}
+
+object FallbackEvidenceWriter {
+    fun writeBundle(
+        cases: List<FallbackEvidenceCase>,
+    ): FallbackEvidenceBundle {
+        val orderedCases = cases.sortedBy { it.fixtureId }
+        val traceCases = orderedCases.map { case ->
+            FallbackDecisionCaseDump(
+                fixtureId = case.fixtureId,
+                request = FallbackRequestSummary(
+                    text = case.request.text,
+                    locale = case.request.locale,
+                    preferredFamilies = case.request.preferredFamilies,
+                    style = case.request.style,
+                ),
+                decisions = case.decisions,
+                diagnostics = case.diagnostics.sorted(),
+            )
+        }
+        val runCases = orderedCases.map { case ->
+            ResolvedFontRunsCaseDump(
+                fixtureId = case.fixtureId,
+                request = FallbackRequestSummary(
+                    text = case.request.text,
+                    locale = case.request.locale,
+                    preferredFamilies = case.request.preferredFamilies,
+                    style = case.request.style,
+                ),
+                runs = case.runs,
+                diagnostics = case.diagnostics.sorted(),
+            )
+        }
+        return FallbackEvidenceBundle(
+            fallbackDecisionTraceJson = buildString {
+                append("{\n")
+                append("  \"schemaVersion\": 1,\n")
+                append("  \"dumpId\": \"fallback-decision-trace\",\n")
+                append("  \"ownerTickets\": [\"KFONT-M7-002\"],\n")
+                append("  \"cases\": [\n")
+                append(traceCases.joinToString(",\n") { dump -> dump.toCanonicalJson().prependIndent("    ") })
+                append("\n  ],\n")
+                append("  \"nonClaims\": [\"no-complete-target-support-claim\", \"no-cluster-safe-fallback-claim\", \"no-platform-font-fallback-claim\", \"no-emoji-rendering-claim\"]\n")
+                append("}")
+            },
+            resolvedFontRunsJson = buildString {
+                append("{\n")
+                append("  \"schemaVersion\": 1,\n")
+                append("  \"dumpId\": \"resolved-font-runs\",\n")
+                append("  \"ownerTickets\": [\"KFONT-M7-002\"],\n")
+                append("  \"cases\": [\n")
+                append(runCases.joinToString(",\n") { dump -> dump.toCanonicalJson().prependIndent("    ") })
+                append("\n  ],\n")
+                append("  \"nonClaims\": [\"no-complete-target-support-claim\", \"no-cluster-safe-fallback-claim\", \"no-platform-font-fallback-claim\", \"no-shaping-engine-claim\"]\n")
+                append("}")
+            },
+        )
+    }
+}
+
+fun defaultFallbackEvidenceBundle(): FallbackEvidenceBundle =
+    FallbackEvidenceWriter.writeBundle(
+        cases = listOf(
+            fallbackFamilyGenericEvidenceCase(),
+            fallbackScriptArabicEvidenceCase(),
+            fallbackLocaleSerbianEvidenceCase(),
+            fallbackEmojiPreferenceEvidenceCase(),
+            fallbackMissingGlyphEvidenceCase(),
+            fallbackFamilyUnavailableEvidenceCase(),
+        ),
+    )
 
 private fun List<String>.normalizedDiagnosticFieldNames(): List<String> {
     for (fieldName in this) {
@@ -4173,6 +4512,221 @@ private fun List<String>.normalizedCatalogFacts(fieldName: String): List<String>
         "$fieldName must use stable non-blank one-line strings."
     }
     return distinct().sorted()
+}
+
+private fun List<FallbackCandidateTrace>.markSelected(
+    selectedTypefaceId: TypefaceID,
+    uncoveredRejectionReason: String?,
+): List<FallbackCandidateTrace> =
+    map { candidate ->
+        when {
+            candidate.typefaceId == selectedTypefaceId -> candidate.copy(selected = true, rejectionReason = null)
+            candidate.covered -> candidate.copy(rejectionReason = "earlier-candidate-selected")
+            else -> candidate.copy(rejectionReason = uncoveredRejectionReason ?: "glyph-missing")
+        }
+    }
+
+private fun familyMatchesRequested(
+    familyName: String,
+    requestedFamilies: List<String>,
+): Boolean {
+    val key = familyName.familyKey()
+    return requestedFamilies.any { requested -> requested.familyKey() == key }
+}
+
+private fun FallbackDecisionTrace.primaryFallbackReason(): String? =
+    when {
+        covered && candidates.any { candidate -> candidate.selected && "emoji-preference" in candidate.reasons } -> "emoji-preference"
+        covered && candidates.any { candidate -> candidate.selected && "locale-hint" in candidate.reasons } -> "locale-hint"
+        covered && candidates.any { candidate -> candidate.selected && "script-fallback" in candidate.reasons } -> "script-fallback"
+        covered && candidates.any { candidate -> candidate.selected && "generic-family" in candidate.reasons } -> "generic-family"
+        !covered && diagnosticCode == "font.fallback-glyph-unavailable" -> "missing-glyph"
+        !covered && diagnosticCode == "font.fallback-family-unavailable" -> "family-unavailable"
+        else -> null
+    }
+
+private fun FallbackDecisionTrace.shapingDiagnosticCode(): String? =
+    when (diagnosticCode) {
+        "font.fallback-family-unavailable", "font.fallback-glyph-unavailable" -> "text.shaping.fallback-missing"
+        else -> null
+    }
+
+private fun fallbackFamilyGenericEvidenceCase(): FallbackEvidenceCase {
+    val fallbackSerif = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440900",
+        familyName = "Fallback Serif",
+    )
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(
+            families = mapOf(
+                "Fallback Serif" to FontCollection(listOf(fallbackSerif)),
+            ),
+        ),
+        policy = FontFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf(
+                "serif" to listOf("Fallback Serif"),
+                "sans-serif" to emptyList(),
+                "monospace" to emptyList(),
+            ),
+            scriptFallbackChains = emptyMap(),
+            localeFallbackChains = emptyMap(),
+            emojiPreferredFamilies = emptyList(),
+        ),
+        coverage = fallbackTestCoverage(fallbackSerif.typeface.id to setOf('x'.code)),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-family-generic",
+        request = FallbackRequest(text = "x", preferredFamilies = listOf("serif")),
+    )
+}
+
+private fun fallbackScriptArabicEvidenceCase(): FallbackEvidenceCase {
+    val latin = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440901",
+        familyName = "Alpha Sans",
+    )
+    val arabic = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440902",
+        familyName = "Arabic Naskh",
+    )
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(
+            families = mapOf(
+                "Alpha Sans" to FontCollection(listOf(latin)),
+                "Arabic Naskh" to FontCollection(listOf(arabic)),
+            ),
+        ),
+        policy = FontFallbackPolicy.Default.copy(
+            scriptFallbackChains = mapOf("arabic" to listOf("Arabic Naskh")),
+            genericFallbackChains = mapOf("sans-serif" to listOf("Alpha Sans")),
+            localeFallbackChains = emptyMap(),
+            emojiPreferredFamilies = emptyList(),
+        ),
+        coverage = fallbackTestCoverage(arabic.typeface.id to setOf(0x0627)),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-script-arabic",
+        request = FallbackRequest(text = "\u0627", preferredFamilies = listOf("Alpha Sans")),
+    )
+}
+
+private fun fallbackLocaleSerbianEvidenceCase(): FallbackEvidenceCase {
+    val latin = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440903",
+        familyName = "Latin Sans",
+    )
+    val serbian = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440904",
+        familyName = "Serbian Sans",
+    )
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(
+            families = mapOf(
+                "Latin Sans" to FontCollection(listOf(latin)),
+                "Serbian Sans" to FontCollection(listOf(serbian)),
+            ),
+        ),
+        policy = FontFallbackPolicy.Default.copy(
+            localeFallbackChains = mapOf("sr" to listOf("Serbian Sans")),
+            genericFallbackChains = mapOf("sans-serif" to listOf("Latin Sans")),
+            scriptFallbackChains = emptyMap(),
+            emojiPreferredFamilies = emptyList(),
+        ),
+        coverage = fallbackTestCoverage(serbian.typeface.id to setOf('A'.code)),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-locale-serbian",
+        request = FallbackRequest(text = "A", locale = "sr-Cyrl-RS", preferredFamilies = listOf("Missing Sans")),
+    )
+}
+
+private fun fallbackEmojiPreferenceEvidenceCase(): FallbackEvidenceCase {
+    val latin = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440905",
+        familyName = "Alpha Sans",
+    )
+    val emoji = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440906",
+        familyName = "Noto Color Emoji",
+    )
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(
+            families = mapOf(
+                "Alpha Sans" to FontCollection(listOf(latin)),
+                "Noto Color Emoji" to FontCollection(listOf(emoji)),
+            ),
+        ),
+        policy = FontFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf("sans-serif" to listOf("Alpha Sans")),
+            scriptFallbackChains = emptyMap(),
+            localeFallbackChains = emptyMap(),
+            emojiPreferredFamilies = listOf("Noto Color Emoji"),
+        ),
+        coverage = fallbackTestCoverage(emoji.typeface.id to setOf(0x1F600)),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-emoji-preference",
+        request = FallbackRequest(text = "\uD83D\uDE00", preferredFamilies = listOf("Alpha Sans")),
+    )
+}
+
+private fun fallbackMissingGlyphEvidenceCase(): FallbackEvidenceCase {
+    val requested = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440907",
+        familyName = "Requested Sans",
+    )
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(families = mapOf("Requested Sans" to FontCollection(listOf(requested)))),
+        policy = FontFallbackPolicy.Default,
+        coverage = fallbackTestCoverage(),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-missing-glyph",
+        request = FallbackRequest(text = "x", preferredFamilies = listOf("Requested Sans")),
+        additionalDiagnostics = listOf("text.shaping.fallback-missing"),
+    )
+}
+
+private fun fallbackFamilyUnavailableEvidenceCase(): FallbackEvidenceCase {
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(),
+        policy = FontFallbackPolicy.Default,
+        coverage = fallbackTestCoverage(),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-family-unavailable",
+        request = FallbackRequest(text = "\u10D0", preferredFamilies = listOf("Missing Sans")),
+        additionalDiagnostics = listOf("text.shaping.script-unsupported"),
+    )
+}
+
+private fun fallbackFixtureFace(
+    uuid: String,
+    familyName: String,
+    styleName: String = "Regular",
+): FontFace {
+    val sourceId = FontSourceID(Uuid.parse(uuid.replaceRange(uuid.length - 1, uuid.length, "0")))
+    val typefaceId = TypefaceID(Uuid.parse(uuid))
+    return FontFace(
+        typeface = TypefaceData(
+            id = typefaceId,
+            source = FontSource(
+                id = sourceId,
+                kind = FontSourceKind.BUNDLED_FIXTURE,
+                displayName = "$familyName $styleName",
+                bytes = byteArrayOf(1),
+            ),
+            familyName = familyName,
+            styleName = styleName,
+        ),
+    )
+}
+
+private fun fallbackTestCoverage(vararg entries: Pair<TypefaceID, Set<Int>>): FontCoverageProvider {
+    val supported = entries.toMap()
+    return FontCoverageProvider { typefaceId, codePoint ->
+        supported[typefaceId]?.contains(codePoint) == true
+    }
 }
 
 private fun List<Pair<String, CanonicalFontIdentityJson>>.toDumpBytePreimage(): String =
