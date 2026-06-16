@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-006"
 title: "Add `GPUTextSubRunPlan` splitting tests"
-status: "proposed"
+status: "blocked"
 milestone: "M11"
 priority: "P1"
 owner_area: "gpu-api"
@@ -98,6 +98,13 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextSubRunPlan*'
 
 - `proposed`: Builds on normalized `DrawTextRun`, accepted A8 route, and dependency-gated refusal mapping.
 - Move to `ready` only after split reason taxonomy and visual-order policy are reviewed.
+- `blocked` (2026-06-16): Readiness audit confirmed the split tests depend
+  on `KFONT-M11-004`. `font:gpu-api` currently has only registry,
+  `DrawTextRunPayload`, leakage validation, route refusals, and telemetry;
+  it does not expose a production `GPUTextSubRunPlan`, atlas-entry
+  compatibility model, or accepted A8 route to split. Remaining gate: finish
+  `KFONT-M11-004`, then re-review split reason taxonomy and visual-order
+  policy.
 
 ## Linear Labels
 

@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-007"
 title: "Add resource/upload/instance/binding plan contracts"
-status: "proposed"
+status: "blocked"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -103,6 +103,12 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextResource*'
 
 - `proposed`: Creates the resource planning contract needed before ordering and material-key leakage tests.
 - Move to `ready` only after each plan schema and resource lifetime rule are reviewed.
+- `blocked` (2026-06-16): Readiness audit confirmed this ticket depends on
+  `KFONT-M11-006`. The existing `GPUTextUploadPlan` is CPU-side artifact
+  metadata only; it is not a renderer resource/upload/instance/binding plan
+  with destination texture facts, row stride, staging requirements, binding
+  layout hash, or lifetime scope. Remaining gate: finish `GPUTextSubRunPlan`
+  planning first, then re-review the resource/upload/instance/binding schemas.
 
 ## Linear Labels
 

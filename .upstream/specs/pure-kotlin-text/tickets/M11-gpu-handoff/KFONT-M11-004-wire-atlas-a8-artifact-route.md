@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-004"
 title: "Wire atlas A8 artifact route"
-status: "proposed"
+status: "blocked"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -95,6 +95,14 @@ rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*A8Text*'
 
 - `proposed`: First positive GPU route for typed text artifacts, still scoped to A8 atlas masks.
 - Move to `ready` only after route dump, instance layout, and focused GPU evidence requirements are reviewed.
+- `blocked` (2026-06-16): Readiness audit confirmed this ticket must not
+  start until `KFONT-M9-003` and `KFONT-M9-005` produce real A8 mask,
+  atlas entry/page/generation, source mask hash, invalidation, and eviction
+  evidence. Current `font:gpu-api` contracts register `GlyphAtlasArtifact`
+  as a value surface only; they do not provide `gpu-text-a8-route-plan.json`,
+  `A8TextMaskStep` WGSL, parser/reflection evidence, or focused GPU proof.
+  Remaining gate: complete the M9 A8/atlas artifact chain, then re-review
+  route dump, instance layout, WGSL, and GPU evidence readiness.
 
 ## Linear Labels
 
