@@ -198,6 +198,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 fillRectCount = 0,
                 meshRibbonCount = 1,
             ),
+            RenderedShapeExpectation(
+                sceneId = "vertices-route-gate-board",
+                fillRectCount = 7,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
         )
 
         rectOnlyScenes.forEach { expectation ->
