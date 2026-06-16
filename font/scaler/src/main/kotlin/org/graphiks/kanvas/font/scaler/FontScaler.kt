@@ -1013,8 +1013,8 @@ data class TrueTypeGlyphContour(
  * TrueType component records encode two arguments. When `ARGS_ARE_XY_VALUES` is set, the arguments
  * are signed x/y translation values in font units. When the flag is absent, the arguments are point
  * indices used for point matching. Point matching is preserved explicitly here so outline resolution
- * can fail with a precise unsupported-feature diagnostic instead of silently treating indices as
- * translations.
+ * can align component points, and invalid indices can refuse with a precise diagnostic instead of
+ * being silently treated as translations.
  */
 sealed interface TrueTypeCompositeGlyphArgument {
     /**
@@ -1029,10 +1029,10 @@ sealed interface TrueTypeCompositeGlyphArgument {
     ) : TrueTypeCompositeGlyphArgument
 
     /**
-     * Unsupported point-matching component arguments.
+     * Point-matching component arguments.
      *
-     * @property compoundPointIndex Point index in the compound glyph.
-     * @property componentPointIndex Point index in the component glyph.
+     * @property compoundPointIndex Point index in the already-resolved compound glyph.
+     * @property componentPointIndex Point index in the component glyph before alignment.
      */
     data class PointMatching(
         val compoundPointIndex: Int,
@@ -1045,8 +1045,9 @@ sealed interface TrueTypeCompositeGlyphArgument {
  *
  * The matrix follows the TrueType component transform equation:
  * `x' = xx * x + xy * y + dx`, `y' = yx * x + yy * y + dy`. The default value is
- * the identity transform. Translation is populated only for `ARGS_ARE_XY_VALUES` components; point
- * matching components retain zero translation until a future point-alignment resolver exists.
+ * the identity transform. Translation is populated for `ARGS_ARE_XY_VALUES` components. Point
+ * matching components keep the decoded transform offset at zero; recursive composite resolution
+ * computes the final alignment translation from resolved TrueType point coordinates.
  *
  * @property xx X contribution from the source x coordinate.
  * @property xy X contribution from the source y coordinate.
@@ -1175,6 +1176,7 @@ object TrueTypeGlyfTableParser {
      * @return Parsed glyph model.
      * @throws IllegalArgumentException when the range, header, flags, coordinate data, or composite
      * component records are invalid.
+     * @throws FontScalerRefusalException when a composite glyph exceeds parser safety bounds.
      */
     fun parseGlyph(
         glyfTable: ByteArray,
@@ -1271,6 +1273,18 @@ object TrueTypeGlyfTableParser {
         val components = mutableListOf<TrueTypeCompositeGlyphComponent>()
         var flags: Int
         do {
+            if (components.size >= MAX_COMPOSITE_GLYPH_COMPONENTS) {
+                throw FontScalerRefusalException(
+                    diagnostic = FontScalerDiagnostic(
+                        code = FontScalerDiagnosticCodes.OUTLINE_FORMAT_UNSUPPORTED,
+                        detail = "truetype.composite-component-count",
+                        operation = "parse",
+                        glyphId = reader.glyphId,
+                    ),
+                    message = "composite glyphId ${reader.glyphId} component count cap " +
+                        "$MAX_COMPOSITE_GLYPH_COMPONENTS exceeded.",
+                )
+            }
             flags = reader.readUInt16("composite component flags")
             val componentGlyphId = reader.readUInt16("composite component glyph id").toUInt()
             val arguments = reader.readCompositeArguments(flags)
@@ -2037,9 +2051,8 @@ private fun List<HorizontalGlyphMetric>.toTrueTypeHorizontalMetrics(
  * When [gvar] is supplied, [position] values are treated as already-normalized coordinates in
  * [normalizedAxisOrder] and are applied only to simple glyph outline points before outline command
  * conversion. Composite glyph-specific variation records, phantom point metrics, `avar` remapping,
- * TrueType VM instructions, and point-matching component arguments are not implemented; unsupported
- * point matching fails explicitly. Metrics use caller-provided horizontal advances and bounds from
- * the glyph header and currently ignore variation deltas.
+ * and TrueType VM instructions are not implemented. Metrics use caller-provided horizontal advances
+ * and bounds from the glyph header and currently ignore variation deltas.
  *
  * @param glyfTable Complete raw `glyf` table bytes.
  * @param loca Parsed `loca` table with one sentinel offset.
@@ -2091,15 +2104,15 @@ class ParsedTrueTypeGlyphScaler(
      * @param position Already-normalized variation coordinates keyed by axis tag when [gvar] is supplied.
      * @return Scaled glyph outline for simple, empty, or supported composite glyphs.
      * @throws IllegalArgumentException when the glyph id is outside the `loca` table.
-     * @throws UnsupportedOperationException when composite recursion exceeds the depth cap or a
-     * composite component uses unsupported point-matching arguments.
+     * @throws UnsupportedOperationException when composite recursion exceeds the depth cap, a
+     * component glyph id is outside `loca`, or point-matching references invalid point indices.
      */
     override fun outline(glyphId: UInt, position: VariationPosition): GlyphOutline =
-        resolveGlyphOutline(
+        resolveGlyph(
             glyphId = glyphId,
             depth = 0,
             normalizedCoordinates = normalizedCoordinates(position),
-        ).scaled(scale)
+        ).outline.scaled(scale)
 
     /**
      * Returns scaled horizontal metrics and glyph-header bounds for one TrueType glyph.
@@ -2114,13 +2127,14 @@ class ParsedTrueTypeGlyphScaler(
      */
     override fun metrics(glyphId: UInt, position: VariationPosition): GlyphMetrics {
         val range = loca.rangeForGlyph(glyphId)
-        val metric = horizontalMetrics[glyphId]
-            ?: throw IllegalArgumentException("horizontal metrics missing for glyphId $glyphId.")
         val glyph = TrueTypeGlyfTableParser.parseGlyph(
             glyfTable = glyfTable,
             range = range,
             glyphId = glyphId,
         )
+        val metricGlyphId = glyph.metricsSourceGlyphId(rootGlyphId = glyphId)
+        val metric = horizontalMetrics[metricGlyphId]
+            ?: throw IllegalArgumentException("horizontal metrics missing for glyphId $metricGlyphId.")
         val bounds = when (glyph) {
             TrueTypeGlyph.Empty -> GlyphBounds(left = 0.0, top = 0.0, right = 0.0, bottom = 0.0)
             is TrueTypeGlyph.Simple -> glyph.header.toGlyphBounds().scaled(scale)
@@ -2202,11 +2216,11 @@ class ParsedTrueTypeGlyphScaler(
         }
 
         val outline = runCatching {
-            resolveGlyphOutline(
+            resolveGlyph(
                 glyphId = glyphId,
                 depth = 0,
                 normalizedCoordinates = normalizedCoordinates,
-            ).scaled(scale)
+            ).outline.scaled(scale)
         }.getOrElse { error ->
             val diagnostic = error.toFontScalerDiagnosticOrNull(
                 glyphId = glyphId,
@@ -2259,6 +2273,26 @@ class ParsedTrueTypeGlyphScaler(
             glyphId = glyphId,
         )
 
+    private fun TrueTypeGlyph.metricsSourceGlyphId(rootGlyphId: UInt): UInt {
+        if (this !is TrueTypeGlyph.Composite) return rootGlyphId
+        val component = components.firstOrNull { component ->
+            component.flags and COMPOSITE_USE_MY_METRICS != 0
+        } ?: return rootGlyphId
+        if (component.glyphId.toLong() >= loca.offsets.lastIndex) {
+            throw FontScalerRefusalException(
+                diagnostic = FontScalerDiagnostic(
+                    code = FontScalerDiagnosticCodes.OUTLINE_FORMAT_UNSUPPORTED,
+                    detail = "truetype.composite-component-glyph-id",
+                    operation = "metrics",
+                    glyphId = rootGlyphId,
+                ),
+                message = "composite glyphId $rootGlyphId references metrics source glyphId " +
+                    "${component.glyphId} outside loca table glyph count ${loca.offsets.size - 1}.",
+            )
+        }
+        return component.glyphId
+    }
+
     private fun compositeComponentEvidence(
         glyphId: UInt,
         depth: Int = 0,
@@ -2282,11 +2316,11 @@ class ParsedTrueTypeGlyphScaler(
         return evidence
     }
 
-    private fun resolveGlyphOutline(
+    private fun resolveGlyph(
         glyphId: UInt,
         depth: Int,
         normalizedCoordinates: List<Double>,
-    ): GlyphOutline {
+    ): ResolvedTrueTypeGlyphOutline {
         if (depth > MAX_COMPOSITE_GLYPH_DEPTH) {
             throw FontScalerRefusalException(
                 diagnostic = FontScalerDiagnostic(
@@ -2299,15 +2333,21 @@ class ParsedTrueTypeGlyphScaler(
             )
         }
         return when (val glyph = parseGlyph(glyphId)) {
-            TrueTypeGlyph.Empty -> GlyphOutline(glyphId = glyphId)
-            is TrueTypeGlyph.Simple -> glyph.toGlyphOutline(
-                glyphId = glyphId,
-                variationDeltas = simpleGlyphVariationDeltas(
+            TrueTypeGlyph.Empty -> ResolvedTrueTypeGlyphOutline(outline = GlyphOutline(glyphId = glyphId))
+            is TrueTypeGlyph.Simple -> {
+                val variationDeltas = simpleGlyphVariationDeltas(
                     glyphId = glyphId,
                     glyph = glyph,
                     normalizedCoordinates = normalizedCoordinates,
-                ),
-            )
+                )
+                ResolvedTrueTypeGlyphOutline(
+                    outline = glyph.toGlyphOutline(
+                        glyphId = glyphId,
+                        variationDeltas = variationDeltas,
+                    ),
+                    points = glyph.resolvedPoints(variationDeltas),
+                )
+            }
             is TrueTypeGlyph.Composite -> resolveCompositeGlyphOutline(
                 glyphId = glyphId,
                 glyph = glyph,
@@ -2322,35 +2362,60 @@ class ParsedTrueTypeGlyphScaler(
         glyph: TrueTypeGlyph.Composite,
         depth: Int,
         normalizedCoordinates: List<Double>,
-    ): GlyphOutline {
-        val commands = buildList {
-            for (component in glyph.components) {
-                when (val arguments = component.arguments) {
-                    is TrueTypeCompositeGlyphArgument.XyValues -> Unit
-                    is TrueTypeCompositeGlyphArgument.PointMatching -> {
+    ): ResolvedTrueTypeGlyphOutline {
+        val commands = mutableListOf<OutlineCommand>()
+        val points = mutableListOf<ResolvedTrueTypeGlyphPoint>()
+        for (component in glyph.components) {
+            if (component.glyphId.toLong() >= loca.offsets.lastIndex) {
+                throw FontScalerRefusalException(
+                    diagnostic = FontScalerDiagnostic(
+                        code = FontScalerDiagnosticCodes.OUTLINE_FORMAT_UNSUPPORTED,
+                        detail = "truetype.composite-component-glyph-id",
+                        operation = "outline",
+                        glyphId = glyphId,
+                    ),
+                    message = "composite glyphId $glyphId references component glyphId ${component.glyphId} " +
+                        "outside loca table glyph count ${loca.offsets.size - 1}.",
+                )
+            }
+            val child = resolveGlyph(
+                glyphId = component.glyphId,
+                depth = depth + 1,
+                normalizedCoordinates = normalizedCoordinates,
+            )
+            val transform = when (val arguments = component.arguments) {
+                is TrueTypeCompositeGlyphArgument.XyValues -> component.transform
+                is TrueTypeCompositeGlyphArgument.PointMatching -> {
+                    val compoundPoint = points.getOrNull(arguments.compoundPointIndex)
+                    val componentPoint = child.points
+                        .map { point -> point.transformed(component.transform) }
+                        .getOrNull(arguments.componentPointIndex)
+                    if (compoundPoint == null || componentPoint == null) {
                         throw FontScalerRefusalException(
                             diagnostic = FontScalerDiagnostic(
                                 code = FontScalerDiagnosticCodes.OUTLINE_FORMAT_UNSUPPORTED,
-                                detail = "truetype.composite-point-matching",
+                                detail = "truetype.composite-point-index",
                                 operation = "outline",
                                 glyphId = glyphId,
                             ),
-                            message = "composite point-matching arguments are not supported for glyphId $glyphId " +
-                                "component glyphId ${component.glyphId}: compound point " +
-                                "${arguments.compoundPointIndex}, component point " +
-                                "${arguments.componentPointIndex}.",
+                            message = "composite glyphId $glyphId has invalid point index for component " +
+                                "glyphId ${component.glyphId}: compound point ${arguments.compoundPointIndex}, " +
+                                "component point ${arguments.componentPointIndex}.",
                         )
                     }
+                    component.transform.copy(
+                        dx = component.transform.dx + compoundPoint.x - componentPoint.x,
+                        dy = component.transform.dy + compoundPoint.y - componentPoint.y,
+                    )
                 }
-                val childOutline = resolveGlyphOutline(
-                    glyphId = component.glyphId,
-                    depth = depth + 1,
-                    normalizedCoordinates = normalizedCoordinates,
-                )
-                addAll(childOutline.commands.transformed(component.transform))
             }
+            commands += child.outline.commands.transformed(transform)
+            points += child.points.map { point -> point.transformed(transform) }
         }
-        return GlyphOutline(glyphId = glyphId, commands = commands)
+        return ResolvedTrueTypeGlyphOutline(
+            outline = GlyphOutline(glyphId = glyphId, commands = commands),
+            points = points,
+        )
     }
 
     private fun simpleGlyphVariationDeltas(
@@ -2442,6 +2507,35 @@ class ParsedTrueTypeGlyphScaler(
         return null
     }
 }
+
+private data class ResolvedTrueTypeGlyphOutline(
+    val outline: GlyphOutline,
+    val points: List<ResolvedTrueTypeGlyphPoint> = emptyList(),
+)
+
+private data class ResolvedTrueTypeGlyphPoint(
+    val x: Double,
+    val y: Double,
+)
+
+private fun TrueTypeGlyph.Simple.resolvedPoints(
+    variationDeltas: TrueTypeGlyphVariationDeltas?,
+): List<ResolvedTrueTypeGlyphPoint> =
+    contours
+        .flatMap { contour -> contour.points }
+        .mapIndexed { pointIndex, point ->
+            ResolvedTrueTypeGlyphPoint(
+                x = point.x.toDouble() + (variationDeltas?.xDelta(pointIndex) ?: 0.0),
+                y = point.y.toDouble() + (variationDeltas?.yDelta(pointIndex) ?: 0.0),
+            )
+        }
+
+private fun ResolvedTrueTypeGlyphPoint.transformed(
+    transform: TrueTypeCompositeTransform,
+): ResolvedTrueTypeGlyphPoint = ResolvedTrueTypeGlyphPoint(
+    x = transform.transformX(x, y),
+    y = transform.transformY(x, y),
+)
 
 private fun TrueTypeCompositeGlyphComponent.toEvidence(
     parentGlyphId: UInt,
@@ -2623,9 +2717,11 @@ private const val COMPOSITE_MORE_COMPONENTS = 0x0020
 private const val COMPOSITE_WE_HAVE_AN_X_AND_Y_SCALE = 0x0040
 private const val COMPOSITE_WE_HAVE_A_TWO_BY_TWO = 0x0080
 private const val COMPOSITE_WE_HAVE_INSTRUCTIONS = 0x0100
+private const val COMPOSITE_USE_MY_METRICS = 0x0200
 private const val COMPOSITE_SCALED_COMPONENT_OFFSET = 0x0800
 private const val COMPOSITE_UNSCALED_COMPONENT_OFFSET = 0x1000
 private const val MAX_COMPOSITE_GLYPH_DEPTH = 32
+private const val MAX_COMPOSITE_GLYPH_COMPONENTS = 64
 
 private const val GVAR_LONG_OFFSETS = 0x0001
 private const val GVAR_SHARED_POINT_NUMBERS = 0x8000

@@ -808,13 +808,13 @@ class FontScalerSurfaceTest {
     }
 
     @Test
-    fun parsedTrueTypeGlyphEvidenceReportsCompositePointMatchingRefusalCode() {
+    fun parsedTrueTypeGlyphEvidenceReportsInvalidCompositeGlyphPointIndexRefusalCode() {
         val compositeGlyph = compositeGlyphData(
             *componentRecord(
                 flags = 0x0001,
                 glyphId = 1,
-                arg1 = 0,
-                arg2 = 1,
+                arg1 = 4,
+                arg2 = 0,
             ),
         )
         val simpleSquare = simpleSquareGlyphData()
@@ -835,7 +835,7 @@ class FontScalerSurfaceTest {
             listOf(
                 FontScalerDiagnostic(
                     code = FontScalerDiagnosticCodes.OUTLINE_FORMAT_UNSUPPORTED,
-                    detail = "truetype.composite-point-matching",
+                    detail = "truetype.composite-point-index",
                     operation = "outline",
                     glyphId = 0u,
                     severity = "refusal",
@@ -844,7 +844,7 @@ class FontScalerSurfaceTest {
             evidence.diagnostics,
         )
         assertTrue(evidence.toCanonicalJson().contains("\"code\": \"font.outline-format-unsupported\""))
-        assertTrue(evidence.toCanonicalJson().contains("\"detail\": \"truetype.composite-point-matching\""))
+        assertTrue(evidence.toCanonicalJson().contains("\"detail\": \"truetype.composite-point-index\""))
     }
 
     @Test
@@ -1255,13 +1255,114 @@ class FontScalerSurfaceTest {
     }
 
     @Test
-    fun parsedTrueTypeGlyphScalerRejectsCompositePointMatchingArgumentsExplicitly() {
+    fun parsedTrueTypeGlyphScalerUsesFirstCompositeGlyphUseMyMetricsSource() {
+        val compositeGlyph = compositeGlyphData(
+            *componentRecord(
+                flags = 0x0223,
+                glyphId = 1,
+                arg1 = 10,
+                arg2 = 20,
+            ),
+            *componentRecord(
+                flags = 0x0203,
+                glyphId = 2,
+                arg1 = 30,
+                arg2 = 40,
+            ),
+        )
+        val simpleSquare = simpleSquareGlyphData()
+        val glyfTable = compositeGlyph + simpleSquare + simpleSquare
+        val scaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = glyfTable,
+            loca = TrueTypeLocaTable(
+                offsets = listOf(
+                    0,
+                    compositeGlyph.size,
+                    compositeGlyph.size + simpleSquare.size,
+                    glyfTable.size,
+                ),
+            ),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+                1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+                2u to TrueTypeGlyphHorizontalMetrics(advanceX = 700.0, leftSideBearing = 30.0),
+            ),
+        )
+
+        assertEquals(
+            GlyphMetrics(
+                advanceX = 500.0,
+                advanceY = 0.0,
+                bounds = GlyphBounds(left = 0.0, top = 0.0, right = 16.0, bottom = 16.0),
+            ),
+            scaler.metrics(glyphId = 0u),
+        )
+        assertEquals(500.0, scaler.scaledGlyphEvidence(glyphId = 0u).metrics?.advanceX)
+    }
+
+    @Test
+    fun parsedTrueTypeGlyphScalerAlignsCompositeGlyphComponentPoints() {
+        val compositeGlyph = compositeGlyphData(
+            *componentRecord(
+                flags = 0x0023,
+                glyphId = 1,
+                arg1 = 50,
+                arg2 = 50,
+            ),
+            *componentRecord(
+                flags = 0x0001,
+                glyphId = 2,
+                arg1 = 1,
+                arg2 = 0,
+            ),
+        )
+        val simpleSquare = simpleSquareGlyphData()
+        val glyfTable = compositeGlyph + simpleSquare + simpleSquare
+        val scaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = glyfTable,
+            loca = TrueTypeLocaTable(
+                offsets = listOf(
+                    0,
+                    compositeGlyph.size,
+                    compositeGlyph.size + simpleSquare.size,
+                    glyfTable.size,
+                ),
+            ),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+                1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+                2u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+            ),
+        )
+
+        assertEquals(
+            GlyphOutline(
+                glyphId = 0u,
+                commands = listOf(
+                    moveTo(50.0, 50.0),
+                    lineTo(150.0, 50.0),
+                    lineTo(150.0, 150.0),
+                    lineTo(50.0, 150.0),
+                    close(),
+                    moveTo(150.0, 50.0),
+                    lineTo(250.0, 50.0),
+                    lineTo(250.0, 150.0),
+                    lineTo(150.0, 150.0),
+                    close(),
+                ),
+            ),
+            scaler.outline(glyphId = 0u),
+        )
+    }
+
+    @Test
+    fun parsedTrueTypeGlyphScalerRejectsInvalidCompositeGlyphPointIndicesExplicitly() {
         val compositeGlyph = compositeGlyphData(
             *componentRecord(
                 flags = 0x0001,
                 glyphId = 1,
-                arg1 = 0,
-                arg2 = 1,
+                arg1 = 4,
+                arg2 = 0,
             ),
         )
         val simpleSquare = simpleSquareGlyphData()
@@ -1279,7 +1380,7 @@ class FontScalerSurfaceTest {
             scaler.outline(glyphId = 0u)
         }
 
-        assertTrue(failure.message.orEmpty().contains("point-matching"))
+        assertTrue(failure.message.orEmpty().contains("point index"))
         assertTrue(failure.message.orEmpty().contains("glyphId 0"))
     }
 
@@ -1307,6 +1408,84 @@ class FontScalerSurfaceTest {
 
         assertTrue(failure.message.orEmpty().contains("depth"))
         assertTrue(failure.message.orEmpty().contains("glyphId 0"))
+    }
+
+    @Test
+    fun parsedTrueTypeGlyphScalerRejectsCompositeGlyphsAboveComponentCountCap() {
+        val compositeGlyph = excessiveCompositeComponentGlyphData()
+        val simpleSquare = simpleSquareGlyphData()
+        val glyfTable = compositeGlyph + simpleSquare
+        val scaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = glyfTable,
+            loca = TrueTypeLocaTable(offsets = listOf(0, compositeGlyph.size, glyfTable.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+                1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+            ),
+        )
+
+        val failure = assertFailsWith<FontScalerRefusalException> {
+            scaler.outline(glyphId = 0u)
+        }
+        val evidence = scaler.scaledGlyphEvidence(glyphId = 0u)
+
+        assertEquals(FontScalerDiagnosticCodes.OUTLINE_FORMAT_UNSUPPORTED, failure.diagnostic.code)
+        assertEquals("truetype.composite-component-count", failure.diagnostic.detail)
+        assertTrue(failure.message.orEmpty().contains("component count"))
+        assertTrue(failure.message.orEmpty().contains("glyphId 0"))
+        assertTrue(evidence.diagnostics.any { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.OUTLINE_FORMAT_UNSUPPORTED &&
+                diagnostic.detail == "truetype.composite-component-count"
+        })
+        assertTrue(evidence.toCanonicalJson().contains("\"detail\": \"truetype.composite-component-count\""))
+    }
+
+    @Test
+    fun parsedTrueTypeGlyphEvidenceReportsCompositeGlyphCycleAndInvalidComponentDiagnostics() {
+        val cyclicComposite = compositeGlyphData(
+            *componentRecord(
+                flags = 0x0003,
+                glyphId = 0,
+                arg1 = 0,
+                arg2 = 0,
+            ),
+        )
+        val cycleScaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = cyclicComposite,
+            loca = TrueTypeLocaTable(offsets = listOf(0, cyclicComposite.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+            ),
+        )
+        val invalidComponent = compositeGlyphData(
+            *componentRecord(
+                flags = 0x0003,
+                glyphId = 2,
+                arg1 = 0,
+                arg2 = 0,
+            ),
+        )
+        val invalidScaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = invalidComponent,
+            loca = TrueTypeLocaTable(offsets = listOf(0, invalidComponent.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+            ),
+        )
+
+        val cycleEvidence = cycleScaler.scaledGlyphEvidence(glyphId = 0u)
+        val invalidEvidence = invalidScaler.scaledGlyphEvidence(glyphId = 0u)
+
+        assertTrue(cycleEvidence.diagnostics.any { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.OUTLINE_FORMAT_UNSUPPORTED &&
+                diagnostic.detail == "truetype.composite-recursion-depth"
+        })
+        assertTrue(invalidEvidence.diagnostics.any { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.OUTLINE_FORMAT_UNSUPPORTED &&
+                diagnostic.detail == "truetype.composite-component-glyph-id"
+        })
+        assertTrue(cycleEvidence.toCanonicalJson().contains("\"detail\": \"truetype.composite-recursion-depth\""))
+        assertTrue(invalidEvidence.toCanonicalJson().contains("\"detail\": \"truetype.composite-component-glyph-id\""))
     }
 
     @Test
@@ -2214,6 +2393,147 @@ class FontScalerSurfaceTest {
         assertTrue(cffReadiness.contains("\"no-native-scaler-oracle-claim\""))
     }
 
+    @Test
+    fun truetypeCompositeGlyphReadinessGoldenMatchesGeneratedEvidence() {
+        val expected = Files.readString(
+            kanvasProjectRoot().resolve("reports/font/fixtures/expected/scaler/truetype-composite-glyphs.json"),
+        ).trimEnd()
+
+        assertEquals(expected, truetypeCompositeGlyphReadinessDump())
+    }
+
+    private fun truetypeCompositeGlyphReadinessDump(): String {
+        val simpleSquare = simpleSquareGlyphData()
+        val supportedComposite = compositeGlyphData(
+            *componentRecord(
+                flags = 0x0223,
+                glyphId = 1,
+                arg1 = 50,
+                arg2 = 50,
+            ),
+            *componentRecord(
+                flags = 0x0001,
+                glyphId = 2,
+                arg1 = 1,
+                arg2 = 0,
+            ),
+        )
+        val supportedGlyf = supportedComposite + simpleSquare + simpleSquare
+        val supportedEvidence = ParsedTrueTypeGlyphScaler(
+            glyfTable = supportedGlyf,
+            loca = TrueTypeLocaTable(
+                offsets = listOf(
+                    0,
+                    supportedComposite.size,
+                    supportedComposite.size + simpleSquare.size,
+                    supportedGlyf.size,
+                ),
+            ),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+                1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+                2u to TrueTypeGlyphHorizontalMetrics(advanceX = 700.0, leftSideBearing = 30.0),
+            ),
+        ).scaledGlyphEvidence(glyphId = 0u)
+        val cycleComposite = compositeGlyphData(
+            *componentRecord(
+                flags = 0x0003,
+                glyphId = 0,
+                arg1 = 0,
+                arg2 = 0,
+            ),
+        )
+        val cycleEvidence = ParsedTrueTypeGlyphScaler(
+            glyfTable = cycleComposite,
+            loca = TrueTypeLocaTable(offsets = listOf(0, cycleComposite.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+            ),
+        ).scaledGlyphEvidence(glyphId = 0u)
+        val invalidComposite = compositeGlyphData(
+            *componentRecord(
+                flags = 0x0003,
+                glyphId = 2,
+                arg1 = 0,
+                arg2 = 0,
+            ),
+        )
+        val invalidEvidence = ParsedTrueTypeGlyphScaler(
+            glyfTable = invalidComposite,
+            loca = TrueTypeLocaTable(offsets = listOf(0, invalidComposite.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+            ),
+        ).scaledGlyphEvidence(glyphId = 0u)
+        val excessiveComposite = excessiveCompositeComponentGlyphData()
+        val excessiveGlyf = excessiveComposite + simpleSquare
+        val excessiveEvidence = ParsedTrueTypeGlyphScaler(
+            glyfTable = excessiveGlyf,
+            loca = TrueTypeLocaTable(offsets = listOf(0, excessiveComposite.size, excessiveGlyf.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+                1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+            ),
+        ).scaledGlyphEvidence(glyphId = 0u)
+
+        return """
+            {
+              "schemaVersion": 1,
+              "dumpId": "truetype-composite-glyphs",
+              "ownerTickets": [
+                "KFONT-M3-001"
+              ],
+              "fixtureIds": [
+                "truetype-scaler-truetype-composite-glyph-transform"
+              ],
+              "requiredEvidence": [
+                "glyph-outline.json",
+                "glyph-metrics.json",
+                "component-trace",
+                "diagnostic-snapshot"
+              ],
+              "pathHashArtifacts": {
+                "outlineCommandDumpSha256": "${supportedEvidence.outlineCommandDumpSha256}",
+                "outlineCommandCount": ${supportedEvidence.outlineCommands.size},
+                "componentTraceCount": ${supportedEvidence.compositeComponents.size}
+              },
+              "useMyMetricsFacts": [
+                {
+                  "parentGlyphId": 0,
+                  "componentIndex": 0,
+                  "componentGlyphId": 1,
+                  "useMyMetrics": true
+                }
+              ],
+              "supportedCompositeEvidence": ${supportedEvidence.toCanonicalJson().prependIndent("              ").trimStart()},
+              "diagnosticSnapshots": {
+                "cycle": [
+                  ${cycleEvidence.diagnostics.joinToString(",\n                  ") { diagnostic -> diagnostic.toCanonicalJson() }}
+                ],
+                "invalidComponentGlyphId": [
+                  ${invalidEvidence.diagnostics.joinToString(",\n                  ") { diagnostic -> diagnostic.toCanonicalJson() }}
+                ],
+                "componentCount": [
+                  ${excessiveEvidence.diagnostics.joinToString(",\n                  ") { diagnostic -> diagnostic.toCanonicalJson() }}
+                ]
+              },
+              "nonClaims": [
+                "no-complete-target-support-claim",
+                "no-a8-or-sdf-artifact-claim",
+                "no-gpu-text-route-claim",
+                "no-native-scaler-oracle-claim",
+                "no-cff-or-cff2-outline-claim",
+                "no-hinting-vm-claim",
+                "no-full-iup-interpolation-claim",
+                "no-phantom-point-metrics-claim",
+                "no-vertical-metrics-claim",
+                "no-complete-variable-font-support-claim",
+                "no-shaping-fallback-or-paragraph-claim"
+              ]
+            }
+        """.trimIndent()
+    }
+
     private fun kanvasProjectRoot(): Path {
         var current = Path.of("").toAbsolutePath()
         while (current.parent != null) {
@@ -2350,6 +2670,18 @@ class FontScalerSurfaceTest {
         0x00, 0x10,
         *componentBytes,
     )
+
+    private fun excessiveCompositeComponentGlyphData(): ByteArray {
+        val componentRecords = (0 until 65).flatMap { index ->
+            componentRecord(
+                flags = if (index == 64) 0x0003 else 0x0023,
+                glyphId = 1,
+                arg1 = 0,
+                arg2 = 0,
+            ).toList()
+        }.toIntArray()
+        return compositeGlyphData(*componentRecords)
+    }
 
     private fun componentRecord(
         flags: Int,
