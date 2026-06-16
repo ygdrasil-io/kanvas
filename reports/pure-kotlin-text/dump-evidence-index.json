@@ -565,6 +565,73 @@
       ]
     },
     {
+      "dumpId": "script-runs",
+      "ownerTicket": "KFONT-M5-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Kanvas Required Script Matrix"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ScriptItemization.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ScriptItemizationTest.kt",
+        "reports/font/fixtures/expected/unicode/script-ambiguous-extension.txt",
+        "reports/font/fixtures/expected/unicode/script-arabic-extension-ambiguous.txt",
+        "reports/font/fixtures/expected/unicode/script-arabic-marks.txt",
+        "reports/font/fixtures/expected/unicode/script-cjk-vs.txt",
+        "reports/font/fixtures/expected/unicode/script-conflicting-context.txt",
+        "reports/font/fixtures/expected/unicode/script-devanagari-matra.txt",
+        "reports/font/fixtures/expected/unicode/script-emoji-zwj.txt",
+        "reports/font/fixtures/expected/unicode/script-greek-polytonic.txt",
+        "reports/font/fixtures/expected/unicode/script-hebrew-niqqud.txt",
+        "reports/font/fixtures/expected/unicode/script-latin-combining.txt",
+        "reports/font/fixtures/expected/unicode/script-runs.json",
+        "reports/font/fixtures/expected/unicode/script-thai-tone.txt",
+        "reports/font/fixtures/expected/unicode/script-unsupported.txt"
+      ],
+      "expectedFields": [
+        "clusterRange",
+        "code",
+        "codePointRange",
+        "diagnostics",
+        "dumpId",
+        "extensionCandidates",
+        "fixtureName",
+        "inputTextHash",
+        "inputs",
+        "languageHint",
+        "message",
+        "nonClaims",
+        "openTypeScriptTags",
+        "ownerTickets",
+        "reason",
+        "runs",
+        "schemaVersion",
+        "selectedScript",
+        "severity",
+        "sourceText",
+        "sourceTextHashAlgorithm",
+        "textRange",
+        "unicodeVersion",
+        "utf16Range"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests '*ScriptItem*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Script run golden changes require fixture text diff review, pinned Unicode source review, stable diagnostic review, and explicit non-claims without GSUB/GPOS, paragraph, or GPU text promotion.",
+      "nonClaims": [
+        "producer-only",
+        "bounded-kfont-m5-004-fixture-evidence-only",
+        "no-complete-target-support-claim",
+        "no-complete-ucd-claim",
+        "no-complete-gsub-gpos-claim",
+        "no-shaping-support-promotion",
+        "no-paragraph-support-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
       "dumpId": "sdf-atlas-build-result",
       "ownerTicket": "PKT-10B",
       "classification": "producer-only",
