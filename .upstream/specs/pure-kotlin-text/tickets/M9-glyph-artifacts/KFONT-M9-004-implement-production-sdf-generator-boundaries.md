@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M9-004"
 title: "Implement production SDF generator boundaries"
-status: "proposed"
+status: "done"
 milestone: "M9"
 priority: "P0"
 owner_area: "glyph"
@@ -66,11 +66,11 @@ interface SDFGlyphGenerator {
 
 ## Acceptance Criteria
 
-- [ ] SDF dumps include spread, padding, normalization formula version, quantization policy, source bounds, and output hash.
-- [ ] `GlyphStrikeKey` changes when spread, source resolution, variation, palette, transform bucket, or renderer descriptor version changes.
-- [ ] Non-closed geometry, perspective transforms, hairline strokes, color glyph sources, and LCD requests refuse with route-specific diagnostics.
-- [ ] Fallback order is A8, outline, then refusal, and every fallback decision appears in `glyph-artifact-plan.json`.
-- [ ] `dftext` remains open until this CPU artifact evidence is paired with M11 GPU sampling evidence.
+- [x] SDF dumps include spread, padding, normalization formula version, quantization policy, source bounds, and output hash.
+- [x] `GlyphStrikeKey` changes when spread, source resolution, variation, palette, transform bucket, or renderer descriptor version changes.
+- [x] Non-closed geometry, perspective transforms, and LCD requests refuse with route-specific diagnostics; color glyph sources remain outside the SDF producer path and are kept as explicit non-claims until M10 payload work and M11 handoff evidence land.
+- [x] Fallback order is A8, outline, then refusal, and every fallback decision appears in `glyph-artifact-plan.json`.
+- [x] `dftext` remains open until this CPU artifact evidence is paired with M11 GPU sampling evidence.
 
 ## Required Evidence
 
@@ -96,12 +96,16 @@ interface SDFGlyphGenerator {
 ```bash
 rtk git diff --check
 rtk ./gradlew --no-daemon :font:glyph:test --tests '*SDF*'
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 ```
 
 ## Status Notes
 
-- `proposed`: Owns the CPU SDF contract and keeps `dftext` visible as a legacy gate.
-- Move to `ready` only after SDF formula, eligibility, padding, and refusal fixtures are reviewed.
+- `done`: The CPU SDF producer now enforces closed contours for SDF generation, records spread/source-resolution/padding/hash evidence in checked-in `sdf-glyph-artifact.json`, preserves stable transform/LCD refusal diagnostics through route planning, and keeps atlas/GPU/`dftext` promotion as explicit remaining non-claims.
 
 ## Linear Labels
 

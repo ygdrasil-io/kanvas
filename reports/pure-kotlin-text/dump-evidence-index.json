@@ -535,38 +535,89 @@
       ]
     },
     {
-      "dumpId": "glyph-atlas-lifecycle",
-      "ownerTicket": "PKT-10C",
-      "classification": "producer-only",
+      "dumpId": "glyph-atlas-eviction-trace",
+      "ownerTicket": "KFONT-M9-005",
+      "classification": "golden-gated",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
         "section": "Cache and invalidation"
       },
       "producerPaths": [
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
-        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt"
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json"
       ],
       "expectedFields": [
         "artifactType",
-        "atlasGeneration",
-        "capacityBytes",
-        "capacityExceeded",
-        "diagnostics",
+        "budgetBytes",
+        "dumpId",
         "dumpSha256",
-        "evictedGlyphIds",
-        "requestedGeneration",
-        "schema",
-        "staleGeneration",
-        "usedBytes"
+        "evictionCount",
+        "evictions",
+        "fixtureIds",
+        "invalidationTokenAfter",
+        "invalidationTokenBefore",
+        "nextGeneration",
+        "nonClaims",
+        "ownerTickets",
+        "previousGeneration",
+        "requiredDiagnostics",
+        "residentBytesAfter",
+        "residentBytesBefore",
+        "schemaVersion"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:glyph:test"
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests '*Atlas*'",
+        "rtk ./gradlew --no-daemon :font:glyph:test",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
       ],
-      "updatePolicy": "Lifecycle dump changes require stale-generation, capacity, and eviction-order tests.",
+      "updatePolicy": "Eviction-trace golden changes require reviewed generation/invalidation-token deltas, resident-byte diffs, and explicit non-claim review without GPU upload or dftext promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-atlas-lifecycle-claim",
-        "no-gpu-upload-execution-claim"
+        "no-gpu-text-route-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "dumpId": "glyph-atlas-lifecycle",
+      "ownerTicket": "KFONT-M9-005",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        "section": "Atlas artifacts"
+      },
+      "producerPaths": [
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/glyph/glyph-atlas.json"
+      ],
+      "expectedFields": [
+        "artifactCount",
+        "artifacts",
+        "dumpId",
+        "dumpSha256",
+        "fixtureIds",
+        "nonClaims",
+        "ownerTickets",
+        "requiredDiagnostics",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests '*Atlas*'",
+        "rtk ./gradlew --no-daemon :font:glyph:test",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Atlas golden changes require reviewed entry/source-hash/upload-byte diffs, generation-token review, and explicit non-claim review without GPU upload or dftext promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-atlas-lifecycle-claim",
+        "no-gpu-text-route-claim",
+        "no-dftext-retirement"
       ]
     },
     {
@@ -980,6 +1031,47 @@
         "producer-only",
         "no-complete-sdf-generation-claim",
         "no-gpu-text-route-claim"
+      ]
+    },
+    {
+      "dumpId": "sdf-glyph-artifact",
+      "ownerTicket": "KFONT-M9-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        "section": "SDF Glyph Atlas Artifact"
+      },
+      "producerPaths": [
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json"
+      ],
+      "expectedFields": [
+        "artifactCount",
+        "artifacts",
+        "dumpId",
+        "dumpSha256",
+        "fixtureIds",
+        "nonClaims",
+        "ownerTickets",
+        "requiredDiagnostics",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests '*SDF*'",
+        "rtk ./gradlew --no-daemon :font:glyph:test",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "SDF artifact golden changes require reviewed spread/padding/hash diffs, normalization-edge checks, refusal-diagnostic review, and explicit non-claim review without atlas, GPU, LCD, or dftext promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-sdf-route-claim",
+        "no-atlas-packing-claim",
+        "no-gpu-text-route-claim",
+        "no-lcd-support-claim",
+        "no-dftext-retirement"
       ]
     },
     {

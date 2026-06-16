@@ -26,6 +26,7 @@
           "generationPolicy": "Use synthetic A8 masks with fixed bounds, padding, row stride, atlas size, placement order, and atlas byte hash.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-atlas.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -47,6 +48,7 @@
           "generationPolicy": "Use a bounded atlas request that exceeds capacity before placement and records the stable refusal.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-atlas.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -65,15 +67,17 @@
           "targetGate": "sdf-normalization",
           "status": "current-positive-evidence",
           "fixtureKind": "structured-dump",
-          "generationPolicy": "Use a closed rectangle outline with fixed spread and assert inside, edge, outside, and mask hash facts.",
+          "generationPolicy": "Use a closed rectangle outline with the stabilized default spread plus an explicit widened spread, then assert inside/edge/outside facts, padding growth, normalization version, and stable CPU-only SDF hashes in the checked-in dump.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
             "sdf mask sample grid",
             "distance range facts",
-            "sdf mask hash"
+            "sdf mask hash",
+            "default/wide spread SDF dump entries"
           ],
           "nonClaims": [
             "no-complete-target-support-claim",
@@ -109,6 +113,7 @@
           "generationPolicy": "Use mismatched artifact/current generation values and assert stable invalidation-token evidence.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
