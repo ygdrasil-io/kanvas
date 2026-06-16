@@ -1972,9 +1972,59 @@ rtk git diff --check
 
 Remaining gate: this is contract-only evidence. It does not claim A8
 rasterization, SDF generation, atlas packing, GPU text routes, color/emoji
-rendering, LCD support, or `dftext` retirement. Complete `KFONT-M9-002`,
-`KFONT-M9-003`, `KFONT-M9-004`, and `KFONT-M9-005` before re-evaluating M11
-A8 GPU handoff.
+rendering, LCD support, or `dftext` retirement. Complete `KFONT-M9-003`,
+`KFONT-M9-004`, and `KFONT-M9-005` before re-evaluating M11 A8 GPU handoff.
+
+### KFONT-M9-002: Promote GlyphArtifactPlan route taxonomy
+
+Status: done; freshly validated after independent review findings were remediated.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/glyph/glyph-artifact-plan.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m9-002-glyph-artifact-plan-taxonomy.md`
+
+Evidence:
+
+- `GlyphArtifactRouteRequest` now carries stable policy inputs and explicit
+  per-glyph route diagnostics that explain fallback/refusal decisions without
+  allocating GPU resources.
+- `GlyphArtifactPlanDecision` records placeholder refs for COLR, bitmap, and
+  SVG routes, `CPUPreparedGPU` artifact intent for A8/SDF routes, route-specific
+  key hashes, fallback policy, rejected alternatives, and explicit unsupported
+  decisions.
+- `GlyphArtifactRoutePlanner` preserves stable refusal codes for
+  `text.glyph.SDF-transform-unsupported`,
+  `text.glyph.atlas-capacity-exceeded`,
+  `text.glyph.outline-unavailable`, and
+  `text.glyph.LCD-future-research`.
+- `GlyphArtifactPlanEvidenceDump` produces checked-in
+  `glyph-artifact-plan.json` evidence with outline, A8, SDF, color placeholder,
+  bitmap placeholder, SVG placeholder, LCD refusal, outline refusal, and
+  unsupported routes.
+- Dump index, fixture manifest, and claim dashboard expose the route taxonomy as
+  `tracked-gap` planner evidence only, with promotion still blocked on later
+  A8/SDF/atlas/GPU tickets.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*GlyphArtifactPlan*'
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: this is route-taxonomy evidence only. It does not claim M10
+COLR/bitmap/SVG payload parsing, production A8 rasterization, production SDF
+quality, atlas lifecycle support, GPU text handoff, LCD support, or `dftext`
+retirement.
 
 ### PKT-10B: Glyph Artifact Plan Decision Trace Dump
 
