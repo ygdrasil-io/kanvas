@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M3-004"
 title: "Add vertical metric coverage"
-status: "proposed"
+status: "done"
 milestone: "M3"
 priority: "P1"
 owner_area: "font-scaler"
@@ -62,11 +62,11 @@ class VerticalMetricResolver {
 
 ## Acceptance Criteria
 
-- [ ] Fixtures with `vhea` and `vmtx` produce vertical advances and bearings in `glyph-metrics.json`.
-- [ ] Fixtures without vertical tables show an explicit absent/fallback diagnostic and do not claim vertical layout support.
-- [ ] `VVAR` deltas apply at varied coordinates when fixture data exists.
-- [ ] Malformed vertical metrics emit precise diagnostics without crashing horizontal outline scaling.
-- [ ] Dashboard classification remains `tracked-gap` until vertical metric dumps and diagnostics are attached.
+- [x] Fixtures with `vhea` and `vmtx` produce vertical advances and bearings in `glyph-metrics.json`.
+- [x] Fixtures without vertical tables show an explicit absent/fallback diagnostic and do not claim vertical layout support.
+- [x] `VVAR` deltas apply at varied coordinates when fixture data exists.
+- [x] Malformed vertical metrics emit precise diagnostics without crashing horizontal outline scaling.
+- [x] Dashboard classification remains `tracked-gap` until vertical metric dumps and diagnostics are attached.
 
 ## Required Evidence
 
@@ -95,8 +95,7 @@ rtk ./gradlew --no-daemon :font:scaler:test --tests '*VerticalMetric*' --tests '
 
 ## Status Notes
 
-- `proposed`: Vertical metric coverage is specified, but no metrics dump evidence is attached yet.
-- Move to `ready` after OpenType table fact dumps expose `vhea`, `vmtx`, and variation metric tables.
+- `done`: `font/sfnt` now parses optional `vhea`/`vmtx` facts without discarding bounded horizontal metrics, `TrueTypeGlyfScaler.scaledGlyphEvidence(...)` emits explicit `present`/`fallback`/`diagnostic` vertical metric states, and `reports/font/fixtures/expected/scaler/truetype-vertical-metrics.json` captures bounded `VVAR` advance-height evidence plus malformed-table diagnostics.
 
 ## Linear Labels
 

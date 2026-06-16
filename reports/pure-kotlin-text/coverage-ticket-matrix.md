@@ -1133,8 +1133,61 @@ rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 ```
 
 Remaining gate: this is a bounded TrueType `gvar` IUP slice only. It does not
-claim complete `HVAR`/`VVAR`/`MVAR` application, vertical metrics, complete
+claim complete `HVAR`/`VVAR`/`MVAR` application, vertical shaping/layout, complete
 variable-font parity, hinting VM parity, or GPU glyph route support.
+### PKT-04G: TrueType Vertical Metric Evidence
+
+Status: done; freshly validated with deterministic evidence.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/font/fixtures/expected/scaler/truetype-gvar-iup.json`
+- `reports/font/fixtures/expected/scaler/truetype-vertical-metrics.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m3-004-vertical-metrics.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+
+Evidence:
+
+- `OpenTypeMetricsTableParser` now parses bounded optional `vhea`/`vmtx` facts
+  into `MetricsTables` while preserving required horizontal metrics and
+  surfacing malformed optional-table diagnostics through
+  `DefaultOpenTypeFaceParser`.
+- `TrueTypeGlyfScaler.scaledGlyphEvidence(...)` now emits `glyph-metrics.json`
+  vertical metric facts with explicit `present`, `fallback`, and `diagnostic`
+  states, including vertical advance, top side bearing, derived vertical
+  origin, and `vhea` global metrics.
+- Missing vertical tables are visible as bounded fallback facts only:
+  evidence records `horizontal-fallback-fact` plus stable
+  `font.vertical-metrics-unavailable` / `truetype.vertical-metrics-absent`
+  diagnostics instead of silently implying vertical layout support.
+- `reports/font/fixtures/expected/scaler/truetype-vertical-metrics.json`
+  captures positive `vhea`/`vmtx` evidence, absent-table fallback evidence,
+  bounded `VVAR` advance-height deltas, and malformed `VVAR` diagnostics.
+- `reports/font/fixtures/expected/scaler/truetype-gvar-iup.json` now keeps the
+  existing bounded IUP/phantom evidence while recording the explicit vertical
+  fallback state for variation dumps that still have no vertical tables.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test
+rtk ./gradlew --no-daemon :font:scaler:test
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this is vertical metric extraction evidence only. It does not
+claim vertical shaping, vertical glyph substitution, line layout, paragraph
+layout, complete HVAR/MVAR parity, native scaler parity, or GPU glyph route
+support.
 ### KFONT-M3-005: Malformed glyf isolation suite
 
 Status: implemented.
