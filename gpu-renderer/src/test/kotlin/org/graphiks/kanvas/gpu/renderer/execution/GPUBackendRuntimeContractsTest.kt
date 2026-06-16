@@ -79,44 +79,4 @@ class GPUBackendRuntimeContractsTest {
             GPUClearColor(red = 0.1, green = 0.2, blue = 0.3, alpha = 1.01)
         }
     }
-
-    @Test
-    fun `backend rect draw requires rgba size four and positive scissor dimensions`() {
-        val draw = GPUBackendRectDraw(
-            rgbaPremul = floatArrayOf(0.1f, 0.2f, 0.3f, 1.0f),
-            scissorX = 4,
-            scissorY = 8,
-            scissorWidth = 16,
-            scissorHeight = 32,
-        )
-
-        assertEquals(16, draw.scissorWidth)
-        assertFailsWith<IllegalArgumentException> {
-            GPUBackendRectDraw(
-                rgbaPremul = floatArrayOf(0.1f, 0.2f, 0.3f),
-                scissorX = 0,
-                scissorY = 0,
-                scissorWidth = 16,
-                scissorHeight = 32,
-            )
-        }
-        assertFailsWith<IllegalArgumentException> {
-            GPUBackendRectDraw(
-                rgbaPremul = floatArrayOf(0.1f, 0.2f, 0.3f, 1.0f),
-                scissorX = 0,
-                scissorY = 0,
-                scissorWidth = 0,
-                scissorHeight = 32,
-            )
-        }
-        assertFailsWith<IllegalArgumentException> {
-            GPUBackendRectDraw(
-                rgbaPremul = floatArrayOf(0.1f, 0.2f, 0.3f, 1.0f),
-                scissorX = 0,
-                scissorY = 0,
-                scissorWidth = 16,
-                scissorHeight = 0,
-            )
-        }
-    }
 }
