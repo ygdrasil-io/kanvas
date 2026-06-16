@@ -641,6 +641,66 @@ class RunGpuRendererSceneKadreMainTest {
         assertContains(presented.toJson(), "\"productRefusal\": false")
     }
 
+    @Test
+    fun `presented session report serializes raw frame timing samples with warmup and stable phases`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("frame-gate-blocker-board")
+        val report = WindowedSceneSessionReport.presented(
+            scene = scene,
+            requestedFrames = 5,
+            surfaceFormat = "BGRA8Unorm",
+            adapterInfo = "AdapterInfo(device=Apple M2 Max, isFallbackAdapter=false)",
+            frameTiming = WindowedFrameTimingReport.wallClockEncodePresent(
+                warmupFrames = 2,
+                samples = listOf(
+                    12_100_000L,
+                    11_900_000L,
+                    10_400_000L,
+                    10_300_000L,
+                    10_500_000L,
+                ),
+            ),
+        )
+
+        val sessionJson = report.toJson()
+
+        assertContains(sessionJson, "\"frameTiming\": {")
+        assertContains(sessionJson, "\"metricName\": \"frame-time-ms\"")
+        assertContains(sessionJson, "\"metricSource\": \"wall-clock-encode-present\"")
+        assertContains(sessionJson, "\"rawSampleCount\": 5")
+        assertContains(sessionJson, "\"warmupFrames\": 2")
+        assertContains(sessionJson, "\"stableFrames\": 3")
+        assertContains(
+            sessionJson,
+            "{\"frameIndex\": 1, \"phase\": \"warmup\", \"durationNanos\": 12100000, \"durationMs\": 12.1000}",
+        )
+        assertContains(
+            sessionJson,
+            "{\"frameIndex\": 3, \"phase\": \"stable\", \"durationNanos\": 10400000, \"durationMs\": 10.4000}",
+        )
+    }
+
+    @Test
+    fun `frame timing report rejects missing samples and invalid warmup split`() {
+        assertFailsWith<IllegalArgumentException> {
+            WindowedFrameTimingReport.wallClockEncodePresent(
+                warmupFrames = 1,
+                samples = emptyList(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            WindowedFrameTimingReport.wallClockEncodePresent(
+                warmupFrames = 3,
+                samples = listOf(1L, 2L),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            WindowedFrameTimingReport.wallClockEncodePresent(
+                warmupFrames = 1,
+                samples = listOf(1L, 0L),
+            )
+        }
+    }
+
     private fun solidCardStackScene() =
         GPURendererSceneRegistry.registry.requireScene("solid-card-stack")
 
