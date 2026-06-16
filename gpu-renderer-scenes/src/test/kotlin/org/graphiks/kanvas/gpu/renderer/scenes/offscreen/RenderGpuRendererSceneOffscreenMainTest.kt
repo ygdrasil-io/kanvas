@@ -14,6 +14,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSource
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
@@ -35,14 +36,14 @@ class RenderGpuRendererSceneOffscreenMainTest {
     fun `non first route scene writes not yet rendered report under scene directory`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
 
-        renderGpuRendererSceneOffscreen(arrayOf("mesh-ribbon", root.toString()))
+        renderGpuRendererSceneOffscreen(arrayOf("receipt-text-run", root.toString()))
 
-        val runJson = root.resolve("mesh-ribbon").resolve("run.json").readText()
-        assertContains(runJson, "\"sceneId\": \"mesh-ribbon\"")
+        val runJson = root.resolve("receipt-text-run").resolve("run.json").readText()
+        assertContains(runJson, "\"sceneId\": \"receipt-text-run\"")
         assertContains(runJson, "\"status\": \"not-yet-rendered\"")
         assertContains(runJson, "\"productRefusal\": false")
         assertContains(runJson, "\"imagePath\": null")
-        assertContains(runJson, "runner-subset:mesh-ribbon")
+        assertContains(runJson, "runner-subset:receipt-text-run")
     }
 
     @Test
@@ -74,6 +75,28 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 fillRectCount = 0,
                 clipCount = 1,
                 bitmapRectCount = 1,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "filtered-photo-chip",
+                fillRectCount = 0,
+                bitmapRectCount = 1,
+                filterNodeCount = 1,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "layered-shadow-card",
+                fillRectCount = 0,
+                saveLayerCount = 1,
+                filterNodeCount = 1,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "runtime-effect-color-tile",
+                fillRectCount = 0,
+                runtimeEffectCount = 1,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "mesh-ribbon",
+                fillRectCount = 0,
+                meshRibbonCount = 1,
             ),
         )
 
@@ -135,6 +158,84 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
+    fun `rect only command preparation rejects filter markers without fixture payloads`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            prepareRectOnlyDrawPlan(
+                sceneId = "filter-marker-only",
+                commands = listOf(testBitmapRect(), SceneCommand.FilterNode("marker")),
+                width = 320,
+                height = 200,
+            )
+        }
+
+        assertContains(failure.message ?: "", "fixture-backed FilterNode payloads: marker")
+    }
+
+    @Test
+    fun `rect only command preparation rejects save layer markers without fixture payloads`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            prepareRectOnlyDrawPlan(
+                sceneId = "save-layer-marker-only",
+                commands = listOf(SceneCommand.SaveLayer("marker")),
+                width = 320,
+                height = 200,
+            )
+        }
+
+        assertContains(failure.message ?: "", "fixture-backed SaveLayer payloads: marker")
+    }
+
+    @Test
+    fun `rect only command preparation rejects runtime effect markers without fixture payloads`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            prepareRectOnlyDrawPlan(
+                sceneId = "runtime-effect-marker-only",
+                commands = listOf(SceneCommand.RuntimeEffectTile("marker")),
+                width = 320,
+                height = 200,
+            )
+        }
+
+        assertContains(failure.message ?: "", "fixture-backed RuntimeEffectTile payloads: marker")
+    }
+
+    @Test
+    fun `rect only command preparation rejects mesh ribbon markers without fixture payloads`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            prepareRectOnlyDrawPlan(
+                sceneId = "mesh-ribbon-marker-only",
+                commands = listOf(SceneCommand.MeshRibbon("marker")),
+                width = 320,
+                height = 200,
+            )
+        }
+
+        assertContains(failure.message ?: "", "fixture-backed MeshRibbon payloads: marker")
+    }
+
+    @Test
+    fun `rect only command preparation rejects runtime effects outside the registered SimpleRT contract`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            prepareRectOnlyDrawPlan(
+                sceneId = "runtime-effect-wrong-descriptor",
+                commands = listOf(
+                    SceneCommand.RuntimeEffectTile(
+                        label = "wrong-runtime-effect",
+                        rect = SceneRect(16f, 16f, 96f, 96f),
+                        stableId = "runtime.spiral_rt",
+                        wgslImplementationId = "wgsl/runtime_spiral_rt",
+                        uniformColor = SceneColor.blue(),
+                    ),
+                ),
+                width = 320,
+                height = 200,
+            )
+        }
+
+        assertContains(failure.message ?: "", "supports only registered runtime.simple_rt RuntimeEffectTile payloads")
+    }
+
+    @Test
     fun `rect only command preparation rejects out of bounds fill rectangles`() {
         val failure = assertFailsWith<IllegalArgumentException> {
             prepareRectOnlyDrawPlan(
@@ -152,6 +253,27 @@ class RenderGpuRendererSceneOffscreenMainTest {
         }
 
         assertContains(failure.message ?: "", "inside positive bounds: oversize")
+    }
+
+    @Test
+    fun `rect only command preparation rejects out of bounds mesh ribbons`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            prepareRectOnlyDrawPlan(
+                sceneId = "oversize-mesh-ribbon",
+                commands = listOf(
+                    SceneCommand.MeshRibbon(
+                        label = "ribbon",
+                        bounds = SceneRect(left = 0f, top = 0f, right = 33f, bottom = 32f),
+                        startColor = SceneColor.blue(),
+                        endColor = SceneColor.amber(),
+                    ),
+                ),
+                width = 32,
+                height = 32,
+            )
+        }
+
+        assertContains(failure.message ?: "", "MeshRibbon bounds inside positive target: ribbon")
     }
 
     @Test
@@ -237,6 +359,10 @@ class RenderGpuRendererSceneOffscreenMainTest {
         val linearGradientRectCount: Int? = null,
         val clipCount: Int? = null,
         val bitmapRectCount: Int? = null,
+        val filterNodeCount: Int? = null,
+        val saveLayerCount: Int? = null,
+        val runtimeEffectCount: Int? = null,
+        val meshRibbonCount: Int? = null,
     )
 
     private fun assertRenderedShapeScene(root: Path, expectation: RenderedShapeExpectation) {
@@ -271,6 +397,50 @@ class RenderGpuRendererSceneOffscreenMainTest {
         expectation.bitmapRectCount?.let { count ->
             assertContains(runJson, "bitmapRectCommands=$count")
         }
+        expectation.saveLayerCount?.let { count ->
+            assertContains(runJson, "saveLayerCommands=$count")
+            assertContains(runJson, "saveLayerKinds=bounded-shadow-card")
+            assertContains(runJson, "saveLayerRoute=scene-fixture.bounded-shadow-card")
+            assertContains(runJson, "saveLayerMaterializedDraws=2")
+            assertContains(runJson, "saveLayerFallbackReason=none")
+            assertContains(runJson, "filterRoutes=scene-fixture.bounded-drop-shadow")
+            assertContains(runJson, "generalSaveLayerSupport=false")
+            assertContains(runJson, "imageFilterDagSupport=false")
+        }
+        expectation.filterNodeCount?.let { count ->
+            assertContains(runJson, "filterNodeCommands=$count")
+            if (expectation.sceneId == "layered-shadow-card") {
+                assertContains(runJson, "filterKinds=drop-shadow")
+                assertContains(runJson, "filterInputs=shadow-card-layer")
+            } else {
+                assertContains(runJson, "filterKinds=luma-tint")
+                assertContains(runJson, "filterInputs=photo")
+            }
+        }
+        expectation.runtimeEffectCount?.let { count ->
+            assertContains(runJson, "runtimeEffectCommands=$count")
+            assertContains(runJson, "runtimeEffectStableIds=runtime.simple_rt")
+            assertContains(runJson, "runtimeEffectWgslImplementationIds=wgsl/runtime_simple_rt")
+            assertContains(runJson, "runtimeEffectUniformLayout=gColor@0:16")
+            assertContains(
+                runJson,
+                "runtimeEffectPipelineKey=runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+            )
+            assertContains(runJson, "runtimeEffectDescriptorEvidence=reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json")
+            assertContains(
+                runJson,
+                "runtimeEffectParserEvidence=RuntimeEffectDescriptorWebGpuTest#runtime SimpleRT descriptor WGSL parses and reflects uniforms",
+            )
+            assertContains(runJson, "fallbackReason=none")
+        }
+        expectation.meshRibbonCount?.let { count ->
+            assertContains(runJson, "meshRibbonCommands=$count")
+            assertContains(runJson, "meshRibbonKinds=bounded-ribbon-strip")
+            assertContains(runJson, "meshRibbonRoute=scene-fixture.bounded-ribbon-strip")
+            assertContains(runJson, "meshRibbonFallbackReason=none")
+            assertContains(runJson, "generalVerticesSupport=false")
+            assertContains(runJson, "vertexIndexBufferSupport=false")
+        }
         assertFalse(runJson.contains("runner-subset:$sceneId"), sceneId)
     }
 
@@ -299,6 +469,18 @@ class RenderGpuRendererSceneOffscreenMainTest {
         val exitCode = process.waitFor()
         assertEquals(0, exitCode, output)
     }
+
+    private fun testBitmapRect(): SceneCommand.BitmapRect =
+        SceneCommand.BitmapRect(
+            label = "photo",
+            rect = SceneRect(24f, 24f, 120f, 120f),
+            source = SceneBitmapSource(
+                topLeft = SceneColor.red(),
+                topRight = SceneColor.blue(),
+                bottomLeft = SceneColor.green(),
+                bottomRight = SceneColor.amber(),
+            ),
+        )
 
     private fun absoluteJavaClasspath(): String =
         System.getProperty("java.class.path")

@@ -64,8 +64,92 @@ class SceneCommandsTest {
                 ),
             ).family,
         )
+        assertEquals(
+            "filter-node",
+            SceneCommand.FilterNode(
+                label = "luma-filter",
+                inputLabel = "bitmap",
+                kind = SceneFilterKind.LumaTint,
+                strength = 0.65f,
+            ).family,
+        )
+        assertEquals(
+            "save-layer",
+            SceneCommand.SaveLayer(
+                label = "shadow-card-layer",
+                bounds = SceneRect(32f, 28f, 288f, 172f),
+                contentRect = SceneRect(48f, 44f, 270f, 154f),
+                radius = 20f,
+                contentColor = SceneColor(0.98f, 0.98f, 0.94f, 1f),
+                shadowColor = SceneColor(0.02f, 0.04f, 0.07f, 0.44f),
+            ).family,
+        )
         assertEquals("runtime-effect", SceneCommand.RuntimeEffectTile("simple-rt").family)
         assertEquals("vertices", SceneCommand.MeshRibbon("mesh").family)
+    }
+
+    @Test
+    fun `save layer fixture payload names the bounded shadow card contract`() {
+        val command = SceneCommand.SaveLayer(
+            label = "shadow-card-layer",
+            bounds = SceneRect(32f, 28f, 288f, 172f),
+            contentRect = SceneRect(48f, 44f, 270f, 154f),
+            radius = 20f,
+            contentColor = SceneColor(0.98f, 0.98f, 0.94f, 1f),
+            shadowColor = SceneColor(0.02f, 0.04f, 0.07f, 0.44f),
+            shadowOffsetX = 10f,
+            shadowOffsetY = 12f,
+            paintOrder = 2,
+        )
+
+        assertTrue(command.hasFixturePayload)
+        assertEquals("bounded-shadow-card", command.layerKind)
+        assertEquals(SceneRect(32f, 28f, 288f, 172f), command.bounds)
+        assertEquals(SceneRect(48f, 44f, 270f, 154f), command.contentRect)
+        assertEquals(SceneRect(58f, 56f, 280f, 166f), command.shadowRect)
+        assertEquals(20f, command.radius)
+        assertEquals(2, command.paintOrder)
+    }
+
+    @Test
+    fun `runtime effect tile fixture payload names the registered SimpleRT descriptor contract`() {
+        val command = SceneCommand.RuntimeEffectTile(
+            label = "simple-rt-color",
+            rect = SceneRect(48f, 36f, 272f, 164f),
+            stableId = "runtime.simple_rt",
+            wgslImplementationId = "wgsl/runtime_simple_rt",
+            uniformColor = SceneColor(0.18f, 0.42f, 0.72f, 1f),
+        )
+
+        assertTrue(command.hasFixturePayload)
+        assertEquals("runtime.simple_rt", command.stableId)
+        assertEquals("wgsl/runtime_simple_rt", command.wgslImplementationId)
+        assertEquals("kotlin/simple_rt", command.cpuImplementationId)
+        assertEquals("gColor", command.uniformName)
+        assertEquals("kFloat4", command.uniformType)
+        assertEquals(0, command.uniformOffset)
+        assertEquals(16, command.uniformSize)
+        assertEquals("runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]", command.pipelineKey)
+    }
+
+    @Test
+    fun `mesh ribbon fixture payload names the bounded ribbon strip contract`() {
+        val command = SceneCommand.MeshRibbon(
+            label = "ribbon",
+            bounds = SceneRect(36f, 42f, 284f, 158f),
+            startColor = SceneColor(0.10f, 0.52f, 0.86f, 1f),
+            endColor = SceneColor(0.98f, 0.62f, 0.18f, 1f),
+            thickness = 28f,
+            paintOrder = 3,
+        )
+
+        assertTrue(command.hasFixturePayload)
+        assertEquals("bounded-ribbon-strip", command.meshKind)
+        assertEquals(SceneRect(36f, 42f, 284f, 158f), command.bounds)
+        assertEquals(SceneColor(0.10f, 0.52f, 0.86f, 1f), command.startColor)
+        assertEquals(SceneColor(0.98f, 0.62f, 0.18f, 1f), command.endColor)
+        assertEquals(28f, command.thickness)
+        assertEquals(3, command.paintOrder)
     }
 
     @Test
@@ -83,8 +167,148 @@ class SceneCommandsTest {
         }
         assertFailsWith<IllegalArgumentException> { SceneCommand.Clip("", SceneRect(0f, 0f, 8f, 8f)) }
         assertFailsWith<IllegalArgumentException> { SceneCommand.BitmapRect(" ") }
+        assertFailsWith<IllegalArgumentException> { SceneCommand.SaveLayer(" ") }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.FilterNode(
+                label = "filter",
+                inputLabel = " ",
+                kind = SceneFilterKind.DropShadow,
+            )
+        }
         assertFailsWith<IllegalArgumentException> { SceneCommand.RuntimeEffectTile("") }
         assertFailsWith<IllegalArgumentException> { SceneCommand.MeshRibbon("\t") }
+    }
+
+    @Test
+    fun `save layer fixture payload requires bounds content and shadow together`() {
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.SaveLayer(
+                label = "shadow-card-layer",
+                contentRect = SceneRect(48f, 44f, 270f, 154f),
+                contentColor = SceneColor(0.98f, 0.98f, 0.94f, 1f),
+                shadowColor = SceneColor(0.02f, 0.04f, 0.07f, 0.44f),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.SaveLayer(
+                label = "shadow-card-layer",
+                bounds = SceneRect(32f, 28f, 288f, 172f),
+                contentColor = SceneColor(0.98f, 0.98f, 0.94f, 1f),
+                shadowColor = SceneColor(0.02f, 0.04f, 0.07f, 0.44f),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.SaveLayer(
+                label = "shadow-card-layer",
+                bounds = SceneRect(32f, 28f, 288f, 172f),
+                contentRect = SceneRect(48f, 44f, 270f, 154f),
+                shadowColor = SceneColor(0.02f, 0.04f, 0.07f, 0.44f),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.SaveLayer(
+                label = "shadow-card-layer",
+                bounds = SceneRect(32f, 28f, 288f, 172f),
+                contentRect = SceneRect(48f, 44f, 270f, 154f),
+                contentColor = SceneColor(0.98f, 0.98f, 0.94f, 1f),
+            )
+        }
+    }
+
+    @Test
+    fun `filter node fixture payload requires an input kind and normalized strength`() {
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.FilterNode(label = "filter", inputLabel = "photo")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.FilterNode(label = "filter", kind = SceneFilterKind.LumaTint)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.FilterNode(
+                label = "filter",
+                inputLabel = "photo",
+                kind = SceneFilterKind.LumaTint,
+                strength = -0.01f,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.FilterNode(
+                label = "filter",
+                inputLabel = "photo",
+                kind = SceneFilterKind.LumaTint,
+                strength = 1.01f,
+            )
+        }
+    }
+
+    @Test
+    fun `runtime effect tile fixture payload requires descriptor rect and uniform color together`() {
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.RuntimeEffectTile(
+                label = "simple-rt-color",
+                stableId = "runtime.simple_rt",
+                wgslImplementationId = "wgsl/runtime_simple_rt",
+                uniformColor = SceneColor.blue(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.RuntimeEffectTile(
+                label = "simple-rt-color",
+                rect = SceneRect(0f, 0f, 8f, 8f),
+                wgslImplementationId = "wgsl/runtime_simple_rt",
+                uniformColor = SceneColor.blue(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.RuntimeEffectTile(
+                label = "simple-rt-color",
+                rect = SceneRect(0f, 0f, 8f, 8f),
+                stableId = "runtime.simple_rt",
+                uniformColor = SceneColor.blue(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.RuntimeEffectTile(
+                label = "simple-rt-color",
+                rect = SceneRect(0f, 0f, 8f, 8f),
+                stableId = "runtime.simple_rt",
+                wgslImplementationId = "wgsl/runtime_simple_rt",
+            )
+        }
+    }
+
+    @Test
+    fun `mesh ribbon fixture payload requires bounds and endpoint colors together`() {
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.MeshRibbon(
+                label = "ribbon",
+                startColor = SceneColor.blue(),
+                endColor = SceneColor.amber(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.MeshRibbon(
+                label = "ribbon",
+                bounds = SceneRect(0f, 0f, 8f, 8f),
+                endColor = SceneColor.amber(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.MeshRibbon(
+                label = "ribbon",
+                bounds = SceneRect(0f, 0f, 8f, 8f),
+                startColor = SceneColor.blue(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.MeshRibbon(
+                label = "ribbon",
+                bounds = SceneRect(0f, 0f, 8f, 8f),
+                startColor = SceneColor.blue(),
+                endColor = SceneColor.amber(),
+                thickness = 0f,
+            )
+        }
     }
 
     @Test
@@ -111,6 +335,25 @@ class SceneCommandsTest {
                     bottomLeft = SceneColor.green(),
                     bottomRight = SceneColor.amber(),
                 ),
+                paintOrder = -1,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.SaveLayer(
+                label = "shadow-card-layer",
+                bounds = SceneRect(0f, 0f, 16f, 16f),
+                contentRect = SceneRect(2f, 2f, 12f, 12f),
+                contentColor = SceneColor.green(),
+                shadowColor = SceneColor(0f, 0f, 0f, 0.25f),
+                paintOrder = -1,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.MeshRibbon(
+                label = "ribbon",
+                bounds = SceneRect(0f, 0f, 8f, 8f),
+                startColor = SceneColor.blue(),
+                endColor = SceneColor.amber(),
                 paintOrder = -1,
             )
         }
