@@ -169,7 +169,8 @@
         }
       ],
       "expectedDumps": [
-        "reports/font/fixtures/expected/scaler/cff-cff2-readiness.json"
+        "reports/font/fixtures/expected/scaler/cff-cff2-readiness.json",
+        "reports/font/fixtures/expected/scaler/cff-index-dict.json"
       ],
       "nonClaims": [
         "no-complete-target-support-claim",
