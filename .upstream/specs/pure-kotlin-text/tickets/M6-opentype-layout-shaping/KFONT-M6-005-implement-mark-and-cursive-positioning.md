@@ -107,6 +107,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*GposMark*' --tests '*Cursive
 ## Status Notes
 
 - `proposed`: Builds on base GPOS value application from KFONT-M6-004.
+- Current blocker audit (2026-06-16): draft PR `#1705` (`KFONT-M6-004`) is still open, and the required fixture set `gpos-mark-to-base.otf`, `gpos-mark-to-ligature.otf`, `gpos-mark-to-mark.otf`, `gpos-cursive-attachment.otf`, `gpos-missing-gdef.otf`, and `gpos-anchor-malformed.otf` is not present in-repo. Do not bypass these gates with synthetic-only mark/cursive coverage; remaining gate is merge/adopt the bounded GPOS base plus add reviewed fixture provenance and anchor/GDEF refusal evidence.
 - Move to `ready` only after required anchor formats and GDEF diagnostics are reviewed.
 
 ## Linear Labels
