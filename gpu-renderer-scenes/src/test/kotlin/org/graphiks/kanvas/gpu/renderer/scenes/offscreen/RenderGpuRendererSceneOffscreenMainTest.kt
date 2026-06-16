@@ -76,6 +76,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 clipCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "shadow-parity-migration-gate-board",
+                fillRectCount = 8,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "rounded-panel-gradient",
                 fillRectCount = 0,
                 fillRRectCount = 1,

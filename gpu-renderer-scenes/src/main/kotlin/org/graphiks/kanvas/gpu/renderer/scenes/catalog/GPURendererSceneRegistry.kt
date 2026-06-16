@@ -1357,6 +1357,74 @@ object GPURendererSceneRegistry {
                 ),
             ),
         ),
+        scene(
+            id = "shadow-parity-migration-gate-board",
+            title = "Shadow Parity Migration Gate Board",
+            description = "Per-family shadow parity migration gates for M10 without default route switch, route retirement, product activation, broad parity, or CPU-rendered texture fallback claims.",
+            tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.LegacyComparison),
+            links = listOf(SceneRoadmapLink.ticket("KGPU-M10-002")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.034f, 0.038f, 0.046f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "shadow-parity-panel",
+                    rect = SceneRect(22f, 24f, 298f, 176f),
+                    radius = 18f,
+                    color = SceneColor(0.10f, 0.12f, 0.15f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "shadow-parity-window",
+                    rect = SceneRect(38f, 42f, 282f, 158f),
+                ),
+                SceneCommand.FillRect(
+                    label = "per-family-inventory-input-present",
+                    rect = SceneRect(46f, 54f, 76f, 154f),
+                    color = SceneColor.green(0.88f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "adapter-backed-shadow-test-required",
+                    rect = SceneRect(84f, 68f, 114f, 154f),
+                    color = SceneColor.blue(0.88f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "before-after-dumps-required",
+                    rect = SceneRect(122f, 82f, 152f, 154f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "pm-row-required",
+                    rect = SceneRect(160f, 96f, 190f, 154f),
+                    color = SceneColor(0.44f, 0.34f, 0.86f, 0.92f),
+                    paintOrder = 4,
+                ),
+                SceneCommand.FillRect(
+                    label = "rollback-label-required",
+                    rect = SceneRect(198f, 110f, 228f, 154f),
+                    color = SceneColor(0.22f, 0.70f, 0.78f, 0.92f),
+                    paintOrder = 5,
+                ),
+                SceneCommand.FillRect(
+                    label = "skipped-refused-diagnostics-required",
+                    rect = SceneRect(236f, 124f, 266f, 154f),
+                    color = SceneColor(0.84f, 0.88f, 0.94f, 0.92f),
+                    paintOrder = 6,
+                ),
+                SceneCommand.FillRect(
+                    label = "legacy-default-remains-active",
+                    rect = SceneRect(46f, 148f, 152f, 158f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.92f),
+                    paintOrder = 7,
+                ),
+                SceneCommand.FillRect(
+                    label = "no-cross-family-parity-claim",
+                    rect = SceneRect(160f, 148f, 266f, 158f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.74f),
+                    paintOrder = 8,
+                ),
+            ),
+        ),
     )
 
     val registry: SceneRegistry<SceneCommand> = SceneRegistry(scenes)

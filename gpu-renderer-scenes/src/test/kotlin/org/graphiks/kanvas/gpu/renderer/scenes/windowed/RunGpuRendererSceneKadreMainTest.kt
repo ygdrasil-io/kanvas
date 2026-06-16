@@ -108,6 +108,7 @@ class RunGpuRendererSceneKadreMainTest {
             "frame-gate-blocker-board" to 46,
             "legacy-route-comparison" to 21,
             "legacy-inventory-hygiene-board" to 33,
+            "shadow-parity-migration-gate-board" to 47,
             "path-badge-and-stroke" to 22,
             "path-coverage-review-board" to 34,
             "rounded-panel-gradient" to 23,

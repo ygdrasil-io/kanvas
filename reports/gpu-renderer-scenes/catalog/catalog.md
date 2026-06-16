@@ -35,3 +35,4 @@
 | `frame-gate-blocker-board` | Frame Gate Blocker Board | Rect | KGPU M9 | `KGPU-M9-002` |  | `ShouldRender` |
 | `legacy-route-comparison` | Legacy Route Comparison | Rect | KGPU M10 |  |  | `ShouldRender` |
 | `legacy-inventory-hygiene-board` | Legacy Inventory Hygiene Board | Rect,RRect,Clip,LegacyComparison | KGPU M10 | `KGPU-M10-001`,`KGPU-M10-004` |  | `ShouldRender` |
+| `shadow-parity-migration-gate-board` | Shadow Parity Migration Gate Board | Rect,RRect,Clip,LegacyComparison | KGPU M10 | `KGPU-M10-002` |  | `ShouldRender` |

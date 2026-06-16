@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 33,
+  "sceneCount": 34,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -329,6 +329,16 @@
       "tags": ["Rect","RRect","Clip","LegacyComparison"],
       "kgpuMilestones": ["M10"],
       "ticketIds": ["KGPU-M10-001","KGPU-M10-004"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "shadow-parity-migration-gate-board",
+      "title": "Shadow Parity Migration Gate Board",
+      "description": "Per-family shadow parity migration gates for M10 without default route switch, route retirement, product activation, broad parity, or CPU-rendered texture fallback claims.",
+      "tags": ["Rect","RRect","Clip","LegacyComparison"],
+      "kgpuMilestones": ["M10"],
+      "ticketIds": ["KGPU-M10-002"],
       "rStages": [],
       "expectation": "ShouldRender"
     }

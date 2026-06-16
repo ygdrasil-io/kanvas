@@ -502,6 +502,33 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `shadow parity migration gate board is backed by per family M10 parity gates only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("shadow-parity-migration-gate-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.LegacyComparison), scene.tags)
+        assertEquals(listOf("KGPU-M10-002"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf(
+                "per-family-inventory-input-present",
+                "adapter-backed-shadow-test-required",
+                "before-after-dumps-required",
+                "pm-row-required",
+                "rollback-label-required",
+                "skipped-refused-diagnostics-required",
+                "legacy-default-remains-active",
+                "no-cross-family-parity-claim",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..8).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M10-001" || it.ticketId == "KGPU-M10-003" })
+    }
+
+    @Test
     fun `layered shadow card is backed by bounded shadow layer and drop shadow payloads`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("layered-shadow-card")
         assertIs<SceneCommand.Clear>(scene.commands[0])
@@ -1053,6 +1080,24 @@ class GPURendererSceneRegistryTest {
                     RoadmapExpectation("M10", ticketId = "KGPU-M10-001"),
                     RoadmapExpectation("M10", ticketId = "KGPU-M10-004"),
                 ),
+            ),
+            SceneExpectationRow(
+                sceneId = "shadow-parity-migration-gate-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.LegacyComparison),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M10", ticketId = "KGPU-M10-002")),
             ),
         )
     }
