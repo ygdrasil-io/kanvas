@@ -19,7 +19,7 @@ M0 diagnostics and M2 cmap facts.
 | Ticket | Status | Priority | Claim Impact | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|
 | [KFONT-M5-001 - Add pinned Unicode data generation](KFONT-M5-001-add-pinned-unicode-data-generation.md) | `done` | `P0` | `tracked-gap` | `unicode` | `KFONT-M0-004` | - |
-| [KFONT-M5-002 - Replace basic grapheme segmenter](KFONT-M5-002-replace-basic-grapheme-segmenter.md) | `proposed` | `P0` | `tracked-gap` | `unicode` | `KFONT-M5-001` | - |
+| [KFONT-M5-002 - Replace basic grapheme segmenter](KFONT-M5-002-replace-basic-grapheme-segmenter.md) | `done` | `P0` | `tracked-gap` | `unicode` | `KFONT-M5-001` | - |
 | [KFONT-M5-003 - Replace basic bidi resolver](KFONT-M5-003-replace-basic-bidi-resolver.md) | `proposed` | `P0` | `tracked-gap` | `unicode` | `KFONT-M5-001` | - |
 | [KFONT-M5-004 - Add Script_Extensions itemizer](KFONT-M5-004-add-script-extensions-itemizer.md) | `proposed` | `P0` | `tracked-gap` | `unicode` | `KFONT-M5-001`, `KFONT-M5-002` | - |
 | [KFONT-M5-005 - Add cluster safety regression suite](KFONT-M5-005-add-cluster-safety-regression-suite.md) | `proposed` | `P0` | `fixture-gated` | `unicode` | `KFONT-M5-002`, `KFONT-M5-003`, `KFONT-M5-004` | `scaledemoji` |

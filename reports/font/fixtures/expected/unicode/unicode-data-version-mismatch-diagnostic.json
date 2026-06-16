@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "dumpId": "unicode-data-version-mismatch-diagnostic",
-  "ownerTickets": ["KFONT-M5-001"],
+  "ownerTickets": ["KFONT-M5-001", "KFONT-M5-002"],
   "diagnostic": {
     "code": "text.shaping.unicode-data-version-mismatch",
     "severity": "refusal",
@@ -15,8 +15,9 @@
     "bounded-seed-fixture-only",
     "no-complete-ucd-claim",
     "no-uax9-conformance-claim",
-    "no-uax14-uax29-conformance-claim",
-    "no-segmentation-or-bidi-replacement-claim",
+    "no-uax14-conformance-claim",
+    "no-complete-uax29-claim",
+    "no-bidi-or-script-itemizer-replacement-claim",
     "no-shaping-support-promotion",
     "no-paragraph-support-claim",
     "no-gpu-text-route-claim"

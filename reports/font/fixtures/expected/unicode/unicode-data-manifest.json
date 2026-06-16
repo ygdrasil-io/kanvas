@@ -1,31 +1,32 @@
 {
   "schemaVersion": 1,
   "dumpId": "unicode-data-manifest",
-  "ownerTickets": ["KFONT-M5-001"],
+  "ownerTickets": ["KFONT-M5-001", "KFONT-M5-002"],
   "unicodeVersion": "16.0.0",
   "outputSchemaVersion": 1,
   "generatorVersion": "kanvas-unicode-seed-generator-1",
   "generatorOptions": {
     "mode": "bounded-seed-fixture",
     "ordinaryValidationPolicy": "offline",
-    "sourceCoverage": "sample-facts-only"
+    "sourceCoverage": "bounded-kfont-m5-002-fixture-matrix"
   },
   "inputs": [
-    {"fileName": "DerivedCoreProperties.txt", "unicodeVersion": "16.0.0", "sha256": "fd900026ebb49b9ff2e2687c80335846efd01f6aa258423bcf20d70f6489405b"},
-    {"fileName": "GraphemeBreakProperty.txt", "unicodeVersion": "16.0.0", "sha256": "813a368f501da9ec8a6b7254ab712bcc076096c448e01884d4a426c8df9c0afd"},
+    {"fileName": "DerivedCoreProperties.txt", "unicodeVersion": "16.0.0", "sha256": "494c24bebdaeb3b32e9ce4f409b43770c757281165a596de4596100ed76105b2"},
+    {"fileName": "GraphemeBreakProperty.txt", "unicodeVersion": "16.0.0", "sha256": "c3806b63eb12301c7677130372b1f084958edc355a150d77fef41af3806513a5"},
     {"fileName": "LineBreak.txt", "unicodeVersion": "16.0.0", "sha256": "36b045f0542b6f2ced556ad3ce0ef42442af935e8ea0a9326fb01c3506ef280c"},
     {"fileName": "PropList.txt", "unicodeVersion": "16.0.0", "sha256": "d5c348f8b0f19e9e3bbb9d749fb26e12c90ee6d0af295882f3ac29de2da2cba2"},
     {"fileName": "ScriptExtensions.txt", "unicodeVersion": "16.0.0", "sha256": "54ac87338dbabece287c9adb3796a6e855cbb7cfe20c60c47fb017716c16c07c"},
     {"fileName": "Scripts.txt", "unicodeVersion": "16.0.0", "sha256": "7eecd01fff852a1508600e7fb450dabee07e5f903f7aed9775277d03a9a1c2bc"},
-    {"fileName": "UnicodeData.txt", "unicodeVersion": "16.0.0", "sha256": "ce92544a048e6701608166aefbeeb9c373387aeb4ade98b2627a8ad1b5a16763"},
-    {"fileName": "emoji/emoji-data.txt", "unicodeVersion": "16.0.0", "sha256": "1f2e06ef4741c3f3eeeef2a80ce0879ca7ec43f51615a7784476366e733b3353"}
+    {"fileName": "UnicodeData.txt", "unicodeVersion": "16.0.0", "sha256": "65f71cd731ea2093d74440811b2f193ccc19598b4ce7031ea6f1dd983e880095"},
+    {"fileName": "emoji/emoji-data.txt", "unicodeVersion": "16.0.0", "sha256": "6fe8e48b70d3e7be51c74a4432282eb549402de968f0ee6fa4bef3ed8f24aa8f"}
   ],
   "generatedTableHashes": {
-    "bidiClass": "e02f183473b3fddfabcb459b9de539a93ab6a6e492e0d3d24cbc9698e3b17640",
+    "bidiClass": "7f49895b1d8411c028098aeecb9dbf95d1468097d5ffffe4d2b7ea9faf6ca951",
     "defaultIgnorable": "ef85131361b6c000d61e37c2838b2dfc06d0296327af07859377deb56a9ec4e5",
-    "emojiProperties": "16b8ce3fa2240d92d30375fb6be1e9269b503dd6e95350ad7875b4d832506df4",
-    "generalCategory": "cd49b8078dcb841792b282e05b78fcb86a1f4b69f4661070f21c92271dac50f1",
-    "graphemeClusterBreak": "5a26da6dbd28771cb91ddbc519023d9a6b9a2b4b5abd3c734b1ff733f5c9b7ec",
+    "emojiProperties": "f47cda383dd29273269a4e27ecc097d9cc43eb29f30f2bb0b7a25f8579b36144",
+    "generalCategory": "ede929dc055ca82e28cbe53cac902839b2540e527ee929f6aa2dd7cfd41f942c",
+    "graphemeClusterBreak": "88dcff5d4924a15067d973ba1e7fb1f637e2a8da18df2340ed86a6938da4e52f",
+    "indicConjunctBreak": "168770134f4a5db5a60dc2a7d9ae875ef0734f92516498c06a3f96dda9a6f8a8",
     "lineBreak": "7c3f6ac79c31ff9bde121eff13f1ed34a5a8edcf3515d36a6ee14fb9138ab566",
     "script": "eceafe14bfed407ddf8cde662c1b595e483de8a48058fb1aaaa884b72635a6fc",
     "scriptExtensions": "2667af29502eabaa53b8f788ed86da9ccdbcc222a39a8094481262c29a1bb226",
@@ -35,8 +36,9 @@
     "bounded-seed-fixture-only",
     "no-complete-ucd-claim",
     "no-uax9-conformance-claim",
-    "no-uax14-uax29-conformance-claim",
-    "no-segmentation-or-bidi-replacement-claim",
+    "no-uax14-conformance-claim",
+    "no-complete-uax29-claim",
+    "no-bidi-or-script-itemizer-replacement-claim",
     "no-shaping-support-promotion",
     "no-paragraph-support-claim",
     "no-gpu-text-route-claim"
