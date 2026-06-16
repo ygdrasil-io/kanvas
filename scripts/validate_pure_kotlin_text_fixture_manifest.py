@@ -27,6 +27,7 @@ REQUIRED_FAMILIES = {
     "emoji",
     "font-source-sfnt",
     "font-source-system-scan",
+    "glyph-strike-key",
     "gpu-handoff",
     "latin-gsub-gpos-fixtures",
     "paragraph",

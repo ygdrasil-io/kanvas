@@ -1929,6 +1929,53 @@ rtk ./gradlew --no-daemon :font:glyph:test
 Remaining gate: this is key/dump hardening only. It does not claim complete
 A8/SDF artifact generation, atlas lifecycle support, color glyph support, or
 GPU text-route promotion.
+
+### KFONT-M9-001: Complete GlyphStrikeKey
+
+Status: done; independently reviewed and freshly validated.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphStrikeKeyContractTest.kt`
+- `reports/font/fixtures/expected/glyph/glyph-strike-key.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m9-001-glyph-strike-key.md`
+
+Evidence:
+
+- `GlyphStrikeKey` embeds `glyphId`, cluster facts, route, mask, transform,
+  subpixel, edging, SDF, palette, variation, Unicode version, and renderer
+  descriptor facts in deterministic preimages and compact hashes.
+- `glyph-strike-key.json` covers A8, SDF, outline, COLR, bitmap PNG, SVG, and
+  unsupported routes, including variation, palette, renderer descriptor, and a
+  Unicode-sensitive cluster.
+- Refusal records cover missing `TypefaceID`, nondeterministic host source,
+  forbidden live-handle fields, LCD future research, and route-specific key gaps.
+- `font-diagnostic-taxonomy.json`, dump index, fixture manifest, and claim
+  dashboard expose the evidence without support promotion.
+- Independent spec review verdict: `ACCEPT`.
+- Independent code-quality review verdict: `ACCEPT`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*GlyphStrikeKey*'
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontDiagnosticTaxonomy*'
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py scripts/test_validate_pure_kotlin_text_fixture_manifest.py scripts/test_validate_pure_kotlin_text_claim_dashboard.py
+rtk git diff --check
+```
+
+Remaining gate: this is contract-only evidence. It does not claim A8
+rasterization, SDF generation, atlas packing, GPU text routes, color/emoji
+rendering, LCD support, or `dftext` retirement. Complete `KFONT-M9-002`,
+`KFONT-M9-003`, `KFONT-M9-004`, and `KFONT-M9-005` before re-evaluating M11
+A8 GPU handoff.
+
 ### PKT-10B: Glyph Artifact Plan Decision Trace Dump
 
 Status: implemented; independent review pending because the current tool policy

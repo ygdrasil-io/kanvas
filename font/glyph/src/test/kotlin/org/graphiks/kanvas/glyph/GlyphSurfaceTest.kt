@@ -570,7 +570,7 @@ class GlyphSurfaceTest {
             sdfSourceResolutionPx = 18f,
             paletteIdentity = "cpal.palette.3",
             unicodeDataVersion = "Unicode-15.1.0",
-            rendererVersion = "kanvas.sdf.cpu.v1",
+            rendererDescriptorVersion = "sdf-cpu.v1",
         )
 
         assertEquals(
@@ -579,6 +579,7 @@ class GlyphSurfaceTest {
               "schema": "org.graphiks.kanvas.glyph.GlyphStrikeKey.v1",
               "typefaceId": "550e8400-e29b-41d4-a716-446655441061",
               "glyphId": 77,
+              "clusterFingerprint": null,
               "sizePx": 18,
               "scaleX": 1.25,
               "scaleY": 0.75,
@@ -594,7 +595,7 @@ class GlyphSurfaceTest {
               "paletteIdentity": "cpal.palette.3",
               "sdf": {"spreadPx": 8, "sourceResolutionPx": 18},
               "unicodeDataVersion": "Unicode-15.1.0",
-              "rendererVersion": "kanvas.sdf.cpu.v1"
+              "rendererDescriptorVersion": "sdf-cpu.v1"
             }
             """.trimIndent() + "\n",
             strikeKey.canonicalPreimage(glyphId = 77),
