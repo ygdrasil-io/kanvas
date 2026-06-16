@@ -589,7 +589,7 @@
         "reports/font/fixtures/expected/unicode/source-extracts/16.0.0/emoji/emoji-data.txt"
       ],
       "requiredEvidenceGates": [
-        "Keep generated seed data as bounded fixture evidence until later M5 tickets consume it; BasicUnicodeData remains unchanged in this ticket.",
+        "Keep generated seed data as bounded fixture evidence for the reviewed M5 rows; full Unicode data remains gated on future source extract expansion.",
         "Add full UCD fixture regeneration and rebaseline review before expanding beyond the checked-in source extracts."
       ],
       "validationCommands": [
@@ -604,8 +604,65 @@
         "no-complete-target-support-claim",
         "no-complete-ucd-claim",
         "no-uax9-conformance-claim",
-        "no-uax14-uax29-conformance-claim",
-        "no-segmentation-or-bidi-replacement-claim",
+        "no-uax14-conformance-claim",
+        "no-complete-uax29-claim",
+        "no-bidi-or-script-itemizer-replacement-claim",
+        "no-shaping-support-promotion",
+        "no-paragraph-support-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
+      "familyId": "unicode-grapheme-segmentation",
+      "familyName": "Unicode grapheme segmentation",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Clusters"
+      },
+      "currentEvidencePaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/GraphemeSegmentation.kt",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/UnicodeDataGeneration.kt",
+        "font/text/src/main/resources/org/graphiks/kanvas/text/unicode/16.0.0/DerivedCoreProperties.txt",
+        "font/text/src/main/resources/org/graphiks/kanvas/text/unicode/16.0.0/GraphemeBreakProperty.txt",
+        "font/text/src/main/resources/org/graphiks/kanvas/text/unicode/16.0.0/LineBreak.txt",
+        "font/text/src/main/resources/org/graphiks/kanvas/text/unicode/16.0.0/PropList.txt",
+        "font/text/src/main/resources/org/graphiks/kanvas/text/unicode/16.0.0/ScriptExtensions.txt",
+        "font/text/src/main/resources/org/graphiks/kanvas/text/unicode/16.0.0/Scripts.txt",
+        "font/text/src/main/resources/org/graphiks/kanvas/text/unicode/16.0.0/UnicodeData.txt",
+        "font/text/src/main/resources/org/graphiks/kanvas/text/unicode/16.0.0/emoji/emoji-data.txt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/GraphemeSegmentationTest.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/UnicodeDataGenerationTest.kt",
+        "reports/font/fixtures/expected/unicode/grapheme-crlf-control.txt",
+        "reports/font/fixtures/expected/unicode/grapheme-devanagari-virama.txt",
+        "reports/font/fixtures/expected/unicode/grapheme-emoji-zwj.txt",
+        "reports/font/fixtures/expected/unicode/grapheme-isolated-surrogate.txt",
+        "reports/font/fixtures/expected/unicode/grapheme-latin-combining.txt",
+        "reports/font/fixtures/expected/unicode/grapheme-prepend.txt",
+        "reports/font/fixtures/expected/unicode/grapheme-regional-indicators.txt",
+        "reports/font/fixtures/expected/unicode/grapheme-variation-selector.txt",
+        "reports/font/fixtures/expected/unicode/unicode-segments.json",
+        "reports/font/fixtures/expected/unicode/unicode-data-manifest.json",
+        "reports/font/fixtures/expected/unicode/unicode-data-tables.json"
+      ],
+      "requiredEvidenceGates": [
+        "Keep KFONT-M5-002 grapheme segmentation coverage bounded to the checked fixture matrix until a future reviewed full UAX #29 source expansion exists.",
+        "Do not promote shaping, paragraph, emoji rendering, word breaking, sentence breaking, line breaking, or GPU text routes from this segmentation evidence."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests '*Grapheme*'",
+        "rtk ./gradlew --no-daemon --rerun-tasks :font:text:test --tests '*UnicodeData*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "fixtureCommands": [
+        "KFONT-M5-002 uses checked-in bounded Unicode 16.0 source extract rows packaged as font:text resources plus GraphemeSegmentationTest; ordinary tests do not download Unicode data or call platform segmenters."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-ucd-claim",
+        "no-complete-uax29-claim",
+        "no-word-sentence-or-line-breaking-claim",
         "no-shaping-support-promotion",
         "no-paragraph-support-claim",
         "no-gpu-text-route-claim"

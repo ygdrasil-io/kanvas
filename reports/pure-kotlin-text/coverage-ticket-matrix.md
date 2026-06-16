@@ -1262,7 +1262,7 @@ breaking, UAX #29 segmentation, emoji property coverage, or full script matrix
 support.
 ### PKT-06D: Unicode 16.0 Metadata
 
-Status: implemented; independent review pending.
+Status: done; independently reviewed and freshly validated.
 
 Files:
 
@@ -1353,6 +1353,75 @@ not claim a complete Unicode Character Database, UAX #9 bidi conformance, UAX
 #14 line breaking conformance, UAX #29 grapheme segmentation conformance,
 replacement of `BasicUnicodeData`, shaping support promotion, paragraph support
 promotion, or any GPU text route.
+
+### KFONT-M5-002: Replace Basic Grapheme Segmenter
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/GraphemeSegmentation.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/UnicodeDataGeneration.kt`
+- `font/text/src/main/resources/org/graphiks/kanvas/text/unicode/16.0.0/`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/GraphemeSegmentationTest.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/UnicodeDataGenerationTest.kt`
+- `reports/font/fixtures/expected/unicode/source-extracts/16.0.0/`
+- `reports/font/fixtures/expected/unicode/unicode-data-manifest.json`
+- `reports/font/fixtures/expected/unicode/unicode-data-tables.json`
+- `reports/font/fixtures/expected/unicode/unicode-segments.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m5-002-grapheme-segmentation.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M5-unicode-segmentation-bidi/KFONT-M5-002-replace-basic-grapheme-segmenter.md`
+
+Evidence:
+
+- The pinned Unicode 16.0 source extracts were expanded only with reviewed rows
+  needed by the KFONT-M5-002 fixture matrix: CR/LF/control, Hangul
+  `L/V/T/LV/LVT`, `Extend`, `SpacingMark`, `Prepend`, ZWJ,
+  Extended_Pictographic, regional indicators, emoji modifiers, variation
+  selectors, and bounded Indic_Conjunct_Break rows.
+- `GraphemeClusterer` reads segmentation properties from `UnicodeDataSet` and
+  emits UTF-16 ranges, code point ranges, cluster level, source text hash,
+  Unicode version, per-boundary GB rule IDs, and stable diagnostics.
+- `BasicTextSegmenter()` now delegates to the pinned grapheme segmenter by
+  default, using module-packaged Unicode 16.0 source extracts instead of
+  test-only report paths.
+- `unicode-segments.json` covers the six required fixture text files plus
+  `grapheme-crlf-control.txt` and `grapheme-prepend.txt`; it
+  records `text.unicode.invalid-scalar` and
+  `text.unicode.cluster-boundary-invalid` for the isolated surrogate refusal.
+- Grapheme tests assert `text.shaping.unicode-data-version-mismatch`,
+  `text.shaping.cluster-invariant-failed`, `text.unicode.invalid-scalar`,
+  `text.unicode.cluster-boundary-invalid`, and
+  `text.unicode.grapheme-rule-unsupported`, with explicit CR/LF/control and
+  Prepend fixture coverage.
+- The evidence report states that boundaries are not derived from the JDK
+  Unicode version and that ordinary validation stays offline.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests '*Grapheme*'
+rtk ./gradlew --no-daemon :font:text:test --tests '*Grapheme*' --rerun-tasks
+rtk ./gradlew --no-daemon :font:text:test --rerun-tasks
+rtk ./gradlew --no-daemon --rerun-tasks :font:text:test --tests '*UnicodeData*'
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Review:
+
+- Independent spec review verdict: `ACCEPT` after default-segmenter and
+  refusal-diagnostic remediation.
+- Independent code-quality review verdict: `Ready to merge: Yes` after the
+  runtime resource loader and CR/LF/control plus Prepend evidence fixes.
+
+Remaining gate: none for KFONT-M5-002 closeout. This remains bounded fixture
+evidence only and does not promote complete UAX #29, bidi, script itemization,
+shaping, paragraph, emoji rendering, color glyph rendering, or GPU text
+support.
 
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 

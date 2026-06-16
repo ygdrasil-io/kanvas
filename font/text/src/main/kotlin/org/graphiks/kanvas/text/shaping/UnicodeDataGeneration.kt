@@ -67,7 +67,7 @@ public data class UcdSourceManifest(
         append("{\n")
         append("  \"schemaVersion\": ").append(outputSchemaVersion).append(",\n")
         append("  \"dumpId\": \"unicode-data-manifest\",\n")
-        append("  \"ownerTickets\": [\"KFONT-M5-001\"],\n")
+        append("  \"ownerTickets\": [\"KFONT-M5-001\", \"KFONT-M5-002\"],\n")
         appendJsonField("unicodeVersion", unicodeVersion.value, comma = true)
         appendJsonField("outputSchemaVersion", outputSchemaVersion, comma = true)
         appendJsonField("generatorVersion", generatorVersion, comma = true)
@@ -161,6 +161,9 @@ public data class UnicodeRangeTable<T>(
  */
 public data class UnicodeEmojiProperties(
     public val emoji: UnicodeRangeTable<Boolean>,
+    public val emojiPresentation: UnicodeRangeTable<Boolean>,
+    public val emojiModifier: UnicodeRangeTable<Boolean>,
+    public val emojiModifierBase: UnicodeRangeTable<Boolean>,
     public val extendedPictographic: UnicodeRangeTable<Boolean>,
 )
 
@@ -177,7 +180,11 @@ public data class UnicodeSampleFact(
     public val generalCategory: String,
     public val defaultIgnorable: Boolean,
     public val emoji: Boolean,
+    public val emojiPresentation: Boolean,
+    public val emojiModifier: Boolean,
+    public val emojiModifierBase: Boolean,
     public val extendedPictographic: Boolean,
+    public val indicConjunctBreak: String,
     public val variationSelector: Boolean,
 )
 
@@ -199,6 +206,7 @@ public data class UnicodeDataSet(
     public val generalCategory: UnicodeRangeTable<String>,
     public val defaultIgnorable: UnicodeRangeTable<Boolean>,
     public val emojiProperties: UnicodeEmojiProperties,
+    public val indicConjunctBreak: UnicodeRangeTable<String>,
     public val variationSelector: UnicodeRangeTable<Boolean>,
     public val sampleFacts: List<UnicodeSampleFact>,
 ) {
@@ -214,7 +222,7 @@ public data class UnicodeDataSet(
         append("{\n")
         append("  \"schemaVersion\": ").append(sourceManifest.outputSchemaVersion).append(",\n")
         append("  \"dumpId\": \"unicode-data-seed\",\n")
-        append("  \"ownerTickets\": [\"KFONT-M5-001\"],\n")
+        append("  \"ownerTickets\": [\"KFONT-M5-001\", \"KFONT-M5-002\"],\n")
         appendJsonField("unicodeVersion", version.value, comma = true)
         appendJsonField("kind", "bounded-seed-fixture", comma = true)
         append("  \"defaultValue\": {\n")
@@ -225,6 +233,7 @@ public data class UnicodeDataSet(
         append(",\n")
         append("    \"generalCategory\": ").append(jsonString(generalCategory.defaultValue)).append(",\n")
         append("    \"graphemeClusterBreak\": ").append(jsonString(graphemeBreak.defaultValue)).append(",\n")
+        append("    \"indicConjunctBreak\": ").append(jsonString(indicConjunctBreak.defaultValue)).append(",\n")
         append("    \"lineBreak\": ").append(jsonString(lineBreak.defaultValue)).append(",\n")
         append("    \"script\": ").append(jsonString(script.defaultValue)).append(",\n")
         append("    \"scriptExtensions\": ").append(jsonStringList(scriptExtensions.defaultValue)).append(",\n")
@@ -240,6 +249,15 @@ public data class UnicodeDataSet(
         append("    \"emoji\": ")
         appendInlineBooleanRangeArray(emojiProperties.emoji.ranges)
         append(",\n")
+        append("    \"emojiModifier\": ")
+        appendInlineBooleanRangeArray(emojiProperties.emojiModifier.ranges)
+        append(",\n")
+        append("    \"emojiModifierBase\": ")
+        appendInlineBooleanRangeArray(emojiProperties.emojiModifierBase.ranges)
+        append(",\n")
+        append("    \"emojiPresentation\": ")
+        appendInlineBooleanRangeArray(emojiProperties.emojiPresentation.ranges)
+        append(",\n")
         append("    \"extendedPictographic\": ")
         appendInlineBooleanRangeArray(emojiProperties.extendedPictographic.ranges)
         append("\n  },\n")
@@ -248,6 +266,9 @@ public data class UnicodeDataSet(
         append(",\n")
         append("  \"graphemeClusterBreak\": ")
         appendInlineStringRangeArray(graphemeBreak.ranges)
+        append(",\n")
+        append("  \"indicConjunctBreak\": ")
+        appendInlineStringRangeArray(indicConjunctBreak.ranges)
         append(",\n")
         append("  \"lineBreak\": ")
         appendInlineStringRangeArray(lineBreak.ranges)
@@ -291,6 +312,7 @@ public data class UnicodeDataSet(
             generalCategory = generalCategory,
             defaultIgnorable = defaultIgnorable,
             emojiProperties = emojiProperties,
+            indicConjunctBreak = indicConjunctBreak,
             variationSelector = variationSelector,
         )
 }
@@ -330,7 +352,7 @@ public data class UnicodeDataVersionMismatchDiagnostic(
             append("{\n")
             append("  \"schemaVersion\": 1,\n")
             append("  \"dumpId\": \"unicode-data-version-mismatch-diagnostic\",\n")
-            append("  \"ownerTickets\": [\"KFONT-M5-001\"],\n")
+            append("  \"ownerTickets\": [\"KFONT-M5-001\", \"KFONT-M5-002\"],\n")
             append("  \"diagnostic\": {\n")
             appendJsonField("code", diagnostic.code, comma = true, indent = "    ")
             appendJsonField("severity", "refusal", comma = true, indent = "    ")
@@ -401,6 +423,11 @@ public object PinnedUnicodeDataGenerator : UnicodeDataGenerator {
             ),
         )
         val emojiProperties = parseEmojiProperties(inputByName.getValue("emoji/emoji-data.txt"))
+        val indicConjunctBreak = UnicodeRangeTable(
+            propertyName = "Indic_Conjunct_Break",
+            defaultValue = "None",
+            ranges = parseIndicConjunctBreakRanges(inputByName.getValue("DerivedCoreProperties.txt")),
+        )
         val variationSelector = UnicodeRangeTable(
             propertyName = "Variation_Selector",
             defaultValue = false,
@@ -418,6 +445,7 @@ public object PinnedUnicodeDataGenerator : UnicodeDataGenerator {
             generalCategory = generalCategory,
             defaultIgnorable = defaultIgnorable,
             emojiProperties = emojiProperties,
+            indicConjunctBreak = indicConjunctBreak,
             variationSelector = variationSelector,
         )
         val tableHashes = generatedTableHashes(
@@ -430,6 +458,7 @@ public object PinnedUnicodeDataGenerator : UnicodeDataGenerator {
             generalCategory = generalCategory,
             defaultIgnorable = defaultIgnorable,
             emojiProperties = emojiProperties,
+            indicConjunctBreak = indicConjunctBreak,
             variationSelector = variationSelector,
         )
         val manifest = UcdSourceManifest(
@@ -445,7 +474,7 @@ public object PinnedUnicodeDataGenerator : UnicodeDataGenerator {
             generatorOptions = linkedMapOf(
                 "mode" to "bounded-seed-fixture",
                 "ordinaryValidationPolicy" to "offline",
-                "sourceCoverage" to "sample-facts-only",
+                "sourceCoverage" to "bounded-kfont-m5-002-fixture-matrix",
             ),
             generatedTableHashes = tableHashes,
             outputSchemaVersion = OutputSchemaVersion,
@@ -462,6 +491,7 @@ public object PinnedUnicodeDataGenerator : UnicodeDataGenerator {
             generalCategory = generalCategory,
             defaultIgnorable = defaultIgnorable,
             emojiProperties = emojiProperties,
+            indicConjunctBreak = indicConjunctBreak,
             variationSelector = variationSelector,
             sampleFacts = sampleFacts,
         )
@@ -506,18 +536,32 @@ private val OrderedTableNames = listOf(
     "emojiProperties",
     "generalCategory",
     "graphemeClusterBreak",
+    "indicConjunctBreak",
     "lineBreak",
     "script",
     "scriptExtensions",
     "variationSelector",
 )
-private val SampleCodePoints = listOf(0x0041, 0x0301, 0x05D0, 0x0640, 0x1F600, 0xFE0F)
+private val SampleCodePoints = listOf(
+    0x0041,
+    0x0061,
+    0x0301,
+    0x05D0,
+    0x0640,
+    0x0915,
+    0x094D,
+    0x1F3FB,
+    0x1F466,
+    0x1F600,
+    0xFE0F,
+)
 private val UnicodeDataNonClaims = listOf(
     "bounded-seed-fixture-only",
     "no-complete-ucd-claim",
     "no-uax9-conformance-claim",
-    "no-uax14-uax29-conformance-claim",
-    "no-segmentation-or-bidi-replacement-claim",
+    "no-uax14-conformance-claim",
+    "no-complete-uax29-claim",
+    "no-bidi-or-script-itemizer-replacement-claim",
     "no-shaping-support-promotion",
     "no-paragraph-support-claim",
     "no-gpu-text-route-claim",
@@ -592,12 +636,43 @@ private fun parseEmojiProperties(input: UcdInputFile): UnicodeEmojiProperties =
             defaultValue = false,
             ranges = parseBooleanPropertyRanges(input, "Emoji"),
         ),
+        emojiPresentation = UnicodeRangeTable(
+            propertyName = "Emoji_Presentation",
+            defaultValue = false,
+            ranges = parseBooleanPropertyRanges(input, "Emoji_Presentation"),
+        ),
+        emojiModifier = UnicodeRangeTable(
+            propertyName = "Emoji_Modifier",
+            defaultValue = false,
+            ranges = parseBooleanPropertyRanges(input, "Emoji_Modifier"),
+        ),
+        emojiModifierBase = UnicodeRangeTable(
+            propertyName = "Emoji_Modifier_Base",
+            defaultValue = false,
+            ranges = parseBooleanPropertyRanges(input, "Emoji_Modifier_Base"),
+        ),
         extendedPictographic = UnicodeRangeTable(
             propertyName = "Extended_Pictographic",
             defaultValue = false,
             ranges = parseBooleanPropertyRanges(input, "Extended_Pictographic"),
         ),
     )
+
+private fun parseIndicConjunctBreakRanges(input: UcdInputFile): List<UnicodeRange<String>> =
+    input.content.lineSequence().mapIndexedNotNull { index, line ->
+        val payload = line.withoutUcdComment()
+        if (payload.isEmpty()) {
+            null
+        } else {
+            val parts = payload.split(';').map { it.trim() }
+            if (parts.size >= 3 && parts[1] == "InCB") {
+                val (start, endInclusive) = parseCodePointRange(parts[0], input.fileName, index + 1)
+                UnicodeRange(start, endInclusive, parts[2])
+            } else {
+                null
+            }
+        }
+    }.toList().sortedByRange()
 
 private data class PropertyRow(
     val start: Int,
@@ -635,6 +710,7 @@ private fun sampleFacts(
     generalCategory: UnicodeRangeTable<String>,
     defaultIgnorable: UnicodeRangeTable<Boolean>,
     emojiProperties: UnicodeEmojiProperties,
+    indicConjunctBreak: UnicodeRangeTable<String>,
     variationSelector: UnicodeRangeTable<Boolean>,
 ): List<UnicodeSampleFact> =
     SampleCodePoints.map { codePoint ->
@@ -648,7 +724,11 @@ private fun sampleFacts(
             generalCategory = generalCategory.valueAt(codePoint),
             defaultIgnorable = defaultIgnorable.valueAt(codePoint),
             emoji = emojiProperties.emoji.valueAt(codePoint),
+            emojiPresentation = emojiProperties.emojiPresentation.valueAt(codePoint),
+            emojiModifier = emojiProperties.emojiModifier.valueAt(codePoint),
+            emojiModifierBase = emojiProperties.emojiModifierBase.valueAt(codePoint),
             extendedPictographic = emojiProperties.extendedPictographic.valueAt(codePoint),
+            indicConjunctBreak = indicConjunctBreak.valueAt(codePoint),
             variationSelector = variationSelector.valueAt(codePoint),
         )
     }
@@ -663,6 +743,7 @@ private fun generatedTableHashes(
     generalCategory: UnicodeRangeTable<String>,
     defaultIgnorable: UnicodeRangeTable<Boolean>,
     emojiProperties: UnicodeEmojiProperties,
+    indicConjunctBreak: UnicodeRangeTable<String>,
     variationSelector: UnicodeRangeTable<Boolean>,
 ): Map<String, String> {
     val hashes = linkedMapOf<String, String>()
@@ -678,6 +759,7 @@ private fun generatedTableHashes(
             generalCategory = generalCategory,
             defaultIgnorable = defaultIgnorable,
             emojiProperties = emojiProperties,
+            indicConjunctBreak = indicConjunctBreak,
             variationSelector = variationSelector,
         ).toByteArray(Charsets.UTF_8).sha256Hex()
     }
@@ -695,6 +777,7 @@ private fun tableJsonFor(
     generalCategory: UnicodeRangeTable<String>,
     defaultIgnorable: UnicodeRangeTable<Boolean>,
     emojiProperties: UnicodeEmojiProperties,
+    indicConjunctBreak: UnicodeRangeTable<String>,
     variationSelector: UnicodeRangeTable<Boolean>,
 ): String = buildString {
     append("{\n")
@@ -719,6 +802,15 @@ private fun tableJsonFor(
             append("  \"emoji\": ")
             appendInlineBooleanRangeArray(emojiProperties.emoji.ranges)
             append(",\n")
+            append("  \"emojiModifier\": ")
+            appendInlineBooleanRangeArray(emojiProperties.emojiModifier.ranges)
+            append(",\n")
+            append("  \"emojiModifierBase\": ")
+            appendInlineBooleanRangeArray(emojiProperties.emojiModifierBase.ranges)
+            append(",\n")
+            append("  \"emojiPresentation\": ")
+            appendInlineBooleanRangeArray(emojiProperties.emojiPresentation.ranges)
+            append(",\n")
             append("  \"extendedPictographic\": ")
             appendInlineBooleanRangeArray(emojiProperties.extendedPictographic.ranges)
         }
@@ -731,6 +823,11 @@ private fun tableJsonFor(
             appendJsonField("defaultValue", graphemeBreak.defaultValue, comma = true)
             append("  \"ranges\": ")
             appendInlineStringRangeArray(graphemeBreak.ranges)
+        }
+        "indicConjunctBreak" -> {
+            appendJsonField("defaultValue", indicConjunctBreak.defaultValue, comma = true)
+            append("  \"ranges\": ")
+            appendInlineStringRangeArray(indicConjunctBreak.ranges)
         }
         "lineBreak" -> {
             appendJsonField("defaultValue", lineBreak.defaultValue, comma = true)
@@ -770,7 +867,11 @@ private fun UnicodeSampleFact.toCanonicalJson(): String = buildString {
     append(jsonString("generalCategory")).append(": ").append(jsonString(generalCategory)).append(", ")
     append(jsonString("defaultIgnorable")).append(": ").append(defaultIgnorable).append(", ")
     append(jsonString("emoji")).append(": ").append(emoji).append(", ")
+    append(jsonString("emojiPresentation")).append(": ").append(emojiPresentation).append(", ")
+    append(jsonString("emojiModifier")).append(": ").append(emojiModifier).append(", ")
+    append(jsonString("emojiModifierBase")).append(": ").append(emojiModifierBase).append(", ")
     append(jsonString("extendedPictographic")).append(": ").append(extendedPictographic).append(", ")
+    append(jsonString("indicConjunctBreak")).append(": ").append(jsonString(indicConjunctBreak)).append(", ")
     append(jsonString("variationSelector")).append(": ").append(variationSelector)
     append("}")
 }
@@ -823,6 +924,9 @@ private fun StringBuilder.appendInlineStringListRangeArray(ranges: List<UnicodeR
 private fun StringBuilder.appendEmojiDefaultValue(emojiProperties: UnicodeEmojiProperties) {
     append("{")
     append(jsonString("emoji")).append(": ").append(emojiProperties.emoji.defaultValue).append(", ")
+    append(jsonString("emojiModifier")).append(": ").append(emojiProperties.emojiModifier.defaultValue).append(", ")
+    append(jsonString("emojiModifierBase")).append(": ").append(emojiProperties.emojiModifierBase.defaultValue).append(", ")
+    append(jsonString("emojiPresentation")).append(": ").append(emojiProperties.emojiPresentation.defaultValue).append(", ")
     append(jsonString("extendedPictographic")).append(": ")
         .append(emojiProperties.extendedPictographic.defaultValue)
     append("}")

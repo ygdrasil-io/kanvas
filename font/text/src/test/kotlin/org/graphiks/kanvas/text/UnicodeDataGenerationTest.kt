@@ -40,7 +40,11 @@ class UnicodeDataGenerationTest {
         assertTrue(first.tableJson("defaultIgnorable").contains("\"defaultValue\": false"))
         assertTrue(
             first.tableJson("emojiProperties")
-                .contains("\"defaultValue\": {\"emoji\": false, \"extendedPictographic\": false}"),
+                .contains(
+                    "\"defaultValue\": {\"emoji\": false, \"emojiModifier\": false, " +
+                        "\"emojiModifierBase\": false, \"emojiPresentation\": false, " +
+                        "\"extendedPictographic\": false}",
+                ),
         )
         listOf(
             first.toManifestJson(),
@@ -52,7 +56,8 @@ class UnicodeDataGenerationTest {
                 textRange = 0..1,
             ).toCanonicalJson(),
         ).forEach { generatedJson ->
-            assertTrue(generatedJson.contains("\"no-segmentation-or-bidi-replacement-claim\""))
+            assertTrue(generatedJson.contains("\"no-bidi-or-script-itemizer-replacement-claim\""))
+            assertTrue(generatedJson.contains("\"no-complete-uax29-claim\""))
             assertTrue(generatedJson.contains("\"no-paragraph-support-claim\""))
         }
         assertEquals("16.0.0", first.version.value)
@@ -69,6 +74,7 @@ class UnicodeDataGenerationTest {
             "emojiProperties",
             "generalCategory",
             "graphemeClusterBreak",
+            "indicConjunctBreak",
             "lineBreak",
             "script",
             "scriptExtensions",
@@ -87,9 +93,14 @@ class UnicodeDataGenerationTest {
         assertEquals("Latn", facts.getValue(0x0041).script)
         assertEquals("L", facts.getValue(0x0041).bidiClass)
         assertEquals("Lu", facts.getValue(0x0041).generalCategory)
+        assertEquals("Ll", facts.getValue(0x0061).generalCategory)
         assertEquals("Extend", facts.getValue(0x0301).graphemeClusterBreak)
         assertEquals("R", facts.getValue(0x05D0).bidiClass)
         assertEquals(listOf("Arab", "Mand", "Syrc"), facts.getValue(0x0640).scriptExtensions)
+        assertEquals("Consonant", facts.getValue(0x0915).indicConjunctBreak)
+        assertEquals("Linker", facts.getValue(0x094D).indicConjunctBreak)
+        assertTrue(facts.getValue(0x1F3FB).emojiModifier)
+        assertTrue(facts.getValue(0x1F466).emojiModifierBase)
         assertTrue(facts.getValue(0x1F600).emoji)
         assertTrue(facts.getValue(0x1F600).extendedPictographic)
         assertTrue(facts.getValue(0xFE0F).variationSelector)

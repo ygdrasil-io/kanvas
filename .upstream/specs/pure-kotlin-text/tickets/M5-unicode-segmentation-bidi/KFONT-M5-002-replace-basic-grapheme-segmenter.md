@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M5-002"
 title: "Replace basic grapheme segmenter"
-status: "proposed"
+status: "done"
 milestone: "M5"
 priority: "P0"
 owner_area: "unicode"
@@ -68,11 +68,11 @@ data class GraphemeSegmentationResult(
 
 ## Acceptance Criteria
 
-- [ ] UAX #29 fixture strings produce stable cluster boundaries for ASCII, accented Latin, Hangul, combining marks, emoji modifier, emoji ZWJ, regional indicator, and Indic virama cases.
-- [ ] Cluster dumps record Unicode version, original UTF-16 ranges, code point ranges, and per-boundary rule decisions.
-- [ ] Variation selector sequences stay inside one cluster when the pinned data marks the selector appropriately.
-- [ ] Malformed input with isolated surrogate code units refuses or records a precise diagnostic without corrupting following cluster ranges.
-- [ ] Repeated runs on the same input produce byte-identical `unicode-segments.json`.
+- [x] UAX #29 fixture strings produce stable cluster boundaries for ASCII, accented Latin, Hangul, combining marks, emoji modifier, emoji ZWJ, regional indicator, and Indic virama cases.
+- [x] Cluster dumps record Unicode version, original UTF-16 ranges, code point ranges, and per-boundary rule decisions.
+- [x] Variation selector sequences stay inside one cluster when the pinned data marks the selector appropriately.
+- [x] Malformed input with isolated surrogate code units refuses or records a precise diagnostic without corrupting following cluster ranges.
+- [x] Repeated runs on the same input produce byte-identical `unicode-segments.json`.
 
 ## Required Evidence
 
@@ -102,8 +102,10 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*Grapheme*'
 
 ## Status Notes
 
-- `proposed`: Grapheme cluster behavior depends on the pinned Unicode data ticket.
-- Move to `ready` only after target fixture strings and dump fields are reviewed.
+- `done` (2026-06-16): Bounded Unicode 16.0 source extracts were expanded only with reviewed KFONT-M5-002 rows for grapheme fixtures, and `GraphemeClusterer` now segments from `UnicodeDataSet` without ICU, JDK Unicode segmenters, platform APIs, or hardcoded property ranges.
+- `done` (2026-06-16): `BasicTextSegmenter()` now delegates to the pinned grapheme segmenter by default through module-packaged Unicode 16.0 resources; the explicit `BasicTextSegmenter(UnicodeData)` constructor keeps the previous bounded legacy segmenter available for compatibility.
+- `done` (2026-06-16): `GraphemeSegmentationTest` asserts ASCII, Hangul, CR/LF/control, Prepend, combining mark, emoji modifier, emoji ZWJ, regional indicator, Indic virama, variation selector, default segmenter replacement, invalid scalar, `text.unicode.cluster-boundary-invalid`, `text.unicode.grapheme-rule-unsupported`, version mismatch, cluster invariant, and byte-identical `unicode-segments.json` evidence.
+- Independent spec review accepted the implementation after remediation. Independent code-quality review accepted after the resource loader and CR/LF/control plus Prepend evidence fixes. Remaining gate: none for KFONT-M5-002 closeout; this remains bounded fixture evidence and does not promote shaping, paragraph, complete UAX #29, or GPU text support.
 
 ## Linear Labels
 
