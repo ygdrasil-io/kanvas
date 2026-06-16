@@ -244,6 +244,7 @@
           "reports/pure-kotlin-text/fixture-evidence-manifest.json"
         ],
         "deterministicDumps": [
+          "reports/pure-kotlin-text/font-catalog.json",
           "reports/pure-kotlin-text/font-source.json",
           "reports/pure-kotlin-text/typeface-id.json"
         ],
@@ -257,6 +258,7 @@
         ]
       },
       "requiredEvidenceGates": [
+        "Add bundled Hebrew/Arabic, Devanagari/Thai, CJK, and optional emoji-capable deterministic catalog rows before fallback promotion.",
         "Add cluster-safe fallback run dumps with selected and rejected font facts.",
         "Add CPU oracle evidence for fallback decisions before promotion."
       ],

@@ -1418,6 +1418,479 @@ fun defaultTypefaceIdentityReport(): TypefaceIdentityReport {
     )
 }
 
+data class FontCatalogDiagnostic(
+    val code: String,
+    val detail: String? = null,
+    val fixtureId: String? = null,
+    val familyName: String? = null,
+    val styleName: String? = null,
+) {
+    init {
+        require(code.isStableDiagnosticCode()) { "code must be a stable one-line diagnostic code." }
+        require(fixtureId == null || fixtureId.isStableManifestToken()) {
+            "fixtureId must be a stable manifest token when present."
+        }
+        require(familyName == null || familyName.isStableManifestString()) {
+            "familyName must be a stable one-line string when present."
+        }
+        require(styleName == null || styleName.isStableManifestString()) {
+            "styleName must be a stable one-line string when present."
+        }
+        require(detail == null || detail.isStableManifestString()) {
+            "detail must be a stable one-line string when present."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("code", code, comma = true)
+        append("fixtureId".evidenceQuoted()).append(":").append(fixtureId.toFontJsonNullableString()).append(",")
+        append("familyName".evidenceQuoted()).append(":").append(familyName.toFontJsonNullableString()).append(",")
+        append("styleName".evidenceQuoted()).append(":").append(styleName.toFontJsonNullableString()).append(",")
+        append("detail".evidenceQuoted()).append(":").append(detail.toFontJsonNullableString())
+        append("}")
+    }
+}
+
+class BundledFontCatalogInput(
+    val manifestEntry: BundledFontFixtureManifestEntry,
+    val typefacePreimage: TypefaceIdentityPreimage,
+    genericFamilies: List<String> = emptyList(),
+    scriptCoverage: List<String> = emptyList(),
+    localeHints: List<String> = emptyList(),
+    colorFormats: List<String> = emptyList(),
+    val emojiCapable: Boolean = false,
+    val colorCapable: Boolean = false,
+) {
+    val genericFamilies: List<String> = genericFamilies.normalizedCatalogFacts("genericFamilies")
+    val scriptCoverage: List<String> = scriptCoverage.normalizedCatalogFacts("scriptCoverage")
+    val localeHints: List<String> = localeHints.normalizedCatalogFacts("localeHints")
+    val colorFormats: List<String> = colorFormats.normalizedCatalogFacts("colorFormats")
+}
+
+class BundledFontCatalogEntry(
+    val fixtureId: String,
+    val sourceKind: String,
+    val sourceId: FontSourceID,
+    val typefaceId: TypefaceID,
+    val familyName: String,
+    val styleName: String,
+    val postScriptName: String?,
+    genericFamilies: List<String>,
+    scriptCoverage: List<String>,
+    localeHints: List<String>,
+    colorFormats: List<String>,
+    val emojiCapable: Boolean,
+    val colorCapable: Boolean,
+    val collectionIndex: Int,
+    val outlineFormat: String,
+    val scalerMode: String,
+    val contentSha256: String,
+    val relativePath: String,
+    val licenseId: String?,
+    val licensePath: String?,
+    val provenance: String?,
+    val paletteIndex: Int?,
+    variationAxes: List<String>,
+    diagnostics: List<FontCatalogDiagnostic> = emptyList(),
+) {
+    val genericFamilies: List<String> = genericFamilies.normalizedCatalogFacts("genericFamilies")
+    val scriptCoverage: List<String> = scriptCoverage.normalizedCatalogFacts("scriptCoverage")
+    val localeHints: List<String> = localeHints.normalizedCatalogFacts("localeHints")
+    val colorFormats: List<String> = colorFormats.normalizedCatalogFacts("colorFormats")
+    val variationAxes: List<String> = variationAxes.normalizedCatalogFacts("variationAxes")
+    val diagnostics: List<FontCatalogDiagnostic> = diagnostics.sortedWith(
+        compareBy<FontCatalogDiagnostic> { it.code }
+            .thenBy { it.fixtureId.orEmpty() }
+            .thenBy { it.familyName.orEmpty() }
+            .thenBy { it.styleName.orEmpty() }
+            .thenBy { it.detail.orEmpty() },
+    )
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("fixtureId", fixtureId, comma = true)
+        appendFontCompactJsonField("sourceKind", sourceKind, comma = true)
+        appendFontCompactJsonField("sourceId", sourceId.value.toHexDashString(), comma = true)
+        appendFontCompactJsonField("typefaceId", typefaceId.value.toHexDashString(), comma = true)
+        appendFontCompactJsonField("familyName", familyName, comma = true)
+        appendFontCompactJsonField("styleName", styleName, comma = true)
+        append("postScriptName".evidenceQuoted()).append(":").append(postScriptName.toFontJsonNullableString()).append(",")
+        appendStringArrayField("genericFamilies", genericFamilies, comma = true)
+        appendStringArrayField("scriptCoverage", scriptCoverage, comma = true)
+        appendStringArrayField("localeHints", localeHints, comma = true)
+        appendStringArrayField("colorFormats", colorFormats, comma = true)
+        appendFontCompactJsonField("emojiCapable", emojiCapable, comma = true)
+        appendFontCompactJsonField("colorCapable", colorCapable, comma = true)
+        append("collectionIndex".evidenceQuoted()).append(":").append(collectionIndex).append(",")
+        appendFontCompactJsonField("outlineFormat", outlineFormat, comma = true)
+        appendFontCompactJsonField("scalerMode", scalerMode, comma = true)
+        appendFontCompactJsonField("contentSha256", contentSha256, comma = true)
+        appendFontCompactJsonField("relativePath", relativePath, comma = true)
+        append("licenseId".evidenceQuoted()).append(":").append(licenseId.toFontJsonNullableString()).append(",")
+        append("licensePath".evidenceQuoted()).append(":").append(licensePath.toFontJsonNullableString()).append(",")
+        append("provenance".evidenceQuoted()).append(":").append(provenance.toFontJsonNullableString()).append(",")
+        append("paletteIndex".evidenceQuoted()).append(":").append(paletteIndex?.toString() ?: "null").append(",")
+        appendStringArrayField("variationAxes", variationAxes, comma = true)
+        append("diagnostics".evidenceQuoted()).append(":")
+        append(diagnostics.joinToString(prefix = "[", postfix = "]", separator = ",") { it.toCanonicalJson() })
+        append("}")
+    }
+}
+
+class BundledFontCatalog(
+    val generation: Int,
+    entries: List<BundledFontCatalogEntry>,
+    diagnostics: List<FontCatalogDiagnostic>,
+    nonClaims: List<String> = BundledFontCatalogNonClaims,
+    val claimPromotionAllowed: Boolean = false,
+) {
+    val catalogId: String = "font-catalog"
+    val entries: List<BundledFontCatalogEntry> = entries.sortedWith(
+        compareBy<BundledFontCatalogEntry> { it.familyName.lowercase() }
+            .thenBy { it.familyName }
+            .thenBy { it.styleName.lowercase() }
+            .thenBy { it.styleName }
+            .thenBy { it.fixtureId },
+    )
+    val diagnostics: List<FontCatalogDiagnostic> = diagnostics.sortedWith(
+        compareBy<FontCatalogDiagnostic> { it.code }
+            .thenBy { it.fixtureId.orEmpty() }
+            .thenBy { it.familyName.orEmpty() }
+            .thenBy { it.styleName.orEmpty() }
+            .thenBy { it.detail.orEmpty() },
+    )
+    val nonClaims: List<String> = nonClaims.normalizedCatalogFacts("nonClaims")
+    val entryCount: Int
+        get() = entries.size
+    val catalogSha256: String
+        get() = catalogPayloadJson().toByteArray(Charsets.UTF_8).sha256Hex()
+
+    init {
+        require(generation >= 0) { "generation must be non-negative." }
+        require(!claimPromotionAllowed) {
+            "Bundled font catalogs cannot promote fallback, shaping, rendering, glyph, parser, or GPU claims."
+        }
+    }
+
+    fun toCanonicalJson(): CanonicalFontIdentityJson = CanonicalFontIdentityJson(
+        buildString {
+            append("{")
+            appendFontCompactJsonField("schema", BUNDLED_FONT_CATALOG_SCHEMA, comma = true)
+            appendFontCompactJsonField("catalogId", catalogId, comma = true)
+            append("generation".evidenceQuoted()).append(":").append(generation).append(",")
+            append("entryCount".evidenceQuoted()).append(":").append(entryCount).append(",")
+            appendFontCompactJsonField("catalogSha256", catalogSha256, comma = true)
+            append("entries".evidenceQuoted()).append(":")
+            append(entries.joinToString(prefix = "[", postfix = "]", separator = ",") { it.toCanonicalJson() })
+            append(",")
+            append("diagnostics".evidenceQuoted()).append(":")
+            append(diagnostics.joinToString(prefix = "[", postfix = "]", separator = ",") { it.toCanonicalJson() })
+            append(",")
+            appendStringArrayField("nonClaims", nonClaims, comma = true)
+            appendFontCompactJsonField("claimPromotionAllowed", claimPromotionAllowed, comma = false)
+            append("}")
+        },
+    )
+
+    private fun catalogPayloadJson(): String = buildString {
+        append("{")
+        append("generation".evidenceQuoted()).append(":").append(generation).append(",")
+        append("entries".evidenceQuoted()).append(":")
+        append(entries.joinToString(prefix = "[", postfix = "]", separator = ",") { it.toCanonicalJson() })
+        append(",")
+        append("diagnostics".evidenceQuoted()).append(":")
+        append(diagnostics.joinToString(prefix = "[", postfix = "]", separator = ",") { it.toCanonicalJson() })
+        append("}")
+    }
+}
+
+object BundledFontCatalogBuilder {
+    fun build(
+        generation: Int = 1,
+        inputs: List<BundledFontCatalogInput>,
+    ): BundledFontCatalog {
+        val entries = mutableListOf<BundledFontCatalogEntry>()
+        val diagnostics = mutableListOf<FontCatalogDiagnostic>()
+        val seenFaces = linkedSetOf<String>()
+        val orderedInputs = inputs.sortedWith(
+            compareBy<BundledFontCatalogInput> { it.typefacePreimage.familyName.lowercase() }
+                .thenBy { it.typefacePreimage.familyName }
+                .thenBy { it.typefacePreimage.styleName.lowercase() }
+                .thenBy { it.typefacePreimage.styleName }
+                .thenBy { it.manifestEntry.fixtureId },
+        )
+
+        for (input in orderedInputs) {
+            val manifest = input.manifestEntry
+            val typeface = input.typefacePreimage
+            val familyName = typeface.familyName.trim()
+            val styleName = typeface.styleName.trim()
+            val faceKey = buildString {
+                append(familyName.familyKey())
+                append('|')
+                append(styleName.lowercase())
+                append('|')
+                append(typeface.collectionIndex)
+            }
+
+            if (manifest.sourceKind.isHostDependentByDefault()) {
+                diagnostics += FontCatalogDiagnostic(
+                    code = "font.source.host-dependent",
+                    detail = "Host-scanned catalog entries remain non-normative until bytes are captured.",
+                    fixtureId = manifest.fixtureId,
+                    familyName = familyName,
+                    styleName = styleName,
+                )
+                continue
+            }
+
+            if (!seenFaces.add(faceKey)) {
+                diagnostics += FontCatalogDiagnostic(
+                    code = "font.catalog.duplicate-face",
+                    detail = "Duplicate family/style rows keep the first deterministic entry.",
+                    fixtureId = manifest.fixtureId,
+                    familyName = familyName,
+                    styleName = styleName,
+                )
+                continue
+            }
+
+            if (
+                manifest.licenseId == null ||
+                manifest.licensePath == null ||
+                manifest.provenance == null ||
+                manifest.contentSha256 == null ||
+                manifest.byteLength == null ||
+                manifest.relativePath == null
+            ) {
+                diagnostics += FontCatalogDiagnostic(
+                    code = "font.catalog.provenance-missing",
+                    detail = "Catalog entries require license, provenance, path, SHA-256, and byte length facts.",
+                    fixtureId = manifest.fixtureId,
+                    familyName = familyName,
+                    styleName = styleName,
+                )
+            }
+
+            val entryDiagnostics = buildList {
+                addAll(
+                    manifest.diagnostics.map { diagnostic ->
+                        FontCatalogDiagnostic(
+                            code = diagnostic.code,
+                            detail = diagnostic.detail,
+                            fixtureId = manifest.fixtureId,
+                            familyName = familyName,
+                            styleName = styleName,
+                        )
+                    },
+                )
+                addAll(
+                    typeface.diagnostics.map { diagnostic ->
+                        FontCatalogDiagnostic(
+                            code = diagnostic.code,
+                            detail = diagnostic.detail,
+                            fixtureId = manifest.fixtureId,
+                            familyName = familyName,
+                            styleName = styleName,
+                        )
+                    },
+                )
+                if (
+                    typeface.outlineFormat != TypefaceOutlineFormat.TRUE_TYPE_GLYF &&
+                    typeface.outlineFormat != TypefaceOutlineFormat.CFF &&
+                    typeface.outlineFormat != TypefaceOutlineFormat.CFF2 &&
+                    none { it.code == "font.outline-format-unsupported" }
+                ) {
+                    add(
+                        FontCatalogDiagnostic(
+                            code = "font.outline-format-unsupported",
+                            detail = "Catalog entries require a supported outline format.",
+                            fixtureId = manifest.fixtureId,
+                            familyName = familyName,
+                            styleName = styleName,
+                        ),
+                    )
+                }
+            }.sortedWith(
+                compareBy<FontCatalogDiagnostic> { it.code }
+                    .thenBy { it.fixtureId.orEmpty() }
+                    .thenBy { it.familyName.orEmpty() }
+                    .thenBy { it.styleName.orEmpty() }
+                    .thenBy { it.detail.orEmpty() },
+            )
+
+            diagnostics += entryDiagnostics
+            entries += BundledFontCatalogEntry(
+                fixtureId = manifest.fixtureId,
+                sourceKind = manifest.sourceKind.serializedName,
+                sourceId = typeface.sourceId,
+                typefaceId = typeface.typefaceId(),
+                familyName = familyName,
+                styleName = styleName,
+                postScriptName = typeface.postScriptName,
+                genericFamilies = input.genericFamilies,
+                scriptCoverage = input.scriptCoverage,
+                localeHints = input.localeHints,
+                colorFormats = input.colorFormats,
+                emojiCapable = input.emojiCapable,
+                colorCapable = input.colorCapable,
+                collectionIndex = typeface.collectionIndex,
+                outlineFormat = typeface.outlineFormat.serializedName,
+                scalerMode = typeface.scalerMode.serializedName,
+                contentSha256 = manifest.contentSha256 ?: typeface.toCanonicalJson().toByteArray(Charsets.UTF_8).sha256Hex(),
+                relativePath = manifest.relativePath ?: "",
+                licenseId = manifest.licenseId,
+                licensePath = manifest.licensePath,
+                provenance = manifest.provenance,
+                paletteIndex = typeface.palette?.index,
+                variationAxes = typeface.variationCoordinates.map { it.axisTag },
+                diagnostics = entryDiagnostics,
+            )
+        }
+
+        return BundledFontCatalog(
+            generation = generation,
+            entries = entries,
+            diagnostics = diagnostics.distinctBy { diagnostic ->
+                listOf(
+                    diagnostic.code,
+                    diagnostic.fixtureId.orEmpty(),
+                    diagnostic.familyName.orEmpty(),
+                    diagnostic.styleName.orEmpty(),
+                    diagnostic.detail.orEmpty(),
+                )
+            },
+        )
+    }
+}
+
+fun defaultBundledFontCatalog(): BundledFontCatalog =
+    BundledFontCatalogBuilder.build(
+        generation = 1,
+        inputs = defaultBundledFontCatalogInputs(),
+    )
+
+object BundledFontCatalogWriter {
+    fun writeCatalogJson(
+        catalog: BundledFontCatalog = defaultBundledFontCatalog(),
+    ): CanonicalFontIdentityJson = CanonicalFontIdentityJson("${catalog.toCanonicalJson().value}\n")
+}
+
+private data class DefaultBundledCatalogFixtureSpec(
+    val fixtureId: String,
+    val declaredName: String,
+    val familyName: String,
+    val styleName: String,
+    val postScriptName: String,
+    val genericFamilies: List<String>,
+    val scriptCoverage: List<String>,
+    val localeHints: List<String>,
+    val selectedCMap: TypefaceCMapSelection,
+    val outlineFormat: TypefaceOutlineFormat,
+    val scalerMode: TypefaceScalerMode,
+    val variationCoordinates: List<TypefaceVariationCoordinate> = emptyList(),
+)
+
+private fun defaultBundledFontCatalogInputs(): List<BundledFontCatalogInput> {
+    val manifestById = defaultFontFixtureManifest().entries.associateBy { it.fixtureId }
+    val unicodeCMap = TypefaceCMapSelection(
+        platformId = 3,
+        encodingId = 10,
+        format = 12,
+        language = 0,
+        unicode = true,
+    )
+    val fixtures = listOf(
+        DefaultBundledCatalogFixtureSpec(
+            fixtureId = "single-ttf-liberation-sans",
+            declaredName = "Liberation Sans Regular",
+            familyName = "Liberation Sans",
+            styleName = "Regular",
+            postScriptName = "LiberationSans-Regular",
+            genericFamilies = listOf("sans-serif"),
+            scriptCoverage = listOf("Cyrillic", "Greek", "Latin"),
+            localeHints = listOf("en"),
+            selectedCMap = unicodeCMap,
+            outlineFormat = TypefaceOutlineFormat.TRUE_TYPE_GLYF,
+            scalerMode = TypefaceScalerMode.OUTLINE,
+        ),
+        DefaultBundledCatalogFixtureSpec(
+            fixtureId = "otf-cff-source-serif",
+            declaredName = "Source Serif 4 Regular",
+            familyName = "Source Serif 4",
+            styleName = "Regular",
+            postScriptName = "SourceSerif4-Regular",
+            genericFamilies = listOf("serif"),
+            scriptCoverage = listOf("Cyrillic", "Greek", "Latin"),
+            localeHints = listOf("en"),
+            selectedCMap = unicodeCMap,
+            outlineFormat = TypefaceOutlineFormat.CFF,
+            scalerMode = TypefaceScalerMode.OUTLINE,
+        ),
+        DefaultBundledCatalogFixtureSpec(
+            fixtureId = "variable-ttf-roboto-flex",
+            declaredName = "Roboto Flex Variable",
+            familyName = "Roboto Flex",
+            styleName = "Regular",
+            postScriptName = "RobotoFlex-Regular",
+            genericFamilies = listOf("sans-serif"),
+            scriptCoverage = listOf("Latin"),
+            localeHints = listOf("en"),
+            selectedCMap = unicodeCMap,
+            outlineFormat = TypefaceOutlineFormat.TRUE_TYPE_GLYF,
+            scalerMode = TypefaceScalerMode.OUTLINE,
+            variationCoordinates = listOf(TypefaceVariationCoordinate(axisTag = "wght", value = 400.0)),
+        ),
+    )
+
+    return fixtures.map { spec ->
+        val manifest = manifestById.getValue(spec.fixtureId)
+        val tableTags = manifest.coverageTags.mapNotNull { tag ->
+            tag.removePrefix("table:").takeIf { tag.startsWith("table:") }?.let { tableTag ->
+                when (tableTag) {
+                    "CFF" -> "CFF "
+                    "SVG" -> "SVG "
+                    else -> tableTag
+                }
+            }
+        }
+        val sourcePreimage = FontSourceIdentityPreimage(
+            provenance = FontSourceProvenance(
+                kind = manifest.sourceKind,
+                declaredName = spec.declaredName,
+                licenseId = manifest.licenseId,
+                originPath = manifest.relativePath,
+                hostDependent = manifest.sourceKind.isHostDependentByDefault(),
+            ),
+            contentSha256 = manifest.contentSha256,
+            byteLength = manifest.byteLength,
+            faceCount = manifest.faceCount,
+            tableTags = tableTags,
+            parserGeneration = 1,
+            diagnostics = manifest.diagnostics.map { FontSourceIdentityDiagnostic(it.code, it.detail) },
+        )
+        BundledFontCatalogInput(
+            manifestEntry = manifest,
+            typefacePreimage = typefaceIdentityPreimage(
+                sourceId = sourcePreimage.sourceId(),
+                collectionIndex = 0,
+                postScriptName = spec.postScriptName,
+                familyName = spec.familyName,
+                styleName = spec.styleName,
+                outlineFormat = spec.outlineFormat,
+                selectedCMap = spec.selectedCMap,
+                scalerMode = spec.scalerMode,
+                variationCoordinates = spec.variationCoordinates,
+                tableTags = tableTags,
+            ),
+            genericFamilies = spec.genericFamilies,
+            scriptCoverage = spec.scriptCoverage,
+            localeHints = spec.localeHints,
+        )
+    }
+}
+
 @JvmInline
 value class CanonicalFontIdentityJson(
     val value: String,
@@ -1939,6 +2412,22 @@ fun defaultFontDiagnosticTaxonomy(): FontDiagnosticTaxonomy = FontDiagnosticTaxo
     acceptedNamespaces = FontDiagnosticAcceptedNamespaces,
     codes = listOf(
         fontDiagnosticCode(
+            code = "font.catalog.duplicate-face",
+            namespace = "font.catalog",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.WARNING,
+            route = "fallback-catalog",
+            requiredFields = listOf("fixtureId", "familyName", "styleName"),
+        ),
+        fontDiagnosticCode(
+            code = "font.catalog.provenance-missing",
+            namespace = "font.catalog",
+            claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
+            severity = FontDiagnosticSeverity.ERROR,
+            route = "fallback-catalog",
+            requiredFields = listOf("fixtureId", "familyName", "styleName"),
+        ),
+        fontDiagnosticCode(
             code = "font.source.bytes-unavailable",
             namespace = "font.source",
             claimImpact = FontDiagnosticClaimImpact.TRACKED_GAP,
@@ -2250,6 +2739,9 @@ private const val FONT_IDENTITY_DUMP_DETERMINISM_SCHEMA =
 private const val FONT_FIXTURE_MANIFEST_SCHEMA =
     "org.graphiks.kanvas.font.FontFixtureManifest.v1"
 
+private const val BUNDLED_FONT_CATALOG_SCHEMA =
+    "org.graphiks.kanvas.font.BundledFontCatalog.v1"
+
 private const val FONT_DIAGNOSTIC_TAXONOMY_SCHEMA =
     "org.graphiks.kanvas.font.FontDiagnosticTaxonomy.v1"
 
@@ -2263,7 +2755,18 @@ private val FontFixtureManifestNonClaims: List<String> = listOf(
     "no-shaping-support-claim",
 )
 
+private val BundledFontCatalogNonClaims: List<String> = listOf(
+    "no-complete-target-support-claim",
+    "no-fallback-support-claim",
+    "no-hebrew-arabic-bundled-catalog-claim",
+    "no-devanagari-thai-bundled-catalog-claim",
+    "no-cjk-bundled-catalog-claim",
+    "no-emoji-bundled-catalog-claim",
+    "no-platform-font-fallback-claim",
+)
+
 private val FontDiagnosticAcceptedNamespaces: List<String> = listOf(
+    "font.catalog",
     "font.source",
     "font.sfnt",
     "font.scaler",
@@ -3663,6 +4166,13 @@ private fun StringBuilder.appendStringArrayField(
     append(":")
     append(values.joinToString(prefix = "[", postfix = "]", separator = ",") { value -> value.evidenceQuoted() })
     if (comma) append(",")
+}
+
+private fun List<String>.normalizedCatalogFacts(fieldName: String): List<String> {
+    require(all { value -> value.isNotBlank() && value.isStableManifestString() }) {
+        "$fieldName must use stable non-blank one-line strings."
+    }
+    return distinct().sorted()
 }
 
 private fun List<Pair<String, CanonicalFontIdentityJson>>.toDumpBytePreimage(): String =

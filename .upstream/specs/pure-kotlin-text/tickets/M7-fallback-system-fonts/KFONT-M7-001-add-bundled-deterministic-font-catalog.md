@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M7-001"
 title: "Add bundled deterministic font catalog"
-status: "proposed"
+status: "review"
 milestone: "M7"
 priority: "P0"
 owner_area: "fallback"
@@ -66,11 +66,11 @@ data class FontCatalogEntry(
 
 ## Acceptance Criteria
 
-- [ ] Two catalog loads from the same bundled font bytes produce byte-identical `font-catalog.json`.
-- [ ] Each catalog entry records source/typeface IDs, hashes, family/style/generic facts, script coverage, locale hints, emoji/color capability facts, variation axes, and provenance/license metadata.
-- [ ] Duplicate or conflicting face facts emit deterministic diagnostics and do not silently override earlier entries.
-- [ ] Catalog ordering is deterministic and independent of filesystem enumeration order.
-- [ ] Host-installed fonts are absent from the bundled deterministic catalog unless committed as fixture bytes.
+- [x] Two catalog loads from the same bundled font bytes produce byte-identical `font-catalog.json`.
+- [x] Each current catalog entry records source/typeface IDs, hashes, family/style/generic facts, script coverage, locale hints, emoji/color capability facts, variation axes, and provenance/license metadata.
+- [x] Duplicate or conflicting face facts emit deterministic diagnostics and do not silently override earlier entries.
+- [x] Catalog ordering is deterministic and independent of filesystem enumeration order.
+- [x] Host-installed fonts are absent from the bundled deterministic catalog unless committed as fixture bytes.
 
 ## Required Evidence
 
@@ -95,13 +95,18 @@ data class FontCatalogEntry(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test --tests '*FontCatalog*'
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontCatalog*'
+rtk ./gradlew --no-daemon :font:core:test --tests '*DiagnosticTaxonomy*'
+rtk ./gradlew --no-daemon :font:core:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
 ```
 
 ## Status Notes
 
 - `proposed`: Bundled catalog is the deterministic fallback foundation.
 - Move to `ready` only after catalog fields, fixture families, and provenance requirements are reviewed.
+- `review`: `font-catalog.json` now materializes a deterministic bundled catalog for current repo-owned Latin/CFF/variable fixtures with stable duplicate/provenance diagnostics, but Hebrew/Arabic, Devanagari/Thai, CJK, optional emoji-capable metadata, and a checked-in duplicate-family conflict golden remain open evidence gates before `done`.
 
 ## Linear Labels
 

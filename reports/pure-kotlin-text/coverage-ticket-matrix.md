@@ -545,6 +545,55 @@ Remaining gate: this is explicit scan skipped-file evidence only. It does not
 claim implicit system font scanning, bundled fallback catalog completeness,
 parser-backed glyph coverage, shaping fallback completeness, or GPU text-route
 support.
+
+### KFONT-M7-001: Add bundled deterministic font catalog
+
+Status: implemented as a bounded review slice.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCatalogTest.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontDiagnosticTaxonomyTest.kt`
+- `reports/pure-kotlin-text/font-catalog.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m7-001-font-catalog.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/KFONT-M7-001-add-bundled-deterministic-font-catalog.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `BundledFontCatalogBuilder` emits deterministic `font-catalog.json` output
+  for repo-owned bundled fixtures without consulting host font directories.
+- The checked-in dump records bundled source/typeface identities, content
+  hashes, family/style/generic facts, script-coverage labels, locale hints,
+  outline/scaler facts, variation-axis facts, and provenance/license metadata
+  for Liberation Sans, Source Serif 4, and Roboto Flex.
+- `FontCatalogTest` asserts byte-identical output across repeated loads and
+  shuffled input order, duplicate-face refusal, provenance-missing refusal,
+  required-table refusal passthrough, outline-format refusal passthrough, and
+  exclusion of host-dependent rows.
+- The diagnostic taxonomy now reserves `font.catalog.duplicate-face` and
+  `font.catalog.provenance-missing` under a dedicated `font.catalog`
+  namespace.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontCatalog*'
+rtk ./gradlew --no-daemon :font:core:test --tests '*DiagnosticTaxonomy*'
+rtk ./gradlew --no-daemon :font:core:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this is a bounded deterministic catalog slice only. It does
+not yet provide bundled Hebrew/Arabic, Devanagari/Thai, CJK, or emoji-capable
+catalog rows, does not include the ticket's requested checked-in
+duplicate-family conflict golden, and does not claim fallback support,
+cluster-safe fallback segmentation, shaping support, platform font parity, or
+GPU text-route support.
 ### PKT-03A: SFNT/OpenType Face Evidence Dumps
 
 Status: implemented and independently reviewed.
