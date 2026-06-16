@@ -329,6 +329,46 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "filter-dag-refusal-board",
+            title = "Filter DAG Refusal Board",
+            description = "PM-visible filter DAG refusal classes without saveLayer or simple filter route promotion.",
+            tags = setOf(SceneTag.Rect, SceneTag.Filter),
+            links = listOf(SceneRoadmapLink.ticket("KGPU-M5-004")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.042f, 0.040f, 0.050f, 1f)),
+                SceneCommand.FillRect(
+                    label = "bounded-filter-candidate",
+                    rect = SceneRect(28f, 48f, 76f, 154f),
+                    color = SceneColor.green(0.88f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "unbounded-intermediate-refusal",
+                    rect = SceneRect(88f, 64f, 136f, 154f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "recursive-dag-refusal",
+                    rect = SceneRect(148f, 78f, 196f, 154f),
+                    color = SceneColor.red(),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "picture-prepass-refusal",
+                    rect = SceneRect(208f, 92f, 256f, 154f),
+                    color = SceneColor.blue(0.86f),
+                    paintOrder = 4,
+                ),
+                SceneCommand.FillRect(
+                    label = "cpu-filter-texture-refusal",
+                    rect = SceneRect(268f, 110f, 304f, 154f),
+                    color = SceneColor(0.74f, 0.76f, 0.82f, 1f),
+                    paintOrder = 5,
+                ),
+            ),
+        ),
+        scene(
             id = "receipt-text-run",
             title = "Receipt Text Run",
             description = "Simple typed text-run path and future A8 atlas route.",

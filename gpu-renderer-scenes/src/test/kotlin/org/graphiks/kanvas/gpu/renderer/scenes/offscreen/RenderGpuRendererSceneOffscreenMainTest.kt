@@ -110,6 +110,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 bitmapRectCount = 1,
                 filterNodeCount = 1,
             ),
+            RenderedShapeExpectation("filter-dag-refusal-board", fillRectCount = 5),
             RenderedShapeExpectation(
                 sceneId = "layered-shadow-card",
                 fillRectCount = 0,

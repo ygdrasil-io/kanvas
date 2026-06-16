@@ -177,6 +177,27 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `filter dag refusal board is backed by stable refusal classes only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("filter-dag-refusal-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.Filter), scene.tags)
+        assertEquals(listOf("KGPU-M5-004"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertEquals(
+            listOf(
+                "bounded-filter-candidate",
+                "unbounded-intermediate-refusal",
+                "recursive-dag-refusal",
+                "picture-prepass-refusal",
+                "cpu-filter-texture-refusal",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals(listOf(1, 2, 3, 4, 5), fills.map { it.paintOrder })
+    }
+
+    @Test
     fun `receipt text run names real font inputs and unpromoted text routes`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("receipt-text-run")
         val command = assertIs<SceneCommand.TextRun>(scene.commands.single())
@@ -297,6 +318,19 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.Filter, SceneTag.Image),
                 commandFamilies = listOf("bitmap-rect", "filter-node"),
                 roadmapLinks = listOf(RoadmapExpectation("M5")),
+            ),
+            SceneExpectationRow(
+                sceneId = "filter-dag-refusal-board",
+                tags = setOf(SceneTag.Rect, SceneTag.Filter),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M5", ticketId = "KGPU-M5-004")),
             ),
             SceneExpectationRow(
                 sceneId = "receipt-text-run",

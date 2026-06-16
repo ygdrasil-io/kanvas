@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 18,
+  "sceneCount": 19,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -99,6 +99,16 @@
       "tags": ["Filter","Image"],
       "kgpuMilestones": ["M5"],
       "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "filter-dag-refusal-board",
+      "title": "Filter DAG Refusal Board",
+      "description": "PM-visible filter DAG refusal classes without saveLayer or simple filter route promotion.",
+      "tags": ["Rect","Filter"],
+      "kgpuMilestones": ["M5"],
+      "ticketIds": ["KGPU-M5-004"],
       "rStages": [],
       "expectation": "ShouldRender"
     },

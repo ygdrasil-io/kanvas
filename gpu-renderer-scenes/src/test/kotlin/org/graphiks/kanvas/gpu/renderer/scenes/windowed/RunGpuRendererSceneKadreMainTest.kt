@@ -72,6 +72,7 @@ class RunGpuRendererSceneKadreMainTest {
             "layered-shadow-card" to 29,
             "runtime-effect-color-tile" to 30,
             "mesh-ribbon" to 31,
+            "filter-dag-refusal-board" to 32,
         )
         val invocations = mutableListOf<RunnerInvocation>()
 

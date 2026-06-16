@@ -12,6 +12,7 @@
 | `asset-intake-thumbnail-grid` | Asset Intake Thumbnail Grid | Image,Clip,RRect | KGPU M4 | `KGPU-M4-001`,`KGPU-M4-002` |  | `ShouldRender` |
 | `layered-shadow-card` | Layered Shadow Card | Layer,Filter | KGPU M5 |  |  | `ShouldRender` |
 | `filtered-photo-chip` | Filtered Photo Chip | Filter,Image | KGPU M5 |  |  | `ShouldRender` |
+| `filter-dag-refusal-board` | Filter DAG Refusal Board | Rect,Filter | KGPU M5 | `KGPU-M5-004` |  | `ShouldRender` |
 | `receipt-text-run` | Receipt Text Run | Text | KGPU M6 |  |  | `ShouldRender` |
 | `runtime-effect-color-tile` | Runtime Effect Color Tile | RuntimeEffect | KGPU M7 |  |  | `ShouldRender` |
 | `blend-mode-strip` | Blend Mode Strip | Rect | KGPU M7 |  |  | `ShouldRender` |
