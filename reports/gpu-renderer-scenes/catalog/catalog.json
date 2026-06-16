@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 31,
+  "sceneCount": 32,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -269,6 +269,16 @@
       "tags": ["Vertices"],
       "kgpuMilestones": ["M8"],
       "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "vertices-route-gate-board",
+      "title": "Vertices Route Gate Board",
+      "description": "Vertices route, buffer, WGSL ABI, and batching gate board for M8 without promoting DrawVertices, vertex/index uploads, primitive blenders, or CPU-rendered mesh texture fallback.",
+      "tags": ["Rect","RRect","Clip","Vertices"],
+      "kgpuMilestones": ["M8"],
+      "ticketIds": ["KGPU-M8-001","KGPU-M8-002","KGPU-M8-003"],
       "rStages": [],
       "expectation": "ShouldRender"
     },

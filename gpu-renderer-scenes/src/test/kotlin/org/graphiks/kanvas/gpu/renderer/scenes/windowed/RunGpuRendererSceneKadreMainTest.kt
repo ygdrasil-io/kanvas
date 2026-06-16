@@ -127,6 +127,7 @@ class RunGpuRendererSceneKadreMainTest {
             "runtime-effect-descriptor-gate-board" to 42,
             "sdr-color-boundary-board" to 38,
             "mesh-ribbon" to 31,
+            "vertices-route-gate-board" to 45,
             "filter-dag-refusal-board" to 32,
         )
         val invocations = mutableListOf<RunnerInvocation>()
