@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 34,
+  "sceneCount": 35,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -229,6 +229,16 @@
       "tags": ["Rect","RRect","Clip","RuntimeEffect"],
       "kgpuMilestones": ["M7"],
       "ticketIds": ["KGPU-M7-001"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "runtime-effect-refusal-gate-board",
+      "title": "Runtime Effect Refusal Gate Board",
+      "description": "Runtime-effect child, arbitrary source, unsupported placement, and PM RefuseRequired gates without dynamic source compilation or child runtime-effect support claims.",
+      "tags": ["Rect","RRect","Clip","RuntimeEffect"],
+      "kgpuMilestones": ["M7"],
+      "ticketIds": ["KGPU-M7-002"],
       "rStages": [],
       "expectation": "ShouldRender"
     },

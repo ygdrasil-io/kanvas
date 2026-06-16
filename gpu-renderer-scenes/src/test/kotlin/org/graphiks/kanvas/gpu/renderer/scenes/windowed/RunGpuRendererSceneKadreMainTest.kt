@@ -127,6 +127,7 @@ class RunGpuRendererSceneKadreMainTest {
             "text-representation-gate-board" to 37,
             "runtime-effect-color-tile" to 30,
             "runtime-effect-descriptor-gate-board" to 42,
+            "runtime-effect-refusal-gate-board" to 48,
             "sdr-color-boundary-board" to 38,
             "mesh-ribbon" to 31,
             "vertices-route-gate-board" to 45,
@@ -164,6 +165,12 @@ class RunGpuRendererSceneKadreMainTest {
                     assertContains(sessionJson, "meshRibbonRoute=scene-fixture.bounded-ribbon-strip")
                     assertContains(sessionJson, "generalVerticesSupport=false")
                     assertContains(sessionJson, "vertexIndexBufferSupport=false")
+                } else if (sceneId == "runtime-effect-refusal-gate-board") {
+                    assertContains(sessionJson, "runtimeEffectRefusalMatrix=arbitrary-source:RefuseRequired:unsupported.runtime_effect.dynamic_sksl_forbidden,child-slot:RefuseRequired:unsupported.runtime_effect.child_count,unsupported-placement:RefuseRequired:unsupported.runtime_effect.route_unaccepted")
+                    assertContains(sessionJson, "pmRuntimeEffectRefusalRow=gpu-renderer.runtime-effect-refusals")
+                    assertContains(sessionJson, "pmRuntimeEffectRefusalClassification=RefuseRequired")
+                    assertContains(sessionJson, "dynamicSourceCompilation=false")
+                    assertContains(sessionJson, "childRuntimeEffectSupport=false")
                 }
                 assertFalse(sessionJson.contains("\"status\": \"not-yet-rendered\""), sceneId)
             }

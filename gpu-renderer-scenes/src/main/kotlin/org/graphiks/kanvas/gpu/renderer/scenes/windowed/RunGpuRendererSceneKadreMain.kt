@@ -8,6 +8,7 @@ import java.nio.file.StandardCopyOption
 import kotlin.io.path.createDirectories
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.runtimeEffectRefusalGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneFilterKind
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
@@ -501,12 +502,21 @@ internal fun GPURendererScene<*>.windowedSceneDiagnostics(): List<String> {
         .filter { it.hasFixturePayload }
     val meshRibbons = commands.filterIsInstance<SceneCommand.MeshRibbon>()
         .filter { it.hasFixturePayload }
-    if (textRunDiagnostics.isEmpty() && saveLayers.isEmpty() && meshRibbons.isEmpty()) return emptyList()
+    val runtimeEffectRefusalDiagnostics = runtimeEffectRefusalGateDiagnostics()
+    if (
+        textRunDiagnostics.isEmpty() &&
+        saveLayers.isEmpty() &&
+        meshRibbons.isEmpty() &&
+        runtimeEffectRefusalDiagnostics.isEmpty()
+    ) {
+        return emptyList()
+    }
 
     val saveLayerLabels = saveLayers.map { it.label }.toSet()
     val filters = commands.filterIsInstance<SceneCommand.FilterNode>()
         .filter { it.hasFixturePayload && it.inputLabel in saveLayerLabels }
     return buildList {
+        addAll(runtimeEffectRefusalDiagnostics)
         addAll(textRunDiagnostics)
         if (saveLayers.isNotEmpty()) {
             add("saveLayerCommands=${saveLayers.size}")
