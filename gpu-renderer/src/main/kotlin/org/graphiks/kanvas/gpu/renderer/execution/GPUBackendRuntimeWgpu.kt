@@ -149,6 +149,7 @@ private fun nextSessionOrdinal(): Long = sessionOrdinalCounter.incrementAndGet()
 private fun nextWindowRuntimeOrdinal(): Long = windowRuntimeOrdinalCounter.incrementAndGet()
 
 object WgpuBackendRuntimeFactory {
+    /** Creates a WebGPU-backed runtime session when the host can initialize the backend. */
     fun createOrNull(): GPUBackendSession? = try {
         LibraryLoader.load()
         val glfw = runBlocking {
@@ -523,6 +524,7 @@ private data class NativeWindowRuntime(
     val alphaMode: CompositeAlphaMode,
     val adapterInfo: GPUBackendAdapterSummary,
 ) : AutoCloseable {
+    /** Reconfigures the native surface to the latest non-zero size before presentation. */
     fun configure(width: Int, height: Int) {
         if (width <= 0 || height <= 0) return
         surface.configure(
@@ -670,11 +672,13 @@ private fun String.normalizedColorFormat(): String = lowercase()
 private class GpuResourceScope : AutoCloseable {
     private val closeActions = ArrayDeque<() -> Unit>()
 
+    /** Tracks a resource and registers the matching cleanup callback for reverse-order teardown. */
     fun <T> track(resource: T, close: (T) -> Unit): T {
         closeActions.addFirst { close(resource) }
         return resource
     }
 
+    /** Tracks the resource only when it already exposes `AutoCloseable`. */
     fun <T> trackIfAutoCloseable(resource: T): T {
         if (resource is AutoCloseable) {
             track(resource) { it.close() }
