@@ -2877,8 +2877,12 @@ Files:
 - `reports/pure-kotlin-text/font-telemetry-schema.json`
 - `reports/pure-kotlin-text/font-telemetry-schema-fixture.json`
 - `reports/pure-kotlin-text/2026-06-16-kfont-m12-001-font-telemetry-schema.md`
+- `reports/pure-kotlin-text/font-telemetry-pm-bundle.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-001-define-font-telemetry-schema.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md`
+- `scripts/validate_kfont_m12_001_telemetry_pm_evidence.py`
+- `build.gradle.kts`
 - `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
 
 Evidence:
@@ -2889,26 +2893,33 @@ Evidence:
 - `font-telemetry-schema-fixture.json` records one repeated-run advisory sample
   for each telemetry domain plus stable refusal cases for missing dimensions
   and single-run budget misuse.
+- `font-telemetry-pm-bundle.json` now records advisory `tracked-gap`
+  `pipelinePmBundle` packaging for the M12 row and pins one stable sample per
+  telemetry domain without turning budgets into release gates.
 - `FontTelemetrySchemaTest` asserts byte-identical checked-in dumps, required
   domain coverage, repeated-run aggregation fields, conditional GPU adapter
   facts, and stable telemetry refusal diagnostics without HarfBuzz or
   FreeType wording.
+- `validateKfontM12001TelemetryPmEvidence` and its Python validator assert that
+  the PM bundle copies the telemetry schema/dashboard artifacts, preserves
+  `warning-only` wording, and leaves producer-side subsystem wiring as the only
+  remaining gate before `done`.
 
 Validation:
 
 ```bash
 rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
+rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk git diff --check
 ```
 
-Remaining gate: this is telemetry-schema evidence only. It does not yet wire
-parser/scaler/shaping/paragraph/glyph/GPU producers into the schema, does not
-show `pipelinePerformanceTrendWarnings` or PM bundle ingestion of advisory M12
-rows, and does not promote any performance budget, GPU route, or release-gate
-claim.
+Remaining gate: this is telemetry-schema plus advisory PM bundle evidence only.
+It does not yet wire parser/scaler/shaping/paragraph/glyph/GPU producers into
+the schema, and does not promote any performance budget, GPU route, or
+release-gate claim.
 ### KFONT-M1-004: Bundled Source Fixture Manifest
 
 Status: done; merged, independently reviewed, and freshly revalidated for closeout.

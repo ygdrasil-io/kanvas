@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "artifactId": "font-telemetry-pm-bundle",
+  "ownerTickets": ["KFONT-M12-001"],
+  "surfaceId": "font-telemetry-schema",
+  "classification": "tracked-gap",
+  "claimPromotionAllowed": false,
+  "pmBundleTask": "pipelinePmBundle",
+  "warningMode": "advisory",
+  "sourceDashboardPath": "reports/pure-kotlin-text/font-claim-dashboard.json",
+  "bundlePaths": [
+    "reports/pure-kotlin-text/font-claim-dashboard.json",
+    "reports/pure-kotlin-text/font-telemetry-schema.json",
+    "reports/pure-kotlin-text/font-telemetry-schema-fixture.json",
+    "reports/pure-kotlin-text/font-telemetry-pm-bundle.json",
+    "reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"
+  ],
+  "domainRows": [
+    {
+      "domain": "parser",
+      "fixtureId": "telemetry-parser-repeat",
+      "sampleCount": 5,
+      "measurementPhase": "steady-state",
+      "cacheState": "cold",
+      "metricNames": ["parser.parse.time"]
+    },
+    {
+      "domain": "scaler",
+      "fixtureId": "telemetry-scaler-repeat",
+      "sampleCount": 5,
+      "measurementPhase": "steady-state",
+      "cacheState": "warm",
+      "metricNames": ["scaler.outline.time"]
+    },
+    {
+      "domain": "shaping",
+      "fixtureId": "telemetry-shaping-repeat",
+      "sampleCount": 5,
+      "measurementPhase": "steady-state",
+      "cacheState": "warm",
+      "metricNames": ["shaping.fallback.time"]
+    },
+    {
+      "domain": "paragraph",
+      "fixtureId": "telemetry-paragraph-repeat",
+      "sampleCount": 5,
+      "measurementPhase": "steady-state",
+      "cacheState": "warm",
+      "metricNames": ["paragraph.layout.time"]
+    },
+    {
+      "domain": "glyph-artifact",
+      "fixtureId": "telemetry-glyph-artifact-repeat",
+      "sampleCount": 5,
+      "measurementPhase": "steady-state",
+      "cacheState": "mixed",
+      "metricNames": ["glyph-artifact.cache.bytes"]
+    },
+    {
+      "domain": "gpu-text-handoff",
+      "fixtureId": "telemetry-gpu-handoff-repeat",
+      "sampleCount": 5,
+      "measurementPhase": "steady-state",
+      "cacheState": "warm",
+      "metricNames": ["gpu-text-handoff.upload.bytes"]
+    }
+  ],
+  "remainingGates": [
+    "Wire parser, scaler, shaping, paragraph, glyph artifact, and GPU handoff producers into the shared schema before telemetry promotion.",
+    "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
+  ],
+  "nonClaims": [
+    "no-complete-target-support-claim",
+    "no-performance-release-gate-claim",
+    "no-gpu-route-support-claim",
+    "no-native-engine-oracle-claim"
+  ]
+}

@@ -118,6 +118,7 @@ data class FontMetricSeries(
 ```bash
 rtk git diff --check
 rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
+rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
@@ -127,7 +128,7 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
 - Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
-- `review`: `font-telemetry-schema.json` and `font-telemetry-schema-fixture.json` now define a deterministic cross-domain schema with repeated-run samples and stable refusal diagnostics, but `pipelinePerformanceTrendWarnings` / PM bundle ingestion and producer-side subsystem wiring remain open before `done`.
+- `review`: `font-telemetry-schema.json`, `font-telemetry-schema-fixture.json`, and `font-telemetry-pm-bundle.json` now define deterministic cross-domain schema evidence plus advisory `pipelinePmBundle` ingestion, but producer-side subsystem wiring remains open before `done`.
 
 ## Linear Labels
 

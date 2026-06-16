@@ -23,6 +23,9 @@
 - `FontTelemetrySchemaTest` asserts byte-identical checked-in dumps and verifies
   the required domains plus stable telemetry refusal diagnostics without
   HarfBuzz or FreeType wording.
+- Advisory PM bundle ingestion is now captured separately in
+  `reports/pure-kotlin-text/font-telemetry-pm-bundle.json` and
+  `reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md`.
 
 ## Validation
 
@@ -38,6 +41,5 @@ rtk git diff --check
 
 This slice keeps `KFONT-M12-001` in `review`, not `done`. The repo still lacks
 producer-side wiring from parser/scaler/shaping/paragraph/glyph/GPU subsystems
-into this schema, and `pipelinePerformanceTrendWarnings` / PM bundle evidence
-showing advisory `tracked-gap` ingestion is still open. No performance budget,
-GPU route, or release-gate claim is promoted by this evidence.
+into this schema. No performance budget, GPU route, or release-gate claim is
+promoted by this evidence.
