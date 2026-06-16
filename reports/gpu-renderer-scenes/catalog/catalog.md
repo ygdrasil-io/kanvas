@@ -3,6 +3,7 @@
 | Scene ID | Title | Tags | KGPU | Tickets | R Stages | Expectation |
 |---|---|---|---|---|---|---|
 | `solid-card-stack` | Solid Card Stack | Rect | KGPU M0,M1 |  | R0,R1,R2,R3,R4,R5,R6 | `ShouldRender` |
+| `activation-candidate-boundary-board` | Activation Candidate Boundary Board | Rect,Cache,LegacyComparison | KGPU M0,M1 | `KGPU-M0-007`,`KGPU-M1-001`,`KGPU-M1-002` |  | `ShouldRender` |
 | `first-route-rollback-panel` | First Route Rollback Panel | Rect,LegacyComparison | KGPU M1 | `KGPU-M1-003`,`KGPU-M1-004` |  | `ShouldRender` |
 | `rounded-panel-gradient` | Rounded Panel Gradient | RRect,Gradient,Clip | KGPU M2 |  | R1,R2,R3 | `ShouldRender` |
 | `rrect-gradient-route-board` | RRect Gradient Route Board | Rect,RRect,Gradient,Clip | KGPU M2 | `KGPU-M2-001`,`KGPU-M2-002` |  | `ShouldRender` |

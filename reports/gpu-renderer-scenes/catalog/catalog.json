@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 26,
+  "sceneCount": 27,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -10,6 +10,16 @@
       "kgpuMilestones": ["M0","M1"],
       "ticketIds": [],
       "rStages": ["R0","R1","R2","R3","R4","R5","R6"],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "activation-candidate-boundary-board",
+      "title": "Activation Candidate Boundary Board",
+      "description": "PM activation-candidate policy lanes that keep product routing, release blocking, and readiness movement false.",
+      "tags": ["Rect","Cache","LegacyComparison"],
+      "kgpuMilestones": ["M0","M1"],
+      "ticketIds": ["KGPU-M0-007","KGPU-M1-001","KGPU-M1-002"],
+      "rStages": [],
       "expectation": "ShouldRender"
     },
     {

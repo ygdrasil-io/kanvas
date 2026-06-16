@@ -46,6 +46,56 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "activation-candidate-boundary-board",
+            title = "Activation Candidate Boundary Board",
+            description = "PM activation-candidate policy lanes that keep product routing, release blocking, and readiness movement false.",
+            tags = setOf(SceneTag.Rect, SceneTag.Cache, SceneTag.LegacyComparison),
+            links = listOf(
+                SceneRoadmapLink.ticket("KGPU-M0-007"),
+                SceneRoadmapLink.ticket("KGPU-M1-001"),
+                SceneRoadmapLink.ticket("KGPU-M1-002"),
+            ),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.038f, 0.042f, 0.050f, 1f)),
+                SceneCommand.FillRect(
+                    label = "root-activation-candidate",
+                    rect = SceneRect(30f, 46f, 74f, 154f),
+                    color = SceneColor.green(0.90f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "root-validation-incomplete",
+                    rect = SceneRect(82f, 62f, 126f, 154f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "executed-diagnostic-passed",
+                    rect = SceneRect(134f, 78f, 178f, 154f),
+                    color = SceneColor.blue(0.86f),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "adapter-backed-opt-in-only",
+                    rect = SceneRect(186f, 94f, 230f, 154f),
+                    color = SceneColor(0.60f, 0.46f, 0.90f, 0.94f),
+                    paintOrder = 4,
+                ),
+                SceneCommand.FillRect(
+                    label = "product-route-activation-false",
+                    rect = SceneRect(238f, 110f, 268f, 154f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.92f),
+                    paintOrder = 5,
+                ),
+                SceneCommand.FillRect(
+                    label = "release-readiness-unchanged",
+                    rect = SceneRect(276f, 124f, 302f, 154f),
+                    color = SceneColor(0.74f, 0.76f, 0.82f, 1f),
+                    paintOrder = 6,
+                ),
+            ),
+        ),
+        scene(
             id = "first-route-rollback-panel",
             title = "First Route Rollback Panel",
             description = "Controlled FillRect flag and rollback lanes without default product activation.",

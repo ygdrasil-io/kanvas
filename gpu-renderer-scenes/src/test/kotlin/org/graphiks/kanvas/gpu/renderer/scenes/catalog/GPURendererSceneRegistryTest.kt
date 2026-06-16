@@ -84,6 +84,32 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `activation candidate boundary board is backed by policy gates without product activation`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("activation-candidate-boundary-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.Cache, SceneTag.LegacyComparison), scene.tags)
+        assertEquals(
+            listOf("KGPU-M0-007", "KGPU-M1-001", "KGPU-M1-002"),
+            scene.roadmapLinks.mapNotNull { it.ticketId },
+        )
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertEquals(
+            listOf(
+                "root-activation-candidate",
+                "root-validation-incomplete",
+                "executed-diagnostic-passed",
+                "adapter-backed-opt-in-only",
+                "product-route-activation-false",
+                "release-readiness-unchanged",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..6).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M1-003" || it.ticketId == "KGPU-M1-004" })
+    }
+
+    @Test
     fun `runtime effect color tile is backed by registered SimpleRT scene payload`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("runtime-effect-color-tile")
         val command = assertIs<SceneCommand.RuntimeEffectTile>(scene.commands.single())
@@ -438,6 +464,24 @@ class GPURendererSceneRegistryTest {
                     RoadmapExpectation("M1", RStage.R4),
                     RoadmapExpectation("M1", RStage.R5),
                     RoadmapExpectation("M1", RStage.R6),
+                ),
+            ),
+            SceneExpectationRow(
+                sceneId = "activation-candidate-boundary-board",
+                tags = setOf(SceneTag.Rect, SceneTag.Cache, SceneTag.LegacyComparison),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M0", ticketId = "KGPU-M0-007"),
+                    RoadmapExpectation("M1", ticketId = "KGPU-M1-001"),
+                    RoadmapExpectation("M1", ticketId = "KGPU-M1-002"),
                 ),
             ),
             SceneExpectationRow(
