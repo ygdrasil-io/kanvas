@@ -1108,6 +1108,72 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "vertices-route-gate-board",
+            title = "Vertices Route Gate Board",
+            description = "Vertices route, buffer, WGSL ABI, and batching gate board for M8 without promoting DrawVertices, vertex/index uploads, primitive blenders, or CPU-rendered mesh texture fallback.",
+            tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Vertices),
+            links = listOf(
+                SceneRoadmapLink.ticket("KGPU-M8-001"),
+                SceneRoadmapLink.ticket("KGPU-M8-002"),
+                SceneRoadmapLink.ticket("KGPU-M8-003"),
+            ),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.034f, 0.038f, 0.046f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "vertices-route-gate-panel",
+                    rect = SceneRect(24f, 24f, 296f, 176f),
+                    radius = 18f,
+                    color = SceneColor(0.10f, 0.12f, 0.15f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "vertices-route-gate-window",
+                    rect = SceneRect(40f, 42f, 280f, 158f),
+                ),
+                SceneCommand.FillRect(
+                    label = "drawvertices-descriptor-route-blocked",
+                    rect = SceneRect(48f, 58f, 76f, 154f),
+                    color = SceneColor.blue(0.92f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "primitive-blend-destination-read-gated",
+                    rect = SceneRect(86f, 72f, 114f, 154f),
+                    color = SceneColor(0.44f, 0.34f, 0.86f, 0.92f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "vertex-index-buffer-upload-gated",
+                    rect = SceneRect(124f, 64f, 152f, 154f),
+                    color = SceneColor.green(0.88f),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "wgsl-vertex-layout-abi-gated",
+                    rect = SceneRect(162f, 84f, 190f, 154f),
+                    color = SceneColor(0.22f, 0.70f, 0.78f, 0.92f),
+                    paintOrder = 4,
+                ),
+                SceneCommand.FillRect(
+                    label = "invalid-stale-buffer-refusal",
+                    rect = SceneRect(200f, 98f, 228f, 154f),
+                    color = SceneColor.red(),
+                    paintOrder = 5,
+                ),
+                SceneCommand.FillRect(
+                    label = "batching-after-route-and-buffer-gate",
+                    rect = SceneRect(238f, 112f, 266f, 154f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 6,
+                ),
+                SceneCommand.FillRect(
+                    label = "cpu-rendered-mesh-texture-forbidden",
+                    rect = SceneRect(48f, 150f, 266f, 158f),
+                    color = SceneColor(0.80f, 0.84f, 0.90f, 1f),
+                    paintOrder = 7,
+                ),
+            ),
+        ),
+        scene(
             id = "cache-pressure-deck",
             title = "Cache Pressure Deck",
             description = "Repeated rect commands for future cache telemetry observation.",

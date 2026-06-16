@@ -588,6 +588,42 @@ class GPURendererSceneRegistryTest {
         assertEquals(28f, command.thickness)
     }
 
+    @Test
+    fun `vertices route gate board is backed by M8 route buffer and batching refusals only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("vertices-route-gate-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Vertices), scene.tags)
+        assertEquals(
+            listOf("KGPU-M8-001", "KGPU-M8-002", "KGPU-M8-003"),
+            scene.roadmapLinks.mapNotNull { it.ticketId },
+        )
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertTrue(scene.commands.none { it is SceneCommand.MeshRibbon })
+        assertTrue(SceneTag.Blend !in scene.tags)
+        assertTrue(SceneTag.Cache !in scene.tags)
+        assertEquals(
+            listOf(
+                "drawvertices-descriptor-route-blocked",
+                "primitive-blend-destination-read-gated",
+                "vertex-index-buffer-upload-gated",
+                "wgsl-vertex-layout-abi-gated",
+                "invalid-stale-buffer-refusal",
+                "batching-after-route-and-buffer-gate",
+                "cpu-rendered-mesh-texture-forbidden",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..7).toList(), fills.map { it.paintOrder })
+        assertTrue(
+            scene.roadmapLinks.none {
+                it.ticketId == "KGPU-M7-003" || it.ticketId == "KGPU-M9-001" || it.ticketId == "KGPU-M10-002"
+            },
+        )
+    }
+
     private data class SceneExpectationRow(
         val sceneId: String,
         val tags: Set<SceneTag>,
@@ -913,6 +949,27 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.Vertices),
                 commandFamilies = listOf("clear", "vertices"),
                 roadmapLinks = listOf(RoadmapExpectation("M8")),
+            ),
+            SceneExpectationRow(
+                sceneId = "vertices-route-gate-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Vertices),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M8", ticketId = "KGPU-M8-001"),
+                    RoadmapExpectation("M8", ticketId = "KGPU-M8-002"),
+                    RoadmapExpectation("M8", ticketId = "KGPU-M8-003"),
+                ),
             ),
             SceneExpectationRow(
                 sceneId = "cache-pressure-deck",
