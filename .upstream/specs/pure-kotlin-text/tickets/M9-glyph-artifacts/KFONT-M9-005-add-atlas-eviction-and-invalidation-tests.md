@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M9-005"
 title: "Add atlas eviction and invalidation tests"
-status: "proposed"
+status: "done"
 milestone: "M9"
 priority: "P1"
 owner_area: "glyph"
@@ -69,11 +69,11 @@ data class GlyphAtlasEntry(
 
 ## Acceptance Criteria
 
-- [ ] Eviction changes atlas generation and records which strike keys were evicted.
-- [ ] Variation, palette, SDF spread, renderer descriptor version, and source font invalidation produce new keys or stale-generation diagnostics.
-- [ ] Atlas capacity overflow emits `text.glyph.atlas-capacity-exceeded` and never drops glyphs silently.
-- [ ] `glyph-atlas.json` includes every entry rect, source mask hash, upload byte hash, invalidation token, and budget fact.
-- [ ] GPU consumers can detect stale atlas generations from the artifact dump without parsing fonts or masks again.
+- [x] Eviction changes atlas generation and records which strike keys were evicted.
+- [x] Variation, palette, SDF spread, renderer descriptor version, and source font invalidation produce new keys or stale-generation diagnostics.
+- [x] Atlas capacity overflow emits `text.glyph.atlas-capacity-exceeded` and never drops glyphs silently.
+- [x] `glyph-atlas.json` includes every entry rect, source mask hash, upload byte hash, invalidation token, and budget fact.
+- [x] GPU consumers can detect stale atlas generations from the artifact dump without parsing fonts or masks again.
 
 ## Required Evidence
 
@@ -99,12 +99,17 @@ data class GlyphAtlasEntry(
 ```bash
 rtk git diff --check
 rtk ./gradlew --no-daemon :font:glyph:test --tests '*Atlas*'
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
 ```
 
 ## Status Notes
 
-- `proposed`: Supplies generation and invalidation evidence required before GPU atlas sampling can be claimed.
-- Move to `ready` only after atlas artifact fields and eviction scenarios are reviewed.
+- `done`: CPU atlas artifact evidence now covers deterministic A8/SDF atlas dumps, eviction order, generation increments, invalidation-token changes, source-mask hashes, and stale-generation/capacity diagnostics while keeping GPU upload, sampling, and `dftext` retirement explicitly gated on M11.
 
 ## Linear Labels
 
