@@ -58,7 +58,7 @@
           "outlineCommands": ["M 0.0 0.0", "L 25.0 0.0", "L 25.0 25.0", "Z"],
           "outlineCommandDump": "M 0.0 0.0\nL 25.0 0.0\nL 25.0 25.0\nZ",
           "outlineCommandDumpSha256": "aec601ac802d211ebbef3b33b421c1e56e60e35f7070861977063efcada80630",
-          "callTrace": [{"depth": 0, "scope": "local", "encodedIndex": -107, "resolvedIndex": 0}, {"depth": 0, "scope": "global", "encodedIndex": -107, "resolvedIndex": 0}],
+          "callTrace": [{"depth": 0, "scope": "local", "encodedIndex": -107, "resolvedIndex": 0, "bias": 107, "callerByteOffset": 4, "returnByteOffset": 3, "instructionBudgetRemaining": 1016, "expandedByteBudgetRemaining": 4088}, {"depth": 0, "scope": "global", "encodedIndex": -107, "resolvedIndex": 0, "bias": 107, "callerByteOffset": 6, "returnByteOffset": 3, "instructionBudgetRemaining": 1010, "expandedByteBudgetRemaining": 4082}],
           "variationPosition": [],
           "cff2VsIndex": 0,
           "diagnostics": []

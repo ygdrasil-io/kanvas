@@ -1286,6 +1286,51 @@ rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 Remaining gate at this slice closeout: this remains generated-fixture evidence
 only. It does not claim complete real-font CFF coverage, complete public scaler
 support by itself, broader corpus evidence, or GPU glyph route support.
+### KFONT-M4-003: CFF Subroutine Limits And Diagnostics
+
+Status: done; freshly validated in this wave.
+
+Files:
+
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/font/fixtures/expected/scaler/cff-subroutine-trace.json`
+- `reports/font/fixtures/expected/scaler/cff-charstring-trace.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m4-003-cff-subroutine-trace.md`
+
+Evidence:
+
+- `Type2ExecutionLimits` serializes fixed operand-stack, call-depth,
+  instruction-count, and expanded-byte budgets instead of deriving limits from
+  host state.
+- `cff-subroutine-trace.json` now records deterministic local/global/nested
+  subroutine traces with CFF bias, caller/return byte offsets, and remaining
+  instruction/expanded-byte budgets.
+- Stable refusal diagnostics now cover
+  `font.scaler.cff.subr-out-of-range`,
+  `font.scaler.cff.subr-depth-limit`,
+  `font.cff-stack-malformed` with `cff.subr-missing-return`, and
+  `font.scaler.cff.instruction-limit`.
+- The existing `cff-charstring-trace.json` golden is rebased to include the
+  enriched subroutine trace facts without promoting complete CFF support.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterRecordsNestedSubroutineOffsets --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterRejectsInvalidSubroutinePathsWithDedicatedDiagnostics --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffSubroutineTraceGoldenMatchesGeneratedEvidence
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+```
+
+Remaining gate: this is deterministic generated-fixture safety evidence only.
+It does not claim broader real-font corpus coverage, complete public CFF path
+output, complete CFF2 variation support, or GPU glyph route support.
 ### PKT-05B: CFF INDEX/DICT Fixture Pack And Refusal Goldens
 
 Status: done; independently reviewed and freshly validated.
