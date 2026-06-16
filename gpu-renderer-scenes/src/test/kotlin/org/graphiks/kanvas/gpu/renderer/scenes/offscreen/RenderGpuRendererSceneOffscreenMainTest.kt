@@ -144,6 +144,13 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 bitmapRectCount = 2,
             ),
             RenderedShapeExpectation(
+                sceneId = "photo-contact-sheet",
+                fillRectCount = 0,
+                fillRRectCount = 1,
+                clipCount = 1,
+                bitmapRectCount = 4,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "codec-provenance-gate-board",
                 fillRectCount = 3,
                 fillRRectCount = 1,

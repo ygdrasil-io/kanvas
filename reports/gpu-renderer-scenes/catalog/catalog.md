@@ -14,6 +14,7 @@
 | `clipped-avatar-grid` | Clipped Avatar Grid | Clip,Image | KGPU M3,M5 |  |  | `ShouldRender` |
 | `texture-swatch-board` | Texture Swatch Board | Image | KGPU M4 |  |  | `ShouldRender` |
 | `asset-intake-thumbnail-grid` | Asset Intake Thumbnail Grid | Image,Clip,RRect | KGPU M4 | `KGPU-M4-001`,`KGPU-M4-002` |  | `ShouldRender` |
+| `photo-contact-sheet` | Photo Contact Sheet | Image,Clip,RRect | KGPU M4 |  |  | `ShouldRender` |
 | `codec-provenance-gate-board` | Codec Provenance Gate Board | Rect,RRect,Clip,Image | KGPU M4 | `KGPU-M4-003` |  | `ShouldRender` |
 | `sampler-boundary-gate-board` | Sampler Boundary Gate Board | Rect,RRect,Clip,Image | KGPU M4 | `KGPU-M4-004` |  | `ShouldRender` |
 | `savelayer-isolation-gate-board` | SaveLayer Isolation Gate Board | Rect,RRect,Clip,Layer | KGPU M5 | `KGPU-M5-001` |  | `ShouldRender` |

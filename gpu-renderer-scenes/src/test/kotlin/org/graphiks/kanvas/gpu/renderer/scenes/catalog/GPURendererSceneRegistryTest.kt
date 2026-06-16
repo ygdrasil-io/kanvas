@@ -349,6 +349,33 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `photo contact sheet is backed by four decoded bitmap fixtures in a clipped tray`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("photo-contact-sheet")
+        val bitmaps = scene.commands.filterIsInstance<SceneCommand.BitmapRect>()
+
+        assertEquals(setOf(SceneTag.Image, SceneTag.Clip, SceneTag.RRect), scene.tags)
+        assertEquals(listOf("M4"), scene.roadmapLinks.map { it.milestone })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf("contact-sheet-hero", "contact-sheet-detail", "contact-sheet-proof", "contact-sheet-archive"),
+            bitmaps.map { it.label },
+        )
+        assertTrue(bitmaps.all { it.hasFixturePayload })
+        assertEquals(
+            listOf(
+                SceneBitmapSampling.Linear,
+                SceneBitmapSampling.Nearest,
+                SceneBitmapSampling.Linear,
+                SceneBitmapSampling.Nearest,
+            ),
+            bitmaps.map { it.sampling },
+        )
+        assertEquals((1..4).toList(), bitmaps.map { it.paintOrder })
+    }
+
+    @Test
     fun `codec provenance gate board is backed by M4 dependency refusals only`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("codec-provenance-gate-board")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -1007,6 +1034,20 @@ class GPURendererSceneRegistryTest {
                     RoadmapExpectation("M4", ticketId = "KGPU-M4-001"),
                     RoadmapExpectation("M4", ticketId = "KGPU-M4-002"),
                 ),
+            ),
+            SceneExpectationRow(
+                sceneId = "photo-contact-sheet",
+                tags = setOf(SceneTag.Image, SceneTag.Clip, SceneTag.RRect),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "bitmap-rect",
+                    "bitmap-rect",
+                    "bitmap-rect",
+                    "bitmap-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M4")),
             ),
             SceneExpectationRow(
                 sceneId = "codec-provenance-gate-board",

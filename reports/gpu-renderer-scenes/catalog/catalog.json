@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 41,
+  "sceneCount": 42,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -119,6 +119,16 @@
       "tags": ["Image","Clip","RRect"],
       "kgpuMilestones": ["M4"],
       "ticketIds": ["KGPU-M4-001","KGPU-M4-002"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "photo-contact-sheet",
+      "title": "Photo Contact Sheet",
+      "description": "Four already-decoded photo thumbnails clipped inside a contact sheet tray.",
+      "tags": ["Image","Clip","RRect"],
+      "kgpuMilestones": ["M4"],
+      "ticketIds": [],
       "rStages": [],
       "expectation": "ShouldRender"
     },

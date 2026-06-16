@@ -119,6 +119,7 @@ class RunGpuRendererSceneKadreMainTest {
             "release-gate-progress-board" to 24,
             "texture-swatch-board" to 25,
             "asset-intake-thumbnail-grid" to 26,
+            "photo-contact-sheet" to 57,
             "codec-provenance-gate-board" to 35,
             "sampler-boundary-gate-board" to 41,
             "savelayer-isolation-gate-board" to 43,
