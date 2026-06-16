@@ -29,6 +29,16 @@ data class GPUNativeSurfaceBinding(
         require(pointerLabels.keys.all { it.isNotBlank() }) {
             "GPUNativeSurfaceBinding.pointerLabels keys must not be blank"
         }
+        when (platform) {
+            GPUNativePlatform.AppKitMetalLayer -> {
+                require(pointerLabels.containsKey("nsLayer")) {
+                    "GPUNativeSurfaceBinding.pointerLabels must contain nsLayer for AppKitMetalLayer"
+                }
+                require(pointerLabels.getValue("nsLayer") != 0L) {
+                    "GPUNativeSurfaceBinding.pointerLabels nsLayer must be non-zero for AppKitMetalLayer"
+                }
+            }
+        }
     }
 }
 
@@ -100,6 +110,35 @@ data class GPUBackendRectDraw(
         require(scissorWidth > 0) { "GPUBackendRectDraw.scissorWidth must be positive" }
         require(scissorHeight > 0) { "GPUBackendRectDraw.scissorHeight must be positive" }
     }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is GPUBackendRectDraw) return false
+
+        return rgbaPremul.contentEquals(other.rgbaPremul) &&
+            scissorX == other.scissorX &&
+            scissorY == other.scissorY &&
+            scissorWidth == other.scissorWidth &&
+            scissorHeight == other.scissorHeight
+    }
+
+    override fun hashCode(): Int {
+        var result = rgbaPremul.contentHashCode()
+        result = 31 * result + scissorX
+        result = 31 * result + scissorY
+        result = 31 * result + scissorWidth
+        result = 31 * result + scissorHeight
+        return result
+    }
+
+    override fun toString(): String =
+        "GPUBackendRectDraw(" +
+            "rgbaPremul=${rgbaPremul.contentToString()}, " +
+            "scissorX=$scissorX, " +
+            "scissorY=$scissorY, " +
+            "scissorWidth=$scissorWidth, " +
+            "scissorHeight=$scissorHeight" +
+            ")"
 }
 
 object GPUBackendRuntimeFactory {
