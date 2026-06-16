@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M9-006"
 title: "Add glyph cache telemetry"
-status: "proposed"
+status: "done"
 milestone: "M9"
 priority: "P2"
 owner_area: "glyph"
@@ -67,11 +67,11 @@ data class GlyphCacheInventoryEntry(
 
 ## Acceptance Criteria
 
-- [ ] Telemetry separates A8 generation, SDF generation, atlas packing, cache lookup, eviction, invalidation, and upload-preparation bytes.
-- [ ] Cache inventories include key preimage hashes, resident byte counts, generation tokens, and artifact type.
-- [ ] Warm-cache and cold-cache fixtures are labeled and deterministic in test mode.
-- [ ] Budget refusals emit `text.glyph.artifact-budget-exceeded` or a narrower reason with cache domain and key hash.
-- [ ] Dashboard evidence states that budgets are advisory until a future acceptance update promotes them.
+- [x] Telemetry separates A8 generation, SDF generation, atlas packing, cache lookup, eviction, invalidation, and upload-preparation bytes.
+- [x] Cache inventories include key preimage hashes, resident byte counts, generation tokens, and artifact type.
+- [x] Warm-cache and cold-cache fixtures are labeled and deterministic in test mode.
+- [x] Budget refusals emit `text.glyph.artifact-budget-exceeded` with cache domain and key hash facts.
+- [x] Dashboard evidence states that budgets are advisory until a future acceptance update promotes them.
 
 ## Required Evidence
 
@@ -96,11 +96,18 @@ data class GlyphCacheInventoryEntry(
 ```bash
 rtk git diff --check
 rtk ./gradlew --no-daemon :font:glyph:test --tests '*GlyphCache*'
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
 ```
 
 ## Status Notes
 
 - `proposed`: Adds observability for artifact planning and atlas residency before M12 performance gates.
+- `done`: Checked-in `glyph-cache-inventory.json` and `glyph-cache-telemetry.json` now expose deterministic resident/evicted cache facts, cold/warm advisory timings, and budget-refusal snapshots without promoting GPU or release-gate claims.
 - Move to `ready` only after telemetry schema, deterministic dump mode, and advisory-budget wording are reviewed.
 
 ## Linear Labels

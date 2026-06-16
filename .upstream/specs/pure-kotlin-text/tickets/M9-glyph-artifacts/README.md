@@ -10,11 +10,11 @@ M3 supplies stable TrueType outlines and metrics. M6 supplies shaped glyph runs.
 
 ## Exit Criteria
 
-- [ ] `GlyphStrikeKey` includes every rendering-affecting fact and excludes live handles, atlas coordinates, GPU resources, and object identity.
-- [ ] `GlyphArtifactPlan` records selected route, rejected alternatives, fallback policy, and diagnostics for outline, A8, SDF, color, bitmap, SVG, and unsupported routes.
-- [ ] A8 and SDF CPU artifacts have deterministic bounds, hashes, key preimages, and refusal evidence.
-- [ ] Atlas artifacts expose entry refs, generation, invalidation tokens, eviction traces, source hashes, and budget diagnostics.
-- [ ] Cache inventory and telemetry dumps separate generation, packing, eviction, invalidation, and upload-preparation costs.
+- [x] `GlyphStrikeKey` includes every rendering-affecting fact and excludes live handles, atlas coordinates, GPU resources, and object identity.
+- [x] `GlyphArtifactPlan` records selected route, rejected alternatives, fallback policy, and diagnostics for outline, A8, SDF, color, bitmap, SVG, and unsupported routes.
+- [x] A8 and SDF CPU artifacts have deterministic bounds, hashes, key preimages, and refusal evidence.
+- [x] Atlas artifacts expose entry refs, generation, invalidation tokens, eviction traces, source hashes, and budget diagnostics.
+- [x] Cache inventory and telemetry dumps separate generation, packing, eviction, invalidation, and upload-preparation costs.
 
 ## Tickets
 
@@ -25,7 +25,7 @@ M3 supplies stable TrueType outlines and metrics. M6 supplies shaped glyph runs.
 | [KFONT-M9-003 - Implement quadratic/cubic outline rasterization for A8](KFONT-M9-003-implement-quadratic-cubic-outline-rasterization-for-a8.md) | `done` | `P1` | `tracked-gap` | `glyph` | `KFONT-M3-001`, `KFONT-M9-001`, `KFONT-M9-002` | - |
 | [KFONT-M9-004 - Implement production SDF generator boundaries](KFONT-M9-004-implement-production-sdf-generator-boundaries.md) | `done` | `P0` | `tracked-gap` | `glyph` | `KFONT-M9-001`, `KFONT-M9-002`, `KFONT-M9-003` | `dftext` |
 | [KFONT-M9-005 - Add atlas eviction and invalidation tests](KFONT-M9-005-add-atlas-eviction-and-invalidation-tests.md) | `done` | `P1` | `tracked-gap` | `glyph` | `KFONT-M9-001`, `KFONT-M9-003`, `KFONT-M9-004` | `dftext` |
-| [KFONT-M9-006 - Add glyph cache telemetry](KFONT-M9-006-add-glyph-cache-telemetry.md) | `proposed` | `P2` | `tracked-gap` | `glyph` | `KFONT-M9-005` | `dftext` |
+| [KFONT-M9-006 - Add glyph cache telemetry](KFONT-M9-006-add-glyph-cache-telemetry.md) | `done` | `P2` | `tracked-gap` | `glyph` | `KFONT-M9-005` | `dftext` |
 
 ## Validation Bundle
 

@@ -47,6 +47,14 @@ class GlyphSurfaceTest {
             GlyphRunCacheInventory::class.simpleName,
             GlyphRunCacheInventoryItem::class.simpleName,
             GlyphCacheRecord::class.simpleName,
+            GlyphCacheInventoryEntry::class.simpleName,
+            GlyphCacheInventoryDump::class.simpleName,
+            GlyphCacheTelemetryMetadata::class.simpleName,
+            GlyphCacheRouteCount::class.simpleName,
+            GlyphCacheTimingStats::class.simpleName,
+            GlyphCacheBudgetRefusal::class.simpleName,
+            GlyphCacheTelemetrySample::class.simpleName,
+            GlyphCacheTelemetryDump::class.simpleName,
             GlyphMaskSummary::class.simpleName,
             GlyphRouteDiagnostic::class.simpleName,
             GlyphArtifactPlanDecision::class.simpleName,
@@ -86,6 +94,14 @@ class GlyphSurfaceTest {
                 "GlyphRunCacheInventory",
                 "GlyphRunCacheInventoryItem",
                 "GlyphCacheRecord",
+                "GlyphCacheInventoryEntry",
+                "GlyphCacheInventoryDump",
+                "GlyphCacheTelemetryMetadata",
+                "GlyphCacheRouteCount",
+                "GlyphCacheTimingStats",
+                "GlyphCacheBudgetRefusal",
+                "GlyphCacheTelemetrySample",
+                "GlyphCacheTelemetryDump",
                 "GlyphMaskSummary",
                 "GlyphRouteDiagnostic",
                 "GlyphArtifactPlanDecision",
@@ -2221,6 +2237,245 @@ class GlyphSurfaceTest {
             """.trimIndent() + "\n",
             inventory.toCanonicalJson(),
         )
+    }
+
+    @Test
+    fun glyphCacheInventoryDumpMatchesRepoFixture() {
+        val residentA8 = GlyphCacheInventoryEntry.fromRepresentation(
+            strikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441091").copy(
+                glyphId = 65,
+                representationRoute = "text.glyph.mask.A8",
+                maskFormat = "A8",
+            ),
+            representation = A8GlyphMask(
+                glyphId = 65,
+                width = 4,
+                height = 3,
+                left = -1,
+                top = 4,
+                rowBytes = 4,
+                pixels = listOf(
+                    0, 32, 96, 255,
+                    16, 64, 128, 240,
+                    0, 8, 72, 200,
+                ),
+            ),
+            lifecycleState = GlyphCacheInventoryEntry.ResidentState,
+            generation = 8L,
+            invalidationToken = "font-source-v8",
+        )
+        val residentSdf = GlyphCacheInventoryEntry.fromRepresentation(
+            strikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441092").copy(
+                glyphId = 66,
+                representationRoute = "text.glyph.mask.SDF",
+                maskFormat = "SDF",
+                sdfSpreadPx = 8f,
+                sdfSourceResolutionPx = 16f,
+            ),
+            representation = SDFGlyphMask(
+                glyphId = 66,
+                width = 5,
+                height = 5,
+                left = -2,
+                top = 5,
+                distanceRange = 8f,
+                pixels = List(25) { index -> (index * 9) % 256 },
+                sourceOutlineSha256 = "2b7d4f4c03a0e3b1f34d1bc7b53d8bc967bf5744aca7c13d8f4dd2ba0d9271a8",
+            ),
+            lifecycleState = GlyphCacheInventoryEntry.ResidentState,
+            generation = 8L,
+            invalidationToken = "font-source-v8",
+        )
+        val evictedA8 = GlyphCacheInventoryEntry.fromRepresentation(
+            strikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441093").copy(
+                glyphId = 90,
+                representationRoute = "text.glyph.mask.A8",
+                maskFormat = "A8",
+                paletteIdentity = "palette:legacy-ui",
+            ),
+            representation = A8GlyphMask(
+                glyphId = 90,
+                width = 2,
+                height = 2,
+                left = 0,
+                top = 2,
+                rowBytes = 2,
+                pixels = listOf(
+                    255, 180,
+                    12, 0,
+                ),
+            ),
+            lifecycleState = GlyphCacheInventoryEntry.EvictedState,
+            generation = 7L,
+            invalidationToken = "font-source-v7",
+        )
+
+        val dump = GlyphCacheInventoryDump(
+            dumpId = "glyph-cache-inventory",
+            ownerTickets = listOf("KFONT-M9-006"),
+            fixtureIds = listOf("a8-cache-resident", "sdf-cache-resident", "evicted-a8-entry"),
+            budgetBytes = 512,
+            maxEntries = 4,
+            residentEntries = listOf(residentA8, residentSdf),
+            evictedEntries = listOf(evictedA8),
+            requiredDiagnostics = listOf(
+                "text.glyph.artifact-budget-exceeded",
+                "text.glyph.atlas-generation-stale",
+            ),
+            nonClaims = listOf(
+                "no-complete-target-support-claim",
+                "no-gpu-text-route-claim",
+                "no-dftext-retirement",
+            ),
+        )
+
+        assertEquals(3, dump.entryCount)
+        assertEquals(residentA8.residentBytes + residentSdf.residentBytes, dump.residentBytes)
+        assertEquals(evictedA8.residentBytes, dump.evictedBytes)
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/glyph/glyph-cache-inventory.json"),
+            dump.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun glyphCacheTelemetryDumpMatchesRepoFixture() {
+        val coldRefusal = GlyphCacheBudgetRefusal.fromStrikeKey(
+            strikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441094").copy(
+                glyphId = 91,
+                representationRoute = "text.glyph.mask.A8",
+                maskFormat = "A8",
+            ),
+            cacheDomain = "glyph-cache-memory",
+            observedBytes = 544,
+            advisoryLimitBytes = 512,
+        )
+        val warmRefusal = GlyphCacheBudgetRefusal.fromStrikeKey(
+            strikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441095").copy(
+                glyphId = 66,
+                representationRoute = "text.glyph.mask.SDF",
+                maskFormat = "SDF",
+                sdfSpreadPx = 8f,
+                sdfSourceResolutionPx = 16f,
+            ),
+            cacheDomain = "atlas-upload-preparation",
+            observedBytes = 1536,
+            advisoryLimitBytes = 1024,
+        )
+
+        val dump = GlyphCacheTelemetryDump(
+            dumpId = "glyph-cache-telemetry",
+            ownerTickets = listOf("KFONT-M9-006"),
+            fixtureIds = listOf("cold-cache-sample", "warm-cache-sample"),
+            samples = listOf(
+                GlyphCacheTelemetrySample(
+                    metadata = GlyphCacheTelemetryMetadata(
+                        environmentLabel = "ci-macos-arm64",
+                        fontSourceSet = "font-source-liberation-core",
+                        unicodeVersion = "16.0.0",
+                        cacheState = "cold",
+                        sampleLabel = "cold-start",
+                        sampleCount = 5,
+                    ),
+                    routeCounts = listOf(
+                        GlyphCacheRouteCount("text.glyph.mask.A8", 2),
+                        GlyphCacheRouteCount("text.glyph.mask.SDF", 1),
+                    ),
+                    timings = listOf(
+                        GlyphCacheTimingStats("a8-generation", sampleCount = 5, median = 9, p90 = 11, max = 12),
+                        GlyphCacheTimingStats("atlas-pack", sampleCount = 5, median = 6, p90 = 8, max = 9),
+                        GlyphCacheTimingStats("sdf-generation", sampleCount = 5, median = 13, p90 = 16, max = 18),
+                    ),
+                    cacheHitCount = 0,
+                    cacheMissCount = 3,
+                    evictionCount = 1,
+                    invalidationCount = 1,
+                    residentBytes = 352,
+                    uploadPreparationBytes = 768,
+                    artifactBudgetRefusalCount = 1,
+                    budgetRefusals = listOf(coldRefusal),
+                ),
+                GlyphCacheTelemetrySample(
+                    metadata = GlyphCacheTelemetryMetadata(
+                        environmentLabel = "ci-macos-arm64",
+                        fontSourceSet = "font-source-liberation-core",
+                        unicodeVersion = "16.0.0",
+                        cacheState = "warm",
+                        sampleLabel = "warm-repeat",
+                        sampleCount = 5,
+                    ),
+                    routeCounts = listOf(
+                        GlyphCacheRouteCount("text.glyph.mask.A8", 2),
+                        GlyphCacheRouteCount("text.glyph.mask.SDF", 1),
+                    ),
+                    timings = listOf(
+                        GlyphCacheTimingStats("a8-generation", sampleCount = 5, median = 2, p90 = 3, max = 4),
+                        GlyphCacheTimingStats("atlas-pack", sampleCount = 5, median = 1, p90 = 2, max = 2),
+                        GlyphCacheTimingStats("sdf-generation", sampleCount = 5, median = 4, p90 = 5, max = 6),
+                    ),
+                    cacheHitCount = 3,
+                    cacheMissCount = 0,
+                    evictionCount = 0,
+                    invalidationCount = 0,
+                    residentBytes = 352,
+                    uploadPreparationBytes = 256,
+                    artifactBudgetRefusalCount = 1,
+                    budgetRefusals = listOf(warmRefusal),
+                ),
+            ),
+            requiredDiagnostics = listOf(
+                "text.glyph.artifact-budget-exceeded",
+                "text.glyph.telemetry-unavailable",
+            ),
+            nonClaims = listOf(
+                "no-complete-target-support-claim",
+                "no-gpu-upload-execution-claim",
+                "no-hidden-performance-gate",
+            ),
+        )
+
+        assertEquals(2, dump.sampleCount)
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json"),
+            dump.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun glyphCacheTelemetryRemainsAdvisoryAndPublishesStableDiagnostics() {
+        val refusal = GlyphCacheBudgetRefusal.fromStrikeKey(
+            strikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441096").copy(
+                glyphId = 77,
+                representationRoute = "text.glyph.mask.A8",
+                maskFormat = "A8",
+            ),
+            cacheDomain = "atlas-upload-preparation",
+            observedBytes = 4096,
+            advisoryLimitBytes = 2048,
+        )
+
+        assertEquals("text.glyph.artifact-budget-exceeded", refusal.diagnosticCode)
+        assertEquals(64, refusal.keyPreimageSha256.length)
+        assertTrue(refusal.toCanonicalJson().contains(""""cacheDomain": "atlas-upload-preparation""""))
+
+        val unavailable = GlyphRouteDiagnostic.telemetryUnavailable(
+            cacheDomain = "glyph-cache-memory",
+            detail = "fixture-mode-disabled",
+        )
+        assertEquals("text.glyph.telemetry-unavailable", unavailable.route)
+        assertTrue(unavailable.message.contains("glyph-cache-memory"))
+
+        assertFailsWith<IllegalArgumentException> {
+            GlyphCacheTelemetryMetadata(
+                environmentLabel = "ci-macos-arm64",
+                fontSourceSet = "font-source-liberation-core",
+                unicodeVersion = "16.0.0",
+                cacheState = "cold",
+                sampleLabel = "should-fail",
+                sampleCount = 1,
+                releaseGatePromoted = true,
+            )
+        }
     }
 
     @Test
