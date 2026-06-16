@@ -642,6 +642,24 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `notification shadow stack is backed by two bounded shadow layers`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("notification-shadow-stack")
+        val layers = scene.commands.filterIsInstance<SceneCommand.SaveLayer>()
+        val filters = scene.commands.filterIsInstance<SceneCommand.FilterNode>()
+
+        assertEquals(setOf(SceneTag.Layer, SceneTag.Filter), scene.tags)
+        assertEquals(listOf("M5"), scene.roadmapLinks.map { it.milestone })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertEquals(listOf("primary-notification-layer", "secondary-notification-layer"), layers.map { it.label })
+        assertEquals(listOf("primary-notification-shadow", "secondary-notification-shadow"), filters.map { it.label })
+        assertTrue(layers.all { it.hasFixturePayload })
+        assertTrue(filters.all { it.hasFixturePayload && it.kind?.wireName == "drop-shadow" })
+        assertEquals(listOf("primary-notification-layer", "secondary-notification-layer"), filters.map { it.inputLabel })
+        assertEquals(listOf(1, 2), layers.map { it.paintOrder })
+        assertEquals(listOf(0.68f, 0.54f), filters.map { it.strength })
+    }
+
+    @Test
     fun `filter dag refusal board is backed by stable refusal classes only`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("filter-dag-refusal-board")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -1059,6 +1077,12 @@ class GPURendererSceneRegistryTest {
                 sceneId = "layered-shadow-card",
                 tags = setOf(SceneTag.Layer, SceneTag.Filter),
                 commandFamilies = listOf("clear", "save-layer", "filter-node"),
+                roadmapLinks = listOf(RoadmapExpectation("M5")),
+            ),
+            SceneExpectationRow(
+                sceneId = "notification-shadow-stack",
+                tags = setOf(SceneTag.Layer, SceneTag.Filter),
+                commandFamilies = listOf("clear", "save-layer", "filter-node", "save-layer", "filter-node"),
                 roadmapLinks = listOf(RoadmapExpectation("M5")),
             ),
             SceneExpectationRow(
