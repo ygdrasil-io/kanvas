@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 28,
+  "sceneCount": 31,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -133,6 +133,26 @@
       "expectation": "ShouldRender"
     },
     {
+      "sceneId": "savelayer-isolation-gate-board",
+      "title": "SaveLayer Isolation Gate Board",
+      "description": "Layer route gate board showing provider-owned offscreen target, clear/load/store, child isolation, restore composite, active attachment, resource generation, and CPU/GPU/reference evidence gates without materializing a saveLayer.",
+      "tags": ["Rect","RRect","Clip","Layer"],
+      "kgpuMilestones": ["M5"],
+      "ticketIds": ["KGPU-M5-001"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "destination-read-strategy-gate-board",
+      "title": "Destination Read Strategy Gate Board",
+      "description": "Destination-read strategy gate board showing bounded copy, validated intermediate, layer isolation, pass split, active attachment, texture-binding, framebuffer-fetch, and CPU/GPU/reference evidence gates without promoting a destination-read route.",
+      "tags": ["Rect","RRect","Clip","Blend"],
+      "kgpuMilestones": ["M5"],
+      "ticketIds": ["KGPU-M5-002"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
       "sceneId": "layered-shadow-card",
       "title": "Layered Shadow Card",
       "description": "Bounded shadow-card layer fixture with explicit drop-shadow filter route.",
@@ -199,6 +219,16 @@
       "tags": ["RuntimeEffect"],
       "kgpuMilestones": ["M7"],
       "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "runtime-effect-descriptor-gate-board",
+      "title": "Runtime Effect Descriptor Gate Board",
+      "description": "Registered SimpleRT descriptor fixture with visible WGSL reflection, CPU oracle, route integration, adapter evidence, unregistered descriptor, and dynamic SkSL refusal gates.",
+      "tags": ["Rect","RRect","Clip","RuntimeEffect"],
+      "kgpuMilestones": ["M7"],
+      "ticketIds": ["KGPU-M7-001"],
       "rStages": [],
       "expectation": "ShouldRender"
     },

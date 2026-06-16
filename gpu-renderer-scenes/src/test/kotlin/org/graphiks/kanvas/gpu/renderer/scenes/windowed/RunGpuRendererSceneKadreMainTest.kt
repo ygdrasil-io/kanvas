@@ -53,6 +53,49 @@ class RunGpuRendererSceneKadreMainTest {
     }
 
     @Test
+    fun `shared windowed session output also writes stable scene session mirrors`() {
+        val output = Files.createTempDirectory("gpu-renderer-scenes-windowed-main")
+            .resolve("windowed")
+            .resolve("session.json")
+        val scenes = listOf(
+            "runtime-effect-descriptor-gate-board" to 52,
+            "savelayer-isolation-gate-board" to 53,
+        )
+
+        withKadreWindowedSceneRunnerLauncher(
+            WindowedSceneRunnerLauncher { scene, frames, runnerOutput ->
+                WindowedSceneSessionReport.presented(
+                    scene = scene,
+                    requestedFrames = frames,
+                    surfaceFormat = "BGRA8Unorm",
+                    adapterInfo = "test-adapter",
+                ).writeTo(runnerOutput)
+            },
+        ) {
+            scenes.forEach { (sceneId, frames) ->
+                runGpuRendererSceneKadre(arrayOf(sceneId, frames.toString(), output.toString()))
+
+                val sceneSessionJson = output.parent.resolve(sceneId).resolve("session.json").readText()
+                assertContains(sceneSessionJson, "\"sceneId\": \"$sceneId\"")
+                assertContains(sceneSessionJson, "\"status\": \"presented\"")
+                assertContains(sceneSessionJson, "\"requestedFrames\": $frames")
+                assertContains(sceneSessionJson, "\"presentedFrames\": $frames")
+            }
+        }
+
+        val latestJson = output.readText()
+        assertContains(latestJson, "\"sceneId\": \"savelayer-isolation-gate-board\"")
+        assertContains(latestJson, "\"requestedFrames\": 53")
+
+        val runtimeSessionJson = output.parent
+            .resolve("runtime-effect-descriptor-gate-board")
+            .resolve("session.json")
+            .readText()
+        assertContains(runtimeSessionJson, "\"sceneId\": \"runtime-effect-descriptor-gate-board\"")
+        assertContains(runtimeSessionJson, "\"requestedFrames\": 52")
+    }
+
+    @Test
     fun `catalogued rect rrect gradient clip and bitmap scenes launch Kadre runner instead of not yet rendered`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-windowed-main")
         val renderableScenes = listOf(
@@ -73,12 +116,15 @@ class RunGpuRendererSceneKadreMainTest {
             "asset-intake-thumbnail-grid" to 26,
             "codec-provenance-gate-board" to 35,
             "sampler-boundary-gate-board" to 41,
+            "savelayer-isolation-gate-board" to 43,
+            "destination-read-strategy-gate-board" to 44,
             "clipped-avatar-grid" to 27,
             "filtered-photo-chip" to 28,
             "layered-shadow-card" to 29,
             "text-handoff-boundary-board" to 36,
             "text-representation-gate-board" to 37,
             "runtime-effect-color-tile" to 30,
+            "runtime-effect-descriptor-gate-board" to 42,
             "sdr-color-boundary-board" to 38,
             "mesh-ribbon" to 31,
             "filter-dag-refusal-board" to 32,
