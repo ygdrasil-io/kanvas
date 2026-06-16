@@ -2603,6 +2603,70 @@ class FontScalerSurfaceTest {
     }
 
     @Test
+    fun cffType2FixtureInterpreterRejectsEndcharRemaindersAndStackOverflow() {
+        val interpreter = CFFType2CharStringInterpreter()
+
+        val trailingBytesFailure = assertFailsWith<FontScalerRefusalException> {
+            interpreter.interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Operator(14),
+                    type2Number(10),
+                ),
+                glyphId = 16u,
+                format = "cff",
+            )
+        }
+        assertEquals("font.scaler.cff.trailing-bytes", trailingBytesFailure.diagnostic.code)
+        assertEquals("cff.trailing-bytes", trailingBytesFailure.diagnostic.detail)
+        assertEquals("charstring", trailingBytesFailure.diagnostic.operation)
+        assertEquals(16u, trailingBytesFailure.diagnostic.glyphId)
+        assertTrue(trailingBytesFailure.message.orEmpty().contains("operator offset"))
+
+        val leftoverOperandsFailure = assertFailsWith<FontScalerRefusalException> {
+            interpreter.interpretEvidence(
+                charString = type2CharString(
+                    type2Number(10),
+                    type2Operator(14),
+                ),
+                glyphId = 17u,
+                format = "cff",
+            )
+        }
+        assertEquals(FontScalerDiagnosticCodes.CFF_STACK_MALFORMED, leftoverOperandsFailure.diagnostic.code)
+        assertEquals("cff.stack-malformed", leftoverOperandsFailure.diagnostic.detail)
+        assertEquals("charstring", leftoverOperandsFailure.diagnostic.operation)
+        assertEquals(17u, leftoverOperandsFailure.diagnostic.glyphId)
+
+        val stackOverflowFailure = assertFailsWith<FontScalerRefusalException> {
+            interpreter.interpretEvidence(
+                charString = type2CharString(
+                    *Array(49) { index -> type2Number(index) },
+                    type2Operator(14),
+                ),
+                glyphId = 18u,
+                format = "cff",
+            )
+        }
+        assertEquals("font.scaler.cff.stack-overflow", stackOverflowFailure.diagnostic.code)
+        assertEquals("cff.stack-overflow", stackOverflowFailure.diagnostic.detail)
+        assertEquals("charstring", stackOverflowFailure.diagnostic.operation)
+        assertEquals(18u, stackOverflowFailure.diagnostic.glyphId)
+        assertTrue(stackOverflowFailure.message.orEmpty().contains("operator offset"))
+    }
+
+    @Test
+    fun cffCharStringTraceGoldenMatchesGeneratedEvidence() {
+        val expected = Files.readString(
+            kanvasProjectRoot().resolve("reports/font/fixtures/expected/scaler/cff-charstring-trace.json"),
+        ).trimEnd()
+
+        assertEquals(expected, cffCharStringTraceDump())
+    }
+
+    @Test
     fun cffScalerUsesGeneratedCffTableCharstringsSubrsAndMetrics() {
         val cffTable = generatedCFFTable(
             charStrings = listOf(
@@ -4732,6 +4796,185 @@ class FontScalerSurfaceTest {
             else -> error("Unsupported generated CFF DICT number byte $firstByte.")
         }
 
+    private fun cffCharStringTraceDump(): String {
+        val interpreter = CFFType2CharStringInterpreter(
+            localSubroutines = listOf(
+                type2CharString(
+                    type2Number(25),
+                    type2Number(0),
+                    type2Operator(5),
+                    type2Operator(11),
+                ),
+            ),
+            globalSubroutines = listOf(
+                type2CharString(
+                    type2Number(0),
+                    type2Number(25),
+                    type2Operator(5),
+                    type2Operator(11),
+                ),
+            ),
+        )
+        val lineCurveFlex = interpreter.interpretEvidence(
+            charString = type2CharString(
+                type2Number(100),
+                type2Number(200),
+                type2Operator(21),
+                type2Number(50),
+                type2Number(0),
+                type2Number(0),
+                type2Number(50),
+                type2Operator(5),
+                type2Number(10),
+                type2Number(0),
+                type2Number(20),
+                type2Number(30),
+                type2Number(40),
+                type2Number(30),
+                type2Operator(8),
+                type2Number(5),
+                type2Number(0),
+                type2Number(10),
+                type2Number(10),
+                type2Number(15),
+                type2Number(0),
+                type2Number(15),
+                type2Number(0),
+                type2Number(10),
+                type2Number(-10),
+                type2Number(5),
+                type2Number(0),
+                type2Number(50),
+                type2EscapedOperator(35),
+                type2Operator(14),
+            ),
+            glyphId = 3u,
+            format = "cff",
+        )
+        val widthAndHints = interpreter.interpretEvidence(
+            charString = type2CharString(
+                type2Number(450),
+                type2Number(10),
+                type2Number(5),
+                type2Operator(1),
+                type2Number(20),
+                type2Number(5),
+                type2Operator(23),
+                type2Operator(19),
+                intArrayOf(0xff),
+                type2Number(0),
+                type2Number(0),
+                type2Operator(21),
+                type2Operator(14),
+            ),
+            glyphId = 15u,
+            format = "cff",
+        )
+        val subroutines = interpreter.interpretEvidence(
+            charString = type2CharString(
+                type2Number(0),
+                type2Number(0),
+                type2Operator(21),
+                type2Number(-107),
+                type2Operator(10),
+                type2Number(-107),
+                type2Operator(29),
+                type2Operator(14),
+            ),
+            glyphId = 4u,
+            format = "cff",
+        )
+
+        fun refusalSnapshot(block: () -> Unit): String {
+            val failure = assertFailsWith<FontScalerRefusalException>(block = block)
+            return failure.diagnostic.toCanonicalJson()
+        }
+
+        val stackUnderflow = refusalSnapshot {
+            interpreter.interpretEvidence(
+                charString = type2CharString(
+                    type2Number(50),
+                    type2Operator(21),
+                ),
+                glyphId = 6u,
+                format = "cff",
+            )
+        }
+        val unsupportedOperator = refusalSnapshot {
+            interpreter.interpretEvidence(
+                charString = type2CharString(type2EscapedOperator(0)),
+                glyphId = 7u,
+                format = "cff",
+            )
+        }
+        val trailingBytes = refusalSnapshot {
+            interpreter.interpretEvidence(
+                charString = type2CharString(
+                    type2Number(0),
+                    type2Number(0),
+                    type2Operator(21),
+                    type2Operator(14),
+                    type2Number(10),
+                ),
+                glyphId = 16u,
+                format = "cff",
+            )
+        }
+        val stackOverflow = refusalSnapshot {
+            interpreter.interpretEvidence(
+                charString = type2CharString(
+                    *Array(49) { index -> type2Number(index) },
+                    type2Operator(14),
+                ),
+                glyphId = 18u,
+                format = "cff",
+            )
+        }
+
+        return """
+            {
+              "schemaVersion": 1,
+              "dumpId": "cff-charstring-trace",
+              "ownerTickets": [
+                "KFONT-M4-002"
+              ],
+              "fixtureIds": [
+                "cff-type2-lines.otf",
+                "cff-type2-curves.otf",
+                "cff-type2-flex.otf",
+                "cff-type2-hints-width.otf",
+                "cff-type2-stack-underflow.otf",
+                "cff-type2-unsupported-operator.otf"
+              ],
+              "positiveFixtures": [
+                {
+                  "fixtureId": "cff-type2-lines.otf",
+                  "evidence": ${lineCurveFlex.toCanonicalJson().prependIndent("                    ").trimStart()}
+                },
+                {
+                  "fixtureId": "cff-type2-hints-width.otf",
+                  "evidence": ${widthAndHints.toCanonicalJson().prependIndent("                    ").trimStart()}
+                },
+                {
+                  "fixtureId": "cff-type2-curves.otf",
+                  "evidence": ${subroutines.toCanonicalJson().prependIndent("                    ").trimStart()}
+                }
+              ],
+              "diagnosticSnapshots": {
+                "stackUnderflow": $stackUnderflow,
+                "unsupportedOperator": $unsupportedOperator,
+                "trailingBytes": $trailingBytes,
+                "stackOverflow": $stackOverflow
+              },
+              "nonClaims": [
+                "generated-fixture-evidence-only",
+                "no-complete-type2-operator-coverage-claim",
+                "no-cff-rendering-support-claim",
+                "no-native-scaler-oracle-claim"
+              ]
+            }
+        """.trimIndent()
+    }
     private fun readGeneratedTestInt16(data: ByteArray, offset: Int): Int =
         ((data[offset].toInt() and 0xff) shl 8) or (data[offset + 1].toInt() and 0xff)
 

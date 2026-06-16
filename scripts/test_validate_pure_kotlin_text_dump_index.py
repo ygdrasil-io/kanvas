@@ -55,6 +55,7 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
                 "arabic-seed-readiness",
                 "bidi-runs",
                 "cff-cff2-readiness",
+                "cff-charstring-trace",
                 "cff-index-dict",
                 "cmap-contract",
                 "color-svg-emoji-goldens",
