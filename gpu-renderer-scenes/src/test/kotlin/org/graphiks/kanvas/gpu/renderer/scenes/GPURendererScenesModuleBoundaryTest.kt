@@ -24,8 +24,12 @@ class GPURendererScenesModuleBoundaryTest {
             "gpu-renderer-scenes must not depend on :gpu-raster directly",
         )
 
-        val srcRoot = repoPath("gpu-renderer-scenes/src/main")
-        val sceneSourceFiles = Files.walk(srcRoot).filter { Files.isRegularFile(it) }.toList()
+        val srcRoot = repoPath("gpu-renderer-scenes/src")
+        val sceneSourceFiles = Files.walk(srcRoot)
+            .filter { path ->
+                Files.isRegularFile(path) && path.fileName.toString() != "GPURendererScenesModuleBoundaryTest.kt"
+            }
+            .toList()
         val sceneSource = sceneSourceFiles.joinToString("\n") { it.readText() }
 
         assertFalse("org.skia.gpu.webgpu" in sceneSource)
