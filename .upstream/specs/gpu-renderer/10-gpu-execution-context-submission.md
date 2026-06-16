@@ -17,6 +17,10 @@ Target color-space descriptors, surface value specs, store conversions, and
 readback interpretation are defined by `29-color-management-pipeline.md`.
 This execution spec records and validates the target facts needed to encode
 commands; it does not invent color conversion behavior.
+Draw packet and pass command stream materialization is defined in
+`37-draw-packet-command-stream.md`. This execution spec consumes the resulting
+`GPUCommandEncoderPlan` and owns facade encoding, queue submission, completion,
+and readback status.
 
 ## Ownership Boundary
 
@@ -134,6 +138,13 @@ A task must declare the scope it needs before encoding. Encoding a render draw
 inside a compute scope, sampling a target while it is active as an attachment,
 or copying from a texture without the required usage flags must refuse with a
 stable diagnostic before submitting commands.
+
+Render tasks that contain draws must encode from a `GPUPassCommandStream`, not
+from ad hoc loops over normalized commands or planner internals. The command
+stream may be produced by the first-slice order-preserving path or by a later
+sorted/batched planner, but the execution layer sees the same command classes:
+pipeline bind, bind group bind, buffer bind, scissor/viewport state, draw,
+copy/upload, pass boundary, and readback request records.
 
 Command scopes must preserve:
 
@@ -294,6 +305,8 @@ Promoted execution behavior requires:
   `29-color-management-pipeline.md` are promoted;
 - readback success or skipped-lane diagnostics;
 - device-loss refusal or rebuild tests for touched resources;
+- packet-stream-to-command-stream encoding tests from
+  `37-draw-packet-command-stream.md` before any draw route is promoted;
 - PM evidence that distinguishes encoded, submitted, completed, skipped, and
   failed work.
 

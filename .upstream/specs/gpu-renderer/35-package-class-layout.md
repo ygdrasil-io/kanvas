@@ -600,6 +600,10 @@ Primary concepts:
 - `GPUDrawInvocation`
 - `GPUDrawInsertion`
 - `GPUDrawPass`
+- `GPUDrawPacket`
+- `GPUDrawPacketStream`
+- `GPUPassCommand`
+- `GPUPassCommandStream`
 - `GPURenderStep`
 - `GPURenderStepID`
 - `GPURenderStepPlan`
@@ -656,6 +660,7 @@ Primary concepts:
 
 - `GPUExecutionContext`
 - `GPUCommandScope`
+- `GPUCommandEncoderPlan`
 - `GPUCommandSubmission`
 - `GPUSurfaceTarget`
 - `GPUSurfaceTargetDescriptor`
@@ -666,8 +671,8 @@ Primary concepts:
 - `GPUExecutionDiagnostic`
 
 This package is the only production package allowed to call command-submission
-APIs on the `GPU` facade. Other packages describe work through plans and
-materialization records.
+APIs on the `GPU` facade. Other packages describe work through plans,
+packet/command streams, and materialization records.
 
 ### `validation`
 
