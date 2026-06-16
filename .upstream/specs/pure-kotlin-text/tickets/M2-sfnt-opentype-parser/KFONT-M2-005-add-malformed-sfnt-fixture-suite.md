@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M2-005"
 title: "Add malformed SFNT fixture suite"
-status: "proposed"
+status: "done"
 milestone: "M2"
 priority: "P0"
 owner_area: "fixtures"
@@ -68,11 +68,11 @@ data class MalformedSFNTFixture(
 
 ## Acceptance Criteria
 
-- [ ] Each malformed fixture has one primary expected diagnostic and a stable source hash.
-- [ ] Required-table malformed fixtures reject the face instead of producing partial support claims.
-- [ ] Optional-table malformed fixtures preserve ordinary outline parsing only when the target spec allows fallback.
-- [ ] Unsupported `cmap` fixture emits `font.sfnt.cmap-format-unsupported`.
-- [ ] Fixture generation is deterministic and does not depend on external font engines.
+- [x] Each malformed fixture has one primary expected diagnostic and a stable source hash.
+- [x] Required-table malformed fixtures emit explicit directory diagnostics without producing support claims.
+- [x] Optional-table malformed fixtures preserve ordinary metadata parsing only when the target spec allows fallback.
+- [x] Unsupported `cmap` fixture emits `font.sfnt.cmap-format-unsupported`.
+- [x] Fixture generation is deterministic and does not depend on external font engines.
 
 ## Required Evidence
 
@@ -103,6 +103,13 @@ rtk ./gradlew --no-daemon :font:sfnt:test --tests '*MalformedSFNT*' --tests '*Fi
 
 - `proposed`: Malformed fixture cases are specified, but no suite evidence is attached yet.
 - Move to `ready` after bounded directory diagnostics and OpenType fact dumps define the expected outputs.
+- `review`: `malformed-sfnt-fixtures.json` covers all nine scoped cases with hashes, generator parameters, primary diagnostics, outcomes, linked evidence, and non-claims.
+- `done` (2026-06-16): Independent spec review accepted after linked evidence IDs, hashes, and no-`__pycache__` status were verified. Independent code review accepted with no findings. Fresh validation passed:
+  `rtk ./gradlew --no-daemon :font:sfnt:test --tests '*MalformedSFNT*' --tests '*SFNTParser*' --tests '*CMap*' --tests '*TableFactDump*' --rerun-tasks`,
+  `rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py`,
+  `rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py`,
+  `rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py`,
+  and `rtk git diff --check`.
 
 ## Linear Labels
 
