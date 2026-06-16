@@ -2363,6 +2363,75 @@ class SFNTSurfaceTest {
     }
 
     @Test
+    fun defaultOpenTypeFaceParserExposesParsedGposSingleAdjustmentsInLayout() {
+        val gpos = gposSingleAdjustmentFormat1Table(
+            glyphId = 7,
+            xPlacement = 40,
+            yPlacement = -20,
+            xAdvance = -30,
+        )
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0041,
+                                endCode = 0x0041,
+                                startGlyphId = 7,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 2,
+                ),
+                "maxp" to maxpTable(numGlyphs = 12),
+                "hmtx" to hmtxTable(
+                    metric(advanceWidth = 500, leftSideBearing = 0),
+                    metric(advanceWidth = 450, leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                ),
+                "GPOS" to gpos,
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+
+        assertEquals(emptyList(), parsed.diagnostics)
+        assertEquals(gpos.size, parsed.layout.tables.getValue(SFNTTableTag("GPOS")).size)
+        assertEquals(
+            OpenTypeGposValueRecord(
+                xPlacement = 40,
+                yPlacement = -20,
+                xAdvance = -30,
+            ),
+            parsed.layout.gposSingles?.lookupAdjustment(7),
+        )
+        assertEquals(null, parsed.layout.gposSingles?.lookupAdjustment(11))
+    }
+
+    @Test
     fun defaultOpenTypeFaceParserReportsGposFormat2ExcessiveFinalExpansionAsDiagnostic() {
         val gpos = gposPairAdjustmentFormat2Class0Table(
             coverageGlyphCount = 257,
@@ -3272,6 +3341,70 @@ class SFNTSurfaceTest {
         table.writeUInt16(subtableStart + pairSetOffset, 1)
         table.writeUInt16(subtableStart + pairSetOffset + 2, rightGlyphId)
         table.writeInt16(subtableStart + pairSetOffset + 4, xAdvance)
+
+        return table
+    }
+
+    private fun gposSingleAdjustmentFormat1Table(
+        glyphId: Int,
+        xPlacement: Int = 0,
+        yPlacement: Int = 0,
+        xAdvance: Int = 0,
+        scriptTag: String = "latn",
+    ): ByteArray {
+        require(scriptTag.length == 4)
+
+        val table = ByteArray(78)
+        val scriptListOffset = 10
+        val featureListOffset = 30
+        val lookupListOffset = 44
+        val scriptStart = scriptListOffset + 8
+        val langSysStart = scriptStart + 4
+        val featureStart = featureListOffset + 8
+        val lookupStart = lookupListOffset + 4
+        val subtableStart = lookupStart + 8
+        val coverageOffset = 12
+        val valueRecordStart = subtableStart + 6
+
+        table.writeUInt16(0, 1)
+        table.writeUInt16(2, 0)
+        table.writeUInt16(4, scriptListOffset)
+        table.writeUInt16(6, featureListOffset)
+        table.writeUInt16(8, lookupListOffset)
+
+        table.writeUInt16(scriptListOffset, 1)
+        scriptTag.toByteArray(Charsets.ISO_8859_1).copyInto(table, scriptListOffset + 2)
+        table.writeUInt16(scriptListOffset + 6, 8)
+        table.writeUInt16(scriptStart, 4)
+        table.writeUInt16(scriptStart + 2, 0)
+        table.writeUInt16(langSysStart, 0)
+        table.writeUInt16(langSysStart + 2, 0xffff)
+        table.writeUInt16(langSysStart + 4, 1)
+        table.writeUInt16(langSysStart + 6, 0)
+
+        table.writeUInt16(featureListOffset, 1)
+        "kern".toByteArray(Charsets.ISO_8859_1).copyInto(table, featureListOffset + 2)
+        table.writeUInt16(featureListOffset + 6, 8)
+        table.writeUInt16(featureStart, 0)
+        table.writeUInt16(featureStart + 2, 1)
+        table.writeUInt16(featureStart + 4, 0)
+
+        table.writeUInt16(lookupListOffset, 1)
+        table.writeUInt16(lookupListOffset + 2, 4)
+        table.writeUInt16(lookupStart, 1)
+        table.writeUInt16(lookupStart + 2, 0)
+        table.writeUInt16(lookupStart + 4, 1)
+        table.writeUInt16(lookupStart + 6, 8)
+
+        table.writeUInt16(subtableStart, 1)
+        table.writeUInt16(subtableStart + 2, coverageOffset)
+        table.writeUInt16(subtableStart + 4, 0x0007)
+        table.writeInt16(valueRecordStart, xPlacement)
+        table.writeInt16(valueRecordStart + 2, yPlacement)
+        table.writeInt16(valueRecordStart + 4, xAdvance)
+        table.writeUInt16(subtableStart + coverageOffset, 1)
+        table.writeUInt16(subtableStart + coverageOffset + 2, 1)
+        table.writeUInt16(subtableStart + coverageOffset + 4, glyphId)
 
         return table
     }

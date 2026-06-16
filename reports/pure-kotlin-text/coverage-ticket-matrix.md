@@ -1,6 +1,6 @@
 # Pure Kotlin Text Coverage And Ticket Matrix
 
-Date: 2026-06-14
+Date: 2026-06-16
 Status: coordination evidence
 
 This report maps `.upstream/specs/pure-kotlin-text/` to implementation slices.
@@ -31,7 +31,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 |---|---|---|---|
 | `00-architecture-and-module-boundaries.md` | Module ownership, dependency direction, boundary contracts, serializable diagnostics. | `font/core`, `font/sfnt`, `font/scaler`, `font/text`, `font/glyph`, `font/gpu-api`, `gpu-renderer/text`. | Boundary tests, no forbidden dependencies, dumps with no object identity. |
 | `01-font-source-sfnt-and-scalers.md` | Font sources, TTC/OTC, `cmap`, TrueType `glyf`, CFF/CFF2, variations, fallback catalog. | `font/core`, `font/sfnt`, `font/scaler`, current `kanvas-skia` OpenType backend. | TTF/TTC/malformed fixtures, path/metric dumps, variation fixtures, stable `font.*` diagnostics. |
-| `02-opentype-layout-shaping-engine.md` | Unicode data, bidi, script itemization, GSUB/GPOS/GDEF, clusters, fallback runs, script matrix. | `font/text` basic segmentation/bidi/script, bounded kerning and GPOS pair slice. | One positive and one refusal fixture per required script row, shaping dumps, `text.shaping.*` diagnostics. |
+| `02-opentype-layout-shaping-engine.md` | Unicode data, bidi, script itemization, GSUB/GPOS/GDEF, clusters, fallback runs, script matrix. | `font/text` basic segmentation/bidi/script, bounded kerning, GPOS single-adjustment slice, and GPOS pair value-record slice. | One positive and one refusal fixture per required script row, shaping dumps, `text.shaping.*` diagnostics. |
 | `03-paragraph-engine.md` | Paragraph builder, style runs, wrapping, bidi lines, ellipsis, placeholders, selection, hit testing. | `font/text` paragraph skeleton and deterministic simple line breaker. | Layout dumps, paragraph fixtures, hit-test/selection evidence. |
 | `04-glyph-representation-and-artifacts.md` | Outline, A8, SDF, atlas, strike keys, cache, invalidation, CPUPreparedGPU artifacts. | `font/glyph`, `font/gpu-api`, current `SkCpuGlyphCache` prototype. | Mask/SDF hashes, atlas dumps, stale/capacity refusals, `text.glyph.*` diagnostics. |
 | `05-color-fonts-bitmap-svg-emoji.md` | COLR/CPAL, COLRv1 graph, PNG bitmap glyphs, SVG-in-OpenType, emoji dispatch. | `font/glyph/color`, `font/sfnt` metadata, current OpenType color metadata. | COLR/PNG/SVG/emoji fixtures, budget/security refusals, non-PNG refusal evidence. |
@@ -1634,6 +1634,41 @@ Remaining gate: this is contract and dump evidence only. It does not implement
 GSUB or GPOS lookup behavior, required script support, font fallback policy,
 paragraph layout, glyph artifacts, CPU oracle support promotion, or any GPU
 text route.
+
+### KFONT-M6-004: GPOS Single/Pair Positioning Slice
+
+Status: implemented as a bounded review slice; independent review pending.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-004-implement-gpos-single-pair-positioning.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `OpenTypeLayoutTables` now exposes `gposSingles` in addition to `gposPairs`.
+- `font/sfnt` parses bounded GPOS LookupType 1 single positioning and preserves bounded pair `ValueRecord` data for LookupType 2 formats 1 and 2.
+- `BasicOpenTypeShapingEngine` now applies `xPlacement`, `yPlacement`, and `xAdvance` from GPOS single and pair records into deterministic cluster offsets and advances.
+- Pair positioning is explicitly skipped when `FeatureSet["kern"] == 0`, preserving a stable feature-off path for the bounded kerning slice.
+- Surface tests cover parsed single adjustments, parsed pair adjustments, combined single+pair application, and `kern`-disabled refusal-by-omission behavior.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest
+```
+
+Remaining gate: this slice does not yet promote full GPOS support. `gpos-trace.json`,
+`shaped-glyph-run.json`, layout-contract-level malformed lookup diagnostics,
+fixture-backed refusal evidence, and broader lookup-order/complex-script
+coverage remain open before any readiness or support-claim change.
 
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 
