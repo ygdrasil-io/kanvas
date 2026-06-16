@@ -66,6 +66,7 @@ REQUIRED_FONT_FAMILY_GATES = {
         "cff-unsupported-operator-refusal",
         "cff2-blend-vsindex",
         "cff2-variation-store-region",
+        "cff2-variation-path-output",
         "cff-cff2-malformed-index-dict-refusal",
         "selected-face-cff-cff2-provenance-dump",
     ],

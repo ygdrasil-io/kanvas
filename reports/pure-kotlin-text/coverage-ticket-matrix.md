@@ -1173,6 +1173,54 @@ rtk git diff --check
 Remaining gate: this remains generated-fixture path-output evidence only. It
 does not claim broader real-font corpus coverage, complete CFF2 variation
 output, native scaler parity, or GPU glyph route support.
+### KFONT-M4-005: CFF2 Variation Path Output
+
+Status: done; freshly validated in this wave.
+
+Files:
+
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/font/fixtures/expected/scaler/cff-charstring-trace.json`
+- `reports/font/fixtures/expected/scaler/cff-scaler-path-output.json`
+- `reports/font/fixtures/expected/scaler/cff2-variation-trace.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m4-005-cff2-variation-path-output.md`
+
+Evidence:
+
+- `CFF2Scaler` now normalizes user-space `fvar` coordinates, applies `avar`
+  remapping, and resolves bounded CFF2 `VariationStore` scalars before
+  executing `blend` for path-output evidence.
+- `cff2-variation-trace.json` records distinct default/min/max/named path
+  hashes, normalized variation coordinates, and per-`blend` vector evidence
+  including `vsindex`, region indexes, scalars, and blended values.
+- The existing `cff-charstring-trace.json` and `cff-scaler-path-output.json`
+  goldens are rebased to serialize deterministic `blendVectors` alongside the
+  pre-existing CFF trace/path evidence.
+- Stable refusal coverage now includes the dedicated
+  `font.scaler.cff2.blend-stack-malformed` route plus
+  `cff2.vsindex-invalid`, `cff2.variation-store-missing`,
+  `cff2.variation-axis`, and `cff2.variation-position-non-finite`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2FixtureInterpreterAppliesVsindexBlendEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScalerNormalizesUserSpaceVariationCoordinatesBeforeBlendAndMetrics --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScalerScaledGlyphEvidenceUsesNormalizedVariationPosition --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScalerAppliesAvarCoordinateMappingBeforeBlend --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScaledGlyphEvidenceRefusesBlendWhenVariationStoreIsMissing --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScaledGlyphEvidenceRefusesInvalidVsIndexDeterministically --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScaledGlyphEvidenceReportsUnknownRequestedAxisWithoutThrowing --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScaledGlyphEvidenceReportsNonFiniteAxisWithoutThrowing --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2BlendRejectsMalformedStackWithDedicatedDiagnostic --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2VariationTraceGoldenMatchesGeneratedEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffCharStringTraceGoldenMatchesGeneratedEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffScalerPathOutputGoldenMatchesGeneratedEvidence
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this remains generated-fixture CFF2 variation evidence only. It
+does not claim broader real-font CFF2 support, HVAR/VVAR/MVAR advance deltas,
+native-scaler parity, or GPU glyph route support.
 ### PKT-05B: CFF INDEX/DICT Fixture Pack And Refusal Goldens
 
 Status: done; independently reviewed and freshly validated.

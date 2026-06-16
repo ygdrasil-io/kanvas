@@ -59,6 +59,7 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
                 "cff-index-dict",
                 "cff-scaler-path-output",
                 "cff-subroutine-trace",
+                "cff2-variation-trace",
                 "cmap-contract",
                 "color-svg-emoji-goldens",
                 "fallback-catalog-build",

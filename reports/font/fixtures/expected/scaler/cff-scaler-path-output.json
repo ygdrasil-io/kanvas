@@ -62,6 +62,7 @@
           "callTrace": [],
           "variationPosition": [],
           "cff2VsIndex": 0,
+          "blendVectors": [],
           "diagnostics": []
         },
           "diagnostics": []
@@ -98,6 +99,7 @@
           "callTrace": [{"depth": 0, "scope": "local", "encodedIndex": -107, "resolvedIndex": 0, "bias": 107, "callerByteOffset": 7, "returnByteOffset": 3, "instructionBudgetRemaining": 1015, "expandedByteBudgetRemaining": 4085}, {"depth": 0, "scope": "global", "encodedIndex": -107, "resolvedIndex": 0, "bias": 107, "callerByteOffset": 9, "returnByteOffset": 3, "instructionBudgetRemaining": 1009, "expandedByteBudgetRemaining": 4079}],
           "variationPosition": [],
           "cff2VsIndex": 0,
+          "blendVectors": [],
           "diagnostics": []
         },
           "diagnostics": []
@@ -134,6 +136,7 @@
           "callTrace": [],
           "variationPosition": [],
           "cff2VsIndex": 0,
+          "blendVectors": [],
           "diagnostics": []
         },
           "diagnostics": []
