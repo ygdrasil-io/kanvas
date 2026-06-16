@@ -86,6 +86,50 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
   `.upstream/specs/gpu-renderer/09-draw-family-support-matrix.md` until pure
   Kotlin text artifacts, route diagnostics, GPU renderer registry support,
   WGSL/binding evidence, and GPU evidence are promoted.
+- 2026-06-16 KFONT M6 blocker audit: after draft PRs `#1705`, `#1706`, and
+  `#1707`, the remaining M6 shaping tickets are not actionnable without the
+  missing contextual GSUB, mark/cursive GPOS, Arabic, Devanagari, Thai/CJK,
+  and advanced lookup fixture families named in their tickets. This audit is
+  coordination evidence only and does not promote any shaping support claim.
+
+### KFONT-M6 Remaining Blocker Audit
+
+Status: coordination-only blocker audit; no support promotion.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-003-implement-gsub-contextual-lookups.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-005-implement-mark-and-cursive-positioning.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-007-add-arabic-shaping-fixtures.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-008-add-devanagari-shaping-fixtures.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-009-add-thai-and-cjk-shaping-boundaries.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-010-implement-gsub-gpos-extension-chaining-and-variation-adjustment-lookups.md`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m6-blocker-audit.md`
+
+Evidence:
+
+- Draft PR `#1706` is the current bounded GSUB simple prerequisite for
+  `KFONT-M6-003`.
+- Draft PR `#1705` is the current bounded GPOS prerequisite for
+  `KFONT-M6-005` and part of the gate for `KFONT-M6-009` and `KFONT-M6-010`.
+- Draft PR `#1707` is the current script-feature-policy prerequisite for
+  `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`.
+- The named fixture families for `KFONT-M6-003`, `KFONT-M6-005`,
+  `KFONT-M6-007`, `KFONT-M6-008`, `KFONT-M6-009`, and `KFONT-M6-010` are not
+  present in-repo beyond ticket text references, so those tickets must not be
+  advanced by synthetic-only substitutes.
+- `KFONT-M6-010` also remains gated by `KFONT-M4-005`, which is still
+  `proposed` in the current ticket catalog.
+
+Validation:
+
+```bash
+rtk git diff --check
+```
+
+Remaining gate: merge or adopt the bounded prerequisite PRs, then add the
+reviewed fixture provenance and expected dumps named by each blocked ticket
+before resuming implementation work.
 
 ## Checkpoint Evidence
 

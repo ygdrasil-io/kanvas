@@ -38,6 +38,13 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*GposPair*' --tests '*GposMar
 rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*' --tests '*DevanagariShaping*' --tests '*ExtensionLookup*'
 ```
 
+## Current Blockers
+
+- 2026-06-16 audit: `KFONT-M6-003` is gated by draft PR `#1706` and missing `gsub-context-*.otf` fixtures.
+- 2026-06-16 audit: `KFONT-M6-005` is gated by draft PR `#1705` and missing `gpos-mark-*` / `gpos-cursive-attachment.otf` fixtures.
+- 2026-06-16 audit: `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009` remain fixture-gated on the above shaping dependencies plus their own Arabic / Devanagari / Thai+CJK fixture families.
+- 2026-06-16 audit: `KFONT-M6-010` remains gated by `KFONT-M6-003`, `KFONT-M6-005`, `KFONT-M4-005`, and missing advanced lookup / variation fixtures.
+
 ## Non-Claims
 
 - Paragraph layout, color emoji rendering, and implicit complex shaping in drawString remain separate.
