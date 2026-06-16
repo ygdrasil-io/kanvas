@@ -43,6 +43,13 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*' --tests '*De
 - `KFONT-M6-004` is in `review` for a bounded parser/runtime slice: `font/sfnt` now exposes GPOS single adjustments plus pair value records, and `BasicOpenTypeShapingEngine` applies the validated `xPlacement`/`yPlacement`/`xAdvance` subset.
 - The milestone still has no full GPOS support claim. Remaining gates for `KFONT-M6-004` are fixture-backed `gpos-trace.json`, `shaped-glyph-run.json`, and layout-contract level malformed/refusal evidence.
 
+## Current Blockers
+
+- 2026-06-16 audit: `KFONT-M6-003` is gated by draft PR `#1706` and missing `gsub-context-*.otf` fixtures.
+- 2026-06-16 audit: `KFONT-M6-005` is gated by draft PR `#1705` and missing `gpos-mark-*` / `gpos-cursive-attachment.otf` fixtures.
+- 2026-06-16 audit: `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009` remain fixture-gated on the above shaping dependencies plus their own Arabic / Devanagari / Thai+CJK fixture families.
+- 2026-06-16 audit: `KFONT-M6-010` remains gated by `KFONT-M6-003`, `KFONT-M6-005`, `KFONT-M4-005`, and missing advanced lookup / variation fixtures.
+
 ## Non-Claims
 
 - Paragraph layout, color emoji rendering, and implicit complex shaping in drawString remain separate.
