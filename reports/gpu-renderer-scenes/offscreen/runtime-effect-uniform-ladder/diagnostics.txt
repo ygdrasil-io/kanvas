@@ -1,0 +1,16 @@
+rendered runtime-effect-uniform-ladder via WebGPU offscreen
+adapter=Apple M2 Max
+clearCommands=1
+fillRectCommands=0
+fillRRectCommands=1
+linearGradientRectCommands=0
+clipCommands=1
+bitmapRectCommands=0
+runtimeEffectCommands=4
+runtimeEffectStableIds=runtime.simple_rt, runtime.simple_rt, runtime.simple_rt, runtime.simple_rt
+runtimeEffectWgslImplementationIds=wgsl/runtime_simple_rt, wgsl/runtime_simple_rt, wgsl/runtime_simple_rt, wgsl/runtime_simple_rt
+runtimeEffectUniformLayout=gColor@0:16, gColor@0:16, gColor@0:16, gColor@0:16
+runtimeEffectPipelineKey=runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver], runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver], runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver], runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]
+runtimeEffectDescriptorEvidence=reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json
+runtimeEffectParserEvidence=RuntimeEffectDescriptorWebGpuTest#runtime SimpleRT descriptor WGSL parses and reflects uniforms
+fallbackReason=none

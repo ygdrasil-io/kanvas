@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M9-003"
 title: "Implement quadratic/cubic outline rasterization for A8"
-status: "proposed"
+status: "done"
 milestone: "M9"
 priority: "P1"
 owner_area: "glyph"
@@ -62,15 +62,15 @@ interface A8OutlineRasterizer {
 
 ## Acceptance Criteria
 
-- [ ] Quadratic and cubic outline fixtures produce stable bounds, origin, row stride, coverage bytes hash, and dump output.
-- [ ] The rasterizer handles empty glyphs and `.notdef` without crashing and records the selected fallback/refusal path.
-- [ ] Malformed contours emit `text.glyph.A8-generation-failed` or a narrower reason with glyph ID and strike key hash.
-- [ ] A8 artifacts contain no GPU resource handles and can be embedded in `GlyphAtlasArtifact` input.
-- [ ] External rasterizer comparisons, if present, are labeled `drift-only`.
+- [x] Quadratic and cubic outline fixtures produce stable bounds, origin, row stride, coverage bytes hash, and dump output.
+- [x] The rasterizer handles empty glyphs and `.notdef` without crashing and records the selected fallback/refusal path.
+- [x] Malformed contours emit `text.glyph.A8-generation-failed` or a narrower reason with glyph ID and strike key hash.
+- [x] A8 artifacts contain no GPU resource handles and can be embedded in `GlyphAtlasArtifact` input.
+- [x] External rasterizer comparisons, if present, are labeled `drift-only`.
 
 ## Required Evidence
 
-- `a8-glyph-mask.json` fixtures for simple quadratic glyph, cubic glyph, composite-derived outline, empty glyph, and malformed contour.
+- `a8-glyph-mask.json` fixtures for simple quadratic glyph, cubic glyph, composite-derived outline, empty `.notdef` glyph, malformed contour, and unsupported fill-rule refusal.
 - CPU oracle hash for coverage bytes and source outline path hash.
 - Diagnostic snapshot for malformed outline and unsupported fill-rule refusal.
 
@@ -91,12 +91,16 @@ interface A8OutlineRasterizer {
 ```bash
 rtk git diff --check
 rtk ./gradlew --no-daemon :font:glyph:test --tests '*A8*'
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 ```
 
 ## Status Notes
 
-- `proposed`: Depends on TrueType outline stability and the M9 route taxonomy.
-- Move to `ready` only after raster dump fields and malformed-outline diagnostics are reviewed.
+- `done`: Deterministic A8 rasterization now covers quadratic/cubic outlines, composite-derived outlines, empty `.notdef`, malformed contours, unsupported fill-rule refusal, and coverage-overflow refusal with stable CPU-only evidence in `a8-glyph-mask.json`.
 
 ## Linear Labels
 

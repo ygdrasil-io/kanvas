@@ -54,6 +54,47 @@
       ]
     },
     {
+      "dumpId": "a8-glyph-mask",
+      "ownerTicket": "KFONT-M9-003",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        "section": "Glyph artifact tests"
+      },
+      "producerPaths": [
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/glyph/a8-glyph-mask.json"
+      ],
+      "expectedFields": [
+        "dumpId",
+        "dumpSha256",
+        "fixtureIds",
+        "maskCount",
+        "masks",
+        "nonClaims",
+        "ownerTickets",
+        "requiredDiagnostics",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests '*A8*'",
+        "rtk ./gradlew --no-daemon :font:glyph:test",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "A8 mask golden changes require reviewed CPU coverage/hash diffs, refusal-diagnostic review, and explicit non-claim review without atlas, SDF, LCD, or GPU promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-sdf-generation-claim",
+        "no-atlas-packing-claim",
+        "no-gpu-text-route-claim",
+        "no-lcd-support-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
       "dumpId": "a8-sdf-atlas-lifecycle",
       "ownerTicket": "PKT-10D",
       "classification": "golden-gated",
@@ -407,38 +448,259 @@
       ]
     },
     {
-      "dumpId": "glyph-atlas-lifecycle",
-      "ownerTicket": "PKT-10C",
-      "classification": "producer-only",
+      "dumpId": "font-telemetry-schema",
+      "ownerTicket": "KFONT-M12-001",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Measurement Policy"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/font-telemetry-schema.json"
+      ],
+      "expectedFields": [
+        "dashboardRow",
+        "diagnosticCodes",
+        "domains",
+        "gpuAdapterRequired",
+        "metricNames",
+        "nonClaims",
+        "ownerTickets",
+        "requiredAggregationFields",
+        "requiredDimensions",
+        "schemaId",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Telemetry schema dump changes require domain list, dimension policy, refusal diagnostic, and matrix checkpoint review without performance-gate promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim"
+      ]
+    },
+    {
+      "dumpId": "font-telemetry-schema-fixture",
+      "ownerTicket": "KFONT-M12-001",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/font-telemetry-schema-fixture.json"
+      ],
+      "expectedFields": [
+        "cacheState",
+        "diagnosticCode",
+        "dumpId",
+        "environment",
+        "fixtureId",
+        "fontSourceSetHash",
+        "gpuAdapter",
+        "measurementPhase",
+        "metrics",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "sampleCount",
+        "samples",
+        "schemaVersion",
+        "unicodeDataVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Telemetry fixture dump changes require repeated-run aggregation, GPU-dimension conditionality, refusal diagnostic, and matrix checkpoint review without budget or GPU-claim promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim"
+      ]
+    },
+    {
+      "dumpId": "glyph-atlas-eviction-trace",
+      "ownerTicket": "KFONT-M9-005",
+      "classification": "golden-gated",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
         "section": "Cache and invalidation"
       },
       "producerPaths": [
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
-        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt"
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json"
       ],
       "expectedFields": [
         "artifactType",
-        "atlasGeneration",
-        "capacityBytes",
-        "capacityExceeded",
-        "diagnostics",
+        "budgetBytes",
+        "dumpId",
         "dumpSha256",
-        "evictedGlyphIds",
-        "requestedGeneration",
-        "schema",
-        "staleGeneration",
-        "usedBytes"
+        "evictionCount",
+        "evictions",
+        "fixtureIds",
+        "invalidationTokenAfter",
+        "invalidationTokenBefore",
+        "nextGeneration",
+        "nonClaims",
+        "ownerTickets",
+        "previousGeneration",
+        "requiredDiagnostics",
+        "residentBytesAfter",
+        "residentBytesBefore",
+        "schemaVersion"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:glyph:test"
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests '*Atlas*'",
+        "rtk ./gradlew --no-daemon :font:glyph:test",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
       ],
-      "updatePolicy": "Lifecycle dump changes require stale-generation, capacity, and eviction-order tests.",
+      "updatePolicy": "Eviction-trace golden changes require reviewed generation/invalidation-token deltas, resident-byte diffs, and explicit non-claim review without GPU upload or dftext promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-atlas-lifecycle-claim",
-        "no-gpu-upload-execution-claim"
+        "no-gpu-text-route-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "dumpId": "glyph-atlas-lifecycle",
+      "ownerTicket": "KFONT-M9-005",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        "section": "Atlas artifacts"
+      },
+      "producerPaths": [
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/glyph/glyph-atlas.json"
+      ],
+      "expectedFields": [
+        "artifactCount",
+        "artifacts",
+        "dumpId",
+        "dumpSha256",
+        "fixtureIds",
+        "nonClaims",
+        "ownerTickets",
+        "requiredDiagnostics",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests '*Atlas*'",
+        "rtk ./gradlew --no-daemon :font:glyph:test",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Atlas golden changes require reviewed entry/source-hash/upload-byte diffs, generation-token review, and explicit non-claim review without GPU upload or dftext promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-atlas-lifecycle-claim",
+        "no-gpu-text-route-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "dumpId": "glyph-cache-inventory",
+      "ownerTicket": "KFONT-M9-006",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        "section": "Cache and invalidation"
+      },
+      "producerPaths": [
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/glyph/glyph-cache-inventory.json"
+      ],
+      "expectedFields": [
+        "budgetBytes",
+        "dumpId",
+        "dumpSha256",
+        "entryCount",
+        "evictedBytes",
+        "evictedEntries",
+        "fixtureIds",
+        "maxEntries",
+        "nonClaims",
+        "ownerTickets",
+        "requiredDiagnostics",
+        "residentBytes",
+        "residentEntries",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests '*GlyphCache*'",
+        "rtk ./gradlew --no-daemon :font:glyph:test",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Glyph cache inventory golden changes require reviewed key-preimage/hash diffs, resident-byte accounting review, lifecycle-state review, and explicit non-claim review without GPU ownership or dftext promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-cache-lifecycle-claim",
+        "no-gpu-text-route-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "dumpId": "glyph-cache-telemetry",
+      "ownerTicket": "KFONT-M9-006",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Cache Budgets"
+      },
+      "producerPaths": [
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json"
+      ],
+      "expectedFields": [
+        "dumpId",
+        "dumpSha256",
+        "fixtureIds",
+        "nonClaims",
+        "ownerTickets",
+        "requiredDiagnostics",
+        "sampleCount",
+        "samples",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests '*GlyphCache*'",
+        "rtk ./gradlew --no-daemon :font:glyph:test",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Glyph cache telemetry golden changes require reviewed cold/warm sample deltas, advisory timing-counter diffs, budget-refusal review, and explicit confirmation that no blocking perf gate or GPU upload claim was introduced.",
+      "nonClaims": [
+        "producer-only",
+        "no-hidden-performance-gate",
+        "no-gpu-upload-execution-claim",
+        "no-dftext-retirement"
       ]
     },
     {
@@ -852,6 +1114,47 @@
         "producer-only",
         "no-complete-sdf-generation-claim",
         "no-gpu-text-route-claim"
+      ]
+    },
+    {
+      "dumpId": "sdf-glyph-artifact",
+      "ownerTicket": "KFONT-M9-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        "section": "SDF Glyph Atlas Artifact"
+      },
+      "producerPaths": [
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json"
+      ],
+      "expectedFields": [
+        "artifactCount",
+        "artifacts",
+        "dumpId",
+        "dumpSha256",
+        "fixtureIds",
+        "nonClaims",
+        "ownerTickets",
+        "requiredDiagnostics",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests '*SDF*'",
+        "rtk ./gradlew --no-daemon :font:glyph:test",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "SDF artifact golden changes require reviewed spread/padding/hash diffs, normalization-edge checks, refusal-diagnostic review, and explicit non-claim review without atlas, GPU, LCD, or dftext promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-sdf-route-claim",
+        "no-atlas-packing-claim",
+        "no-gpu-text-route-claim",
+        "no-lcd-support-claim",
+        "no-dftext-retirement"
       ]
     },
     {

@@ -49,9 +49,12 @@ KNOWN_FIXTURE_KINDS = {
 REQUIRED_FONT_FAMILY_GATES = {
     "a8-sdf-artifacts": [
         "a8-atlas-pack",
+        "atlas-capacity-refusal",
+        "cache-budget-refusal",
+        "cache-inventory",
+        "cache-telemetry",
         "sdf-normalization",
         "sdf-transform-refusal",
-        "atlas-capacity-refusal",
         "stale-generation-refusal",
     ],
     "cff-cff2-scaler": [

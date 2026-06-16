@@ -2021,9 +2021,252 @@ rtk git diff --check
 
 Remaining gate: this is contract-only evidence. It does not claim A8
 rasterization, SDF generation, atlas packing, GPU text routes, color/emoji
-rendering, LCD support, or `dftext` retirement. Complete `KFONT-M9-002`,
-`KFONT-M9-003`, `KFONT-M9-004`, and `KFONT-M9-005` before re-evaluating M11
-A8 GPU handoff.
+rendering, LCD support, or `dftext` retirement. `KFONT-M9-003` now lands the
+CPU A8 rasterization checkpoint; complete `KFONT-M9-004` and `KFONT-M9-005`
+before re-evaluating M11 A8 GPU handoff.
+
+### KFONT-M9-002: Promote GlyphArtifactPlan route taxonomy
+
+Status: done; freshly validated after independent review findings were remediated.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/glyph/glyph-artifact-plan.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m9-002-glyph-artifact-plan-taxonomy.md`
+
+Evidence:
+
+- `GlyphArtifactRouteRequest` now carries stable policy inputs and explicit
+  per-glyph route diagnostics that explain fallback/refusal decisions without
+  allocating GPU resources.
+- `GlyphArtifactPlanDecision` records placeholder refs for COLR, bitmap, and
+  SVG routes, `CPUPreparedGPU` artifact intent for A8/SDF routes, route-specific
+  key hashes, fallback policy, rejected alternatives, and explicit unsupported
+  decisions.
+- `GlyphArtifactRoutePlanner` preserves stable refusal codes for
+  `text.glyph.SDF-transform-unsupported`,
+  `text.glyph.atlas-capacity-exceeded`,
+  `text.glyph.outline-unavailable`, and
+  `text.glyph.LCD-future-research`.
+- `GlyphArtifactPlanEvidenceDump` produces checked-in
+  `glyph-artifact-plan.json` evidence with outline, A8, SDF, color placeholder,
+  bitmap placeholder, SVG placeholder, LCD refusal, outline refusal, and
+  unsupported routes.
+- Dump index, fixture manifest, and claim dashboard expose the route taxonomy as
+  `tracked-gap` planner evidence only, with promotion still blocked on later
+  A8/SDF/atlas/GPU tickets.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*GlyphArtifactPlan*'
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: this is route-taxonomy evidence only. It does not claim M10
+COLR/bitmap/SVG payload parsing, production A8 rasterization, production SDF
+quality, atlas lifecycle support, GPU text handoff, LCD support, or `dftext`
+retirement.
+
+### KFONT-M9-003: Implement quadratic/cubic outline rasterization for A8
+
+Status: done; freshly validated.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/glyph/a8-glyph-mask.json`
+- `reports/font/fixtures/expected/glyph/glyph-artifact-plan.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m9-003-a8-outline-rasterization.md`
+
+Evidence:
+
+- `GlyphMaskGenerator` now rasterizes quadratic and cubic outlines into
+  deterministic A8 masks with stable bounds, origin, row stride, and CPU
+  coverage hashes.
+- Empty `.notdef` outlines, malformed contours, unsupported fill rules, and
+  coverage overflow now produce stable empty A8 masks with
+  `text.glyph.A8-generation-failed` diagnostics that include glyph ID and
+  route-scoped strike-key hash facts.
+- `A8GlyphMaskArtifactEvidence` and `A8GlyphMaskEvidenceDump` now carry
+  `sourceOutlineSha256`, refusal diagnostics, and checked-in
+  `a8-glyph-mask.json` evidence for quadratic, cubic, composite-derived,
+  empty `.notdef`, malformed, and unsupported-fill fixtures.
+- `GlyphArtifactPlanDecision` now records `sourceRepresentationSha256`, linking
+  `glyph-artifact-plan.json` route evidence back to the source representation
+  hash without claiming atlas lifecycle or GPU handoff.
+- Dump index, fixture manifest, and claim dashboard now expose `A8 outline
+  rasterization` as `tracked-gap` CPU evidence only.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*A8*'
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*GlyphArtifactPlan*'
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: this checkpoint does not claim SDF generation, atlas lifecycle
+support, GPU text-route handoff, LCD support, external rasterizer parity, or
+`dftext` retirement. Next gates remain `KFONT-M9-004` and `KFONT-M9-005`.
+
+### KFONT-M9-004: Implement production SDF generator boundaries
+
+Status: done; freshly validated.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m9-004-sdf-generator-boundaries.md`
+
+Evidence:
+
+- `generateLinearOutlineSDF(...)` now derives spread from the strike key or
+  the stabilized default `8f`, preserves `left`/`top` and
+  `sourceOutlineSha256` on empty and non-empty CPU SDF masks, and keeps the
+  normalization contract tied to `R8Unorm` bytes.
+- The SDF contour parser now requires closed contours terminated by `Z` for
+  the SDF route only, so open geometry becomes deterministic
+  `text.glyph.SDF-generation-failed` evidence instead of silently reusing A8
+  contour semantics.
+- `SDFGlyphArtifactEvidence` and `SDFGlyphArtifactEvidenceDump` produce
+  checked-in `sdf-glyph-artifact.json` evidence for default-spread and
+  widened-spread fixtures, including spread, source resolution, atlas padding,
+  normalization formula version, addressable pixel count, distance-field hash,
+  source-outline hash, and stable dump hashes.
+- Focused tests cover edge/inside/outside normalization behavior, explicit
+  spread overrides, non-closed contour refusal, and the checked-in SDF dump
+  contract.
+- Dump index, fixture manifest, fixture inventory, and claim dashboard expose
+  this as CPU-only SDF artifact evidence while keeping atlas lifecycle, GPU
+  sampling, LCD promotion, and `dftext` retirement gated.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*SDF*'
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: this checkpoint does not claim atlas lifecycle support, GPU SDF
+sampling/reconstruction, LCD promotion, unsupported color-glyph SDF production,
+or `dftext` retirement. Next gates remain `KFONT-M9-005` and the M11 GPU text
+handoff chain.
+
+### KFONT-M9-005: Add atlas eviction and invalidation tests
+
+Status: done; freshly validated.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/glyph/glyph-atlas.json`
+- `reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m9-005-atlas-lifecycle.md`
+
+Evidence:
+
+- `GlyphAtlasArtifactEvidence` now records deterministic CPU A8/SDF atlas
+  artifacts with artifact-key hashes, generation, dimensions, row stride,
+  source bounds, source-mask hashes, upload byte hash, budget class, lifetime
+  class, invalidation token, and optional SDF distance range.
+- `GlyphAtlasEvictionTrace` now records eviction order, generation increments,
+  invalidation-token changes, resident-byte deltas, and evicted strike-key
+  hashes in checked-in `glyph-atlas-eviction-trace.json`.
+- Tests prove that atlas artifact keys rotate when variation, palette, SDF
+  spread/source resolution, renderer descriptor version, or source-mask facts
+  change, while stale-generation refusal remains an explicit diagnostic.
+- Dump index, fixture manifest, fixture inventory, and claim dashboard now
+  expose atlas lifecycle as CPU-only evidence and keep GPU upload/sampling plus
+  `dftext` retirement explicitly gated on M11.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*Atlas*'
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk git diff --check
+```
+
+Remaining gate: this checkpoint does not claim GPU upload execution, WebGPU
+texture ownership, GPU sampling validation, or `dftext` retirement. Next gates
+remain the M11 GPU text handoff chain and any future M12 budget-promotion
+policy.
+
+### KFONT-M9-006: Add glyph cache telemetry
+
+Status: done; freshly validated.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/glyph/glyph-cache-inventory.json`
+- `reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m9-006-glyph-cache-telemetry.md`
+- `reports/pure-kotlin-text/font-diagnostic-taxonomy.json`
+
+Evidence:
+
+- `GlyphCacheInventoryDump` now records resident and evicted cache rows with
+  stable key preimages, preimage hashes, route-specific strike-key hashes,
+  resident bytes, generation, and invalidation tokens.
+- `GlyphCacheTelemetryDump` records deterministic cold and warm advisory
+  samples with route counts, cache hit/miss, eviction/invalidation counters,
+  resident bytes, upload-preparation bytes, and fixture timing counters.
+- `GlyphCacheBudgetRefusal` records cache-domain budget overruns with stable
+  `text.glyph.artifact-budget-exceeded` linkage and key-hash evidence.
+- `GlyphRouteDiagnostic.telemetryUnavailable(...)` now exposes the stable
+  `text.glyph.telemetry-unavailable` refusal so missing telemetry keeps the row
+  blocked instead of fabricating support.
+- Dump index, fixture manifest, fixture inventory, dashboard, and diagnostic
+  taxonomy now classify cache telemetry as CPU-only advisory evidence and keep
+  GPU text claims plus `dftext` retirement explicitly gated elsewhere.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*GlyphCache*'
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk git diff --check
+```
+
+Remaining gate: this checkpoint does not claim runtime GPU upload execution,
+WebGPU timing, blocking performance budgets, renderer resource ownership, or
+`dftext` retirement. Next gates remain the M11 GPU text handoff chain and any
+future M12 promotion of advisory cache budgets.
 
 ### PKT-10B: Glyph Artifact Plan Decision Trace Dump
 
@@ -2173,11 +2416,10 @@ Validation:
 rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.a8GlyphMaskArtifactEvidenceRecordsBoundsAndCoverageHash
 ```
 
-Remaining gate: this is current A8 mask evidence only. It does not claim
-quadratic/cubic outline rasterization, complete malformed-contour diagnostics,
-LCD support, SDF generation, atlas eviction/stale-generation support, GPU
-upload/sampling, external rasterizer oracle parity, or complete
-`a8-glyph-mask.json` fixture coverage.
+Remaining gate: this component evidence now feeds `KFONT-M9-003`, but by itself
+it still does not claim SDF generation, atlas eviction/stale-generation
+support, GPU upload/sampling, LCD support, external rasterizer oracle parity,
+or broader GPU text-route promotion.
 ### PKT-10F: Atlas Stale Generation Refusal Diagnostic
 
 Status: implemented; independent review pending because the current tool policy
@@ -2243,6 +2485,78 @@ Remaining gate: this is SDF transform refusal evidence only. It does not claim
 complete SDF eligibility policy, SDF generation fixture coverage, perspective
 or non-affine transform support, A8 fallback production, atlas upload/sampling,
 or GPU text-route promotion.
+
+### PKT-10H: SDF Glyph Artifact Evidence Dump
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `SDFGlyphArtifactEvidence.from(...)` builds deterministic per-glyph CPU SDF
+  evidence with bounds, spread, source resolution, atlas padding, normalization
+  formula version, addressable pixel count, strike-key hash, distance-field
+  hash, and `sourceOutlineSha256`.
+- `SDFGlyphArtifactEvidenceDump.toCanonicalJson()` emits stable
+  `sdf-glyph-artifact.json`-style evidence for a default-spread and
+  widened-spread outline fixture, plus explicit required diagnostics and
+  checked-in dump hashes.
+- Tests cover padding growth from non-default spread, canonical JSON field
+  order, stable hash shape, and fixture parity against the checked-in golden.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.sdfGlyphArtifactEvidenceRecordsSpreadPaddingBoundsAndCoverageHash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.sdfGlyphArtifactEvidenceDumpMatchesRepoFixture
+```
+
+Remaining gate: this is CPU SDF artifact evidence only. It does not claim atlas
+lifecycle support, GPU sampling/handoff, LCD support, unsupported color-glyph
+SDF production, or `dftext` retirement.
+
+### PKT-10I: Glyph Atlas Artifact And Eviction Dumps
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/glyph/glyph-atlas.json`
+- `reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `GlyphAtlasArtifactEvidence.fromA8(...)` and `.fromSdf(...)` emit stable CPU
+  atlas dumps with artifact-key hashes, generation, dimensions, row stride,
+  source bounds, source-mask hashes, upload byte hash, invalidation token, and
+  optional SDF distance range.
+- `GlyphAtlasEvictionTrace` records strike-key eviction order, generation
+  increments, invalidation-token changes, resident-byte deltas, and required
+  stale/capacity diagnostics in a checked-in golden.
+- Tests cover atlas key invalidation from variation, palette, SDF spread/source
+  resolution, renderer descriptor version, and source-mask changes, plus exact
+  golden parity for `glyph-atlas.json` and `glyph-atlas-eviction-trace.json`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*Atlas*'
+```
+
+Remaining gate: this is CPU atlas lifecycle evidence only. It does not claim
+GPU upload execution, WebGPU texture ownership, GPU sampling validation, or
+`dftext` retirement.
 ### PKT-11A: Color Glyph Planning Evidence Dumps
 
 Status: implemented and independently reviewed.
@@ -3233,9 +3547,9 @@ Evidence:
   `10f8ffeb86783294760ea4854ccda2a2623c72ed`, M11 tickets, pure Kotlin text
   handoff specs, GPU text glyph pipeline specs, and current `font:gpu-api`
   contracts.
-- `KFONT-M11-004` is blocked by missing M9 A8 mask and atlas
-  entry/page/generation/invalidation evidence from `KFONT-M9-003` and
-  `KFONT-M9-005`.
+- `KFONT-M11-004` is blocked by missing atlas
+  entry/page/generation/invalidation evidence from `KFONT-M9-005` plus the
+  remaining downstream M9 handoff work after `KFONT-M9-003`.
 - `KFONT-M11-006`, `KFONT-M11-007`, `KFONT-M11-008`, `KFONT-M11-009`, and
   `KFONT-M11-010` are blocked by the missing A8 route and downstream
   subrun/resource/upload/binding contracts.
@@ -3249,8 +3563,7 @@ Validation:
 rtk git diff --check
 ```
 
-Remaining gate: unblock M11 by completing `KFONT-M9-003`, `KFONT-M9-004`, and
-`KFONT-M9-005`, then re-evaluate `KFONT-M11-004`. This blocked wave does not
-claim GPU text support, A8 atlas route support, SDF/outline/color/bitmap/SVG
-text support, or retirement of `dftext`, `scaledemoji_rendering`, or
-`coloremoji_blendmodes`.
+Remaining gate: unblock M11 by completing `KFONT-M9-004` and `KFONT-M9-005`,
+then re-evaluate `KFONT-M11-004`. This blocked wave does not claim GPU text
+support, A8 atlas route support, SDF/outline/color/bitmap/SVG text support, or
+retirement of `dftext`, `scaledemoji_rendering`, or `coloremoji_blendmodes`.
