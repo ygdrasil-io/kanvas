@@ -1356,7 +1356,7 @@ promotion, or any GPU text route.
 
 ### KFONT-M5-002: Replace Basic Grapheme Segmenter
 
-Status: implemented; independent review pending.
+Status: done with bounded fixture evidence; independently reviewed.
 
 Files:
 
@@ -1488,6 +1488,87 @@ Remaining gate: none for KFONT-M5-003 closeout. This remains bounded
 run-level fixture evidence only and does not claim complete UAX #9
 conformance, paired bracket resolution, paragraph visual line ordering,
 GSUB/GPOS shaping, script itemization, or GPU text support.
+
+### KFONT-M5-004: Add Script_Extensions Itemizer
+
+Status: implemented; independent review pending.
+
+Files:
+
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ScriptItemization.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ScriptItemizationTest.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/UnicodeDataGeneration.kt`
+- `font/text/src/main/resources/org/graphiks/kanvas/text/unicode/16.0.0/GraphemeBreakProperty.txt`
+- `font/text/src/main/resources/org/graphiks/kanvas/text/unicode/16.0.0/Scripts.txt`
+- `font/text/src/main/resources/org/graphiks/kanvas/text/unicode/16.0.0/UnicodeData.txt`
+- `reports/font/fixtures/expected/unicode/source-extracts/16.0.0/GraphemeBreakProperty.txt`
+- `reports/font/fixtures/expected/unicode/source-extracts/16.0.0/Scripts.txt`
+- `reports/font/fixtures/expected/unicode/source-extracts/16.0.0/UnicodeData.txt`
+- `reports/font/fixtures/expected/unicode/script-ambiguous-extension.txt`
+- `reports/font/fixtures/expected/unicode/script-arabic-extension-ambiguous.txt`
+- `reports/font/fixtures/expected/unicode/script-arabic-marks.txt`
+- `reports/font/fixtures/expected/unicode/script-cjk-vs.txt`
+- `reports/font/fixtures/expected/unicode/script-conflicting-context.txt`
+- `reports/font/fixtures/expected/unicode/script-devanagari-matra.txt`
+- `reports/font/fixtures/expected/unicode/script-emoji-zwj.txt`
+- `reports/font/fixtures/expected/unicode/script-greek-polytonic.txt`
+- `reports/font/fixtures/expected/unicode/script-hebrew-niqqud.txt`
+- `reports/font/fixtures/expected/unicode/script-latin-combining.txt`
+- `reports/font/fixtures/expected/unicode/script-runs.json`
+- `reports/font/fixtures/expected/unicode/script-thai-tone.txt`
+- `reports/font/fixtures/expected/unicode/script-unsupported.txt`
+- `reports/font/fixtures/expected/unicode/unicode-data-manifest.json`
+- `reports/font/fixtures/expected/unicode/unicode-data-tables.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m5-004-script-itemization.md`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `.upstream/specs/pure-kotlin-text/tickets/M5-unicode-segmentation-bidi/KFONT-M5-004-add-script-extensions-itemizer.md`
+
+Evidence:
+
+- `ScriptExtensionsItemizer` builds bounded script runs from pinned grapheme
+  clusters and records cluster range, UTF-16 range, code point range, selected
+  script, OpenType script tags, extension candidates, language hint, reason,
+  source text hash, Unicode version, and diagnostics.
+- The required matrix tags covered by this itemization slice are `latn`,
+  `grek`, `hebr`, `arab`, `deva`, `dev2`, `thai`, `hani`, `Zsye`, and the
+  unsupported/ambiguous diagnostic paths. Cyrillic, kana, hira, hang, and Zsym
+  remain future fixture rows before broad shaping promotion.
+- `script-runs.json` records Latin combining marks, Greek marks, Hebrew
+  niqqud, Arabic marks, Devanagari matra, Thai tone mark, CJK variation
+  selector context, emoji ZWJ context, unsupported Georgian, ambiguous
+  Script_Extensions-only ditto mark, isolated TATWEEL, and a neutral Common
+  cluster between conflicting Latin/Greek strong context.
+- Tests regenerate `script-runs.json` from the checked-in fixture text files,
+  trim only trailing CR/LF line endings for canonical source text, compare the
+  result byte-for-byte with the golden, and assert JSON escaping for control
+  characters.
+- Tests assert `text.shaping.script-unsupported`,
+  `text.shaping.script-run-ambiguous`, pinned Unicode version behavior through
+  existing Unicode data tests, and cluster-aligned ranges through the
+  grapheme-backed itemizer.
+- `dump-evidence-index.json` registers `script-runs` as golden-gated producer
+  evidence and `fixture-evidence-manifest.json` keeps the broader
+  shaping-scripts family fixture-gated.
+- Independent spec re-review verdict: `ACCEPT`.
+- Independent code-quality re-review verdict: `Ready to merge: Yes`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests 'org.graphiks.kanvas.text.ScriptItemizationTest.scriptExtensionsItemizerUsesPinnedDataClustersExtensionsAndStableDiagnostics'
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk ./gradlew --no-daemon :font:text:test --tests '*ScriptItem*'
+rtk ./gradlew --no-daemon :font:text:test --tests '*UnicodeData*' --tests '*Grapheme*' --tests '*Bidi*'
+rtk git diff --check
+```
+
+Remaining gate: none for bounded KFONT-M5-004 script itemization closeout.
+This remains itemization evidence only and does not claim complete UCD
+coverage, GSUB/GPOS shaping, default feature policy, font fallback, glyph
+mapping, paragraph layout, emoji rendering, or GPU text route support.
 
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 

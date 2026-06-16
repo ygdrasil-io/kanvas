@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M5-004"
 title: "Add Script_Extensions itemizer"
-status: "proposed"
+status: "done"
 milestone: "M5"
 priority: "P0"
 owner_area: "unicode"
@@ -69,11 +69,11 @@ data class ScriptExtensionsLookup(
 
 ## Acceptance Criteria
 
-- [ ] Latin with combining marks, Greek polytonic marks, Hebrew niqqud, Arabic marks, Devanagari matras, Thai tone marks, CJK variation selectors, and emoji sequences itemize into stable script runs.
-- [ ] `script-runs.json` records selected script, OpenType script tag candidates, extension candidates, cluster ranges, and Unicode data version.
-- [ ] `Common` and `Inherited` clusters inherit script only when neighboring context makes the result deterministic.
-- [ ] Unsupported scripts emit `text.shaping.script-unsupported` with the affected range and candidate script facts.
-- [ ] Script run boundaries do not split grapheme clusters.
+- [x] Latin with combining marks, Greek polytonic marks, Hebrew niqqud, Arabic marks, Devanagari matras, Thai tone marks, CJK variation selectors, and emoji sequences itemize into stable script runs.
+- [x] `script-runs.json` records selected script, OpenType script tag candidates, extension candidates, cluster ranges, and Unicode data version.
+- [x] `Common` and `Inherited` clusters inherit script only when neighboring context makes the result deterministic.
+- [x] Unsupported scripts emit `text.shaping.script-unsupported` with the affected range and candidate script facts.
+- [x] Script run boundaries do not split grapheme clusters.
 
 ## Required Evidence
 
@@ -105,6 +105,25 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ScriptItem*'
 
 - `proposed`: Script itemization is a prerequisite for M6 script-specific feature selection.
 - Move to `ready` only after the required script matrix mapping is reviewed.
+- `done`: `ScriptExtensionsItemizer` and `script-runs.json` now provide
+  bounded KFONT-M5-004 itemization evidence for Latin, Greek, Hebrew, Arabic,
+  Devanagari, Thai, CJK Script_Extensions context, emoji ZWJ context,
+  unsupported scripts, ambiguous extension-only clusters, isolated TATWEEL
+  without strong context, and neutral Common clusters between conflicting
+  strong scripts.
+- Fresh validation:
+  `rtk ./gradlew --no-daemon :font:text:test --tests '*ScriptItem*'`,
+  `rtk ./gradlew --no-daemon :font:text:test --tests '*UnicodeData*' --tests '*Grapheme*' --tests '*Bidi*'`,
+  `rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py`,
+  `rtk python3 scripts/validate_pure_kotlin_text_dump_index.py`, and
+  `rtk git diff --check`.
+- Evidence report:
+  `reports/pure-kotlin-text/2026-06-16-kfont-m5-004-script-itemization.md`.
+- Independent spec re-review verdict: `ACCEPT` by subagent
+  `019ecf3d-67ab-7a53-8d8c-8ff325724c92`.
+- Independent code-quality re-review verdict: `Ready to merge: Yes` by
+  subagent `019ecf4a-e437-7221-bb48-63858d1120e4`.
+- No external shaper or native engine was used as normative evidence.
 
 ## Linear Labels
 
