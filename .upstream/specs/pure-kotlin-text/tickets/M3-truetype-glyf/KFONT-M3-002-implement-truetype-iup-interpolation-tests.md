@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M3-002"
 title: "Implement TrueType IUP interpolation tests"
-status: "proposed"
+status: "done"
 milestone: "M3"
 priority: "P0"
 owner_area: "font-scaler"
@@ -63,11 +63,11 @@ class IUPInterpolator {
 
 ## Acceptance Criteria
 
-- [ ] IUP tests cover x-only, y-only, both-axis, endpoint, wraparound, and sparse-delta contours.
-- [ ] `variation-deltas.json` separates explicit and inferred deltas for each tested point.
-- [ ] Min/default/max variation positions produce stable `glyph-outline.json` path hashes.
-- [ ] Malformed `gvar` tuple data emits `font.variation-data-malformed`.
-- [ ] Default-coordinate output remains identical to the non-varied outline when no deltas apply.
+- [x] IUP tests cover x-only, y-only, both-axis, endpoint, wraparound, and sparse-delta contours.
+- [x] `variation-deltas.json` separates explicit and inferred deltas for each tested point.
+- [x] Min/default/max variation positions produce stable `glyph-outline.json` path hashes.
+- [x] Malformed `gvar` tuple data emits `font.variation-data-malformed`.
+- [x] Default-coordinate output remains identical to the non-varied outline when no deltas apply.
 
 ## Required Evidence
 
@@ -96,8 +96,8 @@ rtk ./gradlew --no-daemon :font:scaler:test --tests '*IUP*' --tests '*Gvar*'
 
 ## Status Notes
 
-- `proposed`: IUP cases are specified, but no variation dump evidence is attached yet.
-- Move to `ready` after composite glyph coverage is available for varied composite cases.
+- `done`: bounded simple-glyph IUP interpolation, wraparound/contour-isolation coverage, `avar`-normalized variation evidence, composite child propagation, and malformed tuple diagnostics are attached in `reports/font/fixtures/expected/scaler/truetype-gvar-iup.json` and validated by focused scaler tests.
+- Remaining non-claims stay explicit for phantom-point metrics, vertical metrics, complete variable-font parity, hinting VM parity, and GPU glyph routes.
 
 ## Linear Labels
 

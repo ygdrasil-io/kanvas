@@ -104,6 +104,7 @@ REQUIRED_FONT_FAMILY_GATES = {
         "truetype-composite-glyph-transform",
         "truetype-gvar-simple-delta",
         "truetype-gvar-composite-delta",
+        "truetype-gvar-iup",
         "truetype-avar-coordinate-mapping",
     ],
 }

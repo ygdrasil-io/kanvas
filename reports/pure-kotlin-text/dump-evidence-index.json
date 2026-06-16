@@ -1094,6 +1094,51 @@
       ]
     },
     {
+      "dumpId": "truetype-gvar-iup",
+      "ownerTicket": "KFONT-M3-002",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "TrueType glyf and variations"
+      },
+      "producerPaths": [
+        "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+        "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+        "reports/font/fixtures/expected/scaler/truetype-gvar-iup.json"
+      ],
+      "expectedFields": [
+        "avarMappedCase",
+        "compositeCase",
+        "contourIsolationCase",
+        "diagnosticSnapshots",
+        "dumpId",
+        "fixtureIds",
+        "nonClaims",
+        "ownerTickets",
+        "requiredEvidence",
+        "schemaVersion",
+        "simplePointCase",
+        "wraparoundCase"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:scaler:test --tests '*IUP*' --tests '*Gvar*'",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "TrueType gvar IUP golden changes require simple-contour explicit/inferred delta review, wraparound verification, contour-isolation coverage, avar normalization evidence, composite child evidence, malformed tuple diagnostics, and non-claim review before any claim promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-complete-variable-font-support-claim",
+        "no-phantom-point-metrics-claim",
+        "no-vertical-metrics-claim",
+        "no-complete-hinting-vm-claim",
+        "no-a8-or-sdf-artifact-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
       "dumpId": "truetype-variation-readiness",
       "ownerTicket": "PKT-04C",
       "classification": "golden-gated",

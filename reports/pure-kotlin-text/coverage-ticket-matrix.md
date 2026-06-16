@@ -762,15 +762,15 @@ Evidence:
 - Evidence constructors validate stable diagnostic tokens, sorted variation
   coordinates, SHA-256 hashes, bounded `loca` ranges, and deterministic
   diagnostic ordering.
-- Current variation gaps are visible instead of silent: partial `gvar` point
-  sets that require IUP emit `truetype.gvar-iup-unavailable`, and invalid
-  requested axes/non-finite coordinates emit stable variation diagnostics.
+- Current variation gaps are visible instead of silent: malformed `gvar` tuple
+  payloads, invalid requested axes, and non-finite requested coordinates emit
+  stable variation diagnostics instead of drifting silently.
 - Composite point-matching and recursion-depth refusals now carry stable
   `font.outline-format-unsupported` diagnostics in the evidence path.
 - Tests cover deterministic dumps and hashes, sorted requested axes, normalized
-  `gvar` facts, IUP-gap diagnostics, invalid requested axis diagnostics,
-  non-finite requested coordinate diagnostics, and absence of object-identity/
-  `Sk*` tokens in dumps.
+  `gvar` facts, malformed tuple diagnostics, invalid requested axis
+  diagnostics, non-finite requested coordinate diagnostics, and absence of
+  object-identity/`Sk*` tokens in dumps.
 - Independent spec review verdict: `ACCEPT`.
 - Independent code-quality review verdict: `ACCEPT`.
 
@@ -891,11 +891,13 @@ Evidence:
   linearly interpolates between declared `avar` segments, and clamps remapped
   coordinates to the normalized variation interval.
 - Tests cover a generated one-axis fixture where requested `wght=900.0`
-  normalizes to `1.0` and remaps through `avar` to `0.75` without emitting the
-  prior `truetype.avar-unapplied` diagnostic.
+  normalizes to `1.0`, remaps through `avar` to `0.75`, and then scales the
+  bounded IUP contour deltas without emitting the prior
+  `truetype.avar-unapplied` diagnostic.
 - The font fixture inventory marks `truetype-avar-coordinate-mapping` as
-  current positive evidence; the manifest now leaves only the `gvar` composite
-  delta fixture gate for the current TrueType scaler row.
+  current positive evidence; the broader TrueType scaler row still retains
+  explicit non-claims for phantom-point metrics, vertical metrics, and complete
+  variable-font parity outside the bounded IUP slice.
 
 Validation:
 
@@ -939,6 +941,53 @@ Remaining gate: this proves composite component `gvar` delta evidence only. It
 does not claim composite glyph-specific variation records, full IUP
 interpolation, phantom-point metrics, CFF/CFF2 support, hinting VM parity, or
 GPU glyph route support.
+### PKT-04F: TrueType Gvar IUP Interpolation
+
+Status: implemented.
+
+Files:
+
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/font/fixtures/expected/scaler/truetype-gvar-iup.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- TrueType simple-glyph `gvar` processing now performs bounded contour-by-
+  contour IUP interpolation for partial point sets using default point
+  coordinates and unscaled tuple deltas, matching the OpenType `gvar`
+  interpolation rules for single referenced points, wraparound, and
+  untouched-contour isolation.
+- `reports/font/fixtures/expected/scaler/truetype-gvar-iup.json` captures
+  deterministic `variation-deltas.json` style evidence for one explicit point,
+  wraparound interpolation, untouched-contour isolation, `avar`-mapped
+  coordinates, composite child-outline propagation, and malformed tuple
+  diagnostics.
+- Tests prove that a single explicit point propagates to the whole contour,
+  wraparound interpolation derives deltas for the untouched segment, contours
+  with no referenced points remain unchanged, `TrueTypeGlyfScaler` applies
+  `avar` remapping before requesting `gvar` deltas, and composite outlines
+  inherit interpolated child deltas.
+- Malformed tuple payloads now emit `font.variation-data-malformed` with
+  `truetype.gvar-malformed` while preserving the default outline route when the
+  fallback remains semantically valid.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*IUP*' --tests '*Gvar*'
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+```
+
+Remaining gate: this is a bounded TrueType `gvar` IUP slice only. It does not
+claim phantom-point metrics, HVAR/VVAR/MVAR support, vertical metrics, complete
+variable-font parity, hinting VM parity, or GPU glyph route support.
 ### PKT-05A: CFF/CFF2 CharString Fixture Evidence
 
 Status: implemented; independent review pending because the current tool policy
