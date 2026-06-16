@@ -10,7 +10,15 @@
       "kgpuMilestones": ["M0","M1"],
       "ticketIds": [],
       "rStages": ["R0","R1","R2","R3","R4","R5","R6"],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier une pile de cartes solides avec ordre de dessin stable.",
+          "validates": "Valide Clear, FillRect, alpha borne et paintOrder deterministe.",
+          "nonClaims": "Ne revendique pas les rrect, paths, gradients ou textures.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "activation-candidate-boundary-board",
@@ -20,7 +28,15 @@
       "kgpuMilestones": ["M0","M1"],
       "ticketIds": ["KGPU-M0-007","KGPU-M1-001","KGPU-M1-002"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre visible les frontieres d'activation produit avant promotion.",
+          "validates": "Valide des lanes rectangulaires de diagnostic et de politique d'activation.",
+          "nonClaims": "Ne revendique pas une activation produit ni un mouvement de readiness.",
+          "evidence": "Preuve WebGPU offscreen; lecture PM des lanes attendue."
+        }
+      }
     },
     {
       "sceneId": "first-route-rollback-panel",
@@ -30,7 +46,15 @@
       "kgpuMilestones": ["M1"],
       "ticketIds": ["KGPU-M1-003","KGPU-M1-004"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Montrer le premier routage FillRect avec voie de rollback explicite.",
+          "validates": "Valide les lanes legacy, route candidate, rollback et refus de variante.",
+          "nonClaims": "Ne revendique pas une activation par defaut ni une migration globale.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "rounded-panel-gradient",
@@ -40,7 +64,15 @@
       "kgpuMilestones": ["M2"],
       "ticketIds": [],
       "rStages": ["R1","R2","R3"],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier un panneau arrondi avec clip simple et degrade lineaire.",
+          "validates": "Valide FillRRect, Clip et LinearGradientRect dans une scene compacte.",
+          "nonClaims": "Ne revendique pas les rayons par coin, tile modes ou transforms complexes.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "rrect-gradient-route-board",
@@ -50,7 +82,15 @@
       "kgpuMilestones": ["M2"],
       "ticketIds": ["KGPU-M2-001","KGPU-M2-002"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Documenter la planification rrect et degrade avec refus visibles.",
+          "validates": "Valide rrect natif, degrade lineaire et lanes de refus de route.",
+          "nonClaims": "Ne revendique pas tile modes, transforms de shader ou pipeline key complet.",
+          "evidence": "Preuve WebGPU offscreen avec diagnostics de refus visibles."
+        }
+      }
     },
     {
       "sceneId": "release-gate-progress-board",
@@ -60,7 +100,15 @@
       "kgpuMilestones": ["M2"],
       "ticketIds": ["KGPU-M2-003","KGPU-M2-004"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Representer une progression de gate release dans un panneau clippe.",
+          "validates": "Valide rrect, scissor simple, degrade de progression et marqueur ordonne.",
+          "nonClaims": "Ne revendique pas une gate release bloquante ni une mesure de performance.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "path-badge-and-stroke",
@@ -70,7 +118,15 @@
       "kgpuMilestones": ["M3"],
       "ticketIds": [],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Garder une scene simple pour badge et proxy de stroke.",
+          "validates": "Valide un FillRRect et un FillRect utilise comme proxy visuel de stroke.",
+          "nonClaims": "Ne revendique pas la couverture path native ni les joins/caps.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "path-coverage-review-board",
@@ -80,7 +136,15 @@
       "kgpuMilestones": ["M3"],
       "ticketIds": ["KGPU-M3-001","KGPU-M3-003","KGPU-M3-004","KGPU-M3-005"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Exposer les contrats path, stroke, clip et atlas encore bornes.",
+          "validates": "Valide des lanes de revue pour path fill, stroke simple, clip et refus atlas.",
+          "nonClaims": "Ne revendique pas stencil-cover natif ni couverture path GPU complete.",
+          "evidence": "Preuve WebGPU offscreen avec refus explicites."
+        }
+      }
     },
     {
       "sceneId": "path-stencil-cover-gate-board",
@@ -90,7 +154,15 @@
       "kgpuMilestones": ["M3"],
       "ticketIds": ["KGPU-M3-002"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre visible les blockers du stencil-cover path natif.",
+          "validates": "Valide les diagnostics de capacite depth-stencil, ordering et readback manquant.",
+          "nonClaims": "Ne revendique pas la route native stencil-cover ni activation produit.",
+          "evidence": "Preuve WebGPU offscreen avec statut de gate bloque."
+        }
+      }
     },
     {
       "sceneId": "clipped-avatar-grid",
@@ -100,7 +172,15 @@
       "kgpuMilestones": ["M3","M5"],
       "ticketIds": [],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier un contenu image fixture-backed dans une zone clippee.",
+          "validates": "Valide Clip et BitmapRect avec sampling lineaire dans une grille d'avatars.",
+          "nonClaims": "Ne revendique pas un vrai decode image, texture arbitraire ou clip rrect complet.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "texture-swatch-board",
@@ -110,7 +190,15 @@
       "kgpuMilestones": ["M4"],
       "ticketIds": [],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Comparer deux swatches bitmap deja decodees.",
+          "validates": "Valide BitmapRect nearest et linear avec fixtures de couleur.",
+          "nonClaims": "Ne revendique pas codec, mipmap, tile mode ou color management.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "asset-intake-thumbnail-grid",
@@ -120,7 +208,15 @@
       "kgpuMilestones": ["M4"],
       "ticketIds": ["KGPU-M4-001","KGPU-M4-002"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier des thumbnails d'asset deja decodees dans un tray.",
+          "validates": "Valide Clear, FillRRect, Clip et deux BitmapRect upload-ready.",
+          "nonClaims": "Ne revendique pas l'upload texture arbitraire ni la provenance codec complete.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "photo-contact-sheet",
@@ -130,7 +226,15 @@
       "kgpuMilestones": ["M4"],
       "ticketIds": [],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier un contact sheet de quatre photos deja decodees.",
+          "validates": "Valide un tray rrect clippe et quatre BitmapRect fixture-backed.",
+          "nonClaims": "Ne revendique pas codec reel, upload texture arbitraire ou color management.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "codec-provenance-gate-board",
@@ -140,7 +244,15 @@
       "kgpuMilestones": ["M4"],
       "ticketIds": ["KGPU-M4-003"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre visible les exigences de provenance codec avant promotion.",
+          "validates": "Valide sample bitmap fixture et lanes registry, dependency et provenance.",
+          "nonClaims": "Ne revendique pas decode codec reel ni promotion de route image complete.",
+          "evidence": "Preuve WebGPU offscreen avec refus dependency/provenance."
+        }
+      }
     },
     {
       "sceneId": "sampler-boundary-gate-board",
@@ -150,7 +262,15 @@
       "kgpuMilestones": ["M4"],
       "ticketIds": ["KGPU-M4-004"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Exposer les limites sampler autour des fixtures bitmap.",
+          "validates": "Valide nearest, linear et lanes de refus tile, mipmap, cubic et anisotropic.",
+          "nonClaims": "Ne revendique pas sampler avance, perspective ou decode color-managed.",
+          "evidence": "Preuve WebGPU offscreen avec refus visibles."
+        }
+      }
     },
     {
       "sceneId": "savelayer-isolation-gate-board",
@@ -160,7 +280,15 @@
       "kgpuMilestones": ["M5"],
       "ticketIds": ["KGPU-M5-001"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Documenter les limites saveLayer avant support general.",
+          "validates": "Valide lanes d'isolation, bounds, destination-read et refus de layer.",
+          "nonClaims": "Ne revendique pas saveLayer general ni DAG image-filter.",
+          "evidence": "Preuve WebGPU offscreen avec refus produit/route explicites."
+        }
+      }
     },
     {
       "sceneId": "destination-read-strategy-gate-board",
@@ -170,7 +298,15 @@
       "kgpuMilestones": ["M5"],
       "ticketIds": ["KGPU-M5-002"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre visible la strategie destination-read avant blending avance.",
+          "validates": "Valide lanes de politique dst-read et blend sans lecture destination active.",
+          "nonClaims": "Ne revendique pas framebuffer fetch, dst texture ou blend compose general.",
+          "evidence": "Preuve WebGPU offscreen avec refus destination-read."
+        }
+      }
     },
     {
       "sceneId": "layered-shadow-card",
@@ -180,7 +316,15 @@
       "kgpuMilestones": ["M5"],
       "ticketIds": [],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier une carte shadow bornee materialisee par fixture.",
+          "validates": "Valide SaveLayer fixture-backed et FilterNode drop-shadow borne.",
+          "nonClaims": "Ne revendique pas saveLayer general ni image-filter DAG arbitraire.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "notification-shadow-stack",
@@ -190,7 +334,15 @@
       "kgpuMilestones": ["M5"],
       "ticketIds": [],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier deux notifications shadow bornees empilees.",
+          "validates": "Valide deux SaveLayer fixture-backed et deux FilterNode drop-shadow.",
+          "nonClaims": "Ne revendique pas saveLayer general, blur arbitraire ou filtre DAG complet.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "filtered-photo-chip",
@@ -200,7 +352,15 @@
       "kgpuMilestones": ["M5"],
       "ticketIds": [],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier un chip photo avec filtre luma-tint borne.",
+          "validates": "Valide BitmapRect fixture-backed et FilterNode luma-tint.",
+          "nonClaims": "Ne revendique pas image-filter DAG ni color filter general.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "tinted-avatar-card",
@@ -210,7 +370,15 @@
       "kgpuMilestones": ["M5"],
       "ticketIds": [],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier une carte avatar clippee avec teinte luma.",
+          "validates": "Valide Clear, FillRRect, Clip, BitmapRect et FilterNode luma-tint.",
+          "nonClaims": "Ne revendique pas DAG filtre general ni sampling image avance.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "filter-dag-refusal-board",
@@ -220,7 +388,15 @@
       "kgpuMilestones": ["M5"],
       "ticketIds": ["KGPU-M5-004"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Lister les refus de DAG filtre avant promotion.",
+          "validates": "Valide des lanes de refus stables pour familles de filtre.",
+          "nonClaims": "Ne revendique pas execution de DAG image-filter ni textures intermediaires.",
+          "evidence": "Preuve WebGPU offscreen avec refus attendus."
+        }
+      }
     },
     {
       "sceneId": "receipt-text-run",
@@ -230,7 +406,15 @@
       "kgpuMilestones": ["M6"],
       "ticketIds": [],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Representer un run texte de ticket avec inputs font reels.",
+          "validates": "Valide le payload TextRun et les diagnostics de route texte indisponible.",
+          "nonClaims": "Ne revendique pas glyph atlas WebGPU ni shaping complet.",
+          "evidence": "Preuve attendue comme refus stable de route texte."
+        }
+      }
     },
     {
       "sceneId": "text-handoff-boundary-board",
@@ -240,7 +424,15 @@
       "kgpuMilestones": ["M6"],
       "ticketIds": ["KGPU-M6-001"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Exposer les frontieres de handoff texte et artefacts types.",
+          "validates": "Valide lanes de font input, shaping, atlas et refus de handoff.",
+          "nonClaims": "Ne revendique pas rendu texte GPU ni fallback font complet.",
+          "evidence": "Preuve WebGPU offscreen avec refus texte visibles."
+        }
+      }
     },
     {
       "sceneId": "text-resource-binding-gate-board",
@@ -250,7 +442,15 @@
       "kgpuMilestones": ["M6"],
       "ticketIds": ["KGPU-M6-003"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre visible les blockers de binding ressource texte.",
+          "validates": "Valide lanes upload plan, binding layout, stale generation et budget.",
+          "nonClaims": "Ne revendique pas upload glyph atlas ni texture CPU-rendered supportee.",
+          "evidence": "Preuve WebGPU offscreen avec refus binding texte."
+        }
+      }
     },
     {
       "sceneId": "a8-glyph-atlas-gate-board",
@@ -260,7 +460,15 @@
       "kgpuMilestones": ["M6"],
       "ticketIds": ["KGPU-M6-002"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Documenter les gates d'atlas glyph A8.",
+          "validates": "Valide lanes descriptor, page, entry, generation et instance buffer.",
+          "nonClaims": "Ne revendique pas route A8 glyph atlas ni ordering upload-before-sample.",
+          "evidence": "Preuve WebGPU offscreen avec refus atlas explicites."
+        }
+      }
     },
     {
       "sceneId": "text-representation-gate-board",
@@ -270,7 +478,15 @@
       "kgpuMilestones": ["M6"],
       "ticketIds": ["KGPU-M6-004"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Comparer les representations texte avant route GPU.",
+          "validates": "Valide lanes de representation, font artefacts et refus de route texte.",
+          "nonClaims": "Ne revendique pas shaping multi-script ni rendu glyph GPU.",
+          "evidence": "Preuve WebGPU offscreen avec refus texte attendus."
+        }
+      }
     },
     {
       "sceneId": "runtime-effect-color-tile",
@@ -280,7 +496,15 @@
       "kgpuMilestones": ["M7"],
       "ticketIds": [],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier une tuile RuntimeEffect SimpleRT enregistree.",
+          "validates": "Valide RuntimeEffectTile registered simple_rt avec uniform gColor.",
+          "nonClaims": "Ne revendique pas SkSL dynamique ni runtime effects arbitraires.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "runtime-effect-descriptor-gate-board",
@@ -290,7 +514,15 @@
       "kgpuMilestones": ["M7"],
       "ticketIds": ["KGPU-M7-001"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre visible le contrat descriptor RuntimeEffect.",
+          "validates": "Valide SimpleRT et lanes descriptor, WGSL, CPU implementation et uniforms.",
+          "nonClaims": "Ne revendique pas SpiralRT ni compilation dynamique de source SkSL.",
+          "evidence": "Preuve WebGPU offscreen avec diagnostics descriptor."
+        }
+      }
     },
     {
       "sceneId": "runtime-effect-refusal-gate-board",
@@ -300,7 +532,15 @@
       "kgpuMilestones": ["M7"],
       "ticketIds": ["KGPU-M7-002"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Documenter les refus runtime effect attendus par produit.",
+          "validates": "Valide refus source arbitraire, child slot et placement non supporte.",
+          "nonClaims": "Ne revendique pas children RuntimeEffect ni route shader dynamique.",
+          "evidence": "Preuve WebGPU offscreen avec refus produit attendus."
+        }
+      }
     },
     {
       "sceneId": "blend-mode-strip",
@@ -310,7 +550,15 @@
       "kgpuMilestones": ["M7"],
       "ticketIds": [],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Garder une scene minimale pour une lane blend simple.",
+          "validates": "Valide un FillRect borne dans la famille blend/color actuelle.",
+          "nonClaims": "Ne revendique pas modes blend avances ni destination-read.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "translucent-card-overlap",
@@ -320,7 +568,15 @@
       "kgpuMilestones": ["M7"],
       "ticketIds": ["KGPU-M7-003"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier trois cartes alpha SrcOver bornees.",
+          "validates": "Valide FillRect avec alpha partiel et ordre de peinture stable.",
+          "nonClaims": "Ne revendique pas blend modes arbitraires ni color space large.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "sdr-color-boundary-board",
@@ -330,7 +586,15 @@
       "kgpuMilestones": ["M7"],
       "ticketIds": ["KGPU-M7-004"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre visible les bornes couleur SDR.",
+          "validates": "Valide lanes de faits SDR, clamp et refus de color management avance.",
+          "nonClaims": "Ne revendique pas wide-gamut, HDR ou transforms color-space complets.",
+          "evidence": "Preuve WebGPU offscreen avec refus couleur."
+        }
+      }
     },
     {
       "sceneId": "mesh-ribbon",
@@ -340,7 +604,15 @@
       "kgpuMilestones": ["M8"],
       "ticketIds": [],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier un ruban mesh fixture-backed borne.",
+          "validates": "Valide MeshRibbon bounded-ribbon-strip dans le runner actuel.",
+          "nonClaims": "Ne revendique pas DrawVertices general ni vertex/index buffer arbitraire.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "vertices-route-gate-board",
@@ -350,7 +622,15 @@
       "kgpuMilestones": ["M8"],
       "ticketIds": ["KGPU-M8-001","KGPU-M8-002","KGPU-M8-003"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Lister les blockers de route vertices.",
+          "validates": "Valide lanes descriptor, primitive blend, buffer upload, ABI et batching.",
+          "nonClaims": "Ne revendique pas vertices generaux ni pipeline mesh complet.",
+          "evidence": "Preuve WebGPU offscreen avec refus vertices."
+        }
+      }
     },
     {
       "sceneId": "cache-pressure-deck",
@@ -360,7 +640,15 @@
       "kgpuMilestones": ["M9"],
       "ticketIds": [],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Representer une pression cache minimale et stable.",
+          "validates": "Valide deux rectangles comme deck de pression cache fixture.",
+          "nonClaims": "Ne revendique pas telemetry cache runtime observee.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "cache-source-ledger-board",
@@ -370,7 +658,15 @@
       "kgpuMilestones": ["M9"],
       "ticketIds": ["KGPU-M9-001"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre visible la classification des sources cache.",
+          "validates": "Valide lanes de source cache, stale, generated et policy.",
+          "nonClaims": "Ne revendique pas cache WebGPU observe ni eviction runtime.",
+          "evidence": "Preuve WebGPU offscreen avec ledger diagnostic."
+        }
+      }
     },
     {
       "sceneId": "frame-gate-blocker-board",
@@ -380,7 +676,15 @@
       "kgpuMilestones": ["M9"],
       "ticketIds": ["KGPU-M9-002"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Exposer les blockers de frame gate.",
+          "validates": "Valide lanes de politique frame, telemetry et gating reporting-only.",
+          "nonClaims": "Ne revendique pas gate FPS release-blocking ni mesure native definitive.",
+          "evidence": "Preuve WebGPU offscreen avec blockers visibles."
+        }
+      }
     },
     {
       "sceneId": "pm-readiness-freeze-board",
@@ -390,7 +694,15 @@
       "kgpuMilestones": ["M9"],
       "ticketIds": ["KGPU-M9-003"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Montrer que la readiness PM ne bouge pas sans gate.",
+          "validates": "Valide lanes de policy, release blocking false et readiness delta zero.",
+          "nonClaims": "Ne revendique pas activation produit ni mouvement de readiness.",
+          "evidence": "Preuve WebGPU offscreen avec diagnostics PM."
+        }
+      }
     },
     {
       "sceneId": "legacy-route-comparison",
@@ -400,7 +712,15 @@
       "kgpuMilestones": ["M10"],
       "ticketIds": [],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Garder une comparaison legacy minimale.",
+          "validates": "Valide un proxy rectangulaire pour route legacy courante.",
+          "nonClaims": "Ne revendique pas comparaison pixel complete ni retrait legacy.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     },
     {
       "sceneId": "legacy-inventory-hygiene-board",
@@ -410,7 +730,15 @@
       "kgpuMilestones": ["M10"],
       "ticketIds": ["KGPU-M10-001","KGPU-M10-004"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre visible l'hygiene inventaire legacy.",
+          "validates": "Valide lanes inventory, archive, stale rows et cleanup gates.",
+          "nonClaims": "Ne revendique pas retrait de route legacy ni migration globale.",
+          "evidence": "Preuve WebGPU offscreen avec gates legacy."
+        }
+      }
     },
     {
       "sceneId": "shadow-parity-migration-gate-board",
@@ -420,7 +748,15 @@
       "kgpuMilestones": ["M10"],
       "ticketIds": ["KGPU-M10-002"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Documenter les gates de parite shadow avant migration.",
+          "validates": "Valide lanes par famille pour parite, evidence et refus de migration.",
+          "nonClaims": "Ne revendique pas parite shadow complete ni remplacement accepte.",
+          "evidence": "Preuve WebGPU offscreen avec gates de parite."
+        }
+      }
     },
     {
       "sceneId": "legacy-retirement-blocker-board",
@@ -430,7 +766,177 @@
       "kgpuMilestones": ["M10"],
       "ticketIds": ["KGPU-M10-003"],
       "rStages": [],
-      "expectation": "ShouldRender"
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Exposer les blockers de retrait legacy.",
+          "validates": "Valide lanes replacement, activation decision, rollback et evidence PM.",
+          "nonClaims": "Ne revendique pas retirement legacy ni route produit activee.",
+          "evidence": "Preuve WebGPU offscreen avec blockers de retirement."
+        }
+      }
+    }
+  ],
+  "candidateScenes": [
+    {
+      "sceneId": "product-route-smoke-lanes",
+      "title": "Product Route Smoke Lanes",
+      "status": "candidate",
+      "tags": ["Rect","LegacyComparison"],
+      "kgpuMilestones": ["M0","M1"],
+      "ticketIds": [],
+      "humanDocs": {
+        "fr": {
+          "intention": "Preparer une scene lisible pour verifier activation, rollback et route produit.",
+          "validationTarget": "Comparer lanes legacy, route candidate et refus sans activer le produit.",
+          "nonClaims": "Ne revendique pas activation par defaut ni decision release.",
+          "rationale": "Couvre le pont M0/M1 entre inventaire de routes et premier rollout controle."
+        }
+      }
+    },
+    {
+      "sceneId": "gradient-tile-mode-boundary",
+      "title": "Gradient Tile Mode Boundary",
+      "status": "runner-gap",
+      "tags": ["RRect","Gradient","Clip"],
+      "kgpuMilestones": ["M2"],
+      "ticketIds": [],
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre visible les variations tile mode et transform autour des gradients.",
+          "validationTarget": "Verifier que les tile modes non supportes refusent avec raison stable.",
+          "nonClaims": "Ne revendique pas repeat, mirror, decal ou matrices locales completes.",
+          "rationale": "Complete les scenes M2 actuelles qui couvrent surtout le degrade lineaire simple."
+        }
+      }
+    },
+    {
+      "sceneId": "path-aa-stroke-join-board",
+      "title": "Path AA Stroke Join Board",
+      "status": "runner-gap",
+      "tags": ["Path","Stroke","Clip"],
+      "kgpuMilestones": ["M3"],
+      "ticketIds": [],
+      "humanDocs": {
+        "fr": {
+          "intention": "Preparer une revue des joins, caps et AA path avant support natif.",
+          "validationTarget": "Montrer les routes path/stroke attendues et les refus coverage manquants.",
+          "nonClaims": "Ne revendique pas couverture AA, joins/caps reels ou stencil-cover natif.",
+          "rationale": "Couvre un trou M3 entre proxy rectangulaire et vraie couverture path."
+        }
+      }
+    },
+    {
+      "sceneId": "bitmap-sampler-matrix",
+      "title": "Bitmap Sampler Matrix",
+      "status": "fixture-ready",
+      "tags": ["Image","Clip","RRect"],
+      "kgpuMilestones": ["M4"],
+      "ticketIds": [],
+      "humanDocs": {
+        "fr": {
+          "intention": "Comparer plusieurs fixtures bitmap avec nearest et linear dans une matrice compacte.",
+          "validationTarget": "Valider l'extension de scenes bitmap fixture-backed sans codec reel.",
+          "nonClaims": "Ne revendique pas mipmap, tile mode, anisotropic ou decode color-managed.",
+          "rationale": "Renforce M4 avec une candidate implementable par le runner actuel."
+        }
+      }
+    },
+    {
+      "sceneId": "layer-filter-chain-board",
+      "title": "Layer Filter Chain Board",
+      "status": "runner-gap",
+      "tags": ["Layer","Filter"],
+      "kgpuMilestones": ["M5"],
+      "ticketIds": [],
+      "humanDocs": {
+        "fr": {
+          "intention": "Preparer une scene de chainage layer/filter plus ambitieuse.",
+          "validationTarget": "Distinguer bounded fixtures supportees et DAG image-filter non supporte.",
+          "nonClaims": "Ne revendique pas saveLayer general, intermediate textures ou DAG arbitraire.",
+          "rationale": "Couvre les limites M5 autour de SaveLayer, FilterNode et destination-read."
+        }
+      }
+    },
+    {
+      "sceneId": "simple-latin-glyph-atlas-strip",
+      "title": "Simple Latin Glyph Atlas Strip",
+      "status": "dependency-gated",
+      "tags": ["Text","Cache"],
+      "kgpuMilestones": ["M6"],
+      "ticketIds": [],
+      "humanDocs": {
+        "fr": {
+          "intention": "Preparer une scene texte simple-latin adossee a un atlas glyph reel.",
+          "validationTarget": "Valider glyph masks, atlas entries et binding ressource quand la dependance existe.",
+          "nonClaims": "Ne revendique pas shaping complexe, font fallback ou emoji/color fonts.",
+          "rationale": "Couvre M6 sans ajouter de substitut court-terme pour font/atlas."
+        }
+      }
+    },
+    {
+      "sceneId": "runtime-effect-uniform-ladder",
+      "title": "Runtime Effect Uniform Ladder",
+      "status": "fixture-ready",
+      "tags": ["RuntimeEffect","RRect","Clip"],
+      "kgpuMilestones": ["M7"],
+      "ticketIds": [],
+      "humanDocs": {
+        "fr": {
+          "intention": "Montrer plusieurs tuiles SimpleRT avec uniforms gColor differents.",
+          "validationTarget": "Valider descriptor SimpleRT, layout gColor et pipeline key stable.",
+          "nonClaims": "Ne revendique pas SkSL dynamique, SpiralRT ou effets enfants.",
+          "rationale": "Exerce M7 avec une scene implementable par le runner actuel."
+        }
+      }
+    },
+    {
+      "sceneId": "mesh-ribbon-depth-stack",
+      "title": "Mesh Ribbon Depth Stack",
+      "status": "fixture-ready",
+      "tags": ["Vertices","RRect","Clip"],
+      "kgpuMilestones": ["M8"],
+      "ticketIds": [],
+      "humanDocs": {
+        "fr": {
+          "intention": "Empiler plusieurs rubans mesh bornes pour inspecter ordre et overlap.",
+          "validationTarget": "Valider bounded-ribbon-strip et diagnostics de non-support vertices general.",
+          "nonClaims": "Ne revendique pas DrawVertices general ni vertex/index buffer upload.",
+          "rationale": "Etend M8 avec une scene fixture-backed proche du runner actuel."
+        }
+      }
+    },
+    {
+      "sceneId": "cache-frame-budget-strip",
+      "title": "Cache Frame Budget Strip",
+      "status": "product-refusal-expected",
+      "tags": ["Rect","Cache"],
+      "kgpuMilestones": ["M9"],
+      "ticketIds": [],
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre visible un budget frame/cache depasse comme refus attendu.",
+          "validationTarget": "Verifier qu'un budget depasse est expose comme refus produit explicite.",
+          "nonClaims": "Ne revendique pas mesure runtime WebGPU observee ni gate release-blocking.",
+          "rationale": "Couvre M9 en alignant les refus attendus avec la politique produit."
+        }
+      }
+    },
+    {
+      "sceneId": "legacy-parity-snapshot-board",
+      "title": "Legacy Parity Snapshot Board",
+      "status": "candidate",
+      "tags": ["LegacyComparison","Rect","RRect"],
+      "kgpuMilestones": ["M10"],
+      "ticketIds": [],
+      "humanDocs": {
+        "fr": {
+          "intention": "Preparer une comparaison lisible entre route legacy et route GPU candidate.",
+          "validationTarget": "Afficher parite attendue, evidence manquante et refus de retirement.",
+          "nonClaims": "Ne revendique pas remplacement accepte ni retrait de la route legacy.",
+          "rationale": "Couvre M10 avec une candidate orientee revue de migration."
+        }
+      }
     }
   ]
 }

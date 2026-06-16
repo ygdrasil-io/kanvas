@@ -164,14 +164,139 @@ class SceneCatalogContractsTest {
         )
     }
 
+    @Test
+    fun `candidate scene statuses expose stable pipeline wire names`() {
+        assertEquals(
+            listOf(
+                "candidate",
+                "fixture-ready",
+                "runner-gap",
+                "dependency-gated",
+                "product-refusal-expected",
+            ),
+            CandidateSceneStatus.entries.map { it.wireName },
+        )
+    }
+
+    @Test
+    fun `localized scene text rejects blank explanation fields`() {
+        assertEquals(
+            "Valide les rectangles solides.",
+            LocalizedSceneText(
+                intention = "Verifier une pile de cartes.",
+                validates = "Valide les rectangles solides.",
+                nonClaims = "Ne revendique pas les paths.",
+                evidence = "Preuve WebGPU offscreen.",
+            ).validates,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            LocalizedSceneText(
+                intention = "",
+                validates = "Valide les rectangles solides.",
+                nonClaims = "Ne revendique pas les paths.",
+                evidence = "Preuve WebGPU offscreen.",
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            LocalizedSceneText(
+                intention = "Verifier une pile de cartes.",
+                validates = "   ",
+                nonClaims = "Ne revendique pas les paths.",
+                evidence = "Preuve WebGPU offscreen.",
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            LocalizedSceneText(
+                intention = "Verifier une pile de cartes.",
+                validates = "Valide les rectangles solides.",
+                nonClaims = "",
+                evidence = "Preuve WebGPU offscreen.",
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            LocalizedSceneText(
+                intention = "Verifier une pile de cartes.",
+                validates = "Valide les rectangles solides.",
+                nonClaims = "Ne revendique pas les paths.",
+                evidence = "",
+            )
+        }
+    }
+
+    @Test
+    fun `candidate scenes reject empty roadmap links tags and rationale`() {
+        val candidate = CandidateScene(
+            sceneId = SceneId("sample-candidate-scene"),
+            title = "Sample Candidate Scene",
+            roadmapLinks = listOf(SceneRoadmapLink.milestone("M1")),
+            tags = setOf(SceneTag.Rect),
+            status = CandidateSceneStatus.Candidate,
+            french = sampleCandidateFrenchText(),
+        )
+
+        assertEquals("sample-candidate-scene", candidate.sceneId.value)
+        assertFailsWith<IllegalArgumentException> {
+            candidate.copy(title = "")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            candidate.copy(roadmapLinks = emptyList())
+        }
+        assertFailsWith<IllegalArgumentException> {
+            candidate.copy(tags = emptySet())
+        }
+        assertFailsWith<IllegalArgumentException> {
+            sampleCandidateFrenchText(intention = "")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            sampleCandidateFrenchText(validationTarget = "   ")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            sampleCandidateFrenchText(nonClaims = "")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            sampleCandidateFrenchText(rationale = "   ")
+        }
+    }
+
+    @Test
+    fun `human documentation validation reports document and candidate id violations`() {
+        assertEquals(
+            listOf(
+                "duplicate human docs sceneId=solid-card-stack",
+                "human docs sceneId=future-doc-scene does not match an executable scene",
+                "missing human docs sceneId=undocumented-scene",
+                "duplicate candidate sceneId=future-candidate-scene",
+                "candidate sceneId=solid-card-stack must not be executable",
+            ),
+            validateSceneHumanDocumentation(
+                scenes = listOf(
+                    sampleScene(sceneId = "solid-card-stack"),
+                    sampleScene(sceneId = "undocumented-scene"),
+                ),
+                docs = listOf(
+                    sampleHumanDocs("solid-card-stack"),
+                    sampleHumanDocs("solid-card-stack"),
+                    sampleHumanDocs("future-doc-scene"),
+                ),
+                candidateScenes = listOf(
+                    sampleCandidate("solid-card-stack"),
+                    sampleCandidate("future-candidate-scene"),
+                    sampleCandidate("future-candidate-scene"),
+                ),
+            ),
+        )
+    }
+
     private fun sampleScene(
+        sceneId: String = "solid-card-stack",
         title: String = "Solid Card Stack",
         description: String = "Rectangles with alpha and draw order.",
         tags: Set<SceneTag> = setOf(SceneTag.Rect, SceneTag.Blend),
         commands: List<String> = listOf("clear", "card-1"),
     ): GPURendererScene<String> =
         GPURendererScene(
-            sceneId = SceneId("solid-card-stack"),
+            sceneId = SceneId(sceneId),
             title = title,
             description = description,
             dimensions = SceneDimensions(320, 200),
@@ -179,5 +304,39 @@ class SceneCatalogContractsTest {
             roadmapLinks = listOf(SceneRoadmapLink.milestone("M1", RStage.R1)),
             expectation = SceneExpectation.ShouldRender,
             commands = commands,
+        )
+
+    private fun sampleHumanDocs(sceneId: String): SceneHumanDocs =
+        SceneHumanDocs(
+            sceneId = SceneId(sceneId),
+            french = LocalizedSceneText(
+                intention = "Documenter la scene.",
+                validates = "Valide un contrat de documentation.",
+                nonClaims = "Ne revendique pas une route executable.",
+                evidence = "Preuve contractuelle.",
+            ),
+        )
+
+    private fun sampleCandidate(sceneId: String): CandidateScene =
+        CandidateScene(
+            sceneId = SceneId(sceneId),
+            title = "Sample Candidate Scene",
+            roadmapLinks = listOf(SceneRoadmapLink.milestone("M1")),
+            tags = setOf(SceneTag.Rect),
+            status = CandidateSceneStatus.Candidate,
+            french = sampleCandidateFrenchText(),
+        )
+
+    private fun sampleCandidateFrenchText(
+        intention: String = "Rendre visible une candidate de test.",
+        validationTarget: String = "Valider une future route rect.",
+        nonClaims: String = "Ne revendique pas une route executable.",
+        rationale: String = "Couvre un trou de roadmap M1.",
+    ): CandidateSceneFrenchText =
+        CandidateSceneFrenchText(
+            intention = intention,
+            validationTarget = validationTarget,
+            nonClaims = nonClaims,
+            rationale = rationale,
         )
 }
