@@ -6,10 +6,13 @@
 000D ; CR
 000E..001F ; Control
 0301 ; Extend
+05B0 ; Extend
 0600..0605 ; Prepend
+0651 ; Extend
 0903 ; SpacingMark
 093E..0940 ; SpacingMark
 094D ; Extend
+0E49 ; Extend
 1100..115F ; L
 1160..11A7 ; V
 11A8..11FF ; T

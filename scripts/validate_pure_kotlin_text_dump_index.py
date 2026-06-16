@@ -31,6 +31,7 @@ REQUIRED_DUMPS = {
     "paragraph-layout-result",
     "png-glyph-image",
     "sdf-atlas-build-result",
+    "script-runs",
     "sfnt-cmap-format14-readiness",
     "sfnt-table-facts",
     "svg-glyph-document",
