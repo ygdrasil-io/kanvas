@@ -1,0 +1,25 @@
+rendered path-stencil-cover-gate-board via WebGPU offscreen
+adapter=Apple M2 Max
+clearCommands=1
+fillRectCommands=6
+fillRRectCommands=1
+linearGradientRectCommands=0
+clipCommands=1
+bitmapRectCommands=0
+pathStencilCoverRow=gpu-renderer.path.stencil-cover
+pathStencilCoverTicket=KGPU-M3-002
+pathStencilCoverTicketStatus=blocked
+pathStencilCoverClassification=TargetNative
+pathStencilCoverRouteKind=GPUNative
+pathStencilCoverAdapterRequired=true
+pathStencilCoverRefusalMatrix=depth-stencil-capability:RefuseRequired:coverage.stencil-cover-unavailable,stencil-route-unavailable:RefuseRequired:unsupported.geometry.stencil_cover_unavailable,producer-cover-ordering:RefuseRequired:unsupported.geometry.stencil_cover_ordering_illegal
+adapterBackedStencilEvidenceLinked=false
+passResourceReadbackArtifactsLinked=false
+producerBeforeCoverOrderingProven=false
+stencilCoverRoutePromoted=false
+productRouteActivated=false
+releaseBlocking=false
+cpuPreparedContinuationCountsAsSupport=false
+descriptorOnlyPlanningCountsAsSupport=false
+refusalOnlySelectorCountsAsSupport=false
+nonClaims=no-native-stencil-cover-support,no-adapter-backed-execution,no-product-activation,no-release-blocking-gate,no-cpu-prepared-continuation-as-support,no-refusal-only-selector-as-support

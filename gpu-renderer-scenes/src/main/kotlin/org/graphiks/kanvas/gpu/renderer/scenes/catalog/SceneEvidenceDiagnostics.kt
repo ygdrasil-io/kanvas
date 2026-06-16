@@ -5,6 +5,7 @@ private const val A8_GLYPH_ATLAS_SCENE_ID = "a8-glyph-atlas-gate-board"
 private const val TEXT_RESOURCE_BINDING_SCENE_ID = "text-resource-binding-gate-board"
 private const val PM_READINESS_FREEZE_SCENE_ID = "pm-readiness-freeze-board"
 private const val LEGACY_RETIREMENT_BLOCKER_SCENE_ID = "legacy-retirement-blocker-board"
+private const val PATH_STENCIL_COVER_GATE_SCENE_ID = "path-stencil-cover-gate-board"
 
 internal fun GPURendererScene<*>.runtimeEffectRefusalGateDiagnostics(): List<String> {
     if (sceneId.value != RUNTIME_EFFECT_REFUSAL_SCENE_ID) return emptyList()
@@ -88,5 +89,31 @@ internal fun GPURendererScene<*>.legacyRetirementBlockerDiagnostics(): List<Stri
         "genericMigrationRetirement=false",
         "missingGate=KGPU-M10-002",
         "replacementGate=route-specific-accepted-replacement-required",
+    )
+}
+
+internal fun GPURendererScene<*>.pathStencilCoverGateDiagnostics(): List<String> {
+    if (sceneId.value != PATH_STENCIL_COVER_GATE_SCENE_ID) return emptyList()
+    return listOf(
+        "pathStencilCoverRow=gpu-renderer.path.stencil-cover",
+        "pathStencilCoverTicket=KGPU-M3-002",
+        "pathStencilCoverTicketStatus=blocked",
+        "pathStencilCoverClassification=TargetNative",
+        "pathStencilCoverRouteKind=GPUNative",
+        "pathStencilCoverAdapterRequired=true",
+        "pathStencilCoverRefusalMatrix=" +
+            "depth-stencil-capability:RefuseRequired:coverage.stencil-cover-unavailable," +
+            "stencil-route-unavailable:RefuseRequired:unsupported.geometry.stencil_cover_unavailable," +
+            "producer-cover-ordering:RefuseRequired:unsupported.geometry.stencil_cover_ordering_illegal",
+        "adapterBackedStencilEvidenceLinked=false",
+        "passResourceReadbackArtifactsLinked=false",
+        "producerBeforeCoverOrderingProven=false",
+        "stencilCoverRoutePromoted=false",
+        "productRouteActivated=false",
+        "releaseBlocking=false",
+        "cpuPreparedContinuationCountsAsSupport=false",
+        "descriptorOnlyPlanningCountsAsSupport=false",
+        "refusalOnlySelectorCountsAsSupport=false",
+        "nonClaims=no-native-stencil-cover-support,no-adapter-backed-execution,no-product-activation,no-release-blocking-gate,no-cpu-prepared-continuation-as-support,no-refusal-only-selector-as-support",
     )
 }
