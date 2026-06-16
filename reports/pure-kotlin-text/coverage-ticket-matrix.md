@@ -1972,8 +1972,9 @@ rtk git diff --check
 
 Remaining gate: this is contract-only evidence. It does not claim A8
 rasterization, SDF generation, atlas packing, GPU text routes, color/emoji
-rendering, LCD support, or `dftext` retirement. Complete `KFONT-M9-003`,
-`KFONT-M9-004`, and `KFONT-M9-005` before re-evaluating M11 A8 GPU handoff.
+rendering, LCD support, or `dftext` retirement. `KFONT-M9-003` now lands the
+CPU A8 rasterization checkpoint; complete `KFONT-M9-004` and `KFONT-M9-005`
+before re-evaluating M11 A8 GPU handoff.
 
 ### KFONT-M9-002: Promote GlyphArtifactPlan route taxonomy
 
@@ -2025,6 +2026,54 @@ Remaining gate: this is route-taxonomy evidence only. It does not claim M10
 COLR/bitmap/SVG payload parsing, production A8 rasterization, production SDF
 quality, atlas lifecycle support, GPU text handoff, LCD support, or `dftext`
 retirement.
+
+### KFONT-M9-003: Implement quadratic/cubic outline rasterization for A8
+
+Status: done; freshly validated.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/glyph/a8-glyph-mask.json`
+- `reports/font/fixtures/expected/glyph/glyph-artifact-plan.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m9-003-a8-outline-rasterization.md`
+
+Evidence:
+
+- `GlyphMaskGenerator` now rasterizes quadratic and cubic outlines into
+  deterministic A8 masks with stable bounds, origin, row stride, and CPU
+  coverage hashes.
+- Empty `.notdef` outlines, malformed contours, unsupported fill rules, and
+  coverage overflow now produce stable empty A8 masks with
+  `text.glyph.A8-generation-failed` diagnostics that include glyph ID and
+  route-scoped strike-key hash facts.
+- `A8GlyphMaskArtifactEvidence` and `A8GlyphMaskEvidenceDump` now carry
+  `sourceOutlineSha256`, refusal diagnostics, and checked-in
+  `a8-glyph-mask.json` evidence for quadratic, cubic, composite-derived,
+  empty `.notdef`, malformed, and unsupported-fill fixtures.
+- `GlyphArtifactPlanDecision` now records `sourceRepresentationSha256`, linking
+  `glyph-artifact-plan.json` route evidence back to the source representation
+  hash without claiming atlas lifecycle or GPU handoff.
+- Dump index, fixture manifest, and claim dashboard now expose `A8 outline
+  rasterization` as `tracked-gap` CPU evidence only.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*A8*'
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*GlyphArtifactPlan*'
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: this checkpoint does not claim SDF generation, atlas lifecycle
+support, GPU text-route handoff, LCD support, external rasterizer parity, or
+`dftext` retirement. Next gates remain `KFONT-M9-004` and `KFONT-M9-005`.
 
 ### PKT-10B: Glyph Artifact Plan Decision Trace Dump
 
@@ -2174,11 +2223,10 @@ Validation:
 rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.a8GlyphMaskArtifactEvidenceRecordsBoundsAndCoverageHash
 ```
 
-Remaining gate: this is current A8 mask evidence only. It does not claim
-quadratic/cubic outline rasterization, complete malformed-contour diagnostics,
-LCD support, SDF generation, atlas eviction/stale-generation support, GPU
-upload/sampling, external rasterizer oracle parity, or complete
-`a8-glyph-mask.json` fixture coverage.
+Remaining gate: this component evidence now feeds `KFONT-M9-003`, but by itself
+it still does not claim SDF generation, atlas eviction/stale-generation
+support, GPU upload/sampling, LCD support, external rasterizer oracle parity,
+or broader GPU text-route promotion.
 ### PKT-10F: Atlas Stale Generation Refusal Diagnostic
 
 Status: implemented; independent review pending because the current tool policy
@@ -3234,9 +3282,9 @@ Evidence:
   `10f8ffeb86783294760ea4854ccda2a2623c72ed`, M11 tickets, pure Kotlin text
   handoff specs, GPU text glyph pipeline specs, and current `font:gpu-api`
   contracts.
-- `KFONT-M11-004` is blocked by missing M9 A8 mask and atlas
-  entry/page/generation/invalidation evidence from `KFONT-M9-003` and
-  `KFONT-M9-005`.
+- `KFONT-M11-004` is blocked by missing atlas
+  entry/page/generation/invalidation evidence from `KFONT-M9-005` plus the
+  remaining downstream M9 handoff work after `KFONT-M9-003`.
 - `KFONT-M11-006`, `KFONT-M11-007`, `KFONT-M11-008`, `KFONT-M11-009`, and
   `KFONT-M11-010` are blocked by the missing A8 route and downstream
   subrun/resource/upload/binding contracts.
@@ -3250,8 +3298,7 @@ Validation:
 rtk git diff --check
 ```
 
-Remaining gate: unblock M11 by completing `KFONT-M9-003`, `KFONT-M9-004`, and
-`KFONT-M9-005`, then re-evaluate `KFONT-M11-004`. This blocked wave does not
-claim GPU text support, A8 atlas route support, SDF/outline/color/bitmap/SVG
-text support, or retirement of `dftext`, `scaledemoji_rendering`, or
-`coloremoji_blendmodes`.
+Remaining gate: unblock M11 by completing `KFONT-M9-004` and `KFONT-M9-005`,
+then re-evaluate `KFONT-M11-004`. This blocked wave does not claim GPU text
+support, A8 atlas route support, SDF/outline/color/bitmap/SVG text support, or
+retirement of `dftext`, `scaledemoji_rendering`, or `coloremoji_blendmodes`.

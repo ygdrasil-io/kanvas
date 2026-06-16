@@ -53,6 +53,7 @@ class GlyphSurfaceTest {
             GlyphArtifactRouteRejection::class.simpleName,
             GlyphAtlasPackingResult::class.simpleName,
             A8GlyphMaskArtifactEvidence::class.simpleName,
+            A8GlyphMaskEvidenceDump::class.simpleName,
         )
 
         assertEquals(
@@ -88,6 +89,7 @@ class GlyphSurfaceTest {
                 "GlyphArtifactRouteRejection",
                 "GlyphAtlasPackingResult",
                 "A8GlyphMaskArtifactEvidence",
+                "A8GlyphMaskEvidenceDump",
             ),
             names,
         )
@@ -137,7 +139,191 @@ class GlyphSurfaceTest {
             strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441042"),
         )
 
-        assertEquals(A8GlyphMask(glyphId = 51, width = 0, height = 0, pixels = emptyList()), mask)
+        assertEquals(
+            A8GlyphMask(glyphId = 51, width = 0, height = 0, pixels = emptyList()),
+            mask.copy(diagnostics = emptyList(), sourceOutlineSha256 = null),
+        )
+        assertEquals(64, mask.sourceOutlineSha256?.length)
+        assertEquals(1, mask.diagnostics.size)
+        assertEquals("text.glyph.A8-generation-failed", mask.diagnostics.single().route)
+        assertEquals("info", mask.diagnostics.single().severity)
+        assertTrue(mask.diagnostics.single().message.contains("reason=empty-outline"))
+    }
+
+    @Test
+    fun glyphMaskGeneratorRasterizesClosedQuadraticContourToDeterministicA8Mask() {
+        val generator = object : GlyphMaskGenerator {}
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 54,
+            pathCommands = listOf(
+                "M 1 2",
+                "Q 2.5 2 4 2",
+                "Q 4 3.5 4 5",
+                "Q 2.5 5 1 5",
+                "Q 1 3.5 1 2",
+                "Z",
+            ),
+        )
+
+        val mask = generator.generate(
+            outline = outline,
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441080"),
+        )
+
+        assertEquals(54, mask.glyphId)
+        assertEquals(3, mask.width)
+        assertEquals(3, mask.height)
+        assertEquals(1, mask.left)
+        assertEquals(2, mask.top)
+        assertEquals(3, mask.rowBytes)
+        assertEquals(64, mask.sourceOutlineSha256?.length)
+        assertEquals(emptyList(), mask.diagnostics)
+        assertEquals(
+            listOf(
+                255, 255, 255,
+                255, 255, 255,
+                255, 255, 255,
+            ),
+            mask.pixels,
+        )
+    }
+
+    @Test
+    fun glyphMaskGeneratorRasterizesClosedCubicContourToDeterministicA8Mask() {
+        val generator = object : GlyphMaskGenerator {}
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 55,
+            pathCommands = listOf(
+                "M 1 2",
+                "C 2 2 3 2 4 2",
+                "C 4 3 4 4 4 5",
+                "C 3 5 2 5 1 5",
+                "C 1 4 1 3 1 2",
+                "Z",
+            ),
+        )
+
+        val mask = generator.generate(
+            outline = outline,
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441081"),
+        )
+
+        assertEquals(55, mask.glyphId)
+        assertEquals(3, mask.width)
+        assertEquals(3, mask.height)
+        assertEquals(1, mask.left)
+        assertEquals(2, mask.top)
+        assertEquals(3, mask.rowBytes)
+        assertEquals(64, mask.sourceOutlineSha256?.length)
+        assertEquals(emptyList(), mask.diagnostics)
+        assertEquals(
+            listOf(
+                255, 255, 255,
+                255, 255, 255,
+                255, 255, 255,
+            ),
+            mask.pixels,
+        )
+    }
+
+    @Test
+    fun glyphMaskGeneratorReturnsStableDiagnosticForUnsupportedWindingRule() {
+        val generator = object : GlyphMaskGenerator {}
+        val strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441082")
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 56,
+            pathCommands = listOf(
+                "M 1 2",
+                "L 4 2",
+                "L 4 5",
+                "L 1 5",
+                "Z",
+            ),
+            windingRule = "evenOdd",
+        )
+
+        val mask = generator.generate(outline = outline, strikeKey = strikeKey)
+
+        assertEquals(A8GlyphMask(glyphId = 56, width = 0, height = 0, pixels = emptyList()), mask.copy(
+            diagnostics = emptyList(),
+            sourceOutlineSha256 = null,
+        ))
+        assertEquals(64, mask.sourceOutlineSha256?.length)
+        assertEquals(1, mask.diagnostics.size)
+        assertEquals(56, mask.diagnostics.single().glyphId)
+        assertEquals("text.glyph.A8-generation-failed", mask.diagnostics.single().route)
+        assertEquals("warning", mask.diagnostics.single().severity)
+        assertTrue(mask.diagnostics.single().message.contains("reason=unsupported-winding-rule"))
+        assertTrue(mask.diagnostics.single().message.contains(
+            strikeKey.copy(
+                representationRoute = "text.glyph.mask.A8",
+                maskFormat = "A8",
+            ).preimageSha256(glyphId = 56),
+        ))
+    }
+
+    @Test
+    fun glyphMaskGeneratorReturnsStableDiagnosticForMalformedContour() {
+        val generator = object : GlyphMaskGenerator {}
+        val strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441083")
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 57,
+            pathCommands = listOf("L 1 2"),
+        )
+
+        val mask = generator.generate(outline = outline, strikeKey = strikeKey)
+
+        assertEquals(A8GlyphMask(glyphId = 57, width = 0, height = 0, pixels = emptyList()), mask.copy(
+            diagnostics = emptyList(),
+            sourceOutlineSha256 = null,
+        ))
+        assertEquals(64, mask.sourceOutlineSha256?.length)
+        assertEquals(1, mask.diagnostics.size)
+        assertEquals(57, mask.diagnostics.single().glyphId)
+        assertEquals("text.glyph.A8-generation-failed", mask.diagnostics.single().route)
+        assertEquals("warning", mask.diagnostics.single().severity)
+        assertTrue(mask.diagnostics.single().message.contains("reason=malformed-outline"))
+        assertTrue(mask.diagnostics.single().message.contains(
+            strikeKey.copy(
+                representationRoute = "text.glyph.mask.A8",
+                maskFormat = "A8",
+            ).preimageSha256(glyphId = 57),
+        ))
+    }
+
+    @Test
+    fun glyphMaskGeneratorReturnsStableDiagnosticForCoverageOverflow() {
+        val generator = object : GlyphMaskGenerator {}
+        val strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441090")
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 58,
+            pathCommands = listOf(
+                "M 0 0",
+                "L 5000 0",
+                "L 5000 5000",
+                "L 0 5000",
+                "Z",
+            ),
+        )
+
+        val mask = generator.generate(outline = outline, strikeKey = strikeKey)
+
+        assertEquals(
+            A8GlyphMask(glyphId = 58, width = 0, height = 0, pixels = emptyList()),
+            mask.copy(diagnostics = emptyList(), sourceOutlineSha256 = null),
+        )
+        assertEquals(64, mask.sourceOutlineSha256?.length)
+        assertEquals(1, mask.diagnostics.size)
+        assertEquals(58, mask.diagnostics.single().glyphId)
+        assertEquals("text.glyph.A8-generation-failed", mask.diagnostics.single().route)
+        assertEquals("warning", mask.diagnostics.single().severity)
+        assertTrue(mask.diagnostics.single().message.contains("reason=coverage-overflow"))
+        assertTrue(mask.diagnostics.single().message.contains(
+            strikeKey.copy(
+                representationRoute = "text.glyph.mask.A8",
+                maskFormat = "A8",
+            ).preimageSha256(glyphId = 58),
+        ))
     }
 
     @Test
@@ -149,9 +335,18 @@ class GlyphSurfaceTest {
             left = -1,
             top = 3,
             rowBytes = 3,
+            sourceOutlineSha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             pixels = listOf(
                 0, 7, 99,
                 255, 0, 99,
+            ),
+            diagnostics = listOf(
+                GlyphRouteDiagnostic(
+                    glyphId = 70,
+                    route = "text.glyph.A8-generation-failed",
+                    message = "Synthetic diagnostic snapshot.",
+                    severity = "warning",
+                ),
             ),
         )
 
@@ -164,6 +359,8 @@ class GlyphSurfaceTest {
         assertEquals(4, evidence.addressablePixelCount)
         assertEquals(2, evidence.nonZeroPixels)
         assertEquals("79ef38e8384dc02cd1de6202a09cab298e2bac8148fff30a3c437f87e63956eb", evidence.coverageSha256)
+        assertEquals("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", evidence.sourceOutlineSha256)
+        assertEquals(mask.diagnostics, evidence.diagnostics)
         assertEquals(64, evidence.strikeKeySha256.length)
         assertEquals(64, evidence.dumpSha256.length)
         assertEquals(
@@ -177,7 +374,15 @@ class GlyphSurfaceTest {
               "addressablePixelCount": 4,
               "nonZeroPixels": 2,
               "coverageSha256": "79ef38e8384dc02cd1de6202a09cab298e2bac8148fff30a3c437f87e63956eb",
-              "diagnostics": [],
+              "sourceOutlineSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "diagnostics": [
+                {
+                  "glyphId": 70,
+                  "route": "text.glyph.A8-generation-failed",
+                  "severity": "warning",
+                  "message": "Synthetic diagnostic snapshot."
+                }
+              ],
               "dumpSha256": "${evidence.dumpSha256}"
             }
             """.trimIndent() + "\n",
@@ -877,6 +1082,10 @@ class GlyphSurfaceTest {
         )
         assertEquals(1, plan.diagnostics.size)
         assertTrue(plan.decisions.all { decision -> decision.keySha256.length == 64 })
+        assertEquals(64, plan.decisions[0].sourceRepresentationSha256?.length)
+        assertEquals(64, plan.decisions[1].sourceRepresentationSha256?.length)
+        assertEquals(64, plan.decisions[2].sourceRepresentationSha256?.length)
+        assertEquals(null, plan.decisions[3].sourceRepresentationSha256)
         assertEquals(plan.diagnostics.single(), plan.decisions.last().diagnostic)
         assertEquals(
             listOf("text.glyph.mask.SDF", "text.glyph.mask.A8"),
@@ -902,6 +1111,7 @@ class GlyphSurfaceTest {
                   "planRef": null,
                   "artifactIntent": null,
                   "keySha256": "${plan.decisions[0].keySha256}",
+                  "sourceRepresentationSha256": "${plan.decisions[0].sourceRepresentationSha256}",
                   "fallbackPolicy": "fallback-selected-after-rejections",
                   "rejectedAlternatives": [
                     {"route": "text.glyph.mask.SDF", "reason": "route-unavailable"},
@@ -918,6 +1128,7 @@ class GlyphSurfaceTest {
                   "planRef": null,
                   "artifactIntent": "CPUPreparedGPU",
                   "keySha256": "${plan.decisions[1].keySha256}",
+                  "sourceRepresentationSha256": "${plan.decisions[1].sourceRepresentationSha256}",
                   "fallbackPolicy": "fallback-selected-after-rejections",
                   "rejectedAlternatives": [
                     {"route": "text.glyph.mask.SDF", "reason": "route-unavailable"}
@@ -933,6 +1144,7 @@ class GlyphSurfaceTest {
                   "planRef": null,
                   "artifactIntent": "CPUPreparedGPU",
                   "keySha256": "${plan.decisions[2].keySha256}",
+                  "sourceRepresentationSha256": "${plan.decisions[2].sourceRepresentationSha256}",
                   "fallbackPolicy": "selected-first-requested-route",
                   "rejectedAlternatives": [],
                   "diagnostic": null
@@ -946,6 +1158,7 @@ class GlyphSurfaceTest {
                   "planRef": null,
                   "artifactIntent": null,
                   "keySha256": "${plan.decisions[3].keySha256}",
+                  "sourceRepresentationSha256": null,
                   "fallbackPolicy": "refuse-no-requested-representation",
                   "rejectedAlternatives": [
                     {"route": "text.glyph.mask.SDF", "reason": "route-unavailable"},
@@ -1097,11 +1310,14 @@ class GlyphSurfaceTest {
         assertEquals(request.policyInputs, plan.policyInputs)
         assertEquals("text.glyph.SDF-transform-unsupported", plan.decisions[0].rejectedAlternatives.first().reason)
         assertEquals("CPUPreparedGPU", plan.decisions[1].artifactIntent)
+        assertEquals(64, plan.decisions[1].sourceRepresentationSha256?.length)
         assertEquals("text.glyph.atlas-capacity-exceeded", plan.decisions[2].rejectedAlternatives[1].reason)
         assertEquals("CPUPreparedGPU", plan.decisions[3].artifactIntent)
+        assertEquals(64, plan.decisions[3].sourceRepresentationSha256?.length)
 
         val dump = plan.toCanonicalGlyphArtifactPlanJson()
         assertTrue(dump.contains(""""artifactIntent": "CPUPreparedGPU""""))
+        assertTrue(dump.contains(""""sourceRepresentationSha256": """"))
         assertTrue(dump.contains(""""transformClass": "perspective""""))
         assertTrue(dump.contains(""""rendererCapabilitySummary": "cpu-only""""))
     }
@@ -1241,6 +1457,114 @@ class GlyphSurfaceTest {
 
         assertEquals(
             readProjectFile("reports/font/fixtures/expected/glyph/glyph-artifact-plan.json"),
+            dump.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun a8GlyphMaskEvidenceDumpMatchesRepoFixture() {
+        val generator = object : GlyphMaskGenerator {}
+
+        val quadratic = generator.generate(
+            outline = OutlineGlyphRepresentation(
+                glyphId = 54,
+                pathCommands = listOf(
+                    "M 1 2",
+                    "Q 2.5 2 4 2",
+                    "Q 4 3.5 4 5",
+                    "Q 2.5 5 1 5",
+                    "Q 1 3.5 1 2",
+                    "Z",
+                ),
+            ),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441084"),
+        )
+        val cubic = generator.generate(
+            outline = OutlineGlyphRepresentation(
+                glyphId = 55,
+                pathCommands = listOf(
+                    "M 1 2",
+                    "C 2 2 3 2 4 2",
+                    "C 4 3 4 4 4 5",
+                    "C 3 5 2 5 1 5",
+                    "C 1 4 1 3 1 2",
+                    "Z",
+                ),
+            ),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441085"),
+        )
+        val composite = generator.generate(
+            outline = OutlineGlyphRepresentation(
+                glyphId = 0,
+                pathCommands = listOf(
+                    "M 50 50",
+                    "L 150 50",
+                    "L 150 150",
+                    "L 50 150",
+                    "Z",
+                    "M 150 50",
+                    "L 250 50",
+                    "L 250 150",
+                    "L 150 150",
+                    "Z",
+                ),
+            ),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441086"),
+        )
+        val notdefEmpty = generator.generate(
+            outline = OutlineGlyphRepresentation(glyphId = 0),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441087"),
+        )
+        val malformed = generator.generate(
+            outline = OutlineGlyphRepresentation(glyphId = 57, pathCommands = listOf("L 1 2")),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441088"),
+        )
+        val unsupportedFill = generator.generate(
+            outline = OutlineGlyphRepresentation(
+                glyphId = 56,
+                pathCommands = listOf(
+                    "M 1 2",
+                    "L 4 2",
+                    "L 4 5",
+                    "L 1 5",
+                    "Z",
+                ),
+                windingRule = "evenOdd",
+            ),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441089"),
+        )
+
+        val dump = A8GlyphMaskEvidenceDump(
+            dumpId = "a8-glyph-mask",
+            ownerTickets = listOf("KFONT-M9-003"),
+            fixtureIds = listOf(
+                "a8-quadratic-simple",
+                "a8-cubic-simple",
+                "a8-composite-outline",
+                "a8-empty-notdef",
+                "a8-malformed-contour",
+                "a8-unsupported-fill-rule",
+            ),
+            masks = listOf(
+                A8GlyphMaskArtifactEvidence.from(quadratic, strikeKey("550e8400-e29b-41d4-a716-446655441084")),
+                A8GlyphMaskArtifactEvidence.from(cubic, strikeKey("550e8400-e29b-41d4-a716-446655441085")),
+                A8GlyphMaskArtifactEvidence.from(composite, strikeKey("550e8400-e29b-41d4-a716-446655441086")),
+                A8GlyphMaskArtifactEvidence.from(notdefEmpty, strikeKey("550e8400-e29b-41d4-a716-446655441087")),
+                A8GlyphMaskArtifactEvidence.from(malformed, strikeKey("550e8400-e29b-41d4-a716-446655441088")),
+                A8GlyphMaskArtifactEvidence.from(unsupportedFill, strikeKey("550e8400-e29b-41d4-a716-446655441089")),
+            ),
+            requiredDiagnostics = listOf("text.glyph.A8-generation-failed"),
+            nonClaims = listOf(
+                "producer-only",
+                "no-gpu-text-route-claim",
+                "no-lcd-support-claim",
+                "no-sdf-support-claim",
+                "no-external-rasterizer-parity-claim",
+            ),
+        )
+
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/glyph/a8-glyph-mask.json"),
             dump.toCanonicalJson(),
         )
     }

@@ -27,6 +27,45 @@
   "validationCommand": "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
   "fixtureFamilies": [
     {
+      "familyId": "a8-outline-rasterization",
+      "familyName": "A8 outline rasterization",
+      "classification": "tracked-gap",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        "section": "Glyph artifact tests"
+      },
+      "currentEvidencePaths": [
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "reports/pure-kotlin-text/dump-evidence-index.json",
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/glyph/a8-glyph-mask.json",
+        "reports/pure-kotlin-text/2026-06-16-kfont-m9-003-a8-outline-rasterization.md"
+      ],
+      "requiredEvidenceGates": [
+        "Keep this as CPU-only KFONT-M9-003 rasterization evidence; KFONT-M9-004 SDF boundaries, KFONT-M9-005 atlas lifecycle, and M11 GPU text-route handoff remain separate gates.",
+        "Do not claim LCD support, GPU sampling, external rasterizer parity, or dftext retirement from the A8 mask dump alone."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests '*A8*'",
+        "rtk ./gradlew --no-daemon :font:glyph:test",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "fixtureCommands": [
+        "KFONT-M9-003 A8 rasterization fixture is checked in at reports/font/fixtures/expected/glyph/a8-glyph-mask.json and asserted by GlyphSurfaceTest."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-sdf-generation-claim",
+        "no-atlas-packing-claim",
+        "no-gpu-text-route-claim",
+        "no-lcd-support-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
       "familyId": "a8-sdf-artifacts",
       "familyName": "A8/SDF artifacts",
       "classification": "current-supported",
@@ -314,10 +353,11 @@
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
         "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
         "reports/font/fixtures/expected/glyph/glyph-artifact-plan.json",
-        "reports/pure-kotlin-text/2026-06-16-kfont-m9-002-glyph-artifact-plan-taxonomy.md"
+        "reports/pure-kotlin-text/2026-06-16-kfont-m9-002-glyph-artifact-plan-taxonomy.md",
+        "reports/pure-kotlin-text/2026-06-16-kfont-m9-003-a8-outline-rasterization.md"
       ],
       "requiredEvidenceGates": [
-        "Keep this as KFONT-M9-002 route-taxonomy evidence only until KFONT-M9-003 A8 generation, KFONT-M9-004 SDF boundaries, and KFONT-M9-005 atlas lifecycle evidence land.",
+        "KFONT-M9-003 now attaches sourceRepresentationSha256 linkage and checked-in A8 mask evidence; keep this row as route-taxonomy evidence only until KFONT-M9-004 SDF boundaries and KFONT-M9-005 atlas lifecycle evidence land.",
         "Do not claim GPU text routes, COLR/bitmap/SVG payload support, or dftext retirement from route-plan taxonomy evidence alone."
       ],
       "validationCommands": [
@@ -356,7 +396,7 @@
         "reports/font/fixtures/expected/glyph/glyph-strike-key.json"
       ],
       "requiredEvidenceGates": [
-        "Keep this as KFONT-M9-001 contract evidence only until KFONT-M9-003 A8 generation, KFONT-M9-004 SDF boundaries, and KFONT-M9-005 atlas lifecycle evidence land.",
+        "Keep this as KFONT-M9-001 contract evidence; KFONT-M9-003 now lands A8 raster evidence, but KFONT-M9-004 SDF boundaries and KFONT-M9-005 atlas lifecycle evidence still gate broader artifact promotion.",
         "Do not retire dftext or claim GPU text routes from strike-key identity evidence alone."
       ],
       "validationCommands": [
