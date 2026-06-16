@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "dumpId": "unicode-data-seed",
+  "ownerTickets": ["KFONT-M5-001"],
+  "unicodeVersion": "16.0.0",
+  "kind": "bounded-seed-fixture",
+  "defaultValue": {
+    "bidiClass": "L",
+    "defaultIgnorable": false,
+    "emojiProperties": {"emoji": false, "extendedPictographic": false},
+    "generalCategory": "Cn",
+    "graphemeClusterBreak": "Other",
+    "lineBreak": "XX",
+    "script": "Zyyy",
+    "scriptExtensions": [],
+    "variationSelector": false
+  },
+  "bidiClass": [
+    {"range": "U+000A", "start": "U+000A", "end": "U+000A", "value": "B"},
+    {"range": "U+000D", "start": "U+000D", "end": "U+000D", "value": "B"},
+    {"range": "U+0020", "start": "U+0020", "end": "U+0020", "value": "WS"},
+    {"range": "U+0041", "start": "U+0041", "end": "U+0041", "value": "L"},
+    {"range": "U+0301", "start": "U+0301", "end": "U+0301", "value": "NSM"},
+    {"range": "U+05D0", "start": "U+05D0", "end": "U+05D0", "value": "R"},
+    {"range": "U+0627", "start": "U+0627", "end": "U+0627", "value": "AL"},
+    {"range": "U+0640", "start": "U+0640", "end": "U+0640", "value": "AL"},
+    {"range": "U+200D", "start": "U+200D", "end": "U+200D", "value": "BN"},
+    {"range": "U+FE0E", "start": "U+FE0E", "end": "U+FE0E", "value": "NSM"},
+    {"range": "U+FE0F", "start": "U+FE0F", "end": "U+FE0F", "value": "NSM"},
+    {"range": "U+1F1E6", "start": "U+1F1E6", "end": "U+1F1E6", "value": "L"},
+    {"range": "U+1F600", "start": "U+1F600", "end": "U+1F600", "value": "ON"}
+  ],
+  "defaultIgnorable": [
+    {"range": "U+00AD", "start": "U+00AD", "end": "U+00AD", "value": true},
+    {"range": "U+034F", "start": "U+034F", "end": "U+034F", "value": true},
+    {"range": "U+200D", "start": "U+200D", "end": "U+200D", "value": true},
+    {"range": "U+FE0E..U+FE0F", "start": "U+FE0E", "end": "U+FE0F", "value": true},
+    {"range": "U+E0100..U+E01EF", "start": "U+E0100", "end": "U+E01EF", "value": true}
+  ],
+  "emojiProperties": {
+    "emoji": [
+    {"range": "U+1F1E6..U+1F1FF", "start": "U+1F1E6", "end": "U+1F1FF", "value": true},
+    {"range": "U+1F600", "start": "U+1F600", "end": "U+1F600", "value": true}
+  ],
+    "extendedPictographic": [
+    {"range": "U+1F466", "start": "U+1F466", "end": "U+1F466", "value": true},
+    {"range": "U+1F600", "start": "U+1F600", "end": "U+1F600", "value": true}
+  ]
+  },
+  "generalCategory": [
+    {"range": "U+000A", "start": "U+000A", "end": "U+000A", "value": "Cc"},
+    {"range": "U+000D", "start": "U+000D", "end": "U+000D", "value": "Cc"},
+    {"range": "U+0020", "start": "U+0020", "end": "U+0020", "value": "Zs"},
+    {"range": "U+0041", "start": "U+0041", "end": "U+0041", "value": "Lu"},
+    {"range": "U+0301", "start": "U+0301", "end": "U+0301", "value": "Mn"},
+    {"range": "U+05D0", "start": "U+05D0", "end": "U+05D0", "value": "Lo"},
+    {"range": "U+0627", "start": "U+0627", "end": "U+0627", "value": "Lo"},
+    {"range": "U+0640", "start": "U+0640", "end": "U+0640", "value": "Lm"},
+    {"range": "U+200D", "start": "U+200D", "end": "U+200D", "value": "Cf"},
+    {"range": "U+FE0E", "start": "U+FE0E", "end": "U+FE0E", "value": "Mn"},
+    {"range": "U+FE0F", "start": "U+FE0F", "end": "U+FE0F", "value": "Mn"},
+    {"range": "U+1F1E6", "start": "U+1F1E6", "end": "U+1F1E6", "value": "So"},
+    {"range": "U+1F600", "start": "U+1F600", "end": "U+1F600", "value": "So"}
+  ],
+  "graphemeClusterBreak": [
+    {"range": "U+000A", "start": "U+000A", "end": "U+000A", "value": "LF"},
+    {"range": "U+000D", "start": "U+000D", "end": "U+000D", "value": "CR"},
+    {"range": "U+0301", "start": "U+0301", "end": "U+0301", "value": "Extend"},
+    {"range": "U+200D", "start": "U+200D", "end": "U+200D", "value": "ZWJ"},
+    {"range": "U+FE0E..U+FE0F", "start": "U+FE0E", "end": "U+FE0F", "value": "Extend"},
+    {"range": "U+1F1E6..U+1F1FF", "start": "U+1F1E6", "end": "U+1F1FF", "value": "Regional_Indicator"}
+  ],
+  "lineBreak": [
+    {"range": "U+000A", "start": "U+000A", "end": "U+000A", "value": "LF"},
+    {"range": "U+000D", "start": "U+000D", "end": "U+000D", "value": "CR"},
+    {"range": "U+0020", "start": "U+0020", "end": "U+0020", "value": "SP"},
+    {"range": "U+0041", "start": "U+0041", "end": "U+0041", "value": "AL"},
+    {"range": "U+0301", "start": "U+0301", "end": "U+0301", "value": "CM"},
+    {"range": "U+05D0", "start": "U+05D0", "end": "U+05D0", "value": "HL"},
+    {"range": "U+0627..U+0640", "start": "U+0627", "end": "U+0640", "value": "AL"},
+    {"range": "U+200D", "start": "U+200D", "end": "U+200D", "value": "ZWJ"},
+    {"range": "U+FE0E..U+FE0F", "start": "U+FE0E", "end": "U+FE0F", "value": "CM"},
+    {"range": "U+1F1E6..U+1F1FF", "start": "U+1F1E6", "end": "U+1F1FF", "value": "RI"},
+    {"range": "U+1F600", "start": "U+1F600", "end": "U+1F600", "value": "ID"}
+  ],
+  "script": [
+    {"range": "U+000A..U+000D", "start": "U+000A", "end": "U+000D", "value": "Zyyy"},
+    {"range": "U+0020", "start": "U+0020", "end": "U+0020", "value": "Zyyy"},
+    {"range": "U+0041", "start": "U+0041", "end": "U+0041", "value": "Latn"},
+    {"range": "U+0301", "start": "U+0301", "end": "U+0301", "value": "Zinh"},
+    {"range": "U+05D0", "start": "U+05D0", "end": "U+05D0", "value": "Hebr"},
+    {"range": "U+0627", "start": "U+0627", "end": "U+0627", "value": "Arab"},
+    {"range": "U+0640", "start": "U+0640", "end": "U+0640", "value": "Zyyy"},
+    {"range": "U+200D", "start": "U+200D", "end": "U+200D", "value": "Zinh"},
+    {"range": "U+FE0E..U+FE0F", "start": "U+FE0E", "end": "U+FE0F", "value": "Zinh"},
+    {"range": "U+1F1E6..U+1F1FF", "start": "U+1F1E6", "end": "U+1F1FF", "value": "Zyyy"},
+    {"range": "U+1F600", "start": "U+1F600", "end": "U+1F600", "value": "Zyyy"}
+  ],
+  "scriptExtensions": [
+    {"range": "U+0640", "start": "U+0640", "end": "U+0640", "value": ["Arab", "Mand", "Syrc"]},
+    {"range": "U+3003", "start": "U+3003", "end": "U+3003", "value": ["Bopo", "Hang", "Hani", "Hira", "Kana"]}
+  ],
+  "variationSelector": [
+    {"range": "U+FE00..U+FE0F", "start": "U+FE00", "end": "U+FE0F", "value": true},
+    {"range": "U+E0100..U+E01EF", "start": "U+E0100", "end": "U+E01EF", "value": true}
+  ],
+  "sampleFacts": [
+    {"codePoint": "U+0041", "codePointValue": 65, "graphemeClusterBreak": "Other", "bidiClass": "L", "script": "Latn", "scriptExtensions": [], "lineBreak": "AL", "generalCategory": "Lu", "defaultIgnorable": false, "emoji": false, "extendedPictographic": false, "variationSelector": false},
+    {"codePoint": "U+0301", "codePointValue": 769, "graphemeClusterBreak": "Extend", "bidiClass": "NSM", "script": "Zinh", "scriptExtensions": [], "lineBreak": "CM", "generalCategory": "Mn", "defaultIgnorable": false, "emoji": false, "extendedPictographic": false, "variationSelector": false},
+    {"codePoint": "U+05D0", "codePointValue": 1488, "graphemeClusterBreak": "Other", "bidiClass": "R", "script": "Hebr", "scriptExtensions": [], "lineBreak": "HL", "generalCategory": "Lo", "defaultIgnorable": false, "emoji": false, "extendedPictographic": false, "variationSelector": false},
+    {"codePoint": "U+0640", "codePointValue": 1600, "graphemeClusterBreak": "Other", "bidiClass": "AL", "script": "Zyyy", "scriptExtensions": ["Arab", "Mand", "Syrc"], "lineBreak": "AL", "generalCategory": "Lm", "defaultIgnorable": false, "emoji": false, "extendedPictographic": false, "variationSelector": false},
+    {"codePoint": "U+1F600", "codePointValue": 128512, "graphemeClusterBreak": "Other", "bidiClass": "ON", "script": "Zyyy", "scriptExtensions": [], "lineBreak": "ID", "generalCategory": "So", "defaultIgnorable": false, "emoji": true, "extendedPictographic": true, "variationSelector": false},
+    {"codePoint": "U+FE0F", "codePointValue": 65039, "graphemeClusterBreak": "Extend", "bidiClass": "NSM", "script": "Zinh", "scriptExtensions": [], "lineBreak": "CM", "generalCategory": "Mn", "defaultIgnorable": true, "emoji": false, "extendedPictographic": false, "variationSelector": true}
+  ],
+  "tableHashes": {
+    "bidiClass": "e02f183473b3fddfabcb459b9de539a93ab6a6e492e0d3d24cbc9698e3b17640",
+    "defaultIgnorable": "ef85131361b6c000d61e37c2838b2dfc06d0296327af07859377deb56a9ec4e5",
+    "emojiProperties": "16b8ce3fa2240d92d30375fb6be1e9269b503dd6e95350ad7875b4d832506df4",
+    "generalCategory": "cd49b8078dcb841792b282e05b78fcb86a1f4b69f4661070f21c92271dac50f1",
+    "graphemeClusterBreak": "5a26da6dbd28771cb91ddbc519023d9a6b9a2b4b5abd3c734b1ff733f5c9b7ec",
+    "lineBreak": "7c3f6ac79c31ff9bde121eff13f1ed34a5a8edcf3515d36a6ee14fb9138ab566",
+    "script": "eceafe14bfed407ddf8cde662c1b595e483de8a48058fb1aaaa884b72635a6fc",
+    "scriptExtensions": "2667af29502eabaa53b8f788ed86da9ccdbcc222a39a8094481262c29a1bb226",
+    "variationSelector": "7b2263ccf567a4095ca394b21086da42e851fc2f5515afc5438245608ab3e74b"
+  },
+  "nonClaims": [
+    "bounded-seed-fixture-only",
+    "no-complete-ucd-claim",
+    "no-uax9-conformance-claim",
+    "no-uax14-uax29-conformance-claim",
+    "no-segmentation-or-bidi-replacement-claim",
+    "no-shaping-support-promotion",
+    "no-paragraph-support-claim",
+    "no-gpu-text-route-claim"
+  ]
+}

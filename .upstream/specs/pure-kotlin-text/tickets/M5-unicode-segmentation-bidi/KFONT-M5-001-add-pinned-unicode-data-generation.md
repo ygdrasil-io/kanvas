@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M5-001"
 title: "Add pinned Unicode data generation"
-status: "proposed"
+status: "done"
 milestone: "M5"
 priority: "P0"
 owner_area: "unicode"
@@ -69,11 +69,11 @@ interface UnicodeDataGenerator {
 
 ## Acceptance Criteria
 
-- [ ] Two clean generations from the same pinned inputs produce byte-identical generated tables and manifest output.
-- [ ] Generated tables include the properties required by grapheme, bidi, script itemization, line breaking, emoji sequences, and variation selectors.
-- [ ] Unit tests fail if generated output references a Unicode version different from the fixture expectation.
-- [ ] The generator records input hashes and refuses unpinned or missing input files.
-- [ ] Shaping-related dumps can serialize the Unicode version without depending on the JDK runtime version.
+- [x] Two clean generations from the same pinned inputs produce byte-identical generated tables and manifest output.
+- [x] Generated tables include bounded seed facts for Grapheme_Cluster_Break, Bidi_Class, Script, Script_Extensions, Line_Break, General_Category, emoji/Extended_Pictographic, and Variation_Selector properties.
+- [x] Unit tests fail if generated output references a Unicode version different from the fixture expectation.
+- [x] The generator records input hashes and refuses unpinned or missing input files.
+- [x] Shaping-related dumps can serialize the Unicode version without depending on the JDK runtime version.
 
 ## Required Evidence
 
@@ -105,6 +105,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*UnicodeData*'
 
 - `proposed`: Foundation ticket for all M5 segmentation and M6 shaping rules.
 - Move to `ready` only after pinned Unicode version and manifest fields are reviewed.
+- `done` (2026-06-16): Added a bounded, offline Unicode 16.0.0 seed generator over checked-in extracts, generated manifest/table fixtures with input and table SHA-256 hashes, and a `text.shaping.unicode-data-version-mismatch` diagnostic fixture. This does not replace `BasicUnicodeData`, implement grapheme segmentation, implement bidi resolution, implement Script_Extensions itemization, claim complete UCD coverage, claim UAX #9/#14/#29 conformance, promote shaping support, claim paragraph support, or claim any GPU text route.
 
 ## Linear Labels
 

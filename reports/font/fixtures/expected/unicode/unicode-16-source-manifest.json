@@ -11,16 +11,23 @@
     "DerivedCoreProperties.txt",
     "GraphemeBreakProperty.txt",
     "LineBreak.txt",
+    "PropList.txt",
     "ScriptExtensions.txt",
     "Scripts.txt",
-    "UnicodeData.txt"
+    "UnicodeData.txt",
+    "emoji/emoji-data.txt"
   ],
+  "checkedInSourceExtractRoot": "reports/font/fixtures/expected/unicode/source-extracts/16.0.0",
   "downloadPolicy": "allowed-during-fixture-creation-only",
   "ordinaryValidationPolicy": "offline",
   "nonClaims": [
     "no-complete-ucd-claim",
     "no-complete-uax9-claim",
     "no-complete-uax14-claim",
-    "no-complete-uax29-claim"
+    "no-complete-uax29-claim",
+    "no-segmentation-or-bidi-replacement-claim",
+    "no-shaping-support-promotion",
+    "no-paragraph-support-claim",
+    "no-gpu-text-route-claim"
   ]
 }
