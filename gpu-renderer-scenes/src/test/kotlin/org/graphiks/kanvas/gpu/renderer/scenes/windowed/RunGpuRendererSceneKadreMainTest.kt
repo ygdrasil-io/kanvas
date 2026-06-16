@@ -313,7 +313,7 @@ class RunGpuRendererSceneKadreMainTest {
     }
 
     @Test
-    fun `text run writes not yet rendered without opening Kadre`() {
+    fun `text run writes stable text route unavailable diagnostics without opening Kadre`() {
         val output = Files.createTempDirectory("gpu-renderer-scenes-windowed-main")
             .resolve("session.json")
         var launchCount = 0
@@ -332,8 +332,14 @@ class RunGpuRendererSceneKadreMainTest {
         assertContains(sessionJson, "\"status\": \"not-yet-rendered\"")
         assertContains(
             sessionJson,
-            "\"reason\": \"rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed save-layer, fixture-backed filter-node, fixture-backed runtime-effect, and fixture-backed mesh-ribbon command families: text-run\"",
+            "\"reason\": \"unsupported.text.draw_run_route_unavailable\"",
         )
+        assertContains(sessionJson, "commandFamily=text-run")
+        assertContains(sessionJson, "fontFamily=Liberation Sans")
+        assertContains(sessionJson, "glyphRoute=font.glyph.outline-path")
+        assertContains(sessionJson, "lowerLevelTextRoutesAvailable=font.glyph.outline-path,webgpu.text.glyph-atlas.simple-latin")
+        assertContains(sessionJson, "sceneRoutePromoted=false")
+        assertContains(sessionJson, "nonClaims=no fake glyph substitute,no CPU-rendered text texture,no system font fallback,no broad shaping fallback emoji SDF LCD Kadre-windowed claim")
         assertContains(sessionJson, "\"requestedFrames\": 60")
         assertContains(sessionJson, "\"presentedFrames\": 0")
         assertContains(sessionJson, "\"manualValidation\": true")

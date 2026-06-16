@@ -16,6 +16,10 @@ private fun requireOptionalField(value: String?, fieldName: String) {
     require(value == null || value.isNotBlank()) { "$fieldName must not be blank" }
 }
 
+private fun requireOptionalFinite(value: Float?, fieldName: String) {
+    require(value == null || (!value.isNaN() && !value.isInfinite())) { "$fieldName must be finite" }
+}
+
 data class SceneTarget(val width: Int, val height: Int, val colorFormat: String = "rgba8unorm") {
     init {
         require(width > 0) { "SceneTarget.width must be positive" }
@@ -254,11 +258,51 @@ sealed interface SceneCommand {
         }
     }
 
-    data class TextRun(override val label: String) : SceneCommand {
+    data class TextRun(
+        override val label: String,
+        val text: String? = null,
+        val baselineX: Float? = null,
+        val baselineY: Float? = null,
+        val fontSourceId: String? = null,
+        val fontFamily: String? = null,
+        val fontSize: Float? = null,
+        val color: SceneColor? = null,
+        val shapingMode: String = "simple-latin",
+        val glyphRoute: String = "font.glyph.outline-path",
+        val webGpuCandidateRoute: String = "webgpu.text.glyph-atlas.simple-latin",
+        val fallbackReason: String = TEXT_DRAW_RUN_ROUTE_UNAVAILABLE,
+        val paintOrder: Int = 0,
+    ) : SceneCommand {
         override val family: String = "text-run"
+        val hasFixturePayload: Boolean =
+            text != null &&
+                baselineX != null &&
+                baselineY != null &&
+                fontSourceId != null &&
+                fontFamily != null &&
+                fontSize != null &&
+                color != null
 
         init {
             requireSceneCommandLabel(label)
+            val payloadFieldCount = listOf(text, baselineX, baselineY, fontSourceId, fontFamily, fontSize, color)
+                .count { it != null }
+            require(payloadFieldCount == 0 || payloadFieldCount == 7) {
+                "SceneCommand.TextRun fixture payload requires text, baselineX, baselineY, fontSourceId, fontFamily, fontSize, and color"
+            }
+            requireOptionalField(text, "SceneCommand.TextRun.text")
+            requireOptionalField(fontSourceId, "SceneCommand.TextRun.fontSourceId")
+            requireOptionalField(fontFamily, "SceneCommand.TextRun.fontFamily")
+            require(shapingMode.isNotBlank()) { "SceneCommand.TextRun.shapingMode must not be blank" }
+            require(glyphRoute.isNotBlank()) { "SceneCommand.TextRun.glyphRoute must not be blank" }
+            require(webGpuCandidateRoute.isNotBlank()) {
+                "SceneCommand.TextRun.webGpuCandidateRoute must not be blank"
+            }
+            require(fallbackReason.isNotBlank()) { "SceneCommand.TextRun.fallbackReason must not be blank" }
+            requireOptionalFinite(baselineX, "SceneCommand.TextRun.baselineX")
+            requireOptionalFinite(baselineY, "SceneCommand.TextRun.baselineY")
+            require(fontSize == null || fontSize > 0f) { "SceneCommand.TextRun.fontSize must be positive" }
+            require(paintOrder >= 0) { "SceneCommand.TextRun.paintOrder must be non-negative" }
         }
     }
 
@@ -337,3 +381,39 @@ sealed interface SceneCommand {
         }
     }
 }
+
+internal const val TEXT_DRAW_RUN_ROUTE_UNAVAILABLE: String = "unsupported.text.draw_run_route_unavailable"
+
+internal fun List<SceneCommand>.textRunRouteUnavailableReason(): String? =
+    if (any { it is SceneCommand.TextRun }) TEXT_DRAW_RUN_ROUTE_UNAVAILABLE else null
+
+internal fun List<SceneCommand>.textRunRouteUnavailableDiagnostics(sceneId: String): List<String> {
+    require(sceneId.isNotBlank()) { "sceneId must not be blank" }
+    return filterIsInstance<SceneCommand.TextRun>().flatMap { command ->
+        command.routeUnavailableDiagnostics(sceneId)
+    }
+}
+
+private fun SceneCommand.TextRun.routeUnavailableDiagnostics(sceneId: String): List<String> =
+    buildList {
+        add("sceneId=$sceneId")
+        add("commandFamily=$family")
+        add("label=$label")
+        text?.let { add("text=$it") }
+        fontSourceId?.let { add("fontSourceId=$it") }
+        fontFamily?.let { add("fontFamily=$it") }
+        fontSize?.let { add("fontSize=$it") }
+        if (baselineX != null && baselineY != null) {
+            add("baseline=$baselineX,$baselineY")
+        }
+        add("shapingMode=$shapingMode")
+        add("glyphRoute=$glyphRoute")
+        add("webGpuCandidateRoute=$webGpuCandidateRoute")
+        add("fallbackReason=$fallbackReason")
+        add("lowerLevelTextRoutesAvailable=$glyphRoute,$webGpuCandidateRoute")
+        add("sceneRoutePromoted=false")
+        add(
+            "nonClaims=no fake glyph substitute,no CPU-rendered text texture,no system font fallback," +
+                "no broad shaping fallback emoji SDF LCD Kadre-windowed claim",
+        )
+    }

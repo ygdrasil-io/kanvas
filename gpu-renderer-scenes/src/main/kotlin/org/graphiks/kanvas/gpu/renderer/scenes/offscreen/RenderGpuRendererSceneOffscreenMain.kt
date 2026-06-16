@@ -4,6 +4,7 @@ import java.nio.file.Path
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.textRunRouteUnavailableDiagnostics
 
 fun main(args: Array<String>) {
     renderGpuRendererSceneOffscreen(args)
@@ -31,7 +32,8 @@ fun renderGpuRendererSceneOffscreen(args: Array<String>): OffscreenRunReport {
     } else {
         OffscreenRunReport.notYetRendered(
             sceneId = scene.sceneId.value,
-            reason = "runner-subset:${scene.sceneId.value}",
+            reason = scene.rectOnlyOffscreenUnsupportedReason(),
+            diagnostics = scene.offscreenNotYetRenderedDiagnostics(),
         )
     }
 
@@ -45,6 +47,15 @@ fun renderGpuRendererSceneOffscreen(args: Array<String>): OffscreenRunReport {
 
 private fun GPURendererScene<SceneCommand>.supportsRectOnlyOffscreen(): Boolean =
     rectOnlyCommandSequenceUnsupportedReason(commands) == null
+
+private fun GPURendererScene<SceneCommand>.rectOnlyOffscreenUnsupportedReason(): String =
+    rectOnlyCommandSequenceUnsupportedReason(commands)
+        ?: error("scene supports rect-only offscreen rendering: ${sceneId.value}")
+
+private fun GPURendererScene<SceneCommand>.offscreenNotYetRenderedDiagnostics(): List<String> =
+    commands.textRunRouteUnavailableDiagnostics(sceneId.value).ifEmpty {
+        listOf(rectOnlyOffscreenUnsupportedReason())
+    }
 
 private fun Throwable.toReportReason(): String {
     val className = this::class.qualifiedName ?: this::class.simpleName ?: "Throwable"
