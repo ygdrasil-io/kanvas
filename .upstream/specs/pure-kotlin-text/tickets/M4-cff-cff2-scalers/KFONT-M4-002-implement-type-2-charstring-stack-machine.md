@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M4-002"
 title: "Implement Type 2 charstring stack machine"
-status: "proposed"
+status: "done"
 milestone: "M4"
 priority: "P0"
 owner_area: "font-scaler"
@@ -73,11 +73,11 @@ sealed interface CharStringTraceEvent {
 
 ## Acceptance Criteria
 
-- [ ] Line-only, curve-only, mixed line/curve, flex, width, and hintmask fixtures produce stable charstring traces.
-- [ ] Operand stack overflow, underflow, leftover operands at `endchar`, and unsupported escaped operators are refused with stable diagnostics.
-- [ ] Hint operators are serialized as metadata and do not change path command hashes.
-- [ ] `endchar` closes execution deterministically and rejects trailing executable bytes unless a fixture documents an accepted compatibility case.
-- [ ] Repeated execution of the same charstring bytes produces byte-identical trace dumps.
+- [x] Line-only, curve-only, mixed line/curve, flex, width, and hintmask fixtures produce stable charstring traces.
+- [x] Operand stack overflow, underflow, leftover operands at `endchar`, and unsupported escaped operators are refused with stable diagnostics.
+- [x] Hint operators are serialized as metadata and do not change path command hashes.
+- [x] `endchar` closes execution deterministically and rejects trailing executable bytes unless a fixture documents an accepted compatibility case.
+- [x] Repeated execution of the same charstring bytes produces byte-identical trace dumps.
 
 ## Required Evidence
 
@@ -102,13 +102,20 @@ sealed interface CharStringTraceEvent {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:scaler:test --tests '*Type2CharString*'
+rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterBuildsLineCurveAndFlexEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterTracesLocalAndGlobalSubroutines --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2FixtureInterpreterAppliesVsindexBlendEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterReportsStackAndOperatorRefusals --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterRecordsWidthAndHintMaskMetadata --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterRejectsEndcharRemaindersAndStackOverflow --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffCharStringTraceGoldenMatchesGeneratedEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterCoversRemainingCurveAndFlexOperators
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 ```
 
 ## Status Notes
 
-- `proposed`: Execution scope excludes subroutine resolution and scaler integration.
-- Move to `ready` only after Type 2 operator coverage and diagnostics are reviewed against the target spec.
+- `done`: Generated-fixture Type 2 evidence now includes deterministic
+  charstring traces, width/hint metadata, stable refusal diagnostics, and
+  explicit endchar trailing-byte rejection without widening support claims.
+- Remaining non-claims stay explicit: no complete real-font CFF coverage claim,
+  no complete CFF rendering support claim, and no native-scaler oracle claim.
 
 ## Linear Labels
 
