@@ -2075,6 +2075,56 @@ Remaining gate: this checkpoint does not claim SDF generation, atlas lifecycle
 support, GPU text-route handoff, LCD support, external rasterizer parity, or
 `dftext` retirement. Next gates remain `KFONT-M9-004` and `KFONT-M9-005`.
 
+### KFONT-M9-004: Implement production SDF generator boundaries
+
+Status: done; freshly validated.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m9-004-sdf-generator-boundaries.md`
+
+Evidence:
+
+- `generateLinearOutlineSDF(...)` now derives spread from the strike key or
+  the stabilized default `8f`, preserves `left`/`top` and
+  `sourceOutlineSha256` on empty and non-empty CPU SDF masks, and keeps the
+  normalization contract tied to `R8Unorm` bytes.
+- The SDF contour parser now requires closed contours terminated by `Z` for
+  the SDF route only, so open geometry becomes deterministic
+  `text.glyph.SDF-generation-failed` evidence instead of silently reusing A8
+  contour semantics.
+- `SDFGlyphArtifactEvidence` and `SDFGlyphArtifactEvidenceDump` produce
+  checked-in `sdf-glyph-artifact.json` evidence for default-spread and
+  widened-spread fixtures, including spread, source resolution, atlas padding,
+  normalization formula version, addressable pixel count, distance-field hash,
+  source-outline hash, and stable dump hashes.
+- Focused tests cover edge/inside/outside normalization behavior, explicit
+  spread overrides, non-closed contour refusal, and the checked-in SDF dump
+  contract.
+- Dump index, fixture manifest, fixture inventory, and claim dashboard expose
+  this as CPU-only SDF artifact evidence while keeping atlas lifecycle, GPU
+  sampling, LCD promotion, and `dftext` retirement gated.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*SDF*'
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: this checkpoint does not claim atlas lifecycle support, GPU SDF
+sampling/reconstruction, LCD promotion, unsupported color-glyph SDF production,
+or `dftext` retirement. Next gates remain `KFONT-M9-005` and the M11 GPU text
+handoff chain.
+
 ### PKT-10B: Glyph Artifact Plan Decision Trace Dump
 
 Status: implemented; independent review pending because the current tool policy
@@ -2292,6 +2342,42 @@ Remaining gate: this is SDF transform refusal evidence only. It does not claim
 complete SDF eligibility policy, SDF generation fixture coverage, perspective
 or non-affine transform support, A8 fallback production, atlas upload/sampling,
 or GPU text-route promotion.
+
+### PKT-10H: SDF Glyph Artifact Evidence Dump
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `SDFGlyphArtifactEvidence.from(...)` builds deterministic per-glyph CPU SDF
+  evidence with bounds, spread, source resolution, atlas padding, normalization
+  formula version, addressable pixel count, strike-key hash, distance-field
+  hash, and `sourceOutlineSha256`.
+- `SDFGlyphArtifactEvidenceDump.toCanonicalJson()` emits stable
+  `sdf-glyph-artifact.json`-style evidence for a default-spread and
+  widened-spread outline fixture, plus explicit required diagnostics and
+  checked-in dump hashes.
+- Tests cover padding growth from non-default spread, canonical JSON field
+  order, stable hash shape, and fixture parity against the checked-in golden.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.sdfGlyphArtifactEvidenceRecordsSpreadPaddingBoundsAndCoverageHash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.sdfGlyphArtifactEvidenceDumpMatchesRepoFixture
+```
+
+Remaining gate: this is CPU SDF artifact evidence only. It does not claim atlas
+lifecycle support, GPU sampling/handoff, LCD support, unsupported color-glyph
+SDF production, or `dftext` retirement.
 ### PKT-11A: Color Glyph Planning Evidence Dumps
 
 Status: implemented and independently reviewed.

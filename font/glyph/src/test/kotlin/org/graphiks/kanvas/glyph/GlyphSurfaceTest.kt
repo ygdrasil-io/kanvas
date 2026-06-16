@@ -391,6 +391,114 @@ class GlyphSurfaceTest {
     }
 
     @Test
+    fun sdfGlyphArtifactEvidenceRecordsSpreadPaddingBoundsAndCoverageHash() {
+        val mask = SDFGlyphMask(
+            glyphId = 78,
+            width = 3,
+            height = 2,
+            left = -1,
+            top = 2,
+            distanceRange = 16f,
+            pixels = listOf(
+                96, 128, 160,
+                80, 128, 176,
+            ),
+            sourceOutlineSha256 = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        )
+
+        val evidence = SDFGlyphArtifactEvidence.from(
+            mask = mask,
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441093").copy(
+                representationRoute = "text.glyph.mask.SDF",
+                maskFormat = "R8Unorm",
+                sdfSpreadPx = 16f,
+                sdfSourceResolutionPx = 24f,
+            ),
+        )
+
+        assertEquals(78, evidence.glyphId)
+        assertEquals(-1, evidence.left)
+        assertEquals(2, evidence.top)
+        assertEquals(3, evidence.width)
+        assertEquals(2, evidence.height)
+        assertEquals(16f, evidence.spreadPx)
+        assertEquals(24f, evidence.sourceResolutionPx)
+        assertEquals(17, evidence.atlasPaddingPx)
+        assertEquals("R8Unorm", evidence.format)
+        assertEquals("sdf-normalization-r8unorm-v1", evidence.normalizationFormulaVersion)
+        assertEquals(6, evidence.addressablePixelCount)
+        assertEquals("fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210", evidence.sourceOutlineSha256)
+        assertEquals(64, evidence.strikeKeySha256.length)
+        assertEquals(64, evidence.distanceFieldSha256.length)
+
+        val dump = evidence.toCanonicalJson()
+        assertTrue(dump.contains(""""spreadPx": 16"""))
+        assertTrue(dump.contains(""""atlasPaddingPx": 17"""))
+        assertTrue(dump.contains(""""normalizationFormulaVersion": "sdf-normalization-r8unorm-v1""""))
+        assertTrue(dump.contains(""""sourceOutlineSha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210""""))
+    }
+
+    @Test
+    fun sdfGlyphArtifactEvidenceDumpMatchesRepoFixture() {
+        val generator = object : SDFGlyphGenerator {}
+        val defaultOutline = OutlineGlyphRepresentation(
+            glyphId = 79,
+            pathCommands = listOf(
+                "M 1 1",
+                "L 5 1",
+                "L 5 5",
+                "L 1 5",
+                "Z",
+            ),
+        )
+        val widenedOutline = defaultOutline.copy(glyphId = 80)
+
+        val defaultStrikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441094").copy(
+            representationRoute = "text.glyph.mask.SDF",
+            maskFormat = "R8Unorm",
+        )
+        val widenedStrikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441095").copy(
+            representationRoute = "text.glyph.mask.SDF",
+            maskFormat = "R8Unorm",
+            sdfSpreadPx = 16f,
+            sdfSourceResolutionPx = 24f,
+        )
+
+        val dump = SDFGlyphArtifactEvidenceDump(
+            dumpId = "sdf-glyph-artifact",
+            ownerTickets = listOf("KFONT-M9-004"),
+            fixtureIds = listOf(
+                "sdf-default-spread",
+                "sdf-wide-spread",
+            ),
+            artifacts = listOf(
+                SDFGlyphArtifactEvidence.from(
+                    mask = generator.generate(defaultOutline, defaultStrikeKey),
+                    strikeKey = defaultStrikeKey,
+                ),
+                SDFGlyphArtifactEvidence.from(
+                    mask = generator.generate(widenedOutline, widenedStrikeKey),
+                    strikeKey = widenedStrikeKey,
+                ),
+            ),
+            requiredDiagnostics = listOf(
+                "text.glyph.SDF-generation-failed",
+                "text.glyph.SDF-transform-unsupported",
+            ),
+            nonClaims = listOf(
+                "producer-only",
+                "no-gpu-text-route-claim",
+                "no-dftext-retirement",
+            ),
+        )
+
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json"),
+            dump.toCanonicalJson(),
+        )
+    }
+
+    @Test
     fun sdfGlyphGeneratorBuildsDeterministicSignedDistanceMaskForClosedRectangle() {
         val generator = object : SDFGlyphGenerator {}
         val outline = OutlineGlyphRepresentation(
@@ -412,7 +520,7 @@ class GlyphSurfaceTest {
         assertEquals(52, mask.glyphId)
         assertEquals(6, mask.width)
         assertEquals(6, mask.height)
-        assertEquals(4f, mask.distanceRange)
+        assertEquals(8f, mask.distanceRange)
         assertEquals(36, mask.pixels.size)
         assertTrue(mask.pixels.any { sample -> sample != 0 })
 
@@ -434,7 +542,70 @@ class GlyphSurfaceTest {
             strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441044"),
         )
 
-        assertEquals(SDFGlyphMask(glyphId = 53, width = 0, height = 0, distanceRange = 4f, pixels = emptyList()), mask)
+        assertEquals(
+            SDFGlyphMask(glyphId = 53, width = 0, height = 0, distanceRange = 8f, pixels = emptyList()),
+            mask.copy(sourceOutlineSha256 = null),
+        )
+        assertEquals(64, mask.sourceOutlineSha256?.length)
+    }
+
+    @Test
+    fun sdfGlyphGeneratorRespectsNonDefaultSpreadFromStrikeKey() {
+        val generator = object : SDFGlyphGenerator {}
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 58,
+            pathCommands = listOf(
+                "M 1 1",
+                "L 5 1",
+                "L 5 5",
+                "L 1 5",
+                "Z",
+            ),
+        )
+
+        val defaultMask = generator.generate(
+            outline = outline,
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441090"),
+        )
+        val widenedSpreadMask = generator.generate(
+            outline = outline,
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441091").copy(
+                sdfSpreadPx = 16f,
+                sdfSourceResolutionPx = 16f,
+                maskFormat = "R8Unorm",
+                representationRoute = "text.glyph.mask.SDF",
+            ),
+        )
+
+        assertEquals(8f, defaultMask.distanceRange)
+        assertEquals(16f, widenedSpreadMask.distanceRange)
+        assertTrue(defaultMask.pixels != widenedSpreadMask.pixels)
+        assertTrue(
+            widenedSpreadMask.pixels[3 * widenedSpreadMask.width + 3] < defaultMask.pixels[3 * defaultMask.width + 3],
+            "Larger spread should flatten normalized interior distances in the SDF mask.",
+        )
+    }
+
+    @Test
+    fun sdfGlyphGeneratorRejectsNonClosedOutlinePath() {
+        val generator = object : SDFGlyphGenerator {}
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            generator.generate(
+                outline = OutlineGlyphRepresentation(
+                    glyphId = 59,
+                    pathCommands = listOf(
+                        "M 1 1",
+                        "L 5 1",
+                        "L 5 5",
+                        "L 1 5",
+                    ),
+                ),
+                strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441092"),
+            )
+        }
+
+        assertTrue(failure.message.orEmpty().contains("closed"))
     }
 
     @Test

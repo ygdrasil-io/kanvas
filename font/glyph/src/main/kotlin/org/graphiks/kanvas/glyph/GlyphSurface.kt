@@ -1083,17 +1083,183 @@ interface SDFGlyphGenerator {
  * @property glyphId glyph identifier represented by this mask.
  * @property width mask width in pixels.
  * @property height mask height in pixels.
+ * @property left horizontal bearing of the mask origin.
+ * @property top vertical bearing of the mask origin.
  * @property distanceRange distance range encoded by one byte of mask data.
  * @property pixels Immutable signed-distance samples in row-major order,
  * encoded as integer byte values in the `0..255` range.
+ * @property sourceOutlineSha256 optional SHA-256 over the source outline facts
+ * used to generate this mask.
  */
 data class SDFGlyphMask(
     override val glyphId: Int,
     val width: Int,
     val height: Int,
+    val left: Int = 0,
+    val top: Int = 0,
     val distanceRange: Float,
     val pixels: List<Int> = List(width * height) { 0 },
+    val sourceOutlineSha256: String? = null,
 ) : GlyphRepresentation
+
+/**
+ * Deterministic evidence for one CPU-prepared SDF glyph artifact.
+ *
+ * @property glyphId glyph identifier represented by this artifact.
+ * @property strikeKeySha256 route-specific strike-key hash for this glyph and SDF route.
+ * @property left horizontal mask origin relative to glyph origin.
+ * @property top vertical mask origin relative to glyph origin.
+ * @property width addressable mask width in pixels.
+ * @property height addressable mask height in pixels.
+ * @property spreadPx signed-distance spread in source pixels.
+ * @property sourceResolutionPx source SDF resolution used for generation.
+ * @property atlasPaddingPx minimum atlas padding required by the spread contract.
+ * @property format CPU artifact storage format.
+ * @property normalizationFormulaVersion stable normalization formula contract identifier.
+ * @property addressablePixelCount number of samples included in [distanceFieldSha256].
+ * @property distanceFieldSha256 SHA-256 digest of addressable samples in row-major order.
+ * @property sourceOutlineSha256 optional SHA-256 over the source outline facts.
+ */
+data class SDFGlyphArtifactEvidence(
+    val glyphId: Int,
+    val strikeKeySha256: String,
+    val left: Int,
+    val top: Int,
+    val width: Int,
+    val height: Int,
+    val spreadPx: Float,
+    val sourceResolutionPx: Float,
+    val atlasPaddingPx: Int,
+    val format: String,
+    val normalizationFormulaVersion: String,
+    val addressablePixelCount: Int,
+    val distanceFieldSha256: String,
+    val sourceOutlineSha256: String? = null,
+) {
+    val dumpSha256: String by lazy {
+        glyphSha256(canonicalSdfGlyphArtifactJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+    }
+
+    fun toCanonicalJson(): String =
+        canonicalSdfGlyphArtifactJson(includeDumpSha256 = true)
+
+    companion object {
+        fun from(mask: SDFGlyphMask, strikeKey: GlyphStrikeKey): SDFGlyphArtifactEvidence {
+            mask.requireValidSDFPixels()
+            val spreadPx = strikeKey.sdfSpreadPx ?: mask.distanceRange
+            require(spreadPx.isFinite() && spreadPx > 0f) {
+                "SDF spreadPx must be finite and positive for glyph ${mask.glyphId}."
+            }
+            val sourceResolutionPx = strikeKey.sdfSourceResolutionPx ?: strikeKey.sizePx
+            require(sourceResolutionPx.isFinite() && sourceResolutionPx > 0f) {
+                "SDF sourceResolutionPx must be finite and positive for glyph ${mask.glyphId}."
+            }
+            val addressablePixelCount = mask.width.nonNegativeProduct(
+                other = mask.height,
+                glyphId = mask.glyphId,
+                label = "SDF mask",
+            )
+            require(addressablePixelCount <= Int.MAX_VALUE.toLong()) {
+                "SDF mask addressable pixel count $addressablePixelCount exceeds Int.MAX_VALUE for glyph ${mask.glyphId}."
+            }
+            return SDFGlyphArtifactEvidence(
+                glyphId = mask.glyphId,
+                strikeKeySha256 = strikeKey.artifactPlanKeySha256(mask.glyphId, "text.glyph.mask.SDF"),
+                left = mask.left,
+                top = mask.top,
+                width = mask.width,
+                height = mask.height,
+                spreadPx = spreadPx,
+                sourceResolutionPx = sourceResolutionPx,
+                atlasPaddingPx = ceil(spreadPx.toDouble()).toInt() + 1,
+                format = strikeKey.maskFormat.ifBlank { "R8Unorm" },
+                normalizationFormulaVersion = SDFNormalizationFormulaVersion,
+                addressablePixelCount = addressablePixelCount.toInt(),
+                distanceFieldSha256 = mask.pixels.pixelSha256(addressablePixelCount.toInt()),
+                sourceOutlineSha256 = mask.sourceOutlineSha256,
+            )
+        }
+    }
+
+    private fun canonicalSdfGlyphArtifactJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("schema", SDFGlyphArtifactEvidenceSchema, comma = true)
+        appendGlyphJsonField("glyphId", glyphId, comma = true)
+        appendGlyphJsonField("strikeKeySha256", strikeKeySha256, comma = true)
+        append("  \"bounds\": {")
+        append(glyphJsonString("left")).append(": ").append(left).append(", ")
+        append(glyphJsonString("top")).append(": ").append(top).append(", ")
+        append(glyphJsonString("width")).append(": ").append(width).append(", ")
+        append(glyphJsonString("height")).append(": ").append(height)
+        append("},\n")
+        appendGlyphJsonField("spreadPx", spreadPx, comma = true)
+        appendGlyphJsonField("sourceResolutionPx", sourceResolutionPx, comma = true)
+        appendGlyphJsonField("atlasPaddingPx", atlasPaddingPx, comma = true)
+        appendGlyphJsonField("format", format, comma = true)
+        appendGlyphJsonField("normalizationFormulaVersion", normalizationFormulaVersion, comma = true)
+        appendGlyphJsonField("addressablePixelCount", addressablePixelCount, comma = true)
+        appendGlyphJsonField("distanceFieldSha256", distanceFieldSha256, comma = true)
+        appendGlyphJsonNullableField("sourceOutlineSha256", sourceOutlineSha256, comma = includeDumpSha256)
+        if (includeDumpSha256) {
+            appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("\n}\n")
+    }
+}
+
+/**
+ * Aggregate deterministic evidence dump for `sdf-glyph-artifact.json`.
+ */
+class SDFGlyphArtifactEvidenceDump(
+    val dumpId: String,
+    ownerTickets: List<String>,
+    fixtureIds: List<String>,
+    artifacts: List<SDFGlyphArtifactEvidence>,
+    requiredDiagnostics: List<String>,
+    nonClaims: List<String>,
+) {
+    val ownerTickets: List<String> = ownerTickets.toList()
+    val fixtureIds: List<String> = fixtureIds.toList()
+    val artifacts: List<SDFGlyphArtifactEvidence> = artifacts.toList()
+    val requiredDiagnostics: List<String> = requiredDiagnostics.toList()
+    val nonClaims: List<String> = nonClaims.toList()
+
+    val dumpSha256: String
+        get() = glyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    fun toCanonicalJson(): String =
+        canonicalJson(includeDumpSha256 = true)
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("schemaVersion", 1, comma = true)
+        appendGlyphJsonField("dumpId", dumpId, comma = true)
+        append("  \"ownerTickets\": ")
+        appendGlyphStringArrayMultilineJson(ownerTickets, indent = "  ")
+        append(",\n")
+        append("  \"fixtureIds\": ")
+        appendGlyphStringArrayMultilineJson(fixtureIds, indent = "  ")
+        append(",\n")
+        appendGlyphJsonField("artifactCount", artifacts.size, comma = true)
+        append("  \"artifacts\": ")
+        append(appendSdfGlyphArtifactEvidenceJson(artifacts))
+        append(",\n")
+        append("  \"requiredDiagnostics\": ")
+        appendGlyphStringArrayMultilineJson(requiredDiagnostics, indent = "  ")
+        append(",\n")
+        append("  \"nonClaims\": ")
+        appendGlyphStringArrayMultilineJson(nonClaims, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+}
 
 /**
  * Selects pure Kotlin glyph representations for a run from the caller's available route request.
@@ -2115,11 +2281,13 @@ private const val MaxGeneratedA8MaskPixels = 16_777_216L
 private const val MaxGeneratedSDFMaskPixels = 16_777_216L
 private const val MaxBezierSubdivisionDepth = 10
 private const val A8CurveFlatteningTolerancePx = 0.125
-private const val DefaultSDFDistanceRange = 4f
+private const val DefaultSDFDistanceRange = 8f
 private const val OutlineGlyphSourceSchema = "org.graphiks.kanvas.glyph.OutlineGlyphRepresentation.source.v1"
 private const val A8GlyphMaskArtifactEvidenceSchema = "org.graphiks.kanvas.glyph.A8GlyphMaskArtifactEvidence.v1"
+private const val SDFGlyphArtifactEvidenceSchema = "org.graphiks.kanvas.glyph.SDFGlyphArtifactEvidence.v1"
 private const val GlyphArtifactPlanSchema = "org.graphiks.kanvas.glyph.GlyphArtifactPlan.v1"
 private const val GlyphAtlasPackingResultSchema = "org.graphiks.kanvas.glyph.GlyphAtlasPackingResult.v1"
+private const val SDFNormalizationFormulaVersion = "sdf-normalization-r8unorm-v1"
 private const val UnsupportedGlyphArtifactRoute = "text.glyph.unsupported"
 private const val GlyphCacheKeyNondeterministicDiagnostic = "text.glyph.cache-key-nondeterministic"
 private const val GlyphOutlineUnavailableDiagnosticRoute = "text.glyph.outline-unavailable"
@@ -2539,14 +2707,19 @@ private fun generateLinearOutlineSDF(
     outline: OutlineGlyphRepresentation,
     strikeKey: GlyphStrikeKey,
 ): SDFGlyphMask {
+    val distanceRange = strikeKey.sdfSpreadPx ?: DefaultSDFDistanceRange
+    val sourceOutlineSha256 = outline.sourceOutlineSha256()
     val contours = outline.parseLinearContours(strikeKey)
     if (contours.isEmpty()) {
         return SDFGlyphMask(
             glyphId = outline.glyphId,
             width = 0,
             height = 0,
-            distanceRange = DefaultSDFDistanceRange,
+            left = 0,
+            top = 0,
+            distanceRange = distanceRange,
             pixels = emptyList(),
+            sourceOutlineSha256 = sourceOutlineSha256,
         )
     }
 
@@ -2566,8 +2739,11 @@ private fun generateLinearOutlineSDF(
             glyphId = outline.glyphId,
             width = 0,
             height = 0,
-            distanceRange = DefaultSDFDistanceRange,
+            left = left,
+            top = top,
+            distanceRange = distanceRange,
             pixels = emptyList(),
+            sourceOutlineSha256 = sourceOutlineSha256,
         )
     }
 
@@ -2583,7 +2759,7 @@ private fun generateLinearOutlineSDF(
             val sampleX = left + column.toDouble()
             val distance = contours.distanceToNearestSegment(sampleX, sampleY)
             val signedDistance = if (contours.nonZeroContains(sampleX, sampleY)) distance else -distance
-            pixels[row * width + column] = signedDistance.encodeSDFSample(DefaultSDFDistanceRange)
+            pixels[row * width + column] = signedDistance.encodeSDFSample(distanceRange)
         }
     }
 
@@ -2591,8 +2767,11 @@ private fun generateLinearOutlineSDF(
         glyphId = outline.glyphId,
         width = width,
         height = height,
-        distanceRange = DefaultSDFDistanceRange,
+        left = left,
+        top = top,
+        distanceRange = distanceRange,
         pixels = pixels.toList(),
+        sourceOutlineSha256 = sourceOutlineSha256,
     )
 }
 
@@ -2623,7 +2802,9 @@ private fun OutlineGlyphRepresentation.parseLinearContours(strikeKey: GlyphStrik
         when (val command = tokens.first()) {
             "M" -> {
                 require(tokens.size == 3) { "Glyph $glyphId M command must have exactly two coordinates: '$commandText'." }
-                current.finishContourInto(contours)
+                require(current.isEmpty()) {
+                    "Glyph $glyphId SDF generation requires closed contours before starting a new contour."
+                }
                 val point = parseGlyphPathPoint(tokens, 1, 2, commandText, strikeKey)
                 current = mutableListOf(point)
                 start = point
@@ -2650,7 +2831,9 @@ private fun OutlineGlyphRepresentation.parseLinearContours(strikeKey: GlyphStrik
         }
     }
 
-    current.finishContourInto(contours)
+    require(current.isEmpty()) {
+        "Glyph $glyphId SDF generation requires closed contours terminated by Z."
+    }
     return contours.toList()
 }
 
@@ -3020,6 +3203,9 @@ private fun A8GlyphMask.requireValidA8Pixels() {
 private fun SDFGlyphMask.requireValidSDFPixels() {
     require(width >= 0) { "SDF mask width must be non-negative for glyph $glyphId." }
     require(height >= 0) { "SDF mask height must be non-negative for glyph $glyphId." }
+    require(sourceOutlineSha256 == null || sourceOutlineSha256.matches(Regex("[0-9a-f]{64}"))) {
+        "SDF mask sourceOutlineSha256 must be lowercase hexadecimal when present for glyph $glyphId."
+    }
     val expectedPixelCount = width.toLong() * height.toLong()
     require(pixels.size.toLong() >= expectedPixelCount) {
         "SDF mask pixel count is smaller than width * height for glyph $glyphId."
@@ -3432,6 +3618,18 @@ private fun appendA8GlyphMaskEvidenceJson(masks: List<A8GlyphMaskArtifactEvidenc
         append("\n")
         append(masks.joinToString(",\n") { mask ->
             mask.toCanonicalJson().trimEnd().prependIndent("    ")
+        })
+        append("\n  ")
+    }
+    append("]")
+}
+
+private fun appendSdfGlyphArtifactEvidenceJson(artifacts: List<SDFGlyphArtifactEvidence>): String = buildString {
+    append("[")
+    if (artifacts.isNotEmpty()) {
+        append("\n")
+        append(artifacts.joinToString(",\n") { artifact ->
+            artifact.toCanonicalJson().trimEnd().prependIndent("    ")
         })
         append("\n  ")
     }

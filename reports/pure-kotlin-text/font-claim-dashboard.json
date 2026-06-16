@@ -484,22 +484,29 @@
         "section": "SDF Glyph Atlas Artifact"
       },
       "evidence": {
-        "fixtureProvenance": [],
-        "deterministicDumps": [
-          "reports/pure-kotlin-text/dump-evidence-index.json"
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
         ],
-        "cpuOracle": [],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/dump-evidence-index.json",
+          "reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json"
+        ],
+        "cpuOracle": [
+          "reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json"
+        ],
         "gpuArtifacts": [],
         "routeDiagnostics": [
-          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json"
         ],
         "refusalDiagnostics": [
-          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json"
         ]
       },
       "requiredEvidenceGates": [
-        "Deliver SDF artifact contract, atlas/cache telemetry, CPU oracle evidence, and typed GPU artifact evidence before any GPU support claim.",
-        "Legacy dftext remains open until explicit replacement evidence is linked."
+        "KFONT-M9-004 now lands checked-in CPU SDF artifact evidence; KFONT-M9-005 atlas/cache lifecycle evidence and the M11 GPU handoff chain still gate any GPU SDF support claim.",
+        "Legacy dftext remains open until atlas/cache evidence and explicit M11 GPU replacement evidence are linked."
       ],
       "legacyGates": [
         "dftext"
