@@ -61,12 +61,22 @@ class RenderGpuRendererSceneOffscreenMainTest {
     fun `catalogued rect rrect gradient clip and bitmap scenes route to WebGPU offscreen instead of runner subset`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
         val rectOnlyScenes = listOf(
+            RenderedShapeExpectation("first-route-rollback-panel", fillRectCount = 4),
             RenderedShapeExpectation("blend-mode-strip", fillRectCount = 1),
+            RenderedShapeExpectation("translucent-card-overlap", fillRectCount = 3),
             RenderedShapeExpectation("cache-pressure-deck", fillRectCount = 2),
+            RenderedShapeExpectation("cache-source-ledger-board", fillRectCount = 5),
             RenderedShapeExpectation("legacy-route-comparison", fillRectCount = 1),
             RenderedShapeExpectation(
                 sceneId = "rounded-panel-gradient",
                 fillRectCount = 0,
+                fillRRectCount = 1,
+                linearGradientRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "release-gate-progress-board",
+                fillRectCount = 1,
                 fillRRectCount = 1,
                 linearGradientRectCount = 1,
                 clipCount = 1,
@@ -82,6 +92,13 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 bitmapRectCount = 2,
             ),
             RenderedShapeExpectation(
+                sceneId = "asset-intake-thumbnail-grid",
+                fillRectCount = 0,
+                fillRRectCount = 1,
+                clipCount = 1,
+                bitmapRectCount = 2,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "clipped-avatar-grid",
                 fillRectCount = 0,
                 clipCount = 1,
@@ -93,6 +110,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 bitmapRectCount = 1,
                 filterNodeCount = 1,
             ),
+            RenderedShapeExpectation("filter-dag-refusal-board", fillRectCount = 5),
             RenderedShapeExpectation(
                 sceneId = "layered-shadow-card",
                 fillRectCount = 0,
