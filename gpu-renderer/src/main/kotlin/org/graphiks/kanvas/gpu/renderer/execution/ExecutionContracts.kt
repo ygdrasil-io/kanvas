@@ -254,6 +254,29 @@ class GPUCommandEncoderPlan(
 }
 
 /**
+ * Emits deterministic encoder-plan evidence before backend command recording.
+ *
+ * The line names scope, device/target generations, stream IDs, operation classes, resource
+ * generation labels, and diagnostics only. It does not imply submission or backend completion.
+ */
+fun GPUCommandEncoderPlan.dumpLines(): List<String> =
+    listOf(
+        "execution.encoder-plan id=$planId " +
+            "context=$contextIdentity " +
+            "class=$commandClass " +
+            "scope=${scope.scopeLabel} " +
+            "deviceGeneration=${deviceGeneration.value} " +
+            "targetGeneration=$targetGeneration " +
+            "packetStream=$packetStreamId " +
+            "passCommandStream=$passCommandStreamId " +
+            "packets=$packetCount " +
+            "commands=$passCommandCount " +
+            "operations=${facadeOperationClasses.dumpSequence()} " +
+            "resources=${resourceGenerationLabels.dumpSequence()} " +
+            "diagnostics=${diagnostics.dumpSequence()}",
+    )
+
+/**
  * Submission record for encoded GPU commands.
  *
  * Execution owns these records after resource materialization and command
