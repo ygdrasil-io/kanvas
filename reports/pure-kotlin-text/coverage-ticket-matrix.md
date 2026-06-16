@@ -1423,6 +1423,72 @@ evidence only and does not promote complete UAX #29, bidi, script itemization,
 shaping, paragraph, emoji rendering, color glyph rendering, or GPU text
 support.
 
+### KFONT-M5-003: Replace Basic Bidi Resolver
+
+Status: done with bounded fixture evidence; independently reviewed.
+
+Files:
+
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/BidiSegmentation.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/BidiSegmentationTest.kt`
+- `reports/font/fixtures/expected/unicode/bidi-hebrew-latin.txt`
+- `reports/font/fixtures/expected/unicode/bidi-arabic-number-neutral.txt`
+- `reports/font/fixtures/expected/unicode/bidi-isolate-controls.txt`
+- `reports/font/fixtures/expected/unicode/bidi-embedding-override-controls.txt`
+- `reports/font/fixtures/expected/unicode/bidi-unbalanced-controls.txt`
+- `reports/font/fixtures/expected/unicode/bidi-single-run-needs-paragraph.txt`
+- `reports/font/fixtures/expected/unicode/bidi-runs.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m5-003-bidi-resolver.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M5-unicode-segmentation-bidi/KFONT-M5-003-replace-basic-bidi-resolver.md`
+
+Evidence:
+
+- `DefaultBidiResolver` emits bounded M5 run-level bidi facts for mixed
+  Latin/Hebrew, Arabic plus Arabic-number and neutral punctuation, isolate
+  controls, explicit embedding/override controls, unbalanced controls, and
+  single-run paragraph-required fixtures.
+- `BasicBidiResolver()` now delegates to `DefaultBidiResolver` by default;
+  `BasicBidiResolver(UnicodeData)` keeps the old bounded legacy resolver only
+  for explicit compatibility callers.
+- `BasicOpenTypeShapingEngine` propagates
+  `text.shaping.paragraph-bidi-required` from detailed bidi resolution for
+  mixed-direction single-run shaping requests.
+- `bidi-runs.json` records Unicode version, source text hashes, grapheme
+  cluster references, logical UTF-16 run ranges, cluster ranges, embedding
+  levels, paragraph direction, resolved bidi classes, source controls, trace
+  rule IDs, diagnostics, and non-claims including the absence of a paired
+  bracket resolution claim.
+- Tests assert `text.shaping.unicode-data-version-mismatch`,
+  `text.shaping.paragraph-bidi-required`, and
+  `text.unicode.bidi-control-unbalanced`.
+- Regression tests assert malformed UTF-16 and text ranges that split
+  surrogate pairs return stable `text.unicode.invalid-scalar` diagnostics
+  without classifying invalid scalar values through Unicode tables.
+- Regression tests assert cross-family `PDF`/`PDI` mismatches remain
+  unbalanced through typed bidi-control stack validation.
+- No external UAX #9 comparison is used as normative evidence.
+- Independent spec review verdict: `ACCEPT`.
+- Independent code-quality review verdict: initial `REJECT` for malformed
+  UTF-16 and mixed closer handling, remediated and re-reviewed as `ACCEPT`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests '*Bidi*'
+rtk ./gradlew --no-daemon :font:text:test
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: none for KFONT-M5-003 closeout. This remains bounded
+run-level fixture evidence only and does not claim complete UAX #9
+conformance, paired bracket resolution, paragraph visual line ordering,
+GSUB/GPOS shaping, script itemization, or GPU text support.
+
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 
 Status: implemented with local diff review.
