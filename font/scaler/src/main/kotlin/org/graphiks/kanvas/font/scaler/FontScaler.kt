@@ -231,6 +231,8 @@ object FontScalerDiagnosticCodes {
     const val CFF_OPERATOR_UNSUPPORTED: String = "font.cff-operator-unsupported"
     const val CFF_STACK_MALFORMED: String = "font.cff-stack-malformed"
     const val CFF_TABLE_MALFORMED: String = "font.cff-table-malformed"
+    const val CFF_STACK_OVERFLOW: String = "font.scaler.cff.stack-overflow"
+    const val CFF_TRAILING_BYTES: String = "font.scaler.cff.trailing-bytes"
     const val CFF_INDEX_BOUNDS: String = "font.scaler.cff.index-bounds"
     const val CFF_INDEX_OFFSIZE_UNSUPPORTED: String = "font.scaler.cff.index-offsize-unsupported"
     const val CFF_DICT_OPERAND_MALFORMED: String = "font.scaler.cff.dict-operand-malformed"
@@ -5504,6 +5506,7 @@ class CFFType2CharStringInterpreter(
                 }
                 else -> {
                     val signal = handleOperator(
+                        data = data,
                         operator = byte,
                         operatorOffset = operatorOffset,
                         state = state,
@@ -5520,6 +5523,7 @@ class CFFType2CharStringInterpreter(
     }
 
     private fun handleOperator(
+        data: ByteArray,
         operator: Int,
         operatorOffset: Int,
         state: CFFType2ExecutionState,
@@ -5583,6 +5587,12 @@ class CFFType2CharStringInterpreter(
                 CFFType2Signal.RETURN
             }
             14 -> {
+                if (state.stack.isNotEmpty()) {
+                    malformedCFFStack(glyphId, "cff.stack-malformed", operatorOffset)
+                }
+                if (operatorOffset + 1 != data.size) {
+                    trailingCFFBytes(glyphId, operatorOffset)
+                }
                 state.stack.clear()
                 state.closeOpenPath()
                 CFFType2Signal.END
@@ -5774,7 +5784,7 @@ private class CFFType2ExecutionState {
 
     fun push(value: Double, glyphId: UInt, operatorOffset: Int) {
         if (stack.size >= MAX_CFF_OPERAND_STACK_DEPTH) {
-            malformedCFFStack(glyphId, "cff.stack-overflow", operatorOffset)
+            overflowedCFFStack(glyphId, operatorOffset)
         }
         stack += value
     }
@@ -6246,6 +6256,34 @@ private fun malformedCFFStack(
             glyphId = glyphId,
         ),
         message = "CFF Type 2 stack is malformed at operator offset $operatorOffset for glyphId $glyphId.",
+    )
+
+private fun overflowedCFFStack(
+    glyphId: UInt,
+    operatorOffset: Int,
+): Nothing =
+    throw FontScalerRefusalException(
+        diagnostic = FontScalerDiagnostic(
+            code = FontScalerDiagnosticCodes.CFF_STACK_OVERFLOW,
+            detail = "cff.stack-overflow",
+            operation = "charstring",
+            glyphId = glyphId,
+        ),
+        message = "CFF Type 2 operand stack overflowed at operator offset $operatorOffset for glyphId $glyphId.",
+    )
+
+private fun trailingCFFBytes(
+    glyphId: UInt,
+    operatorOffset: Int,
+): Nothing =
+    throw FontScalerRefusalException(
+        diagnostic = FontScalerDiagnostic(
+            code = FontScalerDiagnosticCodes.CFF_TRAILING_BYTES,
+            detail = "cff.trailing-bytes",
+            operation = "charstring",
+            glyphId = glyphId,
+        ),
+        message = "CFF Type 2 charstring has trailing bytes after endchar at operator offset $operatorOffset for glyphId $glyphId.",
     )
 
 private fun malformedCFFVariation(
