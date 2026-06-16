@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 23,
+  "sceneCount": 24,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -149,6 +149,16 @@
       "tags": ["Rect","RRect","Clip","Text"],
       "kgpuMilestones": ["M6"],
       "ticketIds": ["KGPU-M6-001"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "text-representation-gate-board",
+      "title": "Text Representation Gate Board",
+      "description": "Text representation dependency gates without atlas, SDF, color glyph, emoji, LCD, or CPU texture route promotion.",
+      "tags": ["Rect","RRect","Clip","Text"],
+      "kgpuMilestones": ["M6"],
+      "ticketIds": ["KGPU-M6-004"],
       "rStages": [],
       "expectation": "ShouldRender"
     },

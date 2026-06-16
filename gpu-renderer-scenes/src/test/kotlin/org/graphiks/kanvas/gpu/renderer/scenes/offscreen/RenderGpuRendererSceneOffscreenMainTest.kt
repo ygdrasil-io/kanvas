@@ -143,6 +143,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 clipCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "text-representation-gate-board",
+                fillRectCount = 8,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "runtime-effect-color-tile",
                 fillRectCount = 0,
                 runtimeEffectCount = 1,
