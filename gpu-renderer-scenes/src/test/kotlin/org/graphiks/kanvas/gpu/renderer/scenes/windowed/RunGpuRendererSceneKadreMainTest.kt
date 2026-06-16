@@ -56,17 +56,23 @@ class RunGpuRendererSceneKadreMainTest {
     fun `catalogued rect rrect gradient clip and bitmap scenes launch Kadre runner instead of not yet rendered`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-windowed-main")
         val renderableScenes = listOf(
+            "first-route-rollback-panel" to 16,
             "cache-pressure-deck" to 17,
             "blend-mode-strip" to 18,
-            "legacy-route-comparison" to 19,
-            "path-badge-and-stroke" to 20,
-            "rounded-panel-gradient" to 21,
-            "texture-swatch-board" to 22,
-            "clipped-avatar-grid" to 23,
-            "filtered-photo-chip" to 24,
-            "layered-shadow-card" to 25,
-            "runtime-effect-color-tile" to 26,
-            "mesh-ribbon" to 27,
+            "translucent-card-overlap" to 19,
+            "cache-source-ledger-board" to 20,
+            "legacy-route-comparison" to 21,
+            "path-badge-and-stroke" to 22,
+            "rounded-panel-gradient" to 23,
+            "release-gate-progress-board" to 24,
+            "texture-swatch-board" to 25,
+            "asset-intake-thumbnail-grid" to 26,
+            "clipped-avatar-grid" to 27,
+            "filtered-photo-chip" to 28,
+            "layered-shadow-card" to 29,
+            "runtime-effect-color-tile" to 30,
+            "mesh-ribbon" to 31,
+            "filter-dag-refusal-board" to 32,
         )
         val invocations = mutableListOf<RunnerInvocation>()
 

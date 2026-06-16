@@ -61,6 +61,29 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `first route rollback panel is backed by controlled flag and rollback lanes`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("first-route-rollback-panel")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.LegacyComparison), scene.tags)
+        assertEquals(
+            listOf("KGPU-M1-003", "KGPU-M1-004"),
+            scene.roadmapLinks.mapNotNull { it.ticketId },
+        )
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertEquals(
+            listOf(
+                "legacy-before-route",
+                "product-flagged-fillrect-route",
+                "legacy-rollback-route",
+                "unsupported-variant-refusal",
+            ),
+            fills.map { it.label },
+        )
+        assertTrue(fills.all { it.paintOrder > 0 })
+    }
+
+    @Test
     fun `runtime effect color tile is backed by registered SimpleRT scene payload`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("runtime-effect-color-tile")
         val command = assertIs<SceneCommand.RuntimeEffectTile>(scene.commands.single())
@@ -75,6 +98,71 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `release gate progress board is backed by bounded rrect scissor and gradient payloads`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("release-gate-progress-board")
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Gradient, SceneTag.Clip), scene.tags)
+        assertEquals(
+            listOf("KGPU-M2-003", "KGPU-M2-004"),
+            scene.roadmapLinks.mapNotNull { it.ticketId },
+        )
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertIs<SceneCommand.LinearGradientRect>(scene.commands[3])
+        assertIs<SceneCommand.FillRect>(scene.commands[4])
+    }
+
+    @Test
+    fun `translucent card overlap is backed by bounded SrcOver alpha rectangles`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("translucent-card-overlap")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.Blend), scene.tags)
+        assertEquals(listOf("KGPU-M7-003"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertEquals(3, fills.size)
+        assertTrue(fills.all { it.color.a < 1f })
+        assertEquals(listOf(1, 2, 3), fills.map { it.paintOrder })
+    }
+
+    @Test
+    fun `asset intake thumbnail grid is backed by decoded bitmap fixtures and upload ownership tickets`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("asset-intake-thumbnail-grid")
+
+        assertEquals(setOf(SceneTag.Image, SceneTag.Clip, SceneTag.RRect), scene.tags)
+        assertEquals(
+            listOf("KGPU-M4-001", "KGPU-M4-002"),
+            scene.roadmapLinks.mapNotNull { it.ticketId },
+        )
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertIs<SceneCommand.BitmapRect>(scene.commands[3])
+        assertIs<SceneCommand.BitmapRect>(scene.commands[4])
+    }
+
+    @Test
+    fun `cache source ledger board is backed by visible source classification buckets`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("cache-source-ledger-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.Cache), scene.tags)
+        assertEquals(listOf("KGPU-M9-001"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertEquals(
+            listOf(
+                "observed-runtime-source",
+                "observed-partial-source",
+                "derived-report-source",
+                "unavailable-runtime-source",
+                "reporting-only-source",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals(listOf(1, 2, 3, 4, 5), fills.map { it.paintOrder })
+    }
+
+    @Test
     fun `layered shadow card is backed by bounded shadow layer and drop shadow payloads`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("layered-shadow-card")
         assertIs<SceneCommand.Clear>(scene.commands[0])
@@ -86,6 +174,27 @@ class GPURendererSceneRegistryTest {
         assertEquals("shadow-card-layer", filter.inputLabel)
         assertEquals("drop-shadow", filter.kind?.wireName)
         assertEquals(0.72f, filter.strength)
+    }
+
+    @Test
+    fun `filter dag refusal board is backed by stable refusal classes only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("filter-dag-refusal-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.Filter), scene.tags)
+        assertEquals(listOf("KGPU-M5-004"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertEquals(
+            listOf(
+                "bounded-filter-candidate",
+                "unbounded-intermediate-refusal",
+                "recursive-dag-refusal",
+                "picture-prepass-refusal",
+                "cpu-filter-texture-refusal",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals(listOf(1, 2, 3, 4, 5), fills.map { it.paintOrder })
     }
 
     @Test
@@ -144,6 +253,15 @@ class GPURendererSceneRegistryTest {
                 ),
             ),
             SceneExpectationRow(
+                sceneId = "first-route-rollback-panel",
+                tags = setOf(SceneTag.Rect, SceneTag.LegacyComparison),
+                commandFamilies = listOf("clear", "fill-rect", "fill-rect", "fill-rect", "fill-rect"),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M1", ticketId = "KGPU-M1-003"),
+                    RoadmapExpectation("M1", ticketId = "KGPU-M1-004"),
+                ),
+            ),
+            SceneExpectationRow(
                 sceneId = "rounded-panel-gradient",
                 tags = setOf(SceneTag.RRect, SceneTag.Gradient, SceneTag.Clip),
                 commandFamilies = listOf("fill-rrect", "clip", "linear-gradient-rect"),
@@ -151,6 +269,15 @@ class GPURendererSceneRegistryTest {
                     RoadmapExpectation("M2", RStage.R1),
                     RoadmapExpectation("M2", RStage.R2),
                     RoadmapExpectation("M2", RStage.R3),
+                ),
+            ),
+            SceneExpectationRow(
+                sceneId = "release-gate-progress-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Gradient, SceneTag.Clip),
+                commandFamilies = listOf("clear", "fill-rrect", "clip", "linear-gradient-rect", "fill-rect"),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M2", ticketId = "KGPU-M2-003"),
+                    RoadmapExpectation("M2", ticketId = "KGPU-M2-004"),
                 ),
             ),
             SceneExpectationRow(
@@ -172,6 +299,15 @@ class GPURendererSceneRegistryTest {
                 roadmapLinks = listOf(RoadmapExpectation("M4")),
             ),
             SceneExpectationRow(
+                sceneId = "asset-intake-thumbnail-grid",
+                tags = setOf(SceneTag.Image, SceneTag.Clip, SceneTag.RRect),
+                commandFamilies = listOf("clear", "fill-rrect", "clip", "bitmap-rect", "bitmap-rect"),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M4", ticketId = "KGPU-M4-001"),
+                    RoadmapExpectation("M4", ticketId = "KGPU-M4-002"),
+                ),
+            ),
+            SceneExpectationRow(
                 sceneId = "layered-shadow-card",
                 tags = setOf(SceneTag.Layer, SceneTag.Filter),
                 commandFamilies = listOf("clear", "save-layer", "filter-node"),
@@ -182,6 +318,19 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.Filter, SceneTag.Image),
                 commandFamilies = listOf("bitmap-rect", "filter-node"),
                 roadmapLinks = listOf(RoadmapExpectation("M5")),
+            ),
+            SceneExpectationRow(
+                sceneId = "filter-dag-refusal-board",
+                tags = setOf(SceneTag.Rect, SceneTag.Filter),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M5", ticketId = "KGPU-M5-004")),
             ),
             SceneExpectationRow(
                 sceneId = "receipt-text-run",
@@ -202,6 +351,12 @@ class GPURendererSceneRegistryTest {
                 roadmapLinks = listOf(RoadmapExpectation("M7")),
             ),
             SceneExpectationRow(
+                sceneId = "translucent-card-overlap",
+                tags = setOf(SceneTag.Rect, SceneTag.Blend),
+                commandFamilies = listOf("clear", "fill-rect", "fill-rect", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M7", ticketId = "KGPU-M7-003")),
+            ),
+            SceneExpectationRow(
                 sceneId = "mesh-ribbon",
                 tags = setOf(SceneTag.Vertices),
                 commandFamilies = listOf("clear", "vertices"),
@@ -212,6 +367,19 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.Rect),
                 commandFamilies = listOf("fill-rect", "fill-rect"),
                 roadmapLinks = listOf(RoadmapExpectation("M9")),
+            ),
+            SceneExpectationRow(
+                sceneId = "cache-source-ledger-board",
+                tags = setOf(SceneTag.Rect, SceneTag.Cache),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M9", ticketId = "KGPU-M9-001")),
             ),
             SceneExpectationRow(
                 sceneId = "legacy-route-comparison",
