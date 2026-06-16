@@ -98,24 +98,30 @@ interface GPUBackendRenderRecorder {
     )
 }
 
-data class GPUBackendRectDraw(
-    val rgbaPremul: FloatArray,
+class GPUBackendRectDraw(
+    rgbaPremul: FloatArray,
     val scissorX: Int,
     val scissorY: Int,
     val scissorWidth: Int,
     val scissorHeight: Int,
 ) {
+    private val rgbaPremulSnapshot: FloatArray
+
     init {
         require(rgbaPremul.size == 4) { "GPUBackendRectDraw.rgbaPremul must contain 4 floats" }
         require(scissorWidth > 0) { "GPUBackendRectDraw.scissorWidth must be positive" }
         require(scissorHeight > 0) { "GPUBackendRectDraw.scissorHeight must be positive" }
+        rgbaPremulSnapshot = rgbaPremul.copyOf()
     }
+
+    val rgbaPremul: FloatArray
+        get() = rgbaPremulSnapshot.copyOf()
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is GPUBackendRectDraw) return false
 
-        return rgbaPremul.contentEquals(other.rgbaPremul) &&
+        return rgbaPremulSnapshot.contentEquals(other.rgbaPremulSnapshot) &&
             scissorX == other.scissorX &&
             scissorY == other.scissorY &&
             scissorWidth == other.scissorWidth &&
@@ -123,7 +129,7 @@ data class GPUBackendRectDraw(
     }
 
     override fun hashCode(): Int {
-        var result = rgbaPremul.contentHashCode()
+        var result = rgbaPremulSnapshot.contentHashCode()
         result = 31 * result + scissorX
         result = 31 * result + scissorY
         result = 31 * result + scissorWidth
@@ -133,7 +139,7 @@ data class GPUBackendRectDraw(
 
     override fun toString(): String =
         "GPUBackendRectDraw(" +
-            "rgbaPremul=${rgbaPremul.contentToString()}, " +
+            "rgbaPremul=${rgbaPremulSnapshot.contentToString()}, " +
             "scissorX=$scissorX, " +
             "scissorY=$scissorY, " +
             "scissorWidth=$scissorWidth, " +

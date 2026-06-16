@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
@@ -153,5 +154,36 @@ class GPUBackendRuntimeContractsTest {
         assertEquals(first, second)
         assertEquals(first.hashCode(), second.hashCode())
         assertContains(first.toString(), "rgbaPremul=[0.1, 0.2, 0.3, 1.0]")
+    }
+
+    @Test
+    fun `backend rect draw snapshots rgba input at construction`() {
+        val source = floatArrayOf(0.1f, 0.2f, 0.3f, 1.0f)
+        val draw = GPUBackendRectDraw(
+            rgbaPremul = source,
+            scissorX = 4,
+            scissorY = 8,
+            scissorWidth = 16,
+            scissorHeight = 32,
+        )
+        val stablePeer = GPUBackendRectDraw(
+            rgbaPremul = floatArrayOf(0.1f, 0.2f, 0.3f, 1.0f),
+            scissorX = 4,
+            scissorY = 8,
+            scissorWidth = 16,
+            scissorHeight = 32,
+        )
+
+        source[0] = 0.9f
+        source[1] = 0.8f
+
+        assertContentEquals(floatArrayOf(0.1f, 0.2f, 0.3f, 1.0f), draw.rgbaPremul)
+        assertEquals(stablePeer, draw)
+
+        val exposed = draw.rgbaPremul
+        exposed[2] = 0.7f
+
+        assertContentEquals(floatArrayOf(0.1f, 0.2f, 0.3f, 1.0f), draw.rgbaPremul)
+        assertEquals(stablePeer.hashCode(), draw.hashCode())
     }
 }
