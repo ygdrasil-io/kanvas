@@ -672,7 +672,7 @@ class FontScalerSurfaceTest {
             ),
             evidence.outlineCommands,
         )
-        assertTrue(evidence.diagnostics.any { diagnostic ->
+        assertTrue(evidence.diagnostics.none { diagnostic ->
             diagnostic.code == FontScalerDiagnosticCodes.METRICS_VARIATION_UNAVAILABLE
         })
         assertTrue(dump.indexOf("\"requestedVariationPosition\"") < dump.indexOf("\"normalizedVariationPosition\""))
@@ -715,6 +715,110 @@ class FontScalerSurfaceTest {
         )
         assertTrue(evidence.diagnostics.none { diagnostic -> diagnostic.detail == "truetype.gvar-iup-unavailable" })
         assertTrue(!evidence.toCanonicalJson().contains("\"detail\": \"truetype.gvar-iup-unavailable\""))
+    }
+
+    @Test
+    fun parsedTrueTypeGlyphScalerAppliesGvarPhantomPointAdvanceDeltaToMetrics() {
+        val simpleSquare = simpleSquareGlyphData()
+        val simpleGlyph = TrueTypeGlyfTableParser.parseGlyph(
+            glyfTable = simpleSquare,
+            loca = TrueTypeLocaTable(offsets = listOf(0, simpleSquare.size, simpleSquare.size)),
+            glyphId = 0u,
+        ) as TrueTypeGlyph.Simple
+        val gvar = TrueTypeGvarTable.parse(
+            data = singleAxisGvarWithPhantomPointAdvanceDelta(),
+            axisCount = 1,
+            glyphCount = 2,
+        )
+        val phantomDeltas = gvar.simpleGlyphDeltaResult(
+            glyphId = 0u,
+            glyph = simpleGlyph,
+            normalizedCoordinates = listOf(1.0),
+        ).deltas
+        requireNotNull(phantomDeltas)
+        assertEquals(10.0, phantomDeltas.phantomXDelta(0))
+        assertEquals(50.0, phantomDeltas.phantomXDelta(1))
+        val scaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = simpleSquare,
+            loca = TrueTypeLocaTable(offsets = listOf(0, simpleSquare.size, simpleSquare.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+                1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+            ),
+            gvar = gvar,
+            normalizedAxisOrder = listOf("wght"),
+        )
+
+        assertEquals(
+            GlyphMetrics(
+                advanceX = 640.0,
+                advanceY = 0.0,
+                bounds = GlyphBounds(left = 0.0, top = 0.0, right = 100.0, bottom = 100.0),
+            ),
+            scaler.metrics(
+                glyphId = 0u,
+                position = VariationPosition(axes = mapOf("wght" to 1.0)),
+            ),
+        )
+    }
+
+    @Test
+    fun parsedTrueTypeGlyphEvidenceOmitsPhantomMetricsUnavailableWhenAdvanceIsResolved() {
+        val simpleSquare = simpleSquareGlyphData()
+        val scaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = simpleSquare,
+            loca = TrueTypeLocaTable(offsets = listOf(0, simpleSquare.size, simpleSquare.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+                1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+            ),
+            gvar = TrueTypeGvarTable.parse(
+                data = singleAxisGvarWithPhantomPointAdvanceDelta(),
+                axisCount = 1,
+                glyphCount = 2,
+            ),
+            normalizedAxisOrder = listOf("wght"),
+        )
+
+        val evidence = scaler.scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to 1.0)),
+        )
+
+        assertEquals(640.0, evidence.metrics?.advanceX)
+        assertTrue(evidence.diagnostics.none { diagnostic -> diagnostic.detail == "truetype.phantom-metrics-unavailable" })
+    }
+
+    @Test
+    fun trueTypeGlyfEvidenceWarnsWhenMetricsVariationTablesArePresentButUnimplemented() {
+        val simpleSquare = simpleSquareGlyphData().withTrueTypePadding()
+        val scaler = TrueTypeGlyfScaler(
+            face = syntheticTrueTypeFace(
+                rawTables = mapOf(
+                    SFNTTableTag("loca") to shortLocaForOffsets(0, simpleSquare.size, simpleSquare.size)
+                        .toUnsignedByteList(),
+                    SFNTTableTag("glyf") to simpleSquare.toUnsignedByteList(),
+                    SFNTTableTag("gvar") to singleAxisGvarWithPhantomPointAdvanceDelta().toUnsignedByteList(),
+                    SFNTTableTag("HVAR") to listOf(0x00),
+                ),
+                variations = VariationTables(
+                    axes = listOf(
+                        variationAxis(tag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+                    ),
+                ),
+            ),
+        )
+
+        val evidence = scaler.scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to 900.0)),
+        )
+
+        assertEquals(640.0, evidence.metrics?.advanceX)
+        assertTrue(evidence.diagnostics.any { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.METRICS_VARIATION_UNAVAILABLE &&
+                diagnostic.detail == "truetype.metrics-variation-table-unavailable"
+        })
     }
 
     @Test
@@ -2821,6 +2925,41 @@ class FontScalerSurfaceTest {
             glyphId = 0u,
             position = VariationPosition(axes = mapOf("wght" to 1.0)),
         )
+        val phantomPointGvar = TrueTypeGvarTable.parse(
+            data = singleAxisGvarWithPhantomPointAdvanceDelta(),
+            axisCount = 1,
+            glyphCount = 2,
+        )
+        val paddedSimpleSquare = simpleSquare.withTrueTypePadding()
+        val phantomPointScaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = simpleSquare,
+            loca = TrueTypeLocaTable(offsets = listOf(0, simpleSquare.size, simpleSquare.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+                1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+            ),
+            gvar = phantomPointGvar,
+            normalizedAxisOrder = listOf("wght"),
+        )
+        val phantomMetricsWarningEvidence = TrueTypeGlyfScaler(
+            face = syntheticTrueTypeFace(
+                rawTables = mapOf(
+                    SFNTTableTag("loca") to shortLocaForOffsets(0, paddedSimpleSquare.size, paddedSimpleSquare.size)
+                        .toUnsignedByteList(),
+                    SFNTTableTag("glyf") to paddedSimpleSquare.toUnsignedByteList(),
+                    SFNTTableTag("gvar") to singleAxisGvarWithPhantomPointAdvanceDelta().toUnsignedByteList(),
+                    SFNTTableTag("HVAR") to listOf(0x00),
+                ),
+                variations = VariationTables(
+                    axes = listOf(
+                        variationAxis(tag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+                    ),
+                ),
+            ),
+        ).scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to 900.0)),
+        )
 
         val singlePointDefault = singlePointScaler.scaledGlyphEvidence(
             glyphId = 0u,
@@ -2858,13 +2997,31 @@ class FontScalerSurfaceTest {
             glyph = contourIsolationSimpleGlyph,
             normalizedCoordinates = listOf(1.0),
         )
+        val phantomPointMin = phantomPointScaler.scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to -1.0)),
+        )
+        val phantomPointDefault = phantomPointScaler.scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to 0.0)),
+        )
+        val phantomPointMax = phantomPointScaler.scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to 1.0)),
+        )
+        val phantomPointDeltas = phantomPointGvar.simpleGlyphDeltaResult(
+            glyphId = 0u,
+            glyph = simpleGlyph,
+            normalizedCoordinates = listOf(1.0),
+        )
 
         return """
             {
               "schemaVersion": 1,
               "dumpId": "truetype-gvar-iup",
               "ownerTickets": [
-                "KFONT-M3-002"
+                "KFONT-M3-002",
+                "KFONT-M3-003"
               ],
               "fixtureIds": [
                 "truetype-scaler-truetype-gvar-iup"
@@ -2872,6 +3029,7 @@ class FontScalerSurfaceTest {
               "requiredEvidence": [
                 "variation-deltas.json",
                 "glyph-outline.json",
+                "glyph-metrics.json",
                 "diagnostic-snapshot"
               ],
               "simplePointCase": {
@@ -2896,6 +3054,15 @@ class FontScalerSurfaceTest {
               "compositeCase": {
                 "max": ${glyphEvidenceSummaryJson(compositeEvidence).prependIndent("                ").trimStart()}
               },
+              "phantomMetricCase": {
+                "variationDeltas": ${variationDeltaEvidenceJson(phantomPointDeltas, includePhantomPoints = true).prependIndent("                ").trimStart()},
+                "positionEvidence": {
+                  "min": ${glyphEvidenceSummaryJson(phantomPointMin).prependIndent("                  ").trimStart()},
+                  "default": ${glyphEvidenceSummaryJson(phantomPointDefault).prependIndent("                  ").trimStart()},
+                  "max": ${glyphEvidenceSummaryJson(phantomPointMax).prependIndent("                  ").trimStart()}
+                },
+                "metricsVariationWarning": ${glyphEvidenceSummaryJson(phantomMetricsWarningEvidence).prependIndent("                ").trimStart()}
+              },
               "diagnosticSnapshots": {
                 "malformedTuple": [
                   ${malformedEvidence.diagnostics.joinToString(",\n                  ") { diagnostic -> diagnostic.toCanonicalJson() }}
@@ -2904,7 +3071,7 @@ class FontScalerSurfaceTest {
               "nonClaims": [
                 "no-complete-target-support-claim",
                 "no-complete-variable-font-support-claim",
-                "no-phantom-point-metrics-claim",
+                "no-hvar-vvar-mvar-metrics-claim",
                 "no-vertical-metrics-claim",
                 "no-complete-hinting-vm-claim",
                 "no-a8-or-sdf-artifact-claim",
@@ -2914,13 +3081,12 @@ class FontScalerSurfaceTest {
         """.trimIndent()
     }
 
-    private fun variationDeltaEvidenceJson(result: TrueTypeGvarSimpleGlyphDeltaResult): String {
+    private fun variationDeltaEvidenceJson(
+        result: TrueTypeGvarSimpleGlyphDeltaResult,
+        includePhantomPoints: Boolean = false,
+    ): String {
         val deltas = requireNotNull(result.deltas)
-        return (0 until deltas.pointCount).joinToString(
-            separator = ",\n",
-            prefix = "[\n",
-            postfix = "\n]",
-        ) { pointIndex ->
+        val pointEntries = (0 until deltas.pointCount).map { pointIndex ->
             val source = when {
                 deltas.isExplicit(pointIndex) -> "explicit"
                 deltas.isInferred(pointIndex) -> "inferred"
@@ -2928,9 +3094,33 @@ class FontScalerSurfaceTest {
             }
             """  {"pointIndex": $pointIndex, "source": "${source}", "xDelta": ${deltas.xDelta(pointIndex)}, "yDelta": ${deltas.yDelta(pointIndex)}}"""
         }
+        val phantomEntries = if (includePhantomPoints) {
+            listOf(
+                """  {"phantomPoint": "left-side-bearing", "xDelta": ${deltas.phantomXDelta(0)}, "yDelta": ${deltas.phantomYDelta(0)}}""",
+                """  {"phantomPoint": "right-side-bearing", "xDelta": ${deltas.phantomXDelta(1)}, "yDelta": ${deltas.phantomYDelta(1)}}""",
+                """  {"phantomPoint": "top-origin", "xDelta": ${deltas.phantomXDelta(2)}, "yDelta": ${deltas.phantomYDelta(2)}}""",
+                """  {"phantomPoint": "bottom-origin", "xDelta": ${deltas.phantomXDelta(3)}, "yDelta": ${deltas.phantomYDelta(3)}}""",
+            )
+        } else {
+            emptyList()
+        }
+        return (pointEntries + phantomEntries).joinToString(
+            separator = ",\n",
+            prefix = "[\n",
+            postfix = "\n]",
+        )
     }
 
     private fun glyphEvidenceSummaryJson(evidence: ScaledTrueTypeGlyphEvidence): String {
+        val diagnosticsJson = if (evidence.diagnostics.isEmpty()) {
+            "[]"
+        } else {
+            evidence.diagnostics.joinToString(
+                separator = ",\n",
+                prefix = "[\n",
+                postfix = "\n              ]",
+            ) { diagnostic -> "                ${diagnostic.toCanonicalJson()}" }
+        }
         return """
             {
               "glyphId": ${evidence.glyphId},
@@ -2940,9 +3130,23 @@ class FontScalerSurfaceTest {
               "normalizedVariationPosition": ${variationCoordinateEvidenceJson(evidence.normalizedVariationPosition)},
               "outlineCommands": ${testJsonStringArray(evidence.outlineCommands)},
               "outlineCommandDumpSha256": ${testJsonString(evidence.outlineCommandDumpSha256)},
-              "diagnostics": [
-                ${evidence.diagnostics.joinToString(",\n                ") { diagnostic -> diagnostic.toCanonicalJson() }}
-              ]
+              "metrics": ${evidence.metrics?.let(::glyphMetricsJson) ?: "null"},
+              "diagnostics": ${diagnosticsJson}
+            }
+        """.trimIndent()
+    }
+
+    private fun glyphMetricsJson(metrics: GlyphMetrics): String {
+        return """
+            {
+              "advanceX": ${metrics.advanceX},
+              "advanceY": ${metrics.advanceY},
+              "bounds": {
+                "left": ${metrics.bounds.left},
+                "top": ${metrics.bounds.top},
+                "right": ${metrics.bounds.right},
+                "bottom": ${metrics.bounds.bottom}
+              }
             }
         """.trimIndent()
     }
@@ -3161,6 +3365,28 @@ class FontScalerSurfaceTest {
         0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x07,
         0x00, 0x00, 0xf6, 0x00, 0x00, 0x00, 0x00, 0x00,
+    )
+
+    private fun singleAxisGvarWithPhantomPointAdvanceDelta(): ByteArray = bytes(
+        0x00, 0x01,
+        0x00, 0x00,
+        0x00, 0x01,
+        0x00, 0x00,
+        0x00, 0x00, 0x00, 0x14,
+        0x00, 0x02,
+        0x00, 0x01,
+        0x00, 0x00, 0x00, 0x20,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x14,
+        0x00, 0x00, 0x00, 0x14,
+        0x00, 0x01,
+        0x00, 0x0a,
+        0x00, 0x0a,
+        0x80, 0x00,
+        0x40, 0x00,
+        0x07,
+        0x00, 0x00, 0x00, 0x00, 0x0a, 0x32, 0x00, 0x00,
+        0x87,
     )
 
     private fun singleAxisGvarWithGlyphOneAllPointDelta(): ByteArray = bytes(
