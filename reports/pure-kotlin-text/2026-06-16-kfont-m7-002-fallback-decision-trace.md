@@ -17,10 +17,13 @@
 
 - `FallbackDecisionTrace` now serializes request family facts, generic family,
   script and locale hints, ordered candidate families, per-candidate reasons,
-  selected/rejected typefaces, and stable refusal diagnostics.
+  selected/rejected typefaces, stable refusal diagnostics, and deterministic
+  cluster ranges for complete-miss evidence.
 - `ResolvedFontRunEvidence` records deterministic text ranges, cluster ranges,
   selected `TypefaceID`, host-dependent markers, fallback reasons, and shaping
-  diagnostic codes for the same bounded fixture cases.
+  diagnostic codes for the same bounded fixture cases, while refusal
+  `diagnosticRanges` preserve complete-miss text and cluster coverage when no
+  run can be emitted.
 - `FallbackDecisionDumpTest` asserts byte-identical checked-in dump output and
   verifies script fallback, locale hinting, emoji preference, missing-glyph,
   and family-unavailable refusal diagnostics without leaking HarfBuzz,
@@ -41,7 +44,7 @@ rtk git diff --check
 ## Remaining gate
 
 This slice keeps `KFONT-M7-002` in `review`, not `done`. The current evidence
-does not yet add complete-miss cluster ranges, shaping-plan or
-`shaped-glyph-run` trace propagation, dedicated per-fixture fallback assets,
-variable-axis-aware fallback, cluster-safe fallback segmentation, host-dependent
-system scan facts, CPU oracle promotion, or any GPU text-route claim.
+does not yet add shaping-plan or `shaped-glyph-run` trace propagation,
+dedicated per-fixture fallback assets, variable-axis-aware fallback,
+cluster-safe fallback segmentation, host-dependent system scan facts, CPU
+oracle promotion, or any GPU text-route claim.
