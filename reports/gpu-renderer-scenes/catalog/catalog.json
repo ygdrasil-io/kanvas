@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 16,
+  "sceneCount": 17,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -149,6 +149,16 @@
       "tags": ["Rect"],
       "kgpuMilestones": ["M9"],
       "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "cache-source-ledger-board",
+      "title": "Cache Source Ledger Board",
+      "description": "Visible cache telemetry source classes without release-gate or readiness movement claims.",
+      "tags": ["Rect","Cache"],
+      "kgpuMilestones": ["M9"],
+      "ticketIds": ["KGPU-M9-001"],
       "rStages": [],
       "expectation": "ShouldRender"
     },

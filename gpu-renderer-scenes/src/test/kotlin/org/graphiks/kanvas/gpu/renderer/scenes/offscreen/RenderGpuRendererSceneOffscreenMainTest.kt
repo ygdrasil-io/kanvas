@@ -64,6 +64,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             RenderedShapeExpectation("blend-mode-strip", fillRectCount = 1),
             RenderedShapeExpectation("translucent-card-overlap", fillRectCount = 3),
             RenderedShapeExpectation("cache-pressure-deck", fillRectCount = 2),
+            RenderedShapeExpectation("cache-source-ledger-board", fillRectCount = 5),
             RenderedShapeExpectation("legacy-route-comparison", fillRectCount = 1),
             RenderedShapeExpectation(
                 sceneId = "rounded-panel-gradient",

@@ -119,6 +119,27 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `cache source ledger board is backed by visible source classification buckets`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("cache-source-ledger-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.Cache), scene.tags)
+        assertEquals(listOf("KGPU-M9-001"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertEquals(
+            listOf(
+                "observed-runtime-source",
+                "observed-partial-source",
+                "derived-report-source",
+                "unavailable-runtime-source",
+                "reporting-only-source",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals(listOf(1, 2, 3, 4, 5), fills.map { it.paintOrder })
+    }
+
+    @Test
     fun `layered shadow card is backed by bounded shadow layer and drop shadow payloads`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("layered-shadow-card")
         assertIs<SceneCommand.Clear>(scene.commands[0])
@@ -280,6 +301,19 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.Rect),
                 commandFamilies = listOf("fill-rect", "fill-rect"),
                 roadmapLinks = listOf(RoadmapExpectation("M9")),
+            ),
+            SceneExpectationRow(
+                sceneId = "cache-source-ledger-board",
+                tags = setOf(SceneTag.Rect, SceneTag.Cache),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M9", ticketId = "KGPU-M9-001")),
             ),
             SceneExpectationRow(
                 sceneId = "legacy-route-comparison",

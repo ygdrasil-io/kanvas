@@ -17,4 +17,5 @@
 | `translucent-card-overlap` | Translucent Card Overlap | Rect,Blend | KGPU M7 | `KGPU-M7-003` |  | `ShouldRender` |
 | `mesh-ribbon` | Mesh Ribbon | Vertices | KGPU M8 |  |  | `ShouldRender` |
 | `cache-pressure-deck` | Cache Pressure Deck | Rect | KGPU M9 |  |  | `ShouldRender` |
+| `cache-source-ledger-board` | Cache Source Ledger Board | Rect,Cache | KGPU M9 | `KGPU-M9-001` |  | `ShouldRender` |
 | `legacy-route-comparison` | Legacy Route Comparison | Rect | KGPU M10 |  |  | `ShouldRender` |

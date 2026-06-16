@@ -405,6 +405,46 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "cache-source-ledger-board",
+            title = "Cache Source Ledger Board",
+            description = "Visible cache telemetry source classes without release-gate or readiness movement claims.",
+            tags = setOf(SceneTag.Rect, SceneTag.Cache),
+            links = listOf(SceneRoadmapLink.ticket("KGPU-M9-001")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.040f, 0.044f, 0.052f, 1f)),
+                SceneCommand.FillRect(
+                    label = "observed-runtime-source",
+                    rect = SceneRect(30f, 46f, 82f, 154f),
+                    color = SceneColor.green(),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "observed-partial-source",
+                    rect = SceneRect(90f, 66f, 142f, 154f),
+                    color = SceneColor.amber(),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "derived-report-source",
+                    rect = SceneRect(150f, 86f, 202f, 154f),
+                    color = SceneColor.blue(),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "unavailable-runtime-source",
+                    rect = SceneRect(210f, 106f, 262f, 154f),
+                    color = SceneColor.red(),
+                    paintOrder = 4,
+                ),
+                SceneCommand.FillRect(
+                    label = "reporting-only-source",
+                    rect = SceneRect(270f, 126f, 302f, 154f),
+                    color = SceneColor(0.72f, 0.76f, 0.82f, 1f),
+                    paintOrder = 5,
+                ),
+            ),
+        ),
+        scene(
             id = "legacy-route-comparison",
             title = "Legacy Route Comparison",
             description = "Rect command marker for future legacy-route comparison.",
