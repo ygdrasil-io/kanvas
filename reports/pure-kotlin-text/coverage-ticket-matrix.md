@@ -1131,6 +1131,48 @@ rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 Remaining gate: this is deterministic generated-fixture safety evidence only.
 It does not claim broader real-font corpus coverage, complete public CFF path
 output, complete CFF2 variation support, or GPU glyph route support.
+### KFONT-M4-004: CFF Scaler Path Output
+
+Status: done; freshly validated in this wave.
+
+Files:
+
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/font/fixtures/expected/scaler/cff-scaler-path-output.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m4-004-cff-path-output.md`
+
+Evidence:
+
+- `CFFScaledGlyphEvidence` now records deterministic source/typeface identity,
+  outline commands, path hashes, bounds, metrics, width source, and linked
+  `cff-charstring-trace` evidence for bounded generated CFF glyphs.
+- `cff-scaler-path-output.json` covers basic path output, subroutine path
+  output, flex output, missing-glyph refusal, and malformed-glyph refusal
+  without widening support claims to real-font corpora or GPU routes.
+- Missing glyphs emit `font.scaler.cff.path-output-unavailable`, while
+  malformed glyphs retain the original refusal and add
+  `font.scaler.cff.glyph-malformed` in the deterministic dump.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this remains generated-fixture path-output evidence only. It
+does not claim broader real-font corpus coverage, complete CFF2 variation
+output, native scaler parity, or GPU glyph route support.
 ### PKT-05B: CFF INDEX/DICT Fixture Pack And Refusal Goldens
 
 Status: done; independently reviewed and freshly validated.

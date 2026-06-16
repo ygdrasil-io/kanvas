@@ -62,6 +62,7 @@ REQUIRED_FONT_FAMILY_GATES = {
         "cff-local-global-subroutines",
         "cff-subroutine-safety",
         "cff-malformed-stack-refusal",
+        "cff-path-output",
         "cff-unsupported-operator-refusal",
         "cff2-blend-vsindex",
         "cff2-variation-store-region",
