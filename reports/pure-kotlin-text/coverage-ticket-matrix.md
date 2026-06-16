@@ -507,8 +507,7 @@ scanning, SFNT parsing coverage, scaler support, shaping fallback support, or
 platform/native font API behavior.
 ### PKT-02E: Font Scan Skipped-File Diagnostic Fixture
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: done; freshly validated generated-fixture trace evidence only.
 
 Files:
 
@@ -884,8 +883,7 @@ metrics, HVAR/VVAR/MVAR support, complete variable-font support, native engine
 parity, or pixel-perfect hinting.
 ### PKT-04B: TrueType Composite Component Trace Evidence
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: done; freshly validated generated-fixture trace evidence only.
 
 Files:
 
@@ -977,9 +975,13 @@ Files:
 
 - `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
 - `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/font/fixtures/expected/scaler/cff-charstring-trace.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
 - `reports/pure-kotlin-text/font-fixture-inventory.json`
 - `reports/pure-kotlin-text/fixture-evidence-manifest.json`
 - `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m4-002-cff-charstring-trace.md`
 
 Evidence:
 
@@ -1046,22 +1048,27 @@ Files:
 
 - `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
 - `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/font/fixtures/expected/scaler/cff-charstring-trace.json`
 - `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
 - `reports/pure-kotlin-text/fixture-evidence-manifest.json`
 - `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m4-002-cff-charstring-trace.md`
 
 Evidence:
 
 - `CFFType2CharStringInterpreter` provides a narrow generated-fixture
   interpreter for Type 2/CFF2 charstrings without claiming full CFF table
   parsing or public CFF scaler support.
-- Tests generate deterministic charstring bytes for CFF move/line/curve/flex
-  evidence, local and global subroutine calls with bounded bias resolution and
-  call traces, CFF2 `vsindex`/`blend` variation input, malformed stack refusal,
-  and unsupported escaped-operator refusal.
-- Stable refusal diagnostics now include `font.cff-stack-malformed` and
-  `font.cff-operator-unsupported` evidence with glyph IDs and operator-offset
+- `cff-charstring-trace.json` now fixes deterministic generated-fixture traces
+  for move/line/curve/flex execution, local/global subroutine call traces,
+  width and hint metadata, and non-claiming refusal snapshots.
+- Stable refusal diagnostics now include `font.cff-stack-malformed`,
+  `font.cff-operator-unsupported`, `font.scaler.cff.stack-overflow`, and
+  `font.scaler.cff.trailing-bytes` evidence with glyph IDs and operator-offset
   messages.
+- `endchar` now refuses leftover operands and trailing executable bytes instead
+  of silently accepting them.
 - The font-only fixture inventory marks all five CFF/CFF2 fixture gates as
   current evidence, and the fixture manifest changes the family blocker from
   missing fixtures to tracked parser/scaler integration work.
@@ -1069,13 +1076,16 @@ Evidence:
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterBuildsLineCurveAndFlexEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterTracesLocalAndGlobalSubroutines --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2FixtureInterpreterAppliesVsindexBlendEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterReportsStackAndOperatorRefusals
+rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterBuildsLineCurveAndFlexEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterTracesLocalAndGlobalSubroutines --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2FixtureInterpreterAppliesVsindexBlendEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterReportsStackAndOperatorRefusals --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterRecordsWidthAndHintMaskMetadata --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterRejectsEndcharRemaindersAndStackOverflow --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffCharStringTraceGoldenMatchesGeneratedEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterCoversRemainingCurveAndFlexOperators
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 ```
 
-Remaining gate at this slice closeout: generated charstring evidence had not
-yet been routed through CFF INDEX/top-dict/private-dict parsing or public
-`CFFScaler`/`CFF2Scaler` support. `PKT-05C` below closes that routing gap for
-generated fixtures only; complete CFF/CFF2 target support remains tracked.
+Remaining gate at this slice closeout: this remains generated-fixture evidence
+only. It does not claim complete real-font CFF coverage, complete public scaler
+support by itself, broader corpus evidence, or GPU glyph route support.
 ### PKT-05B: CFF INDEX/DICT Fixture Pack And Refusal Goldens
 
 Status: done; independently reviewed and freshly validated.

@@ -8,7 +8,7 @@ All tickets start as `proposed`. Move a ticket to `ready` only after its scope, 
 | M1 | 0 | 0 | 0 | 0 | 0 | 4 |
 | M2 | 0 | 0 | 0 | 0 | 0 | 5 |
 | M3 | 4 | 0 | 0 | 0 | 0 | 1 |
-| M4 | 4 | 0 | 0 | 0 | 0 | 1 |
+| M4 | 3 | 0 | 0 | 0 | 0 | 2 |
 | M5 | 1 | 0 | 0 | 0 | 0 | 4 |
 | M6 | 9 | 0 | 0 | 0 | 0 | 1 |
 | M7 | 3 | 0 | 0 | 0 | 2 | 0 |
@@ -18,7 +18,7 @@ All tickets start as `proposed`. Move a ticket to `ready` only after its scope, 
 | M11 | 0 | 0 | 0 | 6 | 0 | 4 |
 | M12 | 5 | 0 | 0 | 0 | 0 | 0 |
 | M13 | 5 | 0 | 0 | 0 | 0 | 0 |
-| **Total** | **47** | **0** | **0** | **6** | **2** | **31** |
+| **Total** | **46** | **0** | **0** | **6** | **2** | **32** |
 
 ## Status Update Rule
 
