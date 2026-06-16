@@ -67,10 +67,17 @@ class RenderGpuRendererSceneOffscreenMainTest {
             RenderedShapeExpectation("translucent-card-overlap", fillRectCount = 3),
             RenderedShapeExpectation("cache-pressure-deck", fillRectCount = 2),
             RenderedShapeExpectation("cache-source-ledger-board", fillRectCount = 5),
+            RenderedShapeExpectation("frame-gate-blocker-board", fillRectCount = 6),
             RenderedShapeExpectation("legacy-route-comparison", fillRectCount = 1),
             RenderedShapeExpectation(
                 sceneId = "legacy-inventory-hygiene-board",
                 fillRectCount = 7,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "shadow-parity-migration-gate-board",
+                fillRectCount = 8,
                 fillRRectCount = 1,
                 clipCount = 1,
             ),

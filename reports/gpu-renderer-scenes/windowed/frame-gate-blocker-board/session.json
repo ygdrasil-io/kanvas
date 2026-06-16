@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneId": "shadow-parity-migration-gate-board",
+  "sceneId": "frame-gate-blocker-board",
   "status": "presented",
   "productRefusal": false,
   "reason": "kadre-windowed-presented-frames",
