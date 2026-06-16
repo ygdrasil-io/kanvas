@@ -62,6 +62,12 @@ class GPUBackendRuntimeContractsTest {
             GPUClearColor(red = -0.01, green = 0.2, blue = 0.3, alpha = 1.0)
         }
         assertFailsWith<IllegalArgumentException> {
+            GPUClearColor(red = 0.1, green = 1.01, blue = 0.3, alpha = 1.0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUClearColor(red = 0.1, green = 0.2, blue = -0.01, alpha = 1.0)
+        }
+        assertFailsWith<IllegalArgumentException> {
             GPUClearColor(red = 0.1, green = 0.2, blue = 0.3, alpha = 1.01)
         }
     }
