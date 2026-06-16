@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-010"
 title: "Add `MaterialKey` leakage tests"
-status: "proposed"
+status: "blocked"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -96,6 +96,12 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*MaterialKey*Text*'
 
 - `proposed`: Final M11 cache-identity guardrail before route promotion and batching claims.
 - Move to `ready` only after allowed/forbidden key axes are reviewed.
+- `blocked` (2026-06-16): Readiness audit confirmed this ticket depends on
+  `KFONT-M11-006` and `KFONT-M11-007`. There is not yet a `GPUTextBinding`,
+  `GPUTextResourcePlan`, text `MaterialKey` preimage, or fixture proving that
+  glyph IDs, atlas UVs, atlas generations, upload tokens, and live handles stay
+  out of material identity. Remaining gate: finish subrun and
+  resource/binding contracts, then re-review allowed and forbidden key axes.
 
 ## Linear Labels
 
