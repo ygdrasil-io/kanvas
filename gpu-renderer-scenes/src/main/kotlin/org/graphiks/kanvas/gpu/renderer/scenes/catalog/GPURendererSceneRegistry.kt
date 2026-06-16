@@ -258,6 +258,34 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "translucent-card-overlap",
+            title = "Translucent Card Overlap",
+            description = "Overlapping partial-alpha cards exercising bounded SrcOver blend order.",
+            tags = setOf(SceneTag.Rect, SceneTag.Blend),
+            links = listOf(SceneRoadmapLink.ticket("KGPU-M7-003")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.04f, 0.045f, 0.05f, 1f)),
+                SceneCommand.FillRect(
+                    label = "bottom-blue-card",
+                    rect = SceneRect(42f, 38f, 214f, 142f),
+                    color = SceneColor.blue(0.68f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "middle-green-card",
+                    rect = SceneRect(88f, 62f, 260f, 166f),
+                    color = SceneColor.green(0.62f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "top-amber-card",
+                    rect = SceneRect(128f, 28f, 286f, 128f),
+                    color = SceneColor.amber(0.58f),
+                    paintOrder = 3,
+                ),
+            ),
+        ),
+        scene(
             id = "mesh-ribbon",
             title = "Mesh Ribbon",
             description = "Bounded ribbon-strip fixture for vertices visibility without broad DrawVertices promotion.",

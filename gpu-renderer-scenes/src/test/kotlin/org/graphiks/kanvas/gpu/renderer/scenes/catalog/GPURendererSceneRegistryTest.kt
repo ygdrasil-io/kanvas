@@ -75,6 +75,18 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `translucent card overlap is backed by bounded SrcOver alpha rectangles`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("translucent-card-overlap")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.Blend), scene.tags)
+        assertEquals(listOf("KGPU-M7-003"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertEquals(3, fills.size)
+        assertTrue(fills.all { it.color.a < 1f })
+        assertEquals(listOf(1, 2, 3), fills.map { it.paintOrder })
+    }
+
+    @Test
     fun `layered shadow card is backed by bounded shadow layer and drop shadow payloads`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("layered-shadow-card")
         assertIs<SceneCommand.Clear>(scene.commands[0])
@@ -200,6 +212,12 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.Rect),
                 commandFamilies = listOf("fill-rect"),
                 roadmapLinks = listOf(RoadmapExpectation("M7")),
+            ),
+            SceneExpectationRow(
+                sceneId = "translucent-card-overlap",
+                tags = setOf(SceneTag.Rect, SceneTag.Blend),
+                commandFamilies = listOf("clear", "fill-rect", "fill-rect", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M7", ticketId = "KGPU-M7-003")),
             ),
             SceneExpectationRow(
                 sceneId = "mesh-ribbon",

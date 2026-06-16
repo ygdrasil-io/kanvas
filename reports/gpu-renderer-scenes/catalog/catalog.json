@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 13,
+  "sceneCount": 14,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -8,6 +8,7 @@
       "description": "Rectangles with alpha values and deterministic draw order.",
       "tags": ["Rect"],
       "kgpuMilestones": ["M0","M1"],
+      "ticketIds": [],
       "rStages": ["R0","R1","R2","R3","R4","R5","R6"],
       "expectation": "ShouldRender"
     },
@@ -17,6 +18,7 @@
       "description": "Rounded rect with linear gradient and scissor.",
       "tags": ["RRect","Gradient","Clip"],
       "kgpuMilestones": ["M2"],
+      "ticketIds": [],
       "rStages": ["R1","R2","R3"],
       "expectation": "ShouldRender"
     },
@@ -26,6 +28,7 @@
       "description": "Rounded badge and rectangular stroke proxy using current command families.",
       "tags": ["RRect","Rect"],
       "kgpuMilestones": ["M3"],
+      "ticketIds": [],
       "rStages": [],
       "expectation": "ShouldRender"
     },
@@ -35,6 +38,7 @@
       "description": "Repeated content through bounded clip variants.",
       "tags": ["Clip","Image"],
       "kgpuMilestones": ["M3","M5"],
+      "ticketIds": [],
       "rStages": [],
       "expectation": "ShouldRender"
     },
@@ -44,6 +48,7 @@
       "description": "Already-decoded bitmap swatches represented by bitmap-rect commands.",
       "tags": ["Image"],
       "kgpuMilestones": ["M4"],
+      "ticketIds": [],
       "rStages": [],
       "expectation": "ShouldRender"
     },
@@ -53,6 +58,7 @@
       "description": "Bounded shadow-card layer fixture with explicit drop-shadow filter route.",
       "tags": ["Layer","Filter"],
       "kgpuMilestones": ["M5"],
+      "ticketIds": [],
       "rStages": [],
       "expectation": "ShouldRender"
     },
@@ -62,6 +68,7 @@
       "description": "Bitmap and filter command markers for bounded route observation.",
       "tags": ["Filter","Image"],
       "kgpuMilestones": ["M5"],
+      "ticketIds": [],
       "rStages": [],
       "expectation": "ShouldRender"
     },
@@ -71,6 +78,7 @@
       "description": "Simple typed text-run path and future A8 atlas route.",
       "tags": ["Text"],
       "kgpuMilestones": ["M6"],
+      "ticketIds": [],
       "rStages": [],
       "expectation": "ShouldRender"
     },
@@ -80,6 +88,7 @@
       "description": "Registered SimpleRT runtime-effect tile with reflected gColor parameter intent.",
       "tags": ["RuntimeEffect"],
       "kgpuMilestones": ["M7"],
+      "ticketIds": [],
       "rStages": [],
       "expectation": "ShouldRender"
     },
@@ -89,6 +98,17 @@
       "description": "Rect strip reserved for future explicit blend coverage.",
       "tags": ["Rect"],
       "kgpuMilestones": ["M7"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "translucent-card-overlap",
+      "title": "Translucent Card Overlap",
+      "description": "Overlapping partial-alpha cards exercising bounded SrcOver blend order.",
+      "tags": ["Rect","Blend"],
+      "kgpuMilestones": ["M7"],
+      "ticketIds": ["KGPU-M7-003"],
       "rStages": [],
       "expectation": "ShouldRender"
     },
@@ -98,6 +118,7 @@
       "description": "Bounded ribbon-strip fixture for vertices visibility without broad DrawVertices promotion.",
       "tags": ["Vertices"],
       "kgpuMilestones": ["M8"],
+      "ticketIds": [],
       "rStages": [],
       "expectation": "ShouldRender"
     },
@@ -107,6 +128,7 @@
       "description": "Repeated rect commands for future cache telemetry observation.",
       "tags": ["Rect"],
       "kgpuMilestones": ["M9"],
+      "ticketIds": [],
       "rStages": [],
       "expectation": "ShouldRender"
     },
@@ -116,6 +138,7 @@
       "description": "Rect command marker for future legacy-route comparison.",
       "tags": ["Rect"],
       "kgpuMilestones": ["M10"],
+      "ticketIds": [],
       "rStages": [],
       "expectation": "ShouldRender"
     }
