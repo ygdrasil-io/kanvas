@@ -125,6 +125,52 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `runtime effect descriptor gate board is backed by M7 descriptor refusals only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("runtime-effect-descriptor-gate-board")
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.RuntimeEffect), scene.tags)
+        assertEquals(listOf("KGPU-M7-001"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        val runtimeEffect = assertIs<SceneCommand.RuntimeEffectTile>(scene.commands[3])
+        assertTrue(runtimeEffect.hasFixturePayload)
+        assertTrue(runtimeEffect.isRegisteredSimpleRt)
+        assertEquals("registered-simple-rt-descriptor-fixture", runtimeEffect.label)
+        assertEquals(1, runtimeEffect.paintOrder)
+        assertEquals("runtime.simple_rt", runtimeEffect.stableId)
+        assertEquals("wgsl/runtime_simple_rt", runtimeEffect.wgslImplementationId)
+        assertEquals("kotlin/simple_rt", runtimeEffect.cpuImplementationId)
+        assertEquals("gColor", runtimeEffect.uniformName)
+        assertEquals("kFloat4", runtimeEffect.uniformType)
+        assertEquals(0, runtimeEffect.uniformOffset)
+        assertEquals(16, runtimeEffect.uniformSize)
+        assertEquals(
+            "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+            runtimeEffect.pipelineKey,
+        )
+
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+        assertEquals(
+            listOf(
+                "wgsl4k-reflection-report-shape",
+                "kotlin-cpu-oracle-linkage-gate",
+                "gpu-renderer-route-integration-blocked",
+                "adapter-readback-evidence-blocked",
+                "unregistered-descriptor-refusal",
+                "dynamic-sksl-refusal",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((2..7).toList(), fills.map { it.paintOrder })
+        assertTrue(
+            scene.roadmapLinks.none {
+                it.ticketId == "KGPU-M7-002" || it.ticketId == "KGPU-M7-003" || it.ticketId == "KGPU-M7-004"
+            },
+        )
+    }
+
+    @Test
     fun `release gate progress board is backed by bounded rrect scissor and gradient payloads`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("release-gate-progress-board")
 
@@ -308,6 +354,77 @@ class GPURendererSceneRegistryTest {
         assertEquals((3..6).toList(), fills.map { it.paintOrder })
         assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M4-001" || it.ticketId == "KGPU-M4-002" })
         assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M4-003" })
+    }
+
+    @Test
+    fun `savelayer isolation gate board is backed by M5 layer refusals without materialized SaveLayer`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("savelayer-isolation-gate-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Layer), scene.tags)
+        assertEquals(listOf("KGPU-M5-001"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertTrue(scene.commands.none { it is SceneCommand.SaveLayer })
+        assertTrue(scene.commands.none { it is SceneCommand.FilterNode })
+        assertTrue(SceneTag.Filter !in scene.tags)
+        assertTrue(SceneTag.Image !in scene.tags)
+        assertTrue(SceneTag.Blend !in scene.tags)
+        assertEquals(
+            listOf(
+                "provider-owned-offscreen-target-gated",
+                "clear-load-store-policy-gated",
+                "child-draw-isolation-gated",
+                "restore-composite-route-gated",
+                "active-attachment-sampling-refused",
+                "resource-generation-evidence-gated",
+                "cpu-gpu-reference-comparison-gated",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..7).toList(), fills.map { it.paintOrder })
+        assertTrue(
+            scene.roadmapLinks.none {
+                it.ticketId == "KGPU-M5-002" || it.ticketId == "KGPU-M5-003" || it.ticketId == "KGPU-M5-004"
+            },
+        )
+    }
+
+    @Test
+    fun `destination read strategy gate board is backed by M5 destination read refusals only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("destination-read-strategy-gate-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Blend), scene.tags)
+        assertEquals(listOf("KGPU-M5-002"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertTrue(scene.commands.none { it is SceneCommand.SaveLayer })
+        assertTrue(scene.commands.none { it is SceneCommand.FilterNode })
+        assertTrue(SceneTag.Layer !in scene.tags)
+        assertTrue(SceneTag.Filter !in scene.tags)
+        assertTrue(SceneTag.Image !in scene.tags)
+        assertEquals(
+            listOf(
+                "bounded-destination-copy-gated",
+                "validated-intermediate-strategy-gated",
+                "layer-isolation-strategy-gated",
+                "pass-split-copy-before-sample-gated",
+                "active-attachment-sampling-refused",
+                "copy-usage-texture-binding-gated",
+                "framebuffer-fetch-refused",
+                "cpu-gpu-reference-comparison-gated",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..8).toList(), fills.map { it.paintOrder })
+        assertTrue(
+            scene.roadmapLinks.none {
+                it.ticketId == "KGPU-M5-001" || it.ticketId == "KGPU-M5-003" || it.ticketId == "KGPU-M5-004"
+            },
+        )
     }
 
     @Test
@@ -642,6 +759,41 @@ class GPURendererSceneRegistryTest {
                 roadmapLinks = listOf(RoadmapExpectation("M4", ticketId = "KGPU-M4-004")),
             ),
             SceneExpectationRow(
+                sceneId = "savelayer-isolation-gate-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Layer),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M5", ticketId = "KGPU-M5-001")),
+            ),
+            SceneExpectationRow(
+                sceneId = "destination-read-strategy-gate-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Blend),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M5", ticketId = "KGPU-M5-002")),
+            ),
+            SceneExpectationRow(
                 sceneId = "layered-shadow-card",
                 tags = setOf(SceneTag.Layer, SceneTag.Filter),
                 commandFamilies = listOf("clear", "save-layer", "filter-node"),
@@ -709,6 +861,23 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.RuntimeEffect),
                 commandFamilies = listOf("runtime-effect"),
                 roadmapLinks = listOf(RoadmapExpectation("M7")),
+            ),
+            SceneExpectationRow(
+                sceneId = "runtime-effect-descriptor-gate-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.RuntimeEffect),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "runtime-effect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M7", ticketId = "KGPU-M7-001")),
             ),
             SceneExpectationRow(
                 sceneId = "blend-mode-strip",

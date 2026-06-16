@@ -133,6 +133,18 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 bitmapRectCount = 2,
             ),
             RenderedShapeExpectation(
+                sceneId = "savelayer-isolation-gate-board",
+                fillRectCount = 7,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "destination-read-strategy-gate-board",
+                fillRectCount = 8,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "clipped-avatar-grid",
                 fillRectCount = 0,
                 clipCount = 1,
@@ -166,6 +178,13 @@ class RenderGpuRendererSceneOffscreenMainTest {
             RenderedShapeExpectation(
                 sceneId = "runtime-effect-color-tile",
                 fillRectCount = 0,
+                runtimeEffectCount = 1,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "runtime-effect-descriptor-gate-board",
+                fillRectCount = 6,
+                fillRRectCount = 1,
+                clipCount = 1,
                 runtimeEffectCount = 1,
             ),
             RenderedShapeExpectation(
