@@ -572,28 +572,43 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/UnicodeDataGeneration.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
-        "reports/font/fixtures/expected/unicode/unicode-16-source-manifest.json"
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/UnicodeDataGenerationTest.kt",
+        "reports/font/fixtures/expected/unicode/unicode-16-source-manifest.json",
+        "reports/font/fixtures/expected/unicode/unicode-data-manifest.json",
+        "reports/font/fixtures/expected/unicode/unicode-data-tables.json",
+        "reports/font/fixtures/expected/unicode/unicode-data-version-mismatch-diagnostic.json",
+        "reports/font/fixtures/expected/unicode/source-extracts/16.0.0/DerivedCoreProperties.txt",
+        "reports/font/fixtures/expected/unicode/source-extracts/16.0.0/GraphemeBreakProperty.txt",
+        "reports/font/fixtures/expected/unicode/source-extracts/16.0.0/LineBreak.txt",
+        "reports/font/fixtures/expected/unicode/source-extracts/16.0.0/PropList.txt",
+        "reports/font/fixtures/expected/unicode/source-extracts/16.0.0/ScriptExtensions.txt",
+        "reports/font/fixtures/expected/unicode/source-extracts/16.0.0/Scripts.txt",
+        "reports/font/fixtures/expected/unicode/source-extracts/16.0.0/UnicodeData.txt",
+        "reports/font/fixtures/expected/unicode/source-extracts/16.0.0/emoji/emoji-data.txt"
       ],
       "requiredEvidenceGates": [
-        "Add a pinned Unicode data version row before replacing BasicUnicodeData.",
-        "Document source file names and checksums for script, bidi, grapheme, and default-ignorable data inputs.",
-        "Add generated dump schema rows for sample script, bidi, grapheme, and default-ignorable facts.",
-        "Add mismatch diagnostics for generated-data version, source checksum, and generated dump schema drift.",
-        "Keep product behavior independent of the JDK Unicode version unless that dependency is explicitly diagnosed."
+        "Keep generated seed data as bounded fixture evidence until later M5 tickets consume it; BasicUnicodeData remains unchanged in this ticket.",
+        "Add full UCD fixture regeneration and rebaseline review before expanding beyond the checked-in source extracts."
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test",
-        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+        "rtk ./gradlew --no-daemon --rerun-tasks :font:text:test --tests '*UnicodeData*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
       "fixtureCommands": [
-        "Add a deterministic Unicode-data generator or no-op validator before promoting beyond BasicUnicodeData."
+        "KFONT-M5-001 bounded seed generation is exercised by UnicodeDataGenerationTest from checked-in source extracts; ordinary tests do not download Unicode data."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",
         "no-complete-ucd-claim",
         "no-uax9-conformance-claim",
-        "no-uax14-uax29-conformance-claim"
+        "no-uax14-uax29-conformance-claim",
+        "no-segmentation-or-bidi-replacement-claim",
+        "no-shaping-support-promotion",
+        "no-paragraph-support-claim",
+        "no-gpu-text-route-claim"
       ]
     }
   ]

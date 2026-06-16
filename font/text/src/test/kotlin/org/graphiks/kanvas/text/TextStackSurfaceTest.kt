@@ -422,6 +422,10 @@ class TextStackSurfaceTest {
         assertTrue(manifest.contains("\"unicodeVersion\": \"16.0.0\""))
         assertTrue(manifest.contains("\"ordinaryValidationPolicy\": \"offline\""))
         assertTrue(manifest.contains("\"no-complete-ucd-claim\""))
+        assertTrue(manifest.contains("\"no-segmentation-or-bidi-replacement-claim\""))
+        assertTrue(manifest.contains("\"no-shaping-support-promotion\""))
+        assertTrue(manifest.contains("\"no-paragraph-support-claim\""))
+        assertTrue(manifest.contains("\"no-gpu-text-route-claim\""))
     }
 
     @Test

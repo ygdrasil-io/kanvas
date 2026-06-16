@@ -1305,6 +1305,55 @@ runtime mismatch diagnostics, claim a complete Unicode Character Database,
 claim UAX #9 bidi conformance, claim UAX #14 line breaking, claim UAX #29
 segmentation, claim emoji property coverage, or claim full script matrix
 support.
+
+### KFONT-M5-001: Pinned Unicode Data Generation
+
+Status: done with bounded seed evidence and local self-review.
+
+Files:
+
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/UnicodeDataGeneration.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/UnicodeDataGenerationTest.kt`
+- `reports/font/fixtures/expected/unicode/source-extracts/16.0.0/`
+- `reports/font/fixtures/expected/unicode/unicode-data-manifest.json`
+- `reports/font/fixtures/expected/unicode/unicode-data-tables.json`
+- `reports/font/fixtures/expected/unicode/unicode-data-version-mismatch-diagnostic.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m5-001-unicode-data-generation.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M5-unicode-segmentation-bidi/KFONT-M5-001-add-pinned-unicode-data-generation.md`
+
+Evidence:
+
+- `PinnedUnicodeDataGenerator` accepts only Unicode `16.0.0` checked-in
+  extracts, refuses missing or unpinned inputs, and records input SHA-256
+  hashes in `unicode-data-manifest.json`.
+- The generated bounded table fixture covers sample
+  Grapheme_Cluster_Break, Bidi_Class, Script, Script_Extensions, Line_Break,
+  General_Category, Default_Ignorable_Code_Point, emoji/Extended_Pictographic,
+  and Variation_Selector facts.
+- Generated table SHA-256 hashes are recorded in the manifest and are asserted
+  against the canonical table JSON preimages in `UnicodeDataGenerationTest`.
+- `unicode-data-version-mismatch-diagnostic.json` pins the stable
+  `text.shaping.unicode-data-version-mismatch` refusal for a dump expecting a
+  different Unicode data version.
+- Ordinary validation remains offline and does not download Unicode data.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon --rerun-tasks :font:text:test --tests '*UnicodeData*'
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this is bounded Unicode seed generation evidence only. It does
+not claim a complete Unicode Character Database, UAX #9 bidi conformance, UAX
+#14 line breaking conformance, UAX #29 grapheme segmentation conformance,
+replacement of `BasicUnicodeData`, shaping support promotion, paragraph support
+promotion, or any GPU text route.
+
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 
 Status: implemented with local diff review.

@@ -704,36 +704,133 @@
       ]
     },
     {
-      "dumpId": "unicode-data-seed",
-      "ownerTicket": "PKT-06B",
-      "classification": "producer-only",
+      "dumpId": "unicode-data-manifest",
+      "ownerTicket": "KFONT-M5-001",
+      "classification": "golden-gated",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
         "section": "Unicode Version Policy"
       },
       "producerPaths": [
-        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
-        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
-        "reports/font/fixtures/expected/unicode/unicode-16-source-manifest.json"
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/UnicodeDataGeneration.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/UnicodeDataGenerationTest.kt",
+        "reports/font/fixtures/expected/unicode/unicode-data-manifest.json"
       ],
       "expectedFields": [
-        "bidiClasses",
-        "defaultIgnorableRanges",
-        "kind",
+        "dumpId",
+        "generatedTableHashes",
+        "generatorOptions",
+        "generatorVersion",
+        "inputs",
         "nonClaims",
-        "sampleFacts",
+        "outputSchemaVersion",
+        "ownerTickets",
         "schemaVersion",
-        "scripts",
         "unicodeVersion"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test"
+        "rtk ./gradlew --no-daemon --rerun-tasks :font:text:test --tests '*UnicodeData*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "Unicode seed dump changes require explicit version and non-claim review.",
+      "updatePolicy": "Unicode data manifest golden changes require input SHA-256 review, generated table hash diffs, and explicit non-claim review without replacing BasicUnicodeData.",
       "nonClaims": [
         "producer-only",
+        "bounded-seed-fixture-only",
         "no-complete-ucd-claim",
-        "no-complete-shaping-support-claim"
+        "no-uax9-conformance-claim",
+        "no-uax14-uax29-conformance-claim",
+        "no-segmentation-or-bidi-replacement-claim",
+        "no-shaping-support-promotion",
+        "no-paragraph-support-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
+      "dumpId": "unicode-data-seed",
+      "ownerTicket": "KFONT-M5-001",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Unicode Version Policy"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/UnicodeDataGeneration.kt",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/UnicodeDataGenerationTest.kt",
+        "reports/font/fixtures/expected/unicode/unicode-data-tables.json"
+      ],
+      "expectedFields": [
+        "bidiClass",
+        "defaultIgnorable",
+        "defaultValue",
+        "dumpId",
+        "emojiProperties",
+        "generalCategory",
+        "graphemeClusterBreak",
+        "kind",
+        "lineBreak",
+        "nonClaims",
+        "ownerTickets",
+        "sampleFacts",
+        "schemaVersion",
+        "script",
+        "scriptExtensions",
+        "tableHashes",
+        "unicodeVersion",
+        "variationSelector"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon --rerun-tasks :font:text:test --tests '*UnicodeData*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Unicode seed dump changes require bounded source extract diffs, generated table hash review, and explicit non-claim review without Unicode conformance or shaping promotion.",
+      "nonClaims": [
+        "producer-only",
+        "bounded-seed-fixture-only",
+        "no-complete-ucd-claim",
+        "no-uax9-uax14-uax29-conformance-claim",
+        "no-segmentation-or-bidi-replacement-claim",
+        "no-complete-shaping-support-claim",
+        "no-paragraph-support-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
+      "dumpId": "unicode-data-version-mismatch-diagnostic",
+      "ownerTicket": "KFONT-M5-001",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Diagnostics"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/UnicodeDataGeneration.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/UnicodeDataGenerationTest.kt",
+        "reports/font/fixtures/expected/unicode/unicode-data-version-mismatch-diagnostic.json"
+      ],
+      "expectedFields": [
+        "diagnostic",
+        "dumpId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon --rerun-tasks :font:text:test --tests '*UnicodeData*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Unicode version mismatch diagnostic changes require stable reason-code review and must not imply segmentation, bidi, shaping, or GPU text support.",
+      "nonClaims": [
+        "producer-only",
+        "bounded-seed-fixture-only",
+        "no-complete-ucd-claim",
+        "no-uax9-conformance-claim",
+        "no-uax14-uax29-conformance-claim",
+        "no-segmentation-or-bidi-replacement-claim",
+        "no-shaping-support-promotion",
+        "no-paragraph-support-claim",
+        "no-gpu-text-route-claim"
       ]
     }
   ]
