@@ -49,12 +49,14 @@ import io.ygdrasil.webgpu.WGPUInstanceBackend
 import io.ygdrasil.webgpu.beginRenderPass
 import io.ygdrasil.webgpu.glfwContextRenderer
 import java.lang.foreign.MemorySegment
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.runBlocking
 
 private const val COPY_BYTES_PER_ROW_ALIGNMENT: Int = 256
 private const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
 private const val RGBA_BYTES_PER_PIXEL: Int = 4
 private const val RECT_COLOR_UNIFORM_SIZE_BYTES: ULong = 16uL
+private val windowRuntimeOrdinalCounter = AtomicLong(0L)
 
 internal fun alignCopyBytesPerRow(unpaddedBytesPerRow: Int): Int {
     require(unpaddedBytesPerRow > 0) { "unpaddedBytesPerRow must be positive" }
@@ -99,6 +101,35 @@ internal fun stripRowPadding(
     return stripped
 }
 
+internal fun swizzleBgraToRgba(bytes: ByteArray): ByteArray {
+    require(bytes.size % RGBA_BYTES_PER_PIXEL == 0) {
+        "BGRA byte array size ${bytes.size} must be a multiple of $RGBA_BYTES_PER_PIXEL"
+    }
+    val rgba = ByteArray(bytes.size)
+    for (offset in bytes.indices step RGBA_BYTES_PER_PIXEL) {
+        rgba[offset] = bytes[offset + 2]
+        rgba[offset + 1] = bytes[offset + 1]
+        rgba[offset + 2] = bytes[offset]
+        rgba[offset + 3] = bytes[offset + 3]
+    }
+    return rgba
+}
+
+internal fun windowSurfaceDeviceGeneration(windowRuntimeOrdinal: Long): GPUDeviceGeneration {
+    require(windowRuntimeOrdinal > 0L) { "windowRuntimeOrdinal must be positive" }
+    return GPUDeviceGeneration(windowRuntimeOrdinal)
+}
+
+internal fun windowSurfaceTargetId(
+    windowRuntimeOrdinal: Long,
+    binding: GPUNativeSurfaceBinding,
+): String {
+    require(windowRuntimeOrdinal > 0L) { "windowRuntimeOrdinal must be positive" }
+    return "wgpu-window-surface-$windowRuntimeOrdinal-${binding.platform.name.lowercase()}-${binding.width}x${binding.height}"
+}
+
+private fun nextWindowRuntimeOrdinal(): Long = windowRuntimeOrdinalCounter.incrementAndGet()
+
 object WgpuBackendRuntimeFactory {
     fun createOrNull(): GPUBackendSession? = try {
         LibraryLoader.load()
@@ -133,10 +164,7 @@ private class WgpuBackendSession(
         )
 
     override fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface =
-        WgpuWindowSurface(
-            binding = binding,
-            deviceGeneration = deviceGeneration,
-        )
+        WgpuWindowSurface(binding = binding)
 
     override fun close() {
         glfw.close()
@@ -239,13 +267,14 @@ private class WgpuOffscreenTarget(
         }
         try {
             val mapped = stagingBuffer.getMappedRange(0uL, stagingSize).toByteArray()
-            return stripRowPadding(
+            val tightlyPacked = stripRowPadding(
                 bytes = mapped,
                 width = request.width,
                 height = request.height,
                 bytesPerPixel = bytesPerPixel,
                 paddedBytesPerRow = paddedBytesPerRow,
             )
+            return if (format.isBgraFormat()) swizzleBgraToRgba(tightlyPacked) else tightlyPacked
         } finally {
             stagingBuffer.unmap()
         }
@@ -259,8 +288,10 @@ private class WgpuOffscreenTarget(
 
 private class WgpuWindowSurface(
     binding: GPUNativeSurfaceBinding,
-    private val deviceGeneration: GPUDeviceGeneration,
 ) : GPUBackendWindowSurface {
+    private val windowRuntimeOrdinal = nextWindowRuntimeOrdinal()
+    private val deviceGeneration = windowSurfaceDeviceGeneration(windowRuntimeOrdinal)
+    private val targetId = windowSurfaceTargetId(windowRuntimeOrdinal, binding)
     private val runtime = createNativeWindowRuntime(binding)
     private var width = binding.width
     private var height = binding.height
@@ -268,7 +299,7 @@ private class WgpuWindowSurface(
 
     override val target: GPUSurfaceTarget
         get() = GPUSurfaceTarget(
-            targetId = "wgpu-window-surface",
+            targetId = targetId,
             descriptor = GPUSurfaceTargetDescriptor(
                 width = width,
                 height = height,
@@ -589,6 +620,9 @@ private fun GPUTextureFormat.toBackendColorFormat(): String =
         GPUTextureFormat.BGRA8UnormSrgb -> "bgra8unorm-srgb"
         else -> name.lowercase()
     }
+
+private fun GPUTextureFormat.isBgraFormat(): Boolean =
+    this == GPUTextureFormat.BGRA8Unorm || this == GPUTextureFormat.BGRA8UnormSrgb
 
 private fun String.normalizedColorFormat(): String = lowercase()
 

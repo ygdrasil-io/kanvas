@@ -37,4 +37,38 @@ class GPUBackendRuntimeWgpuSmokeTest {
             stripped,
         )
     }
+
+    @Test
+    fun `swizzle bgra to rgba rewrites channel order per pixel`() {
+        val bgra = byteArrayOf(
+            30, 20, 10, 40,
+            70, 60, 50, 80,
+        )
+
+        val rgba = swizzleBgraToRgba(bgra)
+
+        assertContentEquals(
+            byteArrayOf(
+                10, 20, 30, 40,
+                50, 60, 70, 80,
+            ),
+            rgba,
+        )
+    }
+
+    @Test
+    fun `window surface helpers derive deterministic device generation and target id`() {
+        val binding = GPUNativeSurfaceBinding(
+            platform = GPUNativePlatform.AppKitMetalLayer,
+            width = 640,
+            height = 480,
+            pointerLabels = mapOf("layerHandle" to 42L),
+        )
+
+        assertEquals(GPUDeviceGeneration(7L), windowSurfaceDeviceGeneration(windowRuntimeOrdinal = 7L))
+        assertEquals(
+            "wgpu-window-surface-7-appkitmetallayer-640x480",
+            windowSurfaceTargetId(windowRuntimeOrdinal = 7L, binding = binding),
+        )
+    }
 }
