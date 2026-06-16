@@ -1429,6 +1429,62 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "pm-readiness-freeze-board",
+            title = "PM Readiness Freeze Board",
+            description = "PM readiness dashboard separation lanes for correctness, activation, performance, cache, and release state without readiness movement or product activation.",
+            tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Cache),
+            links = listOf(SceneRoadmapLink.ticket("KGPU-M9-003")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.034f, 0.038f, 0.046f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "pm-readiness-freeze-panel",
+                    rect = SceneRect(24f, 26f, 296f, 174f),
+                    radius = 18f,
+                    color = SceneColor(0.10f, 0.12f, 0.15f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "pm-readiness-freeze-window",
+                    rect = SceneRect(40f, 44f, 280f, 158f),
+                ),
+                SceneCommand.FillRect(
+                    label = "correctness-support-separated",
+                    rect = SceneRect(48f, 52f, 76f, 154f),
+                    color = SceneColor.green(0.88f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "activation-readiness-frozen",
+                    rect = SceneRect(86f, 62f, 114f, 154f),
+                    color = SceneColor.blue(0.86f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "performance-readiness-blocked",
+                    rect = SceneRect(124f, 72f, 152f, 154f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "cache-readiness-reporting-only",
+                    rect = SceneRect(162f, 82f, 190f, 154f),
+                    color = SceneColor(0.44f, 0.34f, 0.86f, 0.92f),
+                    paintOrder = 4,
+                ),
+                SceneCommand.FillRect(
+                    label = "release-blocking-gate-absent",
+                    rect = SceneRect(200f, 94f, 228f, 154f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.92f),
+                    paintOrder = 5,
+                ),
+                SceneCommand.FillRect(
+                    label = "pm-dashboard-delta-zero",
+                    rect = SceneRect(238f, 108f, 268f, 154f),
+                    color = SceneColor(0.74f, 0.76f, 0.82f, 1f),
+                    paintOrder = 6,
+                ),
+            ),
+        ),
+        scene(
             id = "legacy-route-comparison",
             title = "Legacy Route Comparison",
             description = "Rect command marker for future legacy-route comparison.",

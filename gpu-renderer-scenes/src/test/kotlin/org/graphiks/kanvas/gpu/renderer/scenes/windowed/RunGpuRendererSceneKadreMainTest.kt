@@ -106,6 +106,7 @@ class RunGpuRendererSceneKadreMainTest {
             "translucent-card-overlap" to 19,
             "cache-source-ledger-board" to 20,
             "frame-gate-blocker-board" to 46,
+            "pm-readiness-freeze-board" to 51,
             "legacy-route-comparison" to 21,
             "legacy-inventory-hygiene-board" to 33,
             "shadow-parity-migration-gate-board" to 47,
@@ -186,6 +187,17 @@ class RunGpuRendererSceneKadreMainTest {
                     assertContains(sessionJson, "a8GlyphAtlasRoutePromoted=false")
                     assertContains(sessionJson, "uploadBeforeSampleOrderingProven=false")
                     assertContains(sessionJson, "cpuRenderedTextTextureFallback=false")
+                } else if (sceneId == "pm-readiness-freeze-board") {
+                    assertContains(sessionJson, "pmReadinessRow=gpu-renderer.readiness")
+                    assertContains(sessionJson, "pmReadinessClassification=PolicyGated")
+                    assertContains(sessionJson, "readinessDelta=0.0")
+                    assertContains(sessionJson, "releaseBlocking=false")
+                    assertContains(sessionJson, "productRouteActivated=false")
+                    assertContains(sessionJson, "performanceReadinessPromoted=false")
+                    assertContains(sessionJson, "missingGate=KGPU-M9-002")
+                    assertContains(sessionJson, "reportingOnlyGatesVisible=true")
+                    assertContains(sessionJson, "pipelinePmBundleUpdated=false")
+                    assertContains(sessionJson, "nonClaims=no-product-activation,no-release-blocking-gate,no-readiness-delta,no-performance-readiness-from-correctness,no-dashboard-row-promotes-readiness,no-derived-cache-as-observed")
                 }
                 assertFalse(sessionJson.contains("\"status\": \"not-yet-rendered\""), sceneId)
             }

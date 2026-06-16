@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.scenes.catalog
 private const val RUNTIME_EFFECT_REFUSAL_SCENE_ID = "runtime-effect-refusal-gate-board"
 private const val A8_GLYPH_ATLAS_SCENE_ID = "a8-glyph-atlas-gate-board"
 private const val TEXT_RESOURCE_BINDING_SCENE_ID = "text-resource-binding-gate-board"
+private const val PM_READINESS_FREEZE_SCENE_ID = "pm-readiness-freeze-board"
 
 internal fun GPURendererScene<*>.runtimeEffectRefusalGateDiagnostics(): List<String> {
     if (sceneId.value != RUNTIME_EFFECT_REFUSAL_SCENE_ID) return emptyList()
@@ -50,5 +51,21 @@ internal fun GPURendererScene<*>.textResourceBindingGateDiagnostics(): List<Stri
         "pmTextResourceBindingClassification=TargetPrepared",
         "textUploadPlanPromoted=false",
         "glyphAtlasRoutePromoted=false",
+    )
+}
+
+internal fun GPURendererScene<*>.pmReadinessFreezeDiagnostics(): List<String> {
+    if (sceneId.value != PM_READINESS_FREEZE_SCENE_ID) return emptyList()
+    return listOf(
+        "pmReadinessRow=gpu-renderer.readiness",
+        "pmReadinessClassification=PolicyGated",
+        "readinessDelta=0.0",
+        "releaseBlocking=false",
+        "productRouteActivated=false",
+        "performanceReadinessPromoted=false",
+        "missingGate=KGPU-M9-002",
+        "reportingOnlyGatesVisible=true",
+        "pipelinePmBundleUpdated=false",
+        "nonClaims=no-product-activation,no-release-blocking-gate,no-readiness-delta,no-performance-readiness-from-correctness,no-dashboard-row-promotes-readiness,no-derived-cache-as-observed",
     )
 }

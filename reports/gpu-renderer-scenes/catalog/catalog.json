@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 37,
+  "sceneCount": 38,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -339,6 +339,16 @@
       "tags": ["Rect"],
       "kgpuMilestones": ["M9"],
       "ticketIds": ["KGPU-M9-002"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "pm-readiness-freeze-board",
+      "title": "PM Readiness Freeze Board",
+      "description": "PM readiness dashboard separation lanes for correctness, activation, performance, cache, and release state without readiness movement or product activation.",
+      "tags": ["Rect","RRect","Clip","Cache"],
+      "kgpuMilestones": ["M9"],
+      "ticketIds": ["KGPU-M9-003"],
       "rStages": [],
       "expectation": "ShouldRender"
     },
