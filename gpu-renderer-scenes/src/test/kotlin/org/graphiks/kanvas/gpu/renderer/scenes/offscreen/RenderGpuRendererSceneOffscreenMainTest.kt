@@ -139,6 +139,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 clipCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "destination-read-strategy-gate-board",
+                fillRectCount = 8,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "clipped-avatar-grid",
                 fillRectCount = 0,
                 clipCount = 1,

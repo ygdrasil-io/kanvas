@@ -392,6 +392,42 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `destination read strategy gate board is backed by M5 destination read refusals only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("destination-read-strategy-gate-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Blend), scene.tags)
+        assertEquals(listOf("KGPU-M5-002"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertTrue(scene.commands.none { it is SceneCommand.SaveLayer })
+        assertTrue(scene.commands.none { it is SceneCommand.FilterNode })
+        assertTrue(SceneTag.Layer !in scene.tags)
+        assertTrue(SceneTag.Filter !in scene.tags)
+        assertTrue(SceneTag.Image !in scene.tags)
+        assertEquals(
+            listOf(
+                "bounded-destination-copy-gated",
+                "validated-intermediate-strategy-gated",
+                "layer-isolation-strategy-gated",
+                "pass-split-copy-before-sample-gated",
+                "active-attachment-sampling-refused",
+                "copy-usage-texture-binding-gated",
+                "framebuffer-fetch-refused",
+                "cpu-gpu-reference-comparison-gated",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..8).toList(), fills.map { it.paintOrder })
+        assertTrue(
+            scene.roadmapLinks.none {
+                it.ticketId == "KGPU-M5-001" || it.ticketId == "KGPU-M5-003" || it.ticketId == "KGPU-M5-004"
+            },
+        )
+    }
+
+    @Test
     fun `cache source ledger board is backed by visible source classification buckets`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("cache-source-ledger-board")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -738,6 +774,24 @@ class GPURendererSceneRegistryTest {
                     "fill-rect",
                 ),
                 roadmapLinks = listOf(RoadmapExpectation("M5", ticketId = "KGPU-M5-001")),
+            ),
+            SceneExpectationRow(
+                sceneId = "destination-read-strategy-gate-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Blend),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M5", ticketId = "KGPU-M5-002")),
             ),
             SceneExpectationRow(
                 sceneId = "layered-shadow-card",

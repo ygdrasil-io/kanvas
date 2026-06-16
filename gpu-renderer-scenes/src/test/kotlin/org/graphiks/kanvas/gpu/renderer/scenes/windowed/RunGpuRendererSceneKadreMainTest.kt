@@ -117,6 +117,7 @@ class RunGpuRendererSceneKadreMainTest {
             "codec-provenance-gate-board" to 35,
             "sampler-boundary-gate-board" to 41,
             "savelayer-isolation-gate-board" to 43,
+            "destination-read-strategy-gate-board" to 44,
             "clipped-avatar-grid" to 27,
             "filtered-photo-chip" to 28,
             "layered-shadow-card" to 29,

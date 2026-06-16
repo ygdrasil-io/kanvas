@@ -16,6 +16,7 @@
 | `codec-provenance-gate-board` | Codec Provenance Gate Board | Rect,RRect,Clip,Image | KGPU M4 | `KGPU-M4-003` |  | `ShouldRender` |
 | `sampler-boundary-gate-board` | Sampler Boundary Gate Board | Rect,RRect,Clip,Image | KGPU M4 | `KGPU-M4-004` |  | `ShouldRender` |
 | `savelayer-isolation-gate-board` | SaveLayer Isolation Gate Board | Rect,RRect,Clip,Layer | KGPU M5 | `KGPU-M5-001` |  | `ShouldRender` |
+| `destination-read-strategy-gate-board` | Destination Read Strategy Gate Board | Rect,RRect,Clip,Blend | KGPU M5 | `KGPU-M5-002` |  | `ShouldRender` |
 | `layered-shadow-card` | Layered Shadow Card | Layer,Filter | KGPU M5 |  |  | `ShouldRender` |
 | `filtered-photo-chip` | Filtered Photo Chip | Filter,Image | KGPU M5 |  |  | `ShouldRender` |
 | `filter-dag-refusal-board` | Filter DAG Refusal Board | Rect,Filter | KGPU M5 | `KGPU-M5-004` |  | `ShouldRender` |

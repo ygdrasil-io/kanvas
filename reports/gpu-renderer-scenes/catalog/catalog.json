@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 30,
+  "sceneCount": 31,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -139,6 +139,16 @@
       "tags": ["Rect","RRect","Clip","Layer"],
       "kgpuMilestones": ["M5"],
       "ticketIds": ["KGPU-M5-001"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "destination-read-strategy-gate-board",
+      "title": "Destination Read Strategy Gate Board",
+      "description": "Destination-read strategy gate board showing bounded copy, validated intermediate, layer isolation, pass split, active attachment, texture-binding, framebuffer-fetch, and CPU/GPU/reference evidence gates without promoting a destination-read route.",
+      "tags": ["Rect","RRect","Clip","Blend"],
+      "kgpuMilestones": ["M5"],
+      "ticketIds": ["KGPU-M5-002"],
       "rStages": [],
       "expectation": "ShouldRender"
     },
