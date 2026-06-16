@@ -360,6 +360,52 @@
       ]
     },
     {
+      "surfaceId": "glyph-atlas-eviction-invalidation",
+      "label": "Glyph atlas eviction and invalidation",
+      "classification": "tracked-gap",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        "section": "Cache and invalidation"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/dump-evidence-index.json",
+          "reports/font/fixtures/expected/glyph/glyph-atlas.json",
+          "reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json"
+        ],
+        "cpuOracle": [
+          "reports/font/fixtures/expected/glyph/glyph-atlas.json"
+        ],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/font/fixtures/expected/glyph/glyph-atlas.json",
+          "reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/font/fixtures/expected/glyph/glyph-atlas.json",
+          "reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "KFONT-M9-005 now lands CPU atlas generation/eviction evidence; KFONT-M9-006 cache telemetry and the M11 GPU handoff chain still gate any GPU atlas support claim.",
+        "Legacy dftext remains open until explicit M11 upload-before-sample and GPU route replacement evidence are linked."
+      ],
+      "legacyGates": [
+        "dftext"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-gpu-text-route-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
       "surfaceId": "glyph-strike-key-completeness",
       "label": "GlyphStrikeKey completeness",
       "classification": "tracked-gap",

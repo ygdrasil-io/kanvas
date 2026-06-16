@@ -2125,6 +2125,51 @@ sampling/reconstruction, LCD promotion, unsupported color-glyph SDF production,
 or `dftext` retirement. Next gates remain `KFONT-M9-005` and the M11 GPU text
 handoff chain.
 
+### KFONT-M9-005: Add atlas eviction and invalidation tests
+
+Status: done; freshly validated.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/glyph/glyph-atlas.json`
+- `reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m9-005-atlas-lifecycle.md`
+
+Evidence:
+
+- `GlyphAtlasArtifactEvidence` now records deterministic CPU A8/SDF atlas
+  artifacts with artifact-key hashes, generation, dimensions, row stride,
+  source bounds, source-mask hashes, upload byte hash, budget class, lifetime
+  class, invalidation token, and optional SDF distance range.
+- `GlyphAtlasEvictionTrace` now records eviction order, generation increments,
+  invalidation-token changes, resident-byte deltas, and evicted strike-key
+  hashes in checked-in `glyph-atlas-eviction-trace.json`.
+- Tests prove that atlas artifact keys rotate when variation, palette, SDF
+  spread/source resolution, renderer descriptor version, or source-mask facts
+  change, while stale-generation refusal remains an explicit diagnostic.
+- Dump index, fixture manifest, fixture inventory, and claim dashboard now
+  expose atlas lifecycle as CPU-only evidence and keep GPU upload/sampling plus
+  `dftext` retirement explicitly gated on M11.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*Atlas*'
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk git diff --check
+```
+
+Remaining gate: this checkpoint does not claim GPU upload execution, WebGPU
+texture ownership, GPU sampling validation, or `dftext` retirement. Next gates
+remain `KFONT-M9-006` and the M11 GPU text handoff chain.
+
 ### PKT-10B: Glyph Artifact Plan Decision Trace Dump
 
 Status: implemented; independent review pending because the current tool policy
@@ -2378,6 +2423,42 @@ rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.Gly
 Remaining gate: this is CPU SDF artifact evidence only. It does not claim atlas
 lifecycle support, GPU sampling/handoff, LCD support, unsupported color-glyph
 SDF production, or `dftext` retirement.
+
+### PKT-10I: Glyph Atlas Artifact And Eviction Dumps
+
+Status: implemented; independent review pending because the current tool policy
+does not allow subagent dispatch without an explicit user delegation request.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/glyph/glyph-atlas.json`
+- `reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `GlyphAtlasArtifactEvidence.fromA8(...)` and `.fromSdf(...)` emit stable CPU
+  atlas dumps with artifact-key hashes, generation, dimensions, row stride,
+  source bounds, source-mask hashes, upload byte hash, invalidation token, and
+  optional SDF distance range.
+- `GlyphAtlasEvictionTrace` records strike-key eviction order, generation
+  increments, invalidation-token changes, resident-byte deltas, and required
+  stale/capacity diagnostics in a checked-in golden.
+- Tests cover atlas key invalidation from variation, palette, SDF spread/source
+  resolution, renderer descriptor version, and source-mask changes, plus exact
+  golden parity for `glyph-atlas.json` and `glyph-atlas-eviction-trace.json`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*Atlas*'
+```
+
+Remaining gate: this is CPU atlas lifecycle evidence only. It does not claim
+GPU upload execution, WebGPU texture ownership, GPU sampling validation, or
+`dftext` retirement.
 ### PKT-11A: Color Glyph Planning Evidence Dumps
 
 Status: implemented and independently reviewed.
