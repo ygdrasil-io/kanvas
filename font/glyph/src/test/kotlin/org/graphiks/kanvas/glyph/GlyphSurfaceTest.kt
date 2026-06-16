@@ -27,6 +27,12 @@ class GlyphSurfaceTest {
             GlyphRepresentation::class.simpleName,
             GlyphArtifactPlanner::class.simpleName,
             GlyphArtifactPlan::class.simpleName,
+            GlyphArtifactPlanEvidenceDump::class.simpleName,
+            GlyphArtifactPlanRef::class.simpleName,
+            ColorGlyphPlanRef::class.simpleName,
+            BitmapGlyphPlanRef::class.simpleName,
+            SVGGlyphPlanRef::class.simpleName,
+            GlyphArtifactRoutePolicyInputs::class.simpleName,
             OutlineGlyphRepresentation::class.simpleName,
             GlyphMaskGenerator::class.simpleName,
             A8GlyphMask::class.simpleName,
@@ -57,6 +63,12 @@ class GlyphSurfaceTest {
                 "GlyphRepresentation",
                 "GlyphArtifactPlanner",
                 "GlyphArtifactPlan",
+                "GlyphArtifactPlanEvidenceDump",
+                "GlyphArtifactPlanRef",
+                "ColorGlyphPlanRef",
+                "BitmapGlyphPlanRef",
+                "SVGGlyphPlanRef",
+                "GlyphArtifactRoutePolicyInputs",
                 "OutlineGlyphRepresentation",
                 "GlyphMaskGenerator",
                 "A8GlyphMask",
@@ -1088,6 +1100,7 @@ class GlyphSurfaceTest {
               "glyphCount": 4,
               "representationCount": 3,
               "diagnosticCount": 1,
+              "policyInputs": null,
               "decisions": [
                 {
                   "index": 0,
@@ -1095,6 +1108,8 @@ class GlyphSurfaceTest {
                   "selectedRoute": "text.glyph.outline",
                   "representation": "outline",
                   "source": "request",
+                  "planRef": null,
+                  "artifactIntent": null,
                   "keySha256": "${plan.decisions[0].keySha256}",
                   "sourceRepresentationSha256": "${plan.decisions[0].sourceRepresentationSha256}",
                   "fallbackPolicy": "fallback-selected-after-rejections",
@@ -1110,6 +1125,8 @@ class GlyphSurfaceTest {
                   "selectedRoute": "text.glyph.mask.A8",
                   "representation": "a8",
                   "source": "request",
+                  "planRef": null,
+                  "artifactIntent": "CPUPreparedGPU",
                   "keySha256": "${plan.decisions[1].keySha256}",
                   "sourceRepresentationSha256": "${plan.decisions[1].sourceRepresentationSha256}",
                   "fallbackPolicy": "fallback-selected-after-rejections",
@@ -1124,6 +1141,8 @@ class GlyphSurfaceTest {
                   "selectedRoute": "text.glyph.mask.SDF",
                   "representation": "sdf",
                   "source": "request",
+                  "planRef": null,
+                  "artifactIntent": "CPUPreparedGPU",
                   "keySha256": "${plan.decisions[2].keySha256}",
                   "sourceRepresentationSha256": "${plan.decisions[2].sourceRepresentationSha256}",
                   "fallbackPolicy": "selected-first-requested-route",
@@ -1136,6 +1155,8 @@ class GlyphSurfaceTest {
                   "selectedRoute": "text.glyph.unsupported",
                   "representation": null,
                   "source": null,
+                  "planRef": null,
+                  "artifactIntent": null,
                   "keySha256": "${plan.decisions[3].keySha256}",
                   "sourceRepresentationSha256": null,
                   "fallbackPolicy": "refuse-no-requested-representation",
@@ -1547,7 +1568,7 @@ class GlyphSurfaceTest {
             dump.toCanonicalJson(),
         )
     }
-    
+
     @Test
     fun routeDiagnosticsHaveCanonicalDumpAndStableHash() {
         val diagnostics = listOf(

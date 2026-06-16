@@ -514,6 +514,64 @@ interface GlyphRepresentation {
 }
 
 /**
+ * Typed placeholder reference for a later route-specific glyph plan.
+ *
+ * The pure Kotlin glyph planner can select these refs without parsing or materializing the
+ * underlying color/bitmap/SVG plan. They keep the route taxonomy explicit while M10 owns the plan
+ * internals and M11 owns GPU artifact registration.
+ */
+interface GlyphArtifactPlanRef : GlyphRepresentation {
+    val artifactName: String
+    val planId: String
+    val boundsPlaceholder: String
+}
+
+data class ColorGlyphPlanRef(
+    override val glyphId: Int,
+    override val planId: String,
+    override val boundsPlaceholder: String = "deferred-to-color-glyph-plan",
+    override val artifactName: String = "ColorGlyphPlan",
+) : GlyphArtifactPlanRef {
+    init {
+        require(planId.isNotBlank()) { "ColorGlyphPlanRef planId must not be blank." }
+        require(boundsPlaceholder.isNotBlank()) { "ColorGlyphPlanRef boundsPlaceholder must not be blank." }
+        require(artifactName == "ColorGlyphPlan") {
+            "ColorGlyphPlanRef artifactName must stay aligned with the M11 registry."
+        }
+    }
+}
+
+data class BitmapGlyphPlanRef(
+    override val glyphId: Int,
+    override val planId: String,
+    override val boundsPlaceholder: String = "deferred-to-bitmap-glyph-plan",
+    override val artifactName: String = "BitmapGlyphPlan",
+) : GlyphArtifactPlanRef {
+    init {
+        require(planId.isNotBlank()) { "BitmapGlyphPlanRef planId must not be blank." }
+        require(boundsPlaceholder.isNotBlank()) { "BitmapGlyphPlanRef boundsPlaceholder must not be blank." }
+        require(artifactName == "BitmapGlyphPlan") {
+            "BitmapGlyphPlanRef artifactName must stay aligned with the M11 registry."
+        }
+    }
+}
+
+data class SVGGlyphPlanRef(
+    override val glyphId: Int,
+    override val planId: String,
+    override val boundsPlaceholder: String = "deferred-to-svg-glyph-plan",
+    override val artifactName: String = "SVGGlyphPlan",
+) : GlyphArtifactPlanRef {
+    init {
+        require(planId.isNotBlank()) { "SVGGlyphPlanRef planId must not be blank." }
+        require(boundsPlaceholder.isNotBlank()) { "SVGGlyphPlanRef boundsPlaceholder must not be blank." }
+        require(artifactName == "SVGGlyphPlan") {
+            "SVGGlyphPlanRef artifactName must stay aligned with the M11 registry."
+        }
+    }
+}
+
+/**
  * Names the renderer-neutral representation routes supported by the module-local glyph planner.
  *
  * The route is deliberately narrower than a GPU artifact type. It only says which pure Kotlin
@@ -539,7 +597,43 @@ enum class GlyphArtifactRoute(
      * Uses a signed-distance-field mask representation for scale-tolerant text rendering.
      */
     SDF("sdf"),
+
+    /**
+     * Requests LCD text but keeps the route outside target support until dedicated evidence lands.
+     */
+    LCD("lcd"),
+
+    /**
+     * Defers to a typed COLR color glyph plan owned by the color-font stack.
+     */
+    COLOR("colr"),
+
+    /**
+     * Defers to a typed PNG bitmap glyph plan owned by the color-font stack.
+     */
+    BITMAP("bitmap"),
+
+    /**
+     * Defers to a typed SVG glyph plan owned by the color-font stack.
+     */
+    SVG("svg"),
 }
+
+/**
+ * Stable policy facts that explain why a glyph plan chose one route over another.
+ *
+ * The run descriptor and strike key are carried directly by [GlyphArtifactPlan]; this value object
+ * only records the additional planner policy inputs requested by the KFONT evidence contract.
+ */
+data class GlyphArtifactRoutePolicyInputs(
+    val textStylePreference: String,
+    val transformClass: String,
+    val atlasBudgetClass: String,
+    val sdfEligibility: String,
+    val colorGlyphAvailability: String,
+    val emojiSequenceFacts: String,
+    val rendererCapabilitySummary: String,
+)
 
 /**
  * Describes the route preference and already-available representations for one planning pass.
@@ -556,6 +650,8 @@ enum class GlyphArtifactRoute(
  */
 data class GlyphArtifactRouteRequest(
     val preferredRoutes: List<GlyphArtifactRoute>,
+    val policyInputs: GlyphArtifactRoutePolicyInputs? = null,
+    val routeDiagnostics: Map<Int, List<GlyphRouteDiagnostic>> = emptyMap(),
     val availableRepresentations: Map<Int, List<GlyphRepresentation>> = emptyMap(),
 )
 
@@ -585,6 +681,7 @@ interface GlyphArtifactPlanner {
 data class GlyphArtifactPlan(
     val run: GPUGlyphRunDescriptor,
     val strikeKey: GlyphStrikeKey,
+    val policyInputs: GlyphArtifactRoutePolicyInputs? = null,
     val representations: List<GlyphRepresentation>,
     val diagnostics: List<GlyphRouteDiagnostic> = emptyList(),
     val decisions: List<GlyphArtifactPlanDecision> = emptyList(),
@@ -614,6 +711,9 @@ data class GlyphArtifactPlan(
         appendGlyphJsonField("glyphCount", run.glyphIDs.size, comma = true)
         appendGlyphJsonField("representationCount", representations.size, comma = true)
         appendGlyphJsonField("diagnosticCount", diagnostics.size, comma = true)
+        append("  \"policyInputs\": ")
+        append(policyInputs?.toCanonicalJson()?.indentJsonContinuation("  ") ?: "null")
+        append(",\n")
         append("  \"decisions\": [")
         if (decisions.isNotEmpty()) {
             append("\n")
@@ -658,12 +758,66 @@ data class GlyphArtifactPlanDecision(
     val selectedRoute: String,
     val representation: String?,
     val source: String?,
+    val planRef: GlyphArtifactPlanRef? = null,
+    val artifactIntent: String? = null,
     val keySha256: String,
     val sourceRepresentationSha256: String? = null,
     val fallbackPolicy: String,
     val rejectedAlternatives: List<GlyphArtifactRouteRejection> = emptyList(),
     val diagnostic: GlyphRouteDiagnostic? = null,
 )
+
+/**
+ * Aggregate deterministic evidence dump for `glyph-artifact-plan.json`.
+ */
+class GlyphArtifactPlanEvidenceDump(
+    val dumpId: String,
+    ownerTickets: List<String>,
+    fixtureIds: List<String>,
+    plans: List<GlyphArtifactPlan>,
+    requiredDiagnostics: List<String>,
+    nonClaims: List<String>,
+) {
+    val ownerTickets: List<String> = ownerTickets.toList()
+    val fixtureIds: List<String> = fixtureIds.toList()
+    val plans: List<GlyphArtifactPlan> = plans.toList()
+    val requiredDiagnostics: List<String> = requiredDiagnostics.toList()
+    val nonClaims: List<String> = nonClaims.toList()
+
+    val dumpSha256: String
+        get() = glyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    fun toCanonicalJson(): String =
+        canonicalJson(includeDumpSha256 = true)
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("schemaVersion", 1, comma = true)
+        appendGlyphJsonField("dumpId", dumpId, comma = true)
+        append("  \"ownerTickets\": ")
+        appendGlyphStringArrayMultilineJson(ownerTickets, indent = "  ")
+        append(",\n")
+        append("  \"fixtureIds\": ")
+        appendGlyphStringArrayMultilineJson(fixtureIds, indent = "  ")
+        append(",\n")
+        appendGlyphJsonField("planCount", plans.size, comma = true)
+        append("  \"plans\": ")
+        append(appendGlyphArtifactPlansJson(plans))
+        append(",\n")
+        append("  \"requiredDiagnostics\": ")
+        appendGlyphStringArrayMultilineJson(requiredDiagnostics, indent = "  ")
+        append(",\n")
+        append("  \"nonClaims\": ")
+        appendGlyphStringArrayMultilineJson(nonClaims, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+}
 
 /**
  * Describes one rejected route alternative in a glyph artifact decision trace.
@@ -975,7 +1129,7 @@ class GlyphArtifactRoutePlanner(
             val selection = request.selectRoute(glyphId, cache?.get(strikeKey, glyphId))
 
             if (selection.representation == null) {
-                val diagnostic = request.unsupportedDiagnostic(
+                val diagnostic = selection.terminalDiagnostic ?: request.unsupportedDiagnostic(
                     glyphId = glyphId,
                     availableRepresentations = request.availableRepresentations[glyphId].orEmpty(),
                 )
@@ -1001,6 +1155,8 @@ class GlyphArtifactRoutePlanner(
                     selectedRoute = selectedRoute,
                     representation = selection.representation.diagnosticRouteName(),
                     source = selection.source,
+                    planRef = selection.representation as? GlyphArtifactPlanRef,
+                    artifactIntent = selection.representation.artifactIntent(),
                     keySha256 = strikeKey.artifactPlanKeySha256(glyphId, selectedRoute),
                     sourceRepresentationSha256 = selection.representation.sourceRepresentationSha256(),
                     fallbackPolicy = if (selection.rejectedAlternatives.isEmpty()) {
@@ -1017,6 +1173,7 @@ class GlyphArtifactRoutePlanner(
         return GlyphArtifactPlan(
             run = run,
             strikeKey = strikeKey,
+            policyInputs = request.policyInputs,
             representations = representations.toList(),
             diagnostics = diagnostics.toList(),
             decisions = decisions.toList(),
@@ -1965,10 +2122,14 @@ private const val GlyphArtifactPlanSchema = "org.graphiks.kanvas.glyph.GlyphArti
 private const val GlyphAtlasPackingResultSchema = "org.graphiks.kanvas.glyph.GlyphAtlasPackingResult.v1"
 private const val UnsupportedGlyphArtifactRoute = "text.glyph.unsupported"
 private const val GlyphCacheKeyNondeterministicDiagnostic = "text.glyph.cache-key-nondeterministic"
+private const val GlyphOutlineUnavailableDiagnosticRoute = "text.glyph.outline-unavailable"
 private const val GlyphLCDFutureResearchDiagnostic = "text.glyph.LCD-future-research"
 private const val GlyphAtlasCapacityExceededDiagnosticRoute = "text.glyph.atlas-capacity-exceeded"
 private const val GlyphAtlasGenerationStaleDiagnosticRoute = "text.glyph.atlas-generation-stale"
 private const val GlyphSDFTransformUnsupportedDiagnosticRoute = "text.glyph.SDF-transform-unsupported"
+private const val GlyphA8GenerationFailedDiagnosticRoute = "text.glyph.A8-generation-failed"
+private const val GlyphSDFGenerationFailedDiagnosticRoute = "text.glyph.SDF-generation-failed"
+private const val GlyphArtifactBudgetExceededDiagnosticRoute = "text.glyph.artifact-budget-exceeded"
 private const val FallbackPolicySelectedFirstRequestedRoute = "selected-first-requested-route"
 private const val FallbackPolicyFallbackSelectedAfterRejections = "fallback-selected-after-rejections"
 private const val FallbackPolicyRefuseNoRequestedRepresentation = "refuse-no-requested-representation"
@@ -2149,6 +2310,7 @@ private data class GlyphArtifactRouteSelection(
     val representation: GlyphRepresentation?,
     val source: String?,
     val rejectedAlternatives: List<GlyphArtifactRouteRejection>,
+    val terminalDiagnostic: GlyphRouteDiagnostic? = null,
 )
 
 /**
@@ -2928,7 +3090,9 @@ private fun GlyphArtifactRouteRequest.selectRoute(
     cached: GlyphRepresentation?,
 ): GlyphArtifactRouteSelection {
     val candidates = availableRepresentations[glyphId].orEmpty()
+    val explicitDiagnostics = routeDiagnostics[glyphId].orEmpty().toMutableList()
     val rejectedAlternatives = mutableListOf<GlyphArtifactRouteRejection>()
+    var terminalDiagnostic: GlyphRouteDiagnostic? = null
 
     preferredRoutes.forEach { route ->
         candidates.firstOrNull { representation -> route.matches(representation) }?.let { representation ->
@@ -2945,9 +3109,19 @@ private fun GlyphArtifactRouteRequest.selectRoute(
                 rejectedAlternatives = rejectedAlternatives.toList(),
             )
         }
+        val explicitDiagnostic = explicitDiagnostics.firstOrNull { diagnostic ->
+            diagnostic.matchesRejectedRoute(route)
+        }
+        val rejectionDiagnostic = explicitDiagnostic ?: route.defaultRejectionDiagnostic(glyphId)
+        if (explicitDiagnostic != null) {
+            explicitDiagnostics.remove(explicitDiagnostic)
+        }
+        if (rejectionDiagnostic != null) {
+            terminalDiagnostic = rejectionDiagnostic
+        }
         rejectedAlternatives += GlyphArtifactRouteRejection(
             route = route.artifactPlanRouteName(),
-            reason = RouteRejectionUnavailable,
+            reason = rejectionDiagnostic?.route ?: RouteRejectionUnavailable,
         )
     }
 
@@ -2955,6 +3129,7 @@ private fun GlyphArtifactRouteRequest.selectRoute(
         representation = null,
         source = null,
         rejectedAlternatives = rejectedAlternatives.toList(),
+        terminalDiagnostic = terminalDiagnostic,
     )
 }
 
@@ -3004,6 +3179,10 @@ private fun GlyphArtifactRoute.matches(representation: GlyphRepresentation): Boo
         GlyphArtifactRoute.OUTLINE -> representation is OutlineGlyphRepresentation
         GlyphArtifactRoute.A8 -> representation is A8GlyphMask
         GlyphArtifactRoute.SDF -> representation is SDFGlyphMask
+        GlyphArtifactRoute.LCD -> false
+        GlyphArtifactRoute.COLOR -> representation is ColorGlyphPlanRef
+        GlyphArtifactRoute.BITMAP -> representation is BitmapGlyphPlanRef
+        GlyphArtifactRoute.SVG -> representation is SVGGlyphPlanRef
     }
 
 /**
@@ -3014,6 +3193,10 @@ private fun GlyphArtifactRoute.artifactPlanRouteName(): String =
         GlyphArtifactRoute.OUTLINE -> "text.glyph.outline"
         GlyphArtifactRoute.A8 -> "text.glyph.mask.A8"
         GlyphArtifactRoute.SDF -> "text.glyph.mask.SDF"
+        GlyphArtifactRoute.LCD -> "text.glyph.mask.LCD"
+        GlyphArtifactRoute.COLOR -> "text.glyph.color.COLR"
+        GlyphArtifactRoute.BITMAP -> "text.glyph.bitmap.PNG"
+        GlyphArtifactRoute.SVG -> "text.glyph.SVG"
     }
 
 /**
@@ -3026,6 +3209,9 @@ private fun GlyphRepresentation.diagnosticRouteName(): String =
         is OutlineGlyphRepresentation -> GlyphArtifactRoute.OUTLINE.diagnosticName
         is A8GlyphMask -> GlyphArtifactRoute.A8.diagnosticName
         is SDFGlyphMask -> GlyphArtifactRoute.SDF.diagnosticName
+        is ColorGlyphPlanRef -> GlyphArtifactRoute.COLOR.diagnosticName
+        is BitmapGlyphPlanRef -> GlyphArtifactRoute.BITMAP.diagnosticName
+        is SVGGlyphPlanRef -> GlyphArtifactRoute.SVG.diagnosticName
         else -> this::class.simpleName
             ?.removeSuffix("GlyphRepresentation")
             ?.lowercase()
@@ -3092,6 +3278,9 @@ private fun GlyphRepresentation.artifactPlanRouteName(): String =
         is OutlineGlyphRepresentation -> GlyphArtifactRoute.OUTLINE.artifactPlanRouteName()
         is A8GlyphMask -> GlyphArtifactRoute.A8.artifactPlanRouteName()
         is SDFGlyphMask -> GlyphArtifactRoute.SDF.artifactPlanRouteName()
+        is ColorGlyphPlanRef -> GlyphArtifactRoute.COLOR.artifactPlanRouteName()
+        is BitmapGlyphPlanRef -> GlyphArtifactRoute.BITMAP.artifactPlanRouteName()
+        is SVGGlyphPlanRef -> GlyphArtifactRoute.SVG.artifactPlanRouteName()
         else -> UnsupportedGlyphArtifactRoute
     }
 
@@ -3120,6 +3309,9 @@ private fun GlyphRepresentation.approximateCacheBytes(): Long {
             windingRule.length.toLong() * 2L
         is A8GlyphMask -> rowBytes.nonNegativeProduct(height, glyphId = glyphId, label = "A8 mask")
         is SDFGlyphMask -> width.nonNegativeProduct(height, glyphId = glyphId, label = "SDF mask")
+        is GlyphArtifactPlanRef -> artifactName.length.toLong() * 2L +
+            planId.length.toLong() * 2L +
+            boundsPlaceholder.length.toLong() * 2L
         else -> 0L
     }
 }
@@ -3168,6 +3360,12 @@ private fun GlyphArtifactPlanDecision.toCanonicalJson(): String = buildString {
     append(",\n")
     append("  \"source\": ")
     append(glyphJsonNullableString(source))
+    append(",\n")
+    append("  \"planRef\": ")
+    append(planRef?.toCanonicalJson()?.indentJsonContinuation("  ") ?: "null")
+    append(",\n")
+    append("  \"artifactIntent\": ")
+    append(glyphJsonNullableString(artifactIntent))
     append(",\n")
     appendGlyphJsonField("keySha256", keySha256, comma = true)
     appendGlyphJsonNullableField("sourceRepresentationSha256", sourceRepresentationSha256, comma = true)
