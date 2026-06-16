@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.testing.Test
+
 plugins {
     id("buildsrc.convention.kotlin-jvm")
     id("java-library")
@@ -10,6 +12,16 @@ dependencies {
     implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     testImplementation(kotlin("test"))
+}
+
+tasks.withType<Test> {
+    jvmArgs(
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--enable-native-access=ALL-UNNAMED",
+    )
+    if (System.getProperty("os.name").lowercase().contains("mac")) {
+        jvmArgs("-XstartOnFirstThread")
+    }
 }
 
 tasks.register<JavaExec>("gpuRendererR6FirstRoutePmEvidenceBundle") {

@@ -71,4 +71,23 @@ class GPUBackendRuntimeWgpuSmokeTest {
             windowSurfaceTargetId(windowRuntimeOrdinal = 7L, binding = binding),
         )
     }
+
+    @Test
+    fun `offscreen target helper derives deterministic unique target id per session and target`() {
+        val request = GPUOffscreenTargetRequest(
+            width = 320,
+            height = 180,
+            colorFormat = "rgba8unorm",
+        )
+
+        assertEquals(GPUDeviceGeneration(3L), sessionDeviceGeneration(sessionOrdinal = 3L))
+        assertEquals(
+            "wgpu-offscreen-3-5-320x180-rgba8unorm",
+            offscreenTargetId(
+                sessionOrdinal = 3L,
+                offscreenTargetOrdinal = 5L,
+                request = request,
+            ),
+        )
+    }
 }

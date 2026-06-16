@@ -56,6 +56,7 @@ private const val COPY_BYTES_PER_ROW_ALIGNMENT: Int = 256
 private const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
 private const val RGBA_BYTES_PER_PIXEL: Int = 4
 private const val RECT_COLOR_UNIFORM_SIZE_BYTES: ULong = 16uL
+private val sessionOrdinalCounter = AtomicLong(0L)
 private val windowRuntimeOrdinalCounter = AtomicLong(0L)
 
 internal fun alignCopyBytesPerRow(unpaddedBytesPerRow: Int): Int {
@@ -128,6 +129,22 @@ internal fun windowSurfaceTargetId(
     return "wgpu-window-surface-$windowRuntimeOrdinal-${binding.platform.name.lowercase()}-${binding.width}x${binding.height}"
 }
 
+internal fun sessionDeviceGeneration(sessionOrdinal: Long): GPUDeviceGeneration {
+    require(sessionOrdinal > 0L) { "sessionOrdinal must be positive" }
+    return GPUDeviceGeneration(sessionOrdinal)
+}
+
+internal fun offscreenTargetId(
+    sessionOrdinal: Long,
+    offscreenTargetOrdinal: Long,
+    request: GPUOffscreenTargetRequest,
+): String {
+    require(sessionOrdinal > 0L) { "sessionOrdinal must be positive" }
+    require(offscreenTargetOrdinal > 0L) { "offscreenTargetOrdinal must be positive" }
+    return "wgpu-offscreen-$sessionOrdinal-$offscreenTargetOrdinal-${request.width}x${request.height}-${request.colorFormat.normalizedColorFormat()}"
+}
+
+private fun nextSessionOrdinal(): Long = sessionOrdinalCounter.incrementAndGet()
 private fun nextWindowRuntimeOrdinal(): Long = windowRuntimeOrdinalCounter.incrementAndGet()
 
 object WgpuBackendRuntimeFactory {
@@ -150,13 +167,17 @@ object WgpuBackendRuntimeFactory {
 private class WgpuBackendSession(
     private val glfw: GLFWContext,
 ) : GPUBackendSession {
-    private val deviceGeneration = GPUDeviceGeneration(1L)
+    private val sessionOrdinal = nextSessionOrdinal()
+    private val deviceGeneration = sessionDeviceGeneration(sessionOrdinal)
+    private var offscreenTargetOrdinalCounter = 0L
 
     override val adapterInfo: GPUBackendAdapterSummary? =
         GPUBackendAdapterSummary(adapterSummary(glfw))
 
     override fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget =
         WgpuOffscreenTarget(
+            sessionOrdinal = sessionOrdinal,
+            offscreenTargetOrdinal = nextOffscreenTargetOrdinal(),
             deviceGeneration = deviceGeneration,
             device = glfw.wgpuContext.device,
             queue = glfw.wgpuContext.device.queue,
@@ -169,9 +190,16 @@ private class WgpuBackendSession(
     override fun close() {
         glfw.close()
     }
+
+    private fun nextOffscreenTargetOrdinal(): Long {
+        offscreenTargetOrdinalCounter += 1L
+        return offscreenTargetOrdinalCounter
+    }
 }
 
 private class WgpuOffscreenTarget(
+    private val sessionOrdinal: Long,
+    private val offscreenTargetOrdinal: Long,
     private val deviceGeneration: GPUDeviceGeneration,
     private val device: io.ygdrasil.webgpu.GPUDevice,
     private val queue: GPUQueue,
@@ -201,7 +229,11 @@ private class WgpuOffscreenTarget(
 
     override val target: GPUSurfaceTarget =
         GPUSurfaceTarget(
-            targetId = "wgpu-offscreen-${request.width}x${request.height}",
+            targetId = offscreenTargetId(
+                sessionOrdinal = sessionOrdinal,
+                offscreenTargetOrdinal = offscreenTargetOrdinal,
+                request = request,
+            ),
             descriptor = GPUSurfaceTargetDescriptor(
                 width = request.width,
                 height = request.height,
