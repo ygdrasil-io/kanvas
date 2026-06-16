@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 43,
+  "sceneCount": 48,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -52,6 +52,24 @@
           "intention": "Montrer le premier routage FillRect avec voie de rollback explicite.",
           "validates": "Valide les lanes legacy, route candidate, rollback et refus de variante.",
           "nonClaims": "Ne revendique pas une activation par defaut ni une migration globale.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
+    },
+    {
+      "sceneId": "product-route-smoke-lanes",
+      "title": "Product Route Smoke Lanes",
+      "description": "Horizontal smoke lanes compare legacy, candidate product route, and rollback refusal signals without claiming product activation.",
+      "tags": ["Rect","LegacyComparison"],
+      "kgpuMilestones": ["M0","M1"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier une lecture smoke des routes produit, legacy et rollback sans activation finale.",
+          "validates": "Valide des lanes rectangulaires lisibles pour transition M0/M1 et refus visibles.",
+          "nonClaims": "Ne revendique pas activation produit par defaut ni decision release.",
           "evidence": "Preuve WebGPU offscreen et Kadre windowed."
         }
       }
@@ -269,6 +287,24 @@
           "validates": "Valide nearest, linear et lanes de refus tile, mipmap, cubic et anisotropic.",
           "nonClaims": "Ne revendique pas sampler avance, perspective ou decode color-managed.",
           "evidence": "Preuve WebGPU offscreen avec refus visibles."
+        }
+      }
+    },
+    {
+      "sceneId": "bitmap-sampler-matrix",
+      "title": "Bitmap Sampler Matrix",
+      "description": "Compact bitmap sampler matrix with clipped nearest and linear fixture cells.",
+      "tags": ["Image","Clip","RRect"],
+      "kgpuMilestones": ["M4"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Comparer une matrice compacte de fixtures bitmap avec deux politiques de sampling.",
+          "validates": "Valide un tray rrect clippe et plusieurs BitmapRect nearest ou linear bien bornes.",
+          "nonClaims": "Ne revendique pas mipmap, tile mode, anisotropic ni decode color-managed.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
         }
       }
     },
@@ -543,6 +579,24 @@
       }
     },
     {
+      "sceneId": "runtime-effect-uniform-ladder",
+      "title": "Runtime Effect Uniform Ladder",
+      "description": "Clipped SimpleRT tiles with varying gColor uniforms arranged as a promotion candidate ladder.",
+      "tags": ["RuntimeEffect","RRect","Clip"],
+      "kgpuMilestones": ["M7"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier plusieurs tuiles RuntimeEffect SimpleRT avec une echelle de uniforms visible.",
+          "validates": "Valide le descriptor SimpleRT, le layout gColor et la stabilite des tuiles runtime fixture-backed.",
+          "nonClaims": "Ne revendique pas SkSL dynamique, SpiralRT ou runtime effects enfants.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
+    },
+    {
       "sceneId": "blend-mode-strip",
       "title": "Blend Mode Strip",
       "description": "Rect strip reserved for future explicit blend coverage.",
@@ -629,6 +683,24 @@
           "validates": "Valide lanes descriptor, primitive blend, buffer upload, ABI et batching.",
           "nonClaims": "Ne revendique pas vertices generaux ni pipeline mesh complet.",
           "evidence": "Preuve WebGPU offscreen avec refus vertices."
+        }
+      }
+    },
+    {
+      "sceneId": "mesh-ribbon-depth-stack",
+      "title": "Mesh Ribbon Depth Stack",
+      "description": "Stacked bounded mesh ribbons inside a clipped rounded panel to expose depth ordering.",
+      "tags": ["Vertices","RRect","Clip"],
+      "kgpuMilestones": ["M8"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier plusieurs rubans mesh bornes avec overlaps lisibles dans un cadre simple.",
+          "validates": "Valide un stack de MeshRibbon fixture-backed avec ordre visuel stable et clipping borne.",
+          "nonClaims": "Ne revendique pas DrawVertices general ni upload libre de vertex/index buffers.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
         }
       }
     },
@@ -775,25 +847,27 @@
           "evidence": "Preuve WebGPU offscreen avec blockers de retirement."
         }
       }
+    },
+    {
+      "sceneId": "legacy-parity-snapshot-board",
+      "title": "Legacy Parity Snapshot Board",
+      "description": "Legacy parity review board with evidence, parity, and retirement blocker lanes for snapshot promotion.",
+      "tags": ["LegacyComparison","Rect","RRect"],
+      "kgpuMilestones": ["M10"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier une vue de parite legacy lisible avant toute decision de retirement.",
+          "validates": "Valide un board de comparaison rrect/rect borne avec lanes de parite, evidence et blockers.",
+          "nonClaims": "Ne revendique pas remplacement accepte ni retrait effectif de la route legacy.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
     }
   ],
   "candidateScenes": [
-    {
-      "sceneId": "product-route-smoke-lanes",
-      "title": "Product Route Smoke Lanes",
-      "status": "candidate",
-      "tags": ["Rect","LegacyComparison"],
-      "kgpuMilestones": ["M0","M1"],
-      "ticketIds": [],
-      "humanDocs": {
-        "fr": {
-          "intention": "Preparer une scene lisible pour verifier activation, rollback et route produit.",
-          "validationTarget": "Comparer lanes legacy, route candidate et refus sans activer le produit.",
-          "nonClaims": "Ne revendique pas activation par defaut ni decision release.",
-          "rationale": "Couvre le pont M0/M1 entre inventaire de routes et premier rollout controle."
-        }
-      }
-    },
     {
       "sceneId": "gradient-tile-mode-boundary",
       "title": "Gradient Tile Mode Boundary",
@@ -823,22 +897,6 @@
           "validationTarget": "Montrer les routes path/stroke attendues et les refus coverage manquants.",
           "nonClaims": "Ne revendique pas couverture AA, joins/caps reels ou stencil-cover natif.",
           "rationale": "Couvre un trou M3 entre proxy rectangulaire et vraie couverture path."
-        }
-      }
-    },
-    {
-      "sceneId": "bitmap-sampler-matrix",
-      "title": "Bitmap Sampler Matrix",
-      "status": "fixture-ready",
-      "tags": ["Image","Clip","RRect"],
-      "kgpuMilestones": ["M4"],
-      "ticketIds": [],
-      "humanDocs": {
-        "fr": {
-          "intention": "Comparer plusieurs fixtures bitmap avec nearest et linear dans une matrice compacte.",
-          "validationTarget": "Valider l'extension de scenes bitmap fixture-backed sans codec reel.",
-          "nonClaims": "Ne revendique pas mipmap, tile mode, anisotropic ou decode color-managed.",
-          "rationale": "Renforce M4 avec une candidate implementable par le runner actuel."
         }
       }
     },
@@ -875,38 +933,6 @@
       }
     },
     {
-      "sceneId": "runtime-effect-uniform-ladder",
-      "title": "Runtime Effect Uniform Ladder",
-      "status": "fixture-ready",
-      "tags": ["RuntimeEffect","RRect","Clip"],
-      "kgpuMilestones": ["M7"],
-      "ticketIds": [],
-      "humanDocs": {
-        "fr": {
-          "intention": "Montrer plusieurs tuiles SimpleRT avec uniforms gColor differents.",
-          "validationTarget": "Valider descriptor SimpleRT, layout gColor et pipeline key stable.",
-          "nonClaims": "Ne revendique pas SkSL dynamique, SpiralRT ou effets enfants.",
-          "rationale": "Exerce M7 avec une scene implementable par le runner actuel."
-        }
-      }
-    },
-    {
-      "sceneId": "mesh-ribbon-depth-stack",
-      "title": "Mesh Ribbon Depth Stack",
-      "status": "fixture-ready",
-      "tags": ["Vertices","RRect","Clip"],
-      "kgpuMilestones": ["M8"],
-      "ticketIds": [],
-      "humanDocs": {
-        "fr": {
-          "intention": "Empiler plusieurs rubans mesh bornes pour inspecter ordre et overlap.",
-          "validationTarget": "Valider bounded-ribbon-strip et diagnostics de non-support vertices general.",
-          "nonClaims": "Ne revendique pas DrawVertices general ni vertex/index buffer upload.",
-          "rationale": "Etend M8 avec une scene fixture-backed proche du runner actuel."
-        }
-      }
-    },
-    {
       "sceneId": "cache-frame-budget-strip",
       "title": "Cache Frame Budget Strip",
       "status": "product-refusal-expected",
@@ -919,22 +945,6 @@
           "validationTarget": "Verifier qu'un budget depasse est expose comme refus produit explicite.",
           "nonClaims": "Ne revendique pas mesure runtime WebGPU observee ni gate release-blocking.",
           "rationale": "Couvre M9 en alignant les refus attendus avec la politique produit."
-        }
-      }
-    },
-    {
-      "sceneId": "legacy-parity-snapshot-board",
-      "title": "Legacy Parity Snapshot Board",
-      "status": "candidate",
-      "tags": ["LegacyComparison","Rect","RRect"],
-      "kgpuMilestones": ["M10"],
-      "ticketIds": [],
-      "humanDocs": {
-        "fr": {
-          "intention": "Preparer une comparaison lisible entre route legacy et route GPU candidate.",
-          "validationTarget": "Afficher parite attendue, evidence manquante et refus de retirement.",
-          "nonClaims": "Ne revendique pas remplacement accepte ni retrait de la route legacy.",
-          "rationale": "Couvre M10 avec une candidate orientee revue de migration."
         }
       }
     }
