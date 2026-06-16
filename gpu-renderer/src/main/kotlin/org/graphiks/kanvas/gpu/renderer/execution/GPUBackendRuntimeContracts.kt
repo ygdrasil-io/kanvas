@@ -103,5 +103,5 @@ data class GPUBackendRectDraw(
 }
 
 object GPUBackendRuntimeFactory {
-    fun createOrNull(): GPUBackendSession? = null
+    fun createOrNull(): GPUBackendSession? = WgpuBackendRuntimeFactory.createOrNull()
 }

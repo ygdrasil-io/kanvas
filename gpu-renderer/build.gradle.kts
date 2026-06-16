@@ -7,6 +7,8 @@ dependencies {
     api(project(":font:gpu-api"))
 
     implementation(kotlin("stdlib"))
+    implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     testImplementation(kotlin("test"))
 }
 
