@@ -839,6 +839,62 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "text-resource-binding-gate-board",
+            title = "Text Resource Binding Gate Board",
+            description = "Text upload, binding, stale generation, artifact registration, and budget refusal gates without glyph atlas route or CPU-rendered text texture promotion.",
+            tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Text),
+            links = listOf(SceneRoadmapLink.ticket("KGPU-M6-003")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.036f, 0.040f, 0.050f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "text-resource-binding-panel",
+                    rect = SceneRect(24f, 26f, 296f, 174f),
+                    radius = 18f,
+                    color = SceneColor(0.11f, 0.13f, 0.16f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "text-resource-binding-window",
+                    rect = SceneRect(40f, 44f, 280f, 158f),
+                ),
+                SceneCommand.FillRect(
+                    label = "upload-plan-missing-refusal",
+                    rect = SceneRect(48f, 52f, 76f, 154f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "binding-layout-unavailable-refusal",
+                    rect = SceneRect(86f, 62f, 114f, 154f),
+                    color = SceneColor.blue(0.86f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "artifact-generation-stale-refusal",
+                    rect = SceneRect(124f, 72f, 152f, 154f),
+                    color = SceneColor.red(),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "artifact-unregistered-refusal",
+                    rect = SceneRect(162f, 82f, 190f, 154f),
+                    color = SceneColor.green(0.88f),
+                    paintOrder = 4,
+                ),
+                SceneCommand.FillRect(
+                    label = "upload-budget-refusal",
+                    rect = SceneRect(200f, 94f, 228f, 154f),
+                    color = SceneColor(0.86f, 0.36f, 0.24f, 0.94f),
+                    paintOrder = 5,
+                ),
+                SceneCommand.FillRect(
+                    label = "cpu-rendered-texture-forbidden",
+                    rect = SceneRect(238f, 108f, 268f, 154f),
+                    color = SceneColor(0.74f, 0.76f, 0.82f, 1f),
+                    paintOrder = 6,
+                ),
+            ),
+        ),
+        scene(
             id = "text-representation-gate-board",
             title = "Text Representation Gate Board",
             description = "Text representation dependency gates without atlas, SDF, color glyph, emoji, LCD, or CPU texture route promotion.",

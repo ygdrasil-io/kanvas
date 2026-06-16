@@ -39,6 +39,7 @@ import kotlin.math.floor
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.runtimeEffectRefusalGateDiagnostics
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.textResourceBindingGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSampling
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSource
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
@@ -76,7 +77,7 @@ class RectOnlyOffscreenRenderer {
                 val nonTransparentPixels = pixels.countNonTransparentPixels()
                 val imagePath = outputDir.resolve(RENDER_FILE_NAME)
                 writePng(pixels, target.width, target.height, imagePath)
-                val diagnostics = rectOnlyRenderedDiagnostics(
+                val baseDiagnostics = rectOnlyRenderedDiagnostics(
                     sceneId = sceneId,
                     adapterInfo = ctx.adapterInfo,
                     fillRectCount = drawPlan.fillRectCount,
@@ -88,7 +89,11 @@ class RectOnlyOffscreenRenderer {
                     saveLayers = drawPlan.saveLayers,
                     runtimeEffects = drawPlan.runtimeEffects,
                     meshRibbons = drawPlan.meshRibbons,
-                ) + scene.runtimeEffectRefusalGateDiagnostics()
+                )
+                val diagnostics =
+                    baseDiagnostics +
+                        scene.runtimeEffectRefusalGateDiagnostics() +
+                        scene.textResourceBindingGateDiagnostics()
                 return OffscreenRunReport.rendered(
                     sceneId = sceneId,
                     imagePath = RENDER_FILE_NAME,

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sceneId": "text-resource-binding-gate-board",
+  "status": "rendered",
+  "productRefusal": false,
+  "backend": "webgpu-offscreen",
+  "imagePath": "render.png",
+  "width": 320,
+  "height": 200,
+  "byteCount": 256000,
+  "nonTransparentPixels": 64000,
+  "diagnostics": ["rendered text-resource-binding-gate-board via WebGPU offscreen","adapter=Apple M2 Max","fillRectCommands=6","fillRRectCommands=1","linearGradientRectCommands=0","clipCommands=1","bitmapRectCommands=0","textResourceBindingRefusalMatrix=upload-plan:RefuseRequired:unsupported.text.upload_plan_missing,binding-layout:RefuseRequired:unsupported.text.binding_layout_unavailable,stale-generation:RefuseRequired:unsupported.text.artifact_generation_stale,artifact-registration:RefuseRequired:unsupported.text.artifact_unregistered,upload-budget:RefuseRequired:unsupported.text.upload_budget_exceeded,cpu-rendered-texture:RefuseRequired:unsupported.text.cpu_rendered_texture_forbidden","pmTextResourceBindingRow=gpu-renderer.text-resource-binding","pmTextResourceBindingClassification=TargetPrepared","textUploadPlanPromoted=false","glyphAtlasRoutePromoted=false"]
+}
