@@ -144,6 +144,13 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 bitmapRectCount = 2,
             ),
             RenderedShapeExpectation(
+                sceneId = "photo-contact-sheet",
+                fillRectCount = 0,
+                fillRRectCount = 1,
+                clipCount = 1,
+                bitmapRectCount = 4,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "codec-provenance-gate-board",
                 fillRectCount = 3,
                 fillRRectCount = 1,
@@ -178,6 +185,14 @@ class RenderGpuRendererSceneOffscreenMainTest {
             RenderedShapeExpectation(
                 sceneId = "filtered-photo-chip",
                 fillRectCount = 0,
+                bitmapRectCount = 1,
+                filterNodeCount = 1,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "tinted-avatar-card",
+                fillRectCount = 0,
+                fillRRectCount = 1,
+                clipCount = 1,
                 bitmapRectCount = 1,
                 filterNodeCount = 1,
             ),
@@ -571,6 +586,9 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 assertContains(runJson, "filterKinds=drop-shadow, drop-shadow")
                 assertContains(runJson, "filterInputs=primary-notification-layer, secondary-notification-layer")
                 assertContains(runJson, "saveLayerFilterKinds=drop-shadow, drop-shadow")
+            } else if (expectation.sceneId == "tinted-avatar-card") {
+                assertContains(runJson, "filterKinds=luma-tint")
+                assertContains(runJson, "filterInputs=avatar-card-photo")
             } else {
                 assertContains(runJson, "filterKinds=luma-tint")
                 assertContains(runJson, "filterInputs=photo")

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sceneId": "tinted-avatar-card",
+  "status": "rendered",
+  "productRefusal": false,
+  "backend": "webgpu-offscreen",
+  "imagePath": "render.png",
+  "width": 320,
+  "height": 200,
+  "byteCount": 256000,
+  "nonTransparentPixels": 64000,
+  "diagnostics": ["rendered tinted-avatar-card via WebGPU offscreen","adapter=Apple M2 Max","clearCommands=1","fillRectCommands=0","fillRRectCommands=1","linearGradientRectCommands=0","clipCommands=1","bitmapRectCommands=1","filterNodeCommands=1","filterKinds=luma-tint","filterInputs=avatar-card-photo"]
+}

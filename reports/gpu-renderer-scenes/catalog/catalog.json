@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 41,
+  "sceneCount": 43,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -123,6 +123,16 @@
       "expectation": "ShouldRender"
     },
     {
+      "sceneId": "photo-contact-sheet",
+      "title": "Photo Contact Sheet",
+      "description": "Four already-decoded photo thumbnails clipped inside a contact sheet tray.",
+      "tags": ["Image","Clip","RRect"],
+      "kgpuMilestones": ["M4"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
       "sceneId": "codec-provenance-gate-board",
       "title": "Codec Provenance Gate Board",
       "description": "Codec registry provenance and dependency refusal lanes without codec or decode route promotion.",
@@ -187,6 +197,16 @@
       "title": "Filtered Photo Chip",
       "description": "Bitmap and filter command markers for bounded route observation.",
       "tags": ["Filter","Image"],
+      "kgpuMilestones": ["M5"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "tinted-avatar-card",
+      "title": "Tinted Avatar Card",
+      "description": "Clipped avatar photo card with one explicit luma-tint filter route.",
+      "tags": ["Image","Clip","RRect","Filter"],
       "kgpuMilestones": ["M5"],
       "ticketIds": [],
       "rStages": [],
