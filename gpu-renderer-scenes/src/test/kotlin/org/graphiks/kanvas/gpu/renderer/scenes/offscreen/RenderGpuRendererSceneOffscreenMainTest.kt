@@ -36,14 +36,14 @@ class RenderGpuRendererSceneOffscreenMainTest {
     fun `non first route scene writes not yet rendered report under scene directory`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
 
-        renderGpuRendererSceneOffscreen(arrayOf("mesh-ribbon", root.toString()))
+        renderGpuRendererSceneOffscreen(arrayOf("receipt-text-run", root.toString()))
 
-        val runJson = root.resolve("mesh-ribbon").resolve("run.json").readText()
-        assertContains(runJson, "\"sceneId\": \"mesh-ribbon\"")
+        val runJson = root.resolve("receipt-text-run").resolve("run.json").readText()
+        assertContains(runJson, "\"sceneId\": \"receipt-text-run\"")
         assertContains(runJson, "\"status\": \"not-yet-rendered\"")
         assertContains(runJson, "\"productRefusal\": false")
         assertContains(runJson, "\"imagePath\": null")
-        assertContains(runJson, "runner-subset:mesh-ribbon")
+        assertContains(runJson, "runner-subset:receipt-text-run")
     }
 
     @Test
@@ -92,6 +92,11 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 sceneId = "runtime-effect-color-tile",
                 fillRectCount = 0,
                 runtimeEffectCount = 1,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "mesh-ribbon",
+                fillRectCount = 0,
+                meshRibbonCount = 1,
             ),
         )
 
@@ -195,6 +200,20 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
+    fun `rect only command preparation rejects mesh ribbon markers without fixture payloads`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            prepareRectOnlyDrawPlan(
+                sceneId = "mesh-ribbon-marker-only",
+                commands = listOf(SceneCommand.MeshRibbon("marker")),
+                width = 320,
+                height = 200,
+            )
+        }
+
+        assertContains(failure.message ?: "", "fixture-backed MeshRibbon payloads: marker")
+    }
+
+    @Test
     fun `rect only command preparation rejects runtime effects outside the registered SimpleRT contract`() {
         val failure = assertFailsWith<IllegalArgumentException> {
             prepareRectOnlyDrawPlan(
@@ -234,6 +253,27 @@ class RenderGpuRendererSceneOffscreenMainTest {
         }
 
         assertContains(failure.message ?: "", "inside positive bounds: oversize")
+    }
+
+    @Test
+    fun `rect only command preparation rejects out of bounds mesh ribbons`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            prepareRectOnlyDrawPlan(
+                sceneId = "oversize-mesh-ribbon",
+                commands = listOf(
+                    SceneCommand.MeshRibbon(
+                        label = "ribbon",
+                        bounds = SceneRect(left = 0f, top = 0f, right = 33f, bottom = 32f),
+                        startColor = SceneColor.blue(),
+                        endColor = SceneColor.amber(),
+                    ),
+                ),
+                width = 32,
+                height = 32,
+            )
+        }
+
+        assertContains(failure.message ?: "", "MeshRibbon bounds inside positive target: ribbon")
     }
 
     @Test
@@ -322,6 +362,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
         val filterNodeCount: Int? = null,
         val saveLayerCount: Int? = null,
         val runtimeEffectCount: Int? = null,
+        val meshRibbonCount: Int? = null,
     )
 
     private fun assertRenderedShapeScene(root: Path, expectation: RenderedShapeExpectation) {
@@ -391,6 +432,14 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 "runtimeEffectParserEvidence=RuntimeEffectDescriptorWebGpuTest#runtime SimpleRT descriptor WGSL parses and reflects uniforms",
             )
             assertContains(runJson, "fallbackReason=none")
+        }
+        expectation.meshRibbonCount?.let { count ->
+            assertContains(runJson, "meshRibbonCommands=$count")
+            assertContains(runJson, "meshRibbonKinds=bounded-ribbon-strip")
+            assertContains(runJson, "meshRibbonRoute=scene-fixture.bounded-ribbon-strip")
+            assertContains(runJson, "meshRibbonFallbackReason=none")
+            assertContains(runJson, "generalVerticesSupport=false")
+            assertContains(runJson, "vertexIndexBufferSupport=false")
         }
         assertFalse(runJson.contains("runner-subset:$sceneId"), sceneId)
     }

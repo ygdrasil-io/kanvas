@@ -249,10 +249,19 @@ object GPURendererSceneRegistry {
         scene(
             id = "mesh-ribbon",
             title = "Mesh Ribbon",
-            description = "Draw vertices and mesh-like geometry visibility.",
+            description = "Bounded ribbon-strip fixture for vertices visibility without broad DrawVertices promotion.",
             tags = setOf(SceneTag.Vertices),
             links = listOf(SceneRoadmapLink.milestone("M8")),
-            commands = listOf(SceneCommand.MeshRibbon("ribbon")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.05f, 0.07f, 0.09f, 1f)),
+                SceneCommand.MeshRibbon(
+                    label = "ribbon",
+                    bounds = SceneRect(36f, 42f, 284f, 158f),
+                    startColor = SceneColor(0.10f, 0.52f, 0.86f, 1f),
+                    endColor = SceneColor(0.98f, 0.62f, 0.18f, 1f),
+                    thickness = 28f,
+                ),
+            ),
         ),
         scene(
             id = "cache-pressure-deck",

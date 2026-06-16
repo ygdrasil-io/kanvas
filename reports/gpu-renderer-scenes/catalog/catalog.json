@@ -95,7 +95,7 @@
     {
       "sceneId": "mesh-ribbon",
       "title": "Mesh Ribbon",
-      "description": "Draw vertices and mesh-like geometry visibility.",
+      "description": "Bounded ribbon-strip fixture for vertices visibility without broad DrawVertices promotion.",
       "tags": ["Vertices"],
       "kgpuMilestones": ["M8"],
       "rStages": [],

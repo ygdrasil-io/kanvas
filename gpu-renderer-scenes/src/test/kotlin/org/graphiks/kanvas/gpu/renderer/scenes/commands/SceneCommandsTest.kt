@@ -133,6 +133,26 @@ class SceneCommandsTest {
     }
 
     @Test
+    fun `mesh ribbon fixture payload names the bounded ribbon strip contract`() {
+        val command = SceneCommand.MeshRibbon(
+            label = "ribbon",
+            bounds = SceneRect(36f, 42f, 284f, 158f),
+            startColor = SceneColor(0.10f, 0.52f, 0.86f, 1f),
+            endColor = SceneColor(0.98f, 0.62f, 0.18f, 1f),
+            thickness = 28f,
+            paintOrder = 3,
+        )
+
+        assertTrue(command.hasFixturePayload)
+        assertEquals("bounded-ribbon-strip", command.meshKind)
+        assertEquals(SceneRect(36f, 42f, 284f, 158f), command.bounds)
+        assertEquals(SceneColor(0.10f, 0.52f, 0.86f, 1f), command.startColor)
+        assertEquals(SceneColor(0.98f, 0.62f, 0.18f, 1f), command.endColor)
+        assertEquals(28f, command.thickness)
+        assertEquals(3, command.paintOrder)
+    }
+
+    @Test
     fun `label bearing scene commands reject blank labels`() {
         assertFailsWith<IllegalArgumentException> {
             SceneCommand.FillRect(" ", SceneRect(0f, 0f, 8f, 8f), SceneColor.red())
@@ -258,6 +278,40 @@ class SceneCommandsTest {
     }
 
     @Test
+    fun `mesh ribbon fixture payload requires bounds and endpoint colors together`() {
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.MeshRibbon(
+                label = "ribbon",
+                startColor = SceneColor.blue(),
+                endColor = SceneColor.amber(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.MeshRibbon(
+                label = "ribbon",
+                bounds = SceneRect(0f, 0f, 8f, 8f),
+                endColor = SceneColor.amber(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.MeshRibbon(
+                label = "ribbon",
+                bounds = SceneRect(0f, 0f, 8f, 8f),
+                startColor = SceneColor.blue(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.MeshRibbon(
+                label = "ribbon",
+                bounds = SceneRect(0f, 0f, 8f, 8f),
+                startColor = SceneColor.blue(),
+                endColor = SceneColor.amber(),
+                thickness = 0f,
+            )
+        }
+    }
+
+    @Test
     fun `fill rect command rejects negative paint order`() {
         assertFailsWith<IllegalArgumentException> {
             SceneCommand.FillRect("card", SceneRect(0f, 0f, 8f, 8f), SceneColor.red(), paintOrder = -1)
@@ -291,6 +345,15 @@ class SceneCommandsTest {
                 contentRect = SceneRect(2f, 2f, 12f, 12f),
                 contentColor = SceneColor.green(),
                 shadowColor = SceneColor(0f, 0f, 0f, 0.25f),
+                paintOrder = -1,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.MeshRibbon(
+                label = "ribbon",
+                bounds = SceneRect(0f, 0f, 8f, 8f),
+                startColor = SceneColor.blue(),
+                endColor = SceneColor.amber(),
                 paintOrder = -1,
             )
         }

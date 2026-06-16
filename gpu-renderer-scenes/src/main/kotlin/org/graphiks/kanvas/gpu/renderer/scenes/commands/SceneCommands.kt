@@ -311,11 +311,29 @@ sealed interface SceneCommand {
         }
     }
 
-    data class MeshRibbon(override val label: String) : SceneCommand {
+    data class MeshRibbon(
+        override val label: String,
+        val bounds: SceneRect? = null,
+        val startColor: SceneColor? = null,
+        val endColor: SceneColor? = null,
+        val thickness: Float = 24f,
+        val paintOrder: Int = 0,
+    ) : SceneCommand {
         override val family: String = "vertices"
+        val meshKind: String = "bounded-ribbon-strip"
+        val hasFixturePayload: Boolean = bounds != null && startColor != null && endColor != null
 
         init {
             requireSceneCommandLabel(label)
+            val payloadFieldCount = listOf(bounds, startColor, endColor).count { it != null }
+            require(payloadFieldCount == 0 || payloadFieldCount == 3) {
+                "SceneCommand.MeshRibbon fixture payload requires bounds, startColor, and endColor"
+            }
+            require(!thickness.isNaN() && !thickness.isInfinite()) {
+                "SceneCommand.MeshRibbon.thickness must be finite"
+            }
+            require(thickness > 0f) { "SceneCommand.MeshRibbon.thickness must be positive" }
+            require(paintOrder >= 0) { "SceneCommand.MeshRibbon.paintOrder must be non-negative" }
         }
     }
 }

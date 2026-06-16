@@ -92,6 +92,7 @@ class RectOnlyOffscreenRenderer {
                         filters = drawPlan.filters,
                         saveLayers = drawPlan.saveLayers,
                         runtimeEffects = drawPlan.runtimeEffects,
+                        meshRibbons = drawPlan.meshRibbons,
                     ),
                 )
             }
@@ -310,11 +311,43 @@ class RectOnlyOffscreenRenderer {
                 return clamp(0.5 - edge_distance, 0.0, 1.0);
             }
 
+            fn mesh_ribbon_coverage(pixel: vec2f, rect: vec4f, half_thickness: f32) -> f32 {
+                if (pixel.x < rect.x || pixel.x >= rect.z || pixel.y < rect.y || pixel.y >= rect.w) {
+                    return 0.0;
+                }
+                let start = vec2f(rect.x, rect.w);
+                let end = vec2f(rect.z, rect.y);
+                let line = end - start;
+                let t = clamp(dot(pixel - start, line) / max(dot(line, line), 0.0001), 0.0, 1.0);
+                let closest = start + line * t;
+                let edge_distance = length(pixel - closest) - max(half_thickness, 0.0);
+                return clamp(0.5 - edge_distance, 0.0, 1.0);
+            }
+
+            fn shape_coverage(pixel: vec2f, rect: vec4f, radius: f32, paint_kind: f32) -> f32 {
+                if (paint_kind >= 4.5) {
+                    return mesh_ribbon_coverage(pixel, rect, radius);
+                }
+                return rounded_rect_coverage(pixel, rect, radius);
+            }
+
             @fragment
             fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
-                let coverage = rounded_rect_coverage(position.xy, uniforms.rect, uniforms.radius_and_kind.x);
+                let coverage = shape_coverage(
+                    position.xy,
+                    uniforms.rect,
+                    uniforms.radius_and_kind.x,
+                    uniforms.radius_and_kind.y
+                );
                 var color = uniforms.color0;
-                if (uniforms.radius_and_kind.y >= 3.5) {
+                if (uniforms.radius_and_kind.y >= 4.5) {
+                    let uv = clamp(
+                        (position.xy - uniforms.rect.xy) / max(uniforms.rect.zw - uniforms.rect.xy, vec2f(0.0001)),
+                        vec2f(0.0),
+                        vec2f(1.0)
+                    );
+                    color = mix(uniforms.color0, uniforms.color1, uv.x);
+                } else if (uniforms.radius_and_kind.y >= 3.5) {
                     color = vec4f(
                         position.x * (1.0 / 255.0),
                         position.y * (1.0 / 255.0),
@@ -446,6 +479,16 @@ internal data class RectOnlyDrawPlan(
             )
         }
     val runtimeEffectCount: Int = runtimeEffects.size
+    val meshRibbons: List<RectOnlyMeshRibbon> = fills
+        .filter { it.family == "vertices" }
+        .map { fill ->
+            RectOnlyMeshRibbon(
+                label = fill.label,
+                meshKind = fill.meshRibbonKind
+                    ?: error("MeshRibbon draw requires mesh kind: ${fill.label}"),
+            )
+        }
+    val meshRibbonCount: Int = meshRibbons.size
 }
 
 internal data class RectOnlyFilterNode(
@@ -471,6 +514,11 @@ internal data class RectOnlySaveLayer(
     val filterStrength: Float,
 )
 
+internal data class RectOnlyMeshRibbon(
+    val label: String,
+    val meshKind: String,
+)
+
 internal data class RectOnlyFillDraw(
     val label: String,
     val family: String,
@@ -494,6 +542,7 @@ internal data class RectOnlyFillDraw(
     val runtimeEffectWgslImplementationId: String? = null,
     val runtimeEffectUniformLayout: String? = null,
     val runtimeEffectPipelineKey: String? = null,
+    val meshRibbonKind: String? = null,
 )
 
 private data class RectOnlyIndexedDraw(
@@ -523,6 +572,17 @@ internal fun prepareRectOnlyDrawPlan(
     require(height > 0) { "$sceneId rect-only target height must be positive" }
     val unsupportedReason = rectOnlyCommandSequenceUnsupportedReason(commands)
     require(unsupportedReason == null) { "$sceneId $unsupportedReason" }
+    val outOfBoundsMeshRibbons = commands.filterIsInstance<SceneCommand.MeshRibbon>()
+        .filter { it.hasFixturePayload }
+        .filter { ribbon ->
+            val bounds = ribbon.bounds
+            bounds == null || !bounds.isInsideTarget(width, height)
+        }
+        .map { it.label }
+    require(outOfBoundsMeshRibbons.isEmpty()) {
+        "$sceneId rect-only offscreen render requires MeshRibbon bounds inside positive target: " +
+            outOfBoundsMeshRibbons.joinToString()
+    }
 
     val filters = commands.filterIsInstance<SceneCommand.FilterNode>()
         .filter { it.hasFixturePayload }
@@ -558,7 +618,8 @@ internal fun prepareRectOnlyDrawPlan(
                 is SceneCommand.FillRRect,
                 is SceneCommand.LinearGradientRect,
                 is SceneCommand.SaveLayer,
-                is SceneCommand.RuntimeEffectTile -> add(RectOnlyIndexedDraw(index, command, activeClip))
+                is SceneCommand.RuntimeEffectTile,
+                is SceneCommand.MeshRibbon -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.BitmapRect -> if (command.hasFixturePayload) {
                     add(RectOnlyIndexedDraw(index, command, activeClip))
                 }
@@ -638,12 +699,13 @@ internal fun prepareRectOnlyDrawPlan(
                             (command as? SceneCommand.RuntimeEffectTile)?.wgslImplementationId,
                         runtimeEffectUniformLayout = (command as? SceneCommand.RuntimeEffectTile)?.uniformLayout,
                         runtimeEffectPipelineKey = (command as? SceneCommand.RuntimeEffectTile)?.pipelineKey,
+                        meshRibbonKind = (command as? SceneCommand.MeshRibbon)?.meshKind,
                     ),
                 )
             }
     }
     require(fills.isNotEmpty()) {
-        "$sceneId rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, or RuntimeEffectTile command"
+        "$sceneId rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, RuntimeEffectTile, or MeshRibbon command"
     }
 
     return RectOnlyDrawPlan(
@@ -677,6 +739,7 @@ private fun rectOnlyFillDraw(
     runtimeEffectWgslImplementationId: String? = null,
     runtimeEffectUniformLayout: String? = null,
     runtimeEffectPipelineKey: String? = null,
+    meshRibbonKind: String? = null,
 ): RectOnlyFillDraw {
     requireInsideTarget(sceneId, label, rect, width, height, "fill shape")
     clip?.let { requireInsideTarget(sceneId, it.label, it.rect, width, height, "clip") }
@@ -713,6 +776,7 @@ private fun rectOnlyFillDraw(
         runtimeEffectWgslImplementationId = runtimeEffectWgslImplementationId,
         runtimeEffectUniformLayout = runtimeEffectUniformLayout,
         runtimeEffectPipelineKey = runtimeEffectPipelineKey,
+        meshRibbonKind = meshRibbonKind,
     )
 }
 
@@ -728,7 +792,8 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
                 command is SceneCommand.BitmapRect ||
                 command is SceneCommand.SaveLayer ||
                 command is SceneCommand.FilterNode ||
-                command is SceneCommand.RuntimeEffectTile
+                command is SceneCommand.RuntimeEffectTile ||
+                command is SceneCommand.MeshRibbon
             ) {
                 null
             } else {
@@ -737,7 +802,7 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed save-layer, fixture-backed filter-node, and fixture-backed runtime-effect command families: " +
+        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed save-layer, fixture-backed filter-node, fixture-backed runtime-effect, and fixture-backed mesh-ribbon command families: " +
             unsupportedFamilies.joinToString()
     }
 
@@ -771,6 +836,14 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
     if (runtimeEffectMarkers.isNotEmpty()) {
         return "rect-only offscreen render requires fixture-backed RuntimeEffectTile payloads: " +
             runtimeEffectMarkers.joinToString()
+    }
+
+    val meshRibbonMarkers = commands.filterIsInstance<SceneCommand.MeshRibbon>()
+        .filterNot { it.hasFixturePayload }
+        .map { it.label }
+    if (meshRibbonMarkers.isNotEmpty()) {
+        return "rect-only offscreen render requires fixture-backed MeshRibbon payloads: " +
+            meshRibbonMarkers.joinToString()
     }
 
     val unsupportedRuntimeEffects = commands.filterIsInstance<SceneCommand.RuntimeEffectTile>()
@@ -839,10 +912,11 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
                 it is SceneCommand.LinearGradientRect ||
                 it is SceneCommand.BitmapRect ||
                 it is SceneCommand.SaveLayer ||
-                it is SceneCommand.RuntimeEffectTile
+                it is SceneCommand.RuntimeEffectTile ||
+                it is SceneCommand.MeshRibbon
         }
     ) {
-        return "rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, or RuntimeEffectTile command"
+        return "rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, RuntimeEffectTile, or MeshRibbon command"
     }
 
     val clearIndices = commands.withIndex()
@@ -866,10 +940,19 @@ internal fun rectOnlyRenderedDiagnostics(
     filters: List<RectOnlyFilterNode> = emptyList(),
     saveLayers: List<RectOnlySaveLayer> = emptyList(),
     runtimeEffects: List<RectOnlyRuntimeEffectTile> = emptyList(),
+    meshRibbons: List<RectOnlyMeshRibbon> = emptyList(),
 ): List<String> {
     require(sceneId.isNotBlank()) { "rect-only sceneId must not be blank" }
-    require(fillRectCount + fillRRectCount + linearGradientRectCount + bitmapRectCount + saveLayers.size + runtimeEffects.size > 0) {
-        "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, or RuntimeEffectTile command"
+    require(
+        fillRectCount +
+            fillRRectCount +
+            linearGradientRectCount +
+            bitmapRectCount +
+            saveLayers.size +
+            runtimeEffects.size +
+            meshRibbons.size > 0,
+    ) {
+        "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, RuntimeEffectTile, or MeshRibbon command"
     }
     return buildList {
         add("rendered $sceneId via WebGPU offscreen")
@@ -908,6 +991,14 @@ internal fun rectOnlyRenderedDiagnostics(
             )
             add("fallbackReason=none")
         }
+        if (meshRibbons.isNotEmpty()) {
+            add("meshRibbonCommands=${meshRibbons.size}")
+            add("meshRibbonKinds=${meshRibbons.joinToString { it.meshKind }}")
+            add("meshRibbonRoute=scene-fixture.bounded-ribbon-strip")
+            add("meshRibbonFallbackReason=none")
+            add("generalVerticesSupport=false")
+            add("vertexIndexBufferSupport=false")
+        }
     }
 }
 
@@ -919,6 +1010,7 @@ private fun SceneCommand.paintOrder(): Int =
         is SceneCommand.BitmapRect -> paintOrder
         is SceneCommand.SaveLayer -> paintOrder
         is SceneCommand.RuntimeEffectTile -> paintOrder
+        is SceneCommand.MeshRibbon -> paintOrder
         else -> 0
     }
 
@@ -930,6 +1022,7 @@ private fun SceneCommand.shapeRect() =
         is SceneCommand.BitmapRect -> fixtureRect()
         is SceneCommand.SaveLayer -> fixtureContentRect()
         is SceneCommand.RuntimeEffectTile -> fixtureRect()
+        is SceneCommand.MeshRibbon -> fixtureBounds()
         else -> error("Unsupported shape command: $family")
     }
 
@@ -941,6 +1034,7 @@ private fun SceneCommand.shapeStartColor() =
         is SceneCommand.BitmapRect -> fixtureSource().topLeft
         is SceneCommand.SaveLayer -> fixtureContentColor()
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
+        is SceneCommand.MeshRibbon -> fixtureStartColor()
         else -> error("Unsupported shape command: $family")
     }
 
@@ -952,6 +1046,7 @@ private fun SceneCommand.shapeEndColor() =
         is SceneCommand.BitmapRect -> fixtureSource().topRight
         is SceneCommand.SaveLayer -> fixtureContentColor()
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
+        is SceneCommand.MeshRibbon -> fixtureEndColor()
         else -> error("Unsupported shape command: $family")
     }
 
@@ -963,6 +1058,7 @@ private fun SceneCommand.shapeBottomLeftColor() =
         is SceneCommand.BitmapRect -> fixtureSource().bottomLeft
         is SceneCommand.SaveLayer -> fixtureContentColor()
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
+        is SceneCommand.MeshRibbon -> fixtureStartColor()
         else -> error("Unsupported shape command: $family")
     }
 
@@ -974,6 +1070,7 @@ private fun SceneCommand.shapeBottomRightColor() =
         is SceneCommand.BitmapRect -> fixtureSource().bottomRight
         is SceneCommand.SaveLayer -> fixtureContentColor()
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
+        is SceneCommand.MeshRibbon -> fixtureEndColor()
         else -> error("Unsupported shape command: $family")
     }
 
@@ -985,11 +1082,13 @@ private fun SceneCommand.shapeRadius(): Float =
         is SceneCommand.BitmapRect -> 0f
         is SceneCommand.SaveLayer -> radius
         is SceneCommand.RuntimeEffectTile -> 0f
+        is SceneCommand.MeshRibbon -> thickness * 0.5f
         else -> error("Unsupported shape command: $family")
     }
 
 private fun SceneCommand.shapePaintKind(): Float =
     when (this) {
+        is SceneCommand.MeshRibbon -> 5f
         is SceneCommand.RuntimeEffectTile -> 4f
         is SceneCommand.LinearGradientRect -> 1f
         is SceneCommand.BitmapRect -> when (sampling) {
@@ -1029,6 +1128,15 @@ private fun SceneCommand.RuntimeEffectTile.fixtureRect(): SceneRect =
 private fun SceneCommand.RuntimeEffectTile.fixtureUniformColor(): SceneColor =
     uniformColor ?: error("RuntimeEffectTile requires uniform color fixture payload: $label")
 
+private fun SceneCommand.MeshRibbon.fixtureBounds(): SceneRect =
+    bounds ?: error("MeshRibbon requires bounds fixture payload: $label")
+
+private fun SceneCommand.MeshRibbon.fixtureStartColor(): SceneColor =
+    startColor ?: error("MeshRibbon requires startColor fixture payload: $label")
+
+private fun SceneCommand.MeshRibbon.fixtureEndColor(): SceneColor =
+    endColor ?: error("MeshRibbon requires endColor fixture payload: $label")
+
 private fun SceneColor.withAlpha(alpha: Float): SceneColor =
     SceneColor(r = r, g = g, b = b, a = alpha.coerceIn(0f, 1f))
 
@@ -1064,3 +1172,11 @@ private fun SceneRect.intersect(other: SceneRect?): SceneRect? {
     val bottom = minOf(bottom, other.bottom)
     return if (right > left && bottom > top) SceneRect(left, top, right, bottom) else null
 }
+
+private fun SceneRect.isInsideTarget(width: Int, height: Int): Boolean =
+    left >= 0f &&
+        top >= 0f &&
+        right <= width.toFloat() &&
+        bottom <= height.toFloat() &&
+        right > left &&
+        bottom > top

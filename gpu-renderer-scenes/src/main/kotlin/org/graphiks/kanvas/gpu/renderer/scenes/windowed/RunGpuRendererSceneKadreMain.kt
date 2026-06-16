@@ -314,14 +314,15 @@ internal fun GPURendererScene<*>.kadreWindowedRectOnlyUnsupportedReason(): Strin
                 is SceneCommand.BitmapRect,
                 is SceneCommand.SaveLayer,
                 is SceneCommand.FilterNode,
-                is SceneCommand.RuntimeEffectTile -> null
+                is SceneCommand.RuntimeEffectTile,
+                is SceneCommand.MeshRibbon -> null
                 is SceneCommand -> command.family
                 else -> command::class.simpleName ?: "unknown-command"
             }
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed save-layer, fixture-backed filter-node, and fixture-backed runtime-effect command families: " +
+        return "rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed save-layer, fixture-backed filter-node, fixture-backed runtime-effect, and fixture-backed mesh-ribbon command families: " +
             unsupportedFamilies.joinToString()
     }
 
@@ -355,6 +356,14 @@ internal fun GPURendererScene<*>.kadreWindowedRectOnlyUnsupportedReason(): Strin
     if (runtimeEffectMarkers.isNotEmpty()) {
         return "rect-only windowed render requires fixture-backed RuntimeEffectTile payloads: " +
             runtimeEffectMarkers.joinToString()
+    }
+
+    val meshRibbonMarkers = commands.filterIsInstance<SceneCommand.MeshRibbon>()
+        .filterNot { it.hasFixturePayload }
+        .map { it.label }
+    if (meshRibbonMarkers.isNotEmpty()) {
+        return "rect-only windowed render requires fixture-backed MeshRibbon payloads: " +
+            meshRibbonMarkers.joinToString()
     }
 
     val unsupportedRuntimeEffects = commands.filterIsInstance<SceneCommand.RuntimeEffectTile>()
@@ -432,16 +441,29 @@ internal fun GPURendererScene<*>.kadreWindowedRectOnlyUnsupportedReason(): Strin
             outOfBoundsSaveLayerDraws.joinToString()
     }
 
+    val outOfBoundsMeshRibbons = commands.filterIsInstance<SceneCommand.MeshRibbon>()
+        .filter { it.hasFixturePayload }
+        .filter { ribbon ->
+            val bounds = ribbon.bounds
+            bounds == null || !bounds.isInsideTarget(dimensions.width, dimensions.height)
+        }
+        .map { it.label }
+    if (outOfBoundsMeshRibbons.isNotEmpty()) {
+        return "rect-only windowed render requires MeshRibbon bounds inside positive target: " +
+            outOfBoundsMeshRibbons.joinToString()
+    }
+
     if (commands.none {
             it is SceneCommand.FillRect ||
                 it is SceneCommand.FillRRect ||
                 it is SceneCommand.LinearGradientRect ||
                 it is SceneCommand.BitmapRect ||
                 it is SceneCommand.SaveLayer ||
-                it is SceneCommand.RuntimeEffectTile
+                it is SceneCommand.RuntimeEffectTile ||
+                it is SceneCommand.MeshRibbon
         }
     ) {
-        return "rect-only windowed render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, or RuntimeEffectTile command"
+        return "rect-only windowed render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, RuntimeEffectTile, or MeshRibbon command"
     }
 
     val clearIndices = commands.withIndex()
@@ -457,21 +479,33 @@ internal fun GPURendererScene<*>.kadreWindowedRectOnlyUnsupportedReason(): Strin
 internal fun GPURendererScene<*>.windowedSceneDiagnostics(): List<String> {
     val saveLayers = commands.filterIsInstance<SceneCommand.SaveLayer>()
         .filter { it.hasFixturePayload }
-    if (saveLayers.isEmpty()) return emptyList()
+    val meshRibbons = commands.filterIsInstance<SceneCommand.MeshRibbon>()
+        .filter { it.hasFixturePayload }
+    if (saveLayers.isEmpty() && meshRibbons.isEmpty()) return emptyList()
 
     val saveLayerLabels = saveLayers.map { it.label }.toSet()
     val filters = commands.filterIsInstance<SceneCommand.FilterNode>()
         .filter { it.hasFixturePayload && it.inputLabel in saveLayerLabels }
     return buildList {
-        add("saveLayerCommands=${saveLayers.size}")
-        add("saveLayerKinds=${saveLayers.joinToString { it.layerKind }}")
-        add("saveLayerRoute=scene-fixture.bounded-shadow-card")
-        add("saveLayerMaterializedDraws=${saveLayers.size * 2}")
-        if (filters.isNotEmpty()) {
-            add("filterRoutes=scene-fixture.bounded-drop-shadow")
+        if (saveLayers.isNotEmpty()) {
+            add("saveLayerCommands=${saveLayers.size}")
+            add("saveLayerKinds=${saveLayers.joinToString { it.layerKind }}")
+            add("saveLayerRoute=scene-fixture.bounded-shadow-card")
+            add("saveLayerMaterializedDraws=${saveLayers.size * 2}")
+            if (filters.isNotEmpty()) {
+                add("filterRoutes=scene-fixture.bounded-drop-shadow")
+            }
+            add("generalSaveLayerSupport=false")
+            add("imageFilterDagSupport=false")
         }
-        add("generalSaveLayerSupport=false")
-        add("imageFilterDagSupport=false")
+        if (meshRibbons.isNotEmpty()) {
+            add("meshRibbonCommands=${meshRibbons.size}")
+            add("meshRibbonKinds=${meshRibbons.joinToString { it.meshKind }}")
+            add("meshRibbonRoute=scene-fixture.bounded-ribbon-strip")
+            add("meshRibbonFallbackReason=none")
+            add("generalVerticesSupport=false")
+            add("vertexIndexBufferSupport=false")
+        }
     }
 }
 

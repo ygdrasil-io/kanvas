@@ -88,6 +88,17 @@ class GPURendererSceneRegistryTest {
         assertEquals(0.72f, filter.strength)
     }
 
+    @Test
+    fun `mesh ribbon is backed by bounded ribbon strip payload`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("mesh-ribbon")
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        val command = assertIs<SceneCommand.MeshRibbon>(scene.commands[1])
+
+        assertTrue(command.hasFixturePayload)
+        assertEquals("bounded-ribbon-strip", command.meshKind)
+        assertEquals(28f, command.thickness)
+    }
+
     private data class SceneExpectationRow(
         val sceneId: String,
         val tags: Set<SceneTag>,
@@ -178,7 +189,7 @@ class GPURendererSceneRegistryTest {
             SceneExpectationRow(
                 sceneId = "mesh-ribbon",
                 tags = setOf(SceneTag.Vertices),
-                commandFamilies = listOf("vertices"),
+                commandFamilies = listOf("clear", "vertices"),
                 roadmapLinks = listOf(RoadmapExpectation("M8")),
             ),
             SceneExpectationRow(

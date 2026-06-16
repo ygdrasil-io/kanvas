@@ -66,6 +66,7 @@ class RunGpuRendererSceneKadreMainTest {
             "filtered-photo-chip" to 24,
             "layered-shadow-card" to 25,
             "runtime-effect-color-tile" to 26,
+            "mesh-ribbon" to 27,
         )
         val invocations = mutableListOf<RunnerInvocation>()
 
@@ -95,6 +96,10 @@ class RunGpuRendererSceneKadreMainTest {
                     assertContains(sessionJson, "filterRoutes=scene-fixture.bounded-drop-shadow")
                     assertContains(sessionJson, "generalSaveLayerSupport=false")
                     assertContains(sessionJson, "imageFilterDagSupport=false")
+                } else if (sceneId == "mesh-ribbon") {
+                    assertContains(sessionJson, "meshRibbonRoute=scene-fixture.bounded-ribbon-strip")
+                    assertContains(sessionJson, "generalVerticesSupport=false")
+                    assertContains(sessionJson, "vertexIndexBufferSupport=false")
                 }
                 assertFalse(sessionJson.contains("\"status\": \"not-yet-rendered\""), sceneId)
             }
@@ -149,6 +154,17 @@ class RunGpuRendererSceneKadreMainTest {
     }
 
     @Test
+    fun `windowed WGSL materializes bounded mesh ribbon without general vertices claims`() {
+        val wgsl = WindowedRectOnlySceneShader.wgsl(
+            GPURendererSceneRegistry.registry.requireScene("mesh-ribbon"),
+        )
+
+        assertContains(wgsl, "mesh_ribbon_coverage")
+        assertContains(wgsl, "ribbon")
+        assertFalse(wgsl.contains("vertex/index buffer"))
+    }
+
+    @Test
     fun `windowed WGSL refuses runtime effects outside the registered SimpleRT contract when called directly`() {
         val scene = windowedTestScene(
             sceneId = "windowed-runtime-effect-wrong-descriptor",
@@ -181,7 +197,7 @@ class RunGpuRendererSceneKadreMainTest {
                     sceneId = "windowed-no-fill",
                     commands = listOf(SceneCommand.Clear(SceneColor(0f, 0f, 0f, 1f))),
                 ),
-                reason = "rect-only windowed render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, or RuntimeEffectTile command",
+                reason = "rect-only windowed render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, RuntimeEffectTile, or MeshRibbon command",
             ),
             UnsupportedRectOnlyCase(
                 scene = windowedTestScene(
@@ -249,6 +265,27 @@ class RunGpuRendererSceneKadreMainTest {
             ),
             UnsupportedRectOnlyCase(
                 scene = windowedTestScene(
+                    sceneId = "windowed-mesh-ribbon-marker",
+                    commands = listOf(SceneCommand.MeshRibbon("marker")),
+                ),
+                reason = "rect-only windowed render requires fixture-backed MeshRibbon payloads: marker",
+            ),
+            UnsupportedRectOnlyCase(
+                scene = windowedTestScene(
+                    sceneId = "windowed-mesh-ribbon-out-of-bounds",
+                    commands = listOf(
+                        SceneCommand.MeshRibbon(
+                            label = "ribbon",
+                            bounds = SceneRect(0f, 0f, 40f, 32f),
+                            startColor = SceneColor.blue(),
+                            endColor = SceneColor.amber(),
+                        ),
+                    ),
+                ),
+                reason = "rect-only windowed render requires MeshRibbon bounds inside positive target: ribbon",
+            ),
+            UnsupportedRectOnlyCase(
+                scene = windowedTestScene(
                     sceneId = "windowed-late-clear",
                     commands = listOf(
                         testFillRect(),
@@ -276,7 +313,7 @@ class RunGpuRendererSceneKadreMainTest {
     }
 
     @Test
-    fun `mesh ribbon writes not yet rendered without opening Kadre`() {
+    fun `text run writes not yet rendered without opening Kadre`() {
         val output = Files.createTempDirectory("gpu-renderer-scenes-windowed-main")
             .resolve("session.json")
         var launchCount = 0
@@ -284,18 +321,18 @@ class RunGpuRendererSceneKadreMainTest {
         withKadreWindowedSceneRunnerLauncher(
             WindowedSceneRunnerLauncher { _, _, _ ->
                 launchCount++
-                error("mesh-ribbon must not launch Kadre")
+                error("receipt-text-run must not launch Kadre")
             },
         ) {
-            runGpuRendererSceneKadre(arrayOf("mesh-ribbon", "60", output.toString()))
+            runGpuRendererSceneKadre(arrayOf("receipt-text-run", "60", output.toString()))
         }
 
         val sessionJson = output.readText()
-        assertContains(sessionJson, "\"sceneId\": \"mesh-ribbon\"")
+        assertContains(sessionJson, "\"sceneId\": \"receipt-text-run\"")
         assertContains(sessionJson, "\"status\": \"not-yet-rendered\"")
         assertContains(
             sessionJson,
-            "\"reason\": \"rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed save-layer, fixture-backed filter-node, and fixture-backed runtime-effect command families: vertices\"",
+            "\"reason\": \"rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed save-layer, fixture-backed filter-node, fixture-backed runtime-effect, and fixture-backed mesh-ribbon command families: text-run\"",
         )
         assertContains(sessionJson, "\"requestedFrames\": 60")
         assertContains(sessionJson, "\"presentedFrames\": 0")
