@@ -27,6 +27,12 @@ class GlyphSurfaceTest {
             GlyphRepresentation::class.simpleName,
             GlyphArtifactPlanner::class.simpleName,
             GlyphArtifactPlan::class.simpleName,
+            GlyphArtifactPlanEvidenceDump::class.simpleName,
+            GlyphArtifactPlanRef::class.simpleName,
+            ColorGlyphPlanRef::class.simpleName,
+            BitmapGlyphPlanRef::class.simpleName,
+            SVGGlyphPlanRef::class.simpleName,
+            GlyphArtifactRoutePolicyInputs::class.simpleName,
             OutlineGlyphRepresentation::class.simpleName,
             GlyphMaskGenerator::class.simpleName,
             A8GlyphMask::class.simpleName,
@@ -56,6 +62,12 @@ class GlyphSurfaceTest {
                 "GlyphRepresentation",
                 "GlyphArtifactPlanner",
                 "GlyphArtifactPlan",
+                "GlyphArtifactPlanEvidenceDump",
+                "GlyphArtifactPlanRef",
+                "ColorGlyphPlanRef",
+                "BitmapGlyphPlanRef",
+                "SVGGlyphPlanRef",
+                "GlyphArtifactRoutePolicyInputs",
                 "OutlineGlyphRepresentation",
                 "GlyphMaskGenerator",
                 "A8GlyphMask",
@@ -879,6 +891,7 @@ class GlyphSurfaceTest {
               "glyphCount": 4,
               "representationCount": 3,
               "diagnosticCount": 1,
+              "policyInputs": null,
               "decisions": [
                 {
                   "index": 0,
@@ -886,6 +899,8 @@ class GlyphSurfaceTest {
                   "selectedRoute": "text.glyph.outline",
                   "representation": "outline",
                   "source": "request",
+                  "planRef": null,
+                  "artifactIntent": null,
                   "keySha256": "${plan.decisions[0].keySha256}",
                   "fallbackPolicy": "fallback-selected-after-rejections",
                   "rejectedAlternatives": [
@@ -900,6 +915,8 @@ class GlyphSurfaceTest {
                   "selectedRoute": "text.glyph.mask.A8",
                   "representation": "a8",
                   "source": "request",
+                  "planRef": null,
+                  "artifactIntent": "CPUPreparedGPU",
                   "keySha256": "${plan.decisions[1].keySha256}",
                   "fallbackPolicy": "fallback-selected-after-rejections",
                   "rejectedAlternatives": [
@@ -913,6 +930,8 @@ class GlyphSurfaceTest {
                   "selectedRoute": "text.glyph.mask.SDF",
                   "representation": "sdf",
                   "source": "request",
+                  "planRef": null,
+                  "artifactIntent": "CPUPreparedGPU",
                   "keySha256": "${plan.decisions[2].keySha256}",
                   "fallbackPolicy": "selected-first-requested-route",
                   "rejectedAlternatives": [],
@@ -924,6 +943,8 @@ class GlyphSurfaceTest {
                   "selectedRoute": "text.glyph.unsupported",
                   "representation": null,
                   "source": null,
+                  "planRef": null,
+                  "artifactIntent": null,
                   "keySha256": "${plan.decisions[3].keySha256}",
                   "fallbackPolicy": "refuse-no-requested-representation",
                   "rejectedAlternatives": [
@@ -951,6 +972,276 @@ class GlyphSurfaceTest {
             }
             """.trimIndent() + "\n",
             plan.toCanonicalGlyphArtifactPlanJson(),
+        )
+    }
+
+    @Test
+    fun glyphArtifactPlanSupportsColorBitmapAndSvgPlaceholderRoutes() {
+        val outlineFallback = OutlineGlyphRepresentation(glyphId = 40, pathCommands = listOf("M 0 0"))
+        val colorRef = ColorGlyphPlanRef(glyphId = 41, planId = "color-plan-41")
+        val bitmapRef = BitmapGlyphPlanRef(glyphId = 42, planId = "bitmap-plan-42")
+        val svgRef = SVGGlyphPlanRef(glyphId = 43, planId = "svg-plan-43")
+
+        val planner = GlyphArtifactRoutePlanner(
+            request = GlyphArtifactRouteRequest(
+                preferredRoutes = listOf(
+                    GlyphArtifactRoute.COLOR,
+                    GlyphArtifactRoute.BITMAP,
+                    GlyphArtifactRoute.SVG,
+                    GlyphArtifactRoute.OUTLINE,
+                ),
+                availableRepresentations = mapOf(
+                    40 to listOf(outlineFallback),
+                    41 to listOf(colorRef),
+                    42 to listOf(bitmapRef),
+                    43 to listOf(svgRef),
+                ),
+            ),
+        )
+
+        val plan = planner.plan(
+            run = glyphRun(glyphIds = listOf(40, 41, 42, 43, 44)),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441072"),
+        )
+
+        assertEquals(
+            listOf(
+                "text.glyph.outline",
+                "text.glyph.color.COLR",
+                "text.glyph.bitmap.PNG",
+                "text.glyph.SVG",
+                "text.glyph.unsupported",
+            ),
+            plan.decisions.map { decision -> decision.selectedRoute },
+        )
+        assertEquals(
+            listOf("ColorGlyphPlan", "BitmapGlyphPlan", "SVGGlyphPlan"),
+            plan.decisions.mapNotNull { decision -> decision.planRef?.artifactName },
+        )
+        assertEquals(
+            listOf("color-plan-41", "bitmap-plan-42", "svg-plan-43"),
+            plan.decisions.mapNotNull { decision -> decision.planRef?.planId },
+        )
+        assertEquals(
+            listOf(
+                "fallback-selected-after-rejections",
+                "selected-first-requested-route",
+                "fallback-selected-after-rejections",
+                "fallback-selected-after-rejections",
+                "refuse-no-requested-representation",
+            ),
+            plan.decisions.map { decision -> decision.fallbackPolicy },
+        )
+
+        val dump = plan.toCanonicalGlyphArtifactPlanJson()
+        assertTrue(dump.contains(""""artifactName": "ColorGlyphPlan""""))
+        assertTrue(dump.contains(""""artifactName": "BitmapGlyphPlan""""))
+        assertTrue(dump.contains(""""artifactName": "SVGGlyphPlan""""))
+        assertTrue(dump.contains(""""selectedRoute": "text.glyph.color.COLR""""))
+        assertTrue(dump.contains(""""selectedRoute": "text.glyph.bitmap.PNG""""))
+        assertTrue(dump.contains(""""selectedRoute": "text.glyph.SVG""""))
+        assertEquals(plan.diagnostics.single(), plan.decisions.last().diagnostic)
+    }
+
+    @Test
+    fun glyphArtifactPlanRecordsPolicyInputsIntentAndExplicitRouteDiagnostics() {
+        val outlineFallback = OutlineGlyphRepresentation(glyphId = 60, pathCommands = listOf("M 0 0"))
+        val a8 = a8Mask(glyphId = 61, width = 1, height = 1)
+        val sdf = SDFGlyphMask(glyphId = 63, width = 1, height = 1, distanceRange = 8f, pixels = listOf(192))
+
+        val request = GlyphArtifactRouteRequest(
+            preferredRoutes = listOf(
+                GlyphArtifactRoute.SDF,
+                GlyphArtifactRoute.A8,
+                GlyphArtifactRoute.OUTLINE,
+            ),
+            policyInputs = GlyphArtifactRoutePolicyInputs(
+                textStylePreference = "body",
+                transformClass = "perspective",
+                atlasBudgetClass = "tight",
+                sdfEligibility = "mixed",
+                colorGlyphAvailability = "placeholders-only",
+                emojiSequenceFacts = "none",
+                rendererCapabilitySummary = "cpu-only",
+            ),
+            routeDiagnostics = mapOf(
+                60 to listOf(
+                    GlyphRouteDiagnostic.sdfTransformUnsupported(
+                        glyphId = 60,
+                        transformBucket = "perspective",
+                        fallbackRoute = "text.glyph.outline",
+                    ),
+                ),
+                62 to listOf(
+                    GlyphRouteDiagnostic(
+                        glyphId = 62,
+                        route = "text.glyph.atlas-capacity-exceeded",
+                        message = "Atlas budget exceeded for glyph 62.",
+                        severity = "warning",
+                    ),
+                ),
+            ),
+            availableRepresentations = mapOf(
+                60 to listOf(outlineFallback),
+                61 to listOf(a8),
+                62 to listOf(outlineFallback.copy(glyphId = 62)),
+                63 to listOf(sdf),
+            ),
+        )
+
+        val plan = GlyphArtifactRoutePlanner(request).plan(
+            run = glyphRun(glyphIds = listOf(60, 61, 62, 63)),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441073"),
+        )
+
+        assertEquals(request.policyInputs, plan.policyInputs)
+        assertEquals("text.glyph.SDF-transform-unsupported", plan.decisions[0].rejectedAlternatives.first().reason)
+        assertEquals("CPUPreparedGPU", plan.decisions[1].artifactIntent)
+        assertEquals("text.glyph.atlas-capacity-exceeded", plan.decisions[2].rejectedAlternatives[1].reason)
+        assertEquals("CPUPreparedGPU", plan.decisions[3].artifactIntent)
+
+        val dump = plan.toCanonicalGlyphArtifactPlanJson()
+        assertTrue(dump.contains(""""artifactIntent": "CPUPreparedGPU""""))
+        assertTrue(dump.contains(""""transformClass": "perspective""""))
+        assertTrue(dump.contains(""""rendererCapabilitySummary": "cpu-only""""))
+    }
+
+    @Test
+    fun glyphArtifactPlanSupportsExplicitLcdAndOutlineRefusalDiagnostics() {
+        val lcdPlan = GlyphArtifactRoutePlanner(
+            GlyphArtifactRouteRequest(
+                preferredRoutes = listOf(GlyphArtifactRoute.LCD),
+            ),
+        ).plan(
+            run = glyphRun(glyphIds = listOf(70)),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441074"),
+        )
+        assertEquals("text.glyph.LCD-future-research", lcdPlan.diagnostics.single().route)
+        assertEquals(lcdPlan.diagnostics.single(), lcdPlan.decisions.single().diagnostic)
+
+        val outlinePlan = GlyphArtifactRoutePlanner(
+            GlyphArtifactRouteRequest(
+                preferredRoutes = listOf(GlyphArtifactRoute.OUTLINE),
+                routeDiagnostics = mapOf(
+                    71 to listOf(GlyphRouteDiagnostic.outlineUnavailable(glyphId = 71)),
+                ),
+            ),
+        ).plan(
+            run = glyphRun(glyphIds = listOf(71)),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441075"),
+        )
+        assertEquals("text.glyph.outline-unavailable", outlinePlan.diagnostics.single().route)
+        assertEquals(outlinePlan.diagnostics.single(), outlinePlan.decisions.single().diagnostic)
+    }
+
+    @Test
+    fun glyphArtifactPlanEvidenceDumpMatchesRepoFixture() {
+        val placeholderPlan = GlyphArtifactRoutePlanner(
+            request = GlyphArtifactRouteRequest(
+                preferredRoutes = listOf(
+                    GlyphArtifactRoute.COLOR,
+                    GlyphArtifactRoute.BITMAP,
+                    GlyphArtifactRoute.SVG,
+                    GlyphArtifactRoute.OUTLINE,
+                ),
+                availableRepresentations = mapOf(
+                    40 to listOf(OutlineGlyphRepresentation(glyphId = 40, pathCommands = listOf("M 0 0"))),
+                    41 to listOf(ColorGlyphPlanRef(glyphId = 41, planId = "color-plan-41")),
+                    42 to listOf(BitmapGlyphPlanRef(glyphId = 42, planId = "bitmap-plan-42")),
+                    43 to listOf(SVGGlyphPlanRef(glyphId = 43, planId = "svg-plan-43")),
+                ),
+            ),
+        ).plan(
+            run = glyphRun(glyphIds = listOf(40, 41, 42, 43, 44)),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441076"),
+        )
+
+        val policyPlan = GlyphArtifactRoutePlanner(
+            request = GlyphArtifactRouteRequest(
+                preferredRoutes = listOf(
+                    GlyphArtifactRoute.SDF,
+                    GlyphArtifactRoute.A8,
+                    GlyphArtifactRoute.OUTLINE,
+                ),
+                policyInputs = GlyphArtifactRoutePolicyInputs(
+                    textStylePreference = "body",
+                    transformClass = "perspective",
+                    atlasBudgetClass = "tight",
+                    sdfEligibility = "mixed",
+                    colorGlyphAvailability = "placeholders-only",
+                    emojiSequenceFacts = "none",
+                    rendererCapabilitySummary = "cpu-only",
+                ),
+                routeDiagnostics = mapOf(
+                    60 to listOf(GlyphRouteDiagnostic.sdfTransformUnsupported(60, "perspective", "text.glyph.outline")),
+                    62 to listOf(
+                        GlyphRouteDiagnostic(
+                            glyphId = 62,
+                            route = "text.glyph.atlas-capacity-exceeded",
+                            message = "Atlas budget exceeded for glyph 62.",
+                            severity = "warning",
+                        ),
+                    ),
+                ),
+                availableRepresentations = mapOf(
+                    60 to listOf(OutlineGlyphRepresentation(glyphId = 60, pathCommands = listOf("M 0 0"))),
+                    61 to listOf(a8Mask(glyphId = 61, width = 1, height = 1)),
+                    62 to listOf(OutlineGlyphRepresentation(glyphId = 62, pathCommands = listOf("M 0 0"))),
+                    63 to listOf(SDFGlyphMask(glyphId = 63, width = 1, height = 1, distanceRange = 8f, pixels = listOf(192))),
+                ),
+            ),
+        ).plan(
+            run = glyphRun(glyphIds = listOf(60, 61, 62, 63)),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441077"),
+        )
+
+        val lcdPlan = GlyphArtifactRoutePlanner(
+            GlyphArtifactRouteRequest(
+                preferredRoutes = listOf(GlyphArtifactRoute.LCD),
+            ),
+        ).plan(
+            run = glyphRun(glyphIds = listOf(70)),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441078"),
+        )
+
+        val outlinePlan = GlyphArtifactRoutePlanner(
+            GlyphArtifactRouteRequest(
+                preferredRoutes = listOf(GlyphArtifactRoute.OUTLINE),
+                routeDiagnostics = mapOf(
+                    71 to listOf(GlyphRouteDiagnostic.outlineUnavailable(glyphId = 71)),
+                ),
+            ),
+        ).plan(
+            run = glyphRun(glyphIds = listOf(71)),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441079"),
+        )
+
+        val dump = GlyphArtifactPlanEvidenceDump(
+            dumpId = "glyph-artifact-plan",
+            ownerTickets = listOf("KFONT-M9-002"),
+            fixtureIds = listOf(
+                "glyph-artifact-plan-placeholders",
+                "glyph-artifact-plan-policy-refusals",
+                "glyph-artifact-plan-lcd-refusal",
+                "glyph-artifact-plan-outline-refusal",
+            ),
+            plans = listOf(placeholderPlan, policyPlan, lcdPlan, outlinePlan),
+            requiredDiagnostics = listOf(
+                "text.glyph.LCD-future-research",
+                "text.glyph.SDF-transform-unsupported",
+                "text.glyph.atlas-capacity-exceeded",
+                "text.glyph.outline-unavailable",
+            ),
+            nonClaims = listOf(
+                "producer-only",
+                "no-complete-color-bitmap-svg-plan-claim",
+                "no-gpu-text-route-claim",
+            ),
+        )
+
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/glyph/glyph-artifact-plan.json"),
+            dump.toCanonicalJson(),
         )
     }
 

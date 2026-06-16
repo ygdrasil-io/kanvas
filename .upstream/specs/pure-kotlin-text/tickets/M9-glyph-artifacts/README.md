@@ -11,7 +11,7 @@ M3 supplies stable TrueType outlines and metrics. M6 supplies shaped glyph runs.
 ## Exit Criteria
 
 - [ ] `GlyphStrikeKey` includes every rendering-affecting fact and excludes live handles, atlas coordinates, GPU resources, and object identity.
-- [ ] `GlyphArtifactPlan` records selected route, rejected alternatives, fallback policy, and diagnostics for outline, A8, SDF, color, bitmap, SVG, and unsupported routes.
+- [x] `GlyphArtifactPlan` records selected route, rejected alternatives, fallback policy, and diagnostics for outline, A8, SDF, color, bitmap, SVG, and unsupported routes.
 - [ ] A8 and SDF CPU artifacts have deterministic bounds, hashes, key preimages, and refusal evidence.
 - [ ] Atlas artifacts expose entry refs, generation, invalidation tokens, eviction traces, source hashes, and budget diagnostics.
 - [ ] Cache inventory and telemetry dumps separate generation, packing, eviction, invalidation, and upload-preparation costs.
@@ -21,7 +21,7 @@ M3 supplies stable TrueType outlines and metrics. M6 supplies shaped glyph runs.
 | Ticket | Status | Priority | Claim Impact | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|
 | [KFONT-M9-001 - Complete `GlyphStrikeKey`](KFONT-M9-001-complete-glyphstrikekey.md) | `done` | `P0` | `tracked-gap` | `glyph` | `KFONT-M3-001`, `KFONT-M6-001` | - |
-| [KFONT-M9-002 - Promote `GlyphArtifactPlan` route taxonomy](KFONT-M9-002-promote-glyphartifactplan-route-taxonomy.md) | `proposed` | `P0` | `tracked-gap` | `glyph` | `KFONT-M9-001` | - |
+| [KFONT-M9-002 - Promote `GlyphArtifactPlan` route taxonomy](KFONT-M9-002-promote-glyphartifactplan-route-taxonomy.md) | `done` | `P0` | `tracked-gap` | `glyph` | `KFONT-M9-001` | - |
 | [KFONT-M9-003 - Implement quadratic/cubic outline rasterization for A8](KFONT-M9-003-implement-quadratic-cubic-outline-rasterization-for-a8.md) | `proposed` | `P1` | `tracked-gap` | `glyph` | `KFONT-M3-001`, `KFONT-M9-001`, `KFONT-M9-002` | - |
 | [KFONT-M9-004 - Implement production SDF generator boundaries](KFONT-M9-004-implement-production-sdf-generator-boundaries.md) | `proposed` | `P0` | `tracked-gap` | `glyph` | `KFONT-M9-001`, `KFONT-M9-002`, `KFONT-M9-003` | `dftext` |
 | [KFONT-M9-005 - Add atlas eviction and invalidation tests](KFONT-M9-005-add-atlas-eviction-and-invalidation-tests.md) | `proposed` | `P1` | `tracked-gap` | `glyph` | `KFONT-M9-001`, `KFONT-M9-003`, `KFONT-M9-004` | `dftext` |
