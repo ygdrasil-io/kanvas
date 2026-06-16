@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 19,
+  "sceneCount": 20,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -189,6 +189,16 @@
       "tags": ["Rect"],
       "kgpuMilestones": ["M10"],
       "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "legacy-inventory-hygiene-board",
+      "title": "Legacy Inventory Hygiene Board",
+      "description": "Legacy route inventory and archive hygiene lanes without migration or default-route changes.",
+      "tags": ["Rect","RRect","Clip","LegacyComparison"],
+      "kgpuMilestones": ["M10"],
+      "ticketIds": ["KGPU-M10-001","KGPU-M10-004"],
       "rStages": [],
       "expectation": "ShouldRender"
     }

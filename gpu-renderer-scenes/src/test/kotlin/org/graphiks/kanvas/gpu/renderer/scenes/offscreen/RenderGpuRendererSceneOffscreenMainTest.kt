@@ -68,6 +68,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
             RenderedShapeExpectation("cache-source-ledger-board", fillRectCount = 5),
             RenderedShapeExpectation("legacy-route-comparison", fillRectCount = 1),
             RenderedShapeExpectation(
+                sceneId = "legacy-inventory-hygiene-board",
+                fillRectCount = 7,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "rounded-panel-gradient",
                 fillRectCount = 0,
                 fillRRectCount = 1,

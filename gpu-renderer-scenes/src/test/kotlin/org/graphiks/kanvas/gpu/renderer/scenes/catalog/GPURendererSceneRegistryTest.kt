@@ -163,6 +163,35 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `legacy inventory hygiene board is backed by inventory and archive hygiene tickets only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("legacy-inventory-hygiene-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.LegacyComparison), scene.tags)
+        assertEquals(
+            listOf("KGPU-M10-001", "KGPU-M10-004"),
+            scene.roadmapLinks.mapNotNull { it.ticketId },
+        )
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf(
+                "legacy-route-ownership-inventoried",
+                "replacement-status-inventoried",
+                "archive-historical-only",
+                "legacy-default-active",
+                "shadow-parity-blocked",
+                "retirement-blocked",
+                "no-product-activation",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals(listOf(1, 2, 3, 4, 5, 6, 7), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M10-002" || it.ticketId == "KGPU-M10-003" })
+    }
+
+    @Test
     fun `layered shadow card is backed by bounded shadow layer and drop shadow payloads`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("layered-shadow-card")
         assertIs<SceneCommand.Clear>(scene.commands[0])
@@ -386,6 +415,26 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.Rect),
                 commandFamilies = listOf("fill-rect"),
                 roadmapLinks = listOf(RoadmapExpectation("M10")),
+            ),
+            SceneExpectationRow(
+                sceneId = "legacy-inventory-hygiene-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.LegacyComparison),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M10", ticketId = "KGPU-M10-001"),
+                    RoadmapExpectation("M10", ticketId = "KGPU-M10-004"),
+                ),
             ),
         )
     }

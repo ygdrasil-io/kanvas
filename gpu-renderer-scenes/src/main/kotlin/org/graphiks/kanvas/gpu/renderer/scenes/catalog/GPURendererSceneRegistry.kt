@@ -535,6 +535,71 @@ object GPURendererSceneRegistry {
                 ),
             ),
         ),
+        scene(
+            id = "legacy-inventory-hygiene-board",
+            title = "Legacy Inventory Hygiene Board",
+            description = "Legacy route inventory and archive hygiene lanes without migration or default-route changes.",
+            tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.LegacyComparison),
+            links = listOf(
+                SceneRoadmapLink.ticket("KGPU-M10-001"),
+                SceneRoadmapLink.ticket("KGPU-M10-004"),
+            ),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.038f, 0.040f, 0.046f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "legacy-inventory-panel",
+                    rect = SceneRect(22f, 24f, 298f, 176f),
+                    radius = 18f,
+                    color = SceneColor(0.11f, 0.13f, 0.15f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "legacy-inventory-window",
+                    rect = SceneRect(38f, 42f, 282f, 158f),
+                ),
+                SceneCommand.FillRect(
+                    label = "legacy-route-ownership-inventoried",
+                    rect = SceneRect(46f, 50f, 90f, 154f),
+                    color = SceneColor.green(0.90f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "replacement-status-inventoried",
+                    rect = SceneRect(98f, 66f, 132f, 154f),
+                    color = SceneColor.blue(0.86f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "archive-historical-only",
+                    rect = SceneRect(140f, 82f, 174f, 154f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "legacy-default-active",
+                    rect = SceneRect(182f, 58f, 216f, 154f),
+                    color = SceneColor(0.72f, 0.76f, 0.82f, 1f),
+                    paintOrder = 4,
+                ),
+                SceneCommand.FillRect(
+                    label = "shadow-parity-blocked",
+                    rect = SceneRect(224f, 96f, 248f, 154f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.92f),
+                    paintOrder = 5,
+                ),
+                SceneCommand.FillRect(
+                    label = "retirement-blocked",
+                    rect = SceneRect(254f, 108f, 276f, 154f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.74f),
+                    paintOrder = 6,
+                ),
+                SceneCommand.FillRect(
+                    label = "no-product-activation",
+                    rect = SceneRect(48f, 148f, 276f, 156f),
+                    color = SceneColor(0.96f, 0.98f, 0.94f, 0.86f),
+                    paintOrder = 7,
+                ),
+            ),
+        ),
     )
 
     val registry: SceneRegistry<SceneCommand> = SceneRegistry(scenes)

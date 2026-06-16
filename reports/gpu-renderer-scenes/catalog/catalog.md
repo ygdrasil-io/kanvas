@@ -21,3 +21,4 @@
 | `cache-pressure-deck` | Cache Pressure Deck | Rect | KGPU M9 |  |  | `ShouldRender` |
 | `cache-source-ledger-board` | Cache Source Ledger Board | Rect,Cache | KGPU M9 | `KGPU-M9-001` |  | `ShouldRender` |
 | `legacy-route-comparison` | Legacy Route Comparison | Rect | KGPU M10 |  |  | `ShouldRender` |
+| `legacy-inventory-hygiene-board` | Legacy Inventory Hygiene Board | Rect,RRect,Clip,LegacyComparison | KGPU M10 | `KGPU-M10-001`,`KGPU-M10-004` |  | `ShouldRender` |

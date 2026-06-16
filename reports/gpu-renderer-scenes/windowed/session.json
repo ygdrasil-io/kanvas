@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneId": "filter-dag-refusal-board",
+  "sceneId": "legacy-inventory-hygiene-board",
   "status": "presented",
   "productRefusal": false,
   "reason": "kadre-windowed-presented-frames",
