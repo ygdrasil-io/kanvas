@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M12-001"
 title: "Define font telemetry schema"
-status: "proposed"
+status: "review"
 milestone: "M12"
 priority: "P0"
 owner_area: "telemetry"
@@ -87,10 +87,10 @@ data class FontMetricSeries(
 
 ## Acceptance Criteria
 
-- [ ] The schema records every measurement dimension required by `08-performance-budgets-and-telemetry.md`, including GPU adapter facts only when GPU metrics are present.
-- [ ] Metric names are namespaced by domain and cannot mix CPU generation time with GPU upload time in one field.
-- [ ] A repeated-run fixture serializes median, p90, max, sample count, and cache state; single-run timing cannot be interpreted as a release budget.
-- [ ] Missing mandatory dimensions produce `font.telemetry.dimension-missing` with the domain, fixture ID, and missing field name.
+- [x] The schema records every measurement dimension required by `08-performance-budgets-and-telemetry.md`, including GPU adapter facts only when GPU metrics are present.
+- [x] Metric names are namespaced by domain and cannot mix CPU generation time with GPU upload time in one field.
+- [x] A repeated-run fixture serializes median, p90, max, sample count, and cache state; single-run timing cannot be interpreted as a release budget.
+- [x] Missing mandatory dimensions produce `font.telemetry.dimension-missing` with the domain, fixture ID, and missing field name.
 - [ ] Dashboard trend warnings can ingest one sample from every telemetry domain without changing claim impact from `tracked-gap`.
 
 ## Required Evidence
@@ -117,13 +117,17 @@ data class FontMetricSeries(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 ```
 
 ## Status Notes
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
 - Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `review`: `font-telemetry-schema.json` and `font-telemetry-schema-fixture.json` now define a deterministic cross-domain schema with repeated-run samples and stable refusal diagnostics, but `pipelinePerformanceTrendWarnings` / PM bundle ingestion and producer-side subsystem wiring remain open before `done`.
 
 ## Linear Labels
 

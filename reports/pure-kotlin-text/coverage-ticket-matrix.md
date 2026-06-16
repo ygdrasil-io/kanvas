@@ -2865,6 +2865,50 @@ rtk ./gradlew --no-daemon :font:gpu-api:test
 Remaining gate: this is telemetry scaffolding only. It does not measure actual
 runtime performance, promote indicative budgets into release gates, synthesize
 GPU upload evidence, or claim GPU text rendering support.
+
+### KFONT-M12-001: Define font telemetry schema
+
+Status: implemented as a bounded review slice.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt`
+- `reports/pure-kotlin-text/font-telemetry-schema.json`
+- `reports/pure-kotlin-text/font-telemetry-schema-fixture.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m12-001-font-telemetry-schema.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-001-define-font-telemetry-schema.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `FontTelemetryEvidenceWriter` now emits a deterministic cross-domain schema
+  for parser, scaler, shaping, paragraph, glyph artifact, and GPU text handoff
+  telemetry with shared dimensions and GPU-only adapter/backend fields.
+- `font-telemetry-schema-fixture.json` records one repeated-run advisory sample
+  for each telemetry domain plus stable refusal cases for missing dimensions
+  and single-run budget misuse.
+- `FontTelemetrySchemaTest` asserts byte-identical checked-in dumps, required
+  domain coverage, repeated-run aggregation fields, conditional GPU adapter
+  facts, and stable telemetry refusal diagnostics without HarfBuzz or
+  FreeType wording.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: this is telemetry-schema evidence only. It does not yet wire
+parser/scaler/shaping/paragraph/glyph/GPU producers into the schema, does not
+show `pipelinePerformanceTrendWarnings` or PM bundle ingestion of advisory M12
+rows, and does not promote any performance budget, GPU route, or release-gate
+claim.
 ### KFONT-M1-004: Bundled Source Fixture Manifest
 
 Status: done; merged, independently reviewed, and freshly revalidated for closeout.

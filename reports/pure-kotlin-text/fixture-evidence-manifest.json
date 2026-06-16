@@ -301,6 +301,44 @@
       ]
     },
     {
+      "familyId": "font-telemetry-schema",
+      "familyName": "Font telemetry schema",
+      "classification": "tracked-gap",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "currentEvidencePaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/font-telemetry-schema.json",
+        "reports/pure-kotlin-text/font-telemetry-schema-fixture.json",
+        "reports/pure-kotlin-text/2026-06-16-kfont-m12-001-font-telemetry-schema.md",
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "reports/pure-kotlin-text/dump-evidence-index.json"
+      ],
+      "requiredEvidenceGates": [
+        "Wire parser, scaler, shaping, paragraph, glyph artifact, and GPU handoff producers into the shared schema before any telemetry support promotion.",
+        "Add advisory pipelinePerformanceTrendWarnings or PM bundle evidence that ingests the M12 rows without changing claim impact.",
+        "Keep performance budgets advisory until the dedicated promotion policy is updated."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py"
+      ],
+      "fixtureCommands": [
+        "Font telemetry schema dumps are checked in under reports/pure-kotlin-text and asserted by FontTelemetrySchemaTest."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim"
+      ]
+    },
+    {
       "familyId": "glyph-artifact-plan",
       "familyName": "Glyph artifact plan route taxonomy",
       "classification": "tracked-gap",
