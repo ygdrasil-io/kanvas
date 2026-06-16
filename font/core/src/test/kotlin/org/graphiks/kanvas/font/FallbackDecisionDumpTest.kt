@@ -1,0 +1,59 @@
+package org.graphiks.kanvas.font
+
+import java.nio.file.Files
+import java.nio.file.Path
+import kotlin.test.Test
+import kotlin.test.assertContains
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class FallbackDecisionDumpTest {
+    @Test
+    fun `fallback decision trace dump matches repo golden`() {
+        val expected = Files.readString(projectRoot().resolve("reports/font/fixtures/expected/fallback/fallback-decision-trace.json"))
+        val actual = defaultFallbackEvidenceBundle().fallbackDecisionTraceJson
+
+        assertEquals(expected.trimEnd(), actual.trimEnd())
+        assertContains(actual, """"dumpId": "fallback-decision-trace"""")
+        assertContains(actual, """"fixtureId":"fallback-script-arabic"""")
+        assertContains(actual, """"fixtureId":"fallback-locale-serbian"""")
+        assertContains(actual, """"fixtureId":"fallback-emoji-preference"""")
+    }
+
+    @Test
+    fun `resolved font runs dump matches repo golden`() {
+        val expected = Files.readString(projectRoot().resolve("reports/font/fixtures/expected/fallback/resolved-font-runs.json"))
+        val actual = defaultFallbackEvidenceBundle().resolvedFontRunsJson
+
+        assertEquals(expected.trimEnd(), actual.trimEnd())
+        assertContains(actual, """"dumpId": "resolved-font-runs"""")
+        assertContains(actual, """"fixtureId":"fallback-missing-glyph"""")
+        assertContains(actual, """"fixtureId":"fallback-family-unavailable"""")
+    }
+
+    @Test
+    fun `fallback dump exposes script locale emoji reasons and stable refusal diagnostics`() {
+        val bundle = defaultFallbackEvidenceBundle()
+
+        assertContains(bundle.fallbackDecisionTraceJson, """"reason":"script-fallback"""")
+        assertContains(bundle.fallbackDecisionTraceJson, """"reason":"locale-hint"""")
+        assertContains(bundle.fallbackDecisionTraceJson, """"reason":"emoji-preference"""")
+        assertContains(bundle.fallbackDecisionTraceJson, """"diagnosticCode":"font.fallback-glyph-unavailable"""")
+        assertContains(bundle.fallbackDecisionTraceJson, """"diagnosticCode":"font.fallback-family-unavailable"""")
+        assertContains(bundle.fallbackDecisionTraceJson, """"text.shaping.script-unsupported"""")
+        assertContains(bundle.resolvedFontRunsJson, """"diagnosticCode":"text.shaping.fallback-missing"""")
+        assertFalse(bundle.fallbackDecisionTraceJson.contains("HarfBuzz", ignoreCase = true))
+        assertFalse(bundle.fallbackDecisionTraceJson.contains("FreeType", ignoreCase = true))
+        assertFalse(bundle.resolvedFontRunsJson.contains("SkTypeface"))
+        assertTrue(bundle.fallbackDecisionTraceJson.indexOf("fallback-family-generic") < bundle.fallbackDecisionTraceJson.indexOf("fallback-script-arabic"))
+    }
+
+    private fun projectRoot(): Path {
+        var current = Path.of("").toAbsolutePath().normalize()
+        while (current.parent != null && !Files.isDirectory(current.resolve("reports/pure-kotlin-text"))) {
+            current = current.parent
+        }
+        return current
+    }
+}
