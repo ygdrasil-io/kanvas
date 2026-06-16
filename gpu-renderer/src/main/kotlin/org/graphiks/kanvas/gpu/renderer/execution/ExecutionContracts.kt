@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPass
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketStream
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawPayloadRef
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineCreationPlan
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeyPreimage
@@ -152,6 +154,102 @@ sealed interface GPUCommandScope {
     data class Readback(val request: GPUReadbackRequest) : GPUCommandScope {
         override val scopeLabel: String get() = request.requestId
         override val commandClass: GPUCommandClass get() = GPUCommandClass.Readback
+    }
+}
+
+/**
+ * Encoder planning record that bridges pass command streams to a concrete GPU facade.
+ *
+ * The plan records which packet and pass command streams will be encoded for a scope, which device
+ * and target generations they were validated against, and the facade operation classes expected in
+ * order. It still owns no backend encoder, command buffer, queue submission, bind group, texture,
+ * or Dawn/WGPU object.
+ */
+class GPUCommandEncoderPlan(
+    val planId: String,
+    val contextIdentity: String,
+    val deviceGeneration: GPUDeviceGeneration,
+    val targetGeneration: Long,
+    val scope: GPUCommandScope,
+    val packetStreamId: String,
+    val passCommandStreamId: String,
+    val packetCount: Int,
+    val passCommandCount: Int,
+    facadeOperationClasses: List<String>,
+    resourceGenerationLabels: List<String>,
+    diagnostics: List<String> = emptyList(),
+) {
+    /** Command class requested by the scope that will own encoder recording. */
+    val commandClass: GPUCommandClass
+        get() = scope.commandClass
+
+    /** Facade operation labels copied from the pass command stream. */
+    val facadeOperationClasses: List<String> = facadeOperationClasses.toList()
+
+    /** Resource and target generation labels copied before backend validation. */
+    val resourceGenerationLabels: List<String> = resourceGenerationLabels.toList()
+
+    /** Stable diagnostics copied as compact string codes for execution evidence. */
+    val diagnostics: List<String> = diagnostics.toList()
+
+    init {
+        require(planId.isNotBlank()) { "GPUCommandEncoderPlan.planId must not be blank" }
+        require(contextIdentity.isNotBlank()) { "GPUCommandEncoderPlan.contextIdentity must not be blank" }
+        require(targetGeneration >= 0L) { "GPUCommandEncoderPlan.targetGeneration must be non-negative" }
+        require(packetStreamId.isNotBlank()) { "GPUCommandEncoderPlan.packetStreamId must not be blank" }
+        require(passCommandStreamId.isNotBlank()) {
+            "GPUCommandEncoderPlan.passCommandStreamId must not be blank"
+        }
+        require(packetCount >= 0) { "GPUCommandEncoderPlan.packetCount must be non-negative" }
+        require(passCommandCount > 0) { "GPUCommandEncoderPlan.passCommandCount must be positive" }
+        require(this.facadeOperationClasses.size == passCommandCount) {
+            "GPUCommandEncoderPlan facade operation count must match passCommandCount"
+        }
+        require(this.facadeOperationClasses.none { label -> label.isBlank() }) {
+            "GPUCommandEncoderPlan.facadeOperationClasses must not contain blanks"
+        }
+        require(this.resourceGenerationLabels.none { label -> label.isBlank() }) {
+            "GPUCommandEncoderPlan.resourceGenerationLabels must not contain blanks"
+        }
+    }
+
+    companion object {
+        /** Builds a render encoder plan from matching packet and pass command streams. */
+        fun fromPassCommandStream(
+            planId: String,
+            contextIdentity: String,
+            deviceGeneration: GPUDeviceGeneration,
+            targetGeneration: Long,
+            scope: GPUCommandScope,
+            packetStream: GPUDrawPacketStream,
+            passCommandStream: GPUPassCommandStream,
+            resourceGenerationLabels: List<String> = emptyList(),
+        ): GPUCommandEncoderPlan {
+            require(scope.commandClass == GPUCommandClass.Render) {
+                "GPUPassCommandStream currently lowers only render command scopes"
+            }
+            require(packetStream.passId == passCommandStream.passId) {
+                "Packet stream pass ${packetStream.passId} must match command stream pass ${passCommandStream.passId}"
+            }
+            require(packetStream.streamId == passCommandStream.packetStreamId) {
+                "Packet stream ${packetStream.streamId} must match command stream ${passCommandStream.packetStreamId}"
+            }
+
+            return GPUCommandEncoderPlan(
+                planId = planId,
+                contextIdentity = contextIdentity,
+                deviceGeneration = deviceGeneration,
+                targetGeneration = targetGeneration,
+                scope = scope,
+                packetStreamId = packetStream.streamId,
+                passCommandStreamId = passCommandStream.streamId,
+                packetCount = packetStream.packetCount,
+                passCommandCount = passCommandStream.commandCount,
+                facadeOperationClasses = passCommandStream.commandLabels,
+                resourceGenerationLabels = resourceGenerationLabels,
+                diagnostics = passCommandStream.diagnostics.map { diagnostic -> diagnostic.code },
+            )
+        }
     }
 }
 
