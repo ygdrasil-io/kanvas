@@ -60,29 +60,40 @@ data class CandidateScene(
     }
 }
 
+internal fun validateSceneHumanDocumentation(
+    scenes: List<GPURendererScene<*>>,
+    docs: List<SceneHumanDocs>,
+    candidateScenes: List<CandidateScene>,
+): List<String> {
+    val diagnostics = mutableListOf<String>()
+    val executableIds = scenes.map { it.sceneId.value }.toSet()
+    val docIds = docs.map { it.sceneId.value }
+    val duplicateDocIds = docIds.groupingBy { it }.eachCount().filterValues { it > 1 }.keys
+    duplicateDocIds.forEach { diagnostics += "duplicate human docs sceneId=$it" }
+    docIds.filterNot { it in executableIds }.forEach {
+        diagnostics += "human docs sceneId=$it does not match an executable scene"
+    }
+    executableIds.filterNot { it in docIds }.forEach {
+        diagnostics += "missing human docs sceneId=$it"
+    }
+
+    val candidateIds = candidateScenes.map { it.sceneId.value }
+    val duplicateCandidateIds = candidateIds.groupingBy { it }.eachCount().filterValues { it > 1 }.keys
+    duplicateCandidateIds.forEach { diagnostics += "duplicate candidate sceneId=$it" }
+    candidateIds.filter { it in executableIds }.forEach {
+        diagnostics += "candidate sceneId=$it must not be executable"
+    }
+    return diagnostics
+}
+
 object GPURendererSceneHumanDocs {
     val docs: List<SceneHumanDocs> = emptyList()
     val candidateScenes: List<CandidateScene> = emptyList()
 
-    fun validateAgainst(scenes: List<GPURendererScene<*>>): List<String> {
-        val diagnostics = mutableListOf<String>()
-        val executableIds = scenes.map { it.sceneId.value }.toSet()
-        val docIds = docs.map { it.sceneId.value }
-        val duplicateDocIds = docIds.groupingBy { it }.eachCount().filterValues { it > 1 }.keys
-        duplicateDocIds.forEach { diagnostics += "duplicate human docs sceneId=$it" }
-        docIds.filterNot { it in executableIds }.forEach {
-            diagnostics += "human docs sceneId=$it does not match an executable scene"
-        }
-        executableIds.filterNot { it in docIds }.forEach {
-            diagnostics += "missing human docs sceneId=$it"
-        }
-
-        val candidateIds = candidateScenes.map { it.sceneId.value }
-        val duplicateCandidateIds = candidateIds.groupingBy { it }.eachCount().filterValues { it > 1 }.keys
-        duplicateCandidateIds.forEach { diagnostics += "duplicate candidate sceneId=$it" }
-        candidateIds.filter { it in executableIds }.forEach {
-            diagnostics += "candidate sceneId=$it must not be executable"
-        }
-        return diagnostics
-    }
+    fun validateAgainst(scenes: List<GPURendererScene<*>>): List<String> =
+        validateSceneHumanDocumentation(
+            scenes = scenes,
+            docs = docs,
+            candidateScenes = candidateScenes,
+        )
 }
