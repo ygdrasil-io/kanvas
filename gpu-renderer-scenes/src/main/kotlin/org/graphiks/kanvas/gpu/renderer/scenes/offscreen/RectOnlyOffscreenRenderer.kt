@@ -40,6 +40,7 @@ import kotlinx.coroutines.runBlocking
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.a8GlyphAtlasGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.legacyRetirementBlockerDiagnostics
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.pathStencilCoverGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.pmReadinessFreezeDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.runtimeEffectRefusalGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.textResourceBindingGateDiagnostics
@@ -83,6 +84,7 @@ class RectOnlyOffscreenRenderer {
                 val baseDiagnostics = rectOnlyRenderedDiagnostics(
                     sceneId = sceneId,
                     adapterInfo = ctx.adapterInfo,
+                    clearCount = drawPlan.clearCount,
                     fillRectCount = drawPlan.fillRectCount,
                     fillRRectCount = drawPlan.fillRRectCount,
                     linearGradientRectCount = drawPlan.linearGradientRectCount,
@@ -99,7 +101,8 @@ class RectOnlyOffscreenRenderer {
                         scene.a8GlyphAtlasGateDiagnostics() +
                         scene.textResourceBindingGateDiagnostics() +
                         scene.pmReadinessFreezeDiagnostics() +
-                        scene.legacyRetirementBlockerDiagnostics()
+                        scene.legacyRetirementBlockerDiagnostics() +
+                        scene.pathStencilCoverGateDiagnostics()
                 return OffscreenRunReport.rendered(
                     sceneId = sceneId,
                     imagePath = RENDER_FILE_NAME,
@@ -467,6 +470,7 @@ class RectOnlyOffscreenRenderer {
 internal data class RectOnlyDrawPlan(
     val sceneId: String,
     val clearColor: SceneColor,
+    val clearCount: Int,
     val fills: List<RectOnlyFillDraw>,
     val clipCount: Int = 0,
     val filters: List<RectOnlyFilterNode> = emptyList(),
@@ -726,6 +730,7 @@ internal fun prepareRectOnlyDrawPlan(
         sceneId = sceneId,
         clearColor = commands.filterIsInstance<SceneCommand.Clear>().firstOrNull()?.color
             ?: SceneColor(0f, 0f, 0f, 0f),
+        clearCount = commands.count { it is SceneCommand.Clear },
         fills = fills,
         clipCount = commands.count { it is SceneCommand.Clip },
         filters = filters,
@@ -948,6 +953,7 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
 internal fun rectOnlyRenderedDiagnostics(
     sceneId: String,
     adapterInfo: String?,
+    clearCount: Int,
     fillRectCount: Int,
     fillRRectCount: Int,
     linearGradientRectCount: Int = 0,
@@ -973,6 +979,7 @@ internal fun rectOnlyRenderedDiagnostics(
     return buildList {
         add("rendered $sceneId via WebGPU offscreen")
         add("adapter=${adapterInfo ?: "unknown-adapter"}")
+        add("clearCommands=$clearCount")
         add("fillRectCommands=$fillRectCount")
         add("fillRRectCommands=$fillRRectCount")
         add("linearGradientRectCommands=$linearGradientRectCount")

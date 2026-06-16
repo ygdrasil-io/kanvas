@@ -266,6 +266,31 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `path stencil cover gate board is backed by adapter evidence blockers only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("path-stencil-cover-gate-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Path, SceneTag.Stroke), scene.tags)
+        assertEquals(listOf("KGPU-M3-002"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf(
+                "depth-stencil-capability-missing",
+                "producer-before-cover-ordering-missing",
+                "pass-resource-readback-artifacts-missing",
+                "cpu-reference-comparison-missing",
+                "skipped-lane-diagnostics-present",
+                "native-stencil-cover-not-promoted",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..6).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M3-001" || it.ticketId == "KGPU-M3-003" })
+    }
+
+    @Test
     fun `translucent card overlap is backed by bounded SrcOver alpha rectangles`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("translucent-card-overlap")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -927,6 +952,22 @@ class GPURendererSceneRegistryTest {
                     RoadmapExpectation("M3", ticketId = "KGPU-M3-004"),
                     RoadmapExpectation("M3", ticketId = "KGPU-M3-005"),
                 ),
+            ),
+            SceneExpectationRow(
+                sceneId = "path-stencil-cover-gate-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Path, SceneTag.Stroke),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M3", ticketId = "KGPU-M3-002")),
             ),
             SceneExpectationRow(
                 sceneId = "clipped-avatar-grid",

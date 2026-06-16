@@ -329,6 +329,62 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "path-stencil-cover-gate-board",
+            title = "Path Stencil Cover Gate Board",
+            description = "Native stencil-cover path route gates for KGPU-M3-002 without promoting GPUNative path coverage.",
+            tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Path, SceneTag.Stroke),
+            links = listOf(SceneRoadmapLink.ticket("KGPU-M3-002")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.034f, 0.038f, 0.046f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "path-stencil-cover-panel",
+                    rect = SceneRect(26f, 28f, 294f, 172f),
+                    radius = 20f,
+                    color = SceneColor(0.10f, 0.12f, 0.15f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "path-stencil-cover-window",
+                    rect = SceneRect(42f, 46f, 278f, 154f),
+                ),
+                SceneCommand.FillRect(
+                    label = "depth-stencil-capability-missing",
+                    rect = SceneRect(52f, 56f, 82f, 154f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.92f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "producer-before-cover-ordering-missing",
+                    rect = SceneRect(92f, 70f, 122f, 154f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "pass-resource-readback-artifacts-missing",
+                    rect = SceneRect(132f, 84f, 162f, 154f),
+                    color = SceneColor.blue(0.86f),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "cpu-reference-comparison-missing",
+                    rect = SceneRect(172f, 98f, 202f, 154f),
+                    color = SceneColor(0.44f, 0.34f, 0.86f, 0.92f),
+                    paintOrder = 4,
+                ),
+                SceneCommand.FillRect(
+                    label = "skipped-lane-diagnostics-present",
+                    rect = SceneRect(212f, 112f, 242f, 154f),
+                    color = SceneColor.green(0.88f),
+                    paintOrder = 5,
+                ),
+                SceneCommand.FillRect(
+                    label = "native-stencil-cover-not-promoted",
+                    rect = SceneRect(52f, 146f, 268f, 154f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.74f),
+                    paintOrder = 6,
+                ),
+            ),
+        ),
+        scene(
             id = "clipped-avatar-grid",
             title = "Clipped Avatar Grid",
             description = "Repeated content through bounded clip variants.",

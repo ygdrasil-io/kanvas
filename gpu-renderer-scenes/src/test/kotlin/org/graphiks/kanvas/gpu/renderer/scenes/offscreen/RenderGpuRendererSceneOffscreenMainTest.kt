@@ -126,6 +126,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 clipCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "path-stencil-cover-gate-board",
+                fillRectCount = 6,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "texture-swatch-board",
                 fillRectCount = 0,
                 bitmapRectCount = 2,
@@ -624,6 +630,26 @@ class RenderGpuRendererSceneOffscreenMainTest {
             assertContains(runJson, "archivedEvidencePreserved=true")
             assertContains(runJson, "genericMigrationRetirement=false")
             assertContains(runJson, "missingGate=KGPU-M10-002")
+        }
+        if (expectation.sceneId == "path-stencil-cover-gate-board") {
+            assertContains(runJson, "clearCommands=1")
+            assertContains(runJson, "pathStencilCoverRow=gpu-renderer.path.stencil-cover")
+            assertContains(runJson, "pathStencilCoverTicket=KGPU-M3-002")
+            assertContains(runJson, "pathStencilCoverTicketStatus=blocked")
+            assertContains(runJson, "pathStencilCoverClassification=TargetNative")
+            assertContains(runJson, "pathStencilCoverRouteKind=GPUNative")
+            assertContains(runJson, "pathStencilCoverAdapterRequired=true")
+            assertContains(runJson, "pathStencilCoverRefusalMatrix=depth-stencil-capability:RefuseRequired:coverage.stencil-cover-unavailable,stencil-route-unavailable:RefuseRequired:unsupported.geometry.stencil_cover_unavailable,producer-cover-ordering:RefuseRequired:unsupported.geometry.stencil_cover_ordering_illegal")
+            assertContains(runJson, "adapterBackedStencilEvidenceLinked=false")
+            assertContains(runJson, "passResourceReadbackArtifactsLinked=false")
+            assertContains(runJson, "producerBeforeCoverOrderingProven=false")
+            assertContains(runJson, "stencilCoverRoutePromoted=false")
+            assertContains(runJson, "productRouteActivated=false")
+            assertContains(runJson, "releaseBlocking=false")
+            assertContains(runJson, "cpuPreparedContinuationCountsAsSupport=false")
+            assertContains(runJson, "descriptorOnlyPlanningCountsAsSupport=false")
+            assertContains(runJson, "refusalOnlySelectorCountsAsSupport=false")
+            assertContains(runJson, "nonClaims=no-native-stencil-cover-support,no-adapter-backed-execution,no-product-activation,no-release-blocking-gate,no-cpu-prepared-continuation-as-support,no-refusal-only-selector-as-support")
         }
         expectation.meshRibbonCount?.let { count ->
             assertContains(runJson, "meshRibbonCommands=$count")
