@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneId": "activation-candidate-boundary-board",
+  "sceneId": "sampler-boundary-gate-board",
   "status": "presented",
   "productRefusal": false,
   "reason": "kadre-windowed-presented-frames",
