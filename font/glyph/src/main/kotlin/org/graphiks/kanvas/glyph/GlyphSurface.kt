@@ -647,6 +647,7 @@ data class GlyphArtifactPlan(
  * @property representation short representation label, or null for unsupported routes.
  * @property source selected representation source, such as `request` or `cache`.
  * @property keySha256 route-specific strike-key hash for deterministic cache evidence.
+ * @property sourceRepresentationSha256 optional SHA-256 over the selected source representation.
  * @property fallbackPolicy stable fallback/refusal policy label for this decision.
  * @property rejectedAlternatives routes considered and rejected before the selected route.
  * @property diagnostic optional unsupported-route diagnostic attached to this decision.
@@ -658,6 +659,7 @@ data class GlyphArtifactPlanDecision(
     val representation: String?,
     val source: String?,
     val keySha256: String,
+    val sourceRepresentationSha256: String? = null,
     val fallbackPolicy: String,
     val rejectedAlternatives: List<GlyphArtifactRouteRejection> = emptyList(),
     val diagnostic: GlyphRouteDiagnostic? = null,
@@ -699,7 +701,13 @@ interface GlyphMaskGenerator {
      * @return generated A8 glyph mask.
      */
     fun generate(outline: OutlineGlyphRepresentation, strikeKey: GlyphStrikeKey): A8GlyphMask =
-        rasterizeLinearOutlineToA8(outline, strikeKey)
+        try {
+            rasterizeOutlineToA8(outline, strikeKey)
+        } catch (error: IllegalArgumentException) {
+            outline.failedA8Mask(strikeKey, error)
+        } catch (error: IllegalStateException) {
+            outline.failedA8Mask(strikeKey, error)
+        }
 }
 
 /**
@@ -713,6 +721,10 @@ interface GlyphMaskGenerator {
  * @property rowBytes number of bytes per mask row.
  * @property pixels Immutable alpha samples in row-major order, encoded as
  * integer byte values in the `0..255` range.
+ * @property diagnostics stable glyph-local diagnostics recorded while producing
+ * this mask.
+ * @property sourceOutlineSha256 optional SHA-256 over the source outline facts
+ * used to generate this mask.
  */
 data class A8GlyphMask(
     override val glyphId: Int,
@@ -722,6 +734,8 @@ data class A8GlyphMask(
     val top: Int = 0,
     val rowBytes: Int = width,
     val pixels: List<Int> = List(rowBytes * height) { 0 },
+    val diagnostics: List<GlyphRouteDiagnostic> = emptyList(),
+    val sourceOutlineSha256: String? = null,
 ) : GlyphRepresentation
 
 /**
@@ -737,6 +751,7 @@ data class A8GlyphMask(
  * @property addressablePixelCount number of samples included in [coverageSha256].
  * @property nonZeroPixels count of non-zero addressable samples.
  * @property coverageSha256 SHA-256 digest of addressable samples in row-major order.
+ * @property sourceOutlineSha256 optional SHA-256 over the source outline facts.
  * @property diagnostics stable diagnostics attached to this evidence.
  */
 data class A8GlyphMaskArtifactEvidence(
@@ -750,6 +765,7 @@ data class A8GlyphMaskArtifactEvidence(
     val addressablePixelCount: Int,
     val nonZeroPixels: Int,
     val coverageSha256: String,
+    val sourceOutlineSha256: String? = null,
     val diagnostics: List<GlyphRouteDiagnostic> = emptyList(),
 ) {
     /**
@@ -797,7 +813,8 @@ data class A8GlyphMaskArtifactEvidence(
                 addressablePixelCount = addressablePixelCount.toInt(),
                 nonZeroPixels = summary.nonZeroPixels,
                 coverageSha256 = summary.sha256,
-                diagnostics = emptyList(),
+                sourceOutlineSha256 = mask.sourceOutlineSha256,
+                diagnostics = mask.diagnostics,
             )
         }
     }
@@ -820,8 +837,67 @@ data class A8GlyphMaskArtifactEvidence(
         appendGlyphJsonField("addressablePixelCount", addressablePixelCount, comma = true)
         appendGlyphJsonField("nonZeroPixels", nonZeroPixels, comma = true)
         appendGlyphJsonField("coverageSha256", coverageSha256, comma = true)
+        appendGlyphJsonNullableField("sourceOutlineSha256", sourceOutlineSha256, comma = true)
         append("  \"diagnostics\": ")
         append(appendGlyphRouteDiagnosticsInlineJson(diagnostics))
+        if (includeDumpSha256) {
+            append(",\n")
+            appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+}
+
+/**
+ * Aggregate deterministic evidence dump for `a8-glyph-mask.json`.
+ */
+class A8GlyphMaskEvidenceDump(
+    val dumpId: String,
+    ownerTickets: List<String>,
+    fixtureIds: List<String>,
+    masks: List<A8GlyphMaskArtifactEvidence>,
+    requiredDiagnostics: List<String>,
+    nonClaims: List<String>,
+) {
+    val ownerTickets: List<String> = ownerTickets.toList()
+    val fixtureIds: List<String> = fixtureIds.toList()
+    val masks: List<A8GlyphMaskArtifactEvidence> = masks.toList()
+    val requiredDiagnostics: List<String> = requiredDiagnostics.toList()
+    val nonClaims: List<String> = nonClaims.toList()
+
+    /**
+     * SHA-256 digest of [toCanonicalJson] content with `dumpSha256` omitted.
+     */
+    val dumpSha256: String
+        get() = glyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    /**
+     * Serializes the dump as stable JSON.
+     */
+    fun toCanonicalJson(): String =
+        canonicalJson(includeDumpSha256 = true)
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("schemaVersion", 1, comma = true)
+        appendGlyphJsonField("dumpId", dumpId, comma = true)
+        append("  \"ownerTickets\": ")
+        appendGlyphStringArrayMultilineJson(ownerTickets, indent = "  ")
+        append(",\n")
+        append("  \"fixtureIds\": ")
+        appendGlyphStringArrayMultilineJson(fixtureIds, indent = "  ")
+        append(",\n")
+        appendGlyphJsonField("maskCount", masks.size, comma = true)
+        append("  \"masks\": ")
+        append(appendA8GlyphMaskEvidenceJson(masks))
+        append(",\n")
+        append("  \"requiredDiagnostics\": ")
+        appendGlyphStringArrayMultilineJson(requiredDiagnostics, indent = "  ")
+        append(",\n")
+        append("  \"nonClaims\": ")
+        appendGlyphStringArrayMultilineJson(nonClaims, indent = "  ")
         if (includeDumpSha256) {
             append(",\n")
             appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
@@ -926,6 +1002,7 @@ class GlyphArtifactRoutePlanner(
                     representation = selection.representation.diagnosticRouteName(),
                     source = selection.source,
                     keySha256 = strikeKey.artifactPlanKeySha256(glyphId, selectedRoute),
+                    sourceRepresentationSha256 = selection.representation.sourceRepresentationSha256(),
                     fallbackPolicy = if (selection.rejectedAlternatives.isEmpty()) {
                         FallbackPolicySelectedFirstRequestedRoute
                     } else {
@@ -1757,6 +1834,62 @@ data class GlyphRouteDiagnostic(
                 severity = "warning",
             )
         }
+        /**
+         * Builds the stable refusal for unsupported LCD glyph requests.
+         *
+         * @param glyphId glyph identifier whose LCD route remains outside target support.
+         * @return warning diagnostic with the stable `text.glyph.LCD-future-research` route.
+         */
+        fun lcdFutureResearch(glyphId: Int): GlyphRouteDiagnostic =
+            GlyphRouteDiagnostic(
+                glyphId = glyphId,
+                route = GlyphLCDFutureResearchDiagnostic,
+                message = "LCD glyph rendering remains future research for glyph $glyphId; " +
+                    "refusing text.glyph.mask.LCD without fallback support claims.",
+                severity = "warning",
+            )
+
+        /**
+         * Builds the stable refusal for glyphs whose outline representation is unavailable.
+         *
+         * @param glyphId glyph identifier whose outline route is unavailable.
+         * @return warning diagnostic with the stable `text.glyph.outline-unavailable` route.
+         */
+        fun outlineUnavailable(glyphId: Int): GlyphRouteDiagnostic =
+            GlyphRouteDiagnostic(
+                glyphId = glyphId,
+                route = GlyphOutlineUnavailableDiagnosticRoute,
+                message = "Outline glyph representation is unavailable for glyph $glyphId.",
+                severity = "warning",
+            )
+
+        /**
+         * Builds a stable A8 rasterization refusal diagnostic with reason and strike-key hash.
+         *
+         * @param glyphId glyph identifier whose A8 route failed or was refused.
+         * @param strikeKeySha256 route-specific strike-key hash for deterministic evidence.
+         * @param reason stable machine-readable reason suffix.
+         * @param detail human-readable detail retained in the diagnostic snapshot.
+         * @param severity severity label for logs and evidence.
+         * @return diagnostic with the stable `text.glyph.A8-generation-failed` route.
+         */
+        fun a8GenerationFailed(
+            glyphId: Int,
+            strikeKeySha256: String,
+            reason: String,
+            detail: String,
+            severity: String = "warning",
+        ): GlyphRouteDiagnostic {
+            val normalizedReason = reason.trim().ifEmpty { "unspecified" }
+            val normalizedDetail = detail.trim().ifEmpty { "No additional detail." }
+            return GlyphRouteDiagnostic(
+                glyphId = glyphId,
+                route = GlyphA8GenerationFailedDiagnosticRoute,
+                message = "A8 generation failed for glyph $glyphId: " +
+                    "reason=$normalizedReason, strikeKeySha256=$strikeKeySha256, detail=$normalizedDetail",
+                severity = severity,
+            )
+        }
     }
 
     /**
@@ -1823,7 +1956,10 @@ fun List<GlyphRouteDiagnostic>.glyphRouteDiagnosticsSha256(): String =
 private const val MaxGlyphPathCommands = 4_096
 private const val MaxGeneratedA8MaskPixels = 16_777_216L
 private const val MaxGeneratedSDFMaskPixels = 16_777_216L
+private const val MaxBezierSubdivisionDepth = 10
+private const val A8CurveFlatteningTolerancePx = 0.125
 private const val DefaultSDFDistanceRange = 4f
+private const val OutlineGlyphSourceSchema = "org.graphiks.kanvas.glyph.OutlineGlyphRepresentation.source.v1"
 private const val A8GlyphMaskArtifactEvidenceSchema = "org.graphiks.kanvas.glyph.A8GlyphMaskArtifactEvidence.v1"
 private const val GlyphArtifactPlanSchema = "org.graphiks.kanvas.glyph.GlyphArtifactPlan.v1"
 private const val GlyphAtlasPackingResultSchema = "org.graphiks.kanvas.glyph.GlyphAtlasPackingResult.v1"
@@ -2026,17 +2162,24 @@ private data class GlyphPathPoint(
 /**
  * Parses and rasterizes a small deterministic line-only outline command subset to A8.
  */
-private fun rasterizeLinearOutlineToA8(
+private fun rasterizeOutlineToA8(
     outline: OutlineGlyphRepresentation,
     strikeKey: GlyphStrikeKey,
 ): A8GlyphMask {
-    val contours = outline.parseLinearContours(strikeKey)
+    val sourceOutlineSha256 = outline.sourceOutlineSha256()
+    val contours = outline.parseA8Contours(strikeKey)
     if (contours.isEmpty()) {
-        return A8GlyphMask(
-            glyphId = outline.glyphId,
-            width = 0,
-            height = 0,
-            pixels = emptyList(),
+        return outline.emptyA8Mask(
+            sourceOutlineSha256 = sourceOutlineSha256,
+            diagnostics = listOf(
+                GlyphRouteDiagnostic.a8GenerationFailed(
+                    glyphId = outline.glyphId,
+                    strikeKeySha256 = strikeKey.artifactPlanKeySha256(outline.glyphId, "text.glyph.mask.A8"),
+                    reason = "empty-outline",
+                    detail = "No closed contours were available for rasterization.",
+                    severity = "info",
+                ),
+            ),
         )
     }
 
@@ -2086,7 +2229,145 @@ private fun rasterizeLinearOutlineToA8(
         top = top,
         rowBytes = width,
         pixels = pixels.toList(),
+        sourceOutlineSha256 = sourceOutlineSha256,
     )
+}
+
+/**
+ * Builds a stable empty/refusal A8 mask from outline-local diagnostics.
+ */
+private fun OutlineGlyphRepresentation.emptyA8Mask(
+    sourceOutlineSha256: String? = sourceOutlineSha256(),
+    diagnostics: List<GlyphRouteDiagnostic> = emptyList(),
+): A8GlyphMask =
+    A8GlyphMask(
+        glyphId = glyphId,
+        width = 0,
+        height = 0,
+        pixels = emptyList(),
+        diagnostics = diagnostics,
+        sourceOutlineSha256 = sourceOutlineSha256,
+    )
+
+/**
+ * Converts a rasterization exception into stable A8 refusal evidence.
+ */
+private fun OutlineGlyphRepresentation.failedA8Mask(
+    strikeKey: GlyphStrikeKey,
+    error: Throwable,
+): A8GlyphMask =
+    emptyA8Mask(
+        diagnostics = listOf(
+            GlyphRouteDiagnostic.a8GenerationFailed(
+                glyphId = glyphId,
+                strikeKeySha256 = strikeKey.artifactPlanKeySha256(glyphId, "text.glyph.mask.A8"),
+                reason = error.a8FailureReason(),
+                detail = error.message ?: error::class.simpleName ?: "Unknown A8 generation failure.",
+            ),
+        ),
+    )
+
+/**
+ * Computes a stable outline source hash for A8 evidence.
+ */
+private fun OutlineGlyphRepresentation.sourceOutlineSha256(): String =
+    glyphSha256(canonicalOutlineSourceJson().toByteArray(Charsets.UTF_8))
+
+/**
+ * Serializes the source outline facts that can affect deterministic A8 output.
+ */
+private fun OutlineGlyphRepresentation.canonicalOutlineSourceJson(): String = buildString {
+    append("{\n")
+    appendGlyphJsonField("schema", OutlineGlyphSourceSchema, comma = true)
+    appendGlyphJsonField("glyphId", glyphId, comma = true)
+    appendGlyphJsonField("windingRule", windingRule, comma = true)
+    append("  \"pathCommands\": ")
+    appendGlyphStringArrayMultilineJson(pathCommands, indent = "  ")
+    append("\n}\n")
+}
+
+/**
+ * Maps runtime rasterization failures onto stable A8 refusal reasons.
+ */
+private fun Throwable.a8FailureReason(): String {
+    val detail = message.orEmpty()
+    return when {
+        "winding rule" in detail -> "unsupported-winding-rule"
+        "pixel count" in detail && "exceeds limit" in detail -> "coverage-overflow"
+        else -> "malformed-outline"
+    }
+}
+
+/**
+ * Parses supported line/quadratic/cubic path commands into closed contours in strike pixel space.
+ */
+private fun OutlineGlyphRepresentation.parseA8Contours(strikeKey: GlyphStrikeKey): List<List<GlyphPathPoint>> {
+    require(pathCommands.size <= MaxGlyphPathCommands) {
+        "Glyph $glyphId path command count ${pathCommands.size} exceeds limit $MaxGlyphPathCommands."
+    }
+    require(strikeKey.scaleX.isFinite() && strikeKey.scaleY.isFinite()) {
+        "Glyph $glyphId strike scale must be finite."
+    }
+    require(strikeKey.subpixelX.isFinite() && strikeKey.subpixelY.isFinite()) {
+        "Glyph $glyphId strike subpixel buckets must be finite."
+    }
+
+    val contours = mutableListOf<List<GlyphPathPoint>>()
+    var current = mutableListOf<GlyphPathPoint>()
+    var start: GlyphPathPoint? = null
+
+    pathCommands.forEach { commandText ->
+        val tokens = commandText.pathCommandTokens()
+        if (tokens.isEmpty()) {
+            return@forEach
+        }
+
+        when (val command = tokens.first()) {
+            "M" -> {
+                require(tokens.size == 3) { "Glyph $glyphId M command must have exactly two coordinates: '$commandText'." }
+                current.finishContourInto(contours)
+                val point = parseGlyphPathPoint(tokens, 1, 2, commandText, strikeKey)
+                current = mutableListOf(point)
+                start = point
+            }
+            "L" -> {
+                require(tokens.size == 3) { "Glyph $glyphId L command must have exactly two coordinates: '$commandText'." }
+                require(current.isNotEmpty()) { "Glyph $glyphId L command appears before M: '$commandText'." }
+                current += parseGlyphPathPoint(tokens, 1, 2, commandText, strikeKey)
+            }
+            "Q" -> {
+                require(tokens.size == 5) { "Glyph $glyphId Q command must have one control point and one endpoint: '$commandText'." }
+                require(current.isNotEmpty()) { "Glyph $glyphId Q command appears before M: '$commandText'." }
+                val startPoint = current.last()
+                val control = parseGlyphPathPoint(tokens, 1, 2, commandText, strikeKey)
+                val end = parseGlyphPathPoint(tokens, 3, 4, commandText, strikeKey)
+                current += flattenQuadraticSegment(startPoint, control, end)
+            }
+            "C" -> {
+                require(tokens.size == 7) { "Glyph $glyphId C command must have two control points and one endpoint: '$commandText'." }
+                require(current.isNotEmpty()) { "Glyph $glyphId C command appears before M: '$commandText'." }
+                val startPoint = current.last()
+                val control1 = parseGlyphPathPoint(tokens, 1, 2, commandText, strikeKey)
+                val control2 = parseGlyphPathPoint(tokens, 3, 4, commandText, strikeKey)
+                val end = parseGlyphPathPoint(tokens, 5, 6, commandText, strikeKey)
+                current += flattenCubicSegment(startPoint, control1, control2, end)
+            }
+            "Z" -> {
+                require(tokens.size == 1) { "Glyph $glyphId Z command must not have coordinates: '$commandText'." }
+                val contourStart = start
+                if (contourStart != null && current.lastOrNull() != contourStart) {
+                    current += contourStart
+                }
+                current.finishContourInto(contours)
+                current = mutableListOf()
+                start = null
+            }
+            else -> throw IllegalArgumentException("Unsupported glyph $glyphId path command '$command' in '$commandText'.")
+        }
+    }
+
+    current.finishContourInto(contours)
+    return contours.toList()
 }
 
 /**
@@ -2181,14 +2462,14 @@ private fun OutlineGlyphRepresentation.parseLinearContours(strikeKey: GlyphStrik
             "M" -> {
                 require(tokens.size == 3) { "Glyph $glyphId M command must have exactly two coordinates: '$commandText'." }
                 current.finishContourInto(contours)
-                val point = parseGlyphPathPoint(tokens, commandText, strikeKey)
+                val point = parseGlyphPathPoint(tokens, 1, 2, commandText, strikeKey)
                 current = mutableListOf(point)
                 start = point
             }
             "L" -> {
                 require(tokens.size == 3) { "Glyph $glyphId L command must have exactly two coordinates: '$commandText'." }
                 require(current.isNotEmpty()) { "Glyph $glyphId L command appears before M: '$commandText'." }
-                current += parseGlyphPathPoint(tokens, commandText, strikeKey)
+                current += parseGlyphPathPoint(tokens, 1, 2, commandText, strikeKey)
             }
             "Z" -> {
                 require(tokens.size == 1) { "Glyph $glyphId Z command must not have coordinates: '$commandText'." }
@@ -2224,11 +2505,13 @@ private fun String.pathCommandTokens(): List<String> =
  */
 private fun OutlineGlyphRepresentation.parseGlyphPathPoint(
     tokens: List<String>,
+    xIndex: Int,
+    yIndex: Int,
     commandText: String,
     strikeKey: GlyphStrikeKey,
 ): GlyphPathPoint {
-    val x = tokens[1].toDoubleOrNull()
-    val y = tokens[2].toDoubleOrNull()
+    val x = tokens.getOrNull(xIndex)?.toDoubleOrNull()
+    val y = tokens.getOrNull(yIndex)?.toDoubleOrNull()
     require(x != null && y != null && x.isFinite() && y.isFinite()) {
         "Glyph $glyphId path command has non-finite coordinates: '$commandText'."
     }
@@ -2238,6 +2521,98 @@ private fun OutlineGlyphRepresentation.parseGlyphPathPoint(
         y = y * strikeKey.scaleY + strikeKey.subpixelY,
     )
 }
+
+private fun flattenQuadraticSegment(
+    start: GlyphPathPoint,
+    control: GlyphPathPoint,
+    end: GlyphPathPoint,
+): List<GlyphPathPoint> {
+    val points = mutableListOf<GlyphPathPoint>()
+    flattenQuadraticInto(
+        start = start,
+        control = control,
+        end = end,
+        toleranceSquared = A8CurveFlatteningTolerancePx * A8CurveFlatteningTolerancePx,
+        depth = 0,
+        points = points,
+    )
+    return points
+}
+
+private fun flattenQuadraticInto(
+    start: GlyphPathPoint,
+    control: GlyphPathPoint,
+    end: GlyphPathPoint,
+    toleranceSquared: Double,
+    depth: Int,
+    points: MutableList<GlyphPathPoint>,
+) {
+    if (depth >= MaxBezierSubdivisionDepth ||
+        squaredDistanceToSegment(control.x, control.y, start, end) <= toleranceSquared
+    ) {
+        points += end
+        return
+    }
+
+    val startControl = start.midpoint(control)
+    val controlEnd = control.midpoint(end)
+    val mid = startControl.midpoint(controlEnd)
+    flattenQuadraticInto(start, startControl, mid, toleranceSquared, depth + 1, points)
+    flattenQuadraticInto(mid, controlEnd, end, toleranceSquared, depth + 1, points)
+}
+
+private fun flattenCubicSegment(
+    start: GlyphPathPoint,
+    control1: GlyphPathPoint,
+    control2: GlyphPathPoint,
+    end: GlyphPathPoint,
+): List<GlyphPathPoint> {
+    val points = mutableListOf<GlyphPathPoint>()
+    flattenCubicInto(
+        start = start,
+        control1 = control1,
+        control2 = control2,
+        end = end,
+        toleranceSquared = A8CurveFlatteningTolerancePx * A8CurveFlatteningTolerancePx,
+        depth = 0,
+        points = points,
+    )
+    return points
+}
+
+private fun flattenCubicInto(
+    start: GlyphPathPoint,
+    control1: GlyphPathPoint,
+    control2: GlyphPathPoint,
+    end: GlyphPathPoint,
+    toleranceSquared: Double,
+    depth: Int,
+    points: MutableList<GlyphPathPoint>,
+) {
+    val control1DistanceSquared = squaredDistanceToSegment(control1.x, control1.y, start, end)
+    val control2DistanceSquared = squaredDistanceToSegment(control2.x, control2.y, start, end)
+    if (depth >= MaxBezierSubdivisionDepth ||
+        maxOf(control1DistanceSquared, control2DistanceSquared) <= toleranceSquared
+    ) {
+        points += end
+        return
+    }
+
+    val startControl1 = start.midpoint(control1)
+    val control1Control2 = control1.midpoint(control2)
+    val control2End = control2.midpoint(end)
+    val leftMid = startControl1.midpoint(control1Control2)
+    val rightMid = control1Control2.midpoint(control2End)
+    val mid = leftMid.midpoint(rightMid)
+    flattenCubicInto(start, startControl1, leftMid, mid, toleranceSquared, depth + 1, points)
+    flattenCubicInto(mid, rightMid, control2End, end, toleranceSquared, depth + 1, points)
+}
+
+private fun GlyphPathPoint.midpoint(other: GlyphPathPoint): GlyphPathPoint =
+    GlyphPathPoint(
+        x = (x + other.x) / 2.0,
+        y = (y + other.y) / 2.0,
+    )
 
 /**
  * Adds a contour when it has enough distinct points to enclose area.
@@ -2459,6 +2834,9 @@ private fun A8GlyphMask.requireValidA8Pixels() {
     require(width >= 0) { "A8 mask width must be non-negative for glyph $glyphId." }
     require(height >= 0) { "A8 mask height must be non-negative for glyph $glyphId." }
     require(rowBytes >= width) { "A8 mask rowBytes must be at least width for glyph $glyphId." }
+    require(sourceOutlineSha256 == null || sourceOutlineSha256.matches(Regex("[0-9a-f]{64}"))) {
+        "A8 mask sourceOutlineSha256 must be lowercase hexadecimal when present for glyph $glyphId."
+    }
     val expectedPixelCount = rowBytes.toLong() * height.toLong()
     require(pixels.size.toLong() >= expectedPixelCount) {
         "A8 mask pixel count is smaller than rowBytes * height for glyph $glyphId."
@@ -2655,6 +3033,58 @@ private fun GlyphRepresentation.diagnosticRouteName(): String =
     }
 
 /**
+ * Returns the artifact intent for routes that stop at CPU-prepared glyph data.
+ */
+private fun GlyphRepresentation.artifactIntent(): String? =
+    when (this) {
+        is A8GlyphMask, is SDFGlyphMask -> "CPUPreparedGPU"
+        else -> null
+    }
+
+/**
+ * Returns a stable source hash for representations whose content should appear in evidence dumps.
+ */
+private fun GlyphRepresentation.sourceRepresentationSha256(): String? =
+    when (this) {
+        is OutlineGlyphRepresentation -> sourceOutlineSha256()
+        is A8GlyphMask -> GlyphMaskSummary.fromA8Mask(this).sha256
+        is SDFGlyphMask -> pixels.pixelSha256(width * height)
+        else -> null
+    }
+
+/**
+ * Maps stable refusal diagnostics onto the planning route they reject.
+ */
+private fun GlyphRouteDiagnostic.matchesRejectedRoute(route: GlyphArtifactRoute): Boolean =
+    when (route) {
+        GlyphArtifactRoute.OUTLINE -> this.route == GlyphOutlineUnavailableDiagnosticRoute
+        GlyphArtifactRoute.A8 -> this.route in setOf(
+            GlyphA8GenerationFailedDiagnosticRoute,
+            GlyphAtlasCapacityExceededDiagnosticRoute,
+            GlyphAtlasGenerationStaleDiagnosticRoute,
+            GlyphArtifactBudgetExceededDiagnosticRoute,
+        )
+        GlyphArtifactRoute.SDF -> this.route in setOf(
+            GlyphSDFGenerationFailedDiagnosticRoute,
+            GlyphSDFTransformUnsupportedDiagnosticRoute,
+        )
+        GlyphArtifactRoute.LCD -> this.route == GlyphLCDFutureResearchDiagnostic
+        GlyphArtifactRoute.COLOR,
+        GlyphArtifactRoute.BITMAP,
+        GlyphArtifactRoute.SVG,
+        -> false
+    }
+
+/**
+ * Returns the built-in refusal for routes that are always explicit non-claims in M9.
+ */
+private fun GlyphArtifactRoute.defaultRejectionDiagnostic(glyphId: Int): GlyphRouteDiagnostic? =
+    when (this) {
+        GlyphArtifactRoute.LCD -> GlyphRouteDiagnostic.lcdFutureResearch(glyphId)
+        else -> null
+    }
+
+/**
  * Returns the canonical glyph artifact route for a concrete representation.
  */
 private fun GlyphRepresentation.artifactPlanRouteName(): String =
@@ -2695,6 +3125,23 @@ private fun GlyphRepresentation.approximateCacheBytes(): Long {
 }
 
 /**
+ * Hashes the first [addressablePixelCount] samples of a mask-like representation.
+ */
+private fun List<Int>.pixelSha256(addressablePixelCount: Int): String {
+    require(addressablePixelCount >= 0) { "Addressable pixel count must be non-negative." }
+    require(size >= addressablePixelCount) {
+        "Pixel list size $size is smaller than addressable pixel count $addressablePixelCount."
+    }
+    val bytes = ByteArray(addressablePixelCount)
+    for (index in 0 until addressablePixelCount) {
+        val value = this[index]
+        require(value in 0..255) { "Pixel value $value is outside 0..255 at index $index." }
+        bytes[index] = value.toByte()
+    }
+    return glyphSha256(bytes)
+}
+
+/**
  * Computes a non-negative Int product as Long for cache-size estimates.
  *
  * @param other second multiplicand.
@@ -2723,6 +3170,7 @@ private fun GlyphArtifactPlanDecision.toCanonicalJson(): String = buildString {
     append(glyphJsonNullableString(source))
     append(",\n")
     appendGlyphJsonField("keySha256", keySha256, comma = true)
+    appendGlyphJsonNullableField("sourceRepresentationSha256", sourceRepresentationSha256, comma = true)
     appendGlyphJsonField("fallbackPolicy", fallbackPolicy, comma = true)
     append("  \"rejectedAlternatives\": [")
     if (rejectedAlternatives.isEmpty()) {
@@ -2746,6 +3194,50 @@ private fun GlyphArtifactRouteRejection.toCanonicalJson(): String = buildString 
     append(glyphJsonString("route")).append(": ").append(glyphJsonString(route)).append(", ")
     append(glyphJsonString("reason")).append(": ").append(glyphJsonString(reason))
     append("}")
+}
+
+private fun GlyphArtifactPlanRef.toCanonicalJson(): String = buildString {
+    append("{\n")
+    appendGlyphJsonField("artifactName", artifactName, comma = true)
+    appendGlyphJsonField("planId", planId, comma = true)
+    appendGlyphJsonField("boundsPlaceholder", boundsPlaceholder, comma = false)
+    append("\n}")
+}
+
+private fun GlyphArtifactRoutePolicyInputs.toCanonicalJson(): String = buildString {
+    append("{\n")
+    appendGlyphJsonField("textStylePreference", textStylePreference, comma = true)
+    appendGlyphJsonField("transformClass", transformClass, comma = true)
+    appendGlyphJsonField("atlasBudgetClass", atlasBudgetClass, comma = true)
+    appendGlyphJsonField("sdfEligibility", sdfEligibility, comma = true)
+    appendGlyphJsonField("colorGlyphAvailability", colorGlyphAvailability, comma = true)
+    appendGlyphJsonField("emojiSequenceFacts", emojiSequenceFacts, comma = true)
+    appendGlyphJsonField("rendererCapabilitySummary", rendererCapabilitySummary, comma = false)
+    append("\n}")
+}
+
+private fun appendGlyphArtifactPlansJson(plans: List<GlyphArtifactPlan>): String = buildString {
+    append("[")
+    if (plans.isNotEmpty()) {
+        append("\n")
+        append(plans.joinToString(",\n") { plan ->
+            plan.toCanonicalGlyphArtifactPlanJson().trimEnd().prependIndent("    ")
+        })
+        append("\n  ")
+    }
+    append("]")
+}
+
+private fun appendA8GlyphMaskEvidenceJson(masks: List<A8GlyphMaskArtifactEvidence>): String = buildString {
+    append("[")
+    if (masks.isNotEmpty()) {
+        append("\n")
+        append(masks.joinToString(",\n") { mask ->
+            mask.toCanonicalJson().trimEnd().prependIndent("    ")
+        })
+        append("\n  ")
+    }
+    append("]")
 }
 
 /**
@@ -2787,7 +3279,7 @@ private fun GlyphRunCacheInventoryItem.toCanonicalJson(): String = buildString {
     appendGlyphJsonField("advance", advance, comma = true)
     appendGlyphJsonField("x", x, comma = true)
     appendGlyphJsonNullableField("diagnostic", diagnostic, comma = false)
-    append("\n}")
+    append("}")
 }
 
 /**
@@ -2805,7 +3297,7 @@ private fun GlyphCacheRecord.toCanonicalJson(): String = buildString {
     append(maskSummary.toCanonicalJson())
     append(",\n")
     appendGlyphJsonNullableField("diagnostic", diagnostic, comma = false)
-    append("\n}")
+    append("}")
 }
 
 /**
@@ -2930,6 +3422,7 @@ private fun StringBuilder.appendGlyphJsonNullableField(name: String, value: Stri
     append("  ").append(glyphJsonString(name)).append(": ")
     append(if (value == null) "null" else glyphJsonString(value))
     if (comma) append(",")
+    append("\n")
 }
 
 /**
