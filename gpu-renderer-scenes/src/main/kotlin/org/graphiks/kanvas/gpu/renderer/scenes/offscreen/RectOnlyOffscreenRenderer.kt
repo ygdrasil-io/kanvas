@@ -38,6 +38,7 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.a8GlyphAtlasGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.runtimeEffectRefusalGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.textResourceBindingGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSampling
@@ -93,6 +94,7 @@ class RectOnlyOffscreenRenderer {
                 val diagnostics =
                     baseDiagnostics +
                         scene.runtimeEffectRefusalGateDiagnostics() +
+                        scene.a8GlyphAtlasGateDiagnostics() +
                         scene.textResourceBindingGateDiagnostics()
                 return OffscreenRunReport.rendered(
                     sceneId = sceneId,

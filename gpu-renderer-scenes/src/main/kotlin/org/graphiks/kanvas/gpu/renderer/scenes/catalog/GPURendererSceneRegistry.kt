@@ -895,6 +895,62 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "a8-glyph-atlas-gate-board",
+            title = "A8 Glyph Atlas Gate Board",
+            description = "A8 glyph atlas descriptor, page, entry, stale generation, route, and instance-buffer gates without promoted atlas sampling or CPU-rendered text texture fallback.",
+            tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Text),
+            links = listOf(SceneRoadmapLink.ticket("KGPU-M6-002")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.036f, 0.040f, 0.050f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "a8-glyph-atlas-panel",
+                    rect = SceneRect(24f, 26f, 296f, 174f),
+                    radius = 18f,
+                    color = SceneColor(0.11f, 0.13f, 0.16f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "a8-glyph-atlas-window",
+                    rect = SceneRect(40f, 44f, 280f, 158f),
+                ),
+                SceneCommand.FillRect(
+                    label = "atlas-descriptor-unaccepted-refusal",
+                    rect = SceneRect(48f, 52f, 76f, 154f),
+                    color = SceneColor.green(0.88f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "atlas-page-unavailable-refusal",
+                    rect = SceneRect(86f, 62f, 114f, 154f),
+                    color = SceneColor.blue(0.86f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "atlas-entry-missing-refusal",
+                    rect = SceneRect(124f, 72f, 152f, 154f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "atlas-generation-stale-refusal",
+                    rect = SceneRect(162f, 82f, 190f, 154f),
+                    color = SceneColor.red(),
+                    paintOrder = 4,
+                ),
+                SceneCommand.FillRect(
+                    label = "a8-route-unavailable-refusal",
+                    rect = SceneRect(200f, 94f, 228f, 154f),
+                    color = SceneColor(0.26f, 0.72f, 0.76f, 0.94f),
+                    paintOrder = 5,
+                ),
+                SceneCommand.FillRect(
+                    label = "instance-buffer-budget-refusal",
+                    rect = SceneRect(238f, 108f, 268f, 154f),
+                    color = SceneColor(0.74f, 0.76f, 0.82f, 1f),
+                    paintOrder = 6,
+                ),
+            ),
+        ),
+        scene(
             id = "text-representation-gate-board",
             title = "Text Representation Gate Board",
             description = "Text representation dependency gates without atlas, SDF, color glyph, emoji, LCD, or CPU texture route promotion.",
