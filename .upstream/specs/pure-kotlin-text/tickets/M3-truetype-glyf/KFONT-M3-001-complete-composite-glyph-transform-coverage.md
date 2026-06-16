@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M3-001"
 title: "Complete composite glyph transform coverage"
-status: "proposed"
+status: "done"
 milestone: "M3"
 priority: "P0"
 owner_area: "font-scaler"
@@ -77,7 +77,8 @@ class TrueTypeGlyfScaler {
 - `glyph-outline.json` for composite transform fixtures.
 - `glyph-metrics.json` showing component metrics source and `useMyMetrics` behavior when present.
 - CPU path hash or stat artifact for each supported composite transform case.
-- Diagnostic snapshot for composite cycle and invalid component glyph ID.
+- Diagnostic snapshot for composite cycle, invalid component glyph ID, and
+  excessive composite component count.
 
 ## Fallback / Refusal Behavior
 
@@ -99,8 +100,23 @@ rtk ./gradlew --no-daemon :font:scaler:test --tests '*CompositeGlyph*' --tests '
 
 ## Status Notes
 
-- `proposed`: Composite coverage is specified, but no outline or metrics evidence is attached yet.
-- Move to `ready` after M2 table fact dumps provide `loca`, `glyf`, `maxp`, and metrics table facts.
+- `done` (2026-06-16): Implemented composite point matching inside
+  `ParsedTrueTypeGlyphScaler` through recursive resolved outline/point state.
+  Evidence now includes deterministic outline commands, bounds, component
+  trace, metrics/useMyMetrics facts, path hash artifacts, cycle recursion
+  diagnostics, invalid component glyph ID diagnostics, component-count
+  diagnostics, and invalid point-index refusals.
+- Validation bundle for local review:
+  `rtk ./gradlew --no-daemon :font:scaler:test --tests '*CompositeGlyph*' --tests '*Glyf*'`,
+  `rtk python3 scripts/validate_pure_kotlin_text_dump_index.py`,
+  `rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py`,
+  `rtk python3 scripts/validate_font_fixture_assets.py`, and
+  `rtk git diff --check`.
+- Independent spec review accepted the implementation, evidence, status, and
+  non-claim wording after remediation for the component-count cap and missing
+  variation non-claims.
+- Independent quality review accepted the bounded implementation after KDoc
+  wording was updated to match the implemented point-matching resolver.
 
 ## Linear Labels
 
