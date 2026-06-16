@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "sceneId": "pm-readiness-freeze-board",
+  "status": "presented",
+  "productRefusal": false,
+  "reason": "kadre-windowed-presented-frames",
+  "requestedFrames": 60,
+  "presentedFrames": 60,
+  "manualValidation": true,
+  "surface": {
+    "width": 320,
+    "height": 200,
+    "format": "BGRA8Unorm"
+  },
+  "adapterInfo": "AdapterInfo(architecture=, description=, device=Apple M2 Max, subgroupMaxSize=0, subgroupMinSize=0, vendor=, isFallbackAdapter=false)",
+  "error": null,
+  "diagnostics": ["pmReadinessRow=gpu-renderer.readiness","pmReadinessClassification=PolicyGated","readinessDelta=0.0","releaseBlocking=false","productRouteActivated=false","performanceReadinessPromoted=false","missingGate=KGPU-M9-002","reportingOnlyGatesVisible=true","pipelinePmBundleUpdated=false","nonClaims=no-product-activation,no-release-blocking-gate,no-readiness-delta,no-performance-readiness-from-correctness,no-dashboard-row-promotes-readiness,no-derived-cache-as-observed"]
+}

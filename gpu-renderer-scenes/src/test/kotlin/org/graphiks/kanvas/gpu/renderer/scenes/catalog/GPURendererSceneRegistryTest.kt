@@ -496,6 +496,31 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `pm readiness freeze board is backed by policy gates without readiness movement`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("pm-readiness-freeze-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Cache), scene.tags)
+        assertEquals(listOf("KGPU-M9-003"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf(
+                "correctness-support-separated",
+                "activation-readiness-frozen",
+                "performance-readiness-blocked",
+                "cache-readiness-reporting-only",
+                "release-blocking-gate-absent",
+                "pm-dashboard-delta-zero",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..6).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M9-001" || it.ticketId == "KGPU-M9-002" })
+    }
+
+    @Test
     fun `legacy inventory hygiene board is backed by inventory and archive hygiene tickets only`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("legacy-inventory-hygiene-board")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -549,6 +574,32 @@ class GPURendererSceneRegistryTest {
         )
         assertEquals((1..8).toList(), fills.map { it.paintOrder })
         assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M10-001" || it.ticketId == "KGPU-M10-003" })
+    }
+
+    @Test
+    fun `legacy retirement blocker board is backed by route specific replacement gates only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("legacy-retirement-blocker-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.LegacyComparison), scene.tags)
+        assertEquals(listOf("KGPU-M10-003"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf(
+                "accepted-replacement-ticket-missing",
+                "activation-decision-missing",
+                "rollback-evidence-missing",
+                "pm-evidence-missing",
+                "archived-evidence-preserved",
+                "generic-migration-retirement-refused",
+                "legacy-route-remains-active",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..7).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M10-001" || it.ticketId == "KGPU-M10-002" })
     }
 
     @Test
@@ -1184,6 +1235,22 @@ class GPURendererSceneRegistryTest {
                 roadmapLinks = listOf(RoadmapExpectation("M9", ticketId = "KGPU-M9-002")),
             ),
             SceneExpectationRow(
+                sceneId = "pm-readiness-freeze-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Cache),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M9", ticketId = "KGPU-M9-003")),
+            ),
+            SceneExpectationRow(
                 sceneId = "legacy-route-comparison",
                 tags = setOf(SceneTag.Rect),
                 commandFamilies = listOf("fill-rect"),
@@ -1226,6 +1293,23 @@ class GPURendererSceneRegistryTest {
                     "fill-rect",
                 ),
                 roadmapLinks = listOf(RoadmapExpectation("M10", ticketId = "KGPU-M10-002")),
+            ),
+            SceneExpectationRow(
+                sceneId = "legacy-retirement-blocker-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.LegacyComparison),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M10", ticketId = "KGPU-M10-003")),
             ),
         )
     }

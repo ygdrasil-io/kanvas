@@ -68,6 +68,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
             RenderedShapeExpectation("cache-pressure-deck", fillRectCount = 2),
             RenderedShapeExpectation("cache-source-ledger-board", fillRectCount = 5),
             RenderedShapeExpectation("frame-gate-blocker-board", fillRectCount = 6),
+            RenderedShapeExpectation(
+                sceneId = "pm-readiness-freeze-board",
+                fillRectCount = 6,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
             RenderedShapeExpectation("legacy-route-comparison", fillRectCount = 1),
             RenderedShapeExpectation(
                 sceneId = "legacy-inventory-hygiene-board",
@@ -78,6 +84,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
             RenderedShapeExpectation(
                 sceneId = "shadow-parity-migration-gate-board",
                 fillRectCount = 8,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
+                sceneId = "legacy-retirement-blocker-board",
+                fillRectCount = 7,
                 fillRRectCount = 1,
                 clipCount = 1,
             ),
@@ -585,6 +597,33 @@ class RenderGpuRendererSceneOffscreenMainTest {
             assertContains(runJson, "a8GlyphAtlasRoutePromoted=false")
             assertContains(runJson, "uploadBeforeSampleOrderingProven=false")
             assertContains(runJson, "cpuRenderedTextTextureFallback=false")
+        }
+        if (expectation.sceneId == "pm-readiness-freeze-board") {
+            assertContains(runJson, "pmReadinessRow=gpu-renderer.readiness")
+            assertContains(runJson, "pmReadinessClassification=PolicyGated")
+            assertContains(runJson, "readinessDelta=0.0")
+            assertContains(runJson, "releaseBlocking=false")
+            assertContains(runJson, "productRouteActivated=false")
+            assertContains(runJson, "performanceReadinessPromoted=false")
+            assertContains(runJson, "missingGate=KGPU-M9-002")
+            assertContains(runJson, "reportingOnlyGatesVisible=true")
+            assertContains(runJson, "pipelinePmBundleUpdated=false")
+            assertContains(runJson, "nonClaims=no-product-activation,no-release-blocking-gate,no-readiness-delta,no-performance-readiness-from-correctness,no-dashboard-row-promotes-readiness,no-derived-cache-as-observed")
+        }
+        if (expectation.sceneId == "legacy-retirement-blocker-board") {
+            assertContains(runJson, "legacyRetirementRow=gpu-renderer.legacy-retirement")
+            assertContains(runJson, "legacyRetirementClassification=PolicyGated")
+            assertContains(runJson, "legacyRouteRetired=false")
+            assertContains(runJson, "legacyDefaultActive=true")
+            assertContains(runJson, "productRouteActivated=false")
+            assertContains(runJson, "acceptedReplacementLinked=false")
+            assertContains(runJson, "activationDecisionLinked=false")
+            assertContains(runJson, "rollbackEvidenceLinked=false")
+            assertContains(runJson, "pmEvidenceLinked=false")
+            assertContains(runJson, "oldPathUsageEvidenceLinked=false")
+            assertContains(runJson, "archivedEvidencePreserved=true")
+            assertContains(runJson, "genericMigrationRetirement=false")
+            assertContains(runJson, "missingGate=KGPU-M10-002")
         }
         expectation.meshRibbonCount?.let { count ->
             assertContains(runJson, "meshRibbonCommands=$count")
