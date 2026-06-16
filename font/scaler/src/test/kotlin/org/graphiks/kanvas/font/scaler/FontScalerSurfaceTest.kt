@@ -1753,6 +1753,103 @@ class FontScalerSurfaceTest {
     }
 
     @Test
+    fun parsedTrueTypeGlyphEvidenceIsolatesMalformedSimpleGlyphsFromSafeGlyphs() {
+        val safeGlyph = simpleSquareGlyphData()
+        val malformedGlyph = simpleRepeatedFlagGlyphData().copyOf(simpleRepeatedFlagGlyphData().size - 1)
+        val scaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = safeGlyph + malformedGlyph,
+            loca = TrueTypeLocaTable(
+                offsets = listOf(
+                    0,
+                    safeGlyph.size,
+                    safeGlyph.size + malformedGlyph.size,
+                ),
+            ),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+                1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+            ),
+        )
+
+        val safeEvidence = scaler.scaledGlyphEvidence(glyphId = 0u)
+        val malformedEvidence = scaler.scaledGlyphEvidence(glyphId = 1u)
+
+        assertTrue(safeEvidence.outlineCommands.isNotEmpty())
+        assertTrue(malformedEvidence.outlineCommands.isEmpty())
+        assertNull(malformedEvidence.metrics)
+        assertTrue(malformedEvidence.diagnostics.any { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.SCALER_OUTLINE_UNAVAILABLE &&
+                diagnostic.detail == "truetype.coordinate-run-truncated" &&
+                diagnostic.operation == "outline"
+        })
+        assertTrue(malformedEvidence.diagnostics.any { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.SCALER_OUTLINE_UNAVAILABLE &&
+                diagnostic.detail == "truetype.coordinate-run-truncated" &&
+                diagnostic.operation == "metrics"
+        })
+    }
+
+    @Test
+    fun parsedTrueTypeGlyphEvidenceReportsMalformedContourAndFlagDiagnostics() {
+        val badContourGlyph = twoContourSquareGlyphData().copyOf().also { glyph ->
+            glyph[12] = 0x00
+            glyph[13] = 0x03
+        }
+        val repeatOverflowGlyph = simpleRepeatedFlagGlyphData().copyOf().also { glyph ->
+            glyph[16] = 0x04
+        }
+        val contourEvidence = ParsedTrueTypeGlyphScaler(
+            glyfTable = badContourGlyph,
+            loca = TrueTypeLocaTable(offsets = listOf(0, badContourGlyph.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+            ),
+        ).scaledGlyphEvidence(glyphId = 0u)
+        val repeatEvidence = ParsedTrueTypeGlyphScaler(
+            glyfTable = repeatOverflowGlyph,
+            loca = TrueTypeLocaTable(offsets = listOf(0, repeatOverflowGlyph.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+            ),
+        ).scaledGlyphEvidence(glyphId = 0u)
+
+        assertTrue(contourEvidence.diagnostics.any { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.SCALER_OUTLINE_UNAVAILABLE &&
+                diagnostic.detail == "truetype.contour-endpoints-malformed"
+        })
+        assertTrue(repeatEvidence.diagnostics.any { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.SCALER_OUTLINE_UNAVAILABLE &&
+                diagnostic.detail == "truetype.flag-repeat-overflow"
+        })
+    }
+
+    @Test
+    fun parsedTrueTypeGlyphEvidenceReportsCompositeTransformFlagDiagnostic() {
+        val invalidTransformGlyph = compositeGlyphData(
+            *componentRecord(
+                flags = 0x004b,
+                glyphId = 1,
+                arg1 = 0,
+                arg2 = 0,
+            ),
+        )
+        val glyfTable = invalidTransformGlyph + simpleSquareGlyphData()
+        val evidence = ParsedTrueTypeGlyphScaler(
+            glyfTable = glyfTable,
+            loca = TrueTypeLocaTable(offsets = listOf(0, invalidTransformGlyph.size, glyfTable.size)),
+            horizontalMetrics = mapOf(
+                0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+                1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+            ),
+        ).scaledGlyphEvidence(glyphId = 0u)
+
+        assertTrue(evidence.diagnostics.any { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.SCALER_OUTLINE_UNAVAILABLE &&
+                diagnostic.detail == "truetype.composite-transform-flags"
+        })
+    }
+
+    @Test
     fun parsedTrueTypeGlyphScalerRejectsOutOfLocaGlyphIdsAndMissingMetrics() {
         val simpleSquare = simpleSquareGlyphData()
         val scaler = ParsedTrueTypeGlyphScaler(
@@ -2676,6 +2773,24 @@ class FontScalerSurfaceTest {
         assertEquals(expected, actual)
     }
 
+    @Test
+    fun truetypeMalformedGlyfIsolationGoldenMatchesGeneratedEvidence() {
+        val actual = truetypeMalformedGlyfIsolationDump()
+        val expected = Files.readString(
+            kanvasProjectRoot().resolve("reports/font/fixtures/expected/scaler/truetype-malformed-glyf-isolation.json"),
+        ).trimEnd()
+
+        assertEquals(expected, actual)
+    }
+
+    @Test
+    fun truetypeGlyphFailurePolicyGoldenIncludesFaceAndGlyphIsolationActions() {
+        val dump = truetypeMalformedGlyfIsolationDump()
+
+        assertTrue(dump.contains("\"action\": \"refuse-face\""))
+        assertTrue(dump.contains("\"action\": \"refuse-glyph\""))
+    }
+
     private fun truetypeCompositeGlyphReadinessDump(): String {
         val simpleSquare = simpleSquareGlyphData()
         val supportedComposite = compositeGlyphData(
@@ -3080,6 +3195,321 @@ class FontScalerSurfaceTest {
             }
         """.trimIndent()
     }
+
+    private fun truetypeMalformedGlyfIsolationDump(): String {
+        val safeGlyph = simpleSquareGlyphData()
+        val sharedMetrics = mapOf(
+            0u to TrueTypeGlyphHorizontalMetrics(advanceX = 600.0, leftSideBearing = 20.0),
+            1u to TrueTypeGlyphHorizontalMetrics(advanceX = 500.0, leftSideBearing = 0.0),
+        )
+
+        val truncatedHeaderGlyph = bytes(0x00, 0x01, 0x00)
+        val truncatedHeaderScaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = safeGlyph + truncatedHeaderGlyph,
+            loca = TrueTypeLocaTable(offsets = listOf(0, safeGlyph.size, safeGlyph.size + truncatedHeaderGlyph.size)),
+            horizontalMetrics = sharedMetrics,
+        )
+        val truncatedHeaderSafe = truncatedHeaderScaler.scaledGlyphEvidence(glyphId = 0u)
+        val truncatedHeaderMalformed = truncatedHeaderScaler.scaledGlyphEvidence(glyphId = 1u)
+
+        val malformedContourGlyph = twoContourSquareGlyphData().copyOf().also { glyph ->
+            glyph[12] = 0x00
+            glyph[13] = 0x03
+        }
+        val malformedContourScaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = safeGlyph + malformedContourGlyph,
+            loca = TrueTypeLocaTable(offsets = listOf(0, safeGlyph.size, safeGlyph.size + malformedContourGlyph.size)),
+            horizontalMetrics = sharedMetrics,
+        )
+        val malformedContourSafe = malformedContourScaler.scaledGlyphEvidence(glyphId = 0u)
+        val malformedContourEvidence = malformedContourScaler.scaledGlyphEvidence(glyphId = 1u)
+
+        val repeatOverflowGlyph = simpleRepeatedFlagGlyphData().copyOf().also { glyph ->
+            glyph[16] = 0x04
+        }
+        val repeatOverflowScaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = safeGlyph + repeatOverflowGlyph,
+            loca = TrueTypeLocaTable(offsets = listOf(0, safeGlyph.size, safeGlyph.size + repeatOverflowGlyph.size)),
+            horizontalMetrics = sharedMetrics,
+        )
+        val repeatOverflowSafe = repeatOverflowScaler.scaledGlyphEvidence(glyphId = 0u)
+        val repeatOverflowEvidence = repeatOverflowScaler.scaledGlyphEvidence(glyphId = 1u)
+
+        val coordinateTruncatedGlyph = simpleRepeatedFlagGlyphData().copyOf(simpleRepeatedFlagGlyphData().size - 1)
+        val coordinateTruncatedScaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = safeGlyph + coordinateTruncatedGlyph,
+            loca = TrueTypeLocaTable(offsets = listOf(0, safeGlyph.size, safeGlyph.size + coordinateTruncatedGlyph.size)),
+            horizontalMetrics = sharedMetrics,
+        )
+        val coordinateTruncatedSafe = coordinateTruncatedScaler.scaledGlyphEvidence(glyphId = 0u)
+        val coordinateTruncatedEvidence = coordinateTruncatedScaler.scaledGlyphEvidence(glyphId = 1u)
+
+        val cycleGlyph = compositeGlyphData(
+            *componentRecord(
+                flags = 0x0003,
+                glyphId = 1,
+                arg1 = 0,
+                arg2 = 0,
+            ),
+        )
+        val cycleScaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = safeGlyph + cycleGlyph,
+            loca = TrueTypeLocaTable(offsets = listOf(0, safeGlyph.size, safeGlyph.size + cycleGlyph.size)),
+            horizontalMetrics = sharedMetrics,
+        )
+        val cycleSafe = cycleScaler.scaledGlyphEvidence(glyphId = 0u)
+        val cycleEvidence = cycleScaler.scaledGlyphEvidence(glyphId = 1u)
+
+        val missingComponentGlyph = compositeGlyphData(
+            *componentRecord(
+                flags = 0x0003,
+                glyphId = 2,
+                arg1 = 0,
+                arg2 = 0,
+            ),
+        )
+        val missingComponentScaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = safeGlyph + missingComponentGlyph,
+            loca = TrueTypeLocaTable(offsets = listOf(0, safeGlyph.size, safeGlyph.size + missingComponentGlyph.size)),
+            horizontalMetrics = sharedMetrics,
+        )
+        val missingComponentSafe = missingComponentScaler.scaledGlyphEvidence(glyphId = 0u)
+        val missingComponentEvidence = missingComponentScaler.scaledGlyphEvidence(glyphId = 1u)
+
+        val invalidTransformGlyph = compositeGlyphData(
+            *componentRecord(
+                flags = 0x004b,
+                glyphId = 0,
+                arg1 = 0,
+                arg2 = 0,
+            ),
+        )
+        val invalidTransformScaler = ParsedTrueTypeGlyphScaler(
+            glyfTable = safeGlyph + invalidTransformGlyph,
+            loca = TrueTypeLocaTable(offsets = listOf(0, safeGlyph.size, safeGlyph.size + invalidTransformGlyph.size)),
+            horizontalMetrics = sharedMetrics,
+        )
+        val invalidTransformSafe = invalidTransformScaler.scaledGlyphEvidence(glyphId = 0u)
+        val invalidTransformEvidence = invalidTransformScaler.scaledGlyphEvidence(glyphId = 1u)
+
+        val safePaddedGlyph = safeGlyph.withTrueTypePadding()
+        val invalidLocaFailure = requireNotNull(
+            runCatching {
+                TrueTypeGlyphScalerFactory.create(
+                    metrics = sfntMetricsForFactory(),
+                    locaTable = shortLocaForOffsets(0, safePaddedGlyph.size, safePaddedGlyph.size + 2),
+                    glyfTable = safePaddedGlyph,
+                )
+            }.exceptionOrNull(),
+        )
+
+        val malformedVariationEvidence = ParsedTrueTypeGlyphScaler(
+            glyfTable = safeGlyph,
+            loca = TrueTypeLocaTable(offsets = listOf(0, safeGlyph.size, safeGlyph.size)),
+            horizontalMetrics = sharedMetrics,
+            gvar = TrueTypeGvarTable.parse(
+                data = singleAxisGvarWithMalformedPointDelta(),
+                axisCount = 1,
+                glyphCount = 2,
+            ),
+            normalizedAxisOrder = listOf("wght"),
+        ).scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to 1.0)),
+        )
+
+        return """
+            {
+              "schemaVersion": 1,
+              "dumpId": "truetype-malformed-glyf-isolation",
+              "ownerTickets": [
+                "KFONT-M3-005"
+              ],
+              "fixtureIds": [
+                "truetype-scaler-truetype-malformed-glyf-isolation"
+              ],
+              "requiredEvidence": [
+                "glyph-outline.json",
+                "glyph-metrics.json",
+                "variation-deltas.json",
+                "diagnostic-snapshot",
+                "positive-control-dump"
+              ],
+              "faceRefusalCases": [
+                ${faceRefusalCaseJson(
+                    caseId = "loca-final-offset-out-of-bounds",
+                    requestedArtifact = "glyph-outline.json",
+                    action = "refuse-face",
+                    diagnostic = FontScalerDiagnostic(
+                        code = FontScalerDiagnosticCodes.SCALER_OUTLINE_UNAVAILABLE,
+                        detail = "truetype.loca-final-offset-out-of-bounds",
+                        operation = "face",
+                        glyphId = 1u,
+                    ),
+                    exceptionMessage = invalidLocaFailure.message.orEmpty(),
+                ).prependIndent("                ").trimStart()}
+              ],
+              "glyphIsolationCases": [
+                ${glyphIsolationCaseJson(
+                    caseId = "truncated-glyph-header",
+                    requestedArtifact = "glyph-outline.json",
+                    action = "refuse-glyph",
+                    primaryDiagnostic = truncatedHeaderMalformed.primaryDiagnostic("truetype.glyf-header-truncated"),
+                    malformedGlyphEvidence = truncatedHeaderMalformed,
+                    positiveControlGlyphEvidence = truncatedHeaderSafe,
+                ).prependIndent("                ").trimStart()},
+                ${glyphIsolationCaseJson(
+                    caseId = "bad-contour-endpoints",
+                    requestedArtifact = "glyph-outline.json",
+                    action = "refuse-glyph",
+                    primaryDiagnostic = malformedContourEvidence.primaryDiagnostic("truetype.contour-endpoints-malformed"),
+                    malformedGlyphEvidence = malformedContourEvidence,
+                    positiveControlGlyphEvidence = malformedContourSafe,
+                ).prependIndent("                ").trimStart()},
+                ${glyphIsolationCaseJson(
+                    caseId = "flag-repeat-overflow",
+                    requestedArtifact = "glyph-outline.json",
+                    action = "refuse-glyph",
+                    primaryDiagnostic = repeatOverflowEvidence.primaryDiagnostic("truetype.flag-repeat-overflow"),
+                    malformedGlyphEvidence = repeatOverflowEvidence,
+                    positiveControlGlyphEvidence = repeatOverflowSafe,
+                ).prependIndent("                ").trimStart()},
+                ${glyphIsolationCaseJson(
+                    caseId = "coordinate-run-truncation",
+                    requestedArtifact = "glyph-outline.json",
+                    action = "refuse-glyph",
+                    primaryDiagnostic = coordinateTruncatedEvidence.primaryDiagnostic("truetype.coordinate-run-truncated"),
+                    malformedGlyphEvidence = coordinateTruncatedEvidence,
+                    positiveControlGlyphEvidence = coordinateTruncatedSafe,
+                ).prependIndent("                ").trimStart()},
+                ${glyphIsolationCaseJson(
+                    caseId = "composite-cycle",
+                    requestedArtifact = "glyph-outline.json",
+                    action = "refuse-glyph",
+                    primaryDiagnostic = cycleEvidence.primaryDiagnostic("truetype.composite-recursion-depth"),
+                    malformedGlyphEvidence = cycleEvidence,
+                    positiveControlGlyphEvidence = cycleSafe,
+                ).prependIndent("                ").trimStart()},
+                ${glyphIsolationCaseJson(
+                    caseId = "missing-component-glyph",
+                    requestedArtifact = "glyph-outline.json",
+                    action = "refuse-glyph",
+                    primaryDiagnostic = missingComponentEvidence.primaryDiagnostic("truetype.composite-component-glyph-id"),
+                    malformedGlyphEvidence = missingComponentEvidence,
+                    positiveControlGlyphEvidence = missingComponentSafe,
+                ).prependIndent("                ").trimStart()},
+                ${glyphIsolationCaseJson(
+                    caseId = "invalid-composite-transform-flags",
+                    requestedArtifact = "glyph-outline.json",
+                    action = "refuse-glyph",
+                    primaryDiagnostic = invalidTransformEvidence.primaryDiagnostic("truetype.composite-transform-flags"),
+                    malformedGlyphEvidence = invalidTransformEvidence,
+                    positiveControlGlyphEvidence = invalidTransformSafe,
+                ).prependIndent("                ").trimStart()}
+              ],
+              "variationCases": [
+                ${variationDiagnosticCaseJson(
+                    caseId = "malformed-gvar-point-data",
+                    requestedArtifact = "variation-deltas.json",
+                    primaryDiagnostic = malformedVariationEvidence.primaryDiagnostic("truetype.gvar-malformed", operation = "variation"),
+                    glyphEvidence = malformedVariationEvidence,
+                ).prependIndent("                ").trimStart()}
+              ],
+              "nonClaims": [
+                "no-complete-target-support-claim",
+                "no-notdef-substitution-runtime-claim",
+                "no-complete-variable-font-support-claim",
+                "no-hvar-vvar-mvar-metrics-claim",
+                "no-vertical-metrics-claim",
+                "no-complete-hinting-vm-claim",
+                "no-a8-or-sdf-artifact-claim",
+                "no-gpu-text-route-claim"
+              ]
+            }
+        """.trimIndent()
+    }
+
+    private fun glyphIsolationCaseJson(
+        caseId: String,
+        requestedArtifact: String,
+        action: String,
+        primaryDiagnostic: FontScalerDiagnostic,
+        malformedGlyphEvidence: ScaledTrueTypeGlyphEvidence,
+        positiveControlGlyphEvidence: ScaledTrueTypeGlyphEvidence,
+    ): String {
+        return """
+            {
+              "caseId": ${testJsonString(caseId)},
+              "requestedArtifact": ${testJsonString(requestedArtifact)},
+              "failurePolicy": ${glyphFailurePolicyJson(
+                  action = action,
+                  primaryDiagnostic = primaryDiagnostic,
+                  safeGlyphsStillAvailable = true,
+              )},
+              "malformedGlyphEvidence": ${glyphEvidenceSummaryJson(malformedGlyphEvidence).prependIndent("              ").trimStart()},
+              "positiveControlGlyphEvidence": ${glyphEvidenceSummaryJson(positiveControlGlyphEvidence).prependIndent("              ").trimStart()}
+            }
+        """.trimIndent()
+    }
+
+    private fun faceRefusalCaseJson(
+        caseId: String,
+        requestedArtifact: String,
+        action: String,
+        diagnostic: FontScalerDiagnostic,
+        exceptionMessage: String,
+    ): String {
+        return """
+            {
+              "caseId": ${testJsonString(caseId)},
+              "requestedArtifact": ${testJsonString(requestedArtifact)},
+              "failurePolicy": ${glyphFailurePolicyJson(
+                  action = action,
+                  primaryDiagnostic = diagnostic,
+                  safeGlyphsStillAvailable = false,
+              )},
+              "exceptionMessage": ${testJsonString(exceptionMessage)}
+            }
+        """.trimIndent()
+    }
+
+    private fun variationDiagnosticCaseJson(
+        caseId: String,
+        requestedArtifact: String,
+        primaryDiagnostic: FontScalerDiagnostic,
+        glyphEvidence: ScaledTrueTypeGlyphEvidence,
+    ): String {
+        return """
+            {
+              "caseId": ${testJsonString(caseId)},
+              "requestedArtifact": ${testJsonString(requestedArtifact)},
+              "primaryDiagnostic": ${primaryDiagnostic.toCanonicalJson()},
+              "glyphEvidence": ${glyphEvidenceSummaryJson(glyphEvidence).prependIndent("              ").trimStart()}
+            }
+        """.trimIndent()
+    }
+
+    private fun glyphFailurePolicyJson(
+        action: String,
+        primaryDiagnostic: FontScalerDiagnostic,
+        safeGlyphsStillAvailable: Boolean,
+    ): String {
+        return """
+            {
+              "action": ${testJsonString(action)},
+              "primaryDiagnostic": ${primaryDiagnostic.toCanonicalJson()},
+              "safeGlyphsStillAvailable": $safeGlyphsStillAvailable
+            }
+        """.trimIndent()
+    }
+
+    private fun ScaledTrueTypeGlyphEvidence.primaryDiagnostic(
+        detail: String,
+        operation: String = "outline",
+    ): FontScalerDiagnostic =
+        diagnostics.firstOrNull { diagnostic ->
+            diagnostic.detail == detail && diagnostic.operation == operation
+        } ?: diagnostics.first { diagnostic -> diagnostic.detail == detail }
 
     private fun variationDeltaEvidenceJson(
         result: TrueTypeGvarSimpleGlyphDeltaResult,

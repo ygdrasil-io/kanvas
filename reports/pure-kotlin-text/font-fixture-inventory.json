@@ -1097,6 +1097,42 @@
           ]
         },
         {
+          "fixtureId": "truetype-scaler-truetype-malformed-glyf-isolation",
+          "targetGate": "truetype-malformed-glyf-isolation",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate bounded malformed loca/glyf/gvar fixtures that prove face refusal, per-glyph refusal, positive-control safe glyph dumps, and explicit non-claims around runtime .notdef substitution.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/truetype-malformed-glyf-isolation.json",
+            "reports/pure-kotlin-text/2026-06-16-kfont-m3-005-malformed-glyf-isolation.md",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "loca face-refusal snapshot",
+            "truncated-header refusal snapshot",
+            "bad-contour refusal snapshot",
+            "flag-repeat refusal snapshot",
+            "coordinate-truncation refusal snapshot",
+            "composite-cycle refusal snapshot",
+            "missing-component refusal snapshot",
+            "invalid-transform refusal snapshot",
+            "malformed gvar warning snapshot",
+            "positive-control glyph dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-notdef-substitution-runtime-claim",
+            "no-complete-variable-font-support-claim",
+            "no-hvar-vvar-mvar-metrics-claim",
+            "no-vertical-metrics-claim",
+            "no-complete-hinting-vm-claim",
+            "no-a8-or-sdf-artifact-claim",
+            "no-gpu-text-route-claim"
+          ]
+        },
+        {
           "fixtureId": "truetype-scaler-truetype-simple-glyph",
           "targetGate": "truetype-simple-glyph",
           "status": "current-positive-evidence",
