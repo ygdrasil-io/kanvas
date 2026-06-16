@@ -331,6 +331,45 @@
       ]
     },
     {
+      "dumpId": "feature-policy-matrix",
+      "ownerTicket": "KFONT-M6-006",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Features"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/OpenTypeLayoutContract.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt",
+        "reports/font/fixtures/expected/shaping/feature-policy-matrix.json"
+      ],
+      "expectedFields": [
+        "dumpId",
+        "nonClaims",
+        "openTypeScriptTags",
+        "optionalFeatures",
+        "ownerTickets",
+        "refusalWhenMissing",
+        "requiredDefaults",
+        "rows",
+        "schemaVersion",
+        "scriptFamily",
+        "selectedScripts"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests '*OpenTypeLayoutEngineContractTest*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Feature policy matrix changes require script-row review, default-feature review, and non-claim review without shaping support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-complete-feature-policy-claim",
+        "no-native-shaper-oracle-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
       "dumpId": "font-source-liberation-scan-root",
       "ownerTicket": "PKT-02D",
       "classification": "golden-gated",
@@ -993,6 +1032,7 @@
         "dumpId",
         "fallbackRun",
         "features",
+        "languageSystem",
         "nonClaims",
         "ownerTickets",
         "schemaVersion",

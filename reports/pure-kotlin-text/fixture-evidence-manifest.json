@@ -465,6 +465,7 @@
         "reports/pure-kotlin-text/dump-evidence-index.json",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/OpenTypeLayoutContract.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt",
+        "reports/font/fixtures/expected/shaping/feature-policy-matrix.json",
         "reports/font/fixtures/expected/shaping/shaping-plan.json",
         "reports/font/fixtures/expected/shaping/gsub-trace.json",
         "reports/font/fixtures/expected/shaping/gpos-trace.json",

@@ -1,6 +1,6 @@
 # Pure Kotlin Text Coverage And Ticket Matrix
 
-Date: 2026-06-14
+Date: 2026-06-16
 Status: coordination evidence
 
 This report maps `.upstream/specs/pure-kotlin-text/` to implementation slices.
@@ -31,7 +31,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 |---|---|---|---|
 | `00-architecture-and-module-boundaries.md` | Module ownership, dependency direction, boundary contracts, serializable diagnostics. | `font/core`, `font/sfnt`, `font/scaler`, `font/text`, `font/glyph`, `font/gpu-api`, `gpu-renderer/text`. | Boundary tests, no forbidden dependencies, dumps with no object identity. |
 | `01-font-source-sfnt-and-scalers.md` | Font sources, TTC/OTC, `cmap`, TrueType `glyf`, CFF/CFF2, variations, fallback catalog. | `font/core`, `font/sfnt`, `font/scaler`, current `kanvas-skia` OpenType backend. | TTF/TTC/malformed fixtures, path/metric dumps, variation fixtures, stable `font.*` diagnostics. |
-| `02-opentype-layout-shaping-engine.md` | Unicode data, bidi, script itemization, GSUB/GPOS/GDEF, clusters, fallback runs, script matrix. | `font/text` basic segmentation/bidi/script, bounded kerning and GPOS pair slice. | One positive and one refusal fixture per required script row, shaping dumps, `text.shaping.*` diagnostics. |
+| `02-opentype-layout-shaping-engine.md` | Unicode data, bidi, script itemization, GSUB/GPOS/GDEF, clusters, fallback runs, script matrix. | `font/text` basic segmentation/bidi/script plus contract-level script feature policy rows and shaping-plan defaults. | One positive and one refusal fixture per required script row, shaping dumps, `text.shaping.*` diagnostics. |
 | `03-paragraph-engine.md` | Paragraph builder, style runs, wrapping, bidi lines, ellipsis, placeholders, selection, hit testing. | `font/text` paragraph skeleton and deterministic simple line breaker. | Layout dumps, paragraph fixtures, hit-test/selection evidence. |
 | `04-glyph-representation-and-artifacts.md` | Outline, A8, SDF, atlas, strike keys, cache, invalidation, CPUPreparedGPU artifacts. | `font/glyph`, `font/gpu-api`, current `SkCpuGlyphCache` prototype. | Mask/SDF hashes, atlas dumps, stale/capacity refusals, `text.glyph.*` diagnostics. |
 | `05-color-fonts-bitmap-svg-emoji.md` | COLR/CPAL, COLRv1 graph, PNG bitmap glyphs, SVG-in-OpenType, emoji dispatch. | `font/glyph/color`, `font/sfnt` metadata, current OpenType color metadata. | COLR/PNG/SVG/emoji fixtures, budget/security refusals, non-PNG refusal evidence. |
@@ -1634,6 +1634,54 @@ Remaining gate: this is contract and dump evidence only. It does not implement
 GSUB or GPOS lookup behavior, required script support, font fallback policy,
 paragraph layout, glyph artifacts, CPU oracle support promotion, or any GPU
 text route.
+
+### KFONT-M6-006: Script-Specific Default Feature Policy Slice
+
+Status: implemented as a bounded review slice; independent review pending.
+
+Files:
+
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/OpenTypeLayoutContract.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt`
+- `reports/font/fixtures/expected/shaping/feature-policy-matrix.json`
+- `reports/font/fixtures/expected/shaping/shaping-plan.json`
+- `reports/font/fixtures/expected/shaping/gsub-trace.json`
+- `reports/font/fixtures/expected/shaping/gpos-trace.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m6-006-feature-policy.md`
+
+Evidence:
+
+- `RequiredScriptFeaturePolicies` now names explicit rows for Latin, Greek,
+  Cyrillic, Hebrew, Arabic, Devanagari, Thai, CJK, and Emoji.
+- `ResolvedFeatureSet` now serializes `requested`, `enabled`, `disabled`,
+  `defaulted`, and `unsupported` feature facts, and `shaping-plan.json` records
+  a deterministic `languageSystem` value.
+- The checked-in `feature-policy-matrix.json` pins script-family to
+  OpenType-tag mappings, required defaults, optional features, and refusal
+  dependencies without promoting support claims.
+- Contract goldens now prove that unsupported discretionary requests can
+  diagnose while leaving simple-script defaults explicit at the plan layer.
+- `dump-evidence-index.json`, `fixture-evidence-manifest.json`, and
+  `font-claim-dashboard.json` now track the policy matrix as deterministic
+  evidence with `claimPromotionAllowed=false`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.OpenTypeLayoutEngineContractTest
+rtk ./gradlew --no-daemon :font:text:test
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+```
+
+Remaining gate: this slice does not yet execute resolved defaults through full
+GSUB/GPOS runtime behavior, does not add per-script positive/refusal shaping
+fixtures beyond the contract layer, and does not yet prove the `drawString`
+compatibility path records complex-feature non-enablement.
 
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 
