@@ -1,0 +1,15 @@
+rendered runtime-effect-color-tile via WebGPU offscreen
+adapter=Apple M2 Max
+fillRectCommands=0
+fillRRectCommands=0
+linearGradientRectCommands=0
+clipCommands=0
+bitmapRectCommands=0
+runtimeEffectCommands=1
+runtimeEffectStableIds=runtime.simple_rt
+runtimeEffectWgslImplementationIds=wgsl/runtime_simple_rt
+runtimeEffectUniformLayout=gColor@0:16
+runtimeEffectPipelineKey=runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]
+runtimeEffectDescriptorEvidence=reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json
+runtimeEffectParserEvidence=RuntimeEffectDescriptorWebGpuTest#runtime SimpleRT descriptor WGSL parses and reflects uniforms
+fallbackReason=none

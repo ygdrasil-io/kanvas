@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.scenes.catalog
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 
@@ -57,6 +58,45 @@ class GPURendererSceneRegistryTest {
         assertEquals(SceneExpectation.ShouldRender, scene.expectation)
         assertTrue(scene.commands.any { it is SceneCommand.FillRect })
         assertTrue(scene.roadmapLinks.any { it.rStage == RStage.R6 })
+    }
+
+    @Test
+    fun `runtime effect color tile is backed by registered SimpleRT scene payload`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("runtime-effect-color-tile")
+        val command = assertIs<SceneCommand.RuntimeEffectTile>(scene.commands.single())
+
+        assertTrue(command.hasFixturePayload)
+        assertEquals("runtime.simple_rt", command.stableId)
+        assertEquals("wgsl/runtime_simple_rt", command.wgslImplementationId)
+        assertEquals("kotlin/simple_rt", command.cpuImplementationId)
+        assertEquals("gColor", command.uniformName)
+        assertEquals(0, command.uniformOffset)
+        assertEquals(16, command.uniformSize)
+    }
+
+    @Test
+    fun `layered shadow card is backed by bounded shadow layer and drop shadow payloads`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("layered-shadow-card")
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        val layer = assertIs<SceneCommand.SaveLayer>(scene.commands[1])
+        val filter = assertIs<SceneCommand.FilterNode>(scene.commands[2])
+
+        assertTrue(layer.hasFixturePayload)
+        assertEquals("bounded-shadow-card", layer.layerKind)
+        assertEquals("shadow-card-layer", filter.inputLabel)
+        assertEquals("drop-shadow", filter.kind?.wireName)
+        assertEquals(0.72f, filter.strength)
+    }
+
+    @Test
+    fun `mesh ribbon is backed by bounded ribbon strip payload`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("mesh-ribbon")
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        val command = assertIs<SceneCommand.MeshRibbon>(scene.commands[1])
+
+        assertTrue(command.hasFixturePayload)
+        assertEquals("bounded-ribbon-strip", command.meshKind)
+        assertEquals(28f, command.thickness)
     }
 
     private data class SceneExpectationRow(
@@ -119,7 +159,7 @@ class GPURendererSceneRegistryTest {
             SceneExpectationRow(
                 sceneId = "layered-shadow-card",
                 tags = setOf(SceneTag.Layer, SceneTag.Filter),
-                commandFamilies = listOf("save-layer", "filter-node"),
+                commandFamilies = listOf("clear", "save-layer", "filter-node"),
                 roadmapLinks = listOf(RoadmapExpectation("M5")),
             ),
             SceneExpectationRow(
@@ -149,7 +189,7 @@ class GPURendererSceneRegistryTest {
             SceneExpectationRow(
                 sceneId = "mesh-ribbon",
                 tags = setOf(SceneTag.Vertices),
-                commandFamilies = listOf("vertices"),
+                commandFamilies = listOf("clear", "vertices"),
                 roadmapLinks = listOf(RoadmapExpectation("M8")),
             ),
             SceneExpectationRow(

@@ -50,7 +50,7 @@
     {
       "sceneId": "layered-shadow-card",
       "title": "Layered Shadow Card",
-      "description": "Layer and filter command markers for bounded route observation.",
+      "description": "Bounded shadow-card layer fixture with explicit drop-shadow filter route.",
       "tags": ["Layer","Filter"],
       "kgpuMilestones": ["M5"],
       "rStages": [],
@@ -77,7 +77,7 @@
     {
       "sceneId": "runtime-effect-color-tile",
       "title": "Runtime Effect Color Tile",
-      "description": "Runtime-effect tile command marker with bounded parameter intent.",
+      "description": "Registered SimpleRT runtime-effect tile with reflected gColor parameter intent.",
       "tags": ["RuntimeEffect"],
       "kgpuMilestones": ["M7"],
       "rStages": [],
@@ -95,7 +95,7 @@
     {
       "sceneId": "mesh-ribbon",
       "title": "Mesh Ribbon",
-      "description": "Draw vertices and mesh-like geometry visibility.",
+      "description": "Bounded ribbon-strip fixture for vertices visibility without broad DrawVertices promotion.",
       "tags": ["Vertices"],
       "kgpuMilestones": ["M8"],
       "rStages": [],
