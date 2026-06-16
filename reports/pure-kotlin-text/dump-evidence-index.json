@@ -1557,23 +1557,24 @@
         "fixtureIds",
         "nonClaims",
         "ownerTickets",
+        "phantomMetricCase",
         "requiredEvidence",
         "schemaVersion",
         "simplePointCase",
         "wraparoundCase"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:scaler:test --tests '*IUP*' --tests '*Gvar*'",
+        "rtk ./gradlew --no-daemon :font:scaler:test --tests '*IUP*' --tests '*Gvar*' --tests '*PhantomPoint*'",
         "rtk python3 scripts/validate_font_fixture_assets.py",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "TrueType gvar IUP golden changes require simple-contour explicit/inferred delta review, wraparound verification, contour-isolation coverage, avar normalization evidence, composite child evidence, malformed tuple diagnostics, and non-claim review before any claim promotion.",
+      "updatePolicy": "TrueType gvar IUP golden changes require simple-contour explicit/inferred delta review, wraparound verification, contour-isolation coverage, avar normalization evidence, composite child evidence, phantom-point advance review, malformed tuple diagnostics, and non-claim review before any claim promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-target-support-claim",
         "no-complete-variable-font-support-claim",
-        "no-phantom-point-metrics-claim",
+        "no-hvar-vvar-mvar-metrics-claim",
         "no-vertical-metrics-claim",
         "no-complete-hinting-vm-claim",
         "no-a8-or-sdf-artifact-claim",
