@@ -24,6 +24,9 @@ import org.graphiks.kanvas.font.sfnt.CMapSubtable
 import org.graphiks.kanvas.font.sfnt.CMapTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposPairAdjustment
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposPairTable
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposSingleAdjustment
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposSingleTable
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposValueRecord
 import org.graphiks.kanvas.font.sfnt.OpenTypeKernCoverage
 import org.graphiks.kanvas.font.sfnt.OpenTypeKernFormat0Subtable
 import org.graphiks.kanvas.font.sfnt.OpenTypeKernPair
@@ -859,6 +862,137 @@ class TextStackSurfaceTest {
                         GlyphCluster(textRange = 1..1, glyphRange = 1..1, advanceX = 20f),
                     ),
                     advanceX = 39f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            result.glyphRuns,
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineAppliesParsedGposSingleAndPairValueRecordsInFontSizeUnits() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440409"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                'A'.code to 7,
+                'V'.code to 11,
+            ),
+            gposSingleTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGposSingleTable(
+                    adjustments = listOf(
+                        OpenTypeGposSingleAdjustment(
+                            glyphId = 7,
+                            valueRecord = OpenTypeGposValueRecord(
+                                xPlacement = 50,
+                                yPlacement = -25,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            gposPairTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGposPairTable(
+                    pairs = listOf(
+                        OpenTypeGposPairAdjustment(
+                            leftGlyphId = 7,
+                            rightGlyphId = 11,
+                            firstValueRecord = OpenTypeGposValueRecord(xAdvance = -40),
+                            secondValueRecord = OpenTypeGposValueRecord(
+                                xPlacement = 20,
+                                xAdvance = 10,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            kernUnitsPerEmByTypefaceId = mapOf(typefaceId to 1000),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "AV",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(emptyList(), result.diagnostics)
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(7, 11),
+                    clusters = listOf(
+                        GlyphCluster(
+                            textRange = 0..0,
+                            glyphRange = 0..0,
+                            advanceX = 19.2f,
+                            offsetX = 1f,
+                            offsetY = -0.5f,
+                        ),
+                        GlyphCluster(
+                            textRange = 1..1,
+                            glyphRange = 1..1,
+                            advanceX = 20.2f,
+                            offsetX = 0.4f,
+                        ),
+                    ),
+                    advanceX = 39.4f,
+                    advanceY = 0f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            result.glyphRuns,
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineSkipsGposPairAdjustmentsWhenKernFeatureIsDisabled() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-44665544040a"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                'A'.code to 7,
+                'V'.code to 11,
+            ),
+            gposPairTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGposPairTable(
+                    pairs = listOf(
+                        OpenTypeGposPairAdjustment(
+                            leftGlyphId = 7,
+                            rightGlyphId = 11,
+                            firstValueRecord = OpenTypeGposValueRecord(xAdvance = -60),
+                        ),
+                    ),
+                ),
+            ),
+            kernUnitsPerEmByTypefaceId = mapOf(typefaceId to 1000),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "AV",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+                features = FeatureSet(mapOf("kern" to 0)),
+            ),
+        )
+
+        assertEquals(emptyList(), result.diagnostics)
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(7, 11),
+                    clusters = listOf(
+                        GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 20f),
+                        GlyphCluster(textRange = 1..1, glyphRange = 1..1, advanceX = 20f),
+                    ),
+                    advanceX = 40f,
+                    advanceY = 0f,
                     script = "Latn",
                     bidiLevel = 0,
                     typefaceId = typefaceId,
