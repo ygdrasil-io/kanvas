@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 27,
+  "sceneCount": 28,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -119,6 +119,16 @@
       "tags": ["Rect","RRect","Clip","Image"],
       "kgpuMilestones": ["M4"],
       "ticketIds": ["KGPU-M4-003"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "sampler-boundary-gate-board",
+      "title": "Sampler Boundary Gate Board",
+      "description": "Fixture-backed nearest/linear sampler facts with visible tile, mipmap, cubic, anisotropic, perspective, and color-managed decode refusals.",
+      "tags": ["Rect","RRect","Clip","Image"],
+      "kgpuMilestones": ["M4"],
+      "ticketIds": ["KGPU-M4-004"],
       "rStages": [],
       "expectation": "ShouldRender"
     },
