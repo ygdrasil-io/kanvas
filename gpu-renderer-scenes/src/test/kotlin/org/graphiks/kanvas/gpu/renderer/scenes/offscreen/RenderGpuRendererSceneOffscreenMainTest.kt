@@ -14,6 +14,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneHumanDocs
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSource
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
@@ -30,6 +31,19 @@ class RenderGpuRendererSceneOffscreenMainTest {
 
         assertContains(failure.message ?: "", "Unknown GPU renderer scene")
         assertFalse(root.resolve("missing-scene").exists())
+    }
+
+    @Test
+    fun `candidate scenes are not accepted by WebGPU offscreen runner`() {
+        val candidate = GPURendererSceneHumanDocs.candidateScenes.single {
+            it.sceneId.value == "runtime-effect-uniform-ladder"
+        }
+        val root = Files.createTempDirectory("gpu-renderer-scenes-candidate-offscreen")
+        val failure = assertFailsWith<IllegalStateException> {
+            renderGpuRendererSceneOffscreen(arrayOf(candidate.sceneId.value, root.toString()))
+        }
+
+        assertContains(failure.message.orEmpty(), "Unknown GPU renderer scene: runtime-effect-uniform-ladder")
     }
 
     @Test

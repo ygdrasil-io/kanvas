@@ -10,6 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneHumanDocs
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.SceneDimensions
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.SceneExpectation
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.SceneId
@@ -33,6 +34,20 @@ class RunGpuRendererSceneKadreMainTest {
 
         assertContains(failure.message ?: "", "Unknown GPU renderer scene")
         assertFalse(output.exists())
+    }
+
+    @Test
+    fun `candidate scenes are not accepted by Kadre windowed runner`() {
+        val candidate = GPURendererSceneHumanDocs.candidateScenes.single {
+            it.sceneId.value == "runtime-effect-uniform-ladder"
+        }
+        val output = Files.createTempDirectory("gpu-renderer-scenes-candidate-windowed")
+            .resolve("session.json")
+        val failure = assertFailsWith<IllegalStateException> {
+            runGpuRendererSceneKadre(arrayOf(candidate.sceneId.value, "0", output.toString()))
+        }
+
+        assertContains(failure.message.orEmpty(), "Unknown GPU renderer scene: runtime-effect-uniform-ladder")
     }
 
     @Test

@@ -6,7 +6,11 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.CandidateScene
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.CandidateSceneFrenchText
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.CandidateSceneStatus
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneHumanDocs
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.SceneDimensions
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.SceneExpectation
@@ -87,6 +91,82 @@ class SceneCatalogReportTest {
         assertTrue(root.resolve("catalog.json").readText().contains("\"ticketIds\": [\"KGPU-M10-001\",\"KGPU-M10-004\"]"))
         assertTrue(root.resolve("catalog.json").readText().contains("\"ticketIds\": [\"KGPU-M10-002\"]"))
         assertTrue(root.resolve("catalog.json").readText().contains("\"ticketIds\": [\"KGPU-M10-003\"]"))
+    }
+
+    @Test
+    fun `catalog report writes French markdown with executable docs and candidates`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-report-fr")
+        SceneCatalogReport(
+            scenes = GPURendererSceneRegistry.scenes,
+            humanDocs = GPURendererSceneHumanDocs.docs,
+            candidateScenes = GPURendererSceneHumanDocs.candidateScenes,
+        ).writeTo(root)
+
+        val french = root.resolve("catalog.fr.md").readText()
+        assertContains(french, "# Catalogue des scenes GPU Renderer")
+        assertContains(french, "## Scenes executables")
+        assertContains(french, "### Solid Card Stack (`solid-card-stack`)")
+        assertContains(french, "Intention:")
+        assertContains(french, "Valide:")
+        assertContains(french, "Ne revendique pas:")
+        assertContains(french, "Preuve:")
+        assertContains(french, "## Candidates amont")
+        assertContains(french, "### Runtime Effect Uniform Ladder (`runtime-effect-uniform-ladder`)")
+        assertContains(french, "Statut: `fixture-ready`")
+    }
+
+    @Test
+    fun `catalog json separates executable scenes from candidate scenes`() {
+        val json = SceneCatalogReport(
+            scenes = GPURendererSceneRegistry.scenes,
+            humanDocs = GPURendererSceneHumanDocs.docs,
+            candidateScenes = GPURendererSceneHumanDocs.candidateScenes,
+        ).toJson()
+
+        assertContains(json, "\"humanDocs\": {")
+        assertContains(json, "\"fr\": {")
+        assertContains(json, "\"intention\": \"Verifier une pile de cartes solides avec ordre de dessin stable.\"")
+        assertContains(json, "\"candidateScenes\": [")
+        assertContains(json, "\"sceneId\": \"runtime-effect-uniform-ladder\"")
+        assertContains(json, "\"status\": \"fixture-ready\"")
+        assertTrue(json.indexOf("\"scenes\": [") < json.indexOf("\"candidateScenes\": ["))
+    }
+
+    @Test
+    fun `catalog json omits scene human docs when none are provided but keeps candidate array`() {
+        val scene = GPURendererScene(
+            sceneId = SceneId("sample-report-scene"),
+            title = "Sample Report Scene",
+            description = "Sample report scene.",
+            dimensions = SceneDimensions(16, 16),
+            tags = setOf(SceneTag.Rect),
+            roadmapLinks = listOf(SceneRoadmapLink.milestone("M1")),
+            expectation = SceneExpectation.ShouldRender,
+            commands = listOf(Unit),
+        )
+        val candidate = CandidateScene(
+            sceneId = SceneId("sample-report-candidate"),
+            title = "Sample Report Candidate",
+            roadmapLinks = listOf(SceneRoadmapLink.milestone("M1")),
+            tags = setOf(SceneTag.Rect),
+            status = CandidateSceneStatus.Candidate,
+            french = CandidateSceneFrenchText(
+                intention = "Intention candidate de rapport.",
+                validationTarget = "Validation candidate de rapport.",
+                nonClaims = "Non revendication candidate.",
+                rationale = "Raison candidate de rapport.",
+            ),
+        )
+
+        val json = SceneCatalogReport(
+            scenes = listOf(scene),
+            candidateScenes = listOf(candidate),
+        ).toJson()
+
+        val executableScenesJson = json.substringBefore("\"candidateScenes\": [")
+        assertFalse(executableScenesJson.contains("\"humanDocs\""))
+        assertContains(json, "\"candidateScenes\": [")
+        assertContains(json, "\"sceneId\": \"sample-report-candidate\"")
     }
 
     @Test
