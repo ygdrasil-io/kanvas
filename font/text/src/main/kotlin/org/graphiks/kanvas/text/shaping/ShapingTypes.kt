@@ -6,6 +6,11 @@ import org.graphiks.kanvas.font.FontResolver
 import org.graphiks.kanvas.font.ResolvedFontRun
 import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.kanvas.font.sfnt.CMapTable
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubLigatureSubstitution
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubLigatureSubstitutionLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubMultipleSubstitutionLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubSingleSubstitutionLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposPairAdjustment
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposPairTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposSingleTable
@@ -612,6 +617,7 @@ public class BasicOpenTypeShapingEngine(
     private val scriptItemizer: ScriptItemizer = BasicScriptItemizer(),
     private val bidiResolver: BidiResolver = BasicBidiResolver(),
     private val missingGlyphId: Int = 0,
+    private val gsubTablesByTypefaceId: Map<TypefaceID, OpenTypeGsubTable> = emptyMap(),
     private val kernTablesByTypefaceId: Map<TypefaceID, OpenTypeKernTable> = emptyMap(),
     private val gposSingleTablesByTypefaceId: Map<TypefaceID, OpenTypeGposSingleTable> = emptyMap(),
     private val gposPairTablesByTypefaceId: Map<TypefaceID, OpenTypeGposPairTable> = emptyMap(),
@@ -700,41 +706,25 @@ public class BasicOpenTypeShapingEngine(
         group: BasicShapingGroup,
         diagnostics: MutableList<ShapingDiagnostic>,
     ): ShapedGlyphRun {
-        val glyphIds = mutableListOf<Int>()
-        val clusters = mutableListOf<GlyphCluster>()
+        val glyphUnits = mutableListOf<ShapingGlyphUnit>()
         val clusterRanges = if (group.isRightToLeft) group.clusterRanges.asReversed() else group.clusterRanges
 
-        var clusterIndex = 0
-        while (clusterIndex < clusterRanges.size) {
-            val clusterRange = clusterRanges[clusterIndex]
-            val glyphStart = glyphIds.size
-            val standardLigature = standardLigatureAt(request, clusterRanges, clusterIndex)
-            if (standardLigature != null) {
-                glyphIds += standardLigature.glyphId
-                clusters += GlyphCluster(
-                    textRange = standardLigature.textRange,
-                    glyphRange = glyphStart..glyphStart,
-                    advanceX = request.fontSize,
-                )
-                clusterIndex += standardLigature.clusterCount
-                continue
-            }
-
+        clusterRanges.forEach { clusterRange ->
             for (codePointRange in codePointRanges(request.text, clusterRange)) {
                 val glyphId = glyphMapper.glyphIdFor(request.typefaceId, codePointRange.codePoint)
                 if (glyphId == null) {
                     diagnostics += missingGlyphDiagnostic(codePointRange)
                 }
-                glyphIds += glyphId ?: missingGlyphId
+                glyphUnits += ShapingGlyphUnit(
+                    glyphId = glyphId ?: missingGlyphId,
+                    textRange = clusterRange,
+                )
             }
-            clusters += GlyphCluster(
-                textRange = clusterRange,
-                glyphRange = glyphStart..glyphIds.lastIndex,
-                advanceX = request.fontSize,
-            )
-            clusterIndex += 1
         }
 
+        applyGsubLookups(request, glyphUnits)
+        val glyphIds = glyphUnits.map { it.glyphId }
+        val clusters = glyphClustersFor(glyphUnits, request.fontSize)
         val totalAdvanceAdjustment = applyPositionAdjustments(request, group, glyphIds, clusters, diagnostics)
 
         return ShapedGlyphRun(
@@ -756,27 +746,125 @@ public class BasicOpenTypeShapingEngine(
             textRange = codePointRange.textRange,
         )
 
-    private fun standardLigatureAt(
+    private fun applyGsubLookups(
         request: ShapingRequest,
-        clusterRanges: List<IntRange>,
-        clusterIndex: Int,
-    ): StandardLigature? {
-        if (request.features.values["liga"] == 0) return null
-        if (clusterIndex + 1 >= clusterRanges.size) return null
+        glyphUnits: MutableList<ShapingGlyphUnit>,
+    ) {
+        val typefaceId = request.typefaceId ?: return
+        val gsubTable = gsubTablesByTypefaceId[typefaceId] ?: return
 
-        val first = singleCodePointRange(request.text, clusterRanges[clusterIndex]) ?: return null
-        val second = singleCodePointRange(request.text, clusterRanges[clusterIndex + 1]) ?: return null
-        if (first.codePoint != LATIN_SMALL_F_CODE_POINT || second.codePoint != LATIN_SMALL_I_CODE_POINT) {
-            return null
+        gsubTable.lookups.forEach { lookup ->
+            if (request.features.values[lookup.featureTag] == 0) {
+                return@forEach
+            }
+            when (lookup) {
+                is OpenTypeGsubSingleSubstitutionLookup -> applySingleSubstitutionLookup(glyphUnits, lookup)
+                is OpenTypeGsubMultipleSubstitutionLookup -> applyMultipleSubstitutionLookup(glyphUnits, lookup)
+                is OpenTypeGsubLigatureSubstitutionLookup -> applyLigatureSubstitutionLookup(glyphUnits, lookup)
+            }
         }
+    }
 
-        val glyphId = glyphMapper.glyphIdFor(request.typefaceId, LATIN_SMALL_FI_LIGATURE_CODE_POINT)
-            ?: return null
-        return StandardLigature(
-            glyphId = glyphId,
-            textRange = first.textRange.first..second.textRange.last,
-            clusterCount = 2,
-        )
+    private fun applySingleSubstitutionLookup(
+        glyphUnits: MutableList<ShapingGlyphUnit>,
+        lookup: OpenTypeGsubSingleSubstitutionLookup,
+    ) {
+        val replacements = lookup.substitutions.associateBy { it.inputGlyphId }
+        glyphUnits.replaceAll { glyphUnit ->
+            replacements[glyphUnit.glyphId]?.let { substitution ->
+                glyphUnit.copy(glyphId = substitution.replacementGlyphId)
+            } ?: glyphUnit
+        }
+    }
+
+    private fun applyMultipleSubstitutionLookup(
+        glyphUnits: MutableList<ShapingGlyphUnit>,
+        lookup: OpenTypeGsubMultipleSubstitutionLookup,
+    ) {
+        val substitutions = lookup.substitutions.associateBy { it.inputGlyphId }
+        var glyphIndex = 0
+        while (glyphIndex < glyphUnits.size) {
+            val substitution = substitutions[glyphUnits[glyphIndex].glyphId]
+            if (substitution == null) {
+                glyphIndex += 1
+                continue
+            }
+
+            val sourceRange = glyphUnits[glyphIndex].textRange
+            glyphUnits.removeAt(glyphIndex)
+            glyphUnits.addAll(
+                glyphIndex,
+                substitution.replacementGlyphIds.map { replacementGlyphId ->
+                    ShapingGlyphUnit(glyphId = replacementGlyphId, textRange = sourceRange)
+                },
+            )
+            glyphIndex += substitution.replacementGlyphIds.size
+        }
+    }
+
+    private fun applyLigatureSubstitutionLookup(
+        glyphUnits: MutableList<ShapingGlyphUnit>,
+        lookup: OpenTypeGsubLigatureSubstitutionLookup,
+    ) {
+        var glyphIndex = 0
+        while (glyphIndex < glyphUnits.size) {
+            val substitution = lookup.substitutions.firstOrNull { candidate ->
+                ligatureMatchesAt(glyphUnits, glyphIndex, candidate)
+            }
+            if (substitution == null) {
+                glyphIndex += 1
+                continue
+            }
+
+            val matchedUnits = glyphUnits.subList(glyphIndex, glyphIndex + substitution.inputGlyphIds.size).toList()
+            repeat(substitution.inputGlyphIds.size) {
+                glyphUnits.removeAt(glyphIndex)
+            }
+            glyphUnits.add(
+                glyphIndex,
+                ShapingGlyphUnit(
+                    glyphId = substitution.replacementGlyphId,
+                    textRange = matchedUnits.minOf { it.textRange.first }..matchedUnits.maxOf { it.textRange.last },
+                ),
+            )
+            glyphIndex += 1
+        }
+    }
+
+    private fun ligatureMatchesAt(
+        glyphUnits: List<ShapingGlyphUnit>,
+        glyphIndex: Int,
+        substitution: OpenTypeGsubLigatureSubstitution,
+    ): Boolean {
+        val endIndex = glyphIndex + substitution.inputGlyphIds.size
+        if (endIndex > glyphUnits.size) return false
+        return substitution.inputGlyphIds.indices.all { offset ->
+            glyphUnits[glyphIndex + offset].glyphId == substitution.inputGlyphIds[offset]
+        }
+    }
+
+    private fun glyphClustersFor(
+        glyphUnits: List<ShapingGlyphUnit>,
+        fontSize: Float,
+    ): MutableList<GlyphCluster> {
+        if (glyphUnits.isEmpty()) return mutableListOf()
+
+        val clusters = mutableListOf<GlyphCluster>()
+        var glyphIndex = 0
+        while (glyphIndex < glyphUnits.size) {
+            val textRange = glyphUnits[glyphIndex].textRange
+            var glyphEnd = glyphIndex
+            while (glyphEnd + 1 < glyphUnits.size && glyphUnits[glyphEnd + 1].textRange == textRange) {
+                glyphEnd += 1
+            }
+            clusters += GlyphCluster(
+                textRange = textRange,
+                glyphRange = glyphIndex..glyphEnd,
+                advanceX = fontSize,
+            )
+            glyphIndex = glyphEnd + 1
+        }
+        return clusters
     }
 
     private fun applyPositionAdjustments(
@@ -1026,6 +1114,7 @@ public class FallbackOpenTypeShapingEngine(
     scriptItemizer: ScriptItemizer = BasicScriptItemizer(),
     bidiResolver: BidiResolver = BasicBidiResolver(),
     missingGlyphId: Int = 0,
+    gsubTablesByTypefaceId: Map<TypefaceID, OpenTypeGsubTable> = emptyMap(),
     kernTablesByTypefaceId: Map<TypefaceID, OpenTypeKernTable> = emptyMap(),
     gposSingleTablesByTypefaceId: Map<TypefaceID, OpenTypeGposSingleTable> = emptyMap(),
     gposPairTablesByTypefaceId: Map<TypefaceID, OpenTypeGposPairTable> = emptyMap(),
@@ -1037,6 +1126,7 @@ public class FallbackOpenTypeShapingEngine(
         scriptItemizer = scriptItemizer,
         bidiResolver = bidiResolver,
         missingGlyphId = missingGlyphId,
+        gsubTablesByTypefaceId = gsubTablesByTypefaceId,
         kernTablesByTypefaceId = kernTablesByTypefaceId,
         gposSingleTablesByTypefaceId = gposSingleTablesByTypefaceId,
         gposPairTablesByTypefaceId = gposPairTablesByTypefaceId,
@@ -1371,9 +1461,6 @@ private const val SCRIPT_HEBREW = "Hebr"
 private const val SCRIPT_COMMON = "Zyyy"
 private const val SCRIPT_INHERITED = "Zinh"
 private const val SCRIPT_EMOJI = "Zsye"
-private const val LATIN_SMALL_F_CODE_POINT = 0x0066
-private const val LATIN_SMALL_I_CODE_POINT = 0x0069
-private const val LATIN_SMALL_FI_LIGATURE_CODE_POINT = 0xFB01
 private const val ZERO_WIDTH_JOINER = 0x200D
 
 private const val BIDI_LEFT_TO_RIGHT = "L"
@@ -1432,10 +1519,9 @@ private data class BasicPositionAdjustmentContext(
     val fontUnitsToFontSizeUnitsScale: Double,
 )
 
-private data class StandardLigature(
+private data class ShapingGlyphUnit(
     val glyphId: Int,
     val textRange: IntRange,
-    val clusterCount: Int,
 )
 
 private data class EmojiSequence(
