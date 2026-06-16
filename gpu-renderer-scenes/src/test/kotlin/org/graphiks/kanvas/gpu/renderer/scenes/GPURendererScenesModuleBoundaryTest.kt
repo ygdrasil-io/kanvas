@@ -6,9 +6,13 @@ import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlin.io.path.Path
 import kotlin.io.path.readText
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
+import org.graphiks.kanvas.gpu.renderer.scenes.offscreen.rectOnlyCommandSequenceUnsupportedReason
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.assertEquals
 import kotlin.test.fail
 
 class GPURendererScenesModuleBoundaryTest {
@@ -92,6 +96,19 @@ class GPURendererScenesModuleBoundaryTest {
             ),
         )
         assertTrue(launcher.contains("Class.forName(KADRE_RUNNER_CLASS)"))
+    }
+
+    @Test
+    fun `rect only offscreen gate matches current faithful runtime subset`() {
+        val supported = GPURendererSceneRegistry.registry.requireScene("solid-card-stack")
+        assertNull(rectOnlyCommandSequenceUnsupportedReason(supported.commands))
+
+        val richer = GPURendererSceneRegistry.registry.requireScene("rounded-panel-gradient")
+        assertEquals(
+            "rect-only offscreen render supports only clear, fill-rect, and clip command families: " +
+                "fill-rrect, linear-gradient-rect",
+            rectOnlyCommandSequenceUnsupportedReason(richer.commands),
+        )
     }
 
     private fun runGradleDryRun(task: String): String {

@@ -304,57 +304,13 @@ internal fun prepareRectOnlyDrawPlan(
     require(height > 0) { "$sceneId rect-only target height must be positive" }
     val unsupportedReason = rectOnlyCommandSequenceUnsupportedReason(commands)
     require(unsupportedReason == null) { "$sceneId $unsupportedReason" }
-    val outOfBoundsMeshRibbons = commands.filterIsInstance<SceneCommand.MeshRibbon>()
-        .filter { it.hasFixturePayload }
-        .filter { ribbon ->
-            val bounds = ribbon.bounds
-            bounds == null || !bounds.isInsideTarget(width, height)
-        }
-        .map { it.label }
-    require(outOfBoundsMeshRibbons.isEmpty()) {
-        "$sceneId rect-only offscreen render requires MeshRibbon bounds inside positive target: " +
-            outOfBoundsMeshRibbons.joinToString()
-    }
-
-    val filters = commands.filterIsInstance<SceneCommand.FilterNode>()
-        .filter { it.hasFixturePayload }
-        .map { filter ->
-            RectOnlyFilterNode(
-                label = filter.label,
-                inputLabel = filter.inputLabel ?: error("FilterNode requires input fixture payload: ${filter.label}"),
-                kind = filter.kind ?: error("FilterNode requires kind fixture payload: ${filter.label}"),
-                strength = filter.strength,
-            )
-        }
-    val filtersByInput = filters.associateBy { it.inputLabel }
-    val saveLayers = commands.filterIsInstance<SceneCommand.SaveLayer>()
-        .filter { it.hasFixturePayload }
-        .map { layer ->
-            val filter = filtersByInput[layer.label]
-                ?: error("SaveLayer requires DropShadow FilterNode fixture payload: ${layer.label}")
-            RectOnlySaveLayer(
-                label = layer.label,
-                layerKind = layer.layerKind,
-                filterLabel = filter.label,
-                filterKind = filter.kind,
-                filterStrength = filter.strength,
-            )
-        }
 
     var activeClip: SceneCommand.Clip? = null
     val indexedDraws = buildList {
         commands.withIndex().forEach { (index, command) ->
             when (command) {
                 is SceneCommand.Clip -> activeClip = command
-                is SceneCommand.FillRect,
-                is SceneCommand.FillRRect,
-                is SceneCommand.LinearGradientRect,
-                is SceneCommand.SaveLayer,
-                is SceneCommand.RuntimeEffectTile,
-                is SceneCommand.MeshRibbon -> add(RectOnlyIndexedDraw(index, command, activeClip))
-                is SceneCommand.BitmapRect -> if (command.hasFixturePayload) {
-                    add(RectOnlyIndexedDraw(index, command, activeClip))
-                }
+                is SceneCommand.FillRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 else -> Unit
             }
         }
@@ -366,78 +322,27 @@ internal fun prepareRectOnlyDrawPlan(
                 command.paintOrder()
             }.thenBy { it.index },
         )
-        .flatMap { (_, command, clip) ->
-            val rect = command.shapeRect()
-            val filter = if (command is SceneCommand.BitmapRect) filtersByInput[command.label] else null
-            if (command is SceneCommand.SaveLayer) {
-                val layer = saveLayers.singleOrNull { it.label == command.label }
-                    ?: error("SaveLayer requires bounded shadow layer contract: ${command.label}")
-                listOf(
-                    rectOnlyFillDraw(
-                        sceneId = sceneId,
-                        label = "${command.label}-shadow",
-                        family = command.family,
-                        rect = command.fixtureShadowRect(),
-                        radius = command.radius,
-                        startColor = command.fixtureShadowColor().withAlpha(command.fixtureShadowColor().a * layer.filterStrength),
-                        endColor = command.fixtureShadowColor().withAlpha(command.fixtureShadowColor().a * layer.filterStrength),
-                        bottomLeftColor = command.fixtureShadowColor().withAlpha(command.fixtureShadowColor().a * layer.filterStrength),
-                        bottomRightColor = command.fixtureShadowColor().withAlpha(command.fixtureShadowColor().a * layer.filterStrength),
-                        paintKind = 0f,
-                        filterKind = 0f,
-                        filterStrength = 0f,
-                        clip = clip,
-                        width = width,
-                        height = height,
-                    ),
-                    rectOnlyFillDraw(
-                        sceneId = sceneId,
-                        label = "${command.label}-content",
-                        family = command.family,
-                        rect = rect,
-                        radius = command.radius,
-                        startColor = command.fixtureContentColor(),
-                        endColor = command.fixtureContentColor(),
-                        bottomLeftColor = command.fixtureContentColor(),
-                        bottomRightColor = command.fixtureContentColor(),
-                        paintKind = 0f,
-                        filterKind = 0f,
-                        filterStrength = 0f,
-                        clip = clip,
-                        width = width,
-                        height = height,
-                    ),
-                )
-            } else {
-                listOf(
-                    rectOnlyFillDraw(
-                        sceneId = sceneId,
-                        label = command.label,
-                        family = command.family,
-                        rect = rect,
-                        radius = command.shapeRadius(),
-                        startColor = command.shapeStartColor(),
-                        endColor = command.shapeEndColor(),
-                        bottomLeftColor = command.shapeBottomLeftColor(),
-                        bottomRightColor = command.shapeBottomRightColor(),
-                        paintKind = command.shapePaintKind(),
-                        filterKind = filter?.kind?.filterPaintKind() ?: 0f,
-                        filterStrength = filter?.strength ?: 0f,
-                        clip = clip,
-                        width = width,
-                        height = height,
-                        runtimeEffectStableId = (command as? SceneCommand.RuntimeEffectTile)?.stableId,
-                        runtimeEffectWgslImplementationId =
-                            (command as? SceneCommand.RuntimeEffectTile)?.wgslImplementationId,
-                        runtimeEffectUniformLayout = (command as? SceneCommand.RuntimeEffectTile)?.uniformLayout,
-                        runtimeEffectPipelineKey = (command as? SceneCommand.RuntimeEffectTile)?.pipelineKey,
-                        meshRibbonKind = (command as? SceneCommand.MeshRibbon)?.meshKind,
-                    ),
-                )
-            }
-    }
+        .map { (_, command, clip) ->
+            rectOnlyFillDraw(
+                sceneId = sceneId,
+                label = command.label,
+                family = command.family,
+                rect = command.shapeRect(),
+                radius = command.shapeRadius(),
+                startColor = command.shapeStartColor(),
+                endColor = command.shapeEndColor(),
+                bottomLeftColor = command.shapeBottomLeftColor(),
+                bottomRightColor = command.shapeBottomRightColor(),
+                paintKind = command.shapePaintKind(),
+                filterKind = 0f,
+                filterStrength = 0f,
+                clip = clip,
+                width = width,
+                height = height,
+            )
+        }
     require(fills.isNotEmpty()) {
-        "$sceneId rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, RuntimeEffectTile, or MeshRibbon command"
+        "$sceneId rect-only offscreen render requires at least one FillRect command"
     }
 
     return RectOnlyDrawPlan(
@@ -447,8 +352,8 @@ internal fun prepareRectOnlyDrawPlan(
         clearCount = commands.count { it is SceneCommand.Clear },
         fills = fills,
         clipCount = commands.count { it is SceneCommand.Clip },
-        filters = filters,
-        saveLayers = saveLayers,
+        filters = emptyList(),
+        saveLayers = emptyList(),
     )
 }
 
@@ -521,14 +426,7 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
             if (
                 command is SceneCommand.Clear ||
                 command is SceneCommand.FillRect ||
-                command is SceneCommand.FillRRect ||
-                command is SceneCommand.LinearGradientRect ||
-                command is SceneCommand.Clip ||
-                command is SceneCommand.BitmapRect ||
-                command is SceneCommand.SaveLayer ||
-                command is SceneCommand.FilterNode ||
-                command is SceneCommand.RuntimeEffectTile ||
-                command is SceneCommand.MeshRibbon
+                command is SceneCommand.Clip
             ) {
                 null
             } else {
@@ -537,121 +435,15 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed save-layer, fixture-backed filter-node, fixture-backed runtime-effect, and fixture-backed mesh-ribbon command families: " +
+        return "rect-only offscreen render supports only clear, fill-rect, and clip command families: " +
             unsupportedFamilies.joinToString()
     }
 
-    val bitmapMarkers = commands.filterIsInstance<SceneCommand.BitmapRect>()
-        .filterNot { it.hasFixturePayload }
-        .map { it.label }
-    if (bitmapMarkers.isNotEmpty()) {
-        return "rect-only offscreen render requires fixture-backed BitmapRect payloads: " +
-            bitmapMarkers.joinToString()
-    }
-
-    val saveLayerMarkers = commands.filterIsInstance<SceneCommand.SaveLayer>()
-        .filterNot { it.hasFixturePayload }
-        .map { it.label }
-    if (saveLayerMarkers.isNotEmpty()) {
-        return "rect-only offscreen render requires fixture-backed SaveLayer payloads: " +
-            saveLayerMarkers.joinToString()
-    }
-
-    val filterMarkers = commands.filterIsInstance<SceneCommand.FilterNode>()
-        .filterNot { it.hasFixturePayload }
-        .map { it.label }
-    if (filterMarkers.isNotEmpty()) {
-        return "rect-only offscreen render requires fixture-backed FilterNode payloads: " +
-            filterMarkers.joinToString()
-    }
-
-    val runtimeEffectMarkers = commands.filterIsInstance<SceneCommand.RuntimeEffectTile>()
-        .filterNot { it.hasFixturePayload }
-        .map { it.label }
-    if (runtimeEffectMarkers.isNotEmpty()) {
-        return "rect-only offscreen render requires fixture-backed RuntimeEffectTile payloads: " +
-            runtimeEffectMarkers.joinToString()
-    }
-
-    val meshRibbonMarkers = commands.filterIsInstance<SceneCommand.MeshRibbon>()
-        .filterNot { it.hasFixturePayload }
-        .map { it.label }
-    if (meshRibbonMarkers.isNotEmpty()) {
-        return "rect-only offscreen render requires fixture-backed MeshRibbon payloads: " +
-            meshRibbonMarkers.joinToString()
-    }
-
-    val unsupportedRuntimeEffects = commands.filterIsInstance<SceneCommand.RuntimeEffectTile>()
-        .filter { it.hasFixturePayload && !it.isRegisteredSimpleRt }
-        .map { it.label }
-    if (unsupportedRuntimeEffects.isNotEmpty()) {
-        return "rect-only offscreen render supports only registered runtime.simple_rt RuntimeEffectTile payloads: " +
-            unsupportedRuntimeEffects.joinToString()
-    }
-
-    val fixtureBitmapLabels = commands.filterIsInstance<SceneCommand.BitmapRect>()
-        .filter { it.hasFixturePayload }
-        .map { it.label }
-        .toSet()
-    val fixtureSaveLayerLabels = commands.filterIsInstance<SceneCommand.SaveLayer>()
-        .filter { it.hasFixturePayload }
-        .map { it.label }
-        .toSet()
-    val filters = commands.filterIsInstance<SceneCommand.FilterNode>()
-        .filter { it.hasFixturePayload }
-    val invalidFilterInputs = filters
-        .mapNotNull { filter ->
-            val inputLabel = filter.inputLabel
-            when (filter.kind) {
-                SceneFilterKind.LumaTint -> if (inputLabel !in fixtureBitmapLabels) {
-                    "${filter.label}->${filter.inputLabel}:luma-tint requires BitmapRect"
-                } else {
-                    null
-                }
-                SceneFilterKind.DropShadow -> if (inputLabel !in fixtureSaveLayerLabels) {
-                    "${filter.label}->${filter.inputLabel}:drop-shadow requires SaveLayer"
-                } else {
-                    null
-                }
-                null -> null
-            }
-        }
-    if (invalidFilterInputs.isNotEmpty()) {
-        return "rect-only offscreen render requires FilterNode inputs to reference compatible fixture-backed labels: " +
-            invalidFilterInputs.joinToString()
-    }
-
-    val missingDropShadowLayers = fixtureSaveLayerLabels
-        .filter { label ->
-            filters.none { filter -> filter.inputLabel == label && filter.kind == SceneFilterKind.DropShadow }
-        }
-    if (missingDropShadowLayers.isNotEmpty()) {
-        return "rect-only offscreen render requires fixture-backed SaveLayer inputs to have one DropShadow FilterNode: " +
-            missingDropShadowLayers.joinToString()
-    }
-
-    val duplicateFilterInputs = filters
-        .mapNotNull { it.inputLabel }
-        .groupingBy { it }
-        .eachCount()
-        .filterValues { it > 1 }
-        .keys
-    if (duplicateFilterInputs.isNotEmpty()) {
-        return "rect-only offscreen render supports at most one FilterNode per fixture input: " +
-            duplicateFilterInputs.joinToString()
-    }
-
     if (commands.none {
-                it is SceneCommand.FillRect ||
-                it is SceneCommand.FillRRect ||
-                it is SceneCommand.LinearGradientRect ||
-                it is SceneCommand.BitmapRect ||
-                it is SceneCommand.SaveLayer ||
-                it is SceneCommand.RuntimeEffectTile ||
-                it is SceneCommand.MeshRibbon
+                it is SceneCommand.FillRect
         }
     ) {
-        return "rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, RuntimeEffectTile, or MeshRibbon command"
+        return "rect-only offscreen render requires at least one FillRect command"
     }
 
     val clearIndices = commands.withIndex()
