@@ -11,6 +11,8 @@ import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneFilterKind
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.textRunRouteUnavailableDiagnostics
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.textRunRouteUnavailableReason
 import org.graphiks.kanvas.gpu.renderer.scenes.reports.json
 
 private const val KADRE_RUNNER_CLASS =
@@ -303,6 +305,8 @@ private fun GPURendererScene<*>.surface(format: String?): WindowedSceneSurface =
     )
 
 internal fun GPURendererScene<*>.kadreWindowedRectOnlyUnsupportedReason(): String? {
+    commands.filterIsInstance<SceneCommand>().textRunRouteUnavailableReason()?.let { return it }
+
     val unsupportedFamilies = commands
         .mapNotNull { command ->
             when (command) {
@@ -477,16 +481,19 @@ internal fun GPURendererScene<*>.kadreWindowedRectOnlyUnsupportedReason(): Strin
 }
 
 internal fun GPURendererScene<*>.windowedSceneDiagnostics(): List<String> {
+    val textRunDiagnostics = commands.filterIsInstance<SceneCommand>()
+        .textRunRouteUnavailableDiagnostics(sceneId.value)
     val saveLayers = commands.filterIsInstance<SceneCommand.SaveLayer>()
         .filter { it.hasFixturePayload }
     val meshRibbons = commands.filterIsInstance<SceneCommand.MeshRibbon>()
         .filter { it.hasFixturePayload }
-    if (saveLayers.isEmpty() && meshRibbons.isEmpty()) return emptyList()
+    if (textRunDiagnostics.isEmpty() && saveLayers.isEmpty() && meshRibbons.isEmpty()) return emptyList()
 
     val saveLayerLabels = saveLayers.map { it.label }.toSet()
     val filters = commands.filterIsInstance<SceneCommand.FilterNode>()
         .filter { it.hasFixturePayload && it.inputLabel in saveLayerLabels }
     return buildList {
+        addAll(textRunDiagnostics)
         if (saveLayers.isNotEmpty()) {
             add("saveLayerCommands=${saveLayers.size}")
             add("saveLayerKinds=${saveLayers.joinToString { it.layerKind }}")

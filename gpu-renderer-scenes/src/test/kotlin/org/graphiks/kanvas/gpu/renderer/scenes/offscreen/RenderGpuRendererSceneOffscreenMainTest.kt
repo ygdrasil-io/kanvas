@@ -33,17 +33,28 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
-    fun `non first route scene writes not yet rendered report under scene directory`() {
+    fun `receipt text run writes stable text route unavailable report under scene directory`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
 
         renderGpuRendererSceneOffscreen(arrayOf("receipt-text-run", root.toString()))
 
-        val runJson = root.resolve("receipt-text-run").resolve("run.json").readText()
+        val sceneOutput = root.resolve("receipt-text-run")
+        val runJson = sceneOutput.resolve("run.json").readText()
+        val diagnostics = sceneOutput.resolve("diagnostics.txt").readText()
         assertContains(runJson, "\"sceneId\": \"receipt-text-run\"")
         assertContains(runJson, "\"status\": \"not-yet-rendered\"")
         assertContains(runJson, "\"productRefusal\": false")
         assertContains(runJson, "\"imagePath\": null")
-        assertContains(runJson, "runner-subset:receipt-text-run")
+        assertContains(runJson, "unsupported.text.draw_run_route_unavailable")
+        assertContains(runJson, "commandFamily=text-run")
+        assertContains(runJson, "fontFamily=Liberation Sans")
+        assertContains(runJson, "glyphRoute=font.glyph.outline-path")
+        assertContains(runJson, "lowerLevelTextRoutesAvailable=font.glyph.outline-path,webgpu.text.glyph-atlas.simple-latin")
+        assertContains(runJson, "sceneRoutePromoted=false")
+        assertContains(runJson, "nonClaims=no fake glyph substitute,no CPU-rendered text texture,no system font fallback,no broad shaping fallback emoji SDF LCD Kadre-windowed claim")
+        assertContains(diagnostics, "fallbackReason=unsupported.text.draw_run_route_unavailable")
+        assertFalse(runJson.contains("runner-subset:receipt-text-run"))
+        assertFalse(sceneOutput.resolve("render.png").exists())
     }
 
     @Test

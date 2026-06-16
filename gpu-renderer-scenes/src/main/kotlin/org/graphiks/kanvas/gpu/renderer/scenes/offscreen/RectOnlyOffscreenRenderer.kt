@@ -44,6 +44,7 @@ import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneFilterKind
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.textRunRouteUnavailableReason
 import org.skia.gpu.webgpu.HeadlessTarget
 import org.skia.gpu.webgpu.WebGpuContext
 
@@ -781,6 +782,8 @@ private fun rectOnlyFillDraw(
 }
 
 internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneCommand>): String? {
+    commands.textRunRouteUnavailableReason()?.let { return it }
+
     val unsupportedFamilies = commands
         .mapNotNull { command ->
             if (
