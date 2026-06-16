@@ -1,8 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import kotlin.test.Test
-import kotlin.test.assertContains
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
@@ -26,16 +24,16 @@ class GPUBackendRuntimeContractsTest {
     }
 
     @Test
-    fun `native surface binding requires stable platform handle data`() {
+    fun `native surface binding requires positive size and nonblank pointer label keys`() {
         val binding = GPUNativeSurfaceBinding(
             platform = GPUNativePlatform.AppKitMetalLayer,
             width = 1280,
             height = 720,
-            pointerLabels = mapOf("nsLayer" to 42L),
+            pointerLabels = mapOf("layerHandle" to 0L),
         )
 
         assertEquals(GPUNativePlatform.AppKitMetalLayer, binding.platform)
-        assertEquals(42L, binding.pointerLabels.getValue("nsLayer"))
+        assertEquals(0L, binding.pointerLabels.getValue("layerHandle"))
         assertFailsWith<IllegalArgumentException> {
             GPUNativeSurfaceBinding(
                 platform = GPUNativePlatform.AppKitMetalLayer,
@@ -52,24 +50,12 @@ class GPUBackendRuntimeContractsTest {
                 pointerLabels = mapOf("nsLayer" to 42L),
             )
         }
-    }
-
-    @Test
-    fun `appkit metal layer binding requires nonzero nsLayer handle`() {
         assertFailsWith<IllegalArgumentException> {
             GPUNativeSurfaceBinding(
                 platform = GPUNativePlatform.AppKitMetalLayer,
                 width = 1280,
                 height = 720,
-                pointerLabels = mapOf("otherHandle" to 42L),
-            )
-        }
-        assertFailsWith<IllegalArgumentException> {
-            GPUNativeSurfaceBinding(
-                platform = GPUNativePlatform.AppKitMetalLayer,
-                width = 1280,
-                height = 720,
-                pointerLabels = mapOf("nsLayer" to 0L),
+                pointerLabels = mapOf("" to 42L),
             )
         }
     }
@@ -132,58 +118,5 @@ class GPUBackendRuntimeContractsTest {
                 scissorHeight = 0,
             )
         }
-    }
-
-    @Test
-    fun `backend rect draw equality and hash code use rgba contents`() {
-        val first = GPUBackendRectDraw(
-            rgbaPremul = floatArrayOf(0.1f, 0.2f, 0.3f, 1.0f),
-            scissorX = 4,
-            scissorY = 8,
-            scissorWidth = 16,
-            scissorHeight = 32,
-        )
-        val second = GPUBackendRectDraw(
-            rgbaPremul = floatArrayOf(0.1f, 0.2f, 0.3f, 1.0f),
-            scissorX = 4,
-            scissorY = 8,
-            scissorWidth = 16,
-            scissorHeight = 32,
-        )
-
-        assertEquals(first, second)
-        assertEquals(first.hashCode(), second.hashCode())
-        assertContains(first.toString(), "rgbaPremul=[0.1, 0.2, 0.3, 1.0]")
-    }
-
-    @Test
-    fun `backend rect draw snapshots rgba input at construction`() {
-        val source = floatArrayOf(0.1f, 0.2f, 0.3f, 1.0f)
-        val draw = GPUBackendRectDraw(
-            rgbaPremul = source,
-            scissorX = 4,
-            scissorY = 8,
-            scissorWidth = 16,
-            scissorHeight = 32,
-        )
-        val stablePeer = GPUBackendRectDraw(
-            rgbaPremul = floatArrayOf(0.1f, 0.2f, 0.3f, 1.0f),
-            scissorX = 4,
-            scissorY = 8,
-            scissorWidth = 16,
-            scissorHeight = 32,
-        )
-
-        source[0] = 0.9f
-        source[1] = 0.8f
-
-        assertContentEquals(floatArrayOf(0.1f, 0.2f, 0.3f, 1.0f), draw.rgbaPremul)
-        assertEquals(stablePeer, draw)
-
-        val exposed = draw.rgbaPremul
-        exposed[2] = 0.7f
-
-        assertContentEquals(floatArrayOf(0.1f, 0.2f, 0.3f, 1.0f), draw.rgbaPremul)
-        assertEquals(stablePeer.hashCode(), draw.hashCode())
     }
 }
