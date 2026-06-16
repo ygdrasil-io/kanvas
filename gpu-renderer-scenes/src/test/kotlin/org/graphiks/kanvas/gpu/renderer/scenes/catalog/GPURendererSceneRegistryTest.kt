@@ -168,6 +168,29 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `codec provenance gate board is backed by M4 dependency refusals only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("codec-provenance-gate-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Image), scene.tags)
+        assertEquals(listOf("KGPU-M4-003"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertIs<SceneCommand.BitmapRect>(scene.commands[3])
+        assertEquals(
+            listOf(
+                "codec-registry-snapshot",
+                "dependency-codec-refusal",
+                "missing-provenance-refusal",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals(listOf(2, 3, 4), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M4-004" })
+    }
+
+    @Test
     fun `cache source ledger board is backed by visible source classification buckets`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("cache-source-ledger-board")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -380,6 +403,20 @@ class GPURendererSceneRegistryTest {
                     RoadmapExpectation("M4", ticketId = "KGPU-M4-001"),
                     RoadmapExpectation("M4", ticketId = "KGPU-M4-002"),
                 ),
+            ),
+            SceneExpectationRow(
+                sceneId = "codec-provenance-gate-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Image),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "bitmap-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M4", ticketId = "KGPU-M4-003")),
             ),
             SceneExpectationRow(
                 sceneId = "layered-shadow-card",

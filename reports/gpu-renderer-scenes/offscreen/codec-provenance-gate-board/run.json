@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sceneId": "codec-provenance-gate-board",
+  "status": "rendered",
+  "productRefusal": false,
+  "backend": "webgpu-offscreen",
+  "imagePath": "render.png",
+  "width": 320,
+  "height": 200,
+  "byteCount": 256000,
+  "nonTransparentPixels": 64000,
+  "diagnostics": ["rendered codec-provenance-gate-board via WebGPU offscreen","adapter=Apple M2 Max","fillRectCommands=3","fillRRectCommands=1","linearGradientRectCommands=0","clipCommands=1","bitmapRectCommands=1"]
+}

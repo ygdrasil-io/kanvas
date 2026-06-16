@@ -326,6 +326,56 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "codec-provenance-gate-board",
+            title = "Codec Provenance Gate Board",
+            description = "Codec registry provenance and dependency refusal lanes without codec or decode route promotion.",
+            tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Image),
+            links = listOf(SceneRoadmapLink.ticket("KGPU-M4-003")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.034f, 0.038f, 0.046f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "codec-provenance-panel",
+                    rect = SceneRect(26f, 26f, 294f, 174f),
+                    radius = 18f,
+                    color = SceneColor(0.10f, 0.12f, 0.15f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "codec-provenance-window",
+                    rect = SceneRect(42f, 42f, 278f, 158f),
+                ),
+                SceneCommand.BitmapRect(
+                    label = "descriptor-only-pixel-sample",
+                    rect = SceneRect(52f, 54f, 118f, 144f),
+                    source = SceneBitmapSource(
+                        topLeft = SceneColor(0.22f, 0.54f, 0.88f, 1f),
+                        topRight = SceneColor(0.18f, 0.72f, 0.44f, 1f),
+                        bottomLeft = SceneColor(0.96f, 0.70f, 0.16f, 1f),
+                        bottomRight = SceneColor(0.86f, 0.20f, 0.22f, 1f),
+                    ),
+                    sampling = SceneBitmapSampling.Nearest,
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "codec-registry-snapshot",
+                    rect = SceneRect(132f, 60f, 168f, 154f),
+                    color = SceneColor.green(0.90f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "dependency-codec-refusal",
+                    rect = SceneRect(184f, 82f, 220f, 154f),
+                    color = SceneColor.amber(0.94f),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "missing-provenance-refusal",
+                    rect = SceneRect(236f, 104f, 268f, 154f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.92f),
+                    paintOrder = 4,
+                ),
+            ),
+        ),
+        scene(
             id = "layered-shadow-card",
             title = "Layered Shadow Card",
             description = "Bounded shadow-card layer fixture with explicit drop-shadow filter route.",

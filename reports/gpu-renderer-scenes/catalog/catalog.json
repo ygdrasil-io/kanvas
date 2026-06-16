@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 21,
+  "sceneCount": 22,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -89,6 +89,16 @@
       "tags": ["Image","Clip","RRect"],
       "kgpuMilestones": ["M4"],
       "ticketIds": ["KGPU-M4-001","KGPU-M4-002"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "codec-provenance-gate-board",
+      "title": "Codec Provenance Gate Board",
+      "description": "Codec registry provenance and dependency refusal lanes without codec or decode route promotion.",
+      "tags": ["Rect","RRect","Clip","Image"],
+      "kgpuMilestones": ["M4"],
+      "ticketIds": ["KGPU-M4-003"],
       "rStages": [],
       "expectation": "ShouldRender"
     },
