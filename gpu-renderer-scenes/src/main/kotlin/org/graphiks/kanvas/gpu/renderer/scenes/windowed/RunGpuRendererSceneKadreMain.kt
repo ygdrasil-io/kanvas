@@ -9,6 +9,7 @@ import kotlin.io.path.createDirectories
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.runtimeEffectRefusalGateDiagnostics
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.textResourceBindingGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneFilterKind
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
@@ -503,11 +504,13 @@ internal fun GPURendererScene<*>.windowedSceneDiagnostics(): List<String> {
     val meshRibbons = commands.filterIsInstance<SceneCommand.MeshRibbon>()
         .filter { it.hasFixturePayload }
     val runtimeEffectRefusalDiagnostics = runtimeEffectRefusalGateDiagnostics()
+    val textResourceBindingDiagnostics = textResourceBindingGateDiagnostics()
     if (
         textRunDiagnostics.isEmpty() &&
         saveLayers.isEmpty() &&
         meshRibbons.isEmpty() &&
-        runtimeEffectRefusalDiagnostics.isEmpty()
+        runtimeEffectRefusalDiagnostics.isEmpty() &&
+        textResourceBindingDiagnostics.isEmpty()
     ) {
         return emptyList()
     }
@@ -517,6 +520,7 @@ internal fun GPURendererScene<*>.windowedSceneDiagnostics(): List<String> {
         .filter { it.hasFixturePayload && it.inputLabel in saveLayerLabels }
     return buildList {
         addAll(runtimeEffectRefusalDiagnostics)
+        addAll(textResourceBindingDiagnostics)
         addAll(textRunDiagnostics)
         if (saveLayers.isNotEmpty()) {
             add("saveLayerCommands=${saveLayers.size}")

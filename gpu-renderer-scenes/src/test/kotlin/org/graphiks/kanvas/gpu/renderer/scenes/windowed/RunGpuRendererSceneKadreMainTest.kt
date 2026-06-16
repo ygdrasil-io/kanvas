@@ -124,6 +124,7 @@ class RunGpuRendererSceneKadreMainTest {
             "filtered-photo-chip" to 28,
             "layered-shadow-card" to 29,
             "text-handoff-boundary-board" to 36,
+            "text-resource-binding-gate-board" to 49,
             "text-representation-gate-board" to 37,
             "runtime-effect-color-tile" to 30,
             "runtime-effect-descriptor-gate-board" to 42,
@@ -171,6 +172,12 @@ class RunGpuRendererSceneKadreMainTest {
                     assertContains(sessionJson, "pmRuntimeEffectRefusalClassification=RefuseRequired")
                     assertContains(sessionJson, "dynamicSourceCompilation=false")
                     assertContains(sessionJson, "childRuntimeEffectSupport=false")
+                } else if (sceneId == "text-resource-binding-gate-board") {
+                    assertContains(sessionJson, "textResourceBindingRefusalMatrix=upload-plan:RefuseRequired:unsupported.text.upload_plan_missing,binding-layout:RefuseRequired:unsupported.text.binding_layout_unavailable,stale-generation:RefuseRequired:unsupported.text.artifact_generation_stale,artifact-registration:RefuseRequired:unsupported.text.artifact_unregistered,upload-budget:RefuseRequired:unsupported.text.upload_budget_exceeded,cpu-rendered-texture:RefuseRequired:unsupported.text.cpu_rendered_texture_forbidden")
+                    assertContains(sessionJson, "pmTextResourceBindingRow=gpu-renderer.text-resource-binding")
+                    assertContains(sessionJson, "pmTextResourceBindingClassification=TargetPrepared")
+                    assertContains(sessionJson, "textUploadPlanPromoted=false")
+                    assertContains(sessionJson, "glyphAtlasRoutePromoted=false")
                 }
                 assertFalse(sessionJson.contains("\"status\": \"not-yet-rendered\""), sceneId)
             }

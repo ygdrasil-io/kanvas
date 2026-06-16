@@ -177,6 +177,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 clipCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "text-resource-binding-gate-board",
+                fillRectCount = 6,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "text-representation-gate-board",
                 fillRectCount = 8,
                 fillRRectCount = 1,
@@ -558,6 +564,13 @@ class RenderGpuRendererSceneOffscreenMainTest {
             assertContains(runJson, "pmRuntimeEffectRefusalClassification=RefuseRequired")
             assertContains(runJson, "dynamicSourceCompilation=false")
             assertContains(runJson, "childRuntimeEffectSupport=false")
+        }
+        if (expectation.sceneId == "text-resource-binding-gate-board") {
+            assertContains(runJson, "textResourceBindingRefusalMatrix=upload-plan:RefuseRequired:unsupported.text.upload_plan_missing,binding-layout:RefuseRequired:unsupported.text.binding_layout_unavailable,stale-generation:RefuseRequired:unsupported.text.artifact_generation_stale,artifact-registration:RefuseRequired:unsupported.text.artifact_unregistered,upload-budget:RefuseRequired:unsupported.text.upload_budget_exceeded,cpu-rendered-texture:RefuseRequired:unsupported.text.cpu_rendered_texture_forbidden")
+            assertContains(runJson, "pmTextResourceBindingRow=gpu-renderer.text-resource-binding")
+            assertContains(runJson, "pmTextResourceBindingClassification=TargetPrepared")
+            assertContains(runJson, "textUploadPlanPromoted=false")
+            assertContains(runJson, "glyphAtlasRoutePromoted=false")
         }
         expectation.meshRibbonCount?.let { count ->
             assertContains(runJson, "meshRibbonCommands=$count")
