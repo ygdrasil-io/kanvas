@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 25,
+  "sceneCount": 26,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -30,6 +30,16 @@
       "kgpuMilestones": ["M2"],
       "ticketIds": [],
       "rStages": ["R1","R2","R3"],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "rrect-gradient-route-board",
+      "title": "RRect Gradient Route Board",
+      "description": "Native rrect and linear-gradient route planning facts with explicit non-promoted refusal lanes.",
+      "tags": ["Rect","RRect","Gradient","Clip"],
+      "kgpuMilestones": ["M2"],
+      "ticketIds": ["KGPU-M2-001","KGPU-M2-002"],
+      "rStages": [],
       "expectation": "ShouldRender"
     },
     {

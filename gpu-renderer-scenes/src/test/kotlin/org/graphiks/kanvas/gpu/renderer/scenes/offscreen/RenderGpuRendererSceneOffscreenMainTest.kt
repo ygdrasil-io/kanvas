@@ -81,6 +81,13 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 clipCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "rrect-gradient-route-board",
+                fillRectCount = 4,
+                fillRRectCount = 2,
+                linearGradientRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "release-gate-progress-board",
                 fillRectCount = 1,
                 fillRRectCount = 1,

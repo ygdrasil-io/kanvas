@@ -114,6 +114,36 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `rrect gradient route board is backed by native rrect and gradient planning tickets only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("rrect-gradient-route-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+        val rrects = scene.commands.filterIsInstance<SceneCommand.FillRRect>()
+        val gradients = scene.commands.filterIsInstance<SceneCommand.LinearGradientRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Gradient, SceneTag.Clip), scene.tags)
+        assertEquals(listOf("KGPU-M2-001", "KGPU-M2-002"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf("route-board-panel", "solid-rrect-route-candidate"),
+            rrects.map { it.label },
+        )
+        assertEquals(listOf("linear-gradient-inline2-material"), gradients.map { it.label })
+        assertEquals(
+            listOf(
+                "per-corner-radii-facts-preserved",
+                "tile-mode-refusal",
+                "scale-affine-transform-refusal",
+                "payload-excluded-from-key",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..4).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M2-003" || it.ticketId == "KGPU-M2-004" })
+    }
+
+    @Test
     fun `path coverage review board is backed by prepared M3 contracts and atlas refusal only`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("path-coverage-review-board")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -427,6 +457,25 @@ class GPURendererSceneRegistryTest {
                     RoadmapExpectation("M2", RStage.R1),
                     RoadmapExpectation("M2", RStage.R2),
                     RoadmapExpectation("M2", RStage.R3),
+                ),
+            ),
+            SceneExpectationRow(
+                sceneId = "rrect-gradient-route-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Gradient, SceneTag.Clip),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "linear-gradient-rect",
+                    "fill-rrect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M2", ticketId = "KGPU-M2-001"),
+                    RoadmapExpectation("M2", ticketId = "KGPU-M2-002"),
                 ),
             ),
             SceneExpectationRow(

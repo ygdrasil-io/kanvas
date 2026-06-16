@@ -113,6 +113,66 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "rrect-gradient-route-board",
+            title = "RRect Gradient Route Board",
+            description = "Native rrect and linear-gradient route planning facts with explicit non-promoted refusal lanes.",
+            tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Gradient, SceneTag.Clip),
+            links = listOf(
+                SceneRoadmapLink.ticket("KGPU-M2-001"),
+                SceneRoadmapLink.ticket("KGPU-M2-002"),
+            ),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.040f, 0.044f, 0.052f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "route-board-panel",
+                    rect = SceneRect(26f, 28f, 294f, 174f),
+                    radius = 20f,
+                    color = SceneColor(0.11f, 0.13f, 0.16f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "route-board-window",
+                    rect = SceneRect(42f, 46f, 278f, 158f),
+                ),
+                SceneCommand.LinearGradientRect(
+                    label = "linear-gradient-inline2-material",
+                    rect = SceneRect(50f, 54f, 154f, 154f),
+                    startColor = SceneColor.green(0.92f),
+                    endColor = SceneColor.amber(0.88f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRRect(
+                    label = "solid-rrect-route-candidate",
+                    rect = SceneRect(166f, 58f, 260f, 126f),
+                    radius = 18f,
+                    color = SceneColor.blue(0.72f),
+                ),
+                SceneCommand.FillRect(
+                    label = "per-corner-radii-facts-preserved",
+                    rect = SceneRect(166f, 134f, 188f, 154f),
+                    color = SceneColor.green(0.86f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "tile-mode-refusal",
+                    rect = SceneRect(196f, 134f, 218f, 154f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.92f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "scale-affine-transform-refusal",
+                    rect = SceneRect(226f, 134f, 248f, 154f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "payload-excluded-from-key",
+                    rect = SceneRect(256f, 134f, 274f, 154f),
+                    color = SceneColor(0.74f, 0.76f, 0.82f, 1f),
+                    paintOrder = 4,
+                ),
+            ),
+        ),
+        scene(
             id = "release-gate-progress-board",
             title = "Release Gate Progress Board",
             description = "Bounded progress board with a rounded panel, simple scissor clip, and sorted overlay marker.",

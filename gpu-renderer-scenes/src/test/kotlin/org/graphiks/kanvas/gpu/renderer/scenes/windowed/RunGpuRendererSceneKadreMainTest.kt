@@ -66,6 +66,7 @@ class RunGpuRendererSceneKadreMainTest {
             "path-badge-and-stroke" to 22,
             "path-coverage-review-board" to 34,
             "rounded-panel-gradient" to 23,
+            "rrect-gradient-route-board" to 39,
             "release-gate-progress-board" to 24,
             "texture-swatch-board" to 25,
             "asset-intake-thumbnail-grid" to 26,

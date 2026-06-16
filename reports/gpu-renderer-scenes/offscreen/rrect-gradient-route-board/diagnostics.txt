@@ -1,0 +1,7 @@
+rendered rrect-gradient-route-board via WebGPU offscreen
+adapter=Apple M2 Max
+fillRectCommands=4
+fillRRectCommands=2
+linearGradientRectCommands=1
+clipCommands=1
+bitmapRectCommands=0
