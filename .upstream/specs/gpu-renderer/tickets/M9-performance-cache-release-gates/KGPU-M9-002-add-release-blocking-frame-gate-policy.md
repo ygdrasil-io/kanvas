@@ -1,7 +1,7 @@
 ---
 id: KGPU-M9-002
 title: "Add release-blocking frame gate policy"
-status: blocked
+status: done
 milestone: M9
 priority: P0
 owner_area: performance
@@ -55,13 +55,15 @@ data class FrameGatePolicy(val releaseBlocking: Boolean, val quarantineReasons: 
 
 ## Acceptance Criteria
 
-- [ ] Gate state and variance policy are explicit.
-- [ ] Reporting-only lanes remain non-blocking.
-- [ ] Negative threshold fixture exists.
+- [x] Gate state and variance policy are explicit.
+- [x] Reporting-only lanes remain non-blocking.
+- [x] Negative threshold fixture exists.
 
 ## Required Evidence
 
-- Gate policy report, raw sample provenance, and quarantine fixture.
+- [x] Gate policy report.
+- [x] Owned-adapter raw sample provenance.
+- [x] Quarantine and negative-threshold fixtures.
 
 ## Fallback / Refusal Behavior
 
@@ -82,12 +84,21 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: Policy-only release gate work remains gated on raw frame sample
-  provenance from an owned adapter lane, warmup and variance policy,
-  quarantine and rebaseline rules, negative threshold fixtures, and
-  skipped-lane diagnostics. Current M9-001 source-map evidence separates
-  observed from derived counters but does not provide denominator evidence,
-  frame timings, or release-blocking authority.
+- `done`: `GPUFrameGatePolicyTest` covers explicit
+  candidate/release-blocking states, warmup and variance policy,
+  reporting-only lanes, quarantine, skipped-lane diagnostics, and a negative
+  threshold fixture that fails closed without moving `readinessDelta`,
+  `releaseBlocking`, or product activation.
+  `reports/gpu-renderer-scenes/frame-samples/frame-gate-blocker-board/frame-samples.json`
+  provides owned WebGPU offscreen raw samples with 60 samples, 3 warmup frames,
+  57 stable frames, adapter `Apple M2 Max`, metric source
+  `wall-clock-offscreen-render-readback`, and SHA-256
+  `sha256:aacd64f3f65ae87feeaca7600434e2425ff44a7d3e0ddde5a1c66de57021530a`.
+  The stable coefficient of variation is `0.1472`, so the observed lane stays
+  candidate/non-release-blocking. Independent review
+  `019ed26f-3531-7fd0-8e5d-61f9a15d5a9a` accepted the evidence for `done`
+  with no blocking findings and confirmed no product activation,
+  release-blocking gate, readiness delta, or M9-003 implementation.
 
 ## Linear Labels
 
