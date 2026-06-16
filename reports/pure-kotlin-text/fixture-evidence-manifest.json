@@ -166,7 +166,8 @@
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "reports/font/fixtures/expected/scaler/cff-cff2-readiness.json",
         "reports/font/fixtures/expected/scaler/cff-index-dict.json",
-        "reports/font/fixtures/expected/scaler/cff-charstring-trace.json"
+        "reports/font/fixtures/expected/scaler/cff-charstring-trace.json",
+        "reports/font/fixtures/expected/scaler/cff-subroutine-trace.json"
       ],
       "requiredEvidenceGates": [
         "Add broader real-font corpus evidence before claiming complete CFF/CFF2 target support."
@@ -176,6 +177,7 @@
         "rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffScalersExposeDeterministicTableEvidenceDumps --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffTableEvidenceRefusesMalformedIndexAndDictDeterministically",
         "rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterCoversRemainingCurveAndFlexOperators --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterRecordsWidthAndHintMaskMetadata",
         "rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffCharStringTraceGoldenMatchesGeneratedEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterRejectsEndcharRemaindersAndStackOverflow",
+        "rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterRecordsNestedSubroutineOffsets --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterRejectsInvalidSubroutinePathsWithDedicatedDiagnostics --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffSubroutineTraceGoldenMatchesGeneratedEvidence",
         "rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffScalerUsesGeneratedCffTableCharstringsSubrsAndMetrics --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScalerUsesGeneratedCff2TableAndVariationBlend",
         "rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterBuildsLineCurveAndFlexEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterTracesLocalAndGlobalSubroutines --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2FixtureInterpreterAppliesVsindexBlendEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffType2FixtureInterpreterReportsStackAndOperatorRefusals",
         "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
