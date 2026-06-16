@@ -74,6 +74,7 @@ import org.graphiks.kanvas.text.shaping.ShapedGlyphRun
 import org.graphiks.kanvas.text.shaping.ShapingDiagnostic
 import org.graphiks.kanvas.text.shaping.ShapingRequest
 import org.graphiks.kanvas.text.shaping.ShapingResult
+import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_PARAGRAPH_BIDI_REQUIRED_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TextSegmenter
 import org.graphiks.kanvas.text.shaping.UnicodeData
 import org.graphiks.kanvas.text.shaping.UNRESOLVED_FONT_RUN_DIAGNOSTIC_CODE
@@ -671,6 +672,11 @@ class TextStackSurfaceTest {
         )
         assertEquals(
             listOf(
+                ShapingDiagnostic(
+                    code = TEXT_SHAPING_PARAGRAPH_BIDI_REQUIRED_DIAGNOSTIC_CODE,
+                    message = "Paragraph-level visual bidi ordering is required for mixed-direction text; M8 owns line ordering.",
+                    textRange = 0..3,
+                ),
                 ShapingDiagnostic(
                     code = MISSING_GLYPH_DIAGNOSTIC_CODE,
                     message = "Missing glyph for U+2603.",
