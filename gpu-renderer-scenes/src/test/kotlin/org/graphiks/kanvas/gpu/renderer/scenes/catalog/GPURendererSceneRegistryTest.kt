@@ -357,6 +357,41 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `savelayer isolation gate board is backed by M5 layer refusals without materialized SaveLayer`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("savelayer-isolation-gate-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Layer), scene.tags)
+        assertEquals(listOf("KGPU-M5-001"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertTrue(scene.commands.none { it is SceneCommand.SaveLayer })
+        assertTrue(scene.commands.none { it is SceneCommand.FilterNode })
+        assertTrue(SceneTag.Filter !in scene.tags)
+        assertTrue(SceneTag.Image !in scene.tags)
+        assertTrue(SceneTag.Blend !in scene.tags)
+        assertEquals(
+            listOf(
+                "provider-owned-offscreen-target-gated",
+                "clear-load-store-policy-gated",
+                "child-draw-isolation-gated",
+                "restore-composite-route-gated",
+                "active-attachment-sampling-refused",
+                "resource-generation-evidence-gated",
+                "cpu-gpu-reference-comparison-gated",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..7).toList(), fills.map { it.paintOrder })
+        assertTrue(
+            scene.roadmapLinks.none {
+                it.ticketId == "KGPU-M5-002" || it.ticketId == "KGPU-M5-003" || it.ticketId == "KGPU-M5-004"
+            },
+        )
+    }
+
+    @Test
     fun `cache source ledger board is backed by visible source classification buckets`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("cache-source-ledger-board")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -686,6 +721,23 @@ class GPURendererSceneRegistryTest {
                     "fill-rect",
                 ),
                 roadmapLinks = listOf(RoadmapExpectation("M4", ticketId = "KGPU-M4-004")),
+            ),
+            SceneExpectationRow(
+                sceneId = "savelayer-isolation-gate-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Layer),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M5", ticketId = "KGPU-M5-001")),
             ),
             SceneExpectationRow(
                 sceneId = "layered-shadow-card",

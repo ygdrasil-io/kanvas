@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 29,
+  "sceneCount": 30,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -129,6 +129,16 @@
       "tags": ["Rect","RRect","Clip","Image"],
       "kgpuMilestones": ["M4"],
       "ticketIds": ["KGPU-M4-004"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "savelayer-isolation-gate-board",
+      "title": "SaveLayer Isolation Gate Board",
+      "description": "Layer route gate board showing provider-owned offscreen target, clear/load/store, child isolation, restore composite, active attachment, resource generation, and CPU/GPU/reference evidence gates without materializing a saveLayer.",
+      "tags": ["Rect","RRect","Clip","Layer"],
+      "kgpuMilestones": ["M5"],
+      "ticketIds": ["KGPU-M5-001"],
       "rStages": [],
       "expectation": "ShouldRender"
     },

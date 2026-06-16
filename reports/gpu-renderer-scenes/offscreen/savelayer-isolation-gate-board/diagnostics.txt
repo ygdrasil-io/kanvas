@@ -1,0 +1,7 @@
+rendered savelayer-isolation-gate-board via WebGPU offscreen
+adapter=Apple M2 Max
+fillRectCommands=7
+fillRRectCommands=1
+linearGradientRectCommands=0
+clipCommands=1
+bitmapRectCommands=0

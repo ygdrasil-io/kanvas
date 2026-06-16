@@ -554,6 +554,68 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "savelayer-isolation-gate-board",
+            title = "SaveLayer Isolation Gate Board",
+            description = "Layer route gate board showing provider-owned offscreen target, clear/load/store, child isolation, restore composite, active attachment, resource generation, and CPU/GPU/reference evidence gates without materializing a saveLayer.",
+            tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Layer),
+            links = listOf(SceneRoadmapLink.ticket("KGPU-M5-001")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.033f, 0.037f, 0.045f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "savelayer-isolation-panel",
+                    rect = SceneRect(24f, 24f, 296f, 176f),
+                    radius = 18f,
+                    color = SceneColor(0.10f, 0.12f, 0.16f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "savelayer-isolation-window",
+                    rect = SceneRect(40f, 42f, 280f, 158f),
+                ),
+                SceneCommand.FillRect(
+                    label = "provider-owned-offscreen-target-gated",
+                    rect = SceneRect(48f, 60f, 72f, 154f),
+                    color = SceneColor.green(0.88f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "clear-load-store-policy-gated",
+                    rect = SceneRect(80f, 68f, 104f, 154f),
+                    color = SceneColor(0.26f, 0.72f, 0.76f, 0.94f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "child-draw-isolation-gated",
+                    rect = SceneRect(112f, 76f, 136f, 154f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "restore-composite-route-gated",
+                    rect = SceneRect(144f, 84f, 168f, 154f),
+                    color = SceneColor(0.86f, 0.36f, 0.24f, 0.94f),
+                    paintOrder = 4,
+                ),
+                SceneCommand.FillRect(
+                    label = "active-attachment-sampling-refused",
+                    rect = SceneRect(176f, 92f, 200f, 154f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.92f),
+                    paintOrder = 5,
+                ),
+                SceneCommand.FillRect(
+                    label = "resource-generation-evidence-gated",
+                    rect = SceneRect(208f, 100f, 232f, 154f),
+                    color = SceneColor(0.64f, 0.42f, 0.90f, 0.94f),
+                    paintOrder = 6,
+                ),
+                SceneCommand.FillRect(
+                    label = "cpu-gpu-reference-comparison-gated",
+                    rect = SceneRect(48f, 150f, 264f, 158f),
+                    color = SceneColor(0.74f, 0.76f, 0.82f, 1f),
+                    paintOrder = 7,
+                ),
+            ),
+        ),
+        scene(
             id = "layered-shadow-card",
             title = "Layered Shadow Card",
             description = "Bounded shadow-card layer fixture with explicit drop-shadow filter route.",

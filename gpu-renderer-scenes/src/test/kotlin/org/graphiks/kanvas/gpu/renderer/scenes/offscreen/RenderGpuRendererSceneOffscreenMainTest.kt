@@ -133,6 +133,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 bitmapRectCount = 2,
             ),
             RenderedShapeExpectation(
+                sceneId = "savelayer-isolation-gate-board",
+                fillRectCount = 7,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "clipped-avatar-grid",
                 fillRectCount = 0,
                 clipCount = 1,
