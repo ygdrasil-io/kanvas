@@ -22,6 +22,13 @@ import org.graphiks.kanvas.font.sfnt.CMapFormat12Group
 import org.graphiks.kanvas.font.sfnt.CMapFormat12Mapping
 import org.graphiks.kanvas.font.sfnt.CMapSubtable
 import org.graphiks.kanvas.font.sfnt.CMapTable
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubLigatureSubstitution
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubLigatureSubstitutionLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubMultipleSubstitution
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubMultipleSubstitutionLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubSingleSubstitution
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubSingleSubstitutionLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposPairAdjustment
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposPairTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposSingleAdjustment
@@ -993,6 +1000,155 @@ class TextStackSurfaceTest {
                     ),
                     advanceX = 40f,
                     advanceY = 0f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            result.glyphRuns,
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineAppliesParsedGsubSingleMultipleAndLigatureLookups() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440406"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                'a'.code to 5,
+                'b'.code to 6,
+                'f'.code to 7,
+                'i'.code to 8,
+            ),
+            gsubTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubSingleSubstitutionLookup(
+                            featureTag = "ccmp",
+                            substitutions = listOf(
+                                OpenTypeGsubSingleSubstitution(
+                                    inputGlyphId = 5,
+                                    replacementGlyphId = 15,
+                                ),
+                            ),
+                        ),
+                        OpenTypeGsubMultipleSubstitutionLookup(
+                            featureTag = "ccmp",
+                            substitutions = listOf(
+                                OpenTypeGsubMultipleSubstitution(
+                                    inputGlyphId = 6,
+                                    replacementGlyphIds = listOf(16, 17),
+                                ),
+                            ),
+                        ),
+                        OpenTypeGsubLigatureSubstitutionLookup(
+                            featureTag = "liga",
+                            substitutions = listOf(
+                                OpenTypeGsubLigatureSubstitution(
+                                    inputGlyphIds = listOf(7, 8),
+                                    replacementGlyphId = 42,
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "abfi",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(emptyList(), result.diagnostics)
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(15, 16, 17, 42),
+                    clusters = listOf(
+                        GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 20f),
+                        GlyphCluster(textRange = 1..1, glyphRange = 1..2, advanceX = 20f),
+                        GlyphCluster(textRange = 2..3, glyphRange = 3..3, advanceX = 20f),
+                    ),
+                    advanceX = 60f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            result.glyphRuns,
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineRespectsDisabledParsedGsubLigatureFeature() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440407"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                'a'.code to 5,
+                'b'.code to 6,
+                'f'.code to 7,
+                'i'.code to 8,
+            ),
+            gsubTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubSingleSubstitutionLookup(
+                            featureTag = "ccmp",
+                            substitutions = listOf(
+                                OpenTypeGsubSingleSubstitution(
+                                    inputGlyphId = 5,
+                                    replacementGlyphId = 15,
+                                ),
+                            ),
+                        ),
+                        OpenTypeGsubMultipleSubstitutionLookup(
+                            featureTag = "ccmp",
+                            substitutions = listOf(
+                                OpenTypeGsubMultipleSubstitution(
+                                    inputGlyphId = 6,
+                                    replacementGlyphIds = listOf(16, 17),
+                                ),
+                            ),
+                        ),
+                        OpenTypeGsubLigatureSubstitutionLookup(
+                            featureTag = "liga",
+                            substitutions = listOf(
+                                OpenTypeGsubLigatureSubstitution(
+                                    inputGlyphIds = listOf(7, 8),
+                                    replacementGlyphId = 42,
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "abfi",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+                features = FeatureSet(mapOf("liga" to 0)),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(15, 16, 17, 7, 8),
+                    clusters = listOf(
+                        GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 20f),
+                        GlyphCluster(textRange = 1..1, glyphRange = 1..2, advanceX = 20f),
+                        GlyphCluster(textRange = 2..2, glyphRange = 3..3, advanceX = 20f),
+                        GlyphCluster(textRange = 3..3, glyphRange = 4..4, advanceX = 20f),
+                    ),
+                    advanceX = 80f,
                     script = "Latn",
                     bidiLevel = 0,
                     typefaceId = typefaceId,
