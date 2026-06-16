@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "sceneId": "savelayer-isolation-gate-board",
+  "status": "presented",
+  "productRefusal": false,
+  "reason": "kadre-windowed-presented-frames",
+  "requestedFrames": 60,
+  "presentedFrames": 60,
+  "manualValidation": true,
+  "surface": {
+    "width": 320,
+    "height": 200,
+    "format": "BGRA8Unorm"
+  },
+  "adapterInfo": "AdapterInfo(architecture=, description=, device=Apple M2 Max, subgroupMaxSize=0, subgroupMinSize=0, vendor=, isFallbackAdapter=false)",
+  "error": null,
+  "diagnostics": []
+}

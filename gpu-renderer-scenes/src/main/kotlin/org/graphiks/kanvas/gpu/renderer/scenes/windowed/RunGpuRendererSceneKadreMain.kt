@@ -206,6 +206,13 @@ data class WindowedSceneSessionReport(
 
     fun writeTo(output: Path) {
         val absoluteOutput = output.toAbsolutePath()
+        writeJsonAtomically(absoluteOutput)
+        sceneSessionMirrorOutput(absoluteOutput)?.let { mirrorOutput ->
+            writeJsonAtomically(mirrorOutput)
+        }
+    }
+
+    private fun writeJsonAtomically(absoluteOutput: Path) {
         val parent = absoluteOutput.parent ?: Path.of(".").toAbsolutePath()
         parent.createDirectories()
         val temp = Files.createTempFile(parent, "windowed-session-${absoluteOutput.fileName}.", ".tmp")
@@ -223,6 +230,13 @@ data class WindowedSceneSessionReport(
                 Files.deleteIfExists(temp)
             }
         }
+    }
+
+    private fun sceneSessionMirrorOutput(absoluteOutput: Path): Path? {
+        if (absoluteOutput.fileName?.toString() != "session.json") return null
+        val parent = absoluteOutput.parent ?: return null
+        if (parent.fileName?.toString() == sceneId) return null
+        return parent.resolve(sceneId).resolve("session.json")
     }
 
     companion object {
