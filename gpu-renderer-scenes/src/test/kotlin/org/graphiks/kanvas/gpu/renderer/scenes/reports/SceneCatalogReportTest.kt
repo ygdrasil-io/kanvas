@@ -20,6 +20,7 @@ class SceneCatalogReportTest {
         val markdown = SceneCatalogReport(GPURendererSceneRegistry.scenes).toMarkdown()
         assertContains(markdown, "| `solid-card-stack` | Solid Card Stack |")
         assertContains(markdown, "KGPU M0,M1")
+        assertContains(markdown, "`KGPU-M2-003`,`KGPU-M2-004`")
         assertContains(markdown, "`KGPU-M7-003`")
         assertContains(markdown, "R0,R1,R2,R3,R4,R5,R6")
         assertContains(markdown, "`ShouldRender`")

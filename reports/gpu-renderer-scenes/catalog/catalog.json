@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 14,
+  "sceneCount": 15,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -20,6 +20,16 @@
       "kgpuMilestones": ["M2"],
       "ticketIds": [],
       "rStages": ["R1","R2","R3"],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "release-gate-progress-board",
+      "title": "Release Gate Progress Board",
+      "description": "Bounded progress board with a rounded panel, simple scissor clip, and sorted overlay marker.",
+      "tags": ["Rect","RRect","Gradient","Clip"],
+      "kgpuMilestones": ["M2"],
+      "ticketIds": ["KGPU-M2-003","KGPU-M2-004"],
+      "rStages": [],
       "expectation": "ShouldRender"
     },
     {

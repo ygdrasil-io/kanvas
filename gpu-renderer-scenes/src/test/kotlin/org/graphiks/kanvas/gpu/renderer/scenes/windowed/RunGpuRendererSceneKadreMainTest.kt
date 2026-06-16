@@ -62,12 +62,13 @@ class RunGpuRendererSceneKadreMainTest {
             "legacy-route-comparison" to 20,
             "path-badge-and-stroke" to 21,
             "rounded-panel-gradient" to 22,
-            "texture-swatch-board" to 23,
-            "clipped-avatar-grid" to 24,
-            "filtered-photo-chip" to 25,
-            "layered-shadow-card" to 26,
-            "runtime-effect-color-tile" to 27,
-            "mesh-ribbon" to 28,
+            "release-gate-progress-board" to 23,
+            "texture-swatch-board" to 24,
+            "clipped-avatar-grid" to 25,
+            "filtered-photo-chip" to 26,
+            "layered-shadow-card" to 27,
+            "runtime-effect-color-tile" to 28,
+            "mesh-ribbon" to 29,
         )
         val invocations = mutableListOf<RunnerInvocation>()
 

@@ -73,6 +73,13 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 clipCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "release-gate-progress-board",
+                fillRectCount = 1,
+                fillRRectCount = 1,
+                linearGradientRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "path-badge-and-stroke",
                 fillRectCount = 1,
                 fillRRectCount = 1,

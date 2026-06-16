@@ -4,6 +4,7 @@
 |---|---|---|---|---|---|---|
 | `solid-card-stack` | Solid Card Stack | Rect | KGPU M0,M1 |  | R0,R1,R2,R3,R4,R5,R6 | `ShouldRender` |
 | `rounded-panel-gradient` | Rounded Panel Gradient | RRect,Gradient,Clip | KGPU M2 |  | R1,R2,R3 | `ShouldRender` |
+| `release-gate-progress-board` | Release Gate Progress Board | Rect,RRect,Gradient,Clip | KGPU M2 | `KGPU-M2-003`,`KGPU-M2-004` |  | `ShouldRender` |
 | `path-badge-and-stroke` | Path Badge And Stroke | RRect,Rect | KGPU M3 |  |  | `ShouldRender` |
 | `clipped-avatar-grid` | Clipped Avatar Grid | Clip,Image | KGPU M3,M5 |  |  | `ShouldRender` |
 | `texture-swatch-board` | Texture Swatch Board | Image | KGPU M4 |  |  | `ShouldRender` |

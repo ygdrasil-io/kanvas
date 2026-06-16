@@ -76,6 +76,42 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "release-gate-progress-board",
+            title = "Release Gate Progress Board",
+            description = "Bounded progress board with a rounded panel, simple scissor clip, and sorted overlay marker.",
+            tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Gradient, SceneTag.Clip),
+            links = listOf(
+                SceneRoadmapLink.ticket("KGPU-M2-003"),
+                SceneRoadmapLink.ticket("KGPU-M2-004"),
+            ),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.045f, 0.048f, 0.055f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "gate-panel",
+                    rect = SceneRect(34f, 42f, 286f, 158f),
+                    radius = 18f,
+                    color = SceneColor(0.12f, 0.15f, 0.17f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "gate-progress-scissor",
+                    rect = SceneRect(54f, 82f, 232f, 126f),
+                ),
+                SceneCommand.LinearGradientRect(
+                    label = "gate-progress-fill",
+                    rect = SceneRect(46f, 76f, 274f, 134f),
+                    startColor = SceneColor.green(0.92f),
+                    endColor = SceneColor.amber(0.88f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "gate-threshold-marker",
+                    rect = SceneRect(210f, 78f, 222f, 132f),
+                    color = SceneColor(0.96f, 0.98f, 0.94f, 0.90f),
+                    paintOrder = 2,
+                ),
+            ),
+        ),
+        scene(
             id = "path-badge-and-stroke",
             title = "Path Badge And Stroke",
             description = "Rounded badge and rectangular stroke proxy using current command families.",

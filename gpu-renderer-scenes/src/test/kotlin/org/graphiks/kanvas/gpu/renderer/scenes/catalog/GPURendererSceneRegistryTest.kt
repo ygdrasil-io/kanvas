@@ -75,6 +75,22 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `release gate progress board is backed by bounded rrect scissor and gradient payloads`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("release-gate-progress-board")
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Gradient, SceneTag.Clip), scene.tags)
+        assertEquals(
+            listOf("KGPU-M2-003", "KGPU-M2-004"),
+            scene.roadmapLinks.mapNotNull { it.ticketId },
+        )
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertIs<SceneCommand.LinearGradientRect>(scene.commands[3])
+        assertIs<SceneCommand.FillRect>(scene.commands[4])
+    }
+
+    @Test
     fun `translucent card overlap is backed by bounded SrcOver alpha rectangles`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("translucent-card-overlap")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -163,6 +179,15 @@ class GPURendererSceneRegistryTest {
                     RoadmapExpectation("M2", RStage.R1),
                     RoadmapExpectation("M2", RStage.R2),
                     RoadmapExpectation("M2", RStage.R3),
+                ),
+            ),
+            SceneExpectationRow(
+                sceneId = "release-gate-progress-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Gradient, SceneTag.Clip),
+                commandFamilies = listOf("clear", "fill-rrect", "clip", "linear-gradient-rect", "fill-rect"),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M2", ticketId = "KGPU-M2-003"),
+                    RoadmapExpectation("M2", ticketId = "KGPU-M2-004"),
                 ),
             ),
             SceneExpectationRow(
