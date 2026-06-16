@@ -48,7 +48,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | PKT-02 font source catalog and fallback facts | Implementable now | Source provenance, explicit root scans, duplicate/skipped diagnostics, fallback plan dumps. | `font/core/src/main`, `font/core/src/test`. | Scan fixtures, host-dependent markers, fallback ordering tests. |
 | PKT-03 SFNT face and `cmap` contract | Implementable now | Required table diagnostics, TTC index, `cmap` format coverage/refusals. | `font/sfnt/src/main`, `font/sfnt/src/test`. | Malformed required/optional table fixtures and selected face dumps. |
 | PKT-04 TrueType `glyf` and variation evidence | Implementable now | Simple/composite outlines, component transforms, variation metadata and metrics dumps. | `font/scaler/src/main`, `font/scaler/src/test`. | Path hashes, bounds, variation delta fixtures. |
-| PKT-05 CFF/CFF2 vertical | Tracked-gap; generated fixture parser/scaler/operator/table/variation-store slices implemented | CFF INDEX/dicts/Type 2 operators/CFF2 variation. | `font/scaler/src/main`, `font/scaler/src/test`. | Generated CFF/CFF2 tables now reach public scalers with deterministic table evidence, malformed-table refusals, and minimal CFF2 VariationStore region lookup; complete support still needs broader real-font corpus coverage. |
+| PKT-05 CFF/CFF2 vertical | Tracked-gap; generated fixture parser/scaler/operator/table/variation-store slices implemented | CFF INDEX/dicts/Type 2 operators/CFF2 variation. | `font/scaler/src/main`, `font/scaler/src/test`. | Generated CFF/CFF2 tables now expose typed INDEX/DICT evidence, stable parse refusals, and minimal CFF2 VariationStore region lookup; complete support still needs broader real-font corpus coverage. |
 | PKT-06 Unicode data and script matrix seed | Implementable now | Pinned Unicode version surface, basic segmentation/bidi/script dumps. | `font/text/src/main/.../shaping`, `font/text/src/test`. | Script/bidi/grapheme tests and explicit unsupported-script diagnostics. |
 | PKT-07 GSUB/GPOS simple script shaping | Dependency-gated | Latin/Greek/Cyrillic/Hebrew defaults, features, clusters, fallback runs. | `font/text`, `font/sfnt`. | Requires parsed layout table fixtures and feature ordering evidence. |
 | PKT-08 complex shaping rows | Dependency-gated | Arabic, Devanagari, Thai, CJK, emoji shaping support/refusals. | `font/text`. | Requires PKT-07 and per-row positive/refusal fixtures. |
@@ -394,8 +394,7 @@ complete source-discovery behavior.
 
 ### PKT-02B: Fallback Decision Trace Dumps
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: done; freshly validated generated-fixture evidence only.
 
 Files:
 
@@ -1137,37 +1136,50 @@ Files:
 
 - `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
 - `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/font/fixtures/expected/scaler/cff-index-dict.json`
+- `reports/font/fixtures/provenance/index.json`
 - `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
 - `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m4-001-cff-index-dict.md`
 
 Evidence:
 
 - `CFFScaler` now consumes generated `CFF ` table bytes through a bounded parser
   covering header, Name INDEX, Top DICT INDEX, String INDEX, Global Subr INDEX,
-  CharStrings INDEX, Private DICT, and local Subr INDEX routing.
+  CharStrings INDEX, typed DICT operators, Private DICT facts, `FDArray`, and
+  `FDSelect` routing evidence.
 - `CFF2Scaler` now consumes generated `CFF2` table bytes through a bounded
-  header/top-dict/global-subr/charstrings parser and routes `vsindex`/`blend`
-  through the fixture interpreter using face variation-axis tags.
+  header/top-dict/global-subr/charstrings parser, records private/local-subr
+  metadata, and keeps `vsindex`/`blend` routing scoped to generated fixtures.
+- `cff-index-dict.json` now records source/typeface IDs, INDEX counts, object
+  byte ranges, typed DICT operands, `FDArray`/`FDSelect` facts, and stable
+  parser non-claims without host-font or native-oracle expansion.
 - Public scaler tests prove that generated CFF tables reach outlines, local and
   global subroutines, conservative bounds, and horizontal metrics through
   `CFFScaler`, and that generated CFF2 tables reach blended outlines and
   metrics through `CFF2Scaler`.
-- Missing CFF/CFF2 raw table paths keep stable refusals without falling back to
-  native engines or hiding unsupported behavior.
+- Table-evidence refusals now emit the ticketed codes
+  `font.scaler.cff.index-bounds`,
+  `font.scaler.cff.index-offsize-unsupported`,
+  `font.scaler.cff.dict-operand-malformed`, and
+  `font.scaler.cff.required-operator-missing`.
 
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffScalerUsesGeneratedCffTableCharstringsSubrsAndMetrics --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScalerUsesGeneratedCff2TableAndVariationBlend
-rtk ./gradlew --no-daemon :font:scaler:test --rerun-tasks
+rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffScalerUsesGeneratedCffTableCharstringsSubrsAndMetrics --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScalerUsesGeneratedCff2TableAndVariationBlend --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffIndexDictGoldenMatchesGeneratedEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffTableEvidenceUsesStableSpecificCffParseDiagnostics --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffTableEvidenceRefusesMalformedIndexAndDictDeterministically
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 ```
 
 Remaining gate: this is generated CFF/CFF2 fixture routing only. It does not
 claim complete Type 2 operator coverage, real-world CFF font coverage, width
-extraction from charstrings, CFF hint-mask metadata policy completion, CFF2
-variation-store lookup, variation-adjusted metrics, selected-face CFF/CFF2
-provenance dumps, malformed INDEX/dict refusal suite completion, or GPU glyph
-route support.
+extraction from charstrings, complete charset/encoding policy, CFF hint-mask
+metadata policy completion, full CFF2 variation-store lookup, variation-adjusted
+metrics, broader corpus evidence, or GPU glyph route support.
 ### PKT-05D: CFF Type 2 Operator Width And Hint Metadata Fixtures
 
 Status: implemented; independent review pending because the current tool policy
