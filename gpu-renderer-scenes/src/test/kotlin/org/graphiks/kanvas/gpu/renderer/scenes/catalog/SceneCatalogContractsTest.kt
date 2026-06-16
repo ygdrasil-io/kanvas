@@ -164,6 +164,94 @@ class SceneCatalogContractsTest {
         )
     }
 
+    @Test
+    fun `candidate scene statuses expose stable pipeline wire names`() {
+        assertEquals(
+            listOf(
+                "candidate",
+                "fixture-ready",
+                "runner-gap",
+                "dependency-gated",
+                "product-refusal-expected",
+            ),
+            CandidateSceneStatus.entries.map { it.wireName },
+        )
+    }
+
+    @Test
+    fun `localized scene text rejects blank explanation fields`() {
+        assertEquals(
+            "Valide les rectangles solides.",
+            LocalizedSceneText(
+                intention = "Verifier une pile de cartes.",
+                validates = "Valide les rectangles solides.",
+                nonClaims = "Ne revendique pas les paths.",
+                evidence = "Preuve WebGPU offscreen.",
+            ).validates,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            LocalizedSceneText(
+                intention = "",
+                validates = "Valide les rectangles solides.",
+                nonClaims = "Ne revendique pas les paths.",
+                evidence = "Preuve WebGPU offscreen.",
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            LocalizedSceneText(
+                intention = "Verifier une pile de cartes.",
+                validates = "   ",
+                nonClaims = "Ne revendique pas les paths.",
+                evidence = "Preuve WebGPU offscreen.",
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            LocalizedSceneText(
+                intention = "Verifier une pile de cartes.",
+                validates = "Valide les rectangles solides.",
+                nonClaims = "",
+                evidence = "Preuve WebGPU offscreen.",
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            LocalizedSceneText(
+                intention = "Verifier une pile de cartes.",
+                validates = "Valide les rectangles solides.",
+                nonClaims = "Ne revendique pas les paths.",
+                evidence = "",
+            )
+        }
+    }
+
+    @Test
+    fun `candidate scenes reject empty roadmap links tags and rationale`() {
+        val candidate = CandidateScene(
+            sceneId = SceneId("sample-candidate-scene"),
+            title = "Sample Candidate Scene",
+            roadmapLinks = listOf(SceneRoadmapLink.milestone("M1")),
+            tags = setOf(SceneTag.Rect),
+            status = CandidateSceneStatus.Candidate,
+            french = CandidateSceneFrenchText(
+                intention = "Rendre visible une candidate de test.",
+                validationTarget = "Valider une future route rect.",
+                nonClaims = "Ne revendique pas une route executable.",
+                rationale = "Couvre un trou de roadmap M1.",
+            ),
+        )
+
+        assertEquals("sample-candidate-scene", candidate.sceneId.value)
+        assertFailsWith<IllegalArgumentException> {
+            candidate.copy(title = "")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            candidate.copy(roadmapLinks = emptyList())
+        }
+        assertFailsWith<IllegalArgumentException> {
+            candidate.copy(tags = emptySet())
+        }
+    }
+
     private fun sampleScene(
         title: String = "Solid Card Stack",
         description: String = "Rectangles with alpha and draw order.",
