@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-009"
 title: "Add WGSL parser/reflection validation for text routes"
-status: "proposed"
+status: "blocked"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -105,6 +105,13 @@ rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*TextWgsl
   WGSL modules/snippets, A8 route evidence, SDF refusal evidence, and
   CPU/GPU/reference route evidence are not completed by dependency fixtures
   alone.
+- `blocked` (2026-06-16): Readiness audit confirmed the wgsl4k dependency
+  evolution is useful prerequisite evidence only. The current generated
+  dependency fixtures still carry `routePromotion:"not-promoted"` and
+  `productActivation:false`, and there is no real `A8TextMaskStep` module or
+  snippet tied to a `GPUTextBinding`/resource plan. Remaining gate: finish
+  `KFONT-M11-004` and `KFONT-M11-007`, then validate actual text WGSL modules
+  against reflected bindings and Kotlin plan comparisons.
 
 ## Linear Labels
 

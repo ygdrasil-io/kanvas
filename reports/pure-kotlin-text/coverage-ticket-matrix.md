@@ -2719,3 +2719,47 @@ does not claim malformed recovery support, complete SFNT conformance, scaler,
 shaping, color glyph rendering, native engine parity, fallback, paragraph
 layout, or GPU text-route support. Remaining format-14 family fixture gates stay
 explicit in `fixture-evidence-manifest.json`.
+
+### KFONT-M11 Readiness Gate Audit
+
+Status: blocked wave documented after independent readiness review.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/KFONT-M11-004-wire-atlas-a8-artifact-route.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/KFONT-M11-006-add-gputextsubrunplan-splitting-tests.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/KFONT-M11-007-add-resource-upload-instance-binding-plan-contracts.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/KFONT-M11-008-add-upload-before-sample-ordering-validation.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/KFONT-M11-009-add-wgsl-parser-reflection-validation-for-text-routes.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/KFONT-M11-010-add-materialkey-leakage-tests.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m11-readiness-gates.md`
+
+Evidence:
+
+- The audit reviewed `origin/master`
+  `10f8ffeb86783294760ea4854ccda2a2623c72ed`, M11 tickets, pure Kotlin text
+  handoff specs, GPU text glyph pipeline specs, and current `font:gpu-api`
+  contracts.
+- `KFONT-M11-004` is blocked by missing M9 A8 mask and atlas
+  entry/page/generation/invalidation evidence from `KFONT-M9-003` and
+  `KFONT-M9-005`.
+- `KFONT-M11-006`, `KFONT-M11-007`, `KFONT-M11-008`, `KFONT-M11-009`, and
+  `KFONT-M11-010` are blocked by the missing A8 route and downstream
+  subrun/resource/upload/binding contracts.
+- wgsl4k evolution fixtures remain prerequisite validation evidence only; they
+  do not provide real text route WGSL modules, `GPUTextBinding` comparisons,
+  CPU/GPU/reference evidence, or product activation.
+
+Validation:
+
+```bash
+rtk git diff --check
+```
+
+Remaining gate: unblock M11 by completing `KFONT-M9-003`, `KFONT-M9-004`, and
+`KFONT-M9-005`, then re-evaluate `KFONT-M11-004`. This blocked wave does not
+claim GPU text support, A8 atlas route support, SDF/outline/color/bitmap/SVG
+text support, or retirement of `dftext`, `scaledemoji_rendering`, or
+`coloremoji_blendmodes`.

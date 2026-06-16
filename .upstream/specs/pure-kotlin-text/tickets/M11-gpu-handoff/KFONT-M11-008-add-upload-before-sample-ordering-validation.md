@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-008"
 title: "Add upload-before-sample ordering validation"
-status: "proposed"
+status: "blocked"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -100,6 +100,13 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*TextOrdering*'
 
 - `proposed`: Depends on an A8 route plan and resource/upload/binding contracts.
 - Move to `ready` only after ordering token fields and negative ordering cases are reviewed.
+- `blocked` (2026-06-16): Readiness audit confirmed this ticket depends on
+  `KFONT-M11-004` and `KFONT-M11-007`. There is no accepted A8 route, no
+  renderer resource/upload/binding plan, and no `GPUTextOrderingToken`
+  evidence tying upload task, instance upload, draw sampling, generation
+  validation, eviction, and barriers. Remaining gate: finish A8 route and
+  resource/upload/binding contracts, then re-review ordering token fields and
+  negative ordering cases.
 
 ## Linear Labels
 
