@@ -14,6 +14,7 @@
 | `clipped-avatar-grid` | Clipped Avatar Grid | Clip,Image | KGPU M3,M5 |  |  | `ShouldRender` |
 | `texture-swatch-board` | Texture Swatch Board | Image | KGPU M4 |  |  | `ShouldRender` |
 | `asset-intake-thumbnail-grid` | Asset Intake Thumbnail Grid | Image,Clip,RRect | KGPU M4 | `KGPU-M4-001`,`KGPU-M4-002` |  | `ShouldRender` |
+| `photo-contact-sheet` | Photo Contact Sheet | Image,Clip,RRect | KGPU M4 |  |  | `ShouldRender` |
 | `codec-provenance-gate-board` | Codec Provenance Gate Board | Rect,RRect,Clip,Image | KGPU M4 | `KGPU-M4-003` |  | `ShouldRender` |
 | `sampler-boundary-gate-board` | Sampler Boundary Gate Board | Rect,RRect,Clip,Image | KGPU M4 | `KGPU-M4-004` |  | `ShouldRender` |
 | `savelayer-isolation-gate-board` | SaveLayer Isolation Gate Board | Rect,RRect,Clip,Layer | KGPU M5 | `KGPU-M5-001` |  | `ShouldRender` |
@@ -21,6 +22,7 @@
 | `layered-shadow-card` | Layered Shadow Card | Layer,Filter | KGPU M5 |  |  | `ShouldRender` |
 | `notification-shadow-stack` | Notification Shadow Stack | Layer,Filter | KGPU M5 |  |  | `ShouldRender` |
 | `filtered-photo-chip` | Filtered Photo Chip | Filter,Image | KGPU M5 |  |  | `ShouldRender` |
+| `tinted-avatar-card` | Tinted Avatar Card | Image,Clip,RRect,Filter | KGPU M5 |  |  | `ShouldRender` |
 | `filter-dag-refusal-board` | Filter DAG Refusal Board | Rect,Filter | KGPU M5 | `KGPU-M5-004` |  | `ShouldRender` |
 | `receipt-text-run` | Receipt Text Run | Text | KGPU M6 |  |  | `ShouldRender` |
 | `text-handoff-boundary-board` | Text Handoff Boundary Board | Rect,RRect,Clip,Text | KGPU M6 | `KGPU-M6-001` |  | `ShouldRender` |

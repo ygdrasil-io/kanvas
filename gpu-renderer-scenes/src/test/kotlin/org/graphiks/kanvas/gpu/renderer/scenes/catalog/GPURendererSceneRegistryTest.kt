@@ -349,6 +349,33 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `photo contact sheet is backed by four decoded bitmap fixtures in a clipped tray`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("photo-contact-sheet")
+        val bitmaps = scene.commands.filterIsInstance<SceneCommand.BitmapRect>()
+
+        assertEquals(setOf(SceneTag.Image, SceneTag.Clip, SceneTag.RRect), scene.tags)
+        assertEquals(listOf("M4"), scene.roadmapLinks.map { it.milestone })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf("contact-sheet-hero", "contact-sheet-detail", "contact-sheet-proof", "contact-sheet-archive"),
+            bitmaps.map { it.label },
+        )
+        assertTrue(bitmaps.all { it.hasFixturePayload })
+        assertEquals(
+            listOf(
+                SceneBitmapSampling.Linear,
+                SceneBitmapSampling.Nearest,
+                SceneBitmapSampling.Linear,
+                SceneBitmapSampling.Nearest,
+            ),
+            bitmaps.map { it.sampling },
+        )
+        assertEquals((1..4).toList(), bitmaps.map { it.paintOrder })
+    }
+
+    @Test
     fun `codec provenance gate board is backed by M4 dependency refusals only`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("codec-provenance-gate-board")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -657,6 +684,28 @@ class GPURendererSceneRegistryTest {
         assertEquals(listOf("primary-notification-layer", "secondary-notification-layer"), filters.map { it.inputLabel })
         assertEquals(listOf(1, 2), layers.map { it.paintOrder })
         assertEquals(listOf(0.68f, 0.54f), filters.map { it.strength })
+    }
+
+    @Test
+    fun `tinted avatar card is backed by one clipped bitmap and luma tint filter`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("tinted-avatar-card")
+        val bitmap = scene.commands.filterIsInstance<SceneCommand.BitmapRect>().single()
+        val filter = scene.commands.filterIsInstance<SceneCommand.FilterNode>().single()
+
+        assertEquals(setOf(SceneTag.Image, SceneTag.Clip, SceneTag.RRect, SceneTag.Filter), scene.tags)
+        assertEquals(listOf("M5"), scene.roadmapLinks.map { it.milestone })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertTrue(bitmap.hasFixturePayload)
+        assertEquals("avatar-card-photo", bitmap.label)
+        assertEquals(SceneBitmapSampling.Linear, bitmap.sampling)
+        assertEquals(1, bitmap.paintOrder)
+        assertTrue(filter.hasFixturePayload)
+        assertEquals("avatar-card-luma-tint", filter.label)
+        assertEquals("avatar-card-photo", filter.inputLabel)
+        assertEquals("luma-tint", filter.kind?.wireName)
+        assertEquals(0.62f, filter.strength)
     }
 
     @Test
@@ -1009,6 +1058,20 @@ class GPURendererSceneRegistryTest {
                 ),
             ),
             SceneExpectationRow(
+                sceneId = "photo-contact-sheet",
+                tags = setOf(SceneTag.Image, SceneTag.Clip, SceneTag.RRect),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "bitmap-rect",
+                    "bitmap-rect",
+                    "bitmap-rect",
+                    "bitmap-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M4")),
+            ),
+            SceneExpectationRow(
                 sceneId = "codec-provenance-gate-board",
                 tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Image),
                 commandFamilies = listOf(
@@ -1089,6 +1152,12 @@ class GPURendererSceneRegistryTest {
                 sceneId = "filtered-photo-chip",
                 tags = setOf(SceneTag.Filter, SceneTag.Image),
                 commandFamilies = listOf("bitmap-rect", "filter-node"),
+                roadmapLinks = listOf(RoadmapExpectation("M5")),
+            ),
+            SceneExpectationRow(
+                sceneId = "tinted-avatar-card",
+                tags = setOf(SceneTag.Image, SceneTag.Clip, SceneTag.RRect, SceneTag.Filter),
+                commandFamilies = listOf("clear", "fill-rrect", "clip", "bitmap-rect", "filter-node"),
                 roadmapLinks = listOf(RoadmapExpectation("M5")),
             ),
             SceneExpectationRow(
