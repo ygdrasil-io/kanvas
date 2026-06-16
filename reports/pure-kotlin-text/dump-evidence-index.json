@@ -372,6 +372,48 @@
       ]
     },
     {
+      "dumpId": "font-catalog",
+      "ownerTicket": "KFONT-M7-001",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "Font sources"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCatalogTest.kt",
+        "reports/pure-kotlin-text/font-catalog.json"
+      ],
+      "expectedFields": [
+        "catalogId",
+        "catalogSha256",
+        "claimPromotionAllowed",
+        "diagnostics",
+        "entries",
+        "entryCount",
+        "generation",
+        "nonClaims",
+        "schema"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontCatalog*'",
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*DiagnosticTaxonomy*'",
+        "rtk ./gradlew --no-daemon :font:core:test",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Bundled font catalog dump changes require deterministic-order review, duplicate/provenance diagnostic review, and explicit non-claims for any missing multi-script bundled rows.",
+      "nonClaims": [
+        "producer-only",
+        "no-cjk-bundled-catalog-claim",
+        "no-complete-font-fallback-claim",
+        "no-devanagari-thai-bundled-catalog-claim",
+        "no-emoji-bundled-catalog-claim",
+        "no-hebrew-arabic-bundled-catalog-claim",
+        "no-host-platform-fallback-claim"
+      ]
+    },
+    {
       "dumpId": "font-source-liberation-scan-root",
       "ownerTicket": "PKT-02D",
       "classification": "golden-gated",
