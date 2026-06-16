@@ -1,0 +1,7 @@
+# Bounded Unicode 16.0.0 seed extract for KFONT-M5-001.
+# This is not a complete DerivedCoreProperties.txt file.
+00AD ; Default_Ignorable_Code_Point
+034F ; Default_Ignorable_Code_Point
+200D ; Default_Ignorable_Code_Point
+FE0E..FE0F ; Default_Ignorable_Code_Point
+E0100..E01EF ; Default_Ignorable_Code_Point
