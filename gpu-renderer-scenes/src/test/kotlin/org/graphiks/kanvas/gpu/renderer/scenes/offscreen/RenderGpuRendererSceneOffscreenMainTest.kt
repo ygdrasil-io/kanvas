@@ -188,6 +188,14 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 bitmapRectCount = 1,
                 filterNodeCount = 1,
             ),
+            RenderedShapeExpectation(
+                sceneId = "tinted-avatar-card",
+                fillRectCount = 0,
+                fillRRectCount = 1,
+                clipCount = 1,
+                bitmapRectCount = 1,
+                filterNodeCount = 1,
+            ),
             RenderedShapeExpectation("filter-dag-refusal-board", fillRectCount = 5),
             RenderedShapeExpectation(
                 sceneId = "layered-shadow-card",
@@ -578,6 +586,9 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 assertContains(runJson, "filterKinds=drop-shadow, drop-shadow")
                 assertContains(runJson, "filterInputs=primary-notification-layer, secondary-notification-layer")
                 assertContains(runJson, "saveLayerFilterKinds=drop-shadow, drop-shadow")
+            } else if (expectation.sceneId == "tinted-avatar-card") {
+                assertContains(runJson, "filterKinds=luma-tint")
+                assertContains(runJson, "filterInputs=avatar-card-photo")
             } else {
                 assertContains(runJson, "filterKinds=luma-tint")
                 assertContains(runJson, "filterInputs=photo")

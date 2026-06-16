@@ -687,6 +687,28 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `tinted avatar card is backed by one clipped bitmap and luma tint filter`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("tinted-avatar-card")
+        val bitmap = scene.commands.filterIsInstance<SceneCommand.BitmapRect>().single()
+        val filter = scene.commands.filterIsInstance<SceneCommand.FilterNode>().single()
+
+        assertEquals(setOf(SceneTag.Image, SceneTag.Clip, SceneTag.RRect, SceneTag.Filter), scene.tags)
+        assertEquals(listOf("M5"), scene.roadmapLinks.map { it.milestone })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertTrue(bitmap.hasFixturePayload)
+        assertEquals("avatar-card-photo", bitmap.label)
+        assertEquals(SceneBitmapSampling.Linear, bitmap.sampling)
+        assertEquals(1, bitmap.paintOrder)
+        assertTrue(filter.hasFixturePayload)
+        assertEquals("avatar-card-luma-tint", filter.label)
+        assertEquals("avatar-card-photo", filter.inputLabel)
+        assertEquals("luma-tint", filter.kind?.wireName)
+        assertEquals(0.62f, filter.strength)
+    }
+
+    @Test
     fun `filter dag refusal board is backed by stable refusal classes only`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("filter-dag-refusal-board")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -1130,6 +1152,12 @@ class GPURendererSceneRegistryTest {
                 sceneId = "filtered-photo-chip",
                 tags = setOf(SceneTag.Filter, SceneTag.Image),
                 commandFamilies = listOf("bitmap-rect", "filter-node"),
+                roadmapLinks = listOf(RoadmapExpectation("M5")),
+            ),
+            SceneExpectationRow(
+                sceneId = "tinted-avatar-card",
+                tags = setOf(SceneTag.Image, SceneTag.Clip, SceneTag.RRect, SceneTag.Filter),
+                commandFamilies = listOf("clear", "fill-rrect", "clip", "bitmap-rect", "filter-node"),
                 roadmapLinks = listOf(RoadmapExpectation("M5")),
             ),
             SceneExpectationRow(

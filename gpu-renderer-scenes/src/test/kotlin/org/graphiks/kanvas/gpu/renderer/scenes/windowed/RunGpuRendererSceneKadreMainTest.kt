@@ -126,6 +126,7 @@ class RunGpuRendererSceneKadreMainTest {
             "destination-read-strategy-gate-board" to 44,
             "clipped-avatar-grid" to 27,
             "filtered-photo-chip" to 28,
+            "tinted-avatar-card" to 58,
             "layered-shadow-card" to 29,
             "notification-shadow-stack" to 56,
             "text-handoff-boundary-board" to 36,

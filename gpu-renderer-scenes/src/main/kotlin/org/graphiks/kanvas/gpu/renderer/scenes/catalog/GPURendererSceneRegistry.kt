@@ -904,6 +904,44 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "tinted-avatar-card",
+            title = "Tinted Avatar Card",
+            description = "Clipped avatar photo card with one explicit luma-tint filter route.",
+            tags = setOf(SceneTag.Image, SceneTag.Clip, SceneTag.RRect, SceneTag.Filter),
+            links = listOf(SceneRoadmapLink.milestone("M5")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.034f, 0.038f, 0.046f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "avatar-card-shell",
+                    rect = SceneRect(36f, 26f, 284f, 174f),
+                    radius = 20f,
+                    color = SceneColor(0.10f, 0.12f, 0.15f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "avatar-card-viewport",
+                    rect = SceneRect(52f, 42f, 268f, 158f),
+                ),
+                SceneCommand.BitmapRect(
+                    label = "avatar-card-photo",
+                    rect = SceneRect(72f, 48f, 248f, 154f),
+                    source = SceneBitmapSource(
+                        topLeft = SceneColor(0.18f, 0.44f, 0.86f, 1f),
+                        topRight = SceneColor(0.24f, 0.74f, 0.50f, 1f),
+                        bottomLeft = SceneColor(0.96f, 0.72f, 0.18f, 1f),
+                        bottomRight = SceneColor(0.90f, 0.26f, 0.22f, 1f),
+                    ),
+                    sampling = SceneBitmapSampling.Linear,
+                    paintOrder = 1,
+                ),
+                SceneCommand.FilterNode(
+                    label = "avatar-card-luma-tint",
+                    inputLabel = "avatar-card-photo",
+                    kind = SceneFilterKind.LumaTint,
+                    strength = 0.62f,
+                ),
+            ),
+        ),
+        scene(
             id = "filter-dag-refusal-board",
             title = "Filter DAG Refusal Board",
             description = "PM-visible filter DAG refusal classes without saveLayer or simple filter route promotion.",
