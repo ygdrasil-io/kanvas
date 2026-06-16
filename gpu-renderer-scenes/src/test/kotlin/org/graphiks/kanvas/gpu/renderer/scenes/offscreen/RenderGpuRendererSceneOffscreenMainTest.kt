@@ -154,6 +154,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 runtimeEffectCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "sdr-color-boundary-board",
+                fillRectCount = 7,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "mesh-ribbon",
                 fillRectCount = 0,
                 meshRibbonCount = 1,

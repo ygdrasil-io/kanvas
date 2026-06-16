@@ -152,6 +152,36 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `sdr color boundary board is backed by bounded sdr facts and color refusals only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("sdr-color-boundary-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip), scene.tags)
+        assertEquals(listOf("KGPU-M7-004"), scene.roadmapLinks.mapNotNull { it.ticketId })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf(
+                "finite-srgb-store-plan",
+                "hdr-transfer-refusal",
+                "gainmap-refusal",
+                "icc-v4-profile-refusal",
+                "cicp-profile-refusal",
+                "untagged-policy-refusal",
+                "extended-range-refusal",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..7).toList(), fills.map { it.paintOrder })
+        assertTrue(
+            scene.roadmapLinks.none {
+                it.ticketId == "KGPU-M7-001" || it.ticketId == "KGPU-M7-002" || it.ticketId == "KGPU-M7-003"
+            },
+        )
+    }
+
+    @Test
     fun `asset intake thumbnail grid is backed by decoded bitmap fixtures and upload ownership tickets`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("asset-intake-thumbnail-grid")
 
@@ -548,6 +578,23 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.Rect, SceneTag.Blend),
                 commandFamilies = listOf("clear", "fill-rect", "fill-rect", "fill-rect"),
                 roadmapLinks = listOf(RoadmapExpectation("M7", ticketId = "KGPU-M7-003")),
+            ),
+            SceneExpectationRow(
+                sceneId = "sdr-color-boundary-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M7", ticketId = "KGPU-M7-004")),
             ),
             SceneExpectationRow(
                 sceneId = "mesh-ribbon",

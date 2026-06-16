@@ -21,6 +21,7 @@
 | `runtime-effect-color-tile` | Runtime Effect Color Tile | RuntimeEffect | KGPU M7 |  |  | `ShouldRender` |
 | `blend-mode-strip` | Blend Mode Strip | Rect | KGPU M7 |  |  | `ShouldRender` |
 | `translucent-card-overlap` | Translucent Card Overlap | Rect,Blend | KGPU M7 | `KGPU-M7-003` |  | `ShouldRender` |
+| `sdr-color-boundary-board` | SDR Color Boundary Board | Rect,RRect,Clip | KGPU M7 | `KGPU-M7-004` |  | `ShouldRender` |
 | `mesh-ribbon` | Mesh Ribbon | Vertices | KGPU M8 |  |  | `ShouldRender` |
 | `cache-pressure-deck` | Cache Pressure Deck | Rect | KGPU M9 |  |  | `ShouldRender` |
 | `cache-source-ledger-board` | Cache Source Ledger Board | Rect,Cache | KGPU M9 | `KGPU-M9-001` |  | `ShouldRender` |

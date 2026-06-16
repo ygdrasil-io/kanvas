@@ -657,6 +657,68 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "sdr-color-boundary-board",
+            title = "SDR Color Boundary Board",
+            description = "Bounded SDR color value and store facts with terminal HDR, gainmap, profile, untagged, and extended-range refusals.",
+            tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip),
+            links = listOf(SceneRoadmapLink.ticket("KGPU-M7-004")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.038f, 0.040f, 0.046f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "sdr-color-boundary-panel",
+                    rect = SceneRect(24f, 26f, 296f, 174f),
+                    radius = 18f,
+                    color = SceneColor(0.11f, 0.12f, 0.15f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "sdr-color-boundary-window",
+                    rect = SceneRect(40f, 44f, 280f, 158f),
+                ),
+                SceneCommand.FillRect(
+                    label = "finite-srgb-store-plan",
+                    rect = SceneRect(46f, 52f, 70f, 154f),
+                    color = SceneColor.green(0.90f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "hdr-transfer-refusal",
+                    rect = SceneRect(80f, 64f, 104f, 154f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "gainmap-refusal",
+                    rect = SceneRect(114f, 76f, 138f, 154f),
+                    color = SceneColor(0.94f, 0.42f, 0.20f, 0.94f),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "icc-v4-profile-refusal",
+                    rect = SceneRect(148f, 88f, 172f, 154f),
+                    color = SceneColor.blue(0.84f),
+                    paintOrder = 4,
+                ),
+                SceneCommand.FillRect(
+                    label = "cicp-profile-refusal",
+                    rect = SceneRect(182f, 100f, 206f, 154f),
+                    color = SceneColor(0.60f, 0.46f, 0.90f, 0.94f),
+                    paintOrder = 5,
+                ),
+                SceneCommand.FillRect(
+                    label = "untagged-policy-refusal",
+                    rect = SceneRect(216f, 112f, 240f, 154f),
+                    color = SceneColor(0.26f, 0.72f, 0.76f, 0.94f),
+                    paintOrder = 6,
+                ),
+                SceneCommand.FillRect(
+                    label = "extended-range-refusal",
+                    rect = SceneRect(250f, 124f, 270f, 154f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.92f),
+                    paintOrder = 7,
+                ),
+            ),
+        ),
+        scene(
             id = "mesh-ribbon",
             title = "Mesh Ribbon",
             description = "Bounded ribbon-strip fixture for vertices visibility without broad DrawVertices promotion.",

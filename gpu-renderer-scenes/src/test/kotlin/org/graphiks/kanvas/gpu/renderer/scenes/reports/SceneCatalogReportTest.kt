@@ -29,6 +29,7 @@ class SceneCatalogReportTest {
         assertContains(markdown, "`KGPU-M6-001`")
         assertContains(markdown, "`KGPU-M6-004`")
         assertContains(markdown, "`KGPU-M7-003`")
+        assertContains(markdown, "`KGPU-M7-004`")
         assertContains(markdown, "`KGPU-M9-001`")
         assertContains(markdown, "`KGPU-M10-001`,`KGPU-M10-004`")
         assertContains(markdown, "R0,R1,R2,R3,R4,R5,R6")
@@ -50,6 +51,7 @@ class SceneCatalogReportTest {
         assertTrue(root.resolve("catalog.json").readText().contains("\"ticketIds\": [\"KGPU-M6-001\"]"))
         assertTrue(root.resolve("catalog.json").readText().contains("\"ticketIds\": [\"KGPU-M6-004\"]"))
         assertTrue(root.resolve("catalog.json").readText().contains("\"ticketIds\": [\"KGPU-M7-003\"]"))
+        assertTrue(root.resolve("catalog.json").readText().contains("\"ticketIds\": [\"KGPU-M7-004\"]"))
         assertTrue(root.resolve("catalog.json").readText().contains("\"ticketIds\": [\"KGPU-M9-001\"]"))
         assertTrue(root.resolve("catalog.json").readText().contains("\"ticketIds\": [\"KGPU-M10-001\",\"KGPU-M10-004\"]"))
     }

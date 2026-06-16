@@ -76,6 +76,7 @@ class RunGpuRendererSceneKadreMainTest {
             "text-handoff-boundary-board" to 36,
             "text-representation-gate-board" to 37,
             "runtime-effect-color-tile" to 30,
+            "sdr-color-boundary-board" to 38,
             "mesh-ribbon" to 31,
             "filter-dag-refusal-board" to 32,
         )

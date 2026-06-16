@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 24,
+  "sceneCount": 25,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -189,6 +189,16 @@
       "tags": ["Rect","Blend"],
       "kgpuMilestones": ["M7"],
       "ticketIds": ["KGPU-M7-003"],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "sdr-color-boundary-board",
+      "title": "SDR Color Boundary Board",
+      "description": "Bounded SDR color value and store facts with terminal HDR, gainmap, profile, untagged, and extended-range refusals.",
+      "tags": ["Rect","RRect","Clip"],
+      "kgpuMilestones": ["M7"],
+      "ticketIds": ["KGPU-M7-004"],
       "rStages": [],
       "expectation": "ShouldRender"
     },
