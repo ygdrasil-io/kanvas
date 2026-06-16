@@ -190,6 +190,7 @@ data class GlyphMetrics(
  */
 object FontScalerDiagnosticCodes {
     const val OUTLINE_FORMAT_UNSUPPORTED: String = "font.outline-format-unsupported"
+    const val SCALER_OUTLINE_UNAVAILABLE: String = "font.scaler.outline-unavailable"
     const val CFF_OPERATOR_UNSUPPORTED: String = "font.cff-operator-unsupported"
     const val CFF_STACK_MALFORMED: String = "font.cff-stack-malformed"
     const val CFF_TABLE_MALFORMED: String = "font.cff-table-malformed"
@@ -2832,8 +2833,37 @@ private fun Throwable.toFontScalerDiagnosticOrNull(
 ): FontScalerDiagnostic? =
     when (this) {
         is FontScalerRefusalException -> diagnostic.copy(operation = operation, glyphId = glyphId)
+        is IllegalArgumentException -> toMalformedTrueTypeDiagnosticOrNull(glyphId = glyphId, operation = operation)
         else -> null
     }
+
+private fun IllegalArgumentException.toMalformedTrueTypeDiagnosticOrNull(
+    glyphId: UInt,
+    operation: String,
+): FontScalerDiagnostic? {
+    val message = message.orEmpty()
+    val detail = when {
+        "endPtsOfContours must be monotonic" in message -> "truetype.contour-endpoints-malformed"
+        "flag repeat exceeds point count" in message -> "truetype.flag-repeat-overflow"
+        "composite component has mutually exclusive scale flags set" in message -> "truetype.composite-transform-flags"
+        "header is truncated" in message -> "truetype.glyf-header-truncated"
+        "x coordinate data is truncated" in message ||
+            "y coordinate data is truncated" in message -> "truetype.coordinate-run-truncated"
+        "flag data is truncated" in message ||
+            "flag repeat data is truncated" in message -> "truetype.flag-data-truncated"
+        "instructionLength is truncated" in message ||
+            "instructions is truncated" in message -> "truetype.instructions-truncated"
+        "endPtsOfContours is truncated" in message -> "truetype.contour-endpoints-truncated"
+        "outside glyf table" in message -> "truetype.glyf-range-invalid"
+        else -> null
+    } ?: return null
+    return FontScalerDiagnostic(
+        code = FontScalerDiagnosticCodes.SCALER_OUTLINE_UNAVAILABLE,
+        detail = detail,
+        operation = operation,
+        glyphId = glyphId,
+    )
+}
 
 private fun String.isStableToken(): Boolean =
     isNotEmpty() && all { character ->

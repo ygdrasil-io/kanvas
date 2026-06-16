@@ -992,6 +992,56 @@ rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 Remaining gate: this is a bounded TrueType `gvar` IUP slice only. It does not
 claim complete `HVAR`/`VVAR`/`MVAR` application, vertical metrics, complete
 variable-font parity, hinting VM parity, or GPU glyph route support.
+
+### KFONT-M3-005: Malformed glyf isolation suite
+
+Status: implemented.
+
+Files:
+
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/font/fixtures/expected/scaler/truetype-malformed-glyf-isolation.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m3-005-malformed-glyf-isolation.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `.upstream/specs/pure-kotlin-text/tickets/M3-truetype-glyf/KFONT-M3-005-add-glyf-malformed-isolation-suite.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M3-truetype-glyf/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `truetype-malformed-glyf-isolation.json` records one face-level invalid-`loca`
+  refusal, per-glyph malformed `glyf` refusals for truncated headers, bad
+  contour endpoints, flag-repeat overflow, coordinate truncation, composite
+  cycle, missing component glyph, and invalid composite transform flags, plus
+  a malformed `gvar` diagnostic snapshot.
+- Isolation-eligible cases include positive-control dumps for a safe glyph in
+  the same face, proving malformed per-glyph evidence does not poison the whole
+  face when the refusal boundary is local.
+- Malformed simple-glyph parsing now emits stable
+  `font.scaler.outline-unavailable` diagnostics with deterministic
+  `truetype.*` details instead of leaking raw parser exceptions into the
+  fixture surface.
+- The suite keeps explicit non-claims for runtime `.notdef` substitution,
+  broad malformed-font recovery, full variable-font support, vertical metrics,
+  native hinted parity, and GPU text routing.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*MalformedGlyf*' --tests '*GlyphFailurePolicy*' --tests '*CompositeGlyph*' --tests '*Gvar*'
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+```
+
+Remaining gate: this is fixture-backed malformed-scaler evidence only. It does
+not claim runtime `.notdef` substitution, complete malformed-font recovery,
+complete variable-font support, vertical metrics, hinting VM parity, or GPU
+glyph/text routes.
 ### PKT-05A: CFF/CFF2 CharString Fixture Evidence
 
 Status: implemented; independent review pending because the current tool policy

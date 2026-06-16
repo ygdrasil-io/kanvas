@@ -721,7 +721,9 @@
         "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
         "reports/font/fixtures/expected/scaler/truetype-composite-glyphs.json",
         "reports/font/fixtures/expected/scaler/truetype-gvar-iup.json",
+        "reports/font/fixtures/expected/scaler/truetype-malformed-glyf-isolation.json",
         "reports/pure-kotlin-text/2026-06-16-kfont-m3-003-phantom-metrics.md",
+        "reports/pure-kotlin-text/2026-06-16-kfont-m3-005-malformed-glyf-isolation.md",
         "reports/font/fixtures/expected/scaler/truetype-variation-readiness.json"
       ],
       "requiredEvidenceGates": [],
@@ -730,7 +732,7 @@
         "rtk ./gradlew --no-daemon :font:scaler:test"
       ],
       "fixtureCommands": [
-        "Current PKT-04A evidence covers TrueType glyf scaler evidence, composite transform/point-matching/component-count evidence, bounded gvar IUP interpolation, horizontal phantom-point advance deltas, avar-normalized variation dumps, HVAR-unimplemented warnings, and malformed tuple diagnostics while broader HVAR/VVAR/MVAR application and vertical claims remain out of scope."
+        "Current PKT-04A evidence covers TrueType glyf scaler evidence, composite transform/point-matching/component-count evidence, bounded gvar IUP interpolation, horizontal phantom-point advance deltas, avar-normalized variation dumps, malformed loca/glyf isolation evidence, HVAR-unimplemented warnings, and malformed tuple diagnostics while broader HVAR/VVAR/MVAR application and vertical claims remain out of scope."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",
