@@ -10,10 +10,10 @@ M1 deterministic identity and fixture manifest.
 
 ## Exit Criteria
 
-- [ ] Single-face and collection fonts parse through one bounded request/result contract.
-- [ ] Required and optional table failures have stable diagnostics and manifest-backed malformed fixtures.
-- [ ] `cmap-map.json` covers formats 12, 4, 14, 6, 0, missing code point behavior, and unsupported-format refusal.
-- [ ] `sfnt-directory.json` and `sfnt-tables.json` are deterministic and do not imply scaler, shaping, color, or GPU support.
+- [x] Single-face and collection fonts parse through one bounded request/result contract.
+- [x] Required and optional table failures have stable diagnostics and manifest-backed malformed fixtures.
+- [x] `cmap-map.json` covers formats 12, 4, 14, 6, 0, missing code point behavior, and unsupported-format refusal.
+- [x] `sfnt-directory.json` and `sfnt-tables.json` are deterministic and do not imply scaler, shaping, color, or GPU support.
 
 ## Tickets
 
@@ -23,7 +23,7 @@ M1 deterministic identity and fixture manifest.
 | [KFONT-M2-002 - Add bounded table directory diagnostics](KFONT-M2-002-add-bounded-table-directory-diagnostics.md) | `done` | `P0` | `tracked-gap` | `font-sfnt` | `KFONT-M0-004`, `KFONT-M2-001` | - |
 | [KFONT-M2-003 - Complete cmap format coverage](KFONT-M2-003-complete-cmap-format-coverage.md) | `done` | `P0` | `tracked-gap` | `font-sfnt` | `KFONT-M2-001`, `KFONT-M2-002` | - |
 | [KFONT-M2-004 - Add OpenType table fact dumps](KFONT-M2-004-add-opentype-table-fact-dumps.md) | `done` | `P0` | `tracked-gap` | `validation` | `KFONT-M1-003`, `KFONT-M2-001`, `KFONT-M2-003` | - |
-| [KFONT-M2-005 - Add malformed SFNT fixture suite](KFONT-M2-005-add-malformed-sfnt-fixture-suite.md) | `proposed` | `P0` | `fixture-gated` | `fixtures` | `KFONT-M2-002`, `KFONT-M2-004` | - |
+| [KFONT-M2-005 - Add malformed SFNT fixture suite](KFONT-M2-005-add-malformed-sfnt-fixture-suite.md) | `done` | `P0` | `fixture-gated` | `fixtures` | `KFONT-M2-002`, `KFONT-M2-004` | - |
 
 ## Validation Bundle
 

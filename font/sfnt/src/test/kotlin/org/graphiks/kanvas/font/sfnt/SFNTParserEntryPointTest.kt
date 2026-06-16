@@ -30,6 +30,7 @@ class SFNTParserEntryPointTest {
         assertTrue(actual.contains("\"ticketIds\": ["))
         assertTrue(actual.contains("\"KFONT-M2-001\""))
         assertTrue(actual.contains("\"KFONT-M2-002\""))
+        assertTrue(actual.contains("\"KFONT-M2-005\""))
         assertTrue(actual.contains("\"containerKind\": \"SINGLE_FACE\""))
         assertTrue(actual.contains("\"containerKind\": \"TTC_COLLECTION\""))
         assertTrue(actual.contains("\"code\": \"font.collection-index-invalid\""))
@@ -213,9 +214,67 @@ class SFNTParserEntryPointTest {
                 bytes = optionalMalformedBytes,
             ),
         )
+        val badVersionBytes = badSfntVersionFixture()
+        val truncatedHeaderBytes = truncatedHeaderFixture()
+        val invalidTtcBytes = ttcFont(malformedMinimalFace("TTC Fixture", glyphId = 5))
+        val outOfBoundsBytes = tableOutOfBoundsFixture()
+        val overlapBytes = overlappingTablesFixture()
+        val duplicateBytes = duplicateTagFixture()
+        val missingRequiredBytes = malformedMinimalFace("Missing Required", glyphId = 7)
 
         return SFNTDirectoryReport(
             entries = listOf(
+                malformedDirectoryEntry(
+                    entryId = "generated-bad-sfnt-version",
+                    fixtureId = "malformed-sfnt-bad-version-generated",
+                    sourceId = "550e8400-e29b-41d4-a716-44665544a001",
+                    displayName = "generated-bad-sfnt-version",
+                    bytes = badVersionBytes,
+                ),
+                malformedDirectoryEntry(
+                    entryId = "generated-truncated-sfnt-header",
+                    fixtureId = "malformed-sfnt-truncated-header-generated",
+                    sourceId = "550e8400-e29b-41d4-a716-44665544a002",
+                    displayName = "generated-truncated-sfnt-header",
+                    bytes = truncatedHeaderBytes,
+                ),
+                malformedDirectoryEntry(
+                    entryId = "generated-malformed-ttc-invalid-index",
+                    fixtureId = "malformed-sfnt-invalid-ttc-index-generated",
+                    sourceId = "550e8400-e29b-41d4-a716-44665544a003",
+                    displayName = "generated-malformed-ttc-invalid-index",
+                    bytes = invalidTtcBytes,
+                    collectionIndex = 3,
+                ),
+                malformedDirectoryEntry(
+                    entryId = "generated-table-out-of-bounds",
+                    fixtureId = "malformed-sfnt-table-out-of-bounds-generated",
+                    sourceId = "550e8400-e29b-41d4-a716-44665544a004",
+                    displayName = "generated-table-out-of-bounds",
+                    bytes = outOfBoundsBytes,
+                ),
+                malformedDirectoryEntry(
+                    entryId = "generated-overlapping-tables",
+                    fixtureId = "malformed-sfnt-overlapping-tables-generated",
+                    sourceId = "550e8400-e29b-41d4-a716-44665544a005",
+                    displayName = "generated-overlapping-tables",
+                    bytes = overlapBytes,
+                ),
+                malformedDirectoryEntry(
+                    entryId = "generated-duplicate-tag",
+                    fixtureId = "malformed-sfnt-duplicate-tag-generated",
+                    sourceId = "550e8400-e29b-41d4-a716-44665544a006",
+                    displayName = "generated-duplicate-tag",
+                    bytes = duplicateBytes,
+                ),
+                malformedDirectoryEntry(
+                    entryId = "generated-missing-required-table",
+                    fixtureId = "malformed-sfnt-missing-required-table-generated",
+                    sourceId = "550e8400-e29b-41d4-a716-44665544a007",
+                    displayName = "generated-missing-required-table",
+                    bytes = missingRequiredBytes,
+                    requiredTables = setOf(SFNTTableTag("glyf"), SFNTTableTag("loca")),
+                ),
                 SFNTDirectoryReportEntry.fromResult(
                     entryId = "single-ttf-liberation-sans",
                     fixtureId = "single-ttf-liberation-sans",
@@ -250,6 +309,33 @@ class SFNTParserEntryPointTest {
         )
     }
 
+    private fun malformedDirectoryEntry(
+        entryId: String,
+        fixtureId: String,
+        sourceId: String,
+        displayName: String,
+        bytes: ByteArray,
+        collectionIndex: Int = 0,
+        requiredTables: Set<SFNTTableTag> = emptySet(),
+    ): SFNTDirectoryReportEntry =
+        SFNTDirectoryReportEntry.fromResult(
+            entryId = entryId,
+            fixtureId = fixtureId,
+            fixtureKind = "GeneratedFixtureFontSource",
+            result = DefaultSFNTParser().parse(
+                SFNTParseRequest(
+                    sourceId = FontSourceID(Uuid.parse(sourceId)),
+                    sourceKind = FontSourceKind.MEMORY,
+                    displayName = displayName,
+                    bytes = BoundedFontBytes(rawBytes = bytes),
+                    collectionIndex = collectionIndex,
+                    parserGeneration = 1,
+                    requiredTables = requiredTables,
+                ),
+            ),
+            sourceSha256 = bytes.sha256HexForTest(),
+        )
+
     private fun generatedTtcFixture(): ByteArray =
         ttcFont(
             minimalFace("Generated TTC One", glyphId = 7, unitsPerEm = 1000, advanceWidth = 500),
@@ -264,6 +350,47 @@ class SFNTParserEntryPointTest {
         writeDirectoryRecord(font, index = 1, tag = "name", checksum = 1, offset = 88, length = 4)
         writeDirectoryRecord(font, index = 2, tag = "cmap", checksum = 2, offset = 90, length = 6)
         writeDirectoryRecord(font, index = 3, tag = "post", checksum = 3, offset = 92, length = 12)
+        return font
+    }
+
+    private fun badSfntVersionFixture(): ByteArray =
+        ByteArray(12).also { bytes ->
+            bytes.writeUInt32(0, 0x00020000)
+        }
+
+    private fun truncatedHeaderFixture(): ByteArray =
+        ByteArray(10).also { bytes ->
+            bytes.writeUInt32(0, 0x00010000)
+            bytes.writeUInt16(4, 1)
+        }
+
+    private fun tableOutOfBoundsFixture(): ByteArray =
+        directoryOnlyFont(sourceLength = 80, "post" to TestTableRecord(offset = 72, length = 16))
+
+    private fun overlappingTablesFixture(): ByteArray =
+        directoryOnlyFont(
+            sourceLength = 96,
+            "name" to TestTableRecord(offset = 48, length = 16),
+            "cmap" to TestTableRecord(offset = 56, length = 12),
+        )
+
+    private fun duplicateTagFixture(): ByteArray =
+        directoryOnlyFont(
+            sourceLength = 96,
+            "name" to TestTableRecord(offset = 48, length = 4),
+            "name" to TestTableRecord(offset = 56, length = 4),
+        )
+
+    private fun directoryOnlyFont(
+        sourceLength: Int,
+        vararg records: Pair<String, TestTableRecord>,
+    ): ByteArray {
+        val font = ByteArray(sourceLength)
+        font.writeUInt32(0, 0x00010000)
+        font.writeUInt16(4, records.size)
+        records.forEachIndexed { index, (tag, record) ->
+            writeDirectoryRecord(font, index = index, tag = tag, checksum = index, offset = record.offset, length = record.length)
+        }
         return font
     }
 
@@ -313,6 +440,34 @@ class SFNTParserEntryPointTest {
             "hhea" to hheaTable(ascender = 820, descender = -180, lineGap = 40, numberOfHMetrics = 1),
             "maxp" to maxpTable(numGlyphs = 1),
             "hmtx" to hmtxTable(advanceWidth = advanceWidth, leftSideBearing = 0),
+        )
+
+    private fun malformedMinimalFace(family: String, glyphId: Int): ByteArray =
+        sfntFontWithChecksums(
+            "name" to nameTable(
+                testNameRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    languageId = 0x0409,
+                    nameId = 1,
+                    bytes = family.toByteArray(Charsets.UTF_16BE),
+                ),
+            ),
+            "cmap" to cmapTable(
+                testCMapRecord(
+                    platformId = 3,
+                    encodingId = 1,
+                    subtable = format4Subtable(testFormat4Segment(startCode = 0x0041, endCode = 0x0041, startGlyphId = glyphId)),
+                ),
+            ),
+            "head" to headTable(
+                unitsPerEm = 1000,
+                bounds = OpenTypeFontBounds(xMin = 0, yMin = -200, xMax = 1000, yMax = 820),
+                indexToLocFormat = 0,
+            ),
+            "hhea" to hheaTable(ascender = 820, descender = -180, lineGap = 40, numberOfHMetrics = 1),
+            "maxp" to maxpTable(numGlyphs = 1),
+            "hmtx" to hmtxTable(advanceWidth = 500, leftSideBearing = 0),
         )
 
     private fun optionalMalformedFaceFixture(): ByteArray =
@@ -382,6 +537,7 @@ class SFNTParserEntryPointTest {
         val endCode: Int,
         val idDelta: Int,
     )
+    private data class TestTableRecord(val offset: Int, val length: Int)
 
     private fun testNameRecord(
         platformId: Int,
@@ -530,6 +686,42 @@ class SFNTParserEntryPointTest {
             payloadOffset += payload.size
         }
         return font
+    }
+
+    private fun sfntFontWithChecksums(vararg tables: Pair<String, ByteArray>): ByteArray {
+        val directoryLength = 12 + tables.size * 16
+        val font = ByteArray(directoryLength + tables.sumOf { (_, payload) -> payload.size })
+        font.writeUInt32(0, 0x00010000)
+        font.writeUInt16(4, tables.size)
+
+        var payloadOffset = directoryLength
+        tables.forEachIndexed { index, (tag, payload) ->
+            val recordOffset = 12 + index * 16
+            tag.toByteArray(Charsets.ISO_8859_1).copyInto(font, recordOffset)
+            font.writeUInt32(recordOffset + 4, payload.checksumForTest())
+            font.writeUInt32(recordOffset + 8, payloadOffset)
+            font.writeUInt32(recordOffset + 12, payload.size)
+            payload.copyInto(font, payloadOffset)
+            payloadOffset += payload.size
+        }
+        return font
+    }
+
+    private fun ByteArray.checksumForTest(): Int {
+        var sum = 0L
+        var offset = 0
+        while (offset < size) {
+            var word = 0
+            repeat(4) { index ->
+                word = word shl 8
+                if (offset + index < size) {
+                    word = word or (this[offset + index].toInt() and 0xff)
+                }
+            }
+            sum = (sum + (word.toLong() and 0xffffffffL)) and 0xffffffffL
+            offset += 4
+        }
+        return sum.toInt()
     }
 
     private fun ttcFont(vararg faces: ByteArray): ByteArray {

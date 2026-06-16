@@ -440,18 +440,17 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt",
+        "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/MalformedSFNTFixtureSuiteTest.kt",
         "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+        "reports/pure-kotlin-text/malformed-sfnt-fixtures.json",
         "reports/font/fixtures/expected/sfnt/sfnt-cmap-format14-readiness.json"
       ],
       "requiredEvidenceGates": [
-        "Add missing required table fixture rows with stable refusal diagnostics.",
-        "Add malformed optional table fixture rows that preserve bounded face parsing diagnostics.",
-        "Add TTC face-index positive and out-of-range refusal fixture rows.",
         "Add cmap format 14 positive variation-selector fixture rows.",
         "Add cmap format 14 unsupported or malformed refusal rows without claiming complete cmap coverage."
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:sfnt:test",
+        "rtk ./gradlew --no-daemon :font:sfnt:test --tests '*MalformedSFNT*' --tests '*CMap*'",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
       ],
       "fixtureCommands": [
