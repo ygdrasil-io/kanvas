@@ -59,6 +59,7 @@ class PureKotlinTextFixtureManifestTest(unittest.TestCase):
                 "emoji",
                 "font-source-sfnt",
                 "font-source-system-scan",
+                "glyph-strike-key",
                 "gpu-handoff",
                 "latin-gsub-gpos-fixtures",
                 "opentype-layout-contract",

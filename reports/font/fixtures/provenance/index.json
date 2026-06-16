@@ -56,7 +56,8 @@
         "PKT-02D",
         "PKT-03D",
         "KFONT-M1-004",
-        "KFONT-M2-005"
+        "KFONT-M2-005",
+        "KFONT-M9-001"
       ],
       "source": {
         "kind": "in-repo-existing",
@@ -91,6 +92,7 @@
       "expectedDumps": [
         "reports/font/fixtures/expected/font-source/liberation-scan-root.json",
         "reports/font/fixtures/expected/glyph/a8-sdf-atlas-lifecycle.json",
+        "reports/font/fixtures/expected/glyph/glyph-strike-key.json",
         "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json",
         "reports/font/fixtures/expected/shaping/latin-gsub-gpos-goldens.json",
         "reports/font/fixtures/expected/sfnt/sfnt-cmap-format14-readiness.json"

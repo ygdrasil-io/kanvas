@@ -53,6 +53,7 @@ class PureKotlinTextClaimDashboardTest(unittest.TestCase):
                 "complex-shaping",
                 "emoji-color",
                 "fallback",
+                "glyph-strike-key-completeness",
                 "lcd",
                 "outline-path",
                 "sdf",

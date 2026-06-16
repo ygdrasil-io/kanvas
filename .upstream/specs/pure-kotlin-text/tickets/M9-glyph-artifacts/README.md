@@ -20,7 +20,7 @@ M3 supplies stable TrueType outlines and metrics. M6 supplies shaped glyph runs.
 
 | Ticket | Status | Priority | Claim Impact | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|
-| [KFONT-M9-001 - Complete `GlyphStrikeKey`](KFONT-M9-001-complete-glyphstrikekey.md) | `proposed` | `P0` | `tracked-gap` | `glyph` | `KFONT-M3-001`, `KFONT-M6-001` | - |
+| [KFONT-M9-001 - Complete `GlyphStrikeKey`](KFONT-M9-001-complete-glyphstrikekey.md) | `done` | `P0` | `tracked-gap` | `glyph` | `KFONT-M3-001`, `KFONT-M6-001` | - |
 | [KFONT-M9-002 - Promote `GlyphArtifactPlan` route taxonomy](KFONT-M9-002-promote-glyphartifactplan-route-taxonomy.md) | `proposed` | `P0` | `tracked-gap` | `glyph` | `KFONT-M9-001` | - |
 | [KFONT-M9-003 - Implement quadratic/cubic outline rasterization for A8](KFONT-M9-003-implement-quadratic-cubic-outline-rasterization-for-a8.md) | `proposed` | `P1` | `tracked-gap` | `glyph` | `KFONT-M3-001`, `KFONT-M9-001`, `KFONT-M9-002` | - |
 | [KFONT-M9-004 - Implement production SDF generator boundaries](KFONT-M9-004-implement-production-sdf-generator-boundaries.md) | `proposed` | `P0` | `tracked-gap` | `glyph` | `KFONT-M9-001`, `KFONT-M9-002`, `KFONT-M9-003` | `dftext` |

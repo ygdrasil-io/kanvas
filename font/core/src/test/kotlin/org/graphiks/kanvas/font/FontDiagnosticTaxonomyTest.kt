@@ -21,6 +21,7 @@ class FontDiagnosticTaxonomyTest {
                 "font.scaler",
                 "text.shaping",
                 "text.paragraph",
+                "text.glyph",
                 "glyph.artifact",
                 "text.gpu",
                 "unsupported.text",
@@ -110,6 +111,18 @@ class FontDiagnosticTaxonomyTest {
             "paragraphRoute",
         )
         assertRequiredFields(
+            taxonomy.code("text.glyph.cache-key-nondeterministic"),
+            "glyphId",
+            "attemptedRoute",
+            "reason",
+        )
+        assertRequiredFields(
+            taxonomy.code("text.glyph.LCD-future-research"),
+            "glyphId",
+            "attemptedRoute",
+            "fallbackRoute",
+        )
+        assertRequiredFields(
             taxonomy.code("text.gpu.artifact-unregistered"),
             "artifactId",
             "generation",
@@ -151,6 +164,7 @@ class FontDiagnosticTaxonomyTest {
             "sfnt-failure",
             "scaler-failure",
             "shaping-refusal",
+            "glyph-strike-key-refusal",
             "gpu-text-route-refusal",
         ).forEach { label ->
             val sample = assertNotNull(samples[label], "Missing sample diagnostic $label")
@@ -167,6 +181,7 @@ class FontDiagnosticTaxonomyTest {
         assertEquals("font.sfnt.required-table-missing", samples.getValue("sfnt-failure").code)
         assertEquals("font.sfnt.cmap-format-unsupported", samples.getValue("sfnt-cmap-refusal").code)
         assertEquals("font.scaler.outline-unavailable", samples.getValue("scaler-failure").code)
+        assertEquals("text.glyph.cache-key-nondeterministic", samples.getValue("glyph-strike-key-refusal").code)
         assertEquals("text.shaping.emoji-sequence-unsupported", samples.getValue("shaping-refusal").code)
         assertEquals("unsupported.text.artifact_unregistered", samples.getValue("gpu-text-route-refusal").code)
         assertEquals("tracked-gap", samples.getValue("source-failure").classification.serializedName)

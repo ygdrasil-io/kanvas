@@ -12,6 +12,9 @@ import kotlin.math.sqrt
  * Identifies the strike-specific inputs that affect glyph rasterization and cache reuse.
  *
  * @property typefaceId Stable identifier for the selected typeface.
+ * @property glyphId font-specific glyph identifier when the key is bound to one glyph.
+ * @property clusterFingerprint source cluster facts when glyph output depends on text cluster
+ * shaping, variation selectors, emoji sequence, or combining marks.
  * @property sizePx requested strike size in pixels.
  * @property scaleX horizontal scale applied before glyph generation.
  * @property scaleY vertical scale applied before glyph generation.
@@ -26,8 +29,11 @@ import kotlin.math.sqrt
  * @property sdfSourceResolutionPx source SDF resolution selected for this strike.
  * @property paletteIdentity palette identity for color glyph routes when applicable.
  * @property unicodeDataVersion Unicode data version when cluster or emoji facts affect output.
- * @property rendererVersion route-specific renderer version for SVG, COLR, bitmap, or masks.
+ * @property rendererDescriptorVersion route-specific renderer descriptor version for SVG, COLR,
+ * bitmap, or masks.
+ * @property rendererVersion legacy source-compatible alias for [rendererDescriptorVersion].
  */
+@Suppress("DEPRECATION")
 data class GlyphStrikeKey(
     val typefaceId: TypefaceID,
     val sizePx: Float,
@@ -44,8 +50,69 @@ data class GlyphStrikeKey(
     val sdfSourceResolutionPx: Float? = null,
     val paletteIdentity: String? = null,
     val unicodeDataVersion: String? = null,
+    @Deprecated("Use rendererDescriptorVersion.", ReplaceWith("rendererDescriptorVersion"))
     val rendererVersion: String? = null,
+    val rendererDescriptorVersion: String? = null,
+    val glyphId: Int? = null,
+    val clusterFingerprint: GlyphClusterFingerprint? = null,
 ) {
+    init {
+        require(
+            rendererVersion == null ||
+                rendererDescriptorVersion == null ||
+                rendererVersion == rendererDescriptorVersion,
+        ) {
+                "rendererVersion and rendererDescriptorVersion must match when both are present."
+        }
+        require(glyphId == null || glyphId >= 0) { "Glyph strike glyphId must be non-negative when present." }
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is GlyphStrikeKey) return false
+
+        return typefaceId == other.typefaceId &&
+            sizePx.glyphBitsEqual(other.sizePx) &&
+            scaleX.glyphBitsEqual(other.scaleX) &&
+            scaleY.glyphBitsEqual(other.scaleY) &&
+            subpixelX.glyphBitsEqual(other.subpixelX) &&
+            subpixelY.glyphBitsEqual(other.subpixelY) &&
+            variationCoordinates == other.variationCoordinates &&
+            representationRoute == other.representationRoute &&
+            maskFormat == other.maskFormat &&
+            transformBucket == other.transformBucket &&
+            edging == other.edging &&
+            sdfSpreadPx.glyphBitsEqual(other.sdfSpreadPx) &&
+            sdfSourceResolutionPx.glyphBitsEqual(other.sdfSourceResolutionPx) &&
+            paletteIdentity == other.paletteIdentity &&
+            unicodeDataVersion == other.unicodeDataVersion &&
+            effectiveRendererDescriptorVersion() == other.effectiveRendererDescriptorVersion() &&
+            glyphId == other.glyphId &&
+            clusterFingerprint == other.clusterFingerprint
+    }
+
+    override fun hashCode(): Int {
+        var result = typefaceId.hashCode()
+        result = 31 * result + sizePx.toBits()
+        result = 31 * result + scaleX.toBits()
+        result = 31 * result + scaleY.toBits()
+        result = 31 * result + subpixelX.toBits()
+        result = 31 * result + subpixelY.toBits()
+        result = 31 * result + variationCoordinates.hashCode()
+        result = 31 * result + representationRoute.hashCode()
+        result = 31 * result + maskFormat.hashCode()
+        result = 31 * result + transformBucket.hashCode()
+        result = 31 * result + edging.hashCode()
+        result = 31 * result + (sdfSpreadPx?.toBits() ?: 0)
+        result = 31 * result + (sdfSourceResolutionPx?.toBits() ?: 0)
+        result = 31 * result + (paletteIdentity?.hashCode() ?: 0)
+        result = 31 * result + (unicodeDataVersion?.hashCode() ?: 0)
+        result = 31 * result + (effectiveRendererDescriptorVersion()?.hashCode() ?: 0)
+        result = 31 * result + (glyphId ?: 0)
+        result = 31 * result + (clusterFingerprint?.hashCode() ?: 0)
+        return result
+    }
+
     /**
      * Serializes every strike and glyph fact that can affect rendered output into canonical JSON.
      *
@@ -57,12 +124,18 @@ data class GlyphStrikeKey(
      */
     fun canonicalPreimage(glyphId: Int): String {
         requireFiniteStrikeFacts()
+        require(this.glyphId == null || this.glyphId == glyphId) {
+            "Glyph strike key glyphId ${this.glyphId} does not match requested glyphId $glyphId."
+        }
 
         return buildString {
             append("{\n")
             appendGlyphJsonField("schema", PreimageSchema, comma = true)
             appendGlyphJsonField("typefaceId", typefaceId.value.toString(), comma = true)
             appendGlyphJsonField("glyphId", glyphId, comma = true)
+            append("  \"clusterFingerprint\": ")
+            append(clusterFingerprint?.toCanonicalJson() ?: "null")
+            append(",\n")
             appendGlyphJsonField("sizePx", sizePx, comma = true)
             appendGlyphJsonField("scaleX", scaleX, comma = true)
             appendGlyphJsonField("scaleY", scaleY, comma = true)
@@ -89,8 +162,8 @@ data class GlyphStrikeKey(
             append("  \"unicodeDataVersion\": ")
             append(glyphJsonNullableString(unicodeDataVersion))
             append(",\n")
-            append("  \"rendererVersion\": ")
-            append(glyphJsonNullableString(rendererVersion))
+            append("  \"rendererDescriptorVersion\": ")
+            append(glyphJsonNullableString(effectiveRendererDescriptorVersion()))
             append("\n")
             append("}\n")
         }
@@ -104,6 +177,27 @@ data class GlyphStrikeKey(
      */
     fun preimageSha256(glyphId: Int): String =
         glyphSha256(canonicalPreimage(glyphId).toByteArray(Charsets.UTF_8))
+
+    /**
+     * Serializes this key using its embedded glyph ID.
+     */
+    fun canonicalPreimage(): String =
+        canonicalPreimage(requireGlyphId())
+
+    /**
+     * Computes a compact hash using this key's embedded glyph ID.
+     */
+    fun preimageSha256(): String =
+        preimageSha256(requireGlyphId())
+
+    /**
+     * Returns the canonical renderer descriptor value, accepting the legacy constructor alias.
+     */
+    internal fun effectiveRendererDescriptorVersion(): String? =
+        rendererDescriptorVersion ?: rendererVersion
+
+    private fun requireGlyphId(): Int =
+        glyphId ?: error("GlyphStrikeKey requires glyphId for this operation.")
 
     /**
      * Shared canonical labels for strike-key dumps.
@@ -133,6 +227,275 @@ data class GlyphStrikeKey(
          * Default coverage policy for current grayscale mask generation.
          */
         const val DefaultEdging: String = "antialias"
+    }
+}
+
+/**
+ * Stable, content-only facts for the source text cluster that produced one glyph.
+ *
+ * The fingerprint deliberately avoids storing source text in the key. The optional hash lets
+ * Unicode-sensitive routes distinguish cluster content without leaking mutable string identity or
+ * platform handles into cache evidence.
+ *
+ * @property sourceUtf16Start start offset in the source UTF-16 input.
+ * @property sourceUtf16EndExclusive exclusive end offset in the source UTF-16 input.
+ * @property codePointCount number of Unicode scalar values in the cluster.
+ * @property graphemeClusterCount number of grapheme clusters represented by the key.
+ * @property clusterSha256 optional lowercase SHA-256 over the normalized cluster payload.
+ */
+data class GlyphClusterFingerprint(
+    val sourceUtf16Start: Int,
+    val sourceUtf16EndExclusive: Int,
+    val codePointCount: Int,
+    val graphemeClusterCount: Int,
+    val clusterSha256: String? = null,
+) {
+    init {
+        require(sourceUtf16Start >= 0) { "Cluster sourceUtf16Start must be non-negative." }
+        require(sourceUtf16EndExclusive >= sourceUtf16Start) {
+            "Cluster sourceUtf16EndExclusive must be greater than or equal to sourceUtf16Start."
+        }
+        require(codePointCount >= 0) { "Cluster codePointCount must be non-negative." }
+        require(graphemeClusterCount >= 0) { "Cluster graphemeClusterCount must be non-negative." }
+        require(clusterSha256 == null || clusterSha256.matches(Regex("[0-9a-f]{64}"))) {
+            "Cluster SHA-256 must be lowercase hexadecimal when present."
+        }
+    }
+
+    /**
+     * Serializes cluster facts as an inline stable JSON object.
+     */
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(glyphJsonString("sourceUtf16Start")).append(": ").append(sourceUtf16Start).append(", ")
+        append(glyphJsonString("sourceUtf16EndExclusive")).append(": ").append(sourceUtf16EndExclusive).append(", ")
+        append(glyphJsonString("codePointCount")).append(": ").append(codePointCount).append(", ")
+        append(glyphJsonString("graphemeClusterCount")).append(": ").append(graphemeClusterCount).append(", ")
+        append(glyphJsonString("clusterSha256")).append(": ").append(glyphJsonNullableString(clusterSha256))
+        append("}")
+    }
+}
+
+/**
+ * One dumpable route-specific strike-key preimage and compact hash.
+ */
+data class GlyphStrikeKeyRoutePreimage(
+    val glyphId: Int,
+    val route: String,
+    val compactHash: String,
+    val preimage: String,
+) {
+    /**
+     * Serializes this route preimage as stable JSON.
+     */
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("glyphId", glyphId, comma = true)
+        appendGlyphJsonField("route", route, comma = true)
+        appendGlyphJsonField("compactHash", compactHash, comma = true)
+        append("  \"preimage\": ")
+        append(preimage.trimEnd().indentJsonContinuation("  "))
+        append("\n}")
+    }
+}
+
+/**
+ * Builds a dumpable strike-key route preimage for fixture evidence.
+ */
+fun GlyphStrikeKey.toRoutePreimage(glyphId: Int): GlyphStrikeKeyRoutePreimage =
+    GlyphStrikeKeyRoutePreimage(
+        glyphId = glyphId,
+        route = representationRoute,
+        compactHash = preimageSha256(glyphId),
+        preimage = canonicalPreimage(glyphId),
+    )
+
+/**
+ * Builds a dumpable strike-key route preimage from a key with an embedded glyph ID.
+ */
+fun GlyphStrikeKey.toRoutePreimage(): GlyphStrikeKeyRoutePreimage {
+    val resolvedGlyphId = glyphId ?: error("GlyphStrikeKey requires glyphId for route preimage evidence.")
+    return toRoutePreimage(resolvedGlyphId)
+}
+
+/**
+ * Stable negative record for requests that cannot produce a deterministic glyph strike key.
+ *
+ * @property glyphId glyph identifier when known.
+ * @property attemptedRoute route requested by the caller.
+ * @property diagnostic stable diagnostic code emitted for the refusal.
+ * @property reason machine-readable refusal reason.
+ * @property message human-readable refusal message.
+ * @property forbiddenFields live handles, upload tokens, atlas coordinates, or other fields rejected
+ * from the key preimage.
+ * @property fallbackRoute explicit fallback route, when the refusal policy names one.
+ * @property severity diagnostic severity.
+ */
+class GlyphStrikeKeyRefusal(
+    val glyphId: Int?,
+    val attemptedRoute: String,
+    val diagnostic: String,
+    val reason: String,
+    val message: String,
+    forbiddenFields: List<String> = emptyList(),
+    val fallbackRoute: String? = null,
+    val severity: String = "warning",
+) {
+    val forbiddenFields: List<String> = forbiddenFields.toList()
+
+    /**
+     * Serializes this refusal as stable JSON.
+     */
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendGlyphJsonNullableField("glyphId", glyphId, comma = true)
+        appendGlyphJsonField("attemptedRoute", attemptedRoute, comma = true)
+        appendGlyphJsonField("diagnostic", diagnostic, comma = true)
+        appendGlyphJsonField("reason", reason, comma = true)
+        appendGlyphJsonField("severity", severity, comma = true)
+        appendGlyphJsonField("message", message, comma = true)
+        append("  \"forbiddenFields\": ")
+        appendGlyphStringArrayInlineJson(forbiddenFields)
+        append(",\n")
+        append("  \"fallbackRoute\": ")
+        append(glyphJsonNullableString(fallbackRoute))
+        append("\n}")
+    }
+
+    /**
+     * SHA-256 digest of [toCanonicalJson] for compact negative evidence.
+     */
+    val dumpSha256: String
+        get() = glyphSha256(toCanonicalJson().toByteArray(Charsets.UTF_8))
+
+    companion object {
+        fun missingTypefaceId(glyphId: Int?, attemptedRoute: String): GlyphStrikeKeyRefusal =
+            GlyphStrikeKeyRefusal(
+                glyphId = glyphId,
+                attemptedRoute = attemptedRoute,
+                diagnostic = GlyphCacheKeyNondeterministicDiagnostic,
+                reason = "missing-typeface-id",
+                message = "Glyph strike key refused because TypefaceID is missing.",
+            )
+
+        fun nondeterministicHostSource(
+            glyphId: Int?,
+            attemptedRoute: String,
+            hostSource: String,
+        ): GlyphStrikeKeyRefusal =
+            GlyphStrikeKeyRefusal(
+                glyphId = glyphId,
+                attemptedRoute = attemptedRoute,
+                diagnostic = GlyphCacheKeyNondeterministicDiagnostic,
+                reason = "host-source-nondeterministic",
+                message = "Glyph strike key refused because host source '$hostSource' is not captured as deterministic font bytes.",
+            )
+
+        fun forbiddenLiveHandleFields(
+            glyphId: Int?,
+            attemptedRoute: String,
+            forbiddenFields: List<String>,
+        ): GlyphStrikeKeyRefusal =
+            GlyphStrikeKeyRefusal(
+                glyphId = glyphId,
+                attemptedRoute = attemptedRoute,
+                diagnostic = GlyphCacheKeyNondeterministicDiagnostic,
+                reason = "forbidden-live-handle-fields",
+                message = "Glyph strike key refused because live handles, atlas coordinates, GPU resources, or upload tokens are not key facts.",
+                forbiddenFields = forbiddenFields.sorted(),
+            )
+
+        fun lcdFutureResearch(
+            glyphId: Int?,
+            attemptedRoute: String,
+            fallbackRoute: String?,
+        ): GlyphStrikeKeyRefusal =
+            GlyphStrikeKeyRefusal(
+                glyphId = glyphId,
+                attemptedRoute = attemptedRoute,
+                diagnostic = GlyphLCDFutureResearchDiagnostic,
+                reason = "lcd-future-research",
+                message = "LCD subpixel text remains future research and is recorded only as a refused key request.",
+                fallbackRoute = fallbackRoute,
+            )
+
+        fun routeKeyGap(
+            glyphId: Int?,
+            attemptedRoute: String,
+            missingFields: List<String>,
+        ): GlyphStrikeKeyRefusal =
+            GlyphStrikeKeyRefusal(
+                glyphId = glyphId,
+                attemptedRoute = attemptedRoute,
+                diagnostic = GlyphCacheKeyNondeterministicDiagnostic,
+                reason = "route-key-gap",
+                message = "Glyph strike key refused because route-specific key fields are missing.",
+                forbiddenFields = missingFields.sorted(),
+            )
+    }
+}
+
+/**
+ * Aggregate deterministic evidence dump for `glyph-strike-key.json`.
+ */
+class GlyphStrikeKeyEvidenceDump(
+    val dumpId: String,
+    ownerTickets: List<String>,
+    fixtureIds: List<String>,
+    routePreimages: List<GlyphStrikeKeyRoutePreimage>,
+    refusals: List<GlyphStrikeKeyRefusal>,
+    requiredDiagnostics: List<String>,
+    nonClaims: List<String>,
+) {
+    val ownerTickets: List<String> = ownerTickets.toList()
+    val fixtureIds: List<String> = fixtureIds.toList()
+    val routePreimages: List<GlyphStrikeKeyRoutePreimage> = routePreimages.toList()
+    val refusals: List<GlyphStrikeKeyRefusal> = refusals.toList()
+    val requiredDiagnostics: List<String> = requiredDiagnostics.toList()
+    val nonClaims: List<String> = nonClaims.toList()
+
+    /**
+     * SHA-256 digest of [toCanonicalJson] content with `dumpSha256` omitted.
+     */
+    val dumpSha256: String
+        get() = glyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    /**
+     * Serializes the evidence dump as stable JSON.
+     */
+    fun toCanonicalJson(): String =
+        canonicalJson(includeDumpSha256 = true)
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("schemaVersion", 1, comma = true)
+        appendGlyphJsonField("dumpId", dumpId, comma = true)
+        append("  \"ownerTickets\": ")
+        appendGlyphStringArrayMultilineJson(ownerTickets, indent = "  ")
+        append(",\n")
+        append("  \"fixtureIds\": ")
+        appendGlyphStringArrayMultilineJson(fixtureIds, indent = "  ")
+        append(",\n")
+        appendGlyphJsonField("routePreimageCount", routePreimages.size, comma = true)
+        append("  \"routePreimages\": ")
+        appendGlyphRoutePreimagesJson(routePreimages)
+        append(",\n")
+        appendGlyphJsonField("refusalCount", refusals.size, comma = true)
+        append("  \"refusals\": ")
+        appendGlyphStrikeKeyRefusalsJson(refusals)
+        append(",\n")
+        append("  \"requiredDiagnostics\": ")
+        appendGlyphStringArrayMultilineJson(requiredDiagnostics, indent = "  ")
+        append(",\n")
+        append("  \"nonClaims\": ")
+        appendGlyphStringArrayMultilineJson(nonClaims, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
     }
 }
 
@@ -1465,6 +1828,8 @@ private const val A8GlyphMaskArtifactEvidenceSchema = "org.graphiks.kanvas.glyph
 private const val GlyphArtifactPlanSchema = "org.graphiks.kanvas.glyph.GlyphArtifactPlan.v1"
 private const val GlyphAtlasPackingResultSchema = "org.graphiks.kanvas.glyph.GlyphAtlasPackingResult.v1"
 private const val UnsupportedGlyphArtifactRoute = "text.glyph.unsupported"
+private const val GlyphCacheKeyNondeterministicDiagnostic = "text.glyph.cache-key-nondeterministic"
+private const val GlyphLCDFutureResearchDiagnostic = "text.glyph.LCD-future-research"
 private const val GlyphAtlasCapacityExceededDiagnosticRoute = "text.glyph.atlas-capacity-exceeded"
 private const val GlyphAtlasGenerationStaleDiagnosticRoute = "text.glyph.atlas-generation-stale"
 private const val GlyphSDFTransformUnsupportedDiagnosticRoute = "text.glyph.SDF-transform-unsupported"
@@ -1539,6 +1904,7 @@ private data class AtlasItem(
  *
  * @property typefaceId parsed or virtual typeface identity.
  * @property glyphId font-specific glyph identifier.
+ * @property clusterFingerprint source cluster facts that affect Unicode-sensitive glyph output.
  * @property sizePx strike pixel size.
  * @property scaleX horizontal scale applied before glyph generation.
  * @property scaleY vertical scale applied before glyph generation.
@@ -1553,11 +1919,13 @@ private data class AtlasItem(
  * @property sdfSourceResolutionPx source SDF resolution selected for this strike.
  * @property paletteIdentity palette identity for color glyph routes when applicable.
  * @property unicodeDataVersion Unicode data version when cluster or emoji facts affect output.
- * @property rendererVersion route-specific renderer version for SVG, COLR, bitmap, or masks.
+ * @property rendererDescriptorVersion route-specific renderer descriptor version for SVG, COLR,
+ * bitmap, or masks.
  */
 private data class GlyphCacheKey(
     val typefaceId: TypefaceID,
     val glyphId: Int,
+    val clusterFingerprint: GlyphClusterFingerprint?,
     val sizePx: Float,
     val scaleX: Float,
     val scaleY: Float,
@@ -1572,7 +1940,7 @@ private data class GlyphCacheKey(
     val sdfSourceResolutionPx: Float?,
     val paletteIdentity: String?,
     val unicodeDataVersion: String?,
-    val rendererVersion: String?,
+    val rendererDescriptorVersion: String?,
 ) {
     companion object {
         /**
@@ -1582,10 +1950,14 @@ private data class GlyphCacheKey(
          * @param glyphId glyph identifier associated with the cached representation.
          * @return normalized cache key suitable for deterministic map lookup.
          */
-        fun from(strikeKey: GlyphStrikeKey, glyphId: Int): GlyphCacheKey =
-            GlyphCacheKey(
+        fun from(strikeKey: GlyphStrikeKey, glyphId: Int): GlyphCacheKey {
+            require(strikeKey.glyphId == null || strikeKey.glyphId == glyphId) {
+                "Glyph strike key glyphId ${strikeKey.glyphId} does not match cached glyphId $glyphId."
+            }
+            return GlyphCacheKey(
                 typefaceId = strikeKey.typefaceId,
                 glyphId = glyphId,
+                clusterFingerprint = strikeKey.clusterFingerprint,
                 sizePx = strikeKey.sizePx,
                 scaleX = strikeKey.scaleX,
                 scaleY = strikeKey.scaleY,
@@ -1602,8 +1974,9 @@ private data class GlyphCacheKey(
                 sdfSourceResolutionPx = strikeKey.sdfSourceResolutionPx,
                 paletteIdentity = strikeKey.paletteIdentity,
                 unicodeDataVersion = strikeKey.unicodeDataVersion,
-                rendererVersion = strikeKey.rendererVersion,
+                rendererDescriptorVersion = strikeKey.effectiveRendererDescriptorVersion(),
             )
+        }
     }
 }
 
@@ -2492,6 +2865,56 @@ private fun StringBuilder.appendVariationCoordinatesJson(variationCoordinates: M
 }
 
 /**
+ * Serializes a string list as one inline JSON array.
+ */
+private fun StringBuilder.appendGlyphStringArrayInlineJson(values: List<String>) {
+    append("[")
+    append(values.joinToString(", ") { value -> glyphJsonString(value) })
+    append("]")
+}
+
+/**
+ * Serializes a string list as a stable multiline JSON array.
+ */
+private fun StringBuilder.appendGlyphStringArrayMultilineJson(values: List<String>, indent: String) {
+    if (values.isEmpty()) {
+        append("[]")
+        return
+    }
+    append("[\n")
+    append(values.joinToString(",\n") { value -> "$indent  ${glyphJsonString(value)}" })
+    append("\n")
+    append(indent)
+    append("]")
+}
+
+/**
+ * Serializes strike-key route preimage records.
+ */
+private fun StringBuilder.appendGlyphRoutePreimagesJson(records: List<GlyphStrikeKeyRoutePreimage>) {
+    if (records.isEmpty()) {
+        append("[]")
+        return
+    }
+    append("[\n")
+    append(records.joinToString(",\n") { record -> record.toCanonicalJson().prependIndent("    ") })
+    append("\n  ]")
+}
+
+/**
+ * Serializes strike-key refusal records.
+ */
+private fun StringBuilder.appendGlyphStrikeKeyRefusalsJson(refusals: List<GlyphStrikeKeyRefusal>) {
+    if (refusals.isEmpty()) {
+        append("[]")
+        return
+    }
+    append("[\n")
+    append(refusals.joinToString(",\n") { refusal -> refusal.toCanonicalJson().prependIndent("    ") })
+    append("\n  ]")
+}
+
+/**
  * Appends a stable string JSON field.
  */
 private fun StringBuilder.appendGlyphJsonField(name: String, value: String, comma: Boolean) {
@@ -2586,6 +3009,16 @@ private fun glyphFloatToken(value: Float): String {
  */
 private fun glyphNullableFloatToken(value: Float?): String =
     value?.let { glyphFloatToken(it) } ?: "null"
+
+private fun Float.glyphBitsEqual(other: Float): Boolean =
+    toBits() == other.toBits()
+
+private fun Float?.glyphBitsEqual(other: Float?): Boolean =
+    when {
+        this == null && other == null -> true
+        this == null || other == null -> false
+        else -> this.glyphBitsEqual(other)
+    }
 
 /**
  * Escapes a nullable string for compact JSON object fields.
