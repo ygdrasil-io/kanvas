@@ -20,6 +20,7 @@ import io.ygdrasil.webgpu.FragmentState
 import io.ygdrasil.webgpu.GLFWContext
 import io.ygdrasil.webgpu.GPUBlendFactor
 import io.ygdrasil.webgpu.GPUBlendOperation
+import io.ygdrasil.webgpu.GPUAdapterInfo
 import io.ygdrasil.webgpu.GPUBuffer
 import io.ygdrasil.webgpu.GPUBufferBindingType
 import io.ygdrasil.webgpu.GPUBufferUsage
@@ -329,6 +330,9 @@ private class WgpuWindowSurface(
     private var height = binding.height
     private var targetGeneration = 0L
 
+    override val adapterInfo: GPUBackendAdapterSummary
+        get() = runtime.adapterInfo
+
     override val target: GPUSurfaceTarget
         get() = GPUSurfaceTarget(
             targetId = targetId,
@@ -356,14 +360,14 @@ private class WgpuWindowSurface(
     override fun encodeAndPresent(
         clearColor: GPUClearColor,
         block: GPUBackendRenderRecorder.() -> Unit,
-    ) {
+    ): Boolean {
         val surfaceTexture = runtime.surface.getCurrentTexture()
         when (surfaceTexture.status) {
             SurfaceTextureStatus.lost,
             SurfaceTextureStatus.outdated -> {
                 surfaceTexture.texture.close()
                 runtime.configure(width = width, height = height)
-                return
+                return false
             }
             SurfaceTextureStatus.outOfMemory,
             SurfaceTextureStatus.deviceLost -> {
@@ -406,6 +410,7 @@ private class WgpuWindowSurface(
             runtime.device.queue.submit(listOf(commandBuffer))
             runtime.surface.present()
         }
+        return true
     }
 
     override fun close() {
@@ -516,6 +521,7 @@ private data class NativeWindowRuntime(
     val device: io.ygdrasil.webgpu.GPUDevice,
     val format: GPUTextureFormat,
     val alphaMode: CompositeAlphaMode,
+    val adapterInfo: GPUBackendAdapterSummary,
 ) : AutoCloseable {
     fun configure(width: Int, height: Int) {
         if (width <= 0 || height <= 0) return
@@ -556,6 +562,7 @@ private fun createNativeWindowRuntime(binding: GPUNativeSurfaceBinding): NativeW
                 ?: error("WGPU adapter request failed for native surface")
             try {
                 surface.computeSurfaceCapabilities(adapter)
+                val adapterInfo = GPUBackendAdapterSummary(adapterSummary(adapter.info))
                 val device = runBlocking { adapter.requestDevice() }
                     .getOrElse { error -> error(error.message ?: error.toString()) }
                 try {
@@ -570,6 +577,7 @@ private fun createNativeWindowRuntime(binding: GPUNativeSurfaceBinding): NativeW
                         device = device,
                         format = format,
                         alphaMode = alphaMode,
+                        adapterInfo = adapterInfo,
                     ).also { runtime ->
                         runtime.configure(width = binding.width, height = binding.height)
                     }
@@ -590,8 +598,9 @@ private fun createNativeWindowRuntime(binding: GPUNativeSurfaceBinding): NativeW
     }
 }
 
-private fun adapterSummary(glfw: GLFWContext): String {
-    val info = glfw.wgpuContext.adapter.info
+private fun adapterSummary(glfw: GLFWContext): String = adapterSummary(glfw.wgpuContext.adapter.info)
+
+private fun adapterSummary(info: GPUAdapterInfo): String {
     val parts = buildList {
         if (info.vendor.isNotBlank()) add(info.vendor)
         if (info.device.isNotBlank()) add(info.device)

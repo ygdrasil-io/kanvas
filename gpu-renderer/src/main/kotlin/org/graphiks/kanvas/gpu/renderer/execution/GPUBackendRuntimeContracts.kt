@@ -70,6 +70,8 @@ interface GPUBackendOffscreenTarget : AutoCloseable {
 }
 
 interface GPUBackendWindowSurface : AutoCloseable {
+    val adapterInfo: GPUBackendAdapterSummary?
+
     val target: GPUSurfaceTarget
 
     fun resize(width: Int, height: Int)
@@ -77,7 +79,7 @@ interface GPUBackendWindowSurface : AutoCloseable {
     fun encodeAndPresent(
         clearColor: GPUClearColor,
         block: GPUBackendRenderRecorder.() -> Unit,
-    )
+    ): Boolean
 }
 
 interface GPUBackendRenderRecorder {

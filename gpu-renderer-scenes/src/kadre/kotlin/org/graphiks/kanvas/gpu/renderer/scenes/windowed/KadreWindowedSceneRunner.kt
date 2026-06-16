@@ -115,14 +115,15 @@ private class RectOnlyKadreApp(
                 }
             runtimeSession = session
             try {
-                adapterInfo = session.adapterInfo?.summary
-                surface = session.createWindowSurface(
+                val windowSurface = session.createWindowSurface(
                     appKitMetalLayerBinding(
                         width = win.innerSize.width,
                         height = win.innerSize.height,
                         nsLayer = layerAddress,
                     ),
                 )
+                surface = windowSurface
+                adapterInfo = windowSurface.adapterInfo?.summary
                 surfaceFormat = currentSurfaceFormat()
             } catch (failure: Throwable) {
                 val error = failure.message ?: failure.toString()
@@ -182,7 +183,7 @@ private class RectOnlyKadreApp(
             scissorHeight = targetDescriptor.height,
         )
 
-        runCatching {
+        val presented = runCatching {
             windowSurface.encodeAndPresent(
                 clearColor = WindowedRectOnlySceneShader.clearColor(scene).toGpuClearColor(),
             ) {
@@ -192,7 +193,7 @@ private class RectOnlyKadreApp(
                     draws = listOf(draw),
                 )
             }
-        }.onFailure { failure ->
+        }.getOrElse { failure ->
             val error = failure.message ?: failure.toString()
             val reason = if (error.startsWith("Surface texture acquisition failed with terminal status")) {
                 "wgpu-surface-terminal-status"
@@ -204,6 +205,12 @@ private class RectOnlyKadreApp(
         }
 
         surfaceFormat = currentSurfaceFormat()
+        adapterInfo = windowSurface.adapterInfo?.summary ?: adapterInfo
+        if (!presented) {
+            requestNextFrame(eventLoop)
+            return
+        }
+
         presentedFrames++
         if (presentedFrames >= requestedFrames) {
             completePresented(eventLoop)
