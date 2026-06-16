@@ -26,6 +26,14 @@ Valide: Valide les lanes legacy, route candidate, rollback et refus de variante.
 Ne revendique pas: Ne revendique pas une activation par defaut ni une migration globale.
 Preuve: Preuve WebGPU offscreen et Kadre windowed.
 
+### Product Route Smoke Lanes (`product-route-smoke-lanes`)
+M0,M1 - Rect, LegacyComparison - `ShouldRender`
+
+Intention: Verifier une lecture smoke des routes produit, legacy et rollback sans activation finale.
+Valide: Valide des lanes rectangulaires lisibles pour transition M0/M1 et refus visibles.
+Ne revendique pas: Ne revendique pas activation produit par defaut ni decision release.
+Preuve: Preuve WebGPU offscreen et Kadre windowed.
+
 ### Rounded Panel Gradient (`rounded-panel-gradient`)
 M2 - RRect, Gradient, Clip - `ShouldRender`
 
@@ -121,6 +129,14 @@ Intention: Exposer les limites sampler autour des fixtures bitmap.
 Valide: Valide nearest, linear et lanes de refus tile, mipmap, cubic et anisotropic.
 Ne revendique pas: Ne revendique pas sampler avance, perspective ou decode color-managed.
 Preuve: Preuve WebGPU offscreen avec refus visibles.
+
+### Bitmap Sampler Matrix (`bitmap-sampler-matrix`)
+M4 - Image, Clip, RRect - `ShouldRender`
+
+Intention: Comparer une matrice compacte de fixtures bitmap avec deux politiques de sampling.
+Valide: Valide un tray rrect clippe et plusieurs BitmapRect nearest ou linear bien bornes.
+Ne revendique pas: Ne revendique pas mipmap, tile mode, anisotropic ni decode color-managed.
+Preuve: Preuve WebGPU offscreen et Kadre windowed.
 
 ### SaveLayer Isolation Gate Board (`savelayer-isolation-gate-board`)
 M5 - Rect, RRect, Clip, Layer - `ShouldRender`
@@ -242,6 +258,14 @@ Valide: Valide refus source arbitraire, child slot et placement non supporte.
 Ne revendique pas: Ne revendique pas children RuntimeEffect ni route shader dynamique.
 Preuve: Preuve WebGPU offscreen avec refus produit attendus.
 
+### Runtime Effect Uniform Ladder (`runtime-effect-uniform-ladder`)
+M7 - RuntimeEffect, RRect, Clip - `ShouldRender`
+
+Intention: Verifier plusieurs tuiles RuntimeEffect SimpleRT avec une echelle de uniforms visible.
+Valide: Valide le descriptor SimpleRT, le layout gColor et la stabilite des tuiles runtime fixture-backed.
+Ne revendique pas: Ne revendique pas SkSL dynamique, SpiralRT ou runtime effects enfants.
+Preuve: Preuve WebGPU offscreen et Kadre windowed.
+
 ### Blend Mode Strip (`blend-mode-strip`)
 M7 - Rect - `ShouldRender`
 
@@ -281,6 +305,14 @@ Intention: Lister les blockers de route vertices.
 Valide: Valide lanes descriptor, primitive blend, buffer upload, ABI et batching.
 Ne revendique pas: Ne revendique pas vertices generaux ni pipeline mesh complet.
 Preuve: Preuve WebGPU offscreen avec refus vertices.
+
+### Mesh Ribbon Depth Stack (`mesh-ribbon-depth-stack`)
+M8 - Vertices, RRect, Clip - `ShouldRender`
+
+Intention: Verifier plusieurs rubans mesh bornes avec overlaps lisibles dans un cadre simple.
+Valide: Valide un stack de MeshRibbon fixture-backed avec ordre visuel stable et clipping borne.
+Ne revendique pas: Ne revendique pas DrawVertices general ni upload libre de vertex/index buffers.
+Preuve: Preuve WebGPU offscreen et Kadre windowed.
 
 ### Cache Pressure Deck (`cache-pressure-deck`)
 M9 - Rect - `ShouldRender`
@@ -346,16 +378,15 @@ Valide: Valide lanes replacement, activation decision, rollback et evidence PM.
 Ne revendique pas: Ne revendique pas retirement legacy ni route produit activee.
 Preuve: Preuve WebGPU offscreen avec blockers de retirement.
 
+### Legacy Parity Snapshot Board (`legacy-parity-snapshot-board`)
+M10 - LegacyComparison, Rect, RRect - `ShouldRender`
+
+Intention: Verifier une vue de parite legacy lisible avant toute decision de retirement.
+Valide: Valide un board de comparaison rrect/rect borne avec lanes de parite, evidence et blockers.
+Ne revendique pas: Ne revendique pas remplacement accepte ni retrait effectif de la route legacy.
+Preuve: Preuve WebGPU offscreen et Kadre windowed.
+
 ## Candidates amont
-
-### Product Route Smoke Lanes (`product-route-smoke-lanes`)
-M0,M1 - Rect, LegacyComparison
-
-Statut: `candidate`
-Intention: Preparer une scene lisible pour verifier activation, rollback et route produit.
-Validation visee: Comparer lanes legacy, route candidate et refus sans activer le produit.
-Ne revendique pas: Ne revendique pas activation par defaut ni decision release.
-Raison: Couvre le pont M0/M1 entre inventaire de routes et premier rollout controle.
 
 ### Gradient Tile Mode Boundary (`gradient-tile-mode-boundary`)
 M2 - RRect, Gradient, Clip
@@ -375,15 +406,6 @@ Validation visee: Montrer les routes path/stroke attendues et les refus coverage
 Ne revendique pas: Ne revendique pas couverture AA, joins/caps reels ou stencil-cover natif.
 Raison: Couvre un trou M3 entre proxy rectangulaire et vraie couverture path.
 
-### Bitmap Sampler Matrix (`bitmap-sampler-matrix`)
-M4 - Image, Clip, RRect
-
-Statut: `fixture-ready`
-Intention: Comparer plusieurs fixtures bitmap avec nearest et linear dans une matrice compacte.
-Validation visee: Valider l'extension de scenes bitmap fixture-backed sans codec reel.
-Ne revendique pas: Ne revendique pas mipmap, tile mode, anisotropic ou decode color-managed.
-Raison: Renforce M4 avec une candidate implementable par le runner actuel.
-
 ### Layer Filter Chain Board (`layer-filter-chain-board`)
 M5 - Layer, Filter
 
@@ -402,24 +424,6 @@ Validation visee: Valider glyph masks, atlas entries et binding ressource quand 
 Ne revendique pas: Ne revendique pas shaping complexe, font fallback ou emoji/color fonts.
 Raison: Couvre M6 sans ajouter de substitut court-terme pour font/atlas.
 
-### Runtime Effect Uniform Ladder (`runtime-effect-uniform-ladder`)
-M7 - RuntimeEffect, RRect, Clip
-
-Statut: `fixture-ready`
-Intention: Montrer plusieurs tuiles SimpleRT avec uniforms gColor differents.
-Validation visee: Valider descriptor SimpleRT, layout gColor et pipeline key stable.
-Ne revendique pas: Ne revendique pas SkSL dynamique, SpiralRT ou effets enfants.
-Raison: Exerce M7 avec une scene implementable par le runner actuel.
-
-### Mesh Ribbon Depth Stack (`mesh-ribbon-depth-stack`)
-M8 - Vertices, RRect, Clip
-
-Statut: `fixture-ready`
-Intention: Empiler plusieurs rubans mesh bornes pour inspecter ordre et overlap.
-Validation visee: Valider bounded-ribbon-strip et diagnostics de non-support vertices general.
-Ne revendique pas: Ne revendique pas DrawVertices general ni vertex/index buffer upload.
-Raison: Etend M8 avec une scene fixture-backed proche du runner actuel.
-
 ### Cache Frame Budget Strip (`cache-frame-budget-strip`)
 M9 - Rect, Cache
 
@@ -428,12 +432,3 @@ Intention: Rendre visible un budget frame/cache depasse comme refus attendu.
 Validation visee: Verifier qu'un budget depasse est expose comme refus produit explicite.
 Ne revendique pas: Ne revendique pas mesure runtime WebGPU observee ni gate release-blocking.
 Raison: Couvre M9 en alignant les refus attendus avec la politique produit.
-
-### Legacy Parity Snapshot Board (`legacy-parity-snapshot-board`)
-M10 - LegacyComparison, Rect, RRect
-
-Statut: `candidate`
-Intention: Preparer une comparaison lisible entre route legacy et route GPU candidate.
-Validation visee: Afficher parite attendue, evidence manquante et refus de retirement.
-Ne revendique pas: Ne revendique pas remplacement accepte ni retrait de la route legacy.
-Raison: Couvre M10 avec une candidate orientee revue de migration.

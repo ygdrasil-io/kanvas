@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M9-002"
 title: "Promote `GlyphArtifactPlan` route taxonomy"
-status: "proposed"
+status: "done"
 milestone: "M9"
 priority: "P0"
 owner_area: "glyph"
@@ -69,11 +69,11 @@ data class GlyphArtifactDecisionTrace(
 
 ## Acceptance Criteria
 
-- [ ] Every glyph in a `ShapedGlyphRun` receives exactly one accepted plan or one explicit `UnsupportedGlyphPlan`.
-- [ ] The dump records rejected alternatives and fallback policy; it never hides a color/SVG/SDF failure behind an unmarked A8 plan.
-- [ ] SDF and A8 routes carry `CPUPreparedGPU` artifact intent without allocating GPU resources.
-- [ ] LCD requests produce `text.glyph.LCD-future-research` and remain outside target support.
-- [ ] Color, bitmap, and SVG route placeholders are compatible with M10 plan IDs and M11 artifact registry names.
+- [x] Every glyph in a `ShapedGlyphRun` receives exactly one accepted plan or one explicit `UnsupportedGlyphPlan`.
+- [x] The dump records rejected alternatives and fallback policy; it never hides a color/SVG/SDF failure behind an unmarked A8 plan.
+- [x] SDF and A8 routes carry `CPUPreparedGPU` artifact intent without allocating GPU resources.
+- [x] LCD requests produce `text.glyph.LCD-future-research` and remain outside target support.
+- [x] Color, bitmap, and SVG route placeholders are compatible with M10 plan IDs and M11 artifact registry names.
 
 ## Required Evidence
 
@@ -102,8 +102,8 @@ rtk ./gradlew --no-daemon :font:glyph:test --tests '*GlyphArtifactPlan*'
 
 ## Status Notes
 
-- `proposed`: Provides the route vocabulary consumed by A8/SDF, M10 color plans, and M11 GPU handoff.
-- Move to `ready` only after route names and fallback trace schema are reviewed.
+- `done`: `GlyphArtifactPlan` now records policy inputs, explicit placeholder refs, `CPUPreparedGPU` intent for A8/SDF, stable fallback/refusal reason codes, and a checked-in `glyph-artifact-plan.json` fixture.
+- Remaining non-claims stay explicit: no COLR/bitmap/SVG payload parsing, no production A8/SDF quality claim, no GPU route handoff, and no LCD support claim.
 
 ## Linear Labels
 
