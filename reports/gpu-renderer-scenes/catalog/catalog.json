@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 20,
+  "sceneCount": 21,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -49,6 +49,16 @@
       "tags": ["RRect","Rect"],
       "kgpuMilestones": ["M3"],
       "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender"
+    },
+    {
+      "sceneId": "path-coverage-review-board",
+      "title": "Path Coverage Review Board",
+      "description": "Prepared path, stroke, clip, and atlas refusal review lanes without native stencil-cover promotion.",
+      "tags": ["Rect","RRect","Clip","Path","Stroke"],
+      "kgpuMilestones": ["M3"],
+      "ticketIds": ["KGPU-M3-001","KGPU-M3-003","KGPU-M3-004","KGPU-M3-005"],
       "rStages": [],
       "expectation": "ShouldRender"
     },

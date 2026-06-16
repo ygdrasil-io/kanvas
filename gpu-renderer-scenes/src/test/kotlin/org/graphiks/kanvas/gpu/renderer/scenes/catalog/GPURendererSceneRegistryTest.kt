@@ -114,6 +114,32 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `path coverage review board is backed by prepared M3 contracts and atlas refusal only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("path-coverage-review-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Path, SceneTag.Stroke), scene.tags)
+        assertEquals(
+            listOf("KGPU-M3-001", "KGPU-M3-003", "KGPU-M3-004", "KGPU-M3-005"),
+            scene.roadmapLinks.mapNotNull { it.ticketId },
+        )
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.FillRRect>(scene.commands[1])
+        assertIs<SceneCommand.Clip>(scene.commands[2])
+        assertEquals(
+            listOf(
+                "path-fill-prepared-contract",
+                "simple-stroke-prepared-contract",
+                "bounded-clip-prepared-contract",
+                "atlas-policy-refusal-gate",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals(listOf(1, 2, 3, 4), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M3-002" })
+    }
+
+    @Test
     fun `translucent card overlap is backed by bounded SrcOver alpha rectangles`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("translucent-card-overlap")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -314,6 +340,25 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.RRect, SceneTag.Rect),
                 commandFamilies = listOf("fill-rrect", "fill-rect"),
                 roadmapLinks = listOf(RoadmapExpectation("M3")),
+            ),
+            SceneExpectationRow(
+                sceneId = "path-coverage-review-board",
+                tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Path, SceneTag.Stroke),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rrect",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M3", ticketId = "KGPU-M3-001"),
+                    RoadmapExpectation("M3", ticketId = "KGPU-M3-003"),
+                    RoadmapExpectation("M3", ticketId = "KGPU-M3-004"),
+                    RoadmapExpectation("M3", ticketId = "KGPU-M3-005"),
+                ),
             ),
             SceneExpectationRow(
                 sceneId = "clipped-avatar-grid",

@@ -93,6 +93,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 fillRRectCount = 1,
             ),
             RenderedShapeExpectation(
+                sceneId = "path-coverage-review-board",
+                fillRectCount = 4,
+                fillRRectCount = 1,
+                clipCount = 1,
+            ),
+            RenderedShapeExpectation(
                 sceneId = "texture-swatch-board",
                 fillRectCount = 0,
                 bitmapRectCount = 2,

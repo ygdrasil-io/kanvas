@@ -64,6 +64,7 @@ class RunGpuRendererSceneKadreMainTest {
             "legacy-route-comparison" to 21,
             "legacy-inventory-hygiene-board" to 33,
             "path-badge-and-stroke" to 22,
+            "path-coverage-review-board" to 34,
             "rounded-panel-gradient" to 23,
             "release-gate-progress-board" to 24,
             "texture-swatch-board" to 25,

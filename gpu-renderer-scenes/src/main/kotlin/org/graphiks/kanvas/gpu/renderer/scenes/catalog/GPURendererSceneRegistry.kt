@@ -170,6 +170,55 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "path-coverage-review-board",
+            title = "Path Coverage Review Board",
+            description = "Prepared path, stroke, clip, and atlas refusal review lanes without native stencil-cover promotion.",
+            tags = setOf(SceneTag.Rect, SceneTag.RRect, SceneTag.Clip, SceneTag.Path, SceneTag.Stroke),
+            links = listOf(
+                SceneRoadmapLink.ticket("KGPU-M3-001"),
+                SceneRoadmapLink.ticket("KGPU-M3-003"),
+                SceneRoadmapLink.ticket("KGPU-M3-004"),
+                SceneRoadmapLink.ticket("KGPU-M3-005"),
+            ),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.036f, 0.040f, 0.048f, 1f)),
+                SceneCommand.FillRRect(
+                    label = "path-coverage-panel",
+                    rect = SceneRect(28f, 30f, 292f, 170f),
+                    radius = 20f,
+                    color = SceneColor(0.10f, 0.12f, 0.15f, 1f),
+                ),
+                SceneCommand.Clip(
+                    label = "path-coverage-window",
+                    rect = SceneRect(44f, 48f, 276f, 152f),
+                ),
+                SceneCommand.FillRect(
+                    label = "path-fill-prepared-contract",
+                    rect = SceneRect(52f, 56f, 100f, 152f),
+                    color = SceneColor.green(0.90f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "simple-stroke-prepared-contract",
+                    rect = SceneRect(112f, 74f, 160f, 152f),
+                    color = SceneColor.blue(0.86f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "bounded-clip-prepared-contract",
+                    rect = SceneRect(172f, 92f, 220f, 152f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "atlas-policy-refusal-gate",
+                    rect = SceneRect(232f, 110f, 268f, 152f),
+                    color = SceneColor(0.92f, 0.18f, 0.16f, 0.90f),
+                    paintOrder = 4,
+                ),
+            ),
+        ),
+        scene(
             id = "clipped-avatar-grid",
             title = "Clipped Avatar Grid",
             description = "Repeated content through bounded clip variants.",
