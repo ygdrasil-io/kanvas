@@ -822,6 +822,7 @@ data class SFNTDirectoryReportEntry(
             fixtureId: String,
             fixtureKind: String,
             result: SFNTParseResult,
+            sourceSha256: String? = null,
         ): SFNTDirectoryReportEntry =
             SFNTDirectoryReportEntry(
                 entryId = entryId,
@@ -833,7 +834,7 @@ data class SFNTDirectoryReportEntry(
                 parserGeneration = result.parserGeneration,
                 sourceByteOffset = result.sourceByteOffset,
                 sourceByteLength = result.sourceByteLength,
-                sourceSha256 = null,
+                sourceSha256 = sourceSha256,
                 containerKind = result.containerKind,
                 requestedCollectionIndex = result.requestedCollectionIndex,
                 selectedFaceIndex = result.selectedFaceIndex,
@@ -889,14 +890,14 @@ data class SFNTDirectoryReportEntry(
 data class SFNTDirectoryReport(
     val entries: List<SFNTDirectoryReportEntry>,
     val schemaVersion: Int = 1,
-    val ticketIds: List<String> = listOf("KFONT-M2-001", "KFONT-M2-002"),
+    val ticketIds: List<String> = listOf("KFONT-M2-001", "KFONT-M2-002", "KFONT-M2-005"),
     val dashboardClassification: String = "tracked-gap",
     val claimPromotionAllowed: Boolean = false,
 ) {
     init {
         require(schemaVersion == 1) { "SFNT directory report schemaVersion must be 1." }
-        require(ticketIds == listOf("KFONT-M2-001", "KFONT-M2-002")) {
-            "SFNT directory report ticketIds must be KFONT-M2-001 and KFONT-M2-002."
+        require(ticketIds == listOf("KFONT-M2-001", "KFONT-M2-002", "KFONT-M2-005")) {
+            "SFNT directory report ticketIds must be KFONT-M2-001, KFONT-M2-002, and KFONT-M2-005."
         }
         require(dashboardClassification == "tracked-gap") {
             "SFNT directory report must remain tracked-gap."
@@ -926,6 +927,178 @@ object SFNTDirectoryReportWriter {
             append("\n  ")
         }
         append("]\n")
+        append("}\n")
+    }
+}
+
+/**
+ * Stable diagnostic snapshot for one malformed SFNT fixture.
+ */
+data class MalformedSFNTFixtureDiagnosticSnapshot(
+    val source: String,
+    val code: String,
+    val table: String?,
+    val message: String,
+) {
+    init {
+        require(source in MALFORMED_SFNT_DIAGNOSTIC_SOURCES) {
+            "Malformed SFNT fixture diagnostic source must be canonical."
+        }
+        require(code.startsWith("font.") && code.isStableSFNTDiagnosticToken()) {
+            "Malformed SFNT fixture diagnostic code must be a stable font.* token."
+        }
+        require(table == null || table.isStableSFNTTableTag()) {
+            "Malformed SFNT fixture diagnostic table must be a four-character printable ASCII SFNT tag."
+        }
+        require(message.isNotBlank()) { "Malformed SFNT fixture diagnostic message must be non-blank." }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("source", source, indent = "  ", comma = true)
+        appendSFNTJsonField("code", code, indent = "  ", comma = true)
+        appendSFNTJsonNullableField("table", table, indent = "  ", comma = true)
+        appendSFNTJsonField("message", message, indent = "  ", comma = false)
+        append("}")
+    }
+}
+
+/**
+ * One generated malformed SFNT fixture row in the KFONT-M2-005 suite.
+ */
+data class MalformedSFNTFixtureSuiteEntry(
+    val caseId: String,
+    val fixtureId: String,
+    val fixtureKind: String,
+    val generatorId: String,
+    val generatorParameters: List<String>,
+    val contentSha256: String,
+    val byteLength: Int,
+    val expectedDiagnostic: String,
+    val expectedOutcome: String,
+    val linkedEvidencePath: String,
+    val linkedEvidenceEntryId: String,
+    val diagnostics: List<MalformedSFNTFixtureDiagnosticSnapshot>,
+    val claimPromotionAllowed: Boolean = false,
+) {
+    init {
+        require(caseId in MALFORMED_SFNT_CASE_IDS) { "Malformed SFNT fixture caseId must be canonical." }
+        require(fixtureId.isStableSFNTDiagnosticToken()) { "Malformed SFNT fixture fixtureId must be stable." }
+        require(fixtureKind == "GeneratedFixtureFontSource") {
+            "Malformed SFNT fixture rows must use generated fixture provenance."
+        }
+        require(generatorId.isStableSFNTDiagnosticToken()) {
+            "Malformed SFNT fixture generatorId must be stable."
+        }
+        require(generatorParameters.isNotEmpty() && generatorParameters == generatorParameters.sorted()) {
+            "Malformed SFNT fixture generatorParameters must be non-empty and sorted."
+        }
+        require(generatorParameters.all { it.isStableSFNTManifestLine() }) {
+            "Malformed SFNT fixture generatorParameters must be one-line stable strings."
+        }
+        require(contentSha256.matches(SFNT_SHA256_PATTERN)) {
+            "Malformed SFNT fixture contentSha256 must be lowercase SHA-256 text."
+        }
+        require(byteLength > 0) { "Malformed SFNT fixture byteLength must be positive." }
+        require(expectedDiagnostic.startsWith("font.") && expectedDiagnostic.isStableSFNTDiagnosticToken()) {
+            "Malformed SFNT fixture expectedDiagnostic must be stable."
+        }
+        require(expectedOutcome in MALFORMED_SFNT_EXPECTED_OUTCOMES) {
+            "Malformed SFNT fixture expectedOutcome must be canonical."
+        }
+        require(linkedEvidencePath in MALFORMED_SFNT_LINKED_EVIDENCE_PATHS) {
+            "Malformed SFNT fixture linkedEvidencePath must be a canonical M2 evidence dump."
+        }
+        require(linkedEvidenceEntryId.isStableSFNTDiagnosticToken()) {
+            "Malformed SFNT fixture linkedEvidenceEntryId must be stable."
+        }
+        require(diagnostics.map { it.code }.contains(expectedDiagnostic)) {
+            "Malformed SFNT fixture diagnostics must include the expected primary diagnostic."
+        }
+        require(diagnostics == diagnostics.sortedWith(MALFORMED_SFNT_DIAGNOSTIC_ORDER)) {
+            "Malformed SFNT fixture diagnostics must be sorted."
+        }
+        require(!claimPromotionAllowed) {
+            "Malformed SFNT fixture rows cannot promote support claims."
+        }
+    }
+
+    internal fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("caseId", caseId, indent = "  ", comma = true)
+        appendSFNTJsonField("fixtureId", fixtureId, indent = "  ", comma = true)
+        appendSFNTJsonField("fixtureKind", fixtureKind, indent = "  ", comma = true)
+        appendSFNTJsonField("generatorId", generatorId, indent = "  ", comma = true)
+        appendStringArrayField("generatorParameters", generatorParameters, indent = "  ", comma = true)
+        appendSFNTJsonField("contentSha256", contentSha256, indent = "  ", comma = true)
+        appendSFNTJsonField("byteLength", byteLength, indent = "  ", comma = true)
+        appendSFNTJsonField("expectedDiagnostic", expectedDiagnostic, indent = "  ", comma = true)
+        appendSFNTJsonField("expectedOutcome", expectedOutcome, indent = "  ", comma = true)
+        appendSFNTJsonField("linkedEvidencePath", linkedEvidencePath, indent = "  ", comma = true)
+        appendSFNTJsonField("linkedEvidenceEntryId", linkedEvidenceEntryId, indent = "  ", comma = true)
+        appendSFNTJsonField("claimPromotionAllowed", claimPromotionAllowed, indent = "  ", comma = true)
+        append("  \"diagnostics\": [")
+        if (diagnostics.isNotEmpty()) {
+            append("\n")
+            append(diagnostics.joinToString(",\n") { diagnostic -> diagnostic.toCanonicalJson().prependIndent("    ") })
+            append("\n  ")
+        }
+        append("]\n")
+        append("}")
+    }
+}
+
+/**
+ * Canonical KFONT-M2-005 malformed SFNT fixture-suite evidence.
+ */
+class MalformedSFNTFixtureSuiteReport(
+    entries: List<MalformedSFNTFixtureSuiteEntry>,
+    val schemaVersion: Int = 1,
+    val ticketIds: List<String> = listOf("KFONT-M2-005"),
+    val dashboardClassification: String = "fixture-gated",
+    val claimPromotionAllowed: Boolean = false,
+    val nonClaims: List<String> = MALFORMED_SFNT_NON_CLAIMS,
+) {
+    val entries: List<MalformedSFNTFixtureSuiteEntry> = entries.sortedBy { MALFORMED_SFNT_CASE_IDS.indexOf(it.caseId) }
+
+    init {
+        require(schemaVersion == 1) { "Malformed SFNT fixture suite schemaVersion must be 1." }
+        require(ticketIds == listOf("KFONT-M2-005")) {
+            "Malformed SFNT fixture suite ticketIds must contain only KFONT-M2-005."
+        }
+        require(this.entries.map { it.caseId } == MALFORMED_SFNT_CASE_IDS) {
+            "Malformed SFNT fixture suite must cover each required KFONT-M2-005 case once."
+        }
+        require(this.entries.map { it.fixtureId }.toSet().size == this.entries.size) {
+            "Malformed SFNT fixture suite fixture IDs must be unique."
+        }
+        require(dashboardClassification == "fixture-gated") {
+            "Malformed SFNT fixture suite must remain fixture-gated."
+        }
+        require(!claimPromotionAllowed) {
+            "Malformed SFNT fixture suite cannot promote support claims."
+        }
+        require(nonClaims == MALFORMED_SFNT_NON_CLAIMS) {
+            "Malformed SFNT fixture suite nonClaims must stay canonical."
+        }
+    }
+}
+
+/**
+ * Canonical writer for `reports/pure-kotlin-text/malformed-sfnt-fixtures.json`.
+ */
+object MalformedSFNTFixtureSuiteReportWriter {
+    fun write(report: MalformedSFNTFixtureSuiteReport): String = buildString {
+        append("{\n")
+        appendSFNTJsonField("schema", "org.graphiks.kanvas.font.sfnt.MalformedSFNTFixtureSuiteReport.v1", indent = "  ", comma = true)
+        appendSFNTJsonField("schemaVersion", report.schemaVersion, indent = "  ", comma = true)
+        appendStringArrayField("ticketIds", report.ticketIds, indent = "  ", comma = true)
+        appendSFNTJsonField("dashboardClassification", report.dashboardClassification, indent = "  ", comma = true)
+        appendSFNTJsonField("claimPromotionAllowed", report.claimPromotionAllowed, indent = "  ", comma = true)
+        appendStringArrayField("nonClaims", report.nonClaims, indent = "  ", comma = true)
+        append("  \"entries\": [\n")
+        append(report.entries.joinToString(",\n") { entry -> entry.toCanonicalJson().prependIndent("    ") })
+        append("\n  ]\n")
         append("}\n")
     }
 }
@@ -3767,6 +3940,9 @@ private fun String.isStableSFNTTableTag(): Boolean =
 private fun String.isStableSFNTDiagnosticToken(): Boolean =
     isNotEmpty() && all { character -> character.code in 0x21..0x7E }
 
+private fun String.isStableSFNTManifestLine(): Boolean =
+    isNotBlank() && all { character -> character.code in 0x20..0x7E }
+
 private fun ByteArray.sfntSha256Hex(): String =
     MessageDigest.getInstance("SHA-256")
         .digest(this)
@@ -4446,6 +4622,49 @@ private val OPEN_TYPE_TABLE_FACT_NON_CLAIMS = listOf(
     "no-color-glyph-rendering-claim",
     "no-native-engine-oracle",
     "no-gpu-support-claim",
+)
+private val MALFORMED_SFNT_CASE_IDS = listOf(
+    "bad-sfnt-version",
+    "truncated-header",
+    "invalid-ttc-index",
+    "out-of-bounds-table-record",
+    "overlapping-tables",
+    "duplicate-tag",
+    "missing-required-table",
+    "malformed-optional-table",
+    "unsupported-cmap-format",
+)
+private val MALFORMED_SFNT_EXPECTED_OUTCOMES = setOf(
+    "parser-refused",
+    "directory-diagnostic",
+    "optional-table-fallback-diagnostic",
+    "cmap-refusal-diagnostic",
+)
+private val MALFORMED_SFNT_LINKED_EVIDENCE_PATHS = setOf(
+    "reports/pure-kotlin-text/sfnt-directory.json",
+    "reports/pure-kotlin-text/sfnt-tables.json",
+    "reports/pure-kotlin-text/cmap-map.json",
+)
+private val MALFORMED_SFNT_DIAGNOSTIC_SOURCES = setOf(
+    "sfnt-parser",
+    "sfnt-directory",
+    "face-parser",
+    "cmap-parser",
+)
+private val MALFORMED_SFNT_NON_CLAIMS = listOf(
+    "fixture-suite-only",
+    "no-parser-support-promotion",
+    "no-malformed-recovery-support-claim",
+    "no-scaler-support-claim",
+    "no-shaping-support-claim",
+    "no-color-glyph-rendering-claim",
+    "no-gpu-support-claim",
+)
+private val MALFORMED_SFNT_DIAGNOSTIC_ORDER = compareBy<MalformedSFNTFixtureDiagnosticSnapshot>(
+    { it.source },
+    { it.table.orEmpty() },
+    { it.code },
+    { it.message },
 )
 private val CURRENT_METADATA_PARSED_TABLE_TAGS = setOf(
     CMAP_TABLE_TAG,

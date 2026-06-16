@@ -360,6 +360,40 @@
       ]
     },
     {
+      "dumpId": "malformed-sfnt-fixtures",
+      "ownerTicket": "KFONT-M2-005",
+      "classification": "producer-only",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "Font sources, SFNT/OpenType parsing, and collections"
+      },
+      "producerPaths": [
+        "font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt",
+        "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/MalformedSFNTFixtureSuiteTest.kt",
+        "reports/pure-kotlin-text/malformed-sfnt-fixtures.json"
+      ],
+      "expectedFields": [
+        "claimPromotionAllowed",
+        "dashboardClassification",
+        "entries",
+        "nonClaims",
+        "schema",
+        "schemaVersion",
+        "ticketIds"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:sfnt:test --tests '*MalformedSFNT*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Malformed SFNT fixture-suite changes require deterministic byte hashes, one primary expected diagnostic per case, explicit linked evidence, and non-claim review.",
+      "nonClaims": [
+        "producer-only",
+        "no-parser-support-promotion",
+        "no-malformed-recovery-support-claim",
+        "no-gpu-support-claim"
+      ]
+    },
+    {
       "dumpId": "paragraph-input-goldens",
       "ownerTicket": "PKT-09C",
       "classification": "golden-gated",
