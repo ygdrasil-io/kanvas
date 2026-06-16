@@ -58,6 +58,7 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
                 "fallback-catalog-build",
                 "font-source-liberation-scan-root",
                 "glyph-atlas-lifecycle",
+                "glyph-strike-key",
                 "gpos-trace",
                 "gsub-trace",
                 "latin-gsub-gpos-goldens",

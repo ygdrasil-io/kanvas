@@ -25,6 +25,7 @@ REQUIRED_DUMPS = {
     "fallback-catalog-build",
     "font-source-liberation-scan-root",
     "glyph-atlas-lifecycle",
+    "glyph-strike-key",
     "latin-gsub-gpos-goldens",
     "malformed-sfnt-fixtures",
     "paragraph-input-goldens",

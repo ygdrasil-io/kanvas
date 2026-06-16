@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M9-001"
 title: "Complete `GlyphStrikeKey`"
-status: "proposed"
+status: "done"
 milestone: "M9"
 priority: "P0"
 owner_area: "glyph"
@@ -104,6 +104,9 @@ rtk ./gradlew --no-daemon :font:glyph:test --tests '*GlyphStrikeKey*'
 
 - `proposed`: Blocks artifact planning, atlas invalidation, and GPU text handoff identity.
 - Move to `ready` only after key fields, hash preimage format, and forbidden-field checks are reviewed.
+- `done` (2026-06-16): implementation and evidence in `font:glyph` and reports
+  were freshly revalidated. Independent spec review and code-quality review
+  both accepted the contract without widening support claims.
 
 ## Linear Labels
 
