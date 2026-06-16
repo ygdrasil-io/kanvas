@@ -270,6 +270,51 @@
       ]
     },
     {
+      "surfaceId": "glyph-artifact-plan-route-taxonomy",
+      "label": "GlyphArtifactPlan route taxonomy",
+      "classification": "tracked-gap",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        "section": "Refusal And Fallback Policy"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/font/fixtures/expected/glyph/glyph-artifact-plan.json",
+          "reports/pure-kotlin-text/dump-evidence-index.json"
+        ],
+        "cpuOracle": [],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/font/fixtures/expected/glyph/glyph-artifact-plan.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/font/fixtures/expected/glyph/glyph-artifact-plan.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "Complete KFONT-M9-003, KFONT-M9-004, and KFONT-M9-005 before promoting artifact generation, atlas lifecycle, or GPU text route support.",
+        "Keep this row as route-taxonomy evidence only; it proves selection traces and explicit refusals, not production COLR/bitmap/SVG payloads or GPU handoff."
+      ],
+      "legacyGates": [
+        "dftext"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-a8-rasterization-claim",
+        "no-sdf-generation-claim",
+        "no-atlas-packing-claim",
+        "no-gpu-text-route-claim",
+        "no-color-emoji-rendering-claim",
+        "no-lcd-support-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
       "surfaceId": "glyph-strike-key-completeness",
       "label": "GlyphStrikeKey completeness",
       "classification": "tracked-gap",
@@ -298,7 +343,7 @@
         ]
       },
       "requiredEvidenceGates": [
-        "Complete KFONT-M9-002, KFONT-M9-003, KFONT-M9-004, and KFONT-M9-005 before promoting artifact generation, atlas lifecycle, or GPU text route support.",
+        "Complete KFONT-M9-003, KFONT-M9-004, and KFONT-M9-005 before promoting artifact generation, atlas lifecycle, or GPU text route support.",
         "Keep this row as contract-only evidence; it proves key identity and refusals, not glyph artifact production."
       ],
       "legacyGates": [
