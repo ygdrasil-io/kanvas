@@ -113,6 +113,7 @@ class RunGpuRendererSceneKadreMainTest {
             "legacy-retirement-blocker-board" to 54,
             "path-badge-and-stroke" to 22,
             "path-coverage-review-board" to 34,
+            "path-stencil-cover-gate-board" to 55,
             "rounded-panel-gradient" to 23,
             "rrect-gradient-route-board" to 39,
             "release-gate-progress-board" to 24,
@@ -213,6 +214,30 @@ class RunGpuRendererSceneKadreMainTest {
                     assertContains(sessionJson, "archivedEvidencePreserved=true")
                     assertContains(sessionJson, "genericMigrationRetirement=false")
                     assertContains(sessionJson, "missingGate=KGPU-M10-002")
+                } else if (sceneId == "path-stencil-cover-gate-board") {
+                    assertContains(sessionJson, "clearCommands=1")
+                    assertContains(sessionJson, "fillRectCommands=6")
+                    assertContains(sessionJson, "fillRRectCommands=1")
+                    assertContains(sessionJson, "linearGradientRectCommands=0")
+                    assertContains(sessionJson, "clipCommands=1")
+                    assertContains(sessionJson, "bitmapRectCommands=0")
+                    assertContains(sessionJson, "pathStencilCoverRow=gpu-renderer.path.stencil-cover")
+                    assertContains(sessionJson, "pathStencilCoverTicket=KGPU-M3-002")
+                    assertContains(sessionJson, "pathStencilCoverTicketStatus=blocked")
+                    assertContains(sessionJson, "pathStencilCoverClassification=TargetNative")
+                    assertContains(sessionJson, "pathStencilCoverRouteKind=GPUNative")
+                    assertContains(sessionJson, "pathStencilCoverAdapterRequired=true")
+                    assertContains(sessionJson, "pathStencilCoverRefusalMatrix=depth-stencil-capability:RefuseRequired:coverage.stencil-cover-unavailable,stencil-route-unavailable:RefuseRequired:unsupported.geometry.stencil_cover_unavailable,producer-cover-ordering:RefuseRequired:unsupported.geometry.stencil_cover_ordering_illegal")
+                    assertContains(sessionJson, "adapterBackedStencilEvidenceLinked=false")
+                    assertContains(sessionJson, "passResourceReadbackArtifactsLinked=false")
+                    assertContains(sessionJson, "producerBeforeCoverOrderingProven=false")
+                    assertContains(sessionJson, "stencilCoverRoutePromoted=false")
+                    assertContains(sessionJson, "productRouteActivated=false")
+                    assertContains(sessionJson, "releaseBlocking=false")
+                    assertContains(sessionJson, "cpuPreparedContinuationCountsAsSupport=false")
+                    assertContains(sessionJson, "descriptorOnlyPlanningCountsAsSupport=false")
+                    assertContains(sessionJson, "refusalOnlySelectorCountsAsSupport=false")
+                    assertContains(sessionJson, "nonClaims=no-native-stencil-cover-support,no-adapter-backed-execution,no-product-activation,no-release-blocking-gate,no-cpu-prepared-continuation-as-support,no-refusal-only-selector-as-support")
                 }
                 assertFalse(sessionJson.contains("\"status\": \"not-yet-rendered\""), sceneId)
             }
