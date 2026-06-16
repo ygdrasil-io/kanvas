@@ -126,6 +126,7 @@ class RunGpuRendererSceneKadreMainTest {
             "clipped-avatar-grid" to 27,
             "filtered-photo-chip" to 28,
             "layered-shadow-card" to 29,
+            "notification-shadow-stack" to 56,
             "text-handoff-boundary-board" to 36,
             "a8-glyph-atlas-gate-board" to 50,
             "text-resource-binding-gate-board" to 49,
@@ -163,6 +164,14 @@ class RunGpuRendererSceneKadreMainTest {
                 assertContains(sessionJson, "\"presentedFrames\": $frames")
                 if (sceneId == "layered-shadow-card") {
                     assertContains(sessionJson, "saveLayerRoute=scene-fixture.bounded-shadow-card")
+                    assertContains(sessionJson, "filterRoutes=scene-fixture.bounded-drop-shadow")
+                    assertContains(sessionJson, "generalSaveLayerSupport=false")
+                    assertContains(sessionJson, "imageFilterDagSupport=false")
+                } else if (sceneId == "notification-shadow-stack") {
+                    assertContains(sessionJson, "saveLayerCommands=2")
+                    assertContains(sessionJson, "saveLayerKinds=bounded-shadow-card, bounded-shadow-card")
+                    assertContains(sessionJson, "saveLayerRoute=scene-fixture.bounded-shadow-card")
+                    assertContains(sessionJson, "saveLayerMaterializedDraws=4")
                     assertContains(sessionJson, "filterRoutes=scene-fixture.bounded-drop-shadow")
                     assertContains(sessionJson, "generalSaveLayerSupport=false")
                     assertContains(sessionJson, "imageFilterDagSupport=false")
