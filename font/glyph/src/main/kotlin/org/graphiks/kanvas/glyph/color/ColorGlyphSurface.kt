@@ -3548,6 +3548,35 @@ object BasicSVGGlyphParser : SVGGlyphParser {
     }
 
     /**
+     * Builds a stable refusal diagnostic for a malformed SVG glyph document.
+     *
+     * @param glyphId glyph identifier whose SVG payload failed to parse.
+     * @param sourceText original SVG source used only for deterministic hashing.
+     * @param failure parser failure emitted by the bounded SVG parser.
+     * @return stable SVG malformed-document diagnostic.
+     */
+    fun documentMalformedDiagnostic(
+        glyphId: Int,
+        sourceText: String,
+        failure: Throwable,
+    ): ColorGlyphDiagnostic {
+        val sourceHash = colorGlyphSha256(sourceText.toByteArray(Charsets.UTF_8))
+        val failureClass = failure.javaClass.simpleName.ifEmpty { "Throwable" }
+        val failureMessage = failure.message?.trim().orEmpty().ifEmpty { "unknown" }
+        val normalizedMessage = if (failureMessage.endsWith('.')) failureMessage else "$failureMessage."
+
+        return ColorGlyphDiagnostic(
+            glyphId = glyphId,
+            route = "svg",
+            code = ColorGlyphDiagnosticCodes.SVGDocumentMalformed,
+            severity = "warning",
+            detail = "glyphId=$glyphId;sourceDocumentSha256=$sourceHash;failureClass=$failureClass;" +
+                "failureMessage=$failureMessage",
+            message = "SVG glyph document is malformed for glyph $glyphId: $normalizedMessage",
+        )
+    }
+
+    /**
      * Builds a stable refusal diagnostic for an SVG glyph resource or complexity budget overflow.
      *
      * @param glyphId glyph identifier whose SVG payload exceeded a limit.
