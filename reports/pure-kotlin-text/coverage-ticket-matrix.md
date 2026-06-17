@@ -3753,6 +3753,53 @@ claim CBDT/CBLC or sbix table parsing, complete bitmap strike selection, PNG
 fixture coverage, decoded pixel oracle coverage, GPU upload or sampling, emoji
 sequence routing, native/platform codec behavior, or complete bitmap glyph
 support.
+
+### KFONT-M10-006: Promote PNG bitmap glyph artifacts
+
+Status: done; freshly validated.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/color/bitmap-glyph-plan.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m10-006-png-bitmap-glyph-artifacts.md`
+
+Evidence:
+
+- `BitmapGlyphPlan.fromPNG(...)` now records stable origin placement for
+  embedded PNG glyphs in addition to requested size, selected strike ppem,
+  scaling policy, alpha policy, source payload SHA-256, decoded pixel SHA-256,
+  and dump hash facts.
+- `BitmapGlyphPlan.strikeUnavailableDiagnostic(...)` adds stable
+  `text.bitmap.strike-unavailable` refusal evidence with requested size and
+  available strike list facts without invoking platform codecs.
+- Checked-in `bitmap-glyph-plan.json` covers CBDT/CBLC PNG, sbix PNG,
+  unavailable-strike refusal, malformed PNG refusal, and non-PNG payload
+  refusal with explicit `expectedGpuHandoffArtifactType` and route-scoped
+  non-claims.
+- Dump index, fixture manifest, and font fixture inventory now point at the new
+  bitmap plan dump as `tracked-gap` CPU-side evidence only; promotion remains
+  blocked on M11 GPU texture/upload/sampling proof and KFONT-M10-009 emoji
+  sequence planning.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.bitmapGlyphPlanBundleCapturesCbdtSbixAndBitmapRefusalsDeterministically
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk git diff --check
+```
+
+Remaining gate: this is PNG bitmap glyph artifact evidence only. It does not
+claim JPEG/TIFF/BGRA bitmap support, platform/native codec behavior, emoji
+sequence planning, GPU bitmap upload/sampling, or retirement of
+`scaledemoji_rendering`.
 ### PKT-11F: COLRv1 Budget Refusal Diagnostic
 
 Status: implemented; independent review pending because the current tool policy

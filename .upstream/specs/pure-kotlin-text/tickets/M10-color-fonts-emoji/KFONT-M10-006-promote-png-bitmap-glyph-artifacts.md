@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M10-006"
 title: "Promote PNG bitmap glyph artifacts"
-status: "proposed"
+status: "done"
 milestone: "M10"
 priority: "P1"
 owner_area: "color"
@@ -64,11 +64,11 @@ data class BitmapGlyphPlan(
 
 ## Acceptance Criteria
 
-- [ ] CBDT/CBLC PNG and sbix PNG fixtures produce distinct `BitmapGlyphPlan` dumps.
-- [ ] Strike selection records requested size, selected strike size, fallback/scaling decision, and unavailable-strike diagnostics.
-- [ ] Non-PNG payloads emit `text.bitmap.payload-format-unsupported`.
-- [ ] Malformed PNG payloads emit `text.bitmap.PNG-decode-failed` with payload hash and glyph ID.
-- [ ] The plan can be handed to M11 without font table reads or native codec calls.
+- [x] CBDT/CBLC PNG and sbix PNG fixtures produce distinct `BitmapGlyphPlan` dumps.
+- [x] Strike selection records requested size, selected strike size, fallback/scaling decision, and unavailable-strike diagnostics.
+- [x] Non-PNG payloads emit `text.bitmap.payload-format-unsupported`.
+- [x] Malformed PNG payloads emit `text.bitmap.PNG-decode-failed` with payload hash and glyph ID.
+- [x] The plan can be handed to M11 without font table reads or native codec calls.
 
 ## Required Evidence
 
@@ -92,13 +92,19 @@ data class BitmapGlyphPlan(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test --tests '*BitmapGlyph*'
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.bitmapGlyphPlanBundleCapturesCbdtSbixAndBitmapRefusalsDeterministically
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
 ```
 
 ## Status Notes
 
-- `proposed`: Promotes the embedded PNG glyph artifact contract while keeping renderer proof gated.
-- Move to `ready` only after PNG decode provenance, alpha policy, and strike-selection dumps are reviewed.
+- `done`: `BitmapGlyphPlan` now ships checked-in `bitmap-glyph-plan.json` evidence for CBDT/CBLC PNG, sbix PNG, unavailable-strike refusal, malformed PNG refusal, and non-PNG payload refusal with fresh validation.
+- Remaining gate: this is CPU-side artifact and refusal evidence only. M11 still owns texture/upload/sampling proof, GPU route evidence, and any claim to retire `scaledemoji_rendering`.
 
 ## Linear Labels
 

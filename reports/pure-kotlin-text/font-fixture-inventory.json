@@ -942,6 +942,7 @@
           "evidencePaths": [
             "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/bitmap-glyph-plan.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -963,6 +964,7 @@
           "generationPolicy": "Use a malformed PNG payload and assert decode-failed diagnostics with payload hash.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/bitmap-glyph-plan.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -984,6 +986,7 @@
           "generationPolicy": "Use a non-PNG bitmap payload label and assert stable unsupported-format diagnostics.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/bitmap-glyph-plan.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -1006,6 +1009,7 @@
           "evidencePaths": [
             "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/bitmap-glyph-plan.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -1027,6 +1031,7 @@
           "generationPolicy": "Use a requested glyph size with no matching bitmap strike and assert stable strike-unavailable diagnostics.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/bitmap-glyph-plan.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
