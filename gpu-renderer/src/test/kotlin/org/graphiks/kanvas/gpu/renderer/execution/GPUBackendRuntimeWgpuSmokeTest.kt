@@ -1,9 +1,11 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class GPUBackendRuntimeWgpuSmokeTest {
@@ -150,4 +152,158 @@ class GPUBackendRuntimeWgpuSmokeTest {
             }
         }
     }
+
+    @Test
+    fun `backend runtime records WGPU execution cache hit miss and create telemetry when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(
+                    width = 4,
+                    height = 4,
+                    colorFormat = "rgba8unorm",
+                ),
+            ).use { target ->
+                repeat(2) {
+                    target.encode(
+                        clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                    ) {
+                        drawFullscreenPass(
+                            wgsl = solidColorFullscreenWgsl(),
+                            colorFormat = "rgba8unorm",
+                            draws = listOf(
+                                GPUBackendRectDraw(
+                                    rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                    scissorX = 0,
+                                    scissorY = 0,
+                                    scissorWidth = 4,
+                                    scissorHeight = 4,
+                                ),
+                            ),
+                        )
+                    }
+                }
+
+                val telemetry = session.executionCacheTelemetry.associateBy(GPUCacheTelemetry::cacheName)
+
+                listOf("module", "bind-group-layout", "pipeline-layout", "pipeline").forEach { cacheName ->
+                    val cache = telemetry.getValue(cacheName)
+                    assertEquals(1L, cache.misses, "$cacheName should miss once on the first encode")
+                    assertEquals(1L, cache.creations, "$cacheName should create once on the first encode")
+                    assertEquals(1L, cache.hits, "$cacheName should hit once on the second encode")
+                }
+
+                val dump = session.executionCacheDumpLines.joinToString("\n")
+                listOf("module", "bind-group-layout", "pipeline-layout", "pipeline").forEach { cacheName ->
+                    assertTrue(dump.contains("domain=$cacheName"), "$cacheName should be present in cache dumps")
+                }
+                listOf("module", "bind-group-layout", "pipeline-layout", "pipeline").forEach { cacheName ->
+                    assertTrue(
+                        dump.contains("execution.cache.preimage domain=$cacheName"),
+                        "$cacheName should expose a deterministic cache-key preimage dump",
+                    )
+                }
+                assertTrue(dump.contains("kind=wgsl-module"))
+                assertTrue(dump.contains("kind=bind-group-layout"))
+                assertTrue(dump.contains("kind=pipeline-layout"))
+                assertTrue(dump.contains("kind=render"))
+                assertTrue(dump.contains("renderStepIdentity=gpu-backend.fullscreen-pass"))
+                assertTrue(dump.contains("owner=GPUResourceProvider"))
+                assertTrue(dump.contains("productRouteActivated=false"))
+                assertTrue(dump.contains("releaseBlocking=false"))
+                assertTrue(!dump.contains("@"), "cache dumps must not expose backend object identities")
+            }
+        }
+    }
+
+    @Test
+    fun `backend runtime records WGPU execution cache failure telemetry when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(
+                    width = 4,
+                    height = 4,
+                    colorFormat = "rgba8unorm",
+                ),
+            ).use { target ->
+                val failure = assertFailsWith<IllegalStateException> {
+                    target.encode(
+                        clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                    ) {
+                        drawFullscreenPass(
+                            wgsl = fullscreenWgslWithoutFragmentEntry(),
+                            colorFormat = "rgba8unorm",
+                            draws = listOf(
+                                GPUBackendRectDraw(
+                                    rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                    scissorX = 0,
+                                    scissorY = 0,
+                                    scissorWidth = 4,
+                                    scissorHeight = 4,
+                                ),
+                            ),
+                        )
+                    }
+                }
+
+                assertTrue(
+                    failure.message?.contains("unsupported.execution.cache_create_failed") == true,
+                    "failure should expose a stable execution-cache diagnostic",
+                )
+                val telemetry = session.executionCacheTelemetry.associateBy(GPUCacheTelemetry::cacheName)
+                assertEquals(1L, telemetry.getValue("pipeline").failures)
+                val dump = session.executionCacheDumpLines.joinToString("\n")
+                assertTrue(dump.contains("domain=pipeline"))
+                assertTrue(dump.contains("result=failure"))
+                assertTrue(dump.contains("productRouteActivated=false"))
+            }
+        }
+    }
+
+    private fun solidColorFullscreenWgsl(): String =
+        """
+            struct Uniforms {
+                color: vec4f,
+            };
+
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+            @vertex
+            fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+                let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+                let y = f32(idx & 2u) * 2.0 - 1.0;
+                return vec4f(x, y, 0.0, 1.0);
+            }
+
+            @fragment
+            fn fs_main() -> @location(0) vec4f {
+                return uniforms.color;
+            }
+        """.trimIndent()
+
+    private fun fullscreenWgslWithoutFragmentEntry(): String =
+        """
+            struct Uniforms {
+                color: vec4f,
+            };
+
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+            @vertex
+            fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+                let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+                let y = f32(idx & 2u) * 2.0 - 1.0;
+                return vec4f(x, y, 0.0, 1.0);
+            }
+
+            @fragment
+            fn missing_fragment_entry() -> @location(0) vec4f {
+                return uniforms.color;
+            }
+        """.trimIndent()
 }
