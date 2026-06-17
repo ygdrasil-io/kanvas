@@ -197,6 +197,54 @@
       ]
     },
     {
+      "surfaceId": "cluster-safety",
+      "label": "cluster safety",
+      "classification": "current-supported",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Clusters"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/font/fixtures/expected/unicode/cluster-safety-report.json",
+          "reports/font/fixtures/expected/unicode/unicode-segments.json",
+          "reports/font/fixtures/expected/unicode/bidi-runs.json",
+          "reports/font/fixtures/expected/unicode/script-runs.json",
+          "reports/pure-kotlin-text/dump-evidence-index.json"
+        ],
+        "cpuOracle": [],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/font/fixtures/expected/unicode/cluster-safety-report.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/font/fixtures/expected/unicode/cluster-safety-report.json",
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "KFONT-M5-005 now provides bounded grapheme, bidi, and script boundary-alignment evidence only; shaping, fallback, and paragraph routes remain separate gates.",
+        "Keep `scaledemoji` blocked on explicit emoji-sequence refusal, fallback, and color or route evidence rather than treating segmentation alone as emoji support.",
+        "Add broader reviewed CJK IVS coverage before promoting complete cluster-safety coverage."
+      ],
+      "legacyGates": [
+        "scaledemoji"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-uax29-claim",
+        "no-complete-uax9-claim",
+        "no-fallback-support-claim",
+        "no-emoji-route-support-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
       "surfaceId": "complex-shaping",
       "label": "complex shaping",
       "classification": "DependencyGated",
