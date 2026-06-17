@@ -22,7 +22,7 @@ M0 diagnostics and M2 cmap facts.
 | [KFONT-M5-002 - Replace basic grapheme segmenter](KFONT-M5-002-replace-basic-grapheme-segmenter.md) | `done` | `P0` | `tracked-gap` | `unicode` | `KFONT-M5-001` | - |
 | [KFONT-M5-003 - Replace basic bidi resolver](KFONT-M5-003-replace-basic-bidi-resolver.md) | `done` | `P0` | `tracked-gap` | `unicode` | `KFONT-M5-001` | - |
 | [KFONT-M5-004 - Add Script_Extensions itemizer](KFONT-M5-004-add-script-extensions-itemizer.md) | `done` | `P0` | `tracked-gap` | `unicode` | `KFONT-M5-001`, `KFONT-M5-002` | - |
-| [KFONT-M5-005 - Add cluster safety regression suite](KFONT-M5-005-add-cluster-safety-regression-suite.md) | `proposed` | `P0` | `fixture-gated` | `unicode` | `KFONT-M5-002`, `KFONT-M5-003`, `KFONT-M5-004` | `scaledemoji` |
+| [KFONT-M5-005 - Add cluster safety regression suite](KFONT-M5-005-add-cluster-safety-regression-suite.md) | `review` | `P0` | `fixture-gated` | `unicode` | `KFONT-M5-002`, `KFONT-M5-003`, `KFONT-M5-004` | `scaledemoji` |
 
 ## Validation Bundle
 

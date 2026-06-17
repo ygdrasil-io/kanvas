@@ -474,6 +474,71 @@
       ]
     },
     {
+      "dumpId": "cluster-safety-report",
+      "ownerTicket": "KFONT-M5-005",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Clusters"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ClusterSafetyReport.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ClusterSafetyTest.kt",
+        "reports/font/fixtures/expected/unicode/cluster-arabic-mark.txt",
+        "reports/font/fixtures/expected/unicode/cluster-cjk-variation-selector.txt",
+        "reports/font/fixtures/expected/unicode/cluster-devanagari-conjunct.txt",
+        "reports/font/fixtures/expected/unicode/cluster-emoji-family-zwj.txt",
+        "reports/font/fixtures/expected/unicode/cluster-emoji-skin-tone.txt",
+        "reports/font/fixtures/expected/unicode/cluster-mixed-bidi.txt",
+        "reports/font/fixtures/expected/unicode/cluster-negative-split.txt",
+        "reports/font/fixtures/expected/unicode/cluster-safety-report.json",
+        "reports/font/fixtures/expected/unicode/cluster-thai-tone.txt",
+        "reports/font/fixtures/expected/unicode/cluster-vs15-vs16.txt"
+      ],
+      "expectedFields": [
+        "cases",
+        "clusterRange",
+        "code",
+        "diagnostic",
+        "diagnostics",
+        "dumpId",
+        "dumpSha256",
+        "fixtureName",
+        "gate",
+        "inputTextHash",
+        "invariants",
+        "message",
+        "name",
+        "nonClaims",
+        "ownerTickets",
+        "passed",
+        "schemaVersion",
+        "segmentRanges",
+        "severity",
+        "sourceDumpRefs",
+        "sourceText",
+        "sourceTextHashAlgorithm",
+        "textRange",
+        "unicodeVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests '*ClusterSafety*' --tests '*Grapheme*' --tests '*Bidi*' --tests '*ScriptItem*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Cluster-safety golden changes require reviewed source-dump hash deltas, boundary-alignment reasoning, stable refusal diagnostics, and explicit confirmation that `scaledemoji` remains a gate rather than a support claim.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-complete-uax29-claim",
+        "no-complete-uax9-claim",
+        "no-fallback-support-claim",
+        "no-emoji-route-support-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
       "dumpId": "cmap-contract",
       "ownerTicket": "PKT-03B",
       "classification": "producer-only",
