@@ -1,7 +1,7 @@
 ---
 id: KGPU-M3-002
 title: "Add stencil-cover path route candidate"
-status: blocked
+status: done
 milestone: M3
 priority: P0
 owner_area: geometry-passes
@@ -56,10 +56,10 @@ data class StencilCoverEvidence(val stencilPlan: String, val coverPass: String)
 
 ## Acceptance Criteria
 
-- [ ] Stencil and cover ordering is dumpable.
-- [ ] Unsupported fill/clip/target cases refuse.
-- [ ] GPU evidence or explicit skipped reason is linked.
-- [ ] Any prepared-path continuation remains owned by `KGPU-M3-001` and is not
+- [x] Stencil and cover ordering is dumpable.
+- [x] Unsupported fill/clip/target cases refuse.
+- [x] GPU evidence or explicit skipped reason is linked.
+- [x] Any prepared-path continuation remains owned by `KGPU-M3-001` and is not
       promoted by this `GPUNative` candidate ticket.
 
 ## Required Evidence
@@ -89,12 +89,26 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: Candidate route only. This `GPUNative` stencil-cover ticket
-  requires native WebGPU/adapter evidence for depth/stencil capability,
-  producer-before-cover ordering, pass/resource/readback artifacts, and stable
-  skipped-lane or refusal diagnostics. Descriptor-only planning,
-  `CPUPreparedGPU` continuation from KGPU-M3-001, or a refusal-only selector
-  cannot count as stencil-cover support for this ticket.
+- `done`: Closed as a contract-gate candidate without product promotion after
+  independent review `019ed2a0-44e5-77d1-bae8-3b8e9926ffca`.
+  `GPUStencilCoverGatePlanner` records a dumpable `GPUStencilCoverPlan` only
+  when adapter, depth/stencil, sample-count, target, clip, stencil-state,
+  producer-before-cover ordering, pass/resource, and readback evidence labels
+  are all explicit. Missing native facts refuse with stable skipped-lane
+  diagnostics:
+  `unsupported.geometry.stencil_cover_unavailable`,
+  `unsupported.geometry.stencil_cover_target`,
+  `unsupported.clip.stencil_cover`,
+  `unsupported.geometry.stencil_cover_ordering_illegal`,
+  `unsupported.geometry.stencil_cover_pass_resources_missing`, or
+  `unsupported.execution.readback_unavailable`.
+- Evidence: `StencilCoverGatePlannerTest` plus
+  `reports/gpu-renderer/2026-06-17-m3-002-stencil-cover-gate-contract.md`.
+  The path-stencil-cover scene now reports
+  `pathStencilCoverTicketStatus=done` and
+  `pathStencilCoverClosure=contract-gate-complete-no-product-promotion`.
+- Non-claim: no native stencil-cover support, no product activation, no
+  release-blocking gate, and no prepared-path continuation support promotion.
 
 ## Linear Labels
 

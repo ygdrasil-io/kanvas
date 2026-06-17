@@ -57,6 +57,30 @@ tasks.register<JavaExec>("renderGpuRendererSceneOffscreen") {
     })
 }
 
+tasks.register<JavaExec>("sampleGpuRendererSceneFrames") {
+    group = "verification"
+    description = "Samples one GPU renderer scene through repeated WebGPU offscreen render+readback frames."
+
+    val sceneId = providers.gradleProperty("sceneId").orElse("frame-gate-blocker-board")
+    val frames = providers.gradleProperty("frames").orElse("60")
+    val outputDir = providers.gradleProperty("sceneOutput")
+        .map { value -> rootProject.layout.projectDirectory.file(value).asFile }
+        .orElse(rootProject.layout.projectDirectory.dir("reports/gpu-renderer-scenes/frame-samples").asFile)
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.gpu.renderer.scenes.offscreen.RenderGpuRendererSceneFrameSamplesMainKt")
+    args(sceneId.get(), frames.get(), outputDir.get().absolutePath)
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+    jvmArgs(buildList {
+        add("--add-opens=java.base/java.lang=ALL-UNNAMED")
+        add("--enable-native-access=ALL-UNNAMED")
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+    })
+}
+
 tasks.register<JavaExec>("runGpuRendererSceneKadre") {
     group = "verification"
     description = "Opens one GPU renderer scene in the opt-in Kadre windowed runner."

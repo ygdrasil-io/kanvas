@@ -8,6 +8,7 @@ import java.security.MessageDigest
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.round
 
 /**
  * Scales glyph outlines and metrics from parsed font data into requested design positions.
@@ -183,13 +184,50 @@ data class GlyphMetrics(
     val advanceX: Double,
     val advanceY: Double,
     val bounds: GlyphBounds,
+    val verticalMetrics: GlyphVerticalMetrics? = null,
 )
+
+/**
+ * Deterministic vertical metric evidence attached to a glyph metrics dump.
+ *
+ * @property state Stable summary state: `present`, `fallback`, or `diagnostic`.
+ * @property source Stable fact source such as `vhea-vmtx` or `horizontal-fallback-fact`.
+ * @property verticalAdvance Vertical advance height in scaled font units when available.
+ * @property topSideBearing Vertical top side bearing in scaled font units when available.
+ * @property verticalOriginY Derived vertical origin y coordinate in scaled font units when available.
+ * @property ascender Vertical ascender from `vhea` in scaled font units when available.
+ * @property descender Vertical descender from `vhea` in scaled font units when available.
+ * @property lineGap Vertical line gap from `vhea` in scaled font units when available.
+ * @property maxAdvanceHeight Maximum vertical advance from `vhea` in scaled font units when available.
+ * @property diagnostics Stable detail tokens attached to this vertical fact.
+ */
+data class GlyphVerticalMetrics(
+    val state: String,
+    val source: String,
+    val verticalAdvance: Double? = null,
+    val topSideBearing: Double? = null,
+    val verticalOriginY: Double? = null,
+    val ascender: Double? = null,
+    val descender: Double? = null,
+    val lineGap: Double? = null,
+    val maxAdvanceHeight: Double? = null,
+    val diagnostics: List<String> = emptyList(),
+) {
+    init {
+        require(state.isStableToken()) { "vertical metric state must be a stable token." }
+        require(source.isStableToken()) { "vertical metric source must be a stable token." }
+        diagnostics.forEach { diagnostic ->
+            require(diagnostic.isStableToken()) { "vertical metric diagnostic must be a stable token." }
+        }
+    }
+}
 
 /**
  * Stable scaler diagnostic code families used by evidence dumps.
  */
 object FontScalerDiagnosticCodes {
     const val OUTLINE_FORMAT_UNSUPPORTED: String = "font.outline-format-unsupported"
+    const val SCALER_OUTLINE_UNAVAILABLE: String = "font.scaler.outline-unavailable"
     const val CFF_OPERATOR_UNSUPPORTED: String = "font.cff-operator-unsupported"
     const val CFF_STACK_MALFORMED: String = "font.cff-stack-malformed"
     const val CFF_TABLE_MALFORMED: String = "font.cff-table-malformed"
@@ -208,6 +246,7 @@ object FontScalerDiagnosticCodes {
     const val VARIATION_DATA_MALFORMED: String = "font.variation-data-malformed"
     const val VARIATION_AXIS_UNSUPPORTED: String = "font.variation-axis-unsupported"
     const val METRICS_VARIATION_UNAVAILABLE: String = "font.metrics-variation-unavailable"
+    const val VERTICAL_METRICS_UNAVAILABLE: String = "font.vertical-metrics-unavailable"
     const val REQUIRED_TABLE_MISSING: String = "font.required-table-missing"
 }
 
@@ -1796,18 +1835,34 @@ private fun TrueTypeGlyph.Simple.toGlyphOutline(
 /**
  * Per-point variation deltas decoded from a bounded subset of a TrueType `gvar` glyph record.
  *
- * The arrays contain outline-point deltas only. Phantom point deltas, advance adjustments, and side
- * bearing adjustments are intentionally ignored by [ParsedTrueTypeGlyphScaler] for now.
+ * The arrays contain outline-point deltas plus the bounded phantom-point deltas needed for
+ * horizontal advance adjustment.
  */
 class TrueTypeGlyphVariationDeltas internal constructor(
     xDeltas: DoubleArray,
     yDeltas: DoubleArray,
+    phantomXDeltas: DoubleArray = DoubleArray(PHANTOM_POINT_COUNT),
+    phantomYDeltas: DoubleArray = DoubleArray(PHANTOM_POINT_COUNT),
+    explicitPoints: BooleanArray = BooleanArray(xDeltas.size),
+    inferredPoints: BooleanArray = BooleanArray(xDeltas.size),
 ) {
     private val xDeltas: DoubleArray = xDeltas.copyOf()
     private val yDeltas: DoubleArray = yDeltas.copyOf()
+    private val phantomXDeltas: DoubleArray = phantomXDeltas.copyOf()
+    private val phantomYDeltas: DoubleArray = phantomYDeltas.copyOf()
+    private val explicitPoints: BooleanArray = explicitPoints.copyOf()
+    private val inferredPoints: BooleanArray = inferredPoints.copyOf()
 
     init {
         require(xDeltas.size == yDeltas.size) { "gvar x and y delta counts must match." }
+        require(phantomXDeltas.size == PHANTOM_POINT_COUNT) {
+            "gvar phantom x delta count must match phantom point count."
+        }
+        require(phantomYDeltas.size == PHANTOM_POINT_COUNT) {
+            "gvar phantom y delta count must match phantom point count."
+        }
+        require(xDeltas.size == explicitPoints.size) { "gvar explicit point flags must match delta count." }
+        require(xDeltas.size == inferredPoints.size) { "gvar inferred point flags must match delta count." }
     }
 
     /**
@@ -1819,23 +1874,39 @@ class TrueTypeGlyphVariationDeltas internal constructor(
     internal fun xDelta(pointIndex: Int): Double = xDeltas.getOrElse(pointIndex) { 0.0 }
 
     internal fun yDelta(pointIndex: Int): Double = yDeltas.getOrElse(pointIndex) { 0.0 }
+
+    internal fun phantomXDelta(phantomPointIndex: Int): Double = phantomXDeltas.getOrElse(phantomPointIndex) { 0.0 }
+
+    internal fun phantomYDelta(phantomPointIndex: Int): Double = phantomYDeltas.getOrElse(phantomPointIndex) { 0.0 }
+
+    internal fun isExplicit(pointIndex: Int): Boolean = explicitPoints.getOrElse(pointIndex) { false }
+
+    internal fun isInferred(pointIndex: Int): Boolean = inferredPoints.getOrElse(pointIndex) { false }
 }
 
 internal data class TrueTypeGvarSimpleGlyphDeltaResult(
     val deltas: TrueTypeGlyphVariationDeltas? = null,
     val requiresIupInterpolation: Boolean = false,
+    val variationDataMalformed: Boolean = false,
+)
+
+private data class ResolvedTuplePointDeltas(
+    val xDeltas: DoubleArray,
+    val yDeltas: DoubleArray,
+    val explicitPoints: BooleanArray,
+    val inferredPoints: BooleanArray,
 )
 
 /**
  * Bounded model for the TrueType `gvar` table subset used by the pure Kotlin font scaler.
  *
  * Supported data is deliberately narrow: glyph variation records with embedded peak tuples,
- * all-point shared/private point sets, packed x/y deltas, and optional intermediate regions. Shared
- * peak tuples are parsed and may be referenced, but partial point sets that require IUP
- * interpolation, composite-glyph deltas, phantom point metrics, `avar` remapping, and TrueType
- * instruction interaction are not implemented here. Malformed or unsupported per-glyph records
- * return no deltas instead of escaping with an unchecked bounds failure; malformed table headers and
- * offset directories fail eagerly with clear diagnostics from [parse].
+ * shared/private point sets, packed x/y deltas, simple-glyph IUP interpolation, and optional
+ * intermediate regions. Shared peak tuples are parsed and may be referenced, but composite-glyph
+ * deltas, phantom point metrics, `avar` remapping, and TrueType instruction interaction are not
+ * implemented here. Malformed or unsupported per-glyph records return no deltas instead of
+ * escaping with an unchecked bounds failure; malformed table headers and offset directories fail
+ * eagerly with clear diagnostics from [parse].
  */
 class TrueTypeGvarTable private constructor(
     private val data: ByteArray,
@@ -1861,22 +1932,27 @@ class TrueTypeGvarTable private constructor(
      */
     fun simpleGlyphDeltas(
         glyphId: UInt,
-        pointCount: Int,
+        glyph: TrueTypeGlyph.Simple,
         normalizedCoordinates: List<Double>,
     ): TrueTypeGlyphVariationDeltas? =
         simpleGlyphDeltaResult(
             glyphId = glyphId,
-            pointCount = pointCount,
+            glyph = glyph,
             normalizedCoordinates = normalizedCoordinates,
         ).deltas
 
     internal fun simpleGlyphDeltaResult(
         glyphId: UInt,
-        pointCount: Int,
+        glyph: TrueTypeGlyph.Simple,
         normalizedCoordinates: List<Double>,
     ): TrueTypeGvarSimpleGlyphDeltaResult {
         fun unavailable(): TrueTypeGvarSimpleGlyphDeltaResult = TrueTypeGvarSimpleGlyphDeltaResult()
+        fun malformed(): TrueTypeGvarSimpleGlyphDeltaResult = TrueTypeGvarSimpleGlyphDeltaResult(
+            variationDataMalformed = true,
+        )
 
+        val glyphPoints = glyph.contours.flatMap { contour -> contour.points }
+        val pointCount = glyphPoints.size
         if (pointCount <= 0) {
             return unavailable()
         }
@@ -1891,54 +1967,54 @@ class TrueTypeGvarTable private constructor(
             return unavailable()
         }
         if (!data.fitsGvar(start, 4, end)) {
-            return unavailable()
+            return malformed()
         }
 
-        val tupleVariationCountField = data.readUInt16OrNull(start, end) ?: return unavailable()
+        val tupleVariationCountField = data.readUInt16OrNull(start, end) ?: return malformed()
         val tupleVariationCount = tupleVariationCountField and GVAR_TUPLE_COUNT_MASK
         if (tupleVariationCount <= 0) {
-            return unavailable()
+            return malformed()
         }
-        val offsetToData = data.readUInt16OrNull(start + 2, end) ?: return unavailable()
-        val tupleDataStart = start.checkedPlus(offsetToData) ?: return unavailable()
+        val offsetToData = data.readUInt16OrNull(start + 2, end) ?: return malformed()
+        val tupleDataStart = start.checkedPlus(offsetToData) ?: return malformed()
         if (tupleDataStart < start || tupleDataStart > end) {
-            return unavailable()
+            return malformed()
         }
 
         val headers = ArrayList<TrueTypeGvarTupleHeader>(tupleVariationCount)
         var headerOffset = start + 4
         repeat(tupleVariationCount) {
             if (!data.fitsGvar(headerOffset, 4, end)) {
-                return unavailable()
+                return malformed()
             }
-            val variationDataSize = data.readUInt16OrNull(headerOffset, end) ?: return unavailable()
-            val tupleIndex = data.readUInt16OrNull(headerOffset + 2, end) ?: return unavailable()
+            val variationDataSize = data.readUInt16OrNull(headerOffset, end) ?: return malformed()
+            val tupleIndex = data.readUInt16OrNull(headerOffset + 2, end) ?: return malformed()
             headerOffset += 4
             val peak = when {
                 tupleIndex and GVAR_EMBEDDED_PEAK_TUPLE != 0 -> {
                     if (!data.fitsGvar(headerOffset, axisCount * 2, end)) {
-                        return unavailable()
+                        return malformed()
                     }
                     DoubleArray(axisCount) { axis ->
-                        data.readF2Dot14OrNull(headerOffset + axis * 2, end) ?: return unavailable()
+                        data.readF2Dot14OrNull(headerOffset + axis * 2, end) ?: return malformed()
                     }.also {
                         headerOffset += axisCount * 2
                     }
                 }
-                else -> sharedTuples.getOrNull(tupleIndex and GVAR_TUPLE_INDEX_MASK) ?: return unavailable()
+                else -> sharedTuples.getOrNull(tupleIndex and GVAR_TUPLE_INDEX_MASK) ?: return malformed()
             }
             val startTuple: DoubleArray?
             val endTuple: DoubleArray?
             if (tupleIndex and GVAR_INTERMEDIATE_REGION != 0) {
                 if (!data.fitsGvar(headerOffset, axisCount * 4, end)) {
-                    return unavailable()
+                    return malformed()
                 }
                 startTuple = DoubleArray(axisCount) { axis ->
-                    data.readF2Dot14OrNull(headerOffset + axis * 2, end) ?: return unavailable()
+                    data.readF2Dot14OrNull(headerOffset + axis * 2, end) ?: return malformed()
                 }
                 headerOffset += axisCount * 2
                 endTuple = DoubleArray(axisCount) { axis ->
-                    data.readF2Dot14OrNull(headerOffset + axis * 2, end) ?: return unavailable()
+                    data.readF2Dot14OrNull(headerOffset + axis * 2, end) ?: return malformed()
                 }
                 headerOffset += axisCount * 2
             } else {
@@ -1954,7 +2030,7 @@ class TrueTypeGvarTable private constructor(
             )
         }
         if (tupleDataStart < headerOffset || tupleDataStart > end) {
-            return unavailable()
+            return malformed()
         }
 
         var dataOffset = tupleDataStart
@@ -1963,20 +2039,21 @@ class TrueTypeGvarTable private constructor(
                 offset = dataOffset,
                 maxPointCount = maxPointCount,
                 limit = end,
-            ) ?: return unavailable()
+            ) ?: return malformed()
             dataOffset = points.nextOffset
             points.values
         } else {
             null
         }
 
-        var requiresIupInterpolation = false
-        val xDeltas = DoubleArray(pointCount)
-        val yDeltas = DoubleArray(pointCount)
+        val xDeltas = DoubleArray(maxPointCount)
+        val yDeltas = DoubleArray(maxPointCount)
+        val explicitPoints = BooleanArray(maxPointCount)
+        val inferredPoints = BooleanArray(maxPointCount)
         for (header in headers) {
-            val tupleEnd = dataOffset.checkedPlus(header.variationDataSize) ?: return unavailable()
+            val tupleEnd = dataOffset.checkedPlus(header.variationDataSize) ?: return malformed()
             if (tupleEnd > end) {
-                return unavailable()
+                return malformed()
             }
             var tupleDataOffset = dataOffset
             val privatePoints = if (header.tupleIndex and GVAR_PRIVATE_POINT_NUMBERS != 0) {
@@ -1984,31 +2061,26 @@ class TrueTypeGvarTable private constructor(
                     offset = tupleDataOffset,
                     maxPointCount = maxPointCount,
                     limit = tupleEnd,
-                ) ?: return unavailable()
+                ) ?: return malformed()
                 tupleDataOffset = points.nextOffset
                 points.values
             } else {
                 null
             }
             val targetPoints = privatePoints ?: sharedPoints ?: IntArray(maxPointCount) { it }
-            if (!targetPoints.isCompleteGvarPointSet(maxPointCount)) {
-                requiresIupInterpolation = true
-                dataOffset = tupleEnd
-                continue
-            }
             val tupleXDeltas = readPackedGvarDeltas(
                 offset = tupleDataOffset,
                 count = targetPoints.size,
                 limit = tupleEnd,
-            ) ?: return unavailable()
+            ) ?: return malformed()
             tupleDataOffset = tupleXDeltas.nextOffset
             val tupleYDeltas = readPackedGvarDeltas(
                 offset = tupleDataOffset,
                 count = targetPoints.size,
                 limit = tupleEnd,
-            ) ?: return unavailable()
+            ) ?: return malformed()
             if (tupleYDeltas.nextOffset > tupleEnd) {
-                return unavailable()
+                return malformed()
             }
 
             val scalar = tupleScalar(
@@ -2018,21 +2090,134 @@ class TrueTypeGvarTable private constructor(
                 endTuple = header.endTuple,
             )
             if (scalar != 0.0) {
-                for (index in targetPoints.indices) {
-                    val point = targetPoints[index]
-                    if (point in 0 until pointCount) {
-                        xDeltas[point] += tupleXDeltas.values[index] * scalar
-                        yDeltas[point] += tupleYDeltas.values[index] * scalar
-                    }
+                val tuplePointDeltas = resolveTuplePointDeltas(
+                    glyphPoints = glyphPoints,
+                    contourEndPoints = glyph.endPointsOfContours,
+                    pointCount = pointCount,
+                    maxPointCount = maxPointCount,
+                    targetPoints = targetPoints,
+                    tupleXDeltas = tupleXDeltas.values,
+                    tupleYDeltas = tupleYDeltas.values,
+                )
+                for (pointIndex in 0 until maxPointCount) {
+                    xDeltas[pointIndex] += tuplePointDeltas.xDeltas[pointIndex] * scalar
+                    yDeltas[pointIndex] += tuplePointDeltas.yDeltas[pointIndex] * scalar
+                    explicitPoints[pointIndex] = explicitPoints[pointIndex] || tuplePointDeltas.explicitPoints[pointIndex]
+                    inferredPoints[pointIndex] = inferredPoints[pointIndex] || tuplePointDeltas.inferredPoints[pointIndex]
                 }
             }
             dataOffset = tupleEnd
         }
 
         return TrueTypeGvarSimpleGlyphDeltaResult(
-            deltas = TrueTypeGlyphVariationDeltas(xDeltas = xDeltas, yDeltas = yDeltas),
-            requiresIupInterpolation = requiresIupInterpolation,
+            deltas = TrueTypeGlyphVariationDeltas(
+                xDeltas = xDeltas.copyOfRange(0, pointCount),
+                yDeltas = yDeltas.copyOfRange(0, pointCount),
+                phantomXDeltas = xDeltas.copyOfRange(pointCount, maxPointCount),
+                phantomYDeltas = yDeltas.copyOfRange(pointCount, maxPointCount),
+                explicitPoints = explicitPoints.copyOfRange(0, pointCount),
+                inferredPoints = inferredPoints.copyOfRange(0, pointCount),
+            ),
         )
+    }
+
+    private fun resolveTuplePointDeltas(
+        glyphPoints: List<TrueTypeGlyphPoint>,
+        contourEndPoints: List<Int>,
+        pointCount: Int,
+        maxPointCount: Int,
+        targetPoints: IntArray,
+        tupleXDeltas: IntArray,
+        tupleYDeltas: IntArray,
+    ): ResolvedTuplePointDeltas {
+        val resolvedXDeltas = DoubleArray(maxPointCount)
+        val resolvedYDeltas = DoubleArray(maxPointCount)
+        val explicitPoints = BooleanArray(maxPointCount)
+        val inferredPoints = BooleanArray(maxPointCount)
+
+        for (index in targetPoints.indices) {
+            val point = targetPoints[index]
+            if (point in 0 until maxPointCount) {
+                resolvedXDeltas[point] = tupleXDeltas[index].toDouble()
+                resolvedYDeltas[point] = tupleYDeltas[index].toDouble()
+                explicitPoints[point] = true
+            }
+        }
+        if (targetPoints.isCompleteGvarPointSet(maxPointCount)) {
+            return ResolvedTuplePointDeltas(
+                xDeltas = resolvedXDeltas,
+                yDeltas = resolvedYDeltas,
+                explicitPoints = explicitPoints,
+                inferredPoints = inferredPoints,
+            )
+        }
+
+        var contourStart = 0
+        for (contourEnd in contourEndPoints) {
+            val referencedPoints = (contourStart..contourEnd).filter { pointIndex -> explicitPoints[pointIndex] }
+            if (referencedPoints.isEmpty() || referencedPoints.size == contourEnd - contourStart + 1) {
+                contourStart = contourEnd + 1
+                continue
+            }
+            for (pointIndex in contourStart..contourEnd) {
+                if (explicitPoints[pointIndex]) {
+                    continue
+                }
+                val precedingPointIndex = referencedPoints.lastOrNull { referencedPoint -> referencedPoint < pointIndex }
+                    ?: referencedPoints.last()
+                val followingPointIndex = referencedPoints.firstOrNull { referencedPoint -> referencedPoint > pointIndex }
+                    ?: referencedPoints.first()
+                resolvedXDeltas[pointIndex] = inferUntouchedPointDelta(
+                    targetCoordinate = glyphPoints[pointIndex].x.toDouble(),
+                    precedingCoordinate = glyphPoints[precedingPointIndex].x.toDouble(),
+                    precedingDelta = resolvedXDeltas[precedingPointIndex],
+                    followingCoordinate = glyphPoints[followingPointIndex].x.toDouble(),
+                    followingDelta = resolvedXDeltas[followingPointIndex],
+                )
+                resolvedYDeltas[pointIndex] = inferUntouchedPointDelta(
+                    targetCoordinate = glyphPoints[pointIndex].y.toDouble(),
+                    precedingCoordinate = glyphPoints[precedingPointIndex].y.toDouble(),
+                    precedingDelta = resolvedYDeltas[precedingPointIndex],
+                    followingCoordinate = glyphPoints[followingPointIndex].y.toDouble(),
+                    followingDelta = resolvedYDeltas[followingPointIndex],
+                )
+                inferredPoints[pointIndex] = true
+            }
+            contourStart = contourEnd + 1
+        }
+
+        return ResolvedTuplePointDeltas(
+            xDeltas = resolvedXDeltas,
+            yDeltas = resolvedYDeltas,
+            explicitPoints = explicitPoints,
+            inferredPoints = inferredPoints,
+        )
+    }
+
+    private fun inferUntouchedPointDelta(
+        targetCoordinate: Double,
+        precedingCoordinate: Double,
+        precedingDelta: Double,
+        followingCoordinate: Double,
+        followingDelta: Double,
+    ): Double {
+        if (precedingCoordinate == followingCoordinate) {
+            return if (precedingDelta == followingDelta) precedingDelta else 0.0
+        }
+        val minimumCoordinate = min(precedingCoordinate, followingCoordinate)
+        val maximumCoordinate = max(precedingCoordinate, followingCoordinate)
+        return when {
+            targetCoordinate <= minimumCoordinate -> {
+                if (precedingCoordinate < followingCoordinate) precedingDelta else followingDelta
+            }
+            targetCoordinate >= maximumCoordinate -> {
+                if (precedingCoordinate > followingCoordinate) precedingDelta else followingDelta
+            }
+            else -> {
+                val proportion = (targetCoordinate - precedingCoordinate) / (followingCoordinate - precedingCoordinate)
+                ((1.0 - proportion) * precedingDelta) + (proportion * followingDelta)
+            }
+        }
     }
 
     private fun readPackedGvarPoints(
@@ -2477,11 +2662,13 @@ class ParsedTrueTypeGlyphScaler(
      * outline support.
      *
      * @param glyphId Font-specific glyph identifier.
-     * @param position Variation position. Glyph variation deltas and phantom-point metrics are ignored.
+     * @param position Variation position. Simple-glyph metrics apply bounded `gvar` phantom-point
+     * advance deltas when available.
      * @return Scaled glyph metrics.
      * @throws IllegalArgumentException when the glyph id is outside `loca` or has no horizontal metrics.
      */
     override fun metrics(glyphId: UInt, position: VariationPosition): GlyphMetrics {
+        val normalizedCoordinates = normalizedCoordinates(position)
         val range = loca.rangeForGlyph(glyphId)
         val glyph = TrueTypeGlyfTableParser.parseGlyph(
             glyfTable = glyfTable,
@@ -2497,7 +2684,11 @@ class ParsedTrueTypeGlyphScaler(
             is TrueTypeGlyph.Composite -> glyph.header.toGlyphBounds().scaled(scale)
         }
         return GlyphMetrics(
-            advanceX = metric.advanceX * scale,
+            advanceX = resolveHorizontalAdvance(
+                glyphId = metricGlyphId,
+                metric = metric,
+                normalizedCoordinates = normalizedCoordinates,
+            ) * scale,
             advanceY = 0.0,
             bounds = bounds,
         )
@@ -2561,16 +2752,6 @@ class ParsedTrueTypeGlyphScaler(
                 severity = "warning",
             )
         }
-        if (gvar != null && normalizedCoordinates.any { coordinate -> coordinate != 0.0 }) {
-            diagnostics += FontScalerDiagnostic(
-                code = FontScalerDiagnosticCodes.METRICS_VARIATION_UNAVAILABLE,
-                detail = "truetype.phantom-metrics-unavailable",
-                operation = "metrics",
-                glyphId = glyphId,
-                severity = "warning",
-            )
-        }
-
         val outline = runCatching {
             resolveGlyph(
                 glyphId = glyphId,
@@ -2780,12 +2961,32 @@ class ParsedTrueTypeGlyphScaler(
         normalizedCoordinates: List<Double>,
     ): TrueTypeGlyphVariationDeltas? {
         val gvar = gvar ?: return null
-        val pointCount = glyph.endPointsOfContours.lastOrNull()?.plus(1) ?: 0
         return gvar.simpleGlyphDeltas(
             glyphId = glyphId,
-            pointCount = pointCount,
+            glyph = glyph,
             normalizedCoordinates = normalizedCoordinates,
         )
+    }
+
+    private fun resolveHorizontalAdvance(
+        glyphId: UInt,
+        metric: TrueTypeGlyphHorizontalMetrics,
+        normalizedCoordinates: List<Double>,
+    ): Double {
+        if (normalizedCoordinates.isEmpty() || normalizedCoordinates.all { coordinate -> coordinate == 0.0 }) {
+            return metric.advanceX
+        }
+        val glyph = parseGlyph(glyphId)
+        if (glyph !is TrueTypeGlyph.Simple) {
+            return metric.advanceX
+        }
+        val variationDeltas = simpleGlyphVariationDeltas(
+            glyphId = glyphId,
+            glyph = glyph,
+            normalizedCoordinates = normalizedCoordinates,
+        ) ?: return metric.advanceX
+        return metric.advanceX + variationDeltas.phantomXDelta(PHANTOM_RIGHT_SIDE_INDEX) -
+            variationDeltas.phantomXDelta(PHANTOM_LEFT_SIDE_INDEX)
     }
 
     private fun gvarEvidenceDiagnostics(
@@ -2797,24 +2998,35 @@ class ParsedTrueTypeGlyphScaler(
         if (glyph !is TrueTypeGlyph.Simple) {
             return emptyList()
         }
-        val pointCount = glyph.endPointsOfContours.lastOrNull()?.plus(1) ?: 0
         val result = gvar.simpleGlyphDeltaResult(
             glyphId = glyphId,
-            pointCount = pointCount,
+            glyph = glyph,
             normalizedCoordinates = normalizedCoordinates,
         )
-        return if (result.requiresIupInterpolation) {
-            listOf(
-                FontScalerDiagnostic(
-                    code = FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED,
-                    detail = "truetype.gvar-iup-unavailable",
-                    operation = "variation",
-                    glyphId = glyphId,
-                    severity = "warning",
-                ),
-            )
-        } else {
-            emptyList()
+        return when {
+            result.variationDataMalformed -> {
+                listOf(
+                    FontScalerDiagnostic(
+                        code = FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED,
+                        detail = "truetype.gvar-malformed",
+                        operation = "variation",
+                        glyphId = glyphId,
+                        severity = "warning",
+                    ),
+                )
+            }
+            result.requiresIupInterpolation -> {
+                listOf(
+                    FontScalerDiagnostic(
+                        code = FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED,
+                        detail = "truetype.gvar-iup-unavailable",
+                        operation = "variation",
+                        glyphId = glyphId,
+                        severity = "warning",
+                    ),
+                )
+            }
+            else -> emptyList()
         }
     }
 
@@ -3019,6 +3231,33 @@ private fun GlyphMetrics.toCanonicalJson(): String = buildString {
     append(scalerJsonString("advanceX")).append(": ").append(advanceX.toCanonicalScalerNumber()).append(", ")
     append(scalerJsonString("advanceY")).append(": ").append(advanceY.toCanonicalScalerNumber()).append(", ")
     append(scalerJsonString("bounds")).append(": ").append(bounds.toCanonicalJson())
+    verticalMetrics?.let { vertical ->
+        append(", ")
+        append(scalerJsonString("verticalMetrics")).append(": ").append(vertical.toCanonicalJson())
+    }
+    append("}")
+}
+
+private fun GlyphVerticalMetrics.toCanonicalJson(): String = buildString {
+    append("{")
+    append(scalerJsonString("state")).append(": ").append(scalerJsonString(state)).append(", ")
+    append(scalerJsonString("source")).append(": ").append(scalerJsonString(source)).append(", ")
+    append(scalerJsonString("verticalAdvance")).append(": ")
+        .append(verticalAdvance?.toCanonicalScalerNumber() ?: "null").append(", ")
+    append(scalerJsonString("topSideBearing")).append(": ")
+        .append(topSideBearing?.toCanonicalScalerNumber() ?: "null").append(", ")
+    append(scalerJsonString("verticalOriginY")).append(": ")
+        .append(verticalOriginY?.toCanonicalScalerNumber() ?: "null").append(", ")
+    append(scalerJsonString("ascender")).append(": ")
+        .append(ascender?.toCanonicalScalerNumber() ?: "null").append(", ")
+    append(scalerJsonString("descender")).append(": ")
+        .append(descender?.toCanonicalScalerNumber() ?: "null").append(", ")
+    append(scalerJsonString("lineGap")).append(": ")
+        .append(lineGap?.toCanonicalScalerNumber() ?: "null").append(", ")
+    append(scalerJsonString("maxAdvanceHeight")).append(": ")
+        .append(maxAdvanceHeight?.toCanonicalScalerNumber() ?: "null").append(", ")
+    append(scalerJsonString("diagnostics")).append(": ")
+        .append(diagnostics.toJsonStringArray())
     append("}")
 }
 
@@ -3040,8 +3279,37 @@ private fun Throwable.toFontScalerDiagnosticOrNull(
 ): FontScalerDiagnostic? =
     when (this) {
         is FontScalerRefusalException -> diagnostic.copy(operation = operation, glyphId = glyphId)
+        is IllegalArgumentException -> toMalformedTrueTypeDiagnosticOrNull(glyphId = glyphId, operation = operation)
         else -> null
     }
+
+private fun IllegalArgumentException.toMalformedTrueTypeDiagnosticOrNull(
+    glyphId: UInt,
+    operation: String,
+): FontScalerDiagnostic? {
+    val message = message.orEmpty()
+    val detail = when {
+        "endPtsOfContours must be monotonic" in message -> "truetype.contour-endpoints-malformed"
+        "flag repeat exceeds point count" in message -> "truetype.flag-repeat-overflow"
+        "composite component has mutually exclusive scale flags set" in message -> "truetype.composite-transform-flags"
+        "header is truncated" in message -> "truetype.glyf-header-truncated"
+        "x coordinate data is truncated" in message ||
+            "y coordinate data is truncated" in message -> "truetype.coordinate-run-truncated"
+        "flag data is truncated" in message ||
+            "flag repeat data is truncated" in message -> "truetype.flag-data-truncated"
+        "instructionLength is truncated" in message ||
+            "instructions is truncated" in message -> "truetype.instructions-truncated"
+        "endPtsOfContours is truncated" in message -> "truetype.contour-endpoints-truncated"
+        "outside glyf table" in message -> "truetype.glyf-range-invalid"
+        else -> null
+    } ?: return null
+    return FontScalerDiagnostic(
+        code = FontScalerDiagnosticCodes.SCALER_OUTLINE_UNAVAILABLE,
+        detail = detail,
+        operation = operation,
+        glyphId = glyphId,
+    )
+}
 
 private fun String.isStableToken(): Boolean =
     isNotEmpty() && all { character ->
@@ -3112,6 +3380,8 @@ private const val GVAR_INTERMEDIATE_REGION = 0x4000
 private const val GVAR_PRIVATE_POINT_NUMBERS = 0x2000
 private const val GVAR_TUPLE_INDEX_MASK = 0x0fff
 private const val PHANTOM_POINT_COUNT = 4
+private const val PHANTOM_LEFT_SIDE_INDEX = 0
+private const val PHANTOM_RIGHT_SIDE_INDEX = 1
 
 private enum class CoordinateAxis {
     X,
@@ -3484,7 +3754,15 @@ class TrueTypeGlyfScaler(
     }
 
     private val variationNormalizer: VariationNormalizer? by lazy {
-        if (face.rawTables.containsKey(SFNTTableTag("gvar"))) {
+        if (
+            face.variations.axes.isNotEmpty() &&
+            face.rawTables.keys.any { tag ->
+                tag == SFNTTableTag("gvar") ||
+                    tag == SFNTTableTag("HVAR") ||
+                    tag == SFNTTableTag("VVAR") ||
+                    tag == SFNTTableTag("MVAR")
+            }
+        ) {
             BoundedVariationNormalizer(
                 face.variations.axes.map { axis ->
                     VariationAxis(
@@ -3542,12 +3820,18 @@ class TrueTypeGlyfScaler(
         } else {
             VariationPosition()
         }
-        return parsedScaler.scaledGlyphEvidence(
+        val evidence = parsedScaler.scaledGlyphEvidence(
             glyphId = glyphId,
             position = normalizedPosition,
             requestedPosition = position,
-            additionalDiagnostics = normalizationDiagnostics + avarDiagnostics(),
+            additionalDiagnostics = normalizationDiagnostics + avarDiagnostics() +
+                metricsVariationDiagnostics(glyphId = glyphId, normalizedPosition = normalizedPosition),
             includeNormalizedVariationPosition = normalizationDiagnostics.isEmpty(),
+        )
+        return attachVerticalMetricsEvidence(
+            glyphId = glyphId,
+            normalizedPosition = normalizedPosition,
+            evidence = evidence,
         )
     }
 
@@ -3597,8 +3881,162 @@ class TrueTypeGlyfScaler(
         }
     }
 
+    private fun metricsVariationDiagnostics(
+        glyphId: UInt,
+        normalizedPosition: VariationPosition,
+    ): List<FontScalerDiagnostic> {
+        if (normalizedPosition.axes.values.none { value -> value != 0.0 }) {
+            return emptyList()
+        }
+        val hasMetricsVariationTables = face.rawTables.keys.any { tag ->
+            tag == SFNTTableTag("HVAR") || tag == SFNTTableTag("MVAR")
+        }
+        if (!hasMetricsVariationTables) {
+            return emptyList()
+        }
+        return listOf(
+            FontScalerDiagnostic(
+                code = FontScalerDiagnosticCodes.METRICS_VARIATION_UNAVAILABLE,
+                detail = "truetype.metrics-variation-table-unavailable",
+                operation = "metrics",
+                glyphId = glyphId,
+                severity = "warning",
+            ),
+        )
+    }
+
     private fun avarDiagnostics(): List<FontScalerDiagnostic> = emptyList()
+
+    private fun attachVerticalMetricsEvidence(
+        glyphId: UInt,
+        normalizedPosition: VariationPosition,
+        evidence: ScaledTrueTypeGlyphEvidence,
+    ): ScaledTrueTypeGlyphEvidence {
+        val metrics = evidence.metrics ?: return evidence
+        val verticalEvidence = resolveVerticalMetrics(
+            glyphId = glyphId,
+            normalizedPosition = normalizedPosition,
+            metrics = metrics,
+        )
+        return evidence.copy(
+            metrics = metrics.copy(
+                advanceY = verticalEvidence.metrics?.verticalAdvance ?: metrics.advanceY,
+                verticalMetrics = verticalEvidence.metrics,
+            ),
+            diagnostics = evidence.diagnostics + verticalEvidence.diagnostics,
+        )
+    }
+
+    private fun resolveVerticalMetrics(
+        glyphId: UInt,
+        normalizedPosition: VariationPosition,
+        metrics: GlyphMetrics,
+    ): ResolvedVerticalMetricsEvidence {
+        val malformedVerticalTables = face.diagnostics.any { diagnostic ->
+            (diagnostic.table == SFNTTableTag("vhea") || diagnostic.table == SFNTTableTag("vmtx")) &&
+                diagnostic.causeCode == "font.sfnt.optional-table-malformed"
+        }
+        val verticalMetric = face.metrics.verticalMetrics.firstOrNull { metric -> metric.glyphId.toUInt() == glyphId }
+        if (verticalMetric == null) {
+            if (malformedVerticalTables) {
+                return ResolvedVerticalMetricsEvidence(
+                    metrics = GlyphVerticalMetrics(
+                        state = "diagnostic",
+                        source = "vhea-vmtx",
+                        diagnostics = listOf("truetype.vertical-metrics-malformed"),
+                    ),
+                    diagnostics = listOf(
+                        FontScalerDiagnostic(
+                            code = FontScalerDiagnosticCodes.VERTICAL_METRICS_UNAVAILABLE,
+                            detail = "truetype.vertical-metrics-malformed",
+                            operation = "metrics",
+                            glyphId = glyphId,
+                            severity = "warning",
+                        ),
+                    ),
+                )
+            }
+            return ResolvedVerticalMetricsEvidence(
+                metrics = GlyphVerticalMetrics(
+                    state = "fallback",
+                    source = "horizontal-fallback-fact",
+                    diagnostics = listOf("truetype.vertical-metrics-absent"),
+                ),
+                diagnostics = listOf(
+                    FontScalerDiagnostic(
+                        code = FontScalerDiagnosticCodes.VERTICAL_METRICS_UNAVAILABLE,
+                        detail = "truetype.vertical-metrics-absent",
+                        operation = "metrics",
+                        glyphId = glyphId,
+                        severity = "warning",
+                    ),
+                ),
+            )
+        }
+
+        val baseAdvance = verticalMetric.advanceHeight.toDouble()
+        val topSideBearing = verticalMetric.topSideBearing.toDouble()
+        var state = "present"
+        var verticalAdvance = baseAdvance
+        val diagnostics = mutableListOf<FontScalerDiagnostic>()
+        val detailTokens = mutableListOf<String>()
+        if (normalizedPosition.axes.values.any { value -> value != 0.0 }) {
+            val vvarBytes = face.rawTableBytesOrNull("VVAR")
+            if (vvarBytes == null) {
+                state = "diagnostic"
+                detailTokens += "truetype.vvar-unavailable"
+                diagnostics += FontScalerDiagnostic(
+                    code = FontScalerDiagnosticCodes.METRICS_VARIATION_UNAVAILABLE,
+                    detail = "truetype.vvar-unavailable",
+                    operation = "metrics",
+                    glyphId = glyphId,
+                    severity = "warning",
+                )
+            } else {
+                runCatching {
+                    parseVvarTable(vvarBytes).advanceHeightDelta(
+                        glyphId = glyphId,
+                        axisTags = face.variations.axes.map { axis -> axis.tag.text },
+                        position = normalizedPosition,
+                    )
+                }.onSuccess { delta ->
+                    verticalAdvance += delta
+                }.onFailure {
+                    state = "diagnostic"
+                    detailTokens += "truetype.vvar-table-malformed"
+                    diagnostics += FontScalerDiagnostic(
+                        code = FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED,
+                        detail = "truetype.vvar-table-malformed",
+                        operation = "metrics",
+                        glyphId = glyphId,
+                        severity = "warning",
+                    )
+                }
+            }
+        }
+
+        return ResolvedVerticalMetricsEvidence(
+            metrics = GlyphVerticalMetrics(
+                state = state,
+                source = "vhea-vmtx",
+                verticalAdvance = verticalAdvance,
+                topSideBearing = topSideBearing,
+                verticalOriginY = topSideBearing + metrics.bounds.bottom,
+                ascender = face.metrics.verticalAscender?.toDouble(),
+                descender = face.metrics.verticalDescender?.toDouble(),
+                lineGap = face.metrics.verticalLineGap?.toDouble(),
+                maxAdvanceHeight = face.metrics.maxAdvanceHeight?.toDouble(),
+                diagnostics = detailTokens,
+            ),
+            diagnostics = diagnostics,
+        )
+    }
 }
+
+private data class ResolvedVerticalMetricsEvidence(
+    val metrics: GlyphVerticalMetrics?,
+    val diagnostics: List<FontScalerDiagnostic> = emptyList(),
+)
 
 private fun remapAvarCoordinate(
     coordinate: Double,
@@ -3633,6 +4071,282 @@ private fun OpenTypeFaceData.requiredRawTableBytes(tag: String): ByteArray =
 
 private fun OpenTypeFaceData.rawTableBytesOrNull(tag: String): ByteArray? =
     rawTables[SFNTTableTag(tag)]?.toRawSfntTableBytes(tag)
+
+private data class VvarTable(
+    val axisCount: Int,
+    val regions: List<VvarVariationRegion>,
+    val itemVariationData: List<VvarItemVariationData>,
+    val advanceHeightMapping: DeltaSetIndexMap?,
+) {
+    fun advanceHeightDelta(
+        glyphId: UInt,
+        axisTags: List<String>,
+        position: VariationPosition,
+    ): Double {
+        require(axisTags.size == axisCount) {
+            "VVAR axis tag count ${axisTags.size} does not match axisCount $axisCount."
+        }
+        val deltaSetIndex = advanceHeightMapping?.lookup(glyphId.toInt()) ?: DeltaSetIndex(outerIndex = 0, innerIndex = glyphId.toInt())
+        val deltaSet = itemVariationData.getOrNull(deltaSetIndex.outerIndex)
+            ?: throw IllegalArgumentException(
+                "VVAR advanceHeight outer index ${deltaSetIndex.outerIndex} is outside itemVariationData count ${itemVariationData.size}.",
+            )
+        return deltaSet.delta(
+            innerIndex = deltaSetIndex.innerIndex,
+            regions = regions,
+            axisTags = axisTags,
+            position = position,
+        )
+    }
+}
+
+private data class VvarVariationRegion(
+    val startCoordinates: List<Double>,
+    val peakCoordinates: List<Double>,
+    val endCoordinates: List<Double>,
+) {
+    fun scalar(
+        axisTags: List<String>,
+        position: VariationPosition,
+    ): Double {
+        require(axisTags.size == peakCoordinates.size) {
+            "VVAR variation axis count must match region coordinate count."
+        }
+        return peakCoordinates.indices.fold(1.0) { scalar, index ->
+            scalar * axisScalar(
+                coordinate = position.axes[axisTags[index]] ?: 0.0,
+                start = startCoordinates[index],
+                peak = peakCoordinates[index],
+                end = endCoordinates[index],
+            )
+        }
+    }
+}
+
+private data class VvarItemVariationData(
+    val regionIndexes: List<Int>,
+    val deltaSets: List<List<Int>>,
+) {
+    fun delta(
+        innerIndex: Int,
+        regions: List<VvarVariationRegion>,
+        axisTags: List<String>,
+        position: VariationPosition,
+    ): Double {
+        val deltaSet = deltaSets.getOrNull(innerIndex)
+            ?: throw IllegalArgumentException(
+                "VVAR delta set inner index $innerIndex is outside itemCount ${deltaSets.size}.",
+            )
+        return deltaSet.indices.sumOf { index ->
+            val regionIndex = regionIndexes[index]
+            val region = regions.getOrNull(regionIndex)
+                ?: throw IllegalArgumentException(
+                    "VVAR region index $regionIndex is outside region count ${regions.size}.",
+                )
+            deltaSet[index].toDouble() * region.scalar(axisTags = axisTags, position = position)
+        }
+    }
+}
+
+private data class DeltaSetIndexMap(
+    val entries: List<DeltaSetIndex>,
+) {
+    fun lookup(targetIndex: Int): DeltaSetIndex {
+        require(targetIndex >= 0) { "VVAR target index must be non-negative." }
+        require(entries.isNotEmpty()) { "VVAR DeltaSetIndexMap must contain at least one entry." }
+        return entries[min(targetIndex, entries.lastIndex)]
+    }
+}
+
+private data class DeltaSetIndex(
+    val outerIndex: Int,
+    val innerIndex: Int,
+)
+
+private fun parseVvarTable(data: ByteArray): VvarTable {
+    require(data.size >= 24) { "VVAR table must contain at least 24 bytes." }
+    val majorVersion = readUInt16(data, 0)
+    val minorVersion = readUInt16(data, 2)
+    require(majorVersion == 1 && minorVersion == 0) {
+        "VVAR version must be 1.0, was $majorVersion.$minorVersion."
+    }
+    val itemVariationStoreOffset = readCFFUInt32AsInt(data, 4, "VVAR itemVariationStoreOffset")
+    val advanceHeightMappingOffset = readCFFUInt32AsInt(data, 8, "VVAR advanceHeightMappingOffset")
+    val itemVariationStore = parseVvarItemVariationStore(data = data, offset = itemVariationStoreOffset)
+    val advanceHeightMapping = if (advanceHeightMappingOffset == 0) {
+        null
+    } else {
+        parseDeltaSetIndexMap(data = data, offset = advanceHeightMappingOffset)
+    }
+    return VvarTable(
+        axisCount = itemVariationStore.axisCount,
+        regions = itemVariationStore.regions,
+        itemVariationData = itemVariationStore.itemVariationData,
+        advanceHeightMapping = advanceHeightMapping,
+    )
+}
+
+private data class ParsedVvarItemVariationStore(
+    val axisCount: Int,
+    val regions: List<VvarVariationRegion>,
+    val itemVariationData: List<VvarItemVariationData>,
+)
+
+private fun parseVvarItemVariationStore(
+    data: ByteArray,
+    offset: Int,
+): ParsedVvarItemVariationStore {
+    requireCFFAvailable(data, offset, 8, "VVAR ItemVariationStore")
+    val format = readUInt16(data, offset)
+    require(format == 1) { "VVAR ItemVariationStore format must be 1." }
+    val regionListOffset = readCFFUInt32AsInt(data, offset + 2, "VVAR item variation region list offset")
+    val itemVariationDataCount = readUInt16(data, offset + 6)
+    require(itemVariationDataCount > 0) { "VVAR ItemVariationStore must contain ItemVariationData." }
+    requireCFFAvailable(
+        data,
+        offset + 8,
+        itemVariationDataCount * 4,
+        "VVAR item variation data offsets",
+    )
+    val itemVariationDataOffsets = (0 until itemVariationDataCount).map { index ->
+        readCFFUInt32AsInt(
+            data,
+            offset + 8 + index * 4,
+            "VVAR item variation data offset[$index]",
+        )
+    }
+    val (axisCount, regions) = parseVvarVariationRegionList(
+        data = data,
+        offset = offset + regionListOffset,
+    )
+    val itemVariationData = itemVariationDataOffsets.mapIndexed { index, relativeOffset ->
+        parseVvarItemVariationData(
+            data = data,
+            offset = offset + relativeOffset,
+            regionCount = regions.size,
+            label = "VVAR item variation data[$index]",
+        )
+    }
+    return ParsedVvarItemVariationStore(
+        axisCount = axisCount,
+        regions = regions,
+        itemVariationData = itemVariationData,
+    )
+}
+
+private fun parseVvarVariationRegionList(
+    data: ByteArray,
+    offset: Int,
+): Pair<Int, List<VvarVariationRegion>> {
+    requireCFFAvailable(data, offset, 4, "VVAR VariationRegionList")
+    val axisCount = readUInt16(data, offset)
+    val regionCount = readUInt16(data, offset + 2)
+    require(axisCount > 0) { "VVAR VariationRegionList axisCount must be positive." }
+    val regionRecordSize = axisCount * 6
+    requireCFFAvailable(data, offset + 4, regionCount * regionRecordSize, "VVAR variation regions")
+    val regions = (0 until regionCount).map { regionIndex ->
+        val recordOffset = offset + 4 + regionIndex * regionRecordSize
+        val start = MutableList(axisCount) { 0.0 }
+        val peak = MutableList(axisCount) { 0.0 }
+        val end = MutableList(axisCount) { 0.0 }
+        repeat(axisCount) { axisIndex ->
+            val axisOffset = recordOffset + axisIndex * 6
+            start[axisIndex] = readCFFF2Dot14(data, axisOffset)
+            peak[axisIndex] = readCFFF2Dot14(data, axisOffset + 2)
+            end[axisIndex] = readCFFF2Dot14(data, axisOffset + 4)
+        }
+        VvarVariationRegion(
+            startCoordinates = start,
+            peakCoordinates = peak,
+            endCoordinates = end,
+        )
+    }
+    return axisCount to regions
+}
+
+private fun parseVvarItemVariationData(
+    data: ByteArray,
+    offset: Int,
+    regionCount: Int,
+    label: String,
+): VvarItemVariationData {
+    requireCFFAvailable(data, offset, 6, label)
+    val itemCount = readUInt16(data, offset)
+    val wordDeltaCount = readUInt16(data, offset + 2)
+    val regionIndexCount = readUInt16(data, offset + 4)
+    require(regionIndexCount > 0) { "$label regionIndexCount must be positive." }
+    requireCFFAvailable(data, offset + 6, regionIndexCount * 2, "$label region indexes")
+    val regionIndexes = (0 until regionIndexCount).map { index ->
+        readUInt16(data, offset + 6 + index * 2).also { regionIndex ->
+            require(regionIndex < regionCount) {
+                "$label region index $regionIndex is outside region count $regionCount."
+            }
+        }
+    }
+    val longWords = wordDeltaCount and 0x8000 != 0
+    val wordCount = wordDeltaCount and 0x7fff
+    require(wordCount <= regionIndexCount) { "$label wordDeltaCount exceeds regionIndexCount." }
+    val bytesPerDeltaSet = if (longWords) {
+        wordCount * 4 + (regionIndexCount - wordCount) * 2
+    } else {
+        wordCount * 2 + (regionIndexCount - wordCount)
+    }
+    val deltaSetsOffset = offset + 6 + regionIndexCount * 2
+    requireCFFAvailable(data, deltaSetsOffset, itemCount * bytesPerDeltaSet, "$label delta sets")
+    val deltaSets = (0 until itemCount).map { itemIndex ->
+        var cursor = deltaSetsOffset + itemIndex * bytesPerDeltaSet
+        buildList(regionIndexCount) {
+            repeat(wordCount) {
+                val value = if (longWords) {
+                    readInt32(data, cursor)
+                } else {
+                    readInt16(data, cursor)
+                }
+                add(value)
+                cursor += if (longWords) 4 else 2
+            }
+            repeat(regionIndexCount - wordCount) {
+                add(data[cursor].toInt())
+                cursor += 1
+            }
+        }
+    }
+    return VvarItemVariationData(
+        regionIndexes = regionIndexes,
+        deltaSets = deltaSets,
+    )
+}
+
+private fun parseDeltaSetIndexMap(
+    data: ByteArray,
+    offset: Int,
+): DeltaSetIndexMap {
+    requireCFFAvailable(data, offset, 4, "DeltaSetIndexMap header")
+    val format = data[offset].toInt() and 0xff
+    val entryFormat = data[offset + 1].toInt() and 0xff
+    val mapCount = when (format) {
+        0 -> readUInt16(data, offset + 2)
+        1 -> readCFFUInt32AsInt(data, offset + 2, "DeltaSetIndexMap mapCount")
+        else -> throw IllegalArgumentException("DeltaSetIndexMap format $format is unsupported.")
+    }
+    val entrySize = ((entryFormat and 0x30) shr 4) + 1
+    val mapDataOffset = if (format == 0) offset + 4 else offset + 6
+    requireCFFAvailable(data, mapDataOffset, mapCount * entrySize, "DeltaSetIndexMap data")
+    val innerBitCount = (entryFormat and 0x0f) + 1
+    val entries = (0 until mapCount).map { index ->
+        var entry = 0
+        repeat(entrySize) { byteIndex ->
+            entry = (entry shl 8) or (data[mapDataOffset + index * entrySize + byteIndex].toInt() and 0xff)
+        }
+        val outerIndex = entry ushr innerBitCount
+        val innerIndexMask = (1 shl innerBitCount) - 1
+        DeltaSetIndex(
+            outerIndex = outerIndex,
+            innerIndex = entry and innerIndexMask,
+        )
+    }
+    return DeltaSetIndexMap(entries = entries)
+}
 
 private fun List<Int>.toRawSfntTableBytes(tag: String): ByteArray =
     mapIndexed { index, value ->

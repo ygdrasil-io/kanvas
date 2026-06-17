@@ -18,6 +18,7 @@ import org.graphiks.kanvas.text.shaping.OpenTypeRunInput
 import org.graphiks.kanvas.text.shaping.OpenTypeShapingPlanCase
 import org.graphiks.kanvas.text.shaping.OpenTypeTableAvailability
 import org.graphiks.kanvas.text.shaping.PinnedUnicodeDataSetResources
+import org.graphiks.kanvas.text.shaping.RequiredScriptFeaturePolicies
 import org.graphiks.kanvas.text.shaping.ResolvedFeatureSet
 import org.graphiks.kanvas.text.shaping.ScriptExtensionsItemizer
 import org.graphiks.kanvas.text.shaping.ShapingFeatureRequest
@@ -49,7 +50,13 @@ class OpenTypeLayoutEngineContractTest {
         assertEquals(listOf(0..0, 1..1), result.shapedRun.clusters.map { it.sourceUtf16Range })
         assertEquals("Latn", result.shapingPlan.scriptRun.selectedScript)
         assertEquals(listOf("latn"), result.shapingPlan.scriptRun.openTypeScriptTags)
-        assertEquals(listOf("liga", "kern"), result.shapingPlan.features.enabled.map { it.tag })
+        assertEquals(
+            listOf("ccmp", "locl", "liga", "rlig", "clig", "calt", "kern", "mark", "mkmk"),
+            result.shapingPlan.features.enabled.map { it.tag },
+        )
+        assertEquals(listOf("ccmp", "locl", "rlig", "clig", "calt", "mark", "mkmk"), result.shapingPlan.features.defaulted.map { it.tag })
+        assertEquals(emptyList(), result.shapingPlan.features.unsupported)
+        assertEquals("dflt", result.shapingPlan.languageSystem)
         assertEquals("gsub-trace", result.shapingPlan.gsubTraceRef)
         assertEquals("gpos-trace", result.shapingPlan.gposTraceRef)
         assertEquals("no-op-contract", result.gsubTrace.events.single().decision)
@@ -120,8 +127,8 @@ class OpenTypeLayoutEngineContractTest {
             .map { it.message }
         assertEquals(
             listOf(
-                "GSUB table is missing for requested feature set kern,liga.",
-                "GPOS table is missing for requested feature set kern,liga.",
+                "GSUB table is missing for requested feature set calt,ccmp,clig,kern,liga,locl,mark,mkmk,rlig.",
+                "GPOS table is missing for requested feature set calt,ccmp,clig,kern,liga,locl,mark,mkmk,rlig.",
                 "GDEF table is missing for mark or ligature feature data.",
             ),
             missingTableDiagnostics,
@@ -204,6 +211,7 @@ class OpenTypeLayoutEngineContractTest {
             "\"caseId\": \"direct-glyph-run\"",
             "\"caseId\": \"unsupported-script\"",
             "\"caseId\": \"missing-table\"",
+            "\"caseId\": \"unsupported-discretionary-feature\"",
         ).forEach { requiredCase ->
             assertTrue(
                 actual = shapingPlan.contains(requiredCase),
@@ -211,8 +219,50 @@ class OpenTypeLayoutEngineContractTest {
             )
         }
         assertTrue(shapingPlan.contains("\"directGlyphInput\": true"))
+        assertTrue(shapingPlan.contains("\"defaulted\": ["))
+        assertTrue(shapingPlan.contains("\"unsupported\": ["))
+        assertTrue(shapingPlan.contains("\"languageSystem\": \"dflt\""))
         assertTrue(shapingPlan.contains(TEXT_SHAPING_SCRIPT_UNSUPPORTED_DIAGNOSTIC_CODE))
         assertTrue(shapingPlan.contains(TEXT_SHAPING_ENGINE_CONTRACT_MISSING_DIAGNOSTIC_CODE))
+    }
+
+    @Test
+    fun featurePolicyMatrixGoldenPinsRequiredScriptRowsAndEvidenceTracking() {
+        val matrixPath = projectRoot().resolve("reports/font/fixtures/expected/shaping/feature-policy-matrix.json")
+        assertTrue(
+            actual = Files.exists(matrixPath),
+            message = "feature-policy-matrix.json should be checked in for KFONT-M6-006",
+        )
+        val matrix = Files.readString(matrixPath)
+
+        listOf(
+            "\"scriptFamily\": \"Latin\"",
+            "\"scriptFamily\": \"Greek\"",
+            "\"scriptFamily\": \"Cyrillic\"",
+            "\"scriptFamily\": \"Hebrew\"",
+            "\"scriptFamily\": \"Arabic\"",
+            "\"scriptFamily\": \"Devanagari\"",
+            "\"scriptFamily\": \"Thai\"",
+            "\"scriptFamily\": \"CJK\"",
+            "\"scriptFamily\": \"Emoji\"",
+        ).forEach { requiredRow ->
+            assertTrue(
+                actual = matrix.contains(requiredRow),
+                message = "feature-policy-matrix.json is missing required policy row $requiredRow",
+            )
+        }
+        assertTrue(matrix.contains("\"ownerTickets\": [\"KFONT-M6-006\"]"))
+        assertTrue(matrix.contains("\"no-complete-target-support-claim\""))
+        assertTrue(matrix.contains("\"no-native-shaper-oracle-claim\""))
+
+        val dumpIndex = readProjectFile("reports/pure-kotlin-text/dump-evidence-index.json")
+        assertTrue(dumpIndex.contains("\"dumpId\": \"feature-policy-matrix\""))
+
+        val manifest = readProjectFile("reports/pure-kotlin-text/fixture-evidence-manifest.json")
+        assertTrue(manifest.contains("\"reports/font/fixtures/expected/shaping/feature-policy-matrix.json\""))
+
+        val dashboard = readProjectFile("reports/pure-kotlin-text/font-claim-dashboard.json")
+        assertTrue(dashboard.contains("\"reports/font/fixtures/expected/shaping/feature-policy-matrix.json\""))
     }
 
     @Test
@@ -227,8 +277,10 @@ class OpenTypeLayoutEngineContractTest {
             assertTrue(trace.contains("\"openTypeScriptTags\": [\"latn\"]"))
             assertTrue(trace.contains("\"features\": {"))
             assertTrue(trace.contains("\"requested\": [{\"tag\": \"liga\", \"value\": 1}, {\"tag\": \"kern\", \"value\": 1}]"))
-            assertTrue(trace.contains("\"enabled\": [{\"tag\": \"liga\", \"value\": 1}, {\"tag\": \"kern\", \"value\": 1}]"))
+            assertTrue(trace.contains("\"enabled\": [{\"tag\": \"ccmp\", \"value\": 1}, {\"tag\": \"locl\", \"value\": 1}, {\"tag\": \"liga\", \"value\": 1}, {\"tag\": \"rlig\", \"value\": 1}, {\"tag\": \"clig\", \"value\": 1}, {\"tag\": \"calt\", \"value\": 1}, {\"tag\": \"kern\", \"value\": 1}, {\"tag\": \"mark\", \"value\": 1}, {\"tag\": \"mkmk\", \"value\": 1}]"))
             assertTrue(trace.contains("\"disabled\": []"))
+            assertTrue(trace.contains("\"defaulted\": [{\"tag\": \"ccmp\", \"value\": 1}, {\"tag\": \"locl\", \"value\": 1}, {\"tag\": \"rlig\", \"value\": 1}, {\"tag\": \"clig\", \"value\": 1}, {\"tag\": \"calt\", \"value\": 1}, {\"tag\": \"mark\", \"value\": 1}, {\"tag\": \"mkmk\", \"value\": 1}]"))
+            assertTrue(trace.contains("\"unsupported\": []"))
         }
     }
 
@@ -253,8 +305,29 @@ class OpenTypeLayoutEngineContractTest {
         typefaceId: TypefaceID? = this.typefaceId,
         featureSet: ResolvedFeatureSet = ResolvedFeatureSet(
             requested = listOf(ShapingFeatureRequest("liga", 1), ShapingFeatureRequest("kern", 1)),
-            enabled = listOf(ShapingFeatureRequest("liga", 1), ShapingFeatureRequest("kern", 1)),
+            enabled = listOf(
+                ShapingFeatureRequest("ccmp", 1),
+                ShapingFeatureRequest("locl", 1),
+                ShapingFeatureRequest("liga", 1),
+                ShapingFeatureRequest("rlig", 1),
+                ShapingFeatureRequest("clig", 1),
+                ShapingFeatureRequest("calt", 1),
+                ShapingFeatureRequest("kern", 1),
+                ShapingFeatureRequest("mark", 1),
+                ShapingFeatureRequest("mkmk", 1),
+            ),
             disabled = emptyList(),
+            defaulted = listOf(
+                ShapingFeatureRequest("ccmp", 1),
+                ShapingFeatureRequest("locl", 1),
+                ShapingFeatureRequest("rlig", 1),
+                ShapingFeatureRequest("clig", 1),
+                ShapingFeatureRequest("calt", 1),
+                ShapingFeatureRequest("mark", 1),
+                ShapingFeatureRequest("mkmk", 1),
+            ),
+            unsupported = emptyList(),
+            languageSystem = "dflt",
         ),
         tableAvailability: OpenTypeTableAvailability = OpenTypeTableAvailability(),
         lookupTraceRequests: List<OpenTypeLookupTraceRequest> = emptyList(),
@@ -280,11 +353,20 @@ class OpenTypeLayoutEngineContractTest {
     }
 
     private fun unsupportedScriptInput(): OpenTypeRunInput =
-        latinRunInput().copy(
-            text = "\u10A0",
-            clusters = GraphemeClusterer(unicodeData).segment("\u10A0").clusters,
-            scriptRun = ScriptExtensionsItemizer(unicodeData).itemize("\u10A0").runs.single(),
-        )
+        "\u10A0".let { text ->
+            val clusters = GraphemeClusterer(unicodeData).segment(text).clusters
+            val scriptRun = ScriptExtensionsItemizer(unicodeData).itemize(text).runs.single()
+            latinRunInput(
+                featureSet = RequiredScriptFeaturePolicies.resolve(
+                    scriptRun = scriptRun,
+                    requested = listOf(ShapingFeatureRequest("liga", 1), ShapingFeatureRequest("kern", 1)),
+                ),
+            ).copy(
+                text = text,
+                clusters = clusters,
+                scriptRun = scriptRun,
+            )
+        }
 
     private fun shapingPlanCasesJson(): String =
         openTypeShapingPlanCasesToCanonicalJson(
@@ -307,6 +389,17 @@ class OpenTypeLayoutEngineContractTest {
                     engine.shape(
                         latinRunInput(
                             tableAvailability = OpenTypeTableAvailability(gdef = false, gsub = false, gpos = false),
+                        ),
+                    ),
+                ),
+                OpenTypeShapingPlanCase(
+                    "unsupported-discretionary-feature",
+                    engine.shape(
+                        latinRunInput(
+                            featureSet = RequiredScriptFeaturePolicies.resolve(
+                                scriptRun = ScriptExtensionsItemizer(unicodeData).itemize("AB").runs.single(),
+                                requested = listOf(ShapingFeatureRequest("salt", 1)),
+                            ),
                         ),
                     ),
                 ),

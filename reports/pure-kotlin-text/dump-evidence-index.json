@@ -582,6 +582,45 @@
       ]
     },
     {
+      "dumpId": "feature-policy-matrix",
+      "ownerTicket": "KFONT-M6-006",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Features"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/OpenTypeLayoutContract.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt",
+        "reports/font/fixtures/expected/shaping/feature-policy-matrix.json"
+      ],
+      "expectedFields": [
+        "dumpId",
+        "nonClaims",
+        "openTypeScriptTags",
+        "optionalFeatures",
+        "ownerTickets",
+        "refusalWhenMissing",
+        "requiredDefaults",
+        "rows",
+        "schemaVersion",
+        "scriptFamily",
+        "selectedScripts"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests '*OpenTypeLayoutEngineContractTest*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Feature policy matrix changes require script-row review, default-feature review, and non-claim review without shaping support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-complete-feature-policy-claim",
+        "no-native-shaper-oracle-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
       "dumpId": "font-catalog",
       "ownerTicket": "KFONT-M7-001",
       "classification": "golden-gated",
@@ -1552,6 +1591,7 @@
         "dumpId",
         "fallbackRun",
         "features",
+        "languageSystem",
         "nonClaims",
         "ownerTickets",
         "schemaVersion",
@@ -1653,6 +1693,96 @@
       ]
     },
     {
+      "dumpId": "truetype-gvar-iup",
+      "ownerTicket": "KFONT-M3-002",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "TrueType glyf and variations"
+      },
+      "producerPaths": [
+        "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+        "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+        "reports/font/fixtures/expected/scaler/truetype-gvar-iup.json"
+      ],
+      "expectedFields": [
+        "avarMappedCase",
+        "compositeCase",
+        "contourIsolationCase",
+        "diagnosticSnapshots",
+        "dumpId",
+        "fixtureIds",
+        "nonClaims",
+        "ownerTickets",
+        "phantomMetricCase",
+        "requiredEvidence",
+        "schemaVersion",
+        "simplePointCase",
+        "wraparoundCase"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:scaler:test --tests '*IUP*' --tests '*Gvar*' --tests '*PhantomPoint*'",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "TrueType gvar IUP golden changes require simple-contour explicit/inferred delta review, wraparound verification, contour-isolation coverage, avar normalization evidence, composite child evidence, phantom-point advance review, malformed tuple diagnostics, and non-claim review before any claim promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-complete-variable-font-support-claim",
+        "no-hvar-vvar-mvar-metrics-claim",
+        "no-vertical-metrics-claim",
+        "no-complete-hinting-vm-claim",
+        "no-a8-or-sdf-artifact-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
+      "dumpId": "truetype-malformed-glyf-isolation",
+      "ownerTicket": "KFONT-M3-005",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "TrueType glyf"
+      },
+      "producerPaths": [
+        "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+        "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+        "reports/font/fixtures/expected/scaler/truetype-malformed-glyf-isolation.json"
+      ],
+      "expectedFields": [
+        "dumpId",
+        "faceRefusalCases",
+        "fixtureIds",
+        "glyphIsolationCases",
+        "nonClaims",
+        "ownerTickets",
+        "requiredEvidence",
+        "schemaVersion",
+        "variationCases"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:scaler:test --tests '*MalformedGlyf*' --tests '*GlyphFailurePolicy*' --tests '*CompositeGlyph*' --tests '*Gvar*'",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py"
+      ],
+      "updatePolicy": "Malformed glyf isolation golden changes require face-versus-glyph refusal review, safe-glyph positive-control review, stable diagnostic review, and explicit non-claims before any claim promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-notdef-substitution-runtime-claim",
+        "no-complete-variable-font-support-claim",
+        "no-hvar-vvar-mvar-metrics-claim",
+        "no-vertical-metrics-claim",
+        "no-complete-hinting-vm-claim",
+        "no-a8-or-sdf-artifact-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
       "dumpId": "truetype-variation-readiness",
       "ownerTicket": "PKT-04C",
       "classification": "golden-gated",
@@ -1683,6 +1813,51 @@
         "no-complete-target-support-claim",
         "no-full-variable-font-support-claim",
         "no-native-scaler-oracle-claim"
+      ]
+    },
+    {
+      "dumpId": "truetype-vertical-metrics",
+      "ownerTicket": "KFONT-M3-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "TrueType glyf and variations"
+      },
+      "producerPaths": [
+        "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+        "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+        "font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt",
+        "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+        "reports/font/fixtures/expected/scaler/truetype-vertical-metrics.json"
+      ],
+      "expectedFields": [
+        "diagnosticSnapshots",
+        "dumpId",
+        "fallbackCase",
+        "fixtureIds",
+        "nonClaims",
+        "ownerTickets",
+        "presentCase",
+        "requiredEvidence",
+        "schemaVersion",
+        "variedCase"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:sfnt:test",
+        "rtk ./gradlew --no-daemon :font:scaler:test --tests '*VerticalMetric*' --tests '*VVAR*'",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "TrueType vertical metric golden changes require vhea/vmtx parsing review, fallback diagnostic review, bounded VVAR advance-height review, malformed-table diagnostic review, and non-claim review before any claim promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-vertical-shaping-claim",
+        "no-vertical-layout-claim",
+        "no-complete-hvar-mvar-parity-claim",
+        "no-complete-hinting-vm-claim",
+        "no-gpu-text-route-claim"
       ]
     },
     {

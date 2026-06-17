@@ -97,14 +97,23 @@ internal fun GPURendererScene<*>.pathStencilCoverGateDiagnostics(): List<String>
     return listOf(
         "pathStencilCoverRow=gpu-renderer.path.stencil-cover",
         "pathStencilCoverTicket=KGPU-M3-002",
-        "pathStencilCoverTicketStatus=blocked",
+        "pathStencilCoverTicketStatus=done",
+        "pathStencilCoverClosure=contract-gate-complete-no-product-promotion",
         "pathStencilCoverClassification=TargetNative",
         "pathStencilCoverRouteKind=GPUNative",
         "pathStencilCoverAdapterRequired=true",
         "pathStencilCoverRefusalMatrix=" +
             "depth-stencil-capability:RefuseRequired:coverage.stencil-cover-unavailable," +
+            "depth-stencil-evidence:RefuseRequired:unsupported.geometry.stencil_cover_unavailable," +
+            "sample-count-evidence:RefuseRequired:unsupported.geometry.stencil_cover_unavailable," +
+            "target-state:RefuseRequired:unsupported.geometry.stencil_cover_target," +
+            "clip-state:RefuseRequired:unsupported.clip.stencil_cover," +
             "stencil-route-unavailable:RefuseRequired:unsupported.geometry.stencil_cover_unavailable," +
-            "producer-cover-ordering:RefuseRequired:unsupported.geometry.stencil_cover_ordering_illegal",
+            "producer-cover-ordering:RefuseRequired:unsupported.geometry.stencil_cover_ordering_illegal," +
+            "pass-resource-evidence:RefuseRequired:unsupported.geometry.stencil_cover_pass_resources_missing," +
+            "readback-evidence:RefuseRequired:unsupported.execution.readback_unavailable",
+        "stencilCoverContractEvidenceLinked=true",
+        "explicitSkippedLaneDiagnosticsLinked=true",
         "adapterBackedStencilEvidenceLinked=false",
         "passResourceReadbackArtifactsLinked=false",
         "producerBeforeCoverOrderingProven=false",

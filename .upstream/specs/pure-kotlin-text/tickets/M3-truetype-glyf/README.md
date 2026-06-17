@@ -12,18 +12,18 @@ M2 parser facts, `cmap` coverage, OpenType table fact dumps, and malformed SFNT 
 
 - [ ] Simple and composite `glyf` outlines produce stable path, bounds, component trace, and metrics dumps.
 - [ ] `gvar` IUP interpolation, phantom points, and advance deltas are covered by min/default/max variation fixtures.
-- [ ] Vertical metric facts from `vhea`, `vmtx`, and `VVAR` are dumpable without claiming vertical shaping.
-- [ ] Malformed glyphs are isolated or refused with precise diagnostics and fixture-backed policy.
+- [x] Vertical metric facts from `vhea`, `vmtx`, and `VVAR` are dumpable without claiming vertical shaping.
+- [x] Malformed glyphs are isolated or refused with precise diagnostics and fixture-backed policy.
 
 ## Tickets
 
 | Ticket | Status | Priority | Claim Impact | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|
 | [KFONT-M3-001 - Complete composite glyph transform coverage](KFONT-M3-001-complete-composite-glyph-transform-coverage.md) | `done` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M2-004` | - |
-| [KFONT-M3-002 - Implement TrueType IUP interpolation tests](KFONT-M3-002-implement-truetype-iup-interpolation-tests.md) | `proposed` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M3-001` | - |
-| [KFONT-M3-003 - Add phantom point and advance delta support](KFONT-M3-003-add-phantom-point-and-advance-delta-support.md) | `proposed` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M3-002` | - |
-| [KFONT-M3-004 - Add vertical metric coverage](KFONT-M3-004-add-vertical-metric-coverage.md) | `proposed` | `P1` | `tracked-gap` | `font-scaler` | `KFONT-M2-004`, `KFONT-M3-003` | - |
-| [KFONT-M3-005 - Add glyf malformed isolation suite](KFONT-M3-005-add-glyf-malformed-isolation-suite.md) | `proposed` | `P0` | `fixture-gated` | `fixtures` | `KFONT-M3-001`, `KFONT-M3-003` | - |
+| [KFONT-M3-002 - Implement TrueType IUP interpolation tests](KFONT-M3-002-implement-truetype-iup-interpolation-tests.md) | `done` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M3-001` | - |
+| [KFONT-M3-003 - Add phantom point and advance delta support](KFONT-M3-003-add-phantom-point-and-advance-delta-support.md) | `review` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M3-002` | - |
+| [KFONT-M3-004 - Add vertical metric coverage](KFONT-M3-004-add-vertical-metric-coverage.md) | `done` | `P1` | `tracked-gap` | `font-scaler` | `KFONT-M2-004`, `KFONT-M3-003` | - |
+| [KFONT-M3-005 - Add glyf malformed isolation suite](KFONT-M3-005-add-glyf-malformed-isolation-suite.md) | `done` | `P0` | `fixture-gated` | `fixtures` | `KFONT-M3-001`, `KFONT-M3-003` | - |
 
 ## Validation Bundle
 

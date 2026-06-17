@@ -82,6 +82,7 @@ private class RectOnlyKadreApp(
     private var surfaceFormat: String? = null
     private var adapterInfo: String? = null
     private var presentedFrames = 0
+    private val frameTimingSamplesNanos = mutableListOf<Long>()
     private var completed = false
 
     override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
@@ -183,6 +184,7 @@ private class RectOnlyKadreApp(
             scissorHeight = targetDescriptor.height,
         )
 
+        val frameStartNanos = System.nanoTime()
         val presented = runCatching {
             windowSurface.encodeAndPresent(
                 clearColor = WindowedRectOnlySceneShader.clearColor(scene).toGpuClearColor(),
@@ -211,6 +213,7 @@ private class RectOnlyKadreApp(
             return
         }
 
+        frameTimingSamplesNanos += (System.nanoTime() - frameStartNanos).coerceAtLeast(1L)
         presentedFrames++
         if (presentedFrames >= requestedFrames) {
             completePresented(eventLoop)
@@ -254,6 +257,10 @@ private class RectOnlyKadreApp(
                 requestedFrames = requestedFrames,
                 surfaceFormat = surfaceFormat ?: "unknown",
                 adapterInfo = adapterInfo ?: "unknown-adapter",
+                frameTiming = WindowedFrameTimingReport.wallClockEncodePresent(
+                    warmupFrames = frameTimingWarmupFrames(frameTimingSamplesNanos.size),
+                    samples = frameTimingSamplesNanos.toList(),
+                ),
             ).writeTo(output)
             onComplete()
         } finally {
@@ -292,6 +299,9 @@ private class RectOnlyKadreApp(
         window = null
     }
 }
+
+private fun frameTimingWarmupFrames(sampleCount: Int): Int =
+    if (sampleCount <= 1) 0 else minOf(3, sampleCount - 1)
 
 private fun SceneColor.toGpuClearColor(): GPUClearColor =
     GPUClearColor(

@@ -10,18 +10,22 @@ legacy behavior change, or support promotion is included.
 
 | Ticket | Blocker |
 |---|---|
-| `KGPU-M3-002` | Native WebGPU/adapter stencil-cover evidence for depth/stencil capability, producer-before-cover ordering, pass/resource/readback artifacts, and skipped/refusal diagnostics. |
 | `KGPU-M4-004` | Native WebGPU/adapter sampler evidence for tile/filter/mipmap mapping, behavior-affecting key boundaries, unsupported cubic/aniso/perspective diagnostics, and reference/readback artifacts. |
 | `KGPU-M5-001` | Native WebGPU/adapter saveLayer isolated-target evidence for offscreen allocation, clear/load/store, child isolation, restore composite, active-attachment separation, resource generation, and CPU/GPU/reference comparison. |
 | `KGPU-M7-001` | Registered descriptor with Kotlin/CPU oracle, complete parser-validated WGSL/reflection through `wgsl4k`, route integration, adapter-backed execution/readback evidence, and unregistered-descriptor refusals. |
-| `KGPU-M9-002` | Raw frame sample provenance from an owned adapter lane, warmup/variance policy, quarantine and rebaseline rules, negative threshold fixture, and skipped-lane diagnostics. |
-| `KGPU-M9-003` | Accepted KGPU-M9-002 gate policy plus PM dashboard/manifest evidence that separates correctness, activation, performance, cache, and release readiness without moving readiness. |
+| `KGPU-M9-003` | PM dashboard/manifest evidence that separates correctness, activation, performance, cache, and release readiness without moving readiness. |
+
+## Resolved After Closeout
+
+| Ticket | Resolution |
+|---|---|
+| `KGPU-M3-002` | Completed on 2026-06-17 by `reports/gpu-renderer/2026-06-17-m3-002-stencil-cover-gate-contract.md` as independently reviewed contract-gate evidence with stable skipped-lane refusals. The native stencil-cover route remains non-promoted and product activation stays false. |
 
 ## Validation
 
 ```bash
 rtk ./gradlew --no-daemon :gpu-renderer:check
-rtk rg -n '^status: (proposed|ready|in-progress|review)' .upstream/specs/gpu-renderer/tickets/M*-*/KGPU-*.md
+rtk rg -n '^status: (proposed|ready|in-progress)' .upstream/specs/gpu-renderer/tickets/M*-*/KGPU-*.md
 rtk awk '/^status: / {count[$2]++} END {for (s in count) print s, count[s]}' .upstream/specs/gpu-renderer/tickets/M*-*/KGPU-*.md
 rtk git diff --check
 ```
@@ -45,10 +49,10 @@ rtk git diff --check
 
 ## Final State
 
-After this closeout, the GPU renderer ticket catalog has no `proposed`,
-`ready`, `in-progress`, or `review` tickets remaining. The remaining non-done
-tickets are explicitly `blocked` with named adapter, dependency, policy, or
-evidence gates.
+After the 2026-06-17 KGPU-M3-002 follow-up, the GPU renderer ticket catalog has
+no `proposed`, `ready`, `in-progress`, or `review` tickets remaining. The
+remaining non-done tickets are explicitly `blocked` with named adapter,
+dependency, policy, or evidence gates.
 
 ## 2026-06-15 M6 Follow-Up
 
@@ -56,5 +60,18 @@ After the font/text handoff evidence landed on master, KGPU-M6-001 and
 KGPU-M6-004 were completed by
 `reports/gpu-renderer/2026-06-15-m6-001-text-handoff.md` and
 `reports/gpu-renderer/2026-06-15-m6-004-text-representation-gates.md`.
-The current catalog total is 29 `done` and 17 `blocked`; no `proposed`,
+At that point, the catalog total was 29 `done` and 17 `blocked`; no `proposed`,
+`ready`, `in-progress`, or `review` GPU renderer tickets remain.
+
+## 2026-06-16 M9-002 Follow-Up
+
+KGPU-M9-002 was completed by
+`reports/gpu-renderer/2026-06-16-m9-002-frame-gate-policy-owned-samples.md`.
+The evidence adds explicit frame gate policy contracts, negative and skipped
+fixtures, a WebGPU offscreen raw sample artifact for `frame-gate-blocker-board`,
+and independent review `019ed26f-3531-7fd0-8e5d-61f9a15d5a9a`. The sampled
+lane remains candidate/non-release-blocking because its coefficient of
+variation is `0.1472`.
+
+The current catalog total is 31 `done` and 15 `blocked`; no `proposed`,
 `ready`, `in-progress`, or `review` GPU renderer tickets remain.

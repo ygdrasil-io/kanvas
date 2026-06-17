@@ -77,10 +77,10 @@ Preuve: Preuve WebGPU offscreen avec refus explicites.
 ### Path Stencil Cover Gate Board (`path-stencil-cover-gate-board`)
 M3 - Rect, RRect, Clip, Path, Stroke - `ShouldRender`
 
-Intention: Rendre visible les blockers du stencil-cover path natif.
-Valide: Valide les diagnostics de capacite depth-stencil, ordering et readback manquant.
+Intention: Rendre visible la gate stencil-cover path natif cloturee sans promotion.
+Valide: Valide le contrat candidate, les diagnostics de refus et les raisons skipped-lane.
 Ne revendique pas: Ne revendique pas la route native stencil-cover ni activation produit.
-Preuve: Preuve WebGPU offscreen avec statut de gate bloque.
+Preuve: Preuve WebGPU offscreen avec statut de gate contractuelle.
 
 ### Clipped Avatar Grid (`clipped-avatar-grid`)
 M3,M5 - Clip, Image - `ShouldRender`

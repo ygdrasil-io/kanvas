@@ -156,6 +156,10 @@ Layer/saveLayer execution plans, offscreen targets, initialization/backdrop
 resources, source filter chains, restore composites, elision proofs, ordering
 tokens, and layer budgets are defined in
 `28-layer-savelayer-execution.md`.
+Draw packet and pass command stream materialization is defined in
+`37-draw-packet-command-stream.md`; this resource contract resolves the
+pipeline, buffer, bind group, texture, sampler, target, atlas, upload, and
+readback resources those streams reference.
 
 It is responsible for:
 
