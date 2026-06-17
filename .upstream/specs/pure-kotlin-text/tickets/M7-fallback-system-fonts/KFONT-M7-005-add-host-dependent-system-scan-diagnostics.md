@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M7-005"
 title: "Add host-dependent system scan diagnostics"
-status: "proposed"
+status: "done"
 milestone: "M7"
 priority: "P1"
 owner_area: "fallback"
@@ -106,7 +106,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*SystemFont*' --tests '*HostD
 ## Status Notes
 
 - `proposed`: System scanning is allowed only as pure Kotlin, host-dependent evidence.
-- Move to `ready` only after scan config fields and host-dependent dashboard wording are reviewed.
+- `done`: bounded deterministic fixture-dir evidence now lands `system-font-scan.json` plus linked host-dependent catalog/fallback examples without promoting bundled-catalog, normative fallback, or platform-font claims. The reviewed product decision about whether host-dependent links should be folded into the main `font-catalog.json` / shared fallback dumps remains explicit follow-up scope, and any broader scan-root expansion still requires reviewed provenance.
 
 ## Linear Labels
 
