@@ -2503,6 +2503,61 @@ Remaining gate: none on this bounded ticket. Mark/cursive positioning,
 contextual positioning, variation/device tables, and non-Latin promotion remain
 owned by later KFONT-M6 tickets.
 
+### KFONT-M6-005: Mark/Cursive GPOS Positioning
+
+Status: review; bounded parser/runtime support, fixture provenance, and fresh
+evidence are now in place pending independent review only.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/font/fixtures/expected/shaping/gpos-trace.json`
+- `reports/font/fixtures/expected/shaping/shaped-glyph-run.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m6-005-mark-cursive-positioning.md`
+
+Evidence:
+
+- `font/sfnt` now parses bounded GDEF glyph classes plus GPOS LookupType 3/4/5/6
+  facts needed by the checked-in mark/cursive fixtures, including the
+  malformed-anchor refusal path and the missing-GDEF fixture facts.
+- `BasicOpenTypeShapingEngine` now applies bounded mark-to-base,
+  mark-to-ligature, mark-to-mark, and cursive attachment offsets while keeping
+  diagnostics stable for missing GDEF and malformed lookup data; ambiguous
+  multi-component ligature matches now refuse explicitly instead of silently
+  selecting a component, and unrelated GSUB runs keep their original cluster
+  grouping even when the typeface exposes mark/cursive lookups.
+- Reviewed fixture provenance is now checked in for
+  `gpos-mark-to-base.otf`, `gpos-mark-to-ligature.otf`,
+  `gpos-mark-to-mark.otf`, `gpos-cursive-attachment.otf`,
+  `gpos-missing-gdef.otf`, and `gpos-anchor-malformed.otf`.
+- `SFNTSurfaceTest` now asserts deterministic parser extraction for the checked-in
+  positive mark/cursive fonts plus refusal evidence for missing GDEF and
+  malformed anchors.
+- `TextStackSurfaceTest` now asserts fixture-backed glyph IDs, bounded advances,
+  offsets, and stable refusal diagnostics for the new mark/cursive slice.
+- `gpos-trace.json` and the shared `shaped-glyph-run.json` now record bounded
+  mark/cursive attachment vectors, glyph classes, component index, cursive
+  chain links, and refusal diagnostics without broadening Arabic shaping claims.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedMarkAndCursiveGposFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserPreservesMissingGdefAndMalformedAnchorFixtureFacts
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedMarkAndCursiveFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineReportsReviewedMarkAndCursiveFixtureDiagnosticsFromRepo
+rtk ./gradlew --no-daemon :font:text:test --tests '*Gpos*' --tests '*Cursive*'
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+```
+
+Remaining gate: independent review only. This bounded slice does not claim
+Arabic shaping support, contextual GSUB/GPOS support, variation/device-table
+support, native shaper parity, CPU oracle parity, or GPU evidence.
+
 ### KFONT-M6-006: Script-Specific Default Feature Policy Slice
 
 Status: blocked after independent readiness audit; this remains a bounded contract-layer slice with runtime/fixture gates outside the ticket-local write set.
@@ -2575,15 +2630,16 @@ Evidence:
 
 - `fixture-evidence-manifest.json` now records the required
   `latin-gsub-gpos-fixtures` fixture family as `fixture-gated`, separate from
-  the broader `shaping-scripts` row.
-- The row requires Latin fixture provenance for `cmap`-backed glyph IDs, GSUB
-  feature lookup order, GPOS pair positioning data, requested/enabled/disabled
-  feature dump fields, expected glyph ID or fixture-local glyph-name dumps,
-  cluster ranges, and fallback diagnostics.
-- The row explicitly keeps Greek, Cyrillic, Hebrew, and complex-script
-  promotion out of this Latin slice.
-- The fixture manifest validator treats the Latin row as required, and tests
-  assert its non-promotion non-claim remains present.
+  the broader `shaping-scripts` row while now covering simple GSUB/GPOS plus
+  bounded mark/cursive provenance.
+- The row now requires reviewed simple GSUB, simple GPOS, and bounded
+  mark/cursive fixture provenance for `cmap`-backed glyph IDs, cluster ranges,
+  attachment vectors, refusal diagnostics, and shared dump updates.
+- The row explicitly keeps Greek, Cyrillic, Hebrew, Arabic, and broader
+  complex-script promotion out of this reviewed fixture slice.
+- The fixture manifest validator still treats the historical
+  `latin-gsub-gpos-fixtures` row as required, and tests assert its
+  non-promotion non-claims remain present.
 
 Validation:
 
@@ -2614,7 +2670,7 @@ Evidence:
 - `latin-gsub-gpos-goldens.json` records Latin-only `liga`/`kern`
   requested-on/off golden readiness cases for `font-source-liberation-core`.
 - The fixture manifest points `latin-gsub-gpos-fixtures` at the checked-in
-  Latin expected dump.
+  Latin expected dump plus the shared reviewed GSUB/GPOS trace dumps.
 - The dump evidence index records `latin-gsub-gpos-goldens` as
   `golden-gated` producer evidence with non-claiming policy.
 - `TextStackSurfaceTest` loads the expected dump and asserts the fixture ID,
@@ -2685,8 +2741,9 @@ Evidence:
 
 - `arabic-seed-readiness.json` records the Arabic seed rows for joining forms,
   lam-alef, marks, cursive attachment, and mixed bidi.
-- The expected dump records required diagnostics for unavailable cursive
-  attachment, mark positioning, GDEF, and paragraph bidi requirements.
+- The expected dump now keeps only the remaining seed diagnostics for
+  GDEF-dependent mark data and paragraph bidi ordering; mark/cursive
+  unavailability moved out once `KFONT-M6-005` landed bounded support.
 - The fixture manifest points `complex-script-fixture-matrix` at the checked-in
   Arabic seed dump.
 - The dump evidence index records `arabic-seed-readiness` as `golden-gated`

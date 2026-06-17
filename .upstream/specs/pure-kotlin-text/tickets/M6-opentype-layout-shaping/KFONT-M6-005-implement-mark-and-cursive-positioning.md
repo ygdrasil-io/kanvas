@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-005"
 title: "Implement mark and cursive positioning"
-status: "proposed"
+status: "done"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
@@ -32,6 +32,7 @@ Required script rows depend on GPOS mark-to-base, mark-to-ligature, mark-to-mark
 
 - Do not implement device tables, variation adjustments, or extension positioning; KFONT-M6-010 owns those.
 - Do not implement script-specific syllable or joining policy; fixture tickets and feature policy own script behavior.
+- Do not claim ambiguous multi-component ligature-component resolution without dedicated component mapping evidence; those cases must stay on explicit refusal diagnostics.
 - Do not synthesize anchors when GPOS/GDEF data is missing.
 - Do not render glyphs or evaluate visual images in this ticket.
 
@@ -72,11 +73,11 @@ data class CursiveAttachment(
 
 ## Acceptance Criteria
 
-- [ ] Mark-to-base fixture positions a combining mark using GDEF class and anchor data.
-- [ ] Mark-to-ligature fixture attaches marks to the correct ligature component.
-- [ ] Mark-to-mark fixture stacks two marks deterministically.
-- [ ] Cursive fixture applies entry/exit anchors and records attachment chain order.
-- [ ] Missing required GDEF or malformed anchor data emits `text.shaping.gdef-required`, `text.shaping.mark-positioning-unavailable`, or `text.shaping.cursive-attachment-unavailable` as appropriate.
+- [x] Mark-to-base fixture positions a combining mark using GDEF class and anchor data.
+- [x] Mark-to-ligature fixture attaches marks to the correct ligature component.
+- [x] Mark-to-mark fixture stacks two marks deterministically.
+- [x] Cursive fixture applies entry/exit anchors and records attachment chain order.
+- [x] Missing required GDEF or malformed anchor data emits `text.shaping.gdef-required`, `text.shaping.mark-positioning-unavailable`, or `text.shaping.cursive-attachment-unavailable` as appropriate.
 
 ## Required Evidence
 
@@ -88,6 +89,7 @@ data class CursiveAttachment(
 ## Fallback / Refusal Behavior
 
 - Unsupported or malformed paths must emit one of: `text.shaping.gdef-required`, `text.shaping.mark-positioning-unsupported`.
+- Ambiguous mark-to-ligature matches that expose multiple component indexes without a unique runtime choice must emit `text.shaping.mark-positioning-unavailable` instead of silently choosing a component.
 - The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
 - Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
 
@@ -101,14 +103,16 @@ data class CursiveAttachment(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test --tests '*GposMark*' --tests '*Cursive*'
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedMarkAndCursiveGposFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserPreservesMissingGdefAndMalformedAnchorFixtureFacts
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gposTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns --tests org.graphiks.kanvas.text.TextStackSurfaceTest.arabicSeedReadinessGoldenPinsDiagnosticsWithoutSupportClaim --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedMarkAndCursiveFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineReportsReviewedMarkAndCursiveFixtureDiagnosticsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapingKeepsReviewedGsubClustersWhenTypefaceHasUnmatchedMarkLookups --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineRefusesAmbiguousLigatureComponentAttachments --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineDoesNotReportUnavailableWhenCursiveMatchHasZeroAdvanceDelta
+rtk run "python3 scripts/validate_font_fixture_assets.py && python3 scripts/validate_pure_kotlin_text_fixture_manifest.py && python3 scripts/validate_pure_kotlin_text_dump_index.py"
 ```
 
 ## Status Notes
 
-- `proposed`: Builds on base GPOS value application from KFONT-M6-004.
-- Current blocker audit (2026-06-16): draft PR `#1705` (`KFONT-M6-004`) is still open, and the required fixture set `gpos-mark-to-base.otf`, `gpos-mark-to-ligature.otf`, `gpos-mark-to-mark.otf`, `gpos-cursive-attachment.otf`, `gpos-missing-gdef.otf`, and `gpos-anchor-malformed.otf` is not present in-repo. Do not bypass these gates with synthetic-only mark/cursive coverage; remaining gate is merge/adopt the bounded GPOS base plus add reviewed fixture provenance and anchor/GDEF refusal evidence.
-- Move to `ready` only after required anchor formats and GDEF diagnostics are reviewed.
+- `review`: parser/runtime slices, checked-in fixture provenance, fresh focused validations, and dump updates for `gpos-trace.json` / `shaped-glyph-run.json` are now in place for bounded mark/cursive positioning.
+- 2026-06-17 closeout: the required fixture set `gpos-mark-to-base.otf`, `gpos-mark-to-ligature.otf`, `gpos-mark-to-mark.otf`, `gpos-cursive-attachment.otf`, `gpos-missing-gdef.otf`, and `gpos-anchor-malformed.otf` is now present in-repo with reviewed provenance and deterministic parser/runtime assertions.
+- `done`: independent review surfaced three bounded-runtime issues, now fixed with fresh regression tests for ambiguous ligature-component refusal, zero-advance cursive matches, and GSUB cluster preservation under mark/cursive-capable typefaces. Fresh parser/runtime/manifest validations are green, and the remaining non-claims stay explicit.
 
 ## Linear Labels
 

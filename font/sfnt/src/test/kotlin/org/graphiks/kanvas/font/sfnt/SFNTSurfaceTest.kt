@@ -13,6 +13,8 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 
@@ -2767,6 +2769,130 @@ class SFNTSurfaceTest {
                 ),
             ),
             pairFormat2.layout.gposPairs,
+        )
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserLoadsReviewedMarkAndCursiveGposFixtureFontsFromRepo() {
+        val parser = DefaultOpenTypeFaceParser()
+
+        val markToBase = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-mark-to-base.otf"),
+        )
+        assertEquals(emptyList(), markToBase.diagnostics)
+        val markToBaseGdef = assertNotNull(markToBase.layout.gdef)
+        val markToBaseGpos = assertNotNull(markToBase.layout.gpos)
+        val alefGlyphId = assertNotNull(markToBase.cmap.lookupGlyphId(0x0627))
+        val fathaGlyphId = assertNotNull(markToBase.cmap.lookupGlyphId(0x064E))
+        assertEquals(1, markToBaseGdef.glyphClasses[alefGlyphId])
+        assertEquals(3, markToBaseGdef.glyphClasses[fathaGlyphId])
+        val markToBaseLookup = markToBaseGpos.lookups.filterIsInstance<OpenTypeGposMarkToBaseLookup>().first {
+            it.featureTag == "mark" && it.attachments.any { attachment ->
+                attachment.baseGlyphId == alefGlyphId && attachment.markGlyphId == fathaGlyphId
+            }
+        }
+        val markToBaseAttachment = markToBaseLookup.attachments.first { attachment ->
+            attachment.baseGlyphId == alefGlyphId && attachment.markGlyphId == fathaGlyphId
+        }
+        assertEquals(0, markToBaseAttachment.markClass)
+        assertEquals(OpenTypeAnchor(format = 1, x = 99, y = 748), markToBaseAttachment.markAnchor)
+        assertEquals(OpenTypeAnchor(format = 1, x = 120, y = 711), markToBaseAttachment.baseAnchor)
+
+        val markToLigature = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-mark-to-ligature.otf"),
+        )
+        assertEquals(emptyList(), markToLigature.diagnostics)
+        val markToLigatureGpos = assertNotNull(markToLigature.layout.gpos)
+        val ligatureGlyphId = assertNotNull(markToLigature.cmap.lookupGlyphId(0xE000))
+        val ligatureMarkGlyphId = assertNotNull(markToLigature.cmap.lookupGlyphId(0x064E))
+        val markToLigatureLookup = assertNotNull(
+            markToLigatureGpos.lookups.filterIsInstance<OpenTypeGposMarkToLigatureLookup>().firstOrNull {
+                it.featureTag == "mark" && it.attachments.any { attachment ->
+                    attachment.ligatureGlyphId == ligatureGlyphId && attachment.markGlyphId == ligatureMarkGlyphId
+                }
+            },
+            markToLigatureGpos.lookups.toString(),
+        )
+        val ligatureAttachment = markToLigatureLookup.attachments.first { attachment ->
+            attachment.ligatureGlyphId == ligatureGlyphId && attachment.markGlyphId == ligatureMarkGlyphId
+        }
+        assertEquals(0, ligatureAttachment.markClass)
+        assertEquals(0, ligatureAttachment.componentIndex)
+        assertEquals(OpenTypeAnchor(format = 1, x = 99, y = 748), ligatureAttachment.markAnchor)
+        assertEquals(OpenTypeAnchor(format = 1, x = 1050, y = 720), ligatureAttachment.ligatureAnchor)
+
+        val markToMark = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-mark-to-mark.otf"),
+        )
+        assertEquals(emptyList(), markToMark.diagnostics)
+        val markToMarkGpos = assertNotNull(markToMark.layout.gpos)
+        val dotAboveGlyphId = assertNotNull(markToMark.cmap.lookupGlyphId(0xE003))
+        val markToMarkGlyphId = assertNotNull(markToMark.cmap.lookupGlyphId(0x064E))
+        val markToMarkLookup = assertNotNull(
+            markToMarkGpos.lookups.filterIsInstance<OpenTypeGposMarkToMarkLookup>().firstOrNull {
+                it.featureTag == "mkmk" && it.attachments.any { attachment ->
+                    attachment.mark1GlyphId == markToMarkGlyphId && attachment.mark2GlyphId == dotAboveGlyphId
+                }
+            },
+            markToMarkGpos.lookups.toString(),
+        )
+        val markToMarkAttachment = markToMarkLookup.attachments.first { attachment ->
+            attachment.mark1GlyphId == markToMarkGlyphId && attachment.mark2GlyphId == dotAboveGlyphId
+        }
+        assertEquals(0, markToMarkAttachment.markClass)
+        assertEquals(OpenTypeAnchor(format = 1, x = 99, y = 748), markToMarkAttachment.mark1Anchor)
+        assertEquals(OpenTypeAnchor(format = 1, x = 66, y = 929), markToMarkAttachment.mark2Anchor)
+
+        val cursive = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-cursive-attachment.otf"),
+        )
+        assertEquals(emptyList(), cursive.diagnostics)
+        val cursiveGdef = assertNotNull(cursive.layout.gdef)
+        val cursiveGpos = assertNotNull(cursive.layout.gpos)
+        val leftCursiveGlyphId = assertNotNull(cursive.cmap.lookupGlyphId(0xE001))
+        val rightCursiveGlyphId = assertNotNull(cursive.cmap.lookupGlyphId(0xE002))
+        assertEquals(1, cursiveGdef.glyphClasses[leftCursiveGlyphId])
+        assertEquals(1, cursiveGdef.glyphClasses[rightCursiveGlyphId])
+        val cursiveLookup = assertNotNull(
+            cursiveGpos.lookups.filterIsInstance<OpenTypeGposCursiveLookup>().firstOrNull {
+                it.featureTag == "curs" && it.attachments.any { attachment ->
+                    attachment.glyphId == leftCursiveGlyphId && attachment.exitAnchor != null
+                } && it.attachments.any { attachment ->
+                    attachment.glyphId == rightCursiveGlyphId && attachment.entryAnchor != null
+                }
+            },
+            cursiveGpos.lookups.toString(),
+        )
+        val leftAttachment = cursiveLookup.attachments.first { it.glyphId == leftCursiveGlyphId }
+        val rightAttachment = cursiveLookup.attachments.first { it.glyphId == rightCursiveGlyphId }
+        assertEquals(OpenTypeAnchor(format = 1, x = 0, y = 106), leftAttachment.exitAnchor)
+        assertEquals(OpenTypeAnchor(format = 1, x = 226, y = 106), rightAttachment.entryAnchor)
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserPreservesMissingGdefAndMalformedAnchorFixtureFacts() {
+        val parser = DefaultOpenTypeFaceParser()
+
+        val missingGdef = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-missing-gdef.otf"),
+        )
+        assertEquals(emptyList(), missingGdef.diagnostics)
+        assertNull(missingGdef.layout.gdef)
+        assertNotNull(missingGdef.layout.gpos)
+
+        val malformedAnchor = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-anchor-malformed.otf"),
+        )
+        assertEquals(emptyList(), malformedAnchor.diagnostics)
+        val malformedLookup = assertNotNull(malformedAnchor.layout.gpos)
+            .lookups
+            .filterIsInstance<OpenTypeGposMalformedLookup>()
+            .first()
+        assertEquals("mark", malformedLookup.featureTag)
+        assertEquals(4, malformedLookup.lookupType)
+        assertTrue(
+            malformedLookup.message.contains("anchor format 9"),
+            malformedLookup.message,
         )
     }
 
