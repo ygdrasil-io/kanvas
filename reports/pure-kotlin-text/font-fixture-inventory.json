@@ -1134,6 +1134,41 @@
           ]
         },
         {
+          "fixtureId": "truetype-scaler-truetype-gvar-iup",
+          "targetGate": "truetype-gvar-iup",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate bounded simple/composite TrueType gvar tuples that prove single-point IUP propagation, wraparound interpolation, untouched contour isolation, horizontal phantom-point advance deltas, avar-normalized coordinates, bounded HVAR advance-width deltas, bounded MVAR vertical-global metric deltas, and malformed HVAR/MVAR plus tuple diagnostics.",
+          "evidencePaths": [
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/truetype-gvar-iup.json",
+            "reports/pure-kotlin-text/2026-06-16-kfont-m3-003-phantom-metrics.md",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "gvar table bytes",
+            "variation delta dump",
+            "min-default-max outline dump",
+            "min-default-max phantom metrics dump",
+            "avar-normalized outline dump",
+            "composite child outline dump",
+            "bounded HVAR advance-width case",
+            "bounded MVAR vertical-global metrics case",
+            "malformed HVAR diagnostic snapshot",
+            "malformed MVAR diagnostic snapshot",
+            "malformed tuple diagnostic snapshot"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-variable-font-support-claim",
+            "no-complete-hvar-vvar-mvar-metrics-claim",
+            "no-vertical-metrics-claim",
+            "no-complete-hinting-vm-claim",
+            "no-a8-or-sdf-artifact-claim",
+            "no-gpu-text-route-claim"
+          ]
+        },
+        {
           "fixtureId": "truetype-scaler-truetype-gvar-simple-delta",
           "targetGate": "truetype-gvar-simple-delta",
           "status": "current-positive-evidence",
@@ -1155,6 +1190,42 @@
           ]
         },
         {
+          "fixtureId": "truetype-scaler-truetype-malformed-glyf-isolation",
+          "targetGate": "truetype-malformed-glyf-isolation",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate bounded malformed loca/glyf/gvar fixtures that prove face refusal, per-glyph refusal, positive-control safe glyph dumps, and explicit non-claims around runtime .notdef substitution.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/truetype-malformed-glyf-isolation.json",
+            "reports/pure-kotlin-text/2026-06-16-kfont-m3-005-malformed-glyf-isolation.md",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "loca face-refusal snapshot",
+            "truncated-header refusal snapshot",
+            "bad-contour refusal snapshot",
+            "flag-repeat refusal snapshot",
+            "coordinate-truncation refusal snapshot",
+            "composite-cycle refusal snapshot",
+            "missing-component refusal snapshot",
+            "invalid-transform refusal snapshot",
+            "malformed gvar warning snapshot",
+            "positive-control glyph dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-notdef-substitution-runtime-claim",
+            "no-complete-variable-font-support-claim",
+            "no-hvar-vvar-mvar-metrics-claim",
+            "no-vertical-metrics-claim",
+            "no-complete-hinting-vm-claim",
+            "no-a8-or-sdf-artifact-claim",
+            "no-gpu-text-route-claim"
+          ]
+        },
+        {
           "fixtureId": "truetype-scaler-truetype-simple-glyph",
           "targetGate": "truetype-simple-glyph",
           "status": "current-positive-evidence",
@@ -1173,6 +1244,36 @@
             "no-complete-target-support-claim",
             "no-complete-variable-font-support-claim",
             "no-complete-hinting-vm-claim"
+          ]
+        },
+        {
+          "fixtureId": "truetype-scaler-vertical-metrics",
+          "targetGate": "truetype-vertical-metrics",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate bounded TrueType `vhea`/`vmtx`/`VVAR` bytes that prove vertical metric dumps, absent-table fallback facts, bounded advance-height deltas, and malformed `VVAR` diagnostics without claiming vertical layout.",
+          "evidencePaths": [
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/truetype-vertical-metrics.json",
+            "reports/pure-kotlin-text/2026-06-16-kfont-m3-004-vertical-metrics.md",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "vhea table bytes",
+            "vmtx table bytes",
+            "vvar table bytes",
+            "vertical glyph metrics dump",
+            "vertical fallback diagnostic snapshot",
+            "malformed VVAR diagnostic snapshot"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-vertical-shaping-claim",
+            "no-vertical-layout-claim",
+            "no-complete-hvar-mvar-parity-claim",
+            "no-complete-hinting-vm-claim",
+            "no-gpu-text-route-claim"
           ]
         }
       ]

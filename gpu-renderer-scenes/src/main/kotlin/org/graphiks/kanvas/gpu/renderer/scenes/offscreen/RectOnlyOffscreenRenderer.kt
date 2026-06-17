@@ -90,7 +90,7 @@ class RectOnlyOffscreenRenderer {
         }
     }
 
-    private fun renderToPixels(
+    internal fun renderToPixels(
         target: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget,
         drawPlan: RectOnlyDrawPlan,
     ): ByteArray {

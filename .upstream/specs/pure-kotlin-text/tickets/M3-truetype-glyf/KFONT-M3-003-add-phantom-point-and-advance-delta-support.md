@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M3-003"
 title: "Add phantom point and advance delta support"
-status: "proposed"
+status: "done"
 milestone: "M3"
 priority: "P0"
 owner_area: "font-scaler"
@@ -68,17 +68,17 @@ class TrueTypeAdvanceDeltaResolver {
 
 ## Acceptance Criteria
 
-- [ ] Horizontal advance changes caused by phantom points are reflected in `glyph-metrics.json`.
-- [ ] `HVAR`, `VVAR`, and `MVAR` data are applied when fixtures provide them and diagnosed when required data is malformed or unavailable.
-- [ ] Variation coordinates are included in relevant scaler identity or cache keys.
-- [ ] Default coordinates match base `hmtx`/`vmtx` metrics when no deltas apply.
-- [ ] Missing variation metrics emit `font.metrics-variation-unavailable` or `font.variation-data-malformed` as appropriate.
+- [x] Horizontal advance changes caused by phantom points are reflected in `glyph-metrics.json`.
+- [x] `HVAR`, `VVAR`, and `MVAR` data are applied when fixtures provide them and diagnosed when required data is malformed or unavailable.
+- [x] Variation coordinates are included in relevant scaler identity or cache keys.
+- [x] Default coordinates match base `hmtx`/`vmtx` metrics when no deltas apply.
+- [x] Missing variation metrics emit `font.metrics-variation-unavailable` or `font.variation-data-malformed` as appropriate.
 
 ## Required Evidence
 
 - `glyph-metrics.json` for base/default and varied min/max positions showing advances, side bearings, phantom points, and applied deltas.
 - `variation-deltas.json` entries that include phantom point deltas.
-- Diagnostic snapshot for malformed `HVAR`, `VVAR`, or `MVAR` data.
+- Diagnostic snapshot for unavailable or malformed `HVAR`, `VVAR`, or `MVAR` data.
 - Determinism diff for repeated metric dump generation.
 
 ## Fallback / Refusal Behavior
@@ -96,13 +96,23 @@ class TrueTypeAdvanceDeltaResolver {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:scaler:test --tests '*PhantomPoint*' --tests '*AdvanceDelta*' --tests '*HVAR*'
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*IUP*' --tests '*Gvar*' --tests '*PhantomPoint*' --tests '*AdvanceDelta*' --tests '*Hvar*' --tests '*Mvar*' --tests '*VerticalMetric*'
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py
 ```
 
 ## Status Notes
 
-- `proposed`: Phantom and advance-delta evidence is specified, but no metrics dump is attached yet.
-- Move to `ready` after IUP interpolation tests establish variation delta handling.
+- `done`: bounded horizontal phantom-point `gvar` metrics evidence remains
+  attached in `reports/font/fixtures/expected/scaler/truetype-gvar-iup.json`,
+  which now also records bounded `HVAR` advance-width deltas, bounded `MVAR`
+  vertical-global metric deltas, and malformed `HVAR`/`MVAR` diagnostic
+  snapshots. Bounded `VVAR` advance-height evidence remains attached in
+  `reports/font/fixtures/expected/scaler/truetype-vertical-metrics.json` and
+  summarized alongside this slice in
+  `reports/pure-kotlin-text/2026-06-16-kfont-m3-004-vertical-metrics.md`.
 
 ## Linear Labels
 
