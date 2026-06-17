@@ -22,7 +22,7 @@ M1 identities, M5 cluster boundaries, and M6 shaping contract.
 | [KFONT-M7-002 - Add fallback decision trace](KFONT-M7-002-add-fallback-decision-trace.md) | `review` | `P0` | `tracked-gap` | `fallback` | `KFONT-M7-001`, `KFONT-M6-001` | - |
 | [KFONT-M7-003 - Add variable-axis-aware fallback](KFONT-M7-003-add-variable-axis-aware-fallback.md) | `proposed` | `P1` | `tracked-gap` | `fallback` | `KFONT-M7-001`, `KFONT-M7-002`, `KFONT-M3-003`, `KFONT-M4-005` | - |
 | [KFONT-M7-004 - Add cluster-safe fallback segmentation tests](KFONT-M7-004-add-cluster-safe-fallback-segmentation-tests.md) | `proposed` | `P0` | `fixture-gated` | `fallback` | `KFONT-M5-005`, `KFONT-M7-002`, `KFONT-M6-001` | `scaledemoji` |
-| [KFONT-M7-005 - Add host-dependent system scan diagnostics](KFONT-M7-005-add-host-dependent-system-scan-diagnostics.md) | `proposed` | `P1` | `tracked-gap` | `fallback` | `KFONT-M1-001`, `KFONT-M1-003`, `KFONT-M7-001`, `KFONT-M7-002` | - |
+| [KFONT-M7-005 - Add host-dependent system scan diagnostics](KFONT-M7-005-add-host-dependent-system-scan-diagnostics.md) | `review` | `P1` | `tracked-gap` | `fallback` | `KFONT-M1-001`, `KFONT-M1-003`, `KFONT-M7-001`, `KFONT-M7-002` | - |
 
 ## Validation Bundle
 

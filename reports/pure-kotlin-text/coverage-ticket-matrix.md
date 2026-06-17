@@ -686,8 +686,52 @@ rtk git diff --check
 Remaining gate: this is bounded fallback-trace evidence only. It does not yet
 add shaping-plan or `shaped-glyph-run` trace propagation, dedicated
 per-fixture fallback assets, variable-axis-aware fallback, cluster-safe
-fallback segmentation, host-dependent system scan facts, CPU oracle promotion,
-or any GPU text-route claim.
+fallback segmentation, CPU oracle promotion, or any GPU text-route claim.
+
+### KFONT-M7-005: Host-dependent system scan diagnostics
+
+Status: implemented as a bounded review slice.
+
+Files:
+
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/SystemFontScanReport.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/SystemFontScanTest.kt`
+- `reports/font/fixtures/expected/fallback/system-font-scan.json`
+- `reports/font/fixtures/expected/fallback/system-font-scan-font-catalog-link.json`
+- `reports/font/fixtures/expected/fallback/system-font-scan-fallback-trace.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m7-005-host-dependent-system-scan.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/KFONT-M7-005-add-host-dependent-system-scan-diagnostics.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `defaultSystemFontScanEvidenceBundle()` now generates a deterministic
+  host-dependent fixture-root scan with a stable `configSha256`, bounded
+  `maxBytesPerFile`, parser table facts for valid/malformed SFNT fixtures, and
+  explicit diagnostics for unreadable, unsupported-wrapper, oversized,
+  duplicate-byte, and missing-required-table cases.
+- `system-font-scan.json` keeps every entry `hostDependent=true` and avoids
+  leaking absolute temp paths by recording only deterministic relative paths.
+- `system-font-scan-font-catalog-link.json` links scanned sources into a
+  non-normative catalog example while leaving the bundled
+  `reports/pure-kotlin-text/font-catalog.json` claim scope unchanged.
+- `system-font-scan-fallback-trace.json` adds a bounded host-dependent fallback
+  trace example with `selectedSourceKind`, `selectedScanEntryId`, and
+  `selectedHostDependent=true` without changing the shared `KFONT-M7-002`
+  golden bundle.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests '*SystemFontScan*'
+```
+
+Remaining gate: this is non-normative host-scan review evidence only. It does
+not decide whether the linked examples must be folded into the main bundled
+catalog/shared fallback dumps, does not broaden beyond the bounded generated
+fixture directory, and does not promote any platform-font, normative fallback,
+CPU oracle, or GPU text-route claim.
 ### PKT-03A: SFNT/OpenType Face Evidence Dumps
 
 Status: implemented and independently reviewed.

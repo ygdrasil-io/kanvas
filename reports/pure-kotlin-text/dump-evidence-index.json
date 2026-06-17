@@ -497,7 +497,8 @@
       "producerPaths": [
         "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
         "font/core/src/test/kotlin/org/graphiks/kanvas/font/FallbackDecisionDumpTest.kt",
-        "reports/font/fixtures/expected/fallback/fallback-decision-trace.json"
+        "reports/font/fixtures/expected/fallback/fallback-decision-trace.json",
+        "reports/font/fixtures/expected/fallback/system-font-scan-fallback-trace.json"
       ],
       "expectedFields": [
         "candidateFamilies",
@@ -519,6 +520,9 @@
         "schemaVersion",
         "script",
         "selectedFamily",
+        "selectedHostDependent",
+        "selectedScanEntryId",
+        "selectedSourceKind",
         "selectedTypefaceId",
         "styleDistance",
         "textRange"
@@ -619,6 +623,45 @@
         "no-emoji-bundled-catalog-claim",
         "no-hebrew-arabic-bundled-catalog-claim",
         "no-host-platform-fallback-claim"
+      ]
+    },
+    {
+      "dumpId": "font-catalog-system-scan-link",
+      "ownerTicket": "KFONT-M7-005",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "Font sources"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/SystemFontScanReport.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/SystemFontScanTest.kt",
+        "reports/font/fixtures/expected/fallback/system-font-scan-font-catalog-link.json"
+      ],
+      "expectedFields": [
+        "catalogId",
+        "diagnosticCodes",
+        "dumpId",
+        "hostDependent",
+        "linkedSystemScans",
+        "nonClaims",
+        "ownerTickets",
+        "relativePath",
+        "schemaVersion",
+        "sourceKind"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests '*SystemFontScan*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Host-dependent catalog-link golden changes require deterministic-path ordering review and explicit confirmation that the linked rows remain non-normative and separate from the bundled catalog claim.",
+      "nonClaims": [
+        "producer-only",
+        "no-bundled-catalog-promotion",
+        "no-normative-system-font-catalog-claim",
+        "no-platform-font-api-claim"
       ]
     },
     {
@@ -1603,6 +1646,52 @@
         "producer-only",
         "no-complete-svg-in-opentype-rendering-claim",
         "no-external-svg-resource-support-claim"
+      ]
+    },
+    {
+      "dumpId": "system-font-scan",
+      "ownerTicket": "KFONT-M7-005",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/01-font-source-sfnt-and-scalers.md",
+        "section": "Font sources"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/SystemFontScanReport.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/SystemFontScanTest.kt",
+        "reports/font/fixtures/expected/fallback/system-font-scan.json"
+      ],
+      "expectedFields": [
+        "byteLength",
+        "config",
+        "configSha256",
+        "contentHashPolicy",
+        "diagnosticCode",
+        "dumpId",
+        "entries",
+        "faceCount",
+        "hostDependent",
+        "maxBytesPerFile",
+        "mtimePolicy",
+        "nonClaims",
+        "ownerTickets",
+        "relativePath",
+        "rootLabel",
+        "schemaVersion",
+        "tableTags"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests '*SystemFontScan*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Host-dependent scan golden changes require deterministic-path ordering review, stable diagnostic review, and explicit confirmation that the bounded fixture directory remains non-normative.",
+      "nonClaims": [
+        "producer-only",
+        "no-normative-system-font-claim",
+        "no-platform-font-fallback-claim",
+        "no-native-font-api-claim"
       ]
     },
     {
