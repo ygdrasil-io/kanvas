@@ -1771,6 +1771,7 @@ class ColorGlyphSurfaceTest {
         assertEquals(listOf(0f, 0f, 16f, 16f), document.viewBox)
         assertEquals(
             listOf(
+                "defs{}",
                 "lineargradient{gradientunits=userSpaceOnUse,id=g,x1=0,x2=16,y1=0,y2=0}",
                 "stop{offset=0,stop-color=#000000}",
                 "stop{offset=1,stop-color=#ffffff}",
@@ -1861,6 +1862,148 @@ class ColorGlyphSurfaceTest {
             {"glyphId": 82, "route": "svg", "code": "text.SVG.budget-exceeded", "detail": "${diagnostic.detail}", "severity": "warning", "message": "SVG glyph use recursion exceeded for glyph 82 at glyph-loop: depth 9, max 8."}
             """.trimIndent(),
             diagnostic.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun svgGlyphPlanBundleCapturesSupportedPrimitivesAndRefusalsDeterministically() {
+        val pathShapeSvg = """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 64">
+              <rect x="1" y="2" width="10" height="20" fill="#ff0000"/>
+              <path d="M0 0 L10 10" stroke="#000000" fill="none"/>
+            </svg>
+        """.trimIndent()
+        val pathShapePlan = SVGGlyphPlan.fromDocument(
+            sourceText = pathShapeSvg,
+            document = BasicSVGGlyphParser.parse(glyphId = 177, text = pathShapeSvg),
+        )
+
+        val gradientTransformClipSvg = """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+              <defs>
+                <linearGradient id="g" x1="0" y1="0" x2="16" y2="0" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stop-color="#000000"/>
+                  <stop offset="1" stop-color="#ffffff"/>
+                </linearGradient>
+                <clipPath id="c">
+                  <rect x="1" y="1" width="14" height="14"/>
+                </clipPath>
+              </defs>
+              <g opacity="0.75" transform="translate(2 3)">
+                <path d="M0 0 L16 0 L16 16 Z" fill="url(#g)" clip-path="url(#c)"/>
+              </g>
+            </svg>
+        """.trimIndent()
+        val gradientTransformClipPlan = SVGGlyphPlan.fromDocument(
+            sourceText = gradientTransformClipSvg,
+            document = BasicSVGGlyphParser.parse(glyphId = 178, text = gradientTransformClipSvg),
+        )
+
+        val symbolUseSvg = """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+              <defs>
+                <radialGradient id="rg" cx="12" cy="12" r="10">
+                  <stop offset="0" stop-color="#ffee00"/>
+                  <stop offset="1" stop-color="#ff6600"/>
+                </radialGradient>
+                <symbol id="sun" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="8" fill="url(#rg)"/>
+                </symbol>
+              </defs>
+              <use href="#sun" opacity="0.5" transform="translate(1 2)"/>
+            </svg>
+        """.trimIndent()
+        val symbolUsePlan = SVGGlyphPlan.fromDocument(
+            sourceText = symbolUseSvg,
+            document = BasicSVGGlyphParser.parse(glyphId = 179, text = symbolUseSvg),
+        )
+
+        val externalResource = BasicSVGGlyphParser.externalResourceRefusedDiagnostic(
+            glyphId = 180,
+            elementName = "image",
+            attributeName = "href",
+            reference = "https://example.invalid/glyph.png",
+        )
+        val unsupportedFeature = BasicSVGGlyphParser.unsupportedFeatureDiagnostic(
+            glyphId = 181,
+            elementName = "foreignObject",
+            featureName = "embedded-text-layout",
+        )
+        val pathBudget = BasicSVGGlyphParser.budgetExceededDiagnostic(
+            glyphId = 182,
+            budgetName = "pathCommands",
+            observed = 257,
+            max = 256,
+        )
+        val gradientBudget = BasicSVGGlyphParser.budgetExceededDiagnostic(
+            glyphId = 183,
+            budgetName = "gradientStops",
+            observed = 65,
+            max = 64,
+        )
+        val useRecursion = BasicSVGGlyphParser.useRecursionRefusedDiagnostic(
+            glyphId = 184,
+            referenceId = "glyph-loop",
+            depth = 9,
+            maxDepth = 8,
+        )
+
+        val expected = svgGlyphPlanBundleJson(
+            cases = listOf(
+                SVGGlyphPlanFixtureCase(
+                    caseId = "path-and-basic-shape",
+                    expectedGpuHandoffArtifactType = "SVGGlyphPlan",
+                    planJson = pathShapePlan.toCanonicalJson(),
+                    diagnostics = emptyList(),
+                ),
+                SVGGlyphPlanFixtureCase(
+                    caseId = "gradient-transform-clip",
+                    expectedGpuHandoffArtifactType = "SVGGlyphPlan",
+                    planJson = gradientTransformClipPlan.toCanonicalJson(),
+                    diagnostics = emptyList(),
+                ),
+                SVGGlyphPlanFixtureCase(
+                    caseId = "defs-symbol-use-radial-gradient",
+                    expectedGpuHandoffArtifactType = "SVGGlyphPlan",
+                    planJson = symbolUsePlan.toCanonicalJson(),
+                    diagnostics = emptyList(),
+                ),
+                SVGGlyphPlanFixtureCase(
+                    caseId = "external-resource-refusal",
+                    expectedGpuHandoffArtifactType = "refusal",
+                    planJson = null,
+                    diagnostics = listOf(externalResource),
+                ),
+                SVGGlyphPlanFixtureCase(
+                    caseId = "unsupported-feature-refusal",
+                    expectedGpuHandoffArtifactType = "refusal",
+                    planJson = null,
+                    diagnostics = listOf(unsupportedFeature),
+                ),
+                SVGGlyphPlanFixtureCase(
+                    caseId = "path-command-budget-refusal",
+                    expectedGpuHandoffArtifactType = "refusal",
+                    planJson = null,
+                    diagnostics = listOf(pathBudget),
+                ),
+                SVGGlyphPlanFixtureCase(
+                    caseId = "gradient-stop-budget-refusal",
+                    expectedGpuHandoffArtifactType = "refusal",
+                    planJson = null,
+                    diagnostics = listOf(gradientBudget),
+                ),
+                SVGGlyphPlanFixtureCase(
+                    caseId = "use-recursion-budget-refusal",
+                    expectedGpuHandoffArtifactType = "refusal",
+                    planJson = null,
+                    diagnostics = listOf(useRecursion),
+                ),
+            ),
+        )
+
+        assertEquals(
+            expected,
+            readProjectFile("reports/font/fixtures/expected/color/svg-glyph-plan.json"),
         )
     }
 
@@ -3275,6 +3418,53 @@ class ColorGlyphSurfaceTest {
         val pattern = Regex("\"" + Regex.escape(field) + "\"\\s*:\\s*\"([^\"]+)\"")
         return pattern.find(json)?.groupValues?.get(1)
             ?: error("Missing JSON string field $field")
+    }
+
+    private data class SVGGlyphPlanFixtureCase(
+        val caseId: String,
+        val expectedGpuHandoffArtifactType: String,
+        val planJson: String?,
+        val diagnostics: List<ColorGlyphDiagnostic>,
+    )
+
+    private fun svgGlyphPlanBundleJson(cases: List<SVGGlyphPlanFixtureCase>): String = buildString {
+        append("{\n")
+        append("  \"schemaVersion\": 1,\n")
+        append("  \"dumpId\": \"svg-glyph-plan\",\n")
+        append("  \"ownerTickets\": [\"KFONT-M10-007\"],\n")
+        append("  \"cases\": [\n")
+        append(
+            cases.joinToString(",\n") { fixtureCase ->
+                buildString {
+                    append("    {\n")
+                    append("      \"caseId\": ").append(jsonString(fixtureCase.caseId)).append(",\n")
+                    append(
+                        "      \"expectedGpuHandoffArtifactType\": " +
+                            jsonString(fixtureCase.expectedGpuHandoffArtifactType) + ",\n",
+                    )
+                    append("      \"plan\": ")
+                    append(
+                        fixtureCase.planJson
+                            ?.trimEnd()
+                            ?.replace("\n", "\n      ")
+                            ?: "null",
+                    )
+                    append(",\n")
+                    append("      \"diagnostics\": ")
+                    append(diagnosticsJson(fixtureCase.diagnostics, indent = "      "))
+                    append("\n")
+                    append("    }")
+                }
+            },
+        )
+        append("\n  ],\n")
+        append(
+            "  \"nonClaims\": [\"no-complete-target-support-claim\", " +
+                "\"no-complete-svg-in-opentype-rendering-claim\", " +
+                "\"no-gpu-svg-glyph-route-claim\", " +
+                "\"no-native-svg-renderer-claim\"]\n",
+        )
+        append("}\n")
     }
 
     private fun jsonStringArrayField(json: String, field: String): List<String> {

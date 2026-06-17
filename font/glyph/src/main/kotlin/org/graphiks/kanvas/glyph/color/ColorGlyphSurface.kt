@@ -3548,6 +3548,36 @@ object BasicSVGGlyphParser : SVGGlyphParser {
     }
 
     /**
+     * Builds a stable refusal diagnostic for an SVG glyph resource or complexity budget overflow.
+     *
+     * @param glyphId glyph identifier whose SVG payload exceeded a limit.
+     * @param budgetName stable budget label such as `pathCommands` or `gradientStops`.
+     * @param observed observed count.
+     * @param max configured maximum count.
+     * @return stable SVG budget-exceeded diagnostic.
+     */
+    fun budgetExceededDiagnostic(
+        glyphId: Int,
+        budgetName: String,
+        observed: Int,
+        max: Int,
+    ): ColorGlyphDiagnostic {
+        require(observed >= 0 && max >= 0) {
+            "SVG budget diagnostic counts must be non-negative."
+        }
+
+        val normalizedBudget = budgetName.trim().ifEmpty { "unknown" }
+        return ColorGlyphDiagnostic(
+            glyphId = glyphId,
+            route = "svg",
+            code = ColorGlyphDiagnosticCodes.SVGBudgetExceeded,
+            severity = "warning",
+            detail = "glyphId=$glyphId;budgetName=$normalizedBudget;observed=$observed;max=$max",
+            message = "SVG glyph budget $normalizedBudget exceeded for glyph $glyphId: observed $observed, max $max.",
+        )
+    }
+
+    /**
      * Parses bounded UTF-8 SVG text for one glyph.
      *
      * @param glyphId glyph identifier associated with the SVG payload.
@@ -3592,6 +3622,229 @@ data class SVGGlyphDocument(
     val viewBox: List<Float> = emptyList(),
     val elements: List<String> = emptyList(),
 )
+
+/**
+ * Renderer-neutral primitive entry inside an [SVGGlyphPlan].
+ *
+ * @property kind stable primitive label such as `path`, `rect`, `linearGradient`, or `use`.
+ * @property summary canonical parser summary for deterministic fixture evidence.
+ */
+data class SVGGlyphPrimitive(
+    val kind: String,
+    val summary: String,
+)
+
+/**
+ * Stable SVG resource-limit facts captured alongside an [SVGGlyphPlan].
+ *
+ * @property documentChars UTF-16 source length for the SVG payload.
+ * @property pathCommandCount observed total path command count.
+ * @property gradientStopCount observed gradient stop count.
+ * @property primitiveCount observed primitive count in the renderer-neutral summary.
+ * @property maxDocumentChars configured maximum SVG payload length.
+ * @property maxPathCommands configured maximum path command count.
+ * @property maxGradientStops configured maximum gradient stop count.
+ * @property maxPrimitiveCount configured maximum primitive count.
+ * @property maxUseRecursionDepth configured maximum supported `<use>` recursion depth.
+ */
+data class SVGGlyphResourceLimits(
+    val documentChars: Int,
+    val pathCommandCount: Int,
+    val gradientStopCount: Int,
+    val primitiveCount: Int,
+    val maxDocumentChars: Int,
+    val maxPathCommands: Int,
+    val maxGradientStops: Int,
+    val maxPrimitiveCount: Int,
+    val maxUseRecursionDepth: Int,
+)
+
+/**
+ * Renderer-neutral plan for one bounded SVG glyph document.
+ *
+ * The plan records only deterministic pure Kotlin facts: source hash, viewBox, bounds, primitive
+ * summaries, resource limits, and stable diagnostics. It does not allocate GPU resources, invoke a
+ * native SVG engine, or claim complete SVG rendering support.
+ *
+ * @property glyphId glyph identifier represented by this SVG plan.
+ * @property sourceDocumentSha256 SHA-256 digest of the UTF-8 SVG source bytes.
+ * @property viewBoxMinX viewBox minimum x coordinate.
+ * @property viewBoxMinY viewBox minimum y coordinate.
+ * @property viewBoxWidth viewBox width.
+ * @property viewBoxHeight viewBox height.
+ * @property boundsLeft glyph bounds left coordinate.
+ * @property boundsTop glyph bounds top coordinate.
+ * @property boundsWidth glyph bounds width.
+ * @property boundsHeight glyph bounds height.
+ * @property primitives immutable renderer-neutral primitive summaries.
+ * @property resourceLimits stable resource-limit facts for this plan.
+ * @property diagnostics stable SVG diagnostics attached to this plan.
+ */
+data class SVGGlyphPlan(
+    val glyphId: Int,
+    val sourceDocumentSha256: String,
+    val viewBoxMinX: Float,
+    val viewBoxMinY: Float,
+    val viewBoxWidth: Float,
+    val viewBoxHeight: Float,
+    val boundsLeft: Float,
+    val boundsTop: Float,
+    val boundsWidth: Float,
+    val boundsHeight: Float,
+    val primitives: List<SVGGlyphPrimitive>,
+    val resourceLimits: SVGGlyphResourceLimits,
+    val diagnostics: List<ColorGlyphDiagnostic> = emptyList(),
+) {
+    /**
+     * SHA-256 digest of [toCanonicalJson] content with the `dumpSha256` field omitted.
+     */
+    val dumpSha256: String
+        get() = colorGlyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    /**
+     * Serializes this SVG plan as deterministic JSON evidence.
+     *
+     * @return canonical JSON dump ending with a newline.
+     */
+    fun toCanonicalJson(): String = canonicalJson(includeDumpSha256 = true)
+
+    companion object {
+        /**
+         * Builds a deterministic SVG glyph plan from parser output and the original source text.
+         *
+         * @param sourceText UTF-8 decoded SVG source text.
+         * @param document parsed SVG glyph document for the same payload.
+         * @param diagnostics stable route diagnostics to attach to the plan.
+         * @return deterministic SVG glyph plan.
+         */
+        fun fromDocument(
+            sourceText: String,
+            document: SVGGlyphDocument,
+            diagnostics: List<ColorGlyphDiagnostic> = emptyList(),
+        ): SVGGlyphPlan {
+            require(document.viewBox.size == 4) {
+                "SVG glyph document must contain a four-number viewBox."
+            }
+
+            val viewBox = document.viewBox
+            val primitives = document.elements.map { summary ->
+                SVGGlyphPrimitive(
+                    kind = svgPrimitiveKind(summary),
+                    summary = summary,
+                )
+            }
+            val pathCommandCount = svgPathCommandCount(sourceText)
+            val gradientStopCount = svgGradientStopCount(sourceText)
+            val resourceLimits = SVGGlyphResourceLimits(
+                documentChars = sourceText.length,
+                pathCommandCount = pathCommandCount,
+                gradientStopCount = gradientStopCount,
+                primitiveCount = primitives.size,
+                maxDocumentChars = MAX_SVG_GLYPH_TEXT_CHARS,
+                maxPathCommands = MAX_SVG_PATH_COMMANDS,
+                maxGradientStops = MAX_SVG_GRADIENT_STOPS,
+                maxPrimitiveCount = MAX_SVG_GLYPH_ELEMENTS,
+                maxUseRecursionDepth = MAX_SVG_USE_RECURSION_DEPTH,
+            )
+
+            val allDiagnostics = ArrayList<ColorGlyphDiagnostic>()
+            if (pathCommandCount > MAX_SVG_PATH_COMMANDS) {
+                allDiagnostics += BasicSVGGlyphParser.budgetExceededDiagnostic(
+                    glyphId = document.glyphId,
+                    budgetName = "pathCommands",
+                    observed = pathCommandCount,
+                    max = MAX_SVG_PATH_COMMANDS,
+                )
+            }
+            if (gradientStopCount > MAX_SVG_GRADIENT_STOPS) {
+                allDiagnostics += BasicSVGGlyphParser.budgetExceededDiagnostic(
+                    glyphId = document.glyphId,
+                    budgetName = "gradientStops",
+                    observed = gradientStopCount,
+                    max = MAX_SVG_GRADIENT_STOPS,
+                )
+            }
+            if (primitives.size > MAX_SVG_GLYPH_ELEMENTS) {
+                allDiagnostics += BasicSVGGlyphParser.budgetExceededDiagnostic(
+                    glyphId = document.glyphId,
+                    budgetName = "primitiveCount",
+                    observed = primitives.size,
+                    max = MAX_SVG_GLYPH_ELEMENTS,
+                )
+            }
+            allDiagnostics += diagnostics
+
+            return SVGGlyphPlan(
+                glyphId = document.glyphId,
+                sourceDocumentSha256 = colorGlyphSha256(sourceText.toByteArray(Charsets.UTF_8)),
+                viewBoxMinX = viewBox[0],
+                viewBoxMinY = viewBox[1],
+                viewBoxWidth = viewBox[2],
+                viewBoxHeight = viewBox[3],
+                boundsLeft = viewBox[0],
+                boundsTop = viewBox[1],
+                boundsWidth = viewBox[2],
+                boundsHeight = viewBox[3],
+                primitives = primitives,
+                resourceLimits = resourceLimits,
+                diagnostics = allDiagnostics.toList(),
+            )
+        }
+    }
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendColorGlyphJsonField("schema", SVGGlyphPlanSchema, comma = true)
+        appendColorGlyphJsonField("glyphId", glyphId, comma = true)
+        appendColorGlyphJsonField("sourceDocumentSha256", sourceDocumentSha256, comma = true)
+        append("  \"viewBox\": {")
+        append(colorGlyphJsonString("minX")).append(": ").append(colorGlyphFloatToken(viewBoxMinX)).append(", ")
+        append(colorGlyphJsonString("minY")).append(": ").append(colorGlyphFloatToken(viewBoxMinY)).append(", ")
+        append(colorGlyphJsonString("width")).append(": ").append(colorGlyphFloatToken(viewBoxWidth)).append(", ")
+        append(colorGlyphJsonString("height")).append(": ").append(colorGlyphFloatToken(viewBoxHeight))
+        append("},\n")
+        append("  \"bounds\": {")
+        append(colorGlyphJsonString("left")).append(": ").append(colorGlyphFloatToken(boundsLeft)).append(", ")
+        append(colorGlyphJsonString("top")).append(": ").append(colorGlyphFloatToken(boundsTop)).append(", ")
+        append(colorGlyphJsonString("width")).append(": ").append(colorGlyphFloatToken(boundsWidth)).append(", ")
+        append(colorGlyphJsonString("height")).append(": ").append(colorGlyphFloatToken(boundsHeight))
+        append("},\n")
+        appendColorGlyphJsonField("primitiveCount", primitives.size, comma = true)
+        append("  \"primitives\": [")
+        if (primitives.isNotEmpty()) {
+            append("\n")
+            append(
+                primitives.joinToString(",\n") { primitive ->
+                    "    {\"kind\": ${colorGlyphJsonString(primitive.kind)}, " +
+                        "\"summary\": ${colorGlyphJsonString(primitive.summary)}}"
+                },
+            )
+            append("\n")
+            append("  ")
+        }
+        append("],\n")
+        append("  \"resourceLimits\": {")
+        append(colorGlyphJsonString("documentChars")).append(": ").append(resourceLimits.documentChars).append(", ")
+        append(colorGlyphJsonString("pathCommandCount")).append(": ").append(resourceLimits.pathCommandCount).append(", ")
+        append(colorGlyphJsonString("gradientStopCount")).append(": ").append(resourceLimits.gradientStopCount).append(", ")
+        append(colorGlyphJsonString("primitiveCount")).append(": ").append(resourceLimits.primitiveCount).append(", ")
+        append(colorGlyphJsonString("maxDocumentChars")).append(": ").append(resourceLimits.maxDocumentChars).append(", ")
+        append(colorGlyphJsonString("maxPathCommands")).append(": ").append(resourceLimits.maxPathCommands).append(", ")
+        append(colorGlyphJsonString("maxGradientStops")).append(": ").append(resourceLimits.maxGradientStops).append(", ")
+        append(colorGlyphJsonString("maxPrimitiveCount")).append(": ").append(resourceLimits.maxPrimitiveCount).append(", ")
+        append(colorGlyphJsonString("maxUseRecursionDepth")).append(": ").append(resourceLimits.maxUseRecursionDepth)
+        append("},\n")
+        append("  \"diagnostics\": ")
+        appendColorGlyphDiagnosticsJson(diagnostics, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendColorGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+}
 
 /**
  * Stores a rendered SVG glyph image.
@@ -4001,6 +4254,7 @@ private val COLOR_GLYPH_ROUTES = COLOR_GLYPH_ROUTE_ORDER.toSet()
 private const val BitmapGlyphPlanSchema = "org.graphiks.kanvas.glyph.color.BitmapGlyphPlan.v1"
 private const val ColorArtifactRoute = "text.glyph.color.COLR"
 private const val OutlineArtifactRoute = "text.glyph.outline"
+private const val SVGGlyphPlanSchema = "org.graphiks.kanvas.glyph.color.SVGGlyphPlan.v1"
 
 /**
  * Appends a canonical JSON string field using the module's two-space object indentation.
@@ -4034,6 +4288,31 @@ private fun StringBuilder.appendColorGlyphRouteOrderJson() {
         colorGlyphJsonString(route)
     })
 }
+
+/**
+ * Derives a stable primitive kind label from a canonical SVG element summary.
+ */
+private fun svgPrimitiveKind(summary: String): String =
+    when (val raw = summary.substringBefore('{').trim()) {
+        "clippath" -> "clipPath"
+        "lineargradient" -> "linearGradient"
+        "radialgradient" -> "radialGradient"
+        else -> raw
+    }
+
+/**
+ * Counts SVG path commands in raw source text using literal `d="..."` path attributes.
+ */
+private fun svgPathCommandCount(sourceText: String): Int =
+    SVG_PATH_ATTRIBUTE_PATTERN.findAll(sourceText).sumOf { match ->
+        SVG_PATH_COMMAND_PATTERN.findAll(match.groupValues[1]).count()
+    }
+
+/**
+ * Counts SVG gradient stop elements in raw source text.
+ */
+private fun svgGradientStopCount(sourceText: String): Int =
+    SVG_STOP_ELEMENT_PATTERN.findAll(sourceText).count()
 
 /**
  * Appends selected routes as a canonical JSON array while preserving planning order.
@@ -5069,6 +5348,9 @@ private const val PNG_COLOR_TYPE_RGBA = 6
 private const val MAX_SVG_GLYPH_TEXT_CHARS = 64 * 1024
 private const val MAX_SVG_GLYPH_ELEMENTS = 256
 private const val MAX_SVG_ATTRIBUTE_VALUE_CHARS = 4096
+private const val MAX_SVG_PATH_COMMANDS = 256
+private const val MAX_SVG_GRADIENT_STOPS = 64
+private const val MAX_SVG_USE_RECURSION_DEPTH = 8
 
 private val BITMAP_STRIKE_STABLE_ORDER: Comparator<BitmapStrikeSelection> =
     compareBy<BitmapStrikeSelection> { selection -> selection.ppem }
@@ -5089,9 +5371,15 @@ private val PNG_SIGNATURE = byteArrayOf(
 
 private val SVG_NUMBER_SEPARATOR = Regex("[,\\s]+")
 private val SVG_WHITESPACE = Regex("\\s+")
+private val SVG_PATH_ATTRIBUTE_PATTERN = Regex("""(?i)<path\b[^>]*\bd\s*=\s*"([^"]*)"""")
+private val SVG_PATH_COMMAND_PATTERN = Regex("[AaCcHhLlMmQqSsTtVvZz]")
+private val SVG_STOP_ELEMENT_PATTERN = Regex("""(?i)<stop\b""")
 private val SVG_SUMMARY_ELEMENT_NAMES = setOf(
+    "defs",
+    "g",
     "clippath",
     "lineargradient",
+    "radialgradient",
     "path",
     "rect",
     "circle",
@@ -5100,6 +5388,7 @@ private val SVG_SUMMARY_ELEMENT_NAMES = setOf(
     "polyline",
     "polygon",
     "stop",
+    "symbol",
     "use",
 )
 private val SVG_SUMMARY_ATTRIBUTE_NAMES = setOf(
@@ -5122,6 +5411,7 @@ private val SVG_SUMMARY_ATTRIBUTE_NAMES = setOf(
     "stop-color",
     "stroke-width",
     "transform",
+    "viewbox",
     "width",
     "x",
     "x1",
