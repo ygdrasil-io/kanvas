@@ -1553,6 +1553,46 @@ object GPURendererSceneRegistry {
             ),
         ),
         scene(
+            id = "cache-frame-budget-strip",
+            title = "Cache Frame Budget Strip",
+            description = "Visible frame and cache budget lanes where the exceeded-budget product refusal remains explicit and reporting-only.",
+            tags = setOf(SceneTag.Rect, SceneTag.Cache),
+            links = listOf(SceneRoadmapLink.milestone("M9")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0.038f, 0.042f, 0.050f, 1f)),
+                SceneCommand.FillRect(
+                    label = "frame-budget-target",
+                    rect = SceneRect(28f, 44f, 84f, 154f),
+                    color = SceneColor.green(0.88f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "cache-budget-warning",
+                    rect = SceneRect(96f, 64f, 152f, 154f),
+                    color = SceneColor.amber(0.92f),
+                    paintOrder = 2,
+                ),
+                SceneCommand.FillRect(
+                    label = "budget-exceeded-refusal",
+                    rect = SceneRect(164f, 84f, 220f, 154f),
+                    color = SceneColor.red(),
+                    paintOrder = 3,
+                ),
+                SceneCommand.FillRect(
+                    label = "reporting-only-gate",
+                    rect = SceneRect(232f, 104f, 288f, 154f),
+                    color = SceneColor.blue(0.84f),
+                    paintOrder = 4,
+                ),
+                SceneCommand.FillRect(
+                    label = "no-release-blocking-claim",
+                    rect = SceneRect(28f, 148f, 288f, 158f),
+                    color = SceneColor(0.80f, 0.84f, 0.90f, 0.94f),
+                    paintOrder = 5,
+                ),
+            ),
+        ),
+        scene(
             id = "cache-source-ledger-board",
             title = "Cache Source Ledger Board",
             description = "Visible cache telemetry source classes without release-gate or readiness movement claims.",
