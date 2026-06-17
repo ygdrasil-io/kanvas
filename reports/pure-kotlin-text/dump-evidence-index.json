@@ -625,6 +625,73 @@
       ]
     },
     {
+      "dumpId": "fallback-fixture",
+      "ownerTicket": "KFONT-M7-002",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Fallback Runs"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FallbackDecisionDumpTest.kt",
+        "reports/font/fixtures/expected/fallback/fallback-emoji-preference.json",
+        "reports/font/fixtures/expected/fallback/fallback-family-generic.json",
+        "reports/font/fixtures/expected/fallback/fallback-family-unavailable.json",
+        "reports/font/fixtures/expected/fallback/fallback-locale-serbian.json",
+        "reports/font/fixtures/expected/fallback/fallback-missing-glyph.json",
+        "reports/font/fixtures/expected/fallback/fallback-script-arabic.json"
+      ],
+      "expectedFields": [
+        "candidateFamilies",
+        "candidates",
+        "clusterRange",
+        "codePoint",
+        "covered",
+        "decisions",
+        "diagnosticCode",
+        "diagnosticRanges",
+        "diagnostics",
+        "dumpId",
+        "fallbackReason",
+        "familyName",
+        "fixtureId",
+        "genericFamily",
+        "hostDependent",
+        "locales",
+        "nonClaims",
+        "ownerTickets",
+        "reason",
+        "reasons",
+        "request",
+        "requestedFamilies",
+        "runs",
+        "schemaVersion",
+        "script",
+        "selectedFamily",
+        "selectedTypefaceId",
+        "styleDistance",
+        "textRange",
+        "typefaceId"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecisionDump*'",
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecision*'",
+        "rtk ./gradlew --no-daemon :font:core:test",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Per-fixture fallback golden changes require matching aggregate bundle review, stable refusal diagnostics, and no shaping or support promotion by implication.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-cluster-safe-fallback-claim",
+        "no-platform-font-fallback-claim",
+        "no-shaping-engine-claim"
+      ]
+    },
+    {
       "dumpId": "feature-policy-matrix",
       "ownerTicket": "KFONT-M6-006",
       "classification": "golden-gated",

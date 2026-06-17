@@ -4181,6 +4181,7 @@ data class FallbackEvidenceCase(
 data class FallbackEvidenceBundle(
     val fallbackDecisionTraceJson: String,
     val resolvedFontRunsJson: String,
+    val fixtureJsonById: Map<String, String>,
 )
 
 private data class FallbackRequestSummary(
@@ -4245,6 +4246,39 @@ private data class ResolvedFontRunsCaseDump(
     }
 }
 
+private data class FallbackFixtureDump(
+    val fixtureId: String,
+    val request: FallbackRequestSummary,
+    val decisions: List<FallbackDecisionTrace>,
+    val runs: List<ResolvedFontRunEvidence>,
+    val diagnosticRanges: List<FallbackDiagnosticRangeEvidence>,
+    val diagnostics: List<String>,
+    val nonClaims: List<String>,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append("\"schemaVersion\":1,")
+        appendFontCompactJsonField("dumpId", "fallback-fixture", comma = true)
+        appendStringArrayField("ownerTickets", listOf("KFONT-M7-002"), comma = true)
+        appendFontCompactJsonField("fixtureId", fixtureId, comma = true)
+        append("request".evidenceQuoted()).append(":").append(request.toCanonicalJson()).append(",")
+        append("decisions".evidenceQuoted()).append(":")
+        append(decisions.mapIndexed { index, decision ->
+            decision.toCanonicalJson(clusterStart = index, clusterEnd = index)
+        }.joinToString(prefix = "[", postfix = "]", separator = ",") { it })
+        append(",")
+        append("runs".evidenceQuoted()).append(":")
+        append(runs.joinToString(prefix = "[", postfix = "]", separator = ",") { run -> run.toCanonicalJson() })
+        append(",")
+        append("diagnosticRanges".evidenceQuoted()).append(":")
+        append(diagnosticRanges.joinToString(prefix = "[", postfix = "]", separator = ",") { range -> range.toCanonicalJson() })
+        append(",")
+        appendStringArrayField("diagnostics", diagnostics, comma = true)
+        appendStringArrayField("nonClaims", nonClaims, comma = false)
+        append("}")
+    }
+}
+
 fun FallbackDecisionTrace.toCanonicalJson(
     clusterStart: Int,
     clusterEnd: Int = clusterStart,
@@ -4302,6 +4336,13 @@ object FallbackEvidenceWriter {
     fun writeBundle(
         cases: List<FallbackEvidenceCase>,
     ): FallbackEvidenceBundle {
+        val fixtureNonClaims = listOf(
+            "no-cluster-safe-fallback-claim",
+            "no-complete-target-support-claim",
+            "no-emoji-rendering-claim",
+            "no-platform-font-fallback-claim",
+            "no-shaping-engine-claim",
+        )
         val orderedCases = cases.sortedBy { it.fixtureId }
         val traceCases = orderedCases.map { case ->
             FallbackDecisionCaseDump(
@@ -4330,6 +4371,22 @@ object FallbackEvidenceWriter {
                 diagnostics = case.diagnostics.sorted(),
             )
         }
+        val fixtureJsonById = orderedCases.associate { case ->
+            case.fixtureId to FallbackFixtureDump(
+                fixtureId = case.fixtureId,
+                request = FallbackRequestSummary(
+                    text = case.request.text,
+                    locale = case.request.locale,
+                    preferredFamilies = case.request.preferredFamilies,
+                    style = case.request.style,
+                ),
+                decisions = case.decisions,
+                runs = case.runs,
+                diagnosticRanges = buildFallbackDiagnosticRanges(case.decisions),
+                diagnostics = case.diagnostics.sorted(),
+                nonClaims = fixtureNonClaims,
+            ).toCanonicalJson()
+        }
         return FallbackEvidenceBundle(
             fallbackDecisionTraceJson = buildString {
                 append("{\n")
@@ -4353,6 +4410,7 @@ object FallbackEvidenceWriter {
                 append("  \"nonClaims\": [\"no-complete-target-support-claim\", \"no-cluster-safe-fallback-claim\", \"no-platform-font-fallback-claim\", \"no-shaping-engine-claim\"]\n")
                 append("}")
             },
+            fixtureJsonById = fixtureJsonById,
         )
     }
 }

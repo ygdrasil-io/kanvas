@@ -306,13 +306,19 @@
         "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
         "font/core/src/test/kotlin/org/graphiks/kanvas/font/FallbackDecisionDumpTest.kt",
         "reports/font/fixtures/expected/fallback/fallback-decision-trace.json",
+        "reports/font/fixtures/expected/fallback/fallback-emoji-preference.json",
+        "reports/font/fixtures/expected/fallback/fallback-family-generic.json",
+        "reports/font/fixtures/expected/fallback/fallback-family-unavailable.json",
+        "reports/font/fixtures/expected/fallback/fallback-locale-serbian.json",
+        "reports/font/fixtures/expected/fallback/fallback-missing-glyph.json",
+        "reports/font/fixtures/expected/fallback/fallback-script-arabic.json",
         "reports/font/fixtures/expected/fallback/resolved-font-runs.json",
         "reports/pure-kotlin-text/2026-06-16-kfont-m7-002-fallback-decision-trace.md",
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "reports/pure-kotlin-text/dump-evidence-index.json"
       ],
       "requiredEvidenceGates": [
-        "Add shaping trace references and dedicated per-fixture fallback assets before promoting fallback evidence beyond this bounded review slice.",
+        "Add shaping trace references before promoting fallback evidence beyond this bounded review slice.",
         "Add variable-axis-aware and cluster-safe fallback evidence before claiming complete fallback behavior.",
         "Keep host-dependent system scan facts non-normative until deterministic scan inputs and host markers land."
       ],

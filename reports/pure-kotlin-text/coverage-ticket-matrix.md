@@ -646,6 +646,12 @@ Files:
 - `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
 - `font/core/src/test/kotlin/org/graphiks/kanvas/font/FallbackDecisionDumpTest.kt`
 - `reports/font/fixtures/expected/fallback/fallback-decision-trace.json`
+- `reports/font/fixtures/expected/fallback/fallback-emoji-preference.json`
+- `reports/font/fixtures/expected/fallback/fallback-family-generic.json`
+- `reports/font/fixtures/expected/fallback/fallback-family-unavailable.json`
+- `reports/font/fixtures/expected/fallback/fallback-locale-serbian.json`
+- `reports/font/fixtures/expected/fallback/fallback-missing-glyph.json`
+- `reports/font/fixtures/expected/fallback/fallback-script-arabic.json`
 - `reports/font/fixtures/expected/fallback/resolved-font-runs.json`
 - `reports/pure-kotlin-text/2026-06-16-kfont-m7-002-fallback-decision-trace.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/KFONT-M7-002-add-fallback-decision-trace.md`
@@ -663,6 +669,9 @@ Evidence:
   six bounded fallback cases: generic-family selection, Arabic script
   fallback, Serbian locale hinting, emoji preference, missing-glyph refusal,
   and family-unavailable refusal.
+- The same bundle now emits six dedicated `fallback-fixture` assets so later
+  evidence can reference each bounded case directly without reslicing the
+  aggregate dumps.
 - `ResolvedFontRunEvidence` records deterministic text ranges, cluster ranges,
   selected `TypefaceID`, host-dependent markers, fallback reasons, and shaping
   diagnostic codes for positive cases, while refusal `diagnosticRanges` keep
@@ -684,10 +693,9 @@ rtk git diff --check
 ```
 
 Remaining gate: this is bounded fallback-trace evidence only. It does not yet
-add shaping-plan or `shaped-glyph-run` trace propagation, dedicated
-per-fixture fallback assets, variable-axis-aware fallback, cluster-safe
-fallback segmentation, host-dependent system scan facts, CPU oracle promotion,
-or any GPU text-route claim.
+add shaping-plan or `shaped-glyph-run` trace propagation, variable-axis-aware
+fallback, cluster-safe fallback segmentation, host-dependent system scan facts,
+CPU oracle promotion, or any GPU text-route claim.
 ### PKT-03A: SFNT/OpenType Face Evidence Dumps
 
 Status: implemented and independently reviewed.

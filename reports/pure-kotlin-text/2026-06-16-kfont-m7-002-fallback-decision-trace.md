@@ -8,6 +8,10 @@
 - Two checked-in canonical dumps now cover the bounded fallback slice:
   `reports/font/fixtures/expected/fallback/fallback-decision-trace.json` and
   `reports/font/fixtures/expected/fallback/resolved-font-runs.json`.
+- Six dedicated per-fixture assets now sit alongside the aggregate dumps:
+  `fallback-emoji-preference.json`, `fallback-family-generic.json`,
+  `fallback-family-unavailable.json`, `fallback-locale-serbian.json`,
+  `fallback-missing-glyph.json`, and `fallback-script-arabic.json`.
 - The current bundle records six deterministic cases:
   `fallback-family-generic`, `fallback-script-arabic`,
   `fallback-locale-serbian`, `fallback-emoji-preference`,
@@ -24,6 +28,9 @@
   diagnostic codes for the same bounded fixture cases, while refusal
   `diagnosticRanges` preserve complete-miss text and cluster coverage when no
   run can be emitted.
+- `defaultFallbackEvidenceBundle()` now also emits one compact
+  `fallback-fixture` JSON per fixture so later shaping and dashboard evidence
+  can reference bounded cases directly instead of slicing the aggregate dumps.
 - `FallbackDecisionDumpTest` asserts byte-identical checked-in dump output and
   verifies script fallback, locale hinting, emoji preference, missing-glyph,
   and family-unavailable refusal diagnostics without leaking HarfBuzz,
@@ -45,6 +52,6 @@ rtk git diff --check
 
 This slice keeps `KFONT-M7-002` in `review`, not `done`. The current evidence
 does not yet add shaping-plan or `shaped-glyph-run` trace propagation,
-dedicated per-fixture fallback assets, variable-axis-aware fallback,
-cluster-safe fallback segmentation, host-dependent system scan facts, CPU
-oracle promotion, or any GPU text-route claim.
+variable-axis-aware fallback, cluster-safe fallback segmentation,
+host-dependent system scan facts, CPU oracle promotion, or any GPU text-route
+claim.
