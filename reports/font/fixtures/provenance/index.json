@@ -41,6 +41,7 @@
         }
       ],
       "expectedDumps": [
+        "reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json",
         "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
       ],
       "nonClaims": [
@@ -53,7 +54,8 @@
       "fixtureId": "fallback-emoji-noto-color",
       "familyId": "font-fallback-catalog",
       "ownerTickets": [
-        "KFONT-M7-001"
+        "KFONT-M7-001",
+        "KFONT-M10-010"
       ],
       "source": {
         "kind": "vendored-external",
@@ -73,7 +75,9 @@
           "role": "emoji-colrv1-font"
         }
       ],
-      "expectedDumps": [],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json"
+      ],
       "nonClaims": [
         "no-complete-target-support-claim",
         "no-fallback-support-claim",

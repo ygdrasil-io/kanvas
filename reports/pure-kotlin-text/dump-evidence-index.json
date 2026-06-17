@@ -606,6 +606,59 @@
       ]
     },
     {
+      "dumpId": "color-emoji-fixture-manifest",
+      "ownerTicket": "KFONT-M10-010",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md",
+        "section": "Target Fixture Manifest"
+      },
+      "producerPaths": [
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+        "reports/font/fixtures/provenance/index.json",
+        "reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "fixtureFamilies",
+        "legacyGates",
+        "nonClaims",
+        "ownerTickets",
+        "rebaselinePolicy",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.ColorEmojiFixtureManifestMatchesRepoFixture",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_color_emoji_fixture_manifest.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_color_emoji_fixture_manifest.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Color/emoji fixture-manifest changes require reviewed old/new manifest diffs, linked dump diffs, provenance review, legacy-gate mapping review, and explicit non-claims without COLRv1, bitmap, SVG, emoji, GPU, or platform fallback support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-complete-colrv1-rendering-claim",
+        "no-complete-png-bitmap-glyph-routing-claim",
+        "no-complete-svg-in-opentype-rendering-claim",
+        "no-complete-emoji-sequence-shaping-claim",
+        "no-complete-color-glyph-fallback-support-claim",
+        "no-gpu-color-glyph-support-claim",
+        "no-gpu-bitmap-glyph-route-claim",
+        "no-gpu-svg-glyph-route-claim",
+        "no-platform-color-font-fallback-claim",
+        "no-platform-bitmap-codec-claim",
+        "no-platform-emoji-engine-claim",
+        "no-native-svg-renderer-claim",
+        "no-scaledemoji-retirement",
+        "no-scaledemoji-rendering-retirement",
+        "no-coloremoji-blendmodes-retirement"
+      ]
+    },
+    {
       "dumpId": "color-glyph-composite-plan",
       "ownerTicket": "KFONT-M10-004",
       "classification": "golden-gated",

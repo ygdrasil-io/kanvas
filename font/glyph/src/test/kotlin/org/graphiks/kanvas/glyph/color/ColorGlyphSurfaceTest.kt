@@ -3139,6 +3139,70 @@ class ColorGlyphSurfaceTest {
         assertEvidenceDumpClean(dump)
     }
 
+    @Test
+    fun ColorEmojiFixtureManifestMatchesRepoFixture() {
+        val dump = readProjectFile("reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json")
+        assertEquals("color-emoji-fixture-manifest", jsonStringField(dump, "dumpId"))
+        assertEquals(
+            listOf("color-glyphs", "emoji", "png-bitmap-glyphs", "svg-glyphs"),
+            jsonStringArrayField(dump, "fixtureFamilies"),
+        )
+        assertEquals(
+            listOf(
+                "no-complete-target-support-claim",
+                "no-complete-colrv1-rendering-claim",
+                "no-complete-png-bitmap-glyph-routing-claim",
+                "no-complete-svg-in-opentype-rendering-claim",
+                "no-complete-emoji-sequence-shaping-claim",
+                "no-complete-color-glyph-fallback-support-claim",
+                "no-gpu-color-glyph-support-claim",
+                "no-gpu-bitmap-glyph-route-claim",
+                "no-gpu-svg-glyph-route-claim",
+                "no-platform-color-font-fallback-claim",
+                "no-platform-bitmap-codec-claim",
+                "no-platform-emoji-engine-claim",
+                "no-native-svg-renderer-claim",
+                "no-scaledemoji-retirement",
+                "no-scaledemoji-rendering-retirement",
+                "no-coloremoji-blendmodes-retirement",
+            ),
+            jsonStringArrayField(dump, "nonClaims"),
+        )
+
+        val legacyGates = jsonArrayField(dump, "legacyGates")
+        assertJsonPattern(legacyGates, """"gateId"\s*:\s*"coloremoji_blendmodes"""")
+        assertJsonPattern(legacyGates, """"fixtureIds"\s*:\s*\[\s*"color-glyphs-colrv1-composite-clip-bounds"""")
+        assertJsonPattern(legacyGates, """"gateId"\s*:\s*"scaledemoji"""")
+        assertJsonPattern(legacyGates, """"emoji-variation-selector-colr"""")
+        assertJsonPattern(legacyGates, """"emoji-unsupported-sequence"""")
+        assertJsonPattern(legacyGates, """"gateId"\s*:\s*"scaledemoji_rendering"""")
+        assertJsonPattern(legacyGates, """"png-bitmap-glyphs-cbdt-cblc-png"""")
+        assertJsonPattern(legacyGates, """"svg-glyphs-svg-static-path"""")
+
+        val rebaselinePolicy = jsonObjectField(dump, "rebaselinePolicy")
+        assertJsonPattern(rebaselinePolicy, """"ordinaryTestRuns"\s*:\s*"must-not-overwrite-goldens"""")
+        assertJsonPattern(rebaselinePolicy, """"autoOverwritePolicy"\s*:\s*"forbidden"""")
+        assertJsonPattern(rebaselinePolicy, """"reviewRequirement"\s*:\s*"color-emoji fixture-manifest updates require reviewed old/new manifest diffs, linked dump diffs, and a stated reason before check-in\."""")
+        assertJsonPattern(rebaselinePolicy, """"color-svg-emoji-goldens\.json"""")
+        assertJsonPattern(rebaselinePolicy, """"emoji-route-trace\.json"""")
+        assertJsonPattern(rebaselinePolicy, """"svg-glyph-fixture-manifest\.json"""")
+
+        val cases = jsonArrayField(dump, "cases")
+        assertEquals(39, Regex("\"fixtureId\":").findAll(cases).count())
+        assertJsonPattern(cases, """"fixtureId"\s*:\s*"color-glyphs-colrv0-layered-palette-override"""")
+        assertJsonPattern(cases, """"fixtureId"\s*:\s*"color-glyphs-colrv1-gradient-operation-group"""")
+        assertJsonPattern(cases, """"fixtureId"\s*:\s*"png-bitmap-glyphs-cbdt-cblc-png"""")
+        assertJsonPattern(cases, """"fixtureId"\s*:\s*"svg-glyphs-svg-static-path"""")
+        assertJsonPattern(cases, """"fixtureId"\s*:\s*"emoji-variation-selector-colr"""")
+        assertJsonPattern(cases, """"sourceSha256"\s*:\s*"8aa611b1ca97044ac6f13dc982fde29256612f0a5acc6ef47ca541a7a5b99b28"""")
+        assertJsonPattern(cases, """"sourceSha256"\s*:\s*"469e3b92d63cfc203789f8742f1835b8672c7b5995ab4a832f1699b712a5afcc"""")
+        assertJsonPattern(cases, """"generatedSourceRecipe"\s*:\s*\[""")
+        assertJsonPattern(cases, """"expectedDumpFiles"\s*:\s*\[\s*"emoji-route-trace\.json"\s*,\s*"color-glyph-plan\.json"""")
+        assertJsonPattern(cases, """"expectedDumpFiles"\s*:\s*\[\s*"emoji-route-trace\.json"\s*,\s*"bitmap-glyph-plan\.json"""")
+
+        assertEvidenceDumpClean(dump)
+    }
+
     private fun syntheticCpalV0(): ByteArray {
         val bytes = ByteArray(32)
         writeU16(bytes, 0, 0)
@@ -4219,6 +4283,21 @@ class ColorGlyphSurfaceTest {
             }
         }
         error("Unterminated JSON object field $field")
+    }
+
+    private fun jsonArrayField(json: String, field: String): String {
+        val fieldToken = "\"$field\": ["
+        val start = json.indexOf(fieldToken)
+        require(start >= 0) { "Missing JSON array field $field" }
+        val arrayStart = json.indexOf('[', start)
+        return extractJsonArray(json, arrayStart)
+    }
+
+    private fun assertJsonPattern(json: String, pattern: String) {
+        assertTrue(
+            Regex(pattern, RegexOption.DOT_MATCHES_ALL).containsMatchIn(json),
+            "Missing JSON pattern $pattern in: $json",
+        )
     }
 
     private fun sha256Utf8(value: String): String =
