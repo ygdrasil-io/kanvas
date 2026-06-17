@@ -279,7 +279,7 @@ data class GPUSaveLayerIsolatedTargetGatePlan(
     }
 }
 
-/** Planner for the blocked saveLayer isolated target route gate. */
+/** Planner for the contract-only saveLayer isolated target route gate. */
 class GPUSaveLayerIsolatedTargetPlanner {
     /** Plans a contract-only saveLayer isolated target route or a stable refusal. */
     fun plan(request: GPUSaveLayerIsolatedTargetRequest): GPUSaveLayerIsolatedTargetGatePlan {
@@ -289,7 +289,7 @@ class GPUSaveLayerIsolatedTargetPlanner {
             return refusedPlan(request, refusalCode)
         }
 
-        val usageLabels = request.requiredUsageLabels.canonicalUsageLabels()
+        val usageLabels = request.requiredSaveLayerUsageLabels().canonicalUsageLabels()
         val descriptorHash = targetDescriptorHash(request, usageLabels)
         val targetLabel = "layer-target:${request.saveRecord.scopeId.value.removePrefix("layer:")}"
         val targetPlan = GPULayerTargetPlan(
@@ -439,7 +439,7 @@ private fun GPUSaveLayerIsolatedTargetRequest.refusalCode(targetBytes: Long): St
     when {
         !bounds.finite -> "unsupported.layer.bounds_unbounded"
         bounds.width <= 0 || bounds.height <= 0 -> "unsupported.layer.bounds_invalid"
-        (requiredUsageLabels - availableUsageLabels).isNotEmpty() -> "unsupported.layer.target_usage_missing"
+        (requiredSaveLayerUsageLabels() - availableUsageLabels).isNotEmpty() -> "unsupported.layer.target_usage_missing"
         activeAttachmentSampled -> "unsupported.layer.active_attachment_sampled"
         saveRecord.backdropRequired -> "unsupported.layer.backdrop_filter"
         saveRecord.initWithPrevious -> "unsupported.layer.init_previous_unaccepted"
@@ -503,4 +503,8 @@ private val SAVE_LAYER_USAGE_ORDER = listOf(
     "copy_dst",
     "storage_binding",
 )
+private val SAVE_LAYER_REQUIRED_USAGE_LABELS = setOf("render_attachment", "texture_binding")
 private const val SAVE_LAYER_BYTES_PER_PIXEL = 4L
+
+private fun GPUSaveLayerIsolatedTargetRequest.requiredSaveLayerUsageLabels(): Set<String> =
+    requiredUsageLabels + SAVE_LAYER_REQUIRED_USAGE_LABELS
