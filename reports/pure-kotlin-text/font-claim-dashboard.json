@@ -339,6 +339,7 @@
         ],
         "deterministicDumps": [
           "reports/font/fixtures/expected/fallback/fallback-decision-trace.json",
+          "reports/font/fixtures/expected/fallback/fallback-segmentation-report.json",
           "reports/font/fixtures/expected/fallback/resolved-font-runs.json",
           "reports/font/fixtures/expected/shaping/fallback-shaped-glyph-run.json",
           "reports/pure-kotlin-text/font-catalog.json",
@@ -348,15 +349,18 @@
         "cpuOracle": [],
         "gpuArtifacts": [],
         "routeDiagnostics": [
-          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/font/fixtures/expected/fallback/fallback-segmentation-report.json"
         ],
         "refusalDiagnostics": [
-          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/font/fixtures/expected/fallback/fallback-segmentation-report.json"
         ]
       },
       "requiredEvidenceGates": [
         "Add bundled Hebrew/Arabic, Devanagari/Thai, CJK, and optional emoji-capable deterministic catalog rows before fallback promotion.",
-        "Extend fallback shaping evidence to cluster-safe segmentation before claiming complete fallback behavior.",
+        "KFONT-M7-004 now adds bounded cluster-safe fallback segmentation evidence, but the negative emoji row still reports a reviewed split hazard and does not retire `scaledemoji`.",
+        "Promote dedicated per-fixture fallback trace/resolved-run assets plus explicit host-dependent markers before any broader fallback support claim.",
         "Add CPU oracle evidence for fallback decisions before promotion."
       ],
       "legacyGates": [
