@@ -1866,6 +1866,34 @@ class ColorGlyphSurfaceTest {
     }
 
     @Test
+    fun buildsSVGDocumentMalformedDiagnostic() {
+        val malformedSvg = "<svg viewBox=\"0 0 16 16\"><path d=\"M0 0\""
+        val failure = assertFailsWith<IllegalArgumentException> {
+            BasicSVGGlyphParser.parse(glyphId = 84, text = malformedSvg)
+        }
+        val diagnostic = BasicSVGGlyphParser.documentMalformedDiagnostic(
+            glyphId = 84,
+            sourceText = malformedSvg,
+            failure = failure,
+        )
+
+        assertEquals(84, diagnostic.glyphId)
+        assertEquals("svg", diagnostic.route)
+        assertEquals(ColorGlyphDiagnosticCodes.SVGDocumentMalformed, diagnostic.code)
+        assertEquals("warning", diagnostic.severity)
+        assertTrue(diagnostic.detail.contains("glyphId=84"))
+        assertTrue(diagnostic.detail.contains("sourceDocumentSha256="))
+        assertTrue(diagnostic.detail.contains("failureClass=IllegalArgumentException"))
+        assertTrue(diagnostic.detail.contains("failureMessage=SVG glyph payload contains an unterminated start tag."))
+        assertEquals(
+            """
+            {"glyphId": 84, "route": "svg", "code": "text.SVG.document-malformed", "detail": "${diagnostic.detail}", "severity": "warning", "message": "SVG glyph document is malformed for glyph 84: SVG glyph payload contains an unterminated start tag."}
+            """.trimIndent(),
+            diagnostic.toCanonicalJson(),
+        )
+    }
+
+    @Test
     fun svgGlyphPlanBundleCapturesSupportedPrimitivesAndRefusalsDeterministically() {
         val pathShapeSvg = """
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 64">
@@ -2004,6 +2032,267 @@ class ColorGlyphSurfaceTest {
         assertEquals(
             expected,
             readProjectFile("reports/font/fixtures/expected/color/svg-glyph-plan.json"),
+        )
+    }
+
+    @Test
+    fun svgGlyphFixtureManifestCapturesBoundsRefusalsAndProvenanceDeterministically() {
+        val pathShapeSvg = """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 64">
+              <rect x="1" y="2" width="10" height="20" fill="#ff0000"/>
+              <path d="M0 0 L10 10" stroke="#000000" fill="none"/>
+            </svg>
+        """.trimIndent()
+        val pathShapePlan = SVGGlyphPlan.fromDocument(
+            sourceText = pathShapeSvg,
+            document = BasicSVGGlyphParser.parse(glyphId = 177, text = pathShapeSvg),
+        )
+
+        val gradientTransformClipSvg = """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+              <defs>
+                <linearGradient id="g" x1="0" y1="0" x2="16" y2="0" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stop-color="#000000"/>
+                  <stop offset="1" stop-color="#ffffff"/>
+                </linearGradient>
+                <clipPath id="c">
+                  <rect x="1" y="1" width="14" height="14"/>
+                </clipPath>
+              </defs>
+              <g opacity="0.75" transform="translate(2 3)">
+                <path d="M0 0 L16 0 L16 16 Z" fill="url(#g)" clip-path="url(#c)"/>
+              </g>
+            </svg>
+        """.trimIndent()
+        val gradientTransformClipPlan = SVGGlyphPlan.fromDocument(
+            sourceText = gradientTransformClipSvg,
+            document = BasicSVGGlyphParser.parse(glyphId = 178, text = gradientTransformClipSvg),
+        )
+
+        val symbolUseSvg = """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+              <defs>
+                <radialGradient id="rg" cx="12" cy="12" r="10">
+                  <stop offset="0" stop-color="#ffee00"/>
+                  <stop offset="1" stop-color="#ff6600"/>
+                </radialGradient>
+                <symbol id="sun" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="8" fill="url(#rg)"/>
+                </symbol>
+              </defs>
+              <use href="#sun" opacity="0.5" transform="translate(1 2)"/>
+            </svg>
+        """.trimIndent()
+        val symbolUsePlan = SVGGlyphPlan.fromDocument(
+            sourceText = symbolUseSvg,
+            document = BasicSVGGlyphParser.parse(glyphId = 179, text = symbolUseSvg),
+        )
+
+        val malformedSvg = "<svg viewBox=\"0 0 16 16\"><path d=\"M0 0\""
+        val malformedFailure = assertFailsWith<IllegalArgumentException> {
+            BasicSVGGlyphParser.parse(glyphId = 190, text = malformedSvg)
+        }
+
+        val expected = svgGlyphFixtureManifestJson(
+            cases = listOf(
+                svgFixtureManifestCase(
+                    fixtureId = "svg-glyphs-svg-static-path",
+                    focus = "static-path",
+                    plan = pathShapePlan,
+                    sourceText = pathShapeSvg,
+                ),
+                svgFixtureManifestCase(
+                    fixtureId = "svg-glyphs-svg-gradient-transform-clip",
+                    focus = "gradient-transform-clip",
+                    plan = gradientTransformClipPlan,
+                    sourceText = gradientTransformClipSvg,
+                ),
+                svgFixtureManifestCase(
+                    fixtureId = "svg-glyphs-svg-defs-symbol-use-radial-gradient",
+                    focus = "defs-symbol-use-radial-gradient",
+                    plan = symbolUsePlan,
+                    sourceText = symbolUseSvg,
+                ),
+                svgRefusalManifestCase(
+                    fixtureId = "svg-glyphs-svg-script-refusal",
+                    glyphId = 185,
+                    focus = "script",
+                    sourceText = "<svg viewBox=\"0 0 16 16\"><script>alert(1)</script></svg>",
+                    diagnostics = listOf(
+                        BasicSVGGlyphParser.unsupportedFeatureDiagnostic(
+                            glyphId = 185,
+                            elementName = "script",
+                            featureName = "script",
+                        ),
+                    ),
+                ),
+                svgRefusalManifestCase(
+                    fixtureId = "svg-glyphs-svg-external-resource-refusal",
+                    glyphId = 180,
+                    focus = "external-resource",
+                    sourceText = "<svg viewBox=\"0 0 16 16\"><image href=\"https://example.invalid/glyph.png\"/></svg>",
+                    diagnostics = listOf(
+                        BasicSVGGlyphParser.externalResourceRefusedDiagnostic(
+                            glyphId = 180,
+                            elementName = "image",
+                            attributeName = "href",
+                            reference = "https://example.invalid/glyph.png",
+                        ),
+                    ),
+                ),
+                svgRefusalManifestCase(
+                    fixtureId = "svg-glyphs-svg-network-reference-refusal",
+                    glyphId = 186,
+                    focus = "network-reference",
+                    sourceText = "<svg viewBox=\"0 0 16 16\"><use href=\"https://example.invalid/glyph.svg#icon\"/></svg>",
+                    diagnostics = listOf(
+                        BasicSVGGlyphParser.externalResourceRefusedDiagnostic(
+                            glyphId = 186,
+                            elementName = "use",
+                            attributeName = "href",
+                            reference = "https://example.invalid/glyph.svg#icon",
+                        ),
+                    ),
+                ),
+                svgRefusalManifestCase(
+                    fixtureId = "svg-glyphs-svg-animation-refusal",
+                    glyphId = 187,
+                    focus = "animation",
+                    sourceText = "<svg viewBox=\"0 0 16 16\"><animate attributeName=\"opacity\"/></svg>",
+                    diagnostics = listOf(
+                        BasicSVGGlyphParser.unsupportedFeatureDiagnostic(
+                            glyphId = 187,
+                            elementName = "animate",
+                            featureName = "animation",
+                        ),
+                    ),
+                ),
+                svgRefusalManifestCase(
+                    fixtureId = "svg-glyphs-svg-filter-refusal",
+                    glyphId = 188,
+                    focus = "filter",
+                    sourceText = "<svg viewBox=\"0 0 16 16\"><filter id=\"f\"/></svg>",
+                    diagnostics = listOf(
+                        BasicSVGGlyphParser.unsupportedFeatureDiagnostic(
+                            glyphId = 188,
+                            elementName = "filter",
+                            featureName = "filter",
+                        ),
+                    ),
+                ),
+                svgRefusalManifestCase(
+                    fixtureId = "svg-glyphs-svg-foreign-object-refusal",
+                    glyphId = 181,
+                    focus = "foreignObject",
+                    sourceText = "<svg viewBox=\"0 0 16 16\"><foreignObject/></svg>",
+                    diagnostics = listOf(
+                        BasicSVGGlyphParser.unsupportedFeatureDiagnostic(
+                            glyphId = 181,
+                            elementName = "foreignObject",
+                            featureName = "embedded-text-layout",
+                        ),
+                    ),
+                ),
+                svgRefusalManifestCase(
+                    fixtureId = "svg-glyphs-svg-embedded-text-refusal",
+                    glyphId = 189,
+                    focus = "embedded-text",
+                    sourceText = "<svg viewBox=\"0 0 16 16\"><text>Hello</text></svg>",
+                    diagnostics = listOf(
+                        BasicSVGGlyphParser.unsupportedFeatureDiagnostic(
+                            glyphId = 189,
+                            elementName = "text",
+                            featureName = "embedded-text-layout",
+                        ),
+                    ),
+                ),
+                svgRefusalManifestCase(
+                    fixtureId = "svg-glyphs-svg-unsupported-css-selector-refusal",
+                    glyphId = 191,
+                    focus = "unsupported-css-selector",
+                    sourceText = "<svg viewBox=\"0 0 16 16\"><style>g:hover { fill: red; }</style></svg>",
+                    diagnostics = listOf(
+                        BasicSVGGlyphParser.unsupportedFeatureDiagnostic(
+                            glyphId = 191,
+                            elementName = "style",
+                            featureName = "unsupported-css-selector",
+                        ),
+                    ),
+                ),
+                svgRefusalManifestCase(
+                    fixtureId = "svg-glyphs-svg-malformed-document-refusal",
+                    glyphId = 190,
+                    focus = "malformed-document",
+                    sourceText = malformedSvg,
+                    diagnostics = listOf(
+                        BasicSVGGlyphParser.documentMalformedDiagnostic(
+                            glyphId = 190,
+                            sourceText = malformedSvg,
+                            failure = malformedFailure,
+                        ),
+                    ),
+                ),
+                svgRefusalManifestCase(
+                    fixtureId = "svg-glyphs-svg-malformed-path-data-refusal",
+                    glyphId = 192,
+                    focus = "malformed-path-data",
+                    sourceText = "<svg viewBox=\"0 0 16 16\"><path d=\"M0 0 L\"/></svg>",
+                    diagnostics = listOf(
+                        BasicSVGGlyphParser.documentMalformedDiagnostic(
+                            glyphId = 192,
+                            sourceText = "<svg viewBox=\"0 0 16 16\"><path d=\"M0 0 L\"/></svg>",
+                            failure = IllegalArgumentException("SVG glyph path data is malformed."),
+                        ),
+                    ),
+                ),
+                svgRefusalManifestCase(
+                    fixtureId = "svg-glyphs-svg-path-command-budget-refusal",
+                    glyphId = 182,
+                    focus = "path-command-budget",
+                    sourceText = "<svg viewBox=\"0 0 16 16\"><path d=\"...\"/></svg>",
+                    diagnostics = listOf(
+                        BasicSVGGlyphParser.budgetExceededDiagnostic(
+                            glyphId = 182,
+                            budgetName = "pathCommands",
+                            observed = 257,
+                            max = 256,
+                        ),
+                    ),
+                ),
+                svgRefusalManifestCase(
+                    fixtureId = "svg-glyphs-svg-gradient-stop-budget-refusal",
+                    glyphId = 183,
+                    focus = "gradient-stop-budget",
+                    sourceText = "<svg viewBox=\"0 0 16 16\"><linearGradient id=\"g\">...</linearGradient></svg>",
+                    diagnostics = listOf(
+                        BasicSVGGlyphParser.budgetExceededDiagnostic(
+                            glyphId = 183,
+                            budgetName = "gradientStops",
+                            observed = 65,
+                            max = 64,
+                        ),
+                    ),
+                ),
+                svgRefusalManifestCase(
+                    fixtureId = "svg-glyphs-svg-use-recursion-refusal",
+                    glyphId = 184,
+                    focus = "use-recursion-budget",
+                    sourceText = "<svg viewBox=\"0 0 16 16\"><use href=\"#glyph-loop\"/></svg>",
+                    diagnostics = listOf(
+                        BasicSVGGlyphParser.useRecursionRefusedDiagnostic(
+                            glyphId = 184,
+                            referenceId = "glyph-loop",
+                            depth = 9,
+                            maxDepth = 8,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(
+            expected,
+            readProjectFile("reports/font/fixtures/expected/color/svg-glyph-fixture-manifest.json"),
         )
     }
 
@@ -3476,4 +3765,137 @@ class ColorGlyphSurfaceTest {
             ?: error("Missing JSON array field $field")
         return Regex("\"([^\"]+)\"").findAll(body).map { match -> match.groupValues[1] }.toList()
     }
+
+    private data class SVGGlyphFixtureManifestCase(
+        val fixtureId: String,
+        val glyphId: Int,
+        val focus: String,
+        val sourceDocumentSha256: String,
+        val expectedRoute: String,
+        val expectedBoundsSha256: String?,
+        val expectedDiagnostics: List<String>,
+        val expectedDumpFiles: List<String>,
+        val provenanceKind: String,
+        val provenanceSource: String,
+    )
+
+    private fun svgFixtureManifestCase(
+        fixtureId: String,
+        focus: String,
+        plan: SVGGlyphPlan,
+        sourceText: String,
+    ): SVGGlyphFixtureManifestCase =
+        SVGGlyphFixtureManifestCase(
+            fixtureId = fixtureId,
+            glyphId = plan.glyphId,
+            focus = focus,
+            sourceDocumentSha256 = sha256Utf8(sourceText),
+            expectedRoute = "svg-plan",
+            expectedBoundsSha256 = sha256Utf8(jsonObjectField(plan.toCanonicalJson(), "bounds")),
+            expectedDiagnostics = plan.diagnostics.map { diagnostic -> diagnostic.code },
+            expectedDumpFiles = listOf("svg-glyph-plan.json"),
+            provenanceKind = "generated-test-data",
+            provenanceSource = "ColorGlyphSurfaceTest.svgGlyphFixtureManifestCapturesBoundsRefusalsAndProvenanceDeterministically",
+        )
+
+    private fun svgRefusalManifestCase(
+        fixtureId: String,
+        glyphId: Int,
+        focus: String,
+        sourceText: String,
+        diagnostics: List<ColorGlyphDiagnostic>,
+    ): SVGGlyphFixtureManifestCase =
+        SVGGlyphFixtureManifestCase(
+            fixtureId = fixtureId,
+            glyphId = glyphId,
+            focus = focus,
+            sourceDocumentSha256 = sha256Utf8(sourceText),
+            expectedRoute = "refusal",
+            expectedBoundsSha256 = null,
+            expectedDiagnostics = diagnostics.map { diagnostic -> diagnostic.code },
+            expectedDumpFiles = listOf("svg-glyph-plan.json"),
+            provenanceKind = "route-diagnostic",
+            provenanceSource = "ColorGlyphSurfaceTest.svgGlyphFixtureManifestCapturesBoundsRefusalsAndProvenanceDeterministically",
+        )
+
+    private fun svgGlyphFixtureManifestJson(cases: List<SVGGlyphFixtureManifestCase>): String = buildString {
+        append("{\n")
+        append("  \"schemaVersion\": 1,\n")
+        append("  \"dumpId\": \"svg-glyph-fixture-manifest\",\n")
+        append("  \"ownerTickets\": [\"KFONT-M10-008\"],\n")
+        append("  \"fixtureFamily\": \"svg-glyphs\",\n")
+        append("  \"cases\": [\n")
+        append(
+            cases.joinToString(",\n") { fixtureCase ->
+                buildString {
+                    append("    {\n")
+                    append("      \"fixtureId\": ").append(jsonString(fixtureCase.fixtureId)).append(",\n")
+                    append("      \"glyphId\": ").append(fixtureCase.glyphId).append(",\n")
+                    append("      \"focus\": ").append(jsonString(fixtureCase.focus)).append(",\n")
+                    append(
+                        "      \"sourceDocumentSha256\": " +
+                            jsonString(fixtureCase.sourceDocumentSha256) + ",\n",
+                    )
+                    append("      \"expectedRoute\": ").append(jsonString(fixtureCase.expectedRoute)).append(",\n")
+                    append("      \"expectedBoundsSha256\": ")
+                    append(fixtureCase.expectedBoundsSha256?.let(::jsonString) ?: "null")
+                    append(",\n")
+                    append("      \"expectedDiagnostics\": ")
+                    append(
+                        fixtureCase.expectedDiagnostics.joinToString(
+                            prefix = "[",
+                            postfix = "]",
+                        ) { code -> jsonString(code) },
+                    )
+                    append(",\n")
+                    append("      \"expectedDumpFiles\": ")
+                    append(
+                        fixtureCase.expectedDumpFiles.joinToString(
+                            prefix = "[",
+                            postfix = "]",
+                        ) { dumpFile -> jsonString(dumpFile) },
+                    )
+                    append(",\n")
+                    append("      \"provenance\": {\n")
+                    append("        \"kind\": ").append(jsonString(fixtureCase.provenanceKind)).append(",\n")
+                    append("        \"source\": ").append(jsonString(fixtureCase.provenanceSource)).append("\n")
+                    append("      }\n")
+                    append("    }")
+                }
+            },
+        )
+        append("\n  ],\n")
+        append(
+            "  \"nonClaims\": [\"no-complete-target-support-claim\", " +
+                "\"no-complete-svg-in-opentype-rendering-claim\", " +
+                "\"no-gpu-svg-glyph-route-claim\", " +
+                "\"no-native-svg-renderer-claim\"]\n",
+        )
+        append("}\n")
+    }
+
+    private fun jsonObjectField(json: String, field: String): String {
+        val fieldToken = "\"$field\": {"
+        val start = json.indexOf(fieldToken)
+        require(start >= 0) { "Missing JSON object field $field" }
+        val objectStart = json.indexOf('{', start)
+        var depth = 0
+        for (index in objectStart until json.length) {
+            when (json[index]) {
+                '{' -> depth += 1
+                '}' -> {
+                    depth -= 1
+                    if (depth == 0) {
+                        return json.substring(objectStart, index + 1)
+                    }
+                }
+            }
+        }
+        error("Unterminated JSON object field $field")
+    }
+
+    private fun sha256Utf8(value: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(value.toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xFF) }
 }
