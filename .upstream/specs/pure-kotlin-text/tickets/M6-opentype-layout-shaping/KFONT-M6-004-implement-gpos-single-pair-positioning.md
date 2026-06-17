@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-004"
 title: "Implement GPOS single/pair positioning"
-status: "review"
+status: "blocked"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
@@ -112,7 +112,8 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*GposPair*' --tests '*Kerning
 ## Status Notes
 
 - `proposed`: Base GPOS positioning depends on shaping contract and parsed table facts.
-- `review`: bounded single/pair positioning parser and `BasicOpenTypeShapingEngine` application are implemented and freshly validated. Remaining gate: add reviewed fixture provenance and expected dumps for `gpos-single-adjustment.otf`, `gpos-pair-format1-kerning.otf`, `gpos-pair-format2-class.otf`, `gpos-valueformat-malformed.otf`, and `gpos-pair-out-of-range.otf`, then promote `gpos-trace.json` / `shaped-glyph-run.json` and layout-contract malformed/refusal diagnostics beyond the current contract-only goldens.
+- `review`: bounded single/pair positioning parser and `BasicOpenTypeShapingEngine` application are implemented and freshly validated.
+- `blocked`: 2026-06-18 asset audit confirmed reviewed real-font candidates for pair-positioning coverage (`Source Serif 4` under `SIL-OFL-1.1`, plus `TestGPOSOne.ttf` / `TestGPOSTwo.otf` under `Unicode-3.0`) but did not identify a reviewed real fixture for simple GPOS LookupType 1 single positioning. Remaining gate: add reviewed fixture provenance and expected dumps for `gpos-single-adjustment.otf`, `gpos-pair-format1-kerning.otf`, `gpos-pair-format2-class.otf`, `gpos-valueformat-malformed.otf`, and `gpos-pair-out-of-range.otf`, with `gpos-single-adjustment.otf` specifically proving a simple LookupType 1 value-record path, then promote `gpos-trace.json` / `shaped-glyph-run.json` and layout-contract malformed/refusal diagnostics beyond the current contract-only goldens.
 - Move to `ready` only after value-format coverage and kerning fixtures are reviewed.
 
 ## Linear Labels

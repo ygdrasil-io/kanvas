@@ -102,7 +102,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*GsubContext*'
 ## Status Notes
 
 - `proposed`: Context matching builds on the basic GSUB buffer from KFONT-M6-002.
-- Current blocker audit (2026-06-16): draft PR `#1706` (`KFONT-M6-002`) is still open, and the required fixture set `gsub-context-format1.otf`, `gsub-context-format2-class.otf`, `gsub-context-format3-coverage.otf`, `gsub-context-nested-cycle.otf`, and `gsub-context-malformed-classdef.otf` is not present in-repo. Do not substitute synthetic-only coverage for these fixtures; remaining gate is merge/adopt the simple GSUB base plus add reviewed fixture provenance and expected dump coverage for the contextual rows.
+- Current blocker audit (2026-06-18): merged PR `#1706` (`KFONT-M6-002`) delivered the bounded simple-GSUB prerequisite slice, but this `proposed` ticket is not actionnable yet because the required fixture set `gsub-context-format1.otf`, `gsub-context-format2-class.otf`, `gsub-context-format3-coverage.otf`, `gsub-context-nested-cycle.otf`, and `gsub-context-malformed-classdef.otf` is not present in-repo. Do not substitute synthetic-only coverage for these fixtures; remaining gate is add reviewed fixture provenance and expected dump coverage for the contextual rows.
 - Move to `ready` only after context fixture formats and cycle diagnostics are reviewed.
 
 ## Linear Labels

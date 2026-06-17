@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-002"
 title: "Implement GSUB single/multiple/ligature lookups"
-status: "review"
+status: "blocked"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
@@ -108,7 +108,8 @@ rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextS
 ## Status Notes
 
 - `proposed`: Basic GSUB behavior depends on the M6 contract and M2 table facts.
-- `review`: Bounded parser/runtime support for GSUB LookupType 1/2/4 is implemented and freshly validated in `font/sfnt` and `font/text` surface tests. Remaining gate: add reviewed fixture provenance and expected dumps for `gsub-single-substitution.otf`, `gsub-multiple-substitution.otf`, `gsub-ligature-fi.otf`, `gsub-coverage-malformed.otf`, and `gsub-ligature-bad-component.otf`, then promote `gsub-trace.json` / `shaped-glyph-run.json` beyond the current M6-001 contract goldens with explicit `ShapingPlan` ordering.
+- `review`: Bounded parser/runtime support for GSUB LookupType 1/2/4 is implemented and freshly validated in `font/sfnt` and `font/text` surface tests.
+- `blocked`: 2026-06-18 asset audit confirmed reviewed real-font candidates for ligature and single-substitution slices (`Source Serif 4` under `SIL-OFL-1.1`) plus contextual/reference GSUB fixtures in `unicode-org/text-rendering-tests` under `Unicode-3.0`, but no reviewed in-repo asset yet proves a simple GSUB LookupType 2 multiple-substitution fixture for this ticket. Remaining gate: add reviewed provenance and expected dumps for `gsub-single-substitution.otf`, `gsub-multiple-substitution.otf`, `gsub-ligature-fi.otf`, `gsub-coverage-malformed.otf`, and `gsub-ligature-bad-component.otf`, with `gsub-multiple-substitution.otf` specifically backed by a real simple LookupType 2 fixture rather than a contextual-only substitute, then promote `gsub-trace.json` / `shaped-glyph-run.json` beyond the current M6-001 contract goldens with explicit `ShapingPlan` ordering.
 - Move to `ready` only after fixture fonts and trace fields are reviewed.
 
 ## Linear Labels

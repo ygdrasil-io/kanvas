@@ -50,7 +50,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | PKT-04 TrueType `glyf` and variation evidence | Implementable now | Simple/composite outlines, component transforms, variation metadata and metrics dumps. | `font/scaler/src/main`, `font/scaler/src/test`. | Path hashes, bounds, variation delta fixtures. |
 | PKT-05 CFF/CFF2 vertical | Tracked-gap; generated fixture parser/scaler/operator/table/variation-store slices implemented | CFF INDEX/dicts/Type 2 operators/CFF2 variation. | `font/scaler/src/main`, `font/scaler/src/test`. | Generated CFF/CFF2 tables now expose typed INDEX/DICT evidence, stable parse refusals, and minimal CFF2 VariationStore region lookup; complete support still needs broader real-font corpus coverage. |
 | PKT-06 Unicode data and script matrix seed | Implementable now | Pinned Unicode version surface, basic segmentation/bidi/script dumps. | `font/text/src/main/.../shaping`, `font/text/src/test`. | Script/bidi/grapheme tests and explicit unsupported-script diagnostics. |
-| PKT-07 GSUB/GPOS simple script shaping | Partially implementable; bounded GSUB/GPOS simple slices in review | Latin/Greek/Cyrillic/Hebrew defaults, features, clusters, fallback runs. | `font/text`, `font/sfnt`. | Requires parsed layout table fixtures and feature ordering evidence. |
+| PKT-07 GSUB/GPOS simple script shaping | Partially implementable; bounded GSUB/GPOS prerequisite slices merged, remaining M6 work fixture/runtime gated | Latin/Greek/Cyrillic/Hebrew defaults, features, clusters, fallback runs. | `font/text`, `font/sfnt`. | Requires parsed layout table fixtures, feature ordering evidence, and the remaining real-fixture/runtime gates tracked by the M6 tickets. |
 | PKT-08 complex shaping rows | Dependency-gated | Arabic, Devanagari, Thai, CJK, emoji shaping support/refusals. | `font/text`. | Requires PKT-07 and per-row positive/refusal fixtures. |
 | PKT-09 paragraph semantic layout | Partially implementable; full claim gated | Rich styles, bidi visual lines, placeholders, ellipsis, selection, hit testing. | `font/text/src/main/.../paragraph`, `font/text/src/test`. | Layout dumps; full claim waits on shaping/fallback support. |
 | PKT-10 A8/SDF glyph artifact planner | Implementable now | Route policy, key preimage, A8/SDF generation, atlas capacity/stale diagnostics. | `font/glyph`, `font/gpu-api`. | Mask/SDF hashes, atlas dump tests, stable `text.glyph.*` refusals. |
@@ -86,15 +86,18 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
   `.upstream/specs/gpu-renderer/09-draw-family-support-matrix.md` until pure
   Kotlin text artifacts, route diagnostics, GPU renderer registry support,
   WGSL/binding evidence, and GPU evidence are promoted.
-- 2026-06-16 KFONT M6 blocker audit: after draft PRs `#1705`, `#1706`, and
-  `#1707`, the remaining M6 shaping tickets are not actionnable without the
+- 2026-06-18 KFONT M6 fixture-asset audit: merged PRs `#1705`, `#1706`, and
+  `#1707` delivered the bounded simple GSUB/GPOS and feature-policy slices,
+  but the remaining M6 shaping tickets are still not actionnable without the
   missing contextual GSUB, mark/cursive GPOS, Arabic, Devanagari, Thai/CJK,
-  and advanced lookup fixture families named in their tickets. This audit is
-  coordination evidence only and does not promote any shaping support claim.
+  and advanced lookup fixture families named in their tickets, plus the
+  remaining per-script runtime-adoption evidence gate on `KFONT-M6-006`. This
+  audit is coordination evidence only and does not promote any shaping support
+  claim.
 
 ### KFONT-M6 Remaining Blocker Audit
 
-Status: coordination-only blocker audit; no support promotion.
+Status: coordination-only blocker audit after merged prerequisite slices; no support promotion.
 
 Files:
 
@@ -104,16 +107,21 @@ Files:
 - `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-008-add-devanagari-shaping-fixtures.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-009-add-thai-and-cjk-shaping-boundaries.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-010-implement-gsub-gpos-extension-chaining-and-variation-adjustment-lookups.md`
-- `reports/pure-kotlin-text/2026-06-16-kfont-m6-blocker-audit.md`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m6-fixture-asset-audit.md`
 
 Evidence:
 
-- Draft PR `#1706` is the current bounded GSUB simple prerequisite for
-  `KFONT-M6-003`.
-- Draft PR `#1705` is the current bounded GPOS prerequisite for
-  `KFONT-M6-005` and part of the gate for `KFONT-M6-009` and `KFONT-M6-010`.
-- Draft PR `#1707` is the current script-feature-policy prerequisite for
-  `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`.
+- Merged PR `#1706` delivered the bounded GSUB simple prerequisite slice for
+  `KFONT-M6-003`, while `KFONT-M6-002` itself remains blocked on the missing
+  reviewed real LookupType 2 multiple-substitution fixture audit.
+- Merged PR `#1705` delivered the bounded GPOS prerequisite slice for
+  `KFONT-M6-005`, `KFONT-M6-009`, and part of `KFONT-M6-010`, while
+  `KFONT-M6-004` itself remains blocked on the missing reviewed real
+  LookupType 1 single-positioning fixture audit.
+- Merged PR `#1707` delivered the bounded script-feature-policy prerequisite
+  slice for `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`, while
+  `KFONT-M6-006` itself remains blocked on per-script runtime-adoption and
+  `drawString` non-enablement evidence.
 - The named fixture families for `KFONT-M6-003`, `KFONT-M6-005`,
   `KFONT-M6-007`, `KFONT-M6-008`, `KFONT-M6-009`, and `KFONT-M6-010` are not
   present in-repo beyond ticket text references, so those tickets must not be
@@ -127,9 +135,9 @@ Validation:
 rtk git diff --check
 ```
 
-Remaining gate: merge or adopt the bounded prerequisite PRs, then add the
-reviewed fixture provenance and expected dumps named by each blocked ticket
-before resuming implementation work.
+Remaining gate: add the reviewed fixture provenance and expected dumps named
+by each blocked ticket, and satisfy the remaining `KFONT-M6-006`
+runtime-adoption gate, before resuming implementation work.
 
 ## Checkpoint Evidence
 
@@ -2388,7 +2396,7 @@ text route.
 
 ### KFONT-M6-002: GSUB Single/Multiple/Ligature Lookup Slice
 
-Status: review; independent audit confirmed this remains a bounded parser/runtime slice with fixture/dump gates still open.
+Status: blocked; merged bounded parser/runtime slice remains accepted evidence, but 2026-06-18 asset audit moved the ticket itself to a fixture-gated blocker.
 
 Files:
 
@@ -2429,14 +2437,17 @@ rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextS
 Remaining gate: reviewed GSUB fixture provenance and expected dumps for
 `gsub-single-substitution.otf`, `gsub-multiple-substitution.otf`,
 `gsub-ligature-fi.otf`, `gsub-coverage-malformed.otf`, and
-`gsub-ligature-bad-component.otf` are still absent. Keep this ticket in review
-until `gsub-trace.json` / `shaped-glyph-run.json` are promoted beyond the
-current M6-001 contract goldens with malformed/refusal diagnostics and explicit
+`gsub-ligature-bad-component.otf` are still absent. The 2026-06-18 asset audit
+confirmed `Source Serif 4` as a real `SIL-OFL-1.1` candidate for ligature and
+single-substitution evidence, but no reviewed simple LookupType 2
+multiple-substitution fixture is identified yet; keep this ticket blocked until
+`gsub-trace.json` / `shaped-glyph-run.json` are promoted beyond the current
+M6-001 contract goldens with malformed/refusal diagnostics and explicit
 `ShapingPlan` ordering.
 
 ### KFONT-M6-004: GPOS Single/Pair Positioning Slice
 
-Status: review; independent audit confirmed this remains a bounded parser/runtime slice with fixture/dump gates still open.
+Status: blocked; merged bounded parser/runtime slice remains accepted evidence, but 2026-06-18 asset audit moved the ticket itself to a fixture-gated blocker.
 
 Files:
 
@@ -2469,13 +2480,17 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*GposPair*' --tests '*Kerning
 Remaining gate: reviewed GPOS fixture provenance and expected dumps for
 `gpos-single-adjustment.otf`, `gpos-pair-format1-kerning.otf`,
 `gpos-pair-format2-class.otf`, `gpos-valueformat-malformed.otf`, and
-`gpos-pair-out-of-range.otf` are still absent. Keep this ticket in review until
-`gpos-trace.json` / `shaped-glyph-run.json` are promoted beyond the current
-contract goldens with layout-contract malformed/refusal diagnostics.
+`gpos-pair-out-of-range.otf` are still absent. The 2026-06-18 asset audit
+confirmed `Source Serif 4` and `unicode-org/text-rendering-tests`
+`TestGPOSOne.ttf` / `TestGPOSTwo.otf` as real pair-positioning candidates, but
+no reviewed simple LookupType 1 single-positioning fixture is identified yet;
+keep this ticket blocked until `gpos-trace.json` / `shaped-glyph-run.json` are
+promoted beyond the current contract goldens with layout-contract
+malformed/refusal diagnostics.
 
 ### KFONT-M6-006: Script-Specific Default Feature Policy Slice
 
-Status: review; independent audit confirmed this remains a bounded contract-layer slice with runtime/fixture gates still open.
+Status: blocked; merged contract-layer slice remains accepted evidence, but 2026-06-18 asset audit confirmed the remaining work is dependency-gated rather than active review.
 
 Files:
 
@@ -2520,7 +2535,7 @@ Remaining gate: per-script shaping fixture families from `KFONT-M6-007`,
 `KFONT-M6-008`, and `KFONT-M6-009` are still absent, runtime GSUB/GPOS still
 consumes `FeatureSet` rather than `ResolvedFeatureSet`, and the `drawString`
 compatibility path still lacks explicit complex-feature non-enablement
-evidence. Keep this ticket in review until those gates land beyond the current
+evidence. Keep this ticket blocked until those gates land beyond the current
 contract-level `shaping-plan.json` evidence.
 
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
