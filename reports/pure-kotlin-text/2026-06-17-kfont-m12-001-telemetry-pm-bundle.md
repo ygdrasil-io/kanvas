@@ -19,8 +19,10 @@
 - Domain rows cover parser, scaler, shaping, paragraph, glyph artifact, and GPU
   text handoff samples with stable fixture IDs, sample counts, cache states,
   and metric names.
-- The report keeps the performance posture advisory/warning-only and leaves
-  producer-side wiring explicit as the remaining blocker before `done`.
+- The report keeps the performance posture advisory/warning-only and points
+  downstream producer emission to `KFONT-M12-002`, `KFONT-M12-003`,
+  `KFONT-M12-004`, and `KFONT-M12-005` instead of keeping the schema ticket
+  open.
 
 ## Validation
 
@@ -36,8 +38,8 @@ rtk git diff --check
 
 ## Remaining gate
 
-This evidence clears the PM bundle ingestion gap only. `KFONT-M12-001` remains
-in `review` until parser, scaler, shaping, paragraph, glyph artifact, and GPU
-handoff producers emit the shared schema directly. The report stays
-warning-only, keeps all budgets advisory, and does not promote any GPU route,
-release gate, or complete telemetry support claim.
+No schema-local gate remains for `KFONT-M12-001`. Downstream producer emission
+into the shared schema is owned by `KFONT-M12-002`, `KFONT-M12-003`,
+`KFONT-M12-004`, and `KFONT-M12-005`. The report stays warning-only, keeps all
+budgets advisory, and does not promote any GPU route, release gate, or
+complete telemetry support claim.

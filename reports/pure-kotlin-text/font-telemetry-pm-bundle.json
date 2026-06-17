@@ -66,7 +66,7 @@
     }
   ],
   "remainingGates": [
-    "Wire parser, scaler, shaping, paragraph, glyph artifact, and GPU handoff producers into the shared schema before telemetry promotion.",
+    "KFONT-M12-002, KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own parser/scaler/shaping/paragraph/glyph/GPU producer emission into the shared schema; keep this pack advisory and schema-only until those subsystem tickets land.",
     "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
   ],
   "nonClaims": [

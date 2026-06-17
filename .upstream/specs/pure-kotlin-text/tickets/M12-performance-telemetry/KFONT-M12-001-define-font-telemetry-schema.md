@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M12-001"
 title: "Define font telemetry schema"
-status: "review"
+status: "done"
 milestone: "M12"
 priority: "P0"
 owner_area: "telemetry"
@@ -91,7 +91,7 @@ data class FontMetricSeries(
 - [x] Metric names are namespaced by domain and cannot mix CPU generation time with GPU upload time in one field.
 - [x] A repeated-run fixture serializes median, p90, max, sample count, and cache state; single-run timing cannot be interpreted as a release budget.
 - [x] Missing mandatory dimensions produce `font.telemetry.dimension-missing` with the domain, fixture ID, and missing field name.
-- [ ] Dashboard trend warnings can ingest one sample from every telemetry domain without changing claim impact from `tracked-gap`.
+- [x] Dashboard trend warnings can ingest one sample from every telemetry domain without changing claim impact from `tracked-gap`.
 
 ## Required Evidence
 
@@ -128,7 +128,7 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
 - Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
-- `review`: `font-telemetry-schema.json`, `font-telemetry-schema-fixture.json`, and `font-telemetry-pm-bundle.json` now define deterministic cross-domain schema evidence plus advisory `pipelinePmBundle` ingestion, but producer-side subsystem wiring remains open before `done`.
+- `done`: `font-telemetry-schema.json`, `font-telemetry-schema-fixture.json`, and `font-telemetry-pm-bundle.json` now define deterministic cross-domain schema evidence plus advisory `pipelinePmBundle` ingestion. Downstream producer emission into this schema is owned by `KFONT-M12-002`, `KFONT-M12-003`, `KFONT-M12-004`, and `KFONT-M12-005`; this ticket stays schema-only, warning-only, and does not promote budgets, GPU routes, or release-gate claims.
 
 ## Linear Labels
 

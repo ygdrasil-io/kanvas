@@ -320,7 +320,7 @@
         "reports/pure-kotlin-text/dump-evidence-index.json"
       ],
       "requiredEvidenceGates": [
-        "Wire parser, scaler, shaping, paragraph, glyph artifact, and GPU handoff producers into the shared schema before any telemetry support promotion.",
+        "KFONT-M12-002, KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own parser/scaler/shaping/paragraph/glyph/GPU producer emission into the shared schema; keep this family schema-only advisory evidence until those subsystem tickets land.",
         "Keep performance budgets advisory until the dedicated promotion policy is updated."
       ],
       "validationCommands": [

@@ -2868,7 +2868,7 @@ GPU upload evidence, or claim GPU text rendering support.
 
 ### KFONT-M12-001: Define font telemetry schema
 
-Status: implemented as a bounded review slice.
+Status: done; implemented and freshly revalidated for closeout.
 
 Files:
 
@@ -2902,8 +2902,9 @@ Evidence:
   FreeType wording.
 - `validateKfontM12001TelemetryPmEvidence` and its Python validator assert that
   the PM bundle copies the telemetry schema/dashboard artifacts, preserves
-  `warning-only` wording, and leaves producer-side subsystem wiring as the only
-  remaining gate before `done`.
+  `warning-only` wording, and keeps downstream producer work explicit under
+  `KFONT-M12-002`, `KFONT-M12-003`, `KFONT-M12-004`, and `KFONT-M12-005`
+  without keeping the schema slice open.
 
 Validation:
 
@@ -2916,10 +2917,10 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 rtk git diff --check
 ```
 
-Remaining gate: this is telemetry-schema plus advisory PM bundle evidence only.
-It does not yet wire parser/scaler/shaping/paragraph/glyph/GPU producers into
-the schema, and does not promote any performance budget, GPU route, or
-release-gate claim.
+Remaining gate: no schema-local gate remains. Downstream producer emission into
+the shared schema is owned by `KFONT-M12-002`, `KFONT-M12-003`,
+`KFONT-M12-004`, and `KFONT-M12-005`; this slice does not promote any
+performance budget, GPU route, or release-gate claim.
 ### KFONT-M1-004: Bundled Source Fixture Manifest
 
 Status: done; merged, independently reviewed, and freshly revalidated for closeout.

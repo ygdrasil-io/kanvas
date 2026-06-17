@@ -85,8 +85,8 @@ def main() -> int:
         "dashboard still reports the PM bundle ingestion gate as open",
     )
     require(
-        any("Wire parser, scaler, shaping, paragraph, glyph artifact, and GPU handoff producers" in str(gate) for gate in gates),
-        "dashboard must keep the producer wiring gate open",
+        any("KFONT-M12-002" in str(gate) and "KFONT-M12-005" in str(gate) for gate in gates),
+        "dashboard must point downstream producer emission at KFONT-M12-002..005",
     )
 
     schema_domains = schema.get("domains")
@@ -128,8 +128,8 @@ def main() -> int:
     remaining_gates = advisory.get("remainingGates")
     require(isinstance(remaining_gates, list) and remaining_gates, "remainingGates must be a non-empty list")
     require(
-        any("Wire parser, scaler, shaping, paragraph, glyph artifact, and GPU handoff producers" in str(gate) for gate in remaining_gates),
-        "remainingGates must keep producer-side wiring open",
+        any("KFONT-M12-002" in str(gate) and "KFONT-M12-005" in str(gate) for gate in remaining_gates),
+        "remainingGates must point downstream producer emission at KFONT-M12-002..005",
     )
     require(
         all("PM bundle evidence" not in str(gate) for gate in remaining_gates),
@@ -139,7 +139,8 @@ def main() -> int:
     require("pipelinePmBundle" in advisory_md, "markdown report must mention pipelinePmBundle")
     require("warning-only" in advisory_md, "markdown report must mention warning-only status")
     require("tracked-gap" in advisory_md, "markdown report must mention tracked-gap classification")
-    require("producer-side wiring" in advisory_md, "markdown report must mention producer-side wiring as the remaining gate")
+    require("KFONT-M12-002" in advisory_md and "KFONT-M12-005" in advisory_md, "markdown report must mention downstream KFONT-M12-002..005 ownership")
+    require("remains open before `done`" not in advisory_md, "markdown report must not keep KFONT-M12-001 open before done")
 
     require(f'tasks.register<Exec>("{TASK_NAME}")' in build_gradle, "build.gradle.kts must register validateKfontM12001TelemetryPmEvidence")
     pm_bundle_start = build_gradle.find('tasks.register("pipelinePmBundle")')
