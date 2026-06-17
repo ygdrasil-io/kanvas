@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-004"
 title: "Implement GPOS single/pair positioning"
-status: "review"
+status: "done"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
@@ -112,8 +112,8 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*GposPair*' --tests '*Kerning
 ## Status Notes
 
 - `proposed`: Base GPOS positioning depends on shaping contract and parsed table facts.
-- `review`: bounded single/pair positioning parser and `BasicOpenTypeShapingEngine` application are implemented and freshly validated. Remaining gate: add reviewed fixture provenance and expected dumps for `gpos-single-adjustment.otf`, `gpos-pair-format1-kerning.otf`, `gpos-pair-format2-class.otf`, `gpos-valueformat-malformed.otf`, and `gpos-pair-out-of-range.otf`, then promote `gpos-trace.json` / `shaped-glyph-run.json` and layout-contract malformed/refusal diagnostics beyond the current contract-only goldens.
-- Move to `ready` only after value-format coverage and kerning fixtures are reviewed.
+- `review`: bounded single/pair positioning parser and `BasicOpenTypeShapingEngine` application are implemented and freshly validated.
+- `done`: reviewed fixture provenance is now checked in for `gpos-single-adjustment.otf`, `gpos-pair-format1-kerning.otf`, `gpos-pair-format2-class.otf`, `gpos-valueformat-malformed.otf`, and `gpos-pair-out-of-range.otf`; parser/runtime tests cover both the positive and malformed fixture set; and `gpos-trace.json` / `shaped-glyph-run.json` are now fixture-backed Latin evidence rather than contract placeholders. Mark/cursive, contextual, and variation/device positioning remain separate tickets.
 
 ## Linear Labels
 

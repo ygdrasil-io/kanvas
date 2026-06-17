@@ -46,6 +46,14 @@ class GraphemeSegmentationTest {
         assertEquals(listOf(0..2), variationSelector.clusters.map { it.utf16Range })
         assertTrue(variationSelector.boundaries.any { it.ruleId == "GB9" && !it.breakAllowed })
 
+        val cjkStandardizedVariant = clusterer.segment("\u6E1A\uFE00")
+        assertEquals(listOf(0..1), cjkStandardizedVariant.clusters.map { it.utf16Range })
+        assertTrue(cjkStandardizedVariant.boundaries.any { it.ruleId == "GB9" && !it.breakAllowed })
+
+        val cjkIdeographicVariationSequence = clusterer.segment("\u4E00\uDB40\uDD00")
+        assertEquals(listOf(0..2), cjkIdeographicVariationSequence.clusters.map { it.utf16Range })
+        assertTrue(cjkIdeographicVariationSequence.boundaries.any { it.ruleId == "GB9" && !it.breakAllowed })
+
         val crlfControl = clusterer.segment(readEscapedFixture("grapheme-crlf-control.txt"))
         assertEquals(listOf(0..1, 2..2, 3..3), crlfControl.clusters.map { it.utf16Range })
         assertTrue(crlfControl.boundaries.any { it.ruleId == "GB3" && !it.breakAllowed })

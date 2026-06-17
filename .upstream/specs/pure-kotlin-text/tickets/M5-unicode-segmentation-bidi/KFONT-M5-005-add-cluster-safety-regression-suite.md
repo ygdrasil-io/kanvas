@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M5-005"
 title: "Add cluster safety regression suite"
-status: "review"
+status: "done"
 milestone: "M5"
 priority: "P0"
 owner_area: "unicode"
@@ -109,6 +109,7 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 - `proposed`: Regression suite depends on the concrete M5 segmentation, bidi, and itemization outputs.
 - Move to `ready` only after fixture list and legacy gate wording are reviewed.
 - `review`: `cluster-safety-report.json` now links checked-in `unicode-segments`, `bidi-runs`, and `script-runs` dumps by content hash, covers bounded Arabic/Devanagari/Thai/CJK-context/emoji/bidi cluster cases plus a synthetic negative split, and keeps `scaledemoji` explicitly visible as a legacy gate. `KFONT-M7-004` now supplies the explicit `text.shaping.emoji-sequence-unsupported` refusal row and fallback-boundary evidence, so the remaining gate before `done` is broader reviewed CJK IVS coverage beyond the current bounded context fixture family.
+- `done`: Fresh CJK IVS expansion now adds a positive ideographic variation-sequence row, a bounded standardized-variant refusal row, and a minimal grapheme fix that treats `Variation_Selector` code points as `Extend` during clustering. This closes the bounded cluster-safety slice without promoting shaping, fallback, emoji-route, or rendering claims.
 
 ## Linear Labels
 

@@ -18,6 +18,7 @@ import org.graphiks.kanvas.font.FontSourceKind
 import org.graphiks.kanvas.font.ResolvedFontRun
 import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.kanvas.font.TypefaceData
+import org.graphiks.kanvas.font.sfnt.DefaultOpenTypeFaceParser
 import org.graphiks.kanvas.font.sfnt.CMapFormat12Group
 import org.graphiks.kanvas.font.sfnt.CMapFormat12Mapping
 import org.graphiks.kanvas.font.sfnt.CMapSubtable
@@ -477,6 +478,116 @@ class TextStackSurfaceTest {
             ),
             dump.requiredStringList("nonClaims"),
         )
+        assertNoSupportPromotionClaims(dump)
+    }
+
+    @Test
+    fun gsubTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics() {
+        val dump = readJsonProjectFile("reports/font/fixtures/expected/shaping/gsub-trace.json")
+        val cases = dump.requiredObjectList("cases")
+
+        assertEquals(1L, dump.requiredLong("schemaVersion"))
+        assertEquals("gsub-trace", dump.requiredString("dumpId"))
+        assertEquals(listOf("KFONT-M6-002"), dump.requiredStringList("ownerTickets"))
+        assertEquals("latin-gsub-gpos-fixtures", dump.requiredString("fixtureFamilyId"))
+        assertEquals(
+            listOf(
+                "single-substitution",
+                "multiple-substitution",
+                "ligature-fi",
+                "coverage-malformed",
+                "ligature-bad-component",
+            ),
+            cases.map { it.requiredString("caseId") },
+        )
+        assertEquals(listOf("ccmp"), cases[0].requiredStringList("featureOrder"))
+        assertEquals(listOf(552L), cases[0].requiredLongList("inputGlyphIds"))
+        assertEquals(listOf(101L), cases[0].requiredLongList("outputGlyphIds"))
+        assertEquals("preserved", cases[0].requiredObjectList("lookups").single().requiredString("clusterAction"))
+        assertEquals(listOf(553L), cases[1].requiredLongList("inputGlyphIds"))
+        assertEquals(listOf(101L, 102L), cases[1].requiredLongList("outputGlyphIds"))
+        assertEquals("expanded-single-cluster", cases[1].requiredObjectList("lookups").single().requiredString("clusterAction"))
+        assertEquals(listOf("liga"), cases[2].requiredStringList("featureOrder"))
+        assertEquals(listOf(557L, 560L), cases[2].requiredLongList("inputGlyphIds"))
+        assertEquals(listOf(103L), cases[2].requiredLongList("outputGlyphIds"))
+        assertEquals("merged-clusters", cases[2].requiredObjectList("lookups").single().requiredString("clusterAction"))
+        assertEquals(
+            "font.sfnt.optional-table-malformed",
+            cases[3].requiredObjectList("diagnostics").single().requiredString("code"),
+        )
+        assertEquals(
+            "font.sfnt.optional-table-malformed",
+            cases[4].requiredObjectList("diagnostics").single().requiredString("code"),
+        )
+        assertNoSupportPromotionClaims(dump)
+    }
+
+    @Test
+    fun gposTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics() {
+        val dump = readJsonProjectFile("reports/font/fixtures/expected/shaping/gpos-trace.json")
+        val cases = dump.requiredObjectList("cases")
+
+        assertEquals(1L, dump.requiredLong("schemaVersion"))
+        assertEquals("gpos-trace", dump.requiredString("dumpId"))
+        assertEquals(listOf("KFONT-M6-004"), dump.requiredStringList("ownerTickets"))
+        assertEquals("latin-gsub-gpos-fixtures", dump.requiredString("fixtureFamilyId"))
+        assertEquals(
+            listOf(
+                "single-adjustment",
+                "pair-format1-kerning",
+                "pair-format2-class",
+                "valueformat-malformed",
+                "pair-out-of-range",
+            ),
+            cases.map { it.requiredString("caseId") },
+        )
+        assertEquals(listOf("kern"), cases[0].requiredStringList("featureOrder"))
+        assertEquals(listOf(520L), cases[0].requiredLongList("glyphIds"))
+        assertEquals(listOf(200L, 0L, 0L), cases[0].requiredLongLists("before")[0])
+        assertEquals(listOf(192L, 10L, 0L), cases[0].requiredLongLists("after")[0])
+        assertEquals(listOf(520L, 541L), cases[1].requiredLongList("glyphIds"))
+        assertEquals(listOf(189L, 0L, 0L), cases[1].requiredLongLists("after")[0])
+        assertEquals(listOf(188L, 0L, 0L), cases[2].requiredLongLists("after")[0])
+        assertEquals(listOf(0L, 1L), cases[2].requiredObjectList("lookups").single().requiredLongList("classIds"))
+        assertEquals(
+            "font.sfnt.optional-table-malformed",
+            cases[3].requiredObjectList("diagnostics").single().requiredString("code"),
+        )
+        assertEquals(
+            "font.sfnt.optional-table-malformed",
+            cases[4].requiredObjectList("diagnostics").single().requiredString("code"),
+        )
+        assertNoSupportPromotionClaims(dump)
+    }
+
+    @Test
+    fun shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns() {
+        val dump = readJsonProjectFile("reports/font/fixtures/expected/shaping/shaped-glyph-run.json")
+        val cases = dump.requiredObjectList("cases")
+
+        assertEquals(1L, dump.requiredLong("schemaVersion"))
+        assertEquals("shaped-glyph-run", dump.requiredString("dumpId"))
+        assertEquals(listOf("KFONT-M6-002", "KFONT-M6-004"), dump.requiredStringList("ownerTickets"))
+        assertEquals("latin-gsub-gpos-fixtures", dump.requiredString("fixtureFamilyId"))
+        assertEquals(
+            listOf(
+                "gsub-single-substitution",
+                "gsub-multiple-substitution",
+                "gsub-ligature-fi",
+                "gpos-single-adjustment",
+                "gpos-pair-format1-kerning",
+                "gpos-pair-format2-class",
+            ),
+            cases.map { it.requiredString("caseId") },
+        )
+        assertEquals(listOf(101L), cases[0].requiredLongList("glyphIds"))
+        assertEquals("gsub-trace#single-substitution", cases[0].requiredString("traceRef"))
+        assertEquals(listOf(101L, 102L), cases[1].requiredLongList("glyphIds"))
+        assertEquals("0..1", cases[2].requiredObjectList("clusters").single().requiredString("textRange"))
+        assertEquals("gpos-trace#single-adjustment", cases[3].requiredString("traceRef"))
+        assertEquals(listOf(192L, 10L, 0L), cases[3].requiredLongLists("clusterMetrics")[0])
+        assertEquals(listOf(189L, 0L, 0L), cases[4].requiredLongLists("clusterMetrics")[0])
+        assertEquals(listOf(188L, 0L, 0L), cases[5].requiredLongLists("clusterMetrics")[0])
         assertNoSupportPromotionClaims(dump)
     }
 
@@ -1179,6 +1290,97 @@ class TextStackSurfaceTest {
     }
 
     @Test
+    fun basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo() {
+        val single = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440611",
+            relativePath = "reports/font/fixtures/fonts/shaping/gsub-single-substitution.otf",
+        )
+        val multiple = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440612",
+            relativePath = "reports/font/fixtures/fonts/shaping/gsub-multiple-substitution.otf",
+        )
+        val ligature = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440613",
+            relativePath = "reports/font/fixtures/fonts/shaping/gsub-ligature-fi.otf",
+        )
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = CMapGlyphMapper(
+                cmapsByTypefaceId = mapOf(
+                    single.typefaceId to single.cmap,
+                    multiple.typefaceId to multiple.cmap,
+                    ligature.typefaceId to ligature.cmap,
+                ),
+            ),
+            gsubTablesByTypefaceId = mapOf(
+                single.typefaceId to requireNotNull(single.gsub),
+                multiple.typefaceId to requireNotNull(multiple.gsub),
+                ligature.typefaceId to requireNotNull(ligature.gsub),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(101),
+                    clusters = listOf(GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 20f)),
+                    advanceX = 20f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = single.typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            engine.shape(
+                ShapingRequest(
+                    text = "a",
+                    typefaceId = single.typefaceId,
+                    fontSize = 20f,
+                ),
+            ).glyphRuns,
+        )
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(101, 102),
+                    clusters = listOf(GlyphCluster(textRange = 0..0, glyphRange = 0..1, advanceX = 20f)),
+                    advanceX = 20f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = multiple.typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            engine.shape(
+                ShapingRequest(
+                    text = "b",
+                    typefaceId = multiple.typefaceId,
+                    fontSize = 20f,
+                ),
+            ).glyphRuns,
+        )
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(103),
+                    clusters = listOf(GlyphCluster(textRange = 0..1, glyphRange = 0..0, advanceX = 20f)),
+                    advanceX = 20f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = ligature.typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            engine.shape(
+                ShapingRequest(
+                    text = "fi",
+                    typefaceId = ligature.typefaceId,
+                    fontSize = 20f,
+                ),
+            ).glyphRuns,
+        )
+    }
+
+    @Test
     fun basicOpenTypeShapingEngineAppliesStandardFiLigatureWhenAvailable() {
         val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440406"))
         val engine = BasicOpenTypeShapingEngine(
@@ -1250,6 +1452,120 @@ class TextStackSurfaceTest {
                 ),
             ),
             result.glyphRuns,
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineAppliesReviewedGposFixtureFontsFromRepo() {
+        val single = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440621",
+            relativePath = "reports/font/fixtures/fonts/shaping/gpos-single-adjustment.otf",
+        )
+        val pairFormat1 = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440622",
+            relativePath = "reports/font/fixtures/fonts/shaping/gpos-pair-format1-kerning.otf",
+        )
+        val pairFormat2 = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440623",
+            relativePath = "reports/font/fixtures/fonts/shaping/gpos-pair-format2-class.otf",
+        )
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = CMapGlyphMapper(
+                cmapsByTypefaceId = mapOf(
+                    single.typefaceId to single.cmap,
+                    pairFormat1.typefaceId to pairFormat1.cmap,
+                    pairFormat2.typefaceId to pairFormat2.cmap,
+                ),
+            ),
+            gposSingleTablesByTypefaceId = mapOf(
+                single.typefaceId to requireNotNull(single.gposSingles),
+            ),
+            gposPairTablesByTypefaceId = mapOf(
+                pairFormat1.typefaceId to requireNotNull(pairFormat1.gposPairs),
+                pairFormat2.typefaceId to requireNotNull(pairFormat2.gposPairs),
+            ),
+            kernUnitsPerEmByTypefaceId = mapOf(
+                single.typefaceId to single.unitsPerEm,
+                pairFormat1.typefaceId to pairFormat1.unitsPerEm,
+                pairFormat2.typefaceId to pairFormat2.unitsPerEm,
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(520),
+                    clusters = listOf(
+                        GlyphCluster(
+                            textRange = 0..0,
+                            glyphRange = 0..0,
+                            advanceX = 19.2f,
+                            offsetX = 1f,
+                        ),
+                    ),
+                    advanceX = 19.2f,
+                    advanceY = 0f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = single.typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            engine.shape(
+                ShapingRequest(
+                    text = "A",
+                    typefaceId = single.typefaceId,
+                    fontSize = 20f,
+                ),
+            ).glyphRuns,
+        )
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(520, 541),
+                    clusters = listOf(
+                        GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 18.9f),
+                        GlyphCluster(textRange = 1..1, glyphRange = 1..1, advanceX = 20f),
+                    ),
+                    advanceX = 38.9f,
+                    advanceY = 0f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = pairFormat1.typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            engine.shape(
+                ShapingRequest(
+                    text = "AV",
+                    typefaceId = pairFormat1.typefaceId,
+                    fontSize = 20f,
+                ),
+            ).glyphRuns,
+        )
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(520, 541),
+                    clusters = listOf(
+                        GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 18.8f),
+                        GlyphCluster(textRange = 1..1, glyphRange = 1..1, advanceX = 20f),
+                    ),
+                    advanceX = 38.8f,
+                    advanceY = 0f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = pairFormat2.typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            engine.shape(
+                ShapingRequest(
+                    text = "AV",
+                    typefaceId = pairFormat2.typefaceId,
+                    fontSize = 20f,
+                ),
+            ).glyphRuns,
         )
     }
 
@@ -1742,6 +2058,27 @@ class TextStackSurfaceTest {
     private fun readProjectFile(relativePath: String): String =
         Files.readString(projectRoot().resolve(relativePath))
 
+    private fun parsedFixtureFace(uuid: String, relativePath: String): ParsedFixtureFace {
+        val typefaceId = TypefaceID(Uuid.parse(uuid))
+        val path = projectRoot().resolve(relativePath)
+        val source = FontSource(
+            id = FontSourceID(Uuid.parse(uuid.replaceRange(uuid.length - 1, uuid.length, "0"))),
+            kind = FontSourceKind.FILE,
+            displayName = path.fileName.toString(),
+            bytes = Files.readAllBytes(path),
+        )
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+        assertEquals(emptyList(), parsed.diagnostics, relativePath)
+        return ParsedFixtureFace(
+            typefaceId = typefaceId,
+            cmap = parsed.cmap,
+            unitsPerEm = requireNotNull(parsed.metrics.unitsPerEm),
+            gsub = parsed.layout.gsub,
+            gposSingles = parsed.layout.gposSingles,
+            gposPairs = parsed.layout.gposPairs,
+        )
+    }
+
     private fun readJsonProjectFile(relativePath: String): Map<String, Any?> =
         jsonObject(JsonParser(readProjectFile(relativePath)).parse(), relativePath)
 
@@ -1753,6 +2090,9 @@ class TextStackSurfaceTest {
 
     private fun Map<String, Any?>.requiredObjectList(key: String): List<Map<String, Any?>> =
         requiredList(key).mapIndexed { index, value -> jsonObject(value, "$key[$index]") }
+
+    private fun Map<String, Any?>.requiredLong(key: String): Long =
+        this[key] as? Long ?: error("Expected $key to be a number")
 
     private fun Map<String, Any?>.requiredStringList(key: String): List<String> =
         requiredList(key).mapIndexed { index, value ->
@@ -1796,7 +2136,9 @@ class TextStackSurfaceTest {
                 val normalized = value.lowercase()
                 assertFalse(normalized.contains("supportclaim"), "Unexpected support claim value at $path: $value")
                 assertFalse(
-                    normalized.contains("supported") && !normalized.contains("unsupported"),
+                    normalized.contains("supported") &&
+                        !normalized.contains("unsupported") &&
+                        !normalized.contains("not supported"),
                     "Unexpected support promotion value at $path: $value",
                 )
             }
@@ -1944,4 +2286,13 @@ class TextStackSurfaceTest {
             ),
         )
     }
+
+    private data class ParsedFixtureFace(
+        val typefaceId: TypefaceID,
+        val cmap: CMapTable,
+        val unitsPerEm: Int,
+        val gsub: OpenTypeGsubTable?,
+        val gposSingles: OpenTypeGposSingleTable?,
+        val gposPairs: OpenTypeGposPairTable?,
+    )
 }

@@ -250,6 +250,14 @@ private fun defaultClusterSafetyFixtures(): List<ClusterSafetyFixture> = listOf(
         sourceText = "\u0627\u0651",
     ),
     ClusterSafetyFixture(
+        fixtureName = "cluster-cjk-ideographic-variation-sequence.txt",
+        sourceText = "\u4E00\uDB40\uDD00",
+    ),
+    ClusterSafetyFixture(
+        fixtureName = "cluster-cjk-standardized-variant.txt",
+        sourceText = "\u6E1A\uFE00",
+    ),
+    ClusterSafetyFixture(
         fixtureName = "cluster-cjk-variation-selector.txt",
         sourceText = "\u4E00\u3003\uFE0F",
     ),

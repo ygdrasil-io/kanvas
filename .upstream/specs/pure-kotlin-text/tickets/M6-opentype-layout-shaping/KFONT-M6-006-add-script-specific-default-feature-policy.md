@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-006"
 title: "Add script-specific default feature policy"
-status: "review"
+status: "blocked"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
@@ -114,6 +114,7 @@ rtk ./gradlew --no-daemon :font:text:test
 
 - `proposed`: Policy ticket depends on script itemization and the M6 shaping contract.
 - `review`: Contract-level feature policy rows, shaping-plan serialization, and evidence tracking are implemented and freshly validated. Remaining gate: land the per-script shaping fixture families owned by `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`, wire runtime GSUB/GPOS execution to `ResolvedFeatureSet` instead of raw `FeatureSet`, and document explicit `drawString` complex-feature non-enablement before `done`.
+- `blocked`: Contract-level feature policy rows, shaping-plan serialization, and evidence tracking are implemented and freshly validated, but ticket-local closeout is currently impossible. Remaining gate: land the per-script shaping fixture families owned by `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`, wire runtime GSUB/GPOS execution to `ResolvedFeatureSet` instead of raw `FeatureSet`, and document explicit `drawString` complex-feature non-enablement before `done`.
 - Move to `ready` only after the matrix row feature sets are reviewed.
 
 ## Linear Labels

@@ -13,6 +13,8 @@ import org.graphiks.kanvas.text.shaping.defaultClusterSafetyReportJson
 class ClusterSafetyTest {
     private val clusterFixtureNames = listOf(
         "cluster-arabic-mark.txt",
+        "cluster-cjk-ideographic-variation-sequence.txt",
+        "cluster-cjk-standardized-variant.txt",
         "cluster-cjk-variation-selector.txt",
         "cluster-devanagari-conjunct.txt",
         "cluster-emoji-family-zwj.txt",
@@ -34,6 +36,8 @@ class ClusterSafetyTest {
         assertTrue(json.contains("\"dumpId\": \"cluster-safety-report\""))
         assertTrue(json.contains("\"ownerTickets\": [\"KFONT-M5-005\"]"))
         assertTrue(json.contains("\"fixtureName\": \"cluster-emoji-family-zwj.txt\""))
+        assertTrue(json.contains("\"fixtureName\": \"cluster-cjk-ideographic-variation-sequence.txt\""))
+        assertTrue(json.contains("\"fixtureName\": \"cluster-cjk-standardized-variant.txt\""))
         assertTrue(json.contains("\"fixtureName\": \"cluster-negative-split.txt\""))
         assertTrue(json.contains("\"gate\": \"scaledemoji\""))
         assertTrue(json.contains("\"dumpId\": \"unicode-segments\""))

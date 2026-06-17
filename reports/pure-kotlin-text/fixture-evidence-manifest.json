@@ -207,9 +207,13 @@
         "section": "Clusters"
       },
       "currentEvidencePaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/GraphemeSegmentation.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/GraphemeSegmentationTest.kt",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ClusterSafetyReport.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ClusterSafetyTest.kt",
         "reports/font/fixtures/expected/unicode/cluster-arabic-mark.txt",
+        "reports/font/fixtures/expected/unicode/cluster-cjk-ideographic-variation-sequence.txt",
+        "reports/font/fixtures/expected/unicode/cluster-cjk-standardized-variant.txt",
         "reports/font/fixtures/expected/unicode/cluster-cjk-variation-selector.txt",
         "reports/font/fixtures/expected/unicode/cluster-devanagari-conjunct.txt",
         "reports/font/fixtures/expected/unicode/cluster-emoji-family-zwj.txt",
@@ -229,7 +233,7 @@
       "requiredEvidenceGates": [
         "KFONT-M5-005 now proves bounded grapheme, bidi-run, and script-run boundary alignment only; GSUB/GPOS shaping, fallback run splitting, and paragraph ordering remain gated on later tickets.",
         "Keep `scaledemoji` fixture-gated on color, route, and rendering evidence; the explicit emoji-sequence refusal and fallback-boundary proofs now live on the owning KFONT-M7-004 slice.",
-        "Broaden reviewed CJK IVS coverage before promoting complete cluster-safety coverage."
+        "CJK IVS coverage on this bounded row now includes a positive ideographic variation-sequence case plus a deterministic standardized-variant refusal without promoting shaping or rendering support."
       ],
       "validationCommands": [
         "rtk ./gradlew --no-daemon :font:text:test --tests '*ClusterSafety*' --tests '*Grapheme*' --tests '*Bidi*' --tests '*ScriptItem*'",
@@ -728,25 +732,30 @@
       },
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "reports/font/fixtures/provenance/index.json",
         "font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt",
         "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
-        "reports/font/fixtures/expected/shaping/latin-gsub-gpos-goldens.json"
+        "reports/font/fixtures/expected/shaping/latin-gsub-gpos-goldens.json",
+        "reports/font/fixtures/expected/shaping/gsub-trace.json",
+        "reports/font/fixtures/expected/shaping/gpos-trace.json",
+        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json"
       ],
       "requiredEvidenceGates": [
-        "Add Latin fixture provenance for cmap-backed glyph IDs, GSUB feature lookup order, and GPOS pair positioning data.",
-        "Add requested, enabled, disabled, and unsupported feature dump fields before enabling broader feature behavior.",
-        "Add expected glyph ID or fixture-local glyph-name dumps for liga, kern, requested-off, and unsupported-feature cases.",
-        "Add cluster range and fallback diagnostic expectations for every Latin fixture row.",
-        "Keep Greek, Cyrillic, Hebrew, and complex-script promotion out of this Latin contract slice."
+        "Keep this row bounded to reviewed Latin simple GSUB LookupType 1/2/4 and GPOS LookupType 1/2 fixtures plus parser-owned malformed diagnostics; contextual lookups, mark/cursive positioning, and advanced variation/device tables remain separate gates.",
+        "Keep Greek, Cyrillic, Hebrew, Arabic, Devanagari, Thai, CJK, and Emoji promotion out of this Latin fixture slice even though the checked-in dumps now carry deterministic glyph IDs, cluster ranges, and positioned advances.",
+        "Do not claim script-default runtime adoption from these dumps alone; `ResolvedFeatureSet` execution and `drawString` non-enablement remain owned by KFONT-M6-006 and later per-script fixture families."
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test :font:sfnt:test",
+        "rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGsubFixtureFontsAsDiagnostics --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGposFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGposFixtureFontsAsDiagnostics",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGposFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gsubTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gposTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
       ],
       "fixtureCommands": [
-        "Generate deterministic Latin GSUB/GPOS fixtures and reviewed dump goldens before implementing wider shaping support."
+        "KFONT-M6-002 and KFONT-M6-004 fixture fonts are checked in under reports/font/fixtures/fonts/shaping and asserted by SFNTSurfaceTest/TextStackSurfaceTest against gsub-trace.json, gpos-trace.json, and shaped-glyph-run.json."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",
@@ -769,14 +778,10 @@
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/OpenTypeLayoutContract.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt",
         "reports/font/fixtures/expected/shaping/feature-policy-matrix.json",
-        "reports/font/fixtures/expected/shaping/shaping-plan.json",
-        "reports/font/fixtures/expected/shaping/gsub-trace.json",
-        "reports/font/fixtures/expected/shaping/gpos-trace.json",
-        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json"
+        "reports/font/fixtures/expected/shaping/shaping-plan.json"
       ],
       "requiredEvidenceGates": [
-        "Implement bounded GSUB lookup behavior before claiming OpenType substitution support.",
-        "Implement bounded GPOS positioning behavior before claiming OpenType positioning support.",
+        "Keep this row limited to contract-level shaping-plan and feature-policy evidence; fixture-backed GSUB/GPOS traces now live on the Latin fixture row and do not by themselves promote complex shaping support.",
         "Add per-script positive and refusal fixtures from the required script matrix before broad shaping promotion.",
         "Add CPU oracle evidence for promoted glyph ID, cluster, and position behavior before target-supported classification."
       ],
@@ -786,7 +791,7 @@
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
       "fixtureCommands": [
-        "KFONT-M6-001 contract goldens are checked in under reports/font/fixtures/expected/shaping and asserted byte-for-byte by OpenTypeLayoutEngineContractTest."
+        "KFONT-M6-001 contract goldens remain checked in under reports/font/fixtures/expected/shaping/shaping-plan.json and reports/font/fixtures/expected/shaping/feature-policy-matrix.json, both asserted by OpenTypeLayoutEngineContractTest."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",

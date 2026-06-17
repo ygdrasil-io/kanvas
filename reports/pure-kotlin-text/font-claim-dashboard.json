@@ -230,7 +230,7 @@
       "requiredEvidenceGates": [
         "KFONT-M5-005 now provides bounded grapheme, bidi, and script boundary-alignment evidence only; shaping, fallback, and paragraph routes remain separate gates.",
         "Keep `scaledemoji` blocked on color, route, and rendering evidence rather than treating the bounded M5 plus M7 refusal/fallback evidence as emoji support.",
-        "Add broader reviewed CJK IVS coverage before promoting complete cluster-safety coverage."
+        "CJK IVS coverage on this bounded row now includes a positive ideographic variation-sequence case plus a deterministic standardized-variant refusal without promoting shaping or rendering support."
       ],
       "legacyGates": [
         "scaledemoji"
@@ -255,7 +255,10 @@
         "section": "Required Script Matrix"
       },
       "evidence": {
-        "fixtureProvenance": [],
+        "fixtureProvenance": [
+          "reports/font/fixtures/provenance/index.json",
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
         "deterministicDumps": [
           "reports/pure-kotlin-text/dump-evidence-index.json",
           "reports/font/fixtures/expected/shaping/feature-policy-matrix.json",
@@ -267,14 +270,18 @@
         "cpuOracle": [],
         "gpuArtifacts": [],
         "routeDiagnostics": [
-          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/font/fixtures/expected/shaping/gsub-trace.json",
+          "reports/font/fixtures/expected/shaping/gpos-trace.json"
         ],
         "refusalDiagnostics": [
-          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/font/fixtures/expected/shaping/gsub-trace.json",
+          "reports/font/fixtures/expected/shaping/gpos-trace.json"
         ]
       },
       "requiredEvidenceGates": [
-        "Deliver pure Kotlin script itemization, GSUB/GPOS/GDEF shaping, cluster dumps, and CPU oracle evidence before support promotion.",
+        "Latin simple GSUB/GPOS fixture evidence is now checked in, but complete complex-shaping promotion still requires per-script positive/refusal fixture families, runtime ResolvedFeatureSet adoption, and CPU oracle evidence across the required script matrix.",
         "Keep complex shaping separate from simple drawString compatibility."
       ],
       "legacyGates": [],

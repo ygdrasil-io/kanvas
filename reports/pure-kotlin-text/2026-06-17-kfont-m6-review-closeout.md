@@ -13,37 +13,35 @@ Status: documentation-only audit wave.
 
 ## Findings
 
-- PR `#1706` (`KFONT-M6-002`) is merged, but the ticket is not closable yet: the
-  runtime slice still lacks reviewed fixture provenance and expected dumps for
-  `gsub-single-substitution.otf`, `gsub-multiple-substitution.otf`,
-  `gsub-ligature-fi.otf`, `gsub-coverage-malformed.otf`, and
-  `gsub-ligature-bad-component.otf`, plus promoted `gsub-trace.json` /
-  `shaped-glyph-run.json` beyond the M6-001 contract goldens.
-- PR `#1705` (`KFONT-M6-004`) is merged, but the ticket is not closable yet: the
-  bounded positioning slice still lacks reviewed fixture provenance and
-  expected dumps for `gpos-single-adjustment.otf`,
-  `gpos-pair-format1-kerning.otf`, `gpos-pair-format2-class.otf`,
-  `gpos-valueformat-malformed.otf`, and `gpos-pair-out-of-range.otf`, plus
-  promoted `gpos-trace.json` / `shaped-glyph-run.json`.
-- PR `#1707` (`KFONT-M6-006`) is merged, but the ticket is not closable yet: the
-  policy slice remains contract-level only until the per-script shaping
-  fixture families from `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`
-  land, runtime GSUB/GPOS consumes `ResolvedFeatureSet`, and the `drawString`
-  compatibility path records explicit complex-feature non-enablement.
+- `KFONT-M6-002` is now closable: reviewed GSUB fixture provenance is checked
+  in, parser/runtime tests cover the positive and malformed fixture set, and
+  `gsub-trace.json` / `shaped-glyph-run.json` are now fixture-backed Latin
+  evidence rather than M6-001 contract placeholders.
+- `KFONT-M6-004` is now closable: reviewed GPOS fixture provenance is checked
+  in, parser/runtime tests cover the positive and malformed fixture set, and
+  `gpos-trace.json` / `shaped-glyph-run.json` are now fixture-backed Latin
+  evidence rather than contract placeholders.
+- `KFONT-M6-006` is not closable in this wave: the policy slice remains contract-level
+  only until the per-script shaping fixture families from `KFONT-M6-007`,
+  `KFONT-M6-008`, and `KFONT-M6-009` land, runtime GSUB/GPOS consumes
+  `ResolvedFeatureSet`, and the `drawString` compatibility path records
+  explicit complex-feature non-enablement.
 
 ## Outcome
 
-- `KFONT-M6-002` stays in `review`.
-- `KFONT-M6-004` stays in `review`.
-- `KFONT-M6-006` stays in `review`.
-
-The merged slices remain valid prerequisite evidence. The review state here
-records that the remaining work is fixture/dump/runtime-gated, but the bounded
-implementation slices themselves remain current and accepted evidence.
+- `KFONT-M6-002` can move to `done`.
+- `KFONT-M6-004` can move to `done`.
+- `KFONT-M6-006` moves to `blocked`.
 
 ## Validation
 
 ```bash
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGsubFixtureFontsAsDiagnostics --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGposFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGposFixtureFontsAsDiagnostics
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGposFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gsubTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gposTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns --tests org.graphiks.kanvas.text.OpenTypeLayoutEngineContractTest
 rtk git diff --check
 ```
 

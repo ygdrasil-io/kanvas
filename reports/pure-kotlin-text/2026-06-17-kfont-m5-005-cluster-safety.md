@@ -1,7 +1,7 @@
 # KFONT-M5-005 Cluster Safety Evidence
 
 Date: 2026-06-17
-Status: review with bounded fixture evidence.
+Status: done with bounded fixture evidence.
 
 ## Scope
 
@@ -25,8 +25,13 @@ legacy gate rather than implying emoji support.
   `cluster-emoji-family-zwj.txt`, `cluster-emoji-skin-tone.txt`,
   `cluster-vs15-vs16.txt`, `cluster-arabic-mark.txt`,
   `cluster-devanagari-conjunct.txt`, `cluster-thai-tone.txt`,
-  `cluster-cjk-variation-selector.txt`, `cluster-mixed-bidi.txt`, and the
+  `cluster-cjk-variation-selector.txt`,
+  `cluster-cjk-ideographic-variation-sequence.txt`,
+  `cluster-cjk-standardized-variant.txt`, `cluster-mixed-bidi.txt`, and the
   negative `cluster-negative-split.txt`.
+- `GraphemeClusterer` now treats `Variation_Selector` code points as `Extend`
+  during boundary decisions, which closes the ticket-local CJK IVS gap without
+  widening any shaping or fallback claim.
 - The negative split fixture records a stable
   `text.shaping.cluster-invariant-failed` diagnostic without using any
   external or platform oracle.
@@ -61,9 +66,6 @@ rtk git diff --check
 
 ## Remaining Gate
 
-This bounded M5-005 slice remains in `review`, not `done`. Remaining gate:
-
-- broaden reviewed CJK IVS coverage beyond the current bounded
-  Script_Extensions/variation-selector context fixture family before claiming
-  complete CJK variation-selector cluster safety; explicit emoji refusal and
-  fallback-boundary evidence now live on the owning `KFONT-M7-004` slice.
+None on this bounded M5-005 slice. Explicit emoji refusal and fallback-boundary
+evidence remain owned by `KFONT-M7-004`, and shaping, fallback-route,
+paragraph, color-glyph, and GPU claims stay outside this ticket.

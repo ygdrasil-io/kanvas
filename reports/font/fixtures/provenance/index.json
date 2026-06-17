@@ -296,6 +296,124 @@
       ]
     },
     {
+      "fixtureId": "latin-gpos-simple-fixtures",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-004"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "simoncozens/test-fonts FallbackPlus-Small",
+        "url": "https://github.com/simoncozens/test-fonts",
+        "version": "d1cd9d87b8a128b25ed9aaf2e7ccb3a37b0e2a23"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/test-fonts-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-pair-format1-kerning.otf",
+          "sha256": "a4a349f37f6276595b17e146dfbc4ec1c301d169ff48c0ccfaa3705f15a47da9",
+          "sizeBytes": 19676,
+          "role": "pair-format1-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-pair-format2-class.otf",
+          "sha256": "5ff7e526bc52bd1e966116dd5e66e12c511b6c2af8b49bd2309c6b622c1d137b",
+          "sizeBytes": 19692,
+          "role": "pair-format2-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-pair-out-of-range.otf",
+          "sha256": "fc0e3f78c4948dc89b30d0e05ab5e2cdf7345555864f9a48f5ca787f50cc285a",
+          "sizeBytes": 19676,
+          "role": "pair-out-of-range-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-single-adjustment.otf",
+          "sha256": "972258bcd8232a6400aaea65e2a91c793071fcdb95c76cb1018218d1f63e17ed",
+          "sizeBytes": 19668,
+          "role": "single-adjustment-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-valueformat-malformed.otf",
+          "sha256": "2b67e21742e4ebca52b1bafdf620354e398f36af323c0e3efd021a200d4a79db",
+          "sizeBytes": 19676,
+          "role": "valueformat-malformed-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/gpos-trace.json",
+        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gpos-support-claim",
+        "no-complete-gsub-gpos-support-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "latin-gsub-simple-fixtures",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-002"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "simoncozens/test-fonts FallbackPlus-Small",
+        "url": "https://github.com/simoncozens/test-fonts",
+        "version": "d1cd9d87b8a128b25ed9aaf2e7ccb3a37b0e2a23"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/test-fonts-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-coverage-malformed.otf",
+          "sha256": "3c96d3137fdd1b73d9b9726ee455f04eeee9969552a2cebebc34a16d85a4dbd4",
+          "sizeBytes": 19664,
+          "role": "coverage-malformed-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-ligature-bad-component.otf",
+          "sha256": "3c6bf85e62b3cbab6899eda14478d9d861a4b92a00c4b376725a8d4994c9a263",
+          "sizeBytes": 19676,
+          "role": "ligature-bad-component-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-ligature-fi.otf",
+          "sha256": "f8258ec7790faaadaae74612b4aecf47ecc31da6d31b449368a4f1b99e1d368f",
+          "sizeBytes": 19676,
+          "role": "ligature-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-multiple-substitution.otf",
+          "sha256": "87acf4fb65edddfcb513d2b90a3e75358da20b0df77c3d468a0ca4f28754d15f",
+          "sizeBytes": 19672,
+          "role": "multiple-substitution-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-single-substitution.otf",
+          "sha256": "65e06b97bbe69823fc488910bc3f38d7a5205f61bb09a728fe44650134bc34f8",
+          "sizeBytes": 19664,
+          "role": "single-substitution-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/gsub-trace.json",
+        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gsub-support-claim",
+        "no-complete-gsub-gpos-support-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
       "fixtureId": "scaler-roboto-flex-variable",
       "familyId": "truetype-scaler",
       "ownerTickets": [
