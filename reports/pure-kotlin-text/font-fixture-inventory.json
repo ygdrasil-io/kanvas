@@ -562,13 +562,41 @@
           ]
         },
         {
+          "fixtureId": "color-glyphs-colrv1-gradient-operation-group",
+          "targetGate": "colrv1-gradient-operation-group",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate bounded PaintGlyph-wrapped linear, radial, sweep, and variable-stop linear gradients, then assert accepted bundle cases plus explicit malformed-coordinate, gradient-stop-budget, and missing-variation outline-fallback refusals.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/color-glyph-plan.json",
+            "reports/font/fixtures/expected/color/colrv1-paint-graph.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "linear/radial/sweep/variable-stop graph bundle cases",
+            "ColorGlyphPlan bundle cases",
+            "missing variation data refusal diagnostic",
+            "gradient-stop budget refusal diagnostic",
+            "malformed coordinate refusal diagnostic"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-colrv1-rendering-claim",
+            "no-gpu-color-glyph-support-claim",
+            "no-paintvar-gradient-geometry-claim"
+          ]
+        },
+        {
           "fixtureId": "color-glyphs-colrv1-solid-glyph-colr-glyph",
           "targetGate": "colrv1-solid-glyph-colr-glyph",
           "status": "current-positive-evidence",
           "fixtureKind": "synthetic-table-bytes",
-          "generationPolicy": "Generate a bounded COLRv1 base glyph that walks PaintColrGlyph -> PaintGlyph -> PaintSolid and pair it with a PaintVarSolid refusal that preserves explicit outline fallback when variation support is unavailable.",
+          "generationPolicy": "Generate a bounded COLRv1 base glyph that walks PaintColrGlyph -> PaintGlyph -> PaintSolid and pair it with a PaintVarSolid refusal that preserves explicit outline fallback when variation support is unavailable; assert the owned bundle cases in the shared color-glyph and paint-graph fixtures.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/color-glyph-plan.json",
+            "reports/font/fixtures/expected/color/colrv1-paint-graph.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
