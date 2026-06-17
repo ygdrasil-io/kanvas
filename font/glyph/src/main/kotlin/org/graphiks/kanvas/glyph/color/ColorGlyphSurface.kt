@@ -584,9 +584,11 @@ data class COLRV0LayerPlan(
 data class ColorGlyphPlan(
     val glyphId: Int,
     val typefaceId: TypefaceID,
+    val routeKind: String = "colrv0",
     val artifactKey: ColorGlyphArtifactKey,
     val palette: ColorGlyphPalette,
     val layers: List<COLRV0LayerPlan>,
+    val paintGraph: COLRV1PaintGraphEvidence? = null,
     val bounds: ColorGlyphBounds,
     val fallbackPolicy: String,
     val diagnostics: List<ColorGlyphDiagnostic> = emptyList(),
@@ -601,10 +603,14 @@ data class ColorGlyphPlan(
         appendColorGlyphJsonField("schema", ColorGlyphPlanSchema, comma = true)
         appendColorGlyphJsonField("glyphId", glyphId, comma = true)
         appendColorGlyphJsonField("typefaceId", typefaceId.value.toString(), comma = true)
+        appendColorGlyphJsonField("routeKind", routeKind, comma = true)
         append("  ").append(colorGlyphJsonString("artifactKey")).append(": ").append(artifactKey.toCanonicalJson()).append(",\n")
         append("  ").append(colorGlyphJsonString("palette")).append(": ").append(palette.toCanonicalJson()).append(",\n")
         append("  ").append(colorGlyphJsonString("layers")).append(": ")
         appendColorGlyphLayerPlansJson(layers, indent = "  ")
+        append(",\n")
+        append("  ").append(colorGlyphJsonString("paintGraph")).append(": ")
+        append(paintGraph?.toCanonicalJson(indent = "  ") ?: "null")
         append(",\n")
         append("  ").append(colorGlyphJsonString("bounds")).append(": ").append(bounds.toCanonicalJson()).append(",\n")
         appendColorGlyphJsonField("fallbackPolicy", fallbackPolicy, comma = true)
@@ -632,6 +638,97 @@ data class COLRV0ColorGlyphPlanDecision(
     val selectedRoute: ColorGlyphRoute?,
     val diagnostics: List<ColorGlyphDiagnostic> = emptyList(),
 )
+
+data class COLRV1ColorGlyphPlanDecision(
+    val plan: ColorGlyphPlan?,
+    val selectedRoute: ColorGlyphRoute?,
+    val diagnostics: List<ColorGlyphDiagnostic> = emptyList(),
+)
+
+data class COLRV1PaintGraphNode(
+    val nodeId: Int,
+    val kind: String,
+    val childNodeIds: List<Int> = emptyList(),
+    val glyphId: Int? = null,
+    val referencedColrGlyphId: Int? = null,
+    val paletteIndex: Int? = null,
+    val resolvedColorArgb: String? = null,
+    val alpha: Float? = null,
+    val varIndexBase: Long? = null,
+    val outlineArtifactKey: ColorGlyphArtifactKey? = null,
+    val bounds: ColorGlyphBounds? = null,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("nodeId")).append(": ").append(nodeId).append(", ")
+        append(colorGlyphJsonString("kind")).append(": ").append(colorGlyphJsonString(kind)).append(", ")
+        append(colorGlyphJsonString("childNodeIds")).append(": ")
+        append(childNodeIds.joinToString(prefix = "[", postfix = "]"))
+        append(", ")
+        append(colorGlyphJsonString("glyphId")).append(": ").append(glyphId ?: "null").append(", ")
+        append(colorGlyphJsonString("referencedColrGlyphId")).append(": ").append(referencedColrGlyphId ?: "null").append(", ")
+        append(colorGlyphJsonString("paletteIndex")).append(": ").append(paletteIndex ?: "null").append(", ")
+        append(colorGlyphJsonString("resolvedColorArgb")).append(": ").append(colorGlyphNullableString(resolvedColorArgb)).append(", ")
+        append(colorGlyphJsonString("alpha")).append(": ").append(alpha?.let(::colorGlyphFloatToken) ?: "null").append(", ")
+        append(colorGlyphJsonString("varIndexBase")).append(": ").append(varIndexBase ?: "null").append(", ")
+        append(colorGlyphJsonString("outlineArtifactKey")).append(": ")
+        append(outlineArtifactKey?.toCanonicalJson() ?: "null")
+        append(", ")
+        append(colorGlyphJsonString("bounds")).append(": ").append(bounds?.toCanonicalJson() ?: "null")
+        append("}")
+    }
+}
+
+data class COLRV1PaintGraphEvidence(
+    val glyphId: Int,
+    val typefaceId: TypefaceID,
+    val paletteIdentity: String,
+    val rootNodeId: Int,
+    val supportedOperationGroup: String,
+    val nodes: List<COLRV1PaintGraphNode>,
+    val bounds: ColorGlyphBounds,
+    val diagnostics: List<ColorGlyphDiagnostic> = emptyList(),
+) {
+    val dumpSha256: String
+        get() = colorGlyphSha256(canonicalJson(includeDumpSha256 = false, indent = "").toByteArray(Charsets.UTF_8))
+
+    fun toCanonicalJson(): String = canonicalJson(includeDumpSha256 = true, indent = "")
+
+    internal fun toCanonicalJson(indent: String): String = canonicalJson(includeDumpSha256 = true, indent = indent)
+
+    private fun canonicalJson(includeDumpSha256: Boolean, indent: String): String = buildString {
+        val fieldIndent = "$indent  "
+        append("{\n")
+        append(fieldIndent).append(colorGlyphJsonString("schema")).append(": ")
+        append(colorGlyphJsonString(COLRV1PaintGraphSchema)).append(",\n")
+        append(fieldIndent).append(colorGlyphJsonString("glyphId")).append(": ").append(glyphId).append(",\n")
+        append(fieldIndent).append(colorGlyphJsonString("typefaceId")).append(": ")
+        append(colorGlyphJsonString(typefaceId.value.toString())).append(",\n")
+        append(fieldIndent).append(colorGlyphJsonString("paletteIdentity")).append(": ")
+        append(colorGlyphJsonString(paletteIdentity)).append(",\n")
+        append(fieldIndent).append(colorGlyphJsonString("rootNodeId")).append(": ").append(rootNodeId).append(",\n")
+        append(fieldIndent).append(colorGlyphJsonString("supportedOperationGroup")).append(": ")
+        append(colorGlyphJsonString(supportedOperationGroup)).append(",\n")
+        append(fieldIndent).append(colorGlyphJsonString("nodes")).append(": ")
+        appendColorGlyphGraphNodesJson(nodes, indent = fieldIndent)
+        append(",\n")
+        append(fieldIndent).append(colorGlyphJsonString("bounds")).append(": ").append(bounds.toCanonicalJson()).append(",\n")
+        append(fieldIndent).append(colorGlyphJsonString("diagnostics")).append(": ")
+        appendColorGlyphDiagnosticsJson(diagnostics, indent = fieldIndent)
+        if (includeDumpSha256) {
+            append(",\n")
+            append(fieldIndent).append(colorGlyphJsonString("dumpSha256")).append(": ")
+            append(colorGlyphJsonString(dumpSha256)).append("\n")
+        } else {
+            append("\n")
+        }
+        append(indent).append("}")
+    }
+
+    companion object {
+        const val COLRV1PaintGraphSchema: String = "org.graphiks.kanvas.glyph.color.COLRV1PaintGraph.v1"
+    }
+}
 
 /**
  * Promotes parsed COLRv0 and CPAL facts into a deterministic `ColorGlyphPlan`.
@@ -754,6 +851,7 @@ class COLRV0ColorGlyphPlanner(
         val plan = ColorGlyphPlan(
             glyphId = glyphId,
             typefaceId = typefaceId,
+            routeKind = "colrv0",
             artifactKey = strikeKey.artifactKeyForGlyph(
                 glyphId = glyphId,
                 route = ColorArtifactRoute,
@@ -769,6 +867,7 @@ class COLRV0ColorGlyphPlanner(
                 colorCount = palette.colors.size,
             ),
             layers = layerPlans.toList(),
+            paintGraph = null,
             bounds = aggregateBounds ?: error("COLRv0 layer plans must produce aggregate bounds."),
             fallbackPolicy = "allow-monochrome-outline-fallback",
             diagnostics = emptyList(),
@@ -798,6 +897,320 @@ class COLRV0ColorGlyphPlanner(
         )
     }
 }
+
+class COLRV1ColorGlyphPlanner(
+    private val colr: COLRV1Table?,
+    private val cpal: CPALTable?,
+    private val glyphBounds: Map<Int, ColorGlyphBounds> = emptyMap(),
+    private val variationAlphaDeltas: Map<Long, Float> = emptyMap(),
+    private val maxRecursionDepth: Int = 8,
+    private val maxExpandedNodeCount: Int = 64,
+) {
+    fun plan(
+        glyphId: Int,
+        typefaceId: TypefaceID,
+        strikeKey: GlyphStrikeKey,
+        paletteSelection: CPALPaletteSelection = CPALPaletteSelection.Default,
+        allowMonochromeFallback: Boolean = false,
+        outlineFallback: OutlineGlyphRepresentation? = null,
+    ): COLRV1ColorGlyphPlanDecision {
+        val table = colr ?: return refusal(
+            diagnostic = colrMalformedDiagnostic(
+                glyphId = glyphId,
+                detail = "glyphId=$glyphId;nodeId=0;tableFamily=COLR;version=1;reason=table-unavailable",
+                message = "COLRv1 table facts are unavailable for glyph $glyphId.",
+            ),
+            glyphId = glyphId,
+            allowMonochromeFallback = allowMonochromeFallback,
+            outlineFallback = outlineFallback,
+        )
+        val paletteTable = cpal ?: return refusal(
+            diagnostic = cpalMalformedDiagnostic(
+                glyphId = glyphId,
+                detail = "glyphId=$glyphId;nodeId=0;tableFamily=CPAL;version=0;reason=table-unavailable",
+                message = "COLRv1 palette selection is unavailable for glyph $glyphId: CPAL table facts are missing.",
+            ),
+            glyphId = glyphId,
+            allowMonochromeFallback = allowMonochromeFallback,
+            outlineFallback = outlineFallback,
+        )
+        val palette = paletteSelection.select(paletteTable) ?: return refusal(
+            diagnostic = cpalMalformedDiagnostic(
+                glyphId = glyphId,
+                detail = "glyphId=$glyphId;nodeId=0;tableFamily=CPAL;version=0;requestedPaletteIndex=${paletteSelection.index};availablePaletteCount=${paletteTable.palettes.size}",
+                message = "COLRv1 palette selection is unavailable for glyph $glyphId: requested palette ${paletteSelection.index} is outside the CPAL range.",
+            ),
+            glyphId = glyphId,
+            allowMonochromeFallback = allowMonochromeFallback,
+            outlineFallback = outlineFallback,
+        )
+        val rootPaint = table.paintForGlyph(glyphId) ?: return refusal(
+            diagnostic = colrMalformedDiagnostic(
+                glyphId = glyphId,
+                detail = "glyphId=$glyphId;nodeId=0;tableFamily=COLR;version=1;reason=missing-base-glyph-record",
+                message = "COLRv1 base glyph record is unavailable for glyph $glyphId.",
+            ),
+            glyphId = glyphId,
+            allowMonochromeFallback = allowMonochromeFallback,
+            outlineFallback = outlineFallback,
+        )
+
+        val nodes = ArrayList<COLRV1PaintGraphNode>()
+        var nextNodeId = 1
+        var expandedNodeCount = 0
+
+        data class WalkResult(
+            val nodeId: Int,
+            val bounds: ColorGlyphBounds,
+        )
+
+        fun budgetExceeded(limitName: String, limit: Int, observed: Int): COLRV1ColorGlyphPlanDecision =
+            refusal(
+                diagnostic = COLRV1Parser.budgetExceededDiagnostic(
+                    glyphId = glyphId,
+                    limitName = limitName,
+                    limit = limit,
+                    observed = observed,
+                ),
+                glyphId = glyphId,
+                allowMonochromeFallback = allowMonochromeFallback,
+                outlineFallback = outlineFallback,
+            )
+
+        fun unsupportedPaint(nodeId: Int, paintKind: String, detail: String): COLRV1ColorGlyphPlanDecision =
+            refusal(
+                diagnostic = ColorGlyphDiagnostic(
+                    glyphId = glyphId,
+                    route = "colr",
+                    code = ColorGlyphDiagnosticCodes.COLRV1PaintUnsupported,
+                    severity = "warning",
+                    detail = "glyphId=$glyphId;nodeId=$nodeId;paintKind=$paintKind;$detail",
+                    message = "COLRv1 paint $paintKind is unsupported for glyph $glyphId node $nodeId.",
+                ),
+                glyphId = glyphId,
+                allowMonochromeFallback = allowMonochromeFallback,
+                outlineFallback = outlineFallback,
+            )
+
+        fun malformed(nodeId: Int, detail: String, message: String): COLRV1ColorGlyphPlanDecision =
+            refusal(
+                diagnostic = colrMalformedDiagnostic(
+                    glyphId = glyphId,
+                    detail = "glyphId=$glyphId;nodeId=$nodeId;tableFamily=COLR;version=1;$detail",
+                    message = message,
+                ),
+                glyphId = glyphId,
+                allowMonochromeFallback = allowMonochromeFallback,
+                outlineFallback = outlineFallback,
+            )
+
+        fun reserveNode(kind: String): Pair<Int, Int> {
+            val nodeId = nextNodeId++
+            val index = nodes.size
+            nodes += COLRV1PaintGraphNode(nodeId = nodeId, kind = kind)
+            return nodeId to index
+        }
+
+        fun setNode(index: Int, node: COLRV1PaintGraphNode) {
+            nodes[index] = node
+        }
+
+        fun walk(paint: COLRV1Paint, depth: Int): WalkResult? {
+            if (depth > maxRecursionDepth) {
+                val decision = budgetExceeded(
+                    limitName = "recursionDepth",
+                    limit = maxRecursionDepth,
+                    observed = depth,
+                )
+                throw COLRV1PlannerRefusal(decision)
+            }
+            expandedNodeCount += 1
+            if (expandedNodeCount > maxExpandedNodeCount) {
+                val decision = budgetExceeded(
+                    limitName = "expandedPaintCount",
+                    limit = maxExpandedNodeCount,
+                    observed = expandedNodeCount,
+                )
+                throw COLRV1PlannerRefusal(decision)
+            }
+
+            return when (paint) {
+                is COLRV1Paint.Solid -> {
+                    val nodeIdAndIndex = reserveNode(
+                        if (paint.varIndexBase == null) "colrv1-paint-solid" else "colrv1-paint-var-solid",
+                    )
+                    val resolvedAlpha = if (paint.varIndexBase == null) {
+                        paint.alpha
+                    } else {
+                        val delta = variationAlphaDeltas[paint.varIndexBase]
+                            ?: throw COLRV1PlannerRefusal(
+                                unsupportedPaint(
+                                    nodeId = nodeIdAndIndex.first,
+                                    paintKind = "colrv1-paint-var-solid",
+                                    detail = "reason=variable-color-data-unsupported;varIndexBase=${paint.varIndexBase}",
+                                ),
+                            )
+                        (paint.alpha + delta).coerceIn(0f, 1f)
+                    }
+                    val resolvedColor = resolvePaletteColorArgb(
+                        palette = palette,
+                        paletteIndex = paint.paletteIndex,
+                        alpha = resolvedAlpha,
+                    )
+                    setNode(
+                        nodeIdAndIndex.second,
+                        COLRV1PaintGraphNode(
+                            nodeId = nodeIdAndIndex.first,
+                            kind = if (paint.varIndexBase == null) "colrv1-paint-solid" else "colrv1-paint-var-solid",
+                            paletteIndex = paint.paletteIndex,
+                            resolvedColorArgb = resolvedColor,
+                            alpha = resolvedAlpha,
+                            varIndexBase = paint.varIndexBase,
+                        ),
+                    )
+                    WalkResult(
+                        nodeId = nodeIdAndIndex.first,
+                        bounds = ColorGlyphBounds(xMin = 0, yMin = 0, xMax = 1, yMax = 1),
+                    )
+                }
+                is COLRV1Paint.Glyph -> {
+                    val nodeIdAndIndex = reserveNode("colrv1-paint-glyph")
+                    val child = walk(paint.paint, depth + 1) ?: return null
+                    val bounds = glyphBounds[paint.glyphId]
+                        ?: throw COLRV1PlannerRefusal(
+                            malformed(
+                                nodeId = nodeIdAndIndex.first,
+                                detail = "reason=missing-glyph-bounds;referencedGlyphId=${paint.glyphId}",
+                                message = "COLRv1 glyph bounds are unavailable for glyph $glyphId node ${nodeIdAndIndex.first}.",
+                            ),
+                        )
+                    setNode(
+                        nodeIdAndIndex.second,
+                        COLRV1PaintGraphNode(
+                            nodeId = nodeIdAndIndex.first,
+                            kind = "colrv1-paint-glyph",
+                            childNodeIds = listOf(child.nodeId),
+                            glyphId = paint.glyphId,
+                            outlineArtifactKey = strikeKey.artifactKeyForGlyph(
+                                glyphId = paint.glyphId,
+                                route = OutlineArtifactRoute,
+                            ),
+                            bounds = bounds,
+                        ),
+                    )
+                    WalkResult(nodeId = nodeIdAndIndex.first, bounds = bounds)
+                }
+                is COLRV1Paint.ColrGlyph -> {
+                    val nodeIdAndIndex = reserveNode("colrv1-paint-colr-glyph")
+                    val referencedPaint = table.paintForGlyph(paint.glyphId)
+                        ?: throw COLRV1PlannerRefusal(
+                            malformed(
+                                nodeId = nodeIdAndIndex.first,
+                                detail = "reason=missing-colr-glyph-reference;referencedGlyphId=${paint.glyphId}",
+                                message = "COLRv1 PaintColrGlyph reference is unavailable for glyph $glyphId node ${nodeIdAndIndex.first}.",
+                            ),
+                        )
+                    val child = walk(referencedPaint, depth + 1) ?: return null
+                    setNode(
+                        nodeIdAndIndex.second,
+                        COLRV1PaintGraphNode(
+                            nodeId = nodeIdAndIndex.first,
+                            kind = "colrv1-paint-colr-glyph",
+                            childNodeIds = listOf(child.nodeId),
+                            referencedColrGlyphId = paint.glyphId,
+                            bounds = child.bounds,
+                        ),
+                    )
+                    WalkResult(nodeId = nodeIdAndIndex.first, bounds = child.bounds)
+                }
+                else -> throw COLRV1PlannerRefusal(
+                    unsupportedPaint(
+                        nodeId = nextNodeId,
+                        paintKind = paint.colrv1PlannerKind(),
+                        detail = "reason=operation-group-unsupported",
+                    ),
+                )
+            }
+        }
+
+        val root = try {
+            walk(rootPaint, depth = 1)
+        } catch (refusal: COLRV1PlannerRefusal) {
+            return refusal.decision
+        } ?: return refusal(
+            diagnostic = colrMalformedDiagnostic(
+                glyphId = glyphId,
+                detail = "glyphId=$glyphId;nodeId=0;tableFamily=COLR;version=1;reason=graph-walk-failed",
+                message = "COLRv1 graph walk failed for glyph $glyphId.",
+            ),
+            glyphId = glyphId,
+            allowMonochromeFallback = allowMonochromeFallback,
+            outlineFallback = outlineFallback,
+        )
+
+        val graph = COLRV1PaintGraphEvidence(
+            glyphId = glyphId,
+            typefaceId = typefaceId,
+            paletteIdentity = strikeKey.paletteIdentity ?: "cpal:${palette.index}",
+            rootNodeId = 0,
+            supportedOperationGroup = "solid-glyph-colr-glyph",
+            nodes = nodes.toList(),
+            bounds = root.bounds,
+            diagnostics = emptyList(),
+        )
+        val plan = ColorGlyphPlan(
+            glyphId = glyphId,
+            typefaceId = typefaceId,
+            routeKind = "colrv1",
+            artifactKey = strikeKey.artifactKeyForGlyph(
+                glyphId = glyphId,
+                route = ColorArtifactRoute,
+            ),
+            palette = ColorGlyphPalette(
+                identity = strikeKey.paletteIdentity ?: "cpal:${palette.index}",
+                selectionIndex = paletteSelection.index,
+                resolvedIndex = palette.index,
+                overrideCount = paletteSelection.overrides
+                    .map { override -> override.index }
+                    .distinct()
+                    .count { index -> index in palette.colors.indices },
+                colorCount = palette.colors.size,
+            ),
+            layers = emptyList(),
+            paintGraph = graph,
+            bounds = root.bounds,
+            fallbackPolicy = "allow-monochrome-outline-fallback",
+            diagnostics = emptyList(),
+        )
+        return COLRV1ColorGlyphPlanDecision(
+            plan = plan,
+            selectedRoute = ColorGlyphRoute(glyphId = glyphId, route = "colr"),
+            diagnostics = emptyList(),
+        )
+    }
+
+    private fun refusal(
+        diagnostic: ColorGlyphDiagnostic,
+        glyphId: Int,
+        allowMonochromeFallback: Boolean,
+        outlineFallback: OutlineGlyphRepresentation?,
+    ): COLRV1ColorGlyphPlanDecision {
+        val selectedRoute = if (allowMonochromeFallback && outlineFallback?.glyphId == glyphId) {
+            ColorGlyphRoute(glyphId = glyphId, route = "outline", outline = outlineFallback)
+        } else {
+            null
+        }
+        return COLRV1ColorGlyphPlanDecision(
+            plan = null,
+            selectedRoute = selectedRoute,
+            diagnostics = listOf(diagnostic),
+        )
+    }
+}
+
+private class COLRV1PlannerRefusal(
+    val decision: COLRV1ColorGlyphPlanDecision,
+) : RuntimeException()
 
 /**
  * Stores the parsed COLR version 1 paint data supported by the pure Kotlin font stack.
@@ -2902,6 +3315,20 @@ private fun StringBuilder.appendColorGlyphLayerPlansJson(
     append("]")
 }
 
+private fun StringBuilder.appendColorGlyphGraphNodesJson(
+    nodes: List<COLRV1PaintGraphNode>,
+    indent: String,
+) {
+    append("[")
+    if (nodes.isNotEmpty()) {
+        append("\n")
+        append(nodes.joinToString(",\n") { node -> "$indent  ${node.toCanonicalJson()}" })
+        append("\n")
+        append(indent)
+    }
+    append("]")
+}
+
 /**
  * Appends diagnostics as a canonical JSON array while preserving route evidence order.
  */
@@ -2973,6 +3400,36 @@ private fun colorGlyphArgbHex(color: Int): String {
     val unsigned = color.toLong() and 0xFFFF_FFFFL
     return "#%08X".format(unsigned)
 }
+
+private fun resolvePaletteColorArgb(
+    palette: CPALPalette,
+    paletteIndex: Int,
+    alpha: Float,
+): String {
+    if (paletteIndex == COLR_FOREGROUND_PALETTE_INDEX) {
+        return "#%02X000000".format((255f * alpha).toInt().coerceIn(0, 255))
+    }
+    val baseColor = palette.colors.getOrNull(paletteIndex)
+        ?: error("Palette index $paletteIndex is unavailable for resolved color output.")
+    val baseAlpha = (baseColor ushr 24) and 0xFF
+    val resolvedAlpha = (baseAlpha.toFloat() * alpha).toInt().coerceIn(0, 255)
+    val rgb = baseColor and 0x00FF_FFFF
+    return colorGlyphArgbHex((resolvedAlpha shl 24) or rgb)
+}
+
+private fun COLRV1Paint.colrv1PlannerKind(): String =
+    when (this) {
+        is COLRV1Paint.Solid -> if (varIndexBase == null) "colrv1-paint-solid" else "colrv1-paint-var-solid"
+        is COLRV1Paint.Glyph -> "colrv1-paint-glyph"
+        is COLRV1Paint.Layers -> "colrv1-paint-layers"
+        is COLRV1Paint.LinearGradient -> "colrv1-paint-linear-gradient"
+        is COLRV1Paint.RadialGradient -> "colrv1-paint-radial-gradient"
+        is COLRV1Paint.SweepGradient -> "colrv1-paint-sweep-gradient"
+        is COLRV1Paint.Composite -> "colrv1-paint-composite"
+        is COLRV1Paint.ColrGlyph -> "colrv1-paint-colr-glyph"
+        is COLRV1Paint.Translate -> "colrv1-paint-translate"
+        is COLRV1Paint.Transform -> "colrv1-paint-transform"
+    }
 
 /**
  * Escapes a string for canonical JSON evidence.

@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M10-002"
 title: "Implement COLRv1 solid/glyph/colr-glyph operation group"
-status: "proposed"
+status: "done"
 milestone: "M10"
 priority: "P0"
 owner_area: "color"
@@ -70,17 +70,17 @@ sealed interface COLRv1PaintOp {
 
 ## Acceptance Criteria
 
-- [ ] Fixtures cover `PaintSolid`, `PaintVarSolid`, `PaintGlyph`, and `PaintColrGlyph` as separate graph nodes with stable node IDs.
-- [ ] Bounds are computed for referenced glyph nodes and included in the color glyph plan.
-- [ ] Recursion depth and operation budget overflow emit `text.color.COLRv1-budget-exceeded`.
-- [ ] Missing or malformed graph offsets emit `text.color.COLR-malformed` with glyph ID and node ID.
-- [ ] The dump distinguishes accepted solid/glyph operations from unimplemented gradient/transform/composite operations.
+- [x] Fixtures cover `PaintSolid`, `PaintVarSolid`, `PaintGlyph`, and `PaintColrGlyph` as separate graph nodes with stable node IDs.
+- [x] Bounds are computed for referenced glyph nodes and included in the color glyph plan.
+- [x] Recursion depth and operation budget overflow emit `text.color.COLRv1-budget-exceeded`.
+- [x] Missing or malformed graph offsets emit `text.color.COLR-malformed` with glyph ID and node ID.
+- [x] The dump distinguishes accepted solid/glyph operations from unimplemented gradient/transform/composite operations.
 
 ## Required Evidence
 
-- `colrv1-paint-graph.json` fixture for a solid color glyph and nested `PaintColrGlyph`.
-- `color-glyph-plan.json` fixture linking COLRv1 graph nodes to `GlyphArtifactPlan` refs.
-- Refusal fixture for recursion budget overflow and malformed glyph reference.
+- `colrv1-paint-graph.json` fixture for an accepted `PaintColrGlyph` -> `PaintGlyph` -> `PaintSolid` walk with stable node IDs, artifact refs, bounds, and resolved palette color.
+- `color-glyph-plan.json` bundle fixture linking the existing COLRv0 case and the new COLRv1 accepted/refused cases to typed `ColorGlyphPlan` evidence and stable refusal diagnostics.
+- Refusal fixture for unsupported `PaintVarSolid` without variation support while preserving explicit monochrome outline fallback when allowed.
 
 ## Fallback / Refusal Behavior
 
@@ -98,13 +98,17 @@ sealed interface COLRv1PaintOp {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test --tests '*COLRv1*Solid*'
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 ```
 
 ## Status Notes
 
 - `proposed`: First COLRv1 operation group; later tickets add gradients, transforms, composites, clips, and fixtures.
 - Move to `ready` only after operation IDs, budget fields, and fallback policy are reviewed.
+- `done`: `COLRV1ColorGlyphPlanner` now promotes the solid/glyph/colr-glyph operation group into deterministic `ColorGlyphPlan` and `COLRV1PaintGraphEvidence` dumps with stable node IDs, bounds propagation, palette resolution, explicit `PaintVarSolid` refusal diagnostics, and outline fallback evidence; gradients, transforms, composites, clips, cycle fixtures, bitmap/SVG routes, emoji planning, and GPU execution remain separate non-claims.
 
 ## Linear Labels
 

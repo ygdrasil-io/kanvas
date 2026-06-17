@@ -3525,6 +3525,43 @@ Remaining gate: this ticket completes the COLRv0 typed plan slice only. It does
 not claim COLRv1 paint-graph rendering, bitmap/SVG route support, emoji
 sequence shaping, GPU artifact registration, GPU composite execution, or
 platform/native color fallback behavior.
+### KFONT-M10-002: Implement COLRv1 Solid/Glyph/Colr-Glyph Operation Group
+
+Status: implemented with fresh deterministic dump evidence and validation.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/M10-color-fonts-emoji/KFONT-M10-002-implement-colrv1-solid-glyph-colr-glyph-operation-group.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M10-color-fonts-emoji/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/color/color-glyph-plan.json`
+- `reports/font/fixtures/expected/color/colrv1-paint-graph.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m10-002-colrv1-solid-glyph-colr-glyph.md`
+
+Evidence:
+
+- `COLRV1ColorGlyphPlanner` now promotes the bounded `PaintSolid` / `PaintVarSolid` / `PaintGlyph` / `PaintColrGlyph` operation group into typed `ColorGlyphPlan` and `COLRV1PaintGraphEvidence` value objects with stable node IDs, artifact-key refs, bounds propagation, palette resolution, and explicit fallback policy.
+- `ColorGlyphSurfaceTest` proves deterministic accepted-path serialization for a nested `PaintColrGlyph` -> `PaintGlyph` -> `PaintSolid` walk and a refused `PaintVarSolid` path that preserves explicit monochrome outline fallback only when allowed.
+- `reports/font/fixtures/expected/color/colrv1-paint-graph.json` checks in the reviewed canonical graph dump for the accepted operation group, while `reports/font/fixtures/expected/color/color-glyph-plan.json` now bundles the prior COLRv0 case, the accepted COLRv1 case, and the refused variable-solid outline-fallback case.
+- `reports/pure-kotlin-text/dump-evidence-index.json`, `reports/pure-kotlin-text/fixture-evidence-manifest.json`, and `reports/pure-kotlin-text/font-fixture-inventory.json` classify this as bounded planning evidence and keep gradients, transforms, composites, clips, bitmap/SVG routes, emoji planning, and GPU execution explicitly out of scope.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this ticket completes only the bounded COLRv1 solid/glyph/colr-glyph planning slice. It does not claim COLRv1 gradient, transform, composite, or clip execution, bitmap/SVG route support, emoji sequence planning, GPU artifact registration, GPU composite execution, or platform/native color fallback behavior.
 ### PKT-11D: Color Glyph Fixture Family Split
 
 Status: implemented; independent review pending.

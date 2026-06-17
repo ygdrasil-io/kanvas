@@ -562,6 +562,27 @@
           ]
         },
         {
+          "fixtureId": "color-glyphs-colrv1-solid-glyph-colr-glyph",
+          "targetGate": "colrv1-solid-glyph-colr-glyph",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate a bounded COLRv1 base glyph that walks PaintColrGlyph -> PaintGlyph -> PaintSolid and pair it with a PaintVarSolid refusal that preserves explicit outline fallback when variation support is unavailable.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "COLRv1 paint graph dump",
+            "ColorGlyphPlan bundle case",
+            "outline fallback refusal diagnostic"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-colrv1-rendering-claim",
+            "no-gpu-color-glyph-support-claim"
+          ]
+        },
+        {
           "fixtureId": "color-glyphs-colrv1-solid-gradient-transform",
           "targetGate": "colrv1-solid-gradient-transform",
           "status": "current-positive-evidence",
