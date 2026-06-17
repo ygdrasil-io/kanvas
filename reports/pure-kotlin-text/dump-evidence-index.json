@@ -518,9 +518,13 @@
         "section": "Clusters"
       },
       "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/GraphemeSegmentation.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/GraphemeSegmentationTest.kt",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ClusterSafetyReport.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ClusterSafetyTest.kt",
         "reports/font/fixtures/expected/unicode/cluster-arabic-mark.txt",
+        "reports/font/fixtures/expected/unicode/cluster-cjk-ideographic-variation-sequence.txt",
+        "reports/font/fixtures/expected/unicode/cluster-cjk-standardized-variant.txt",
         "reports/font/fixtures/expected/unicode/cluster-cjk-variation-selector.txt",
         "reports/font/fixtures/expected/unicode/cluster-devanagari-conjunct.txt",
         "reports/font/fixtures/expected/unicode/cluster-emoji-family-zwj.txt",
@@ -785,48 +789,6 @@
         "no-complete-colrv1-rendering-claim",
         "no-gpu-color-glyph-support-claim",
         "no-platform-color-font-fallback-claim"
-      ]
-    },
-    {
-      "dumpId": "emoji-route-trace",
-      "ownerTicket": "KFONT-M10-009",
-      "classification": "golden-gated",
-      "targetSpec": {
-        "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
-        "section": "Emoji dispatch"
-      },
-      "producerPaths": [
-        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
-        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
-        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
-        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
-        "reports/font/fixtures/expected/color/emoji-route-trace.json"
-      ],
-      "expectedFields": [
-        "cases",
-        "dumpId",
-        "nonClaims",
-        "ownerTickets",
-        "schemaVersion"
-      ],
-      "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperRecognizesKeycapAndFlagFixturesAsSingleClusters --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperExposesTypedFactsForPlannerSequenceKinds --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperDumpsVS15SkinToneAndZwjFamilyFixtures --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperKeepsRepresentedSkinToneRoleSequenceAsZwj",
-        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.emojiSequencePlannerGoldenMatchesRepoFixture --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.exposesColorGlyphPipelineSurface",
-        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py",
-        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
-        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py",
-        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
-        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_font_fixtures.py"
-      ],
-      "updatePolicy": "Emoji route trace golden changes require reviewed sequence-kind and text-range diffs, fallback-attempt review, route-diagnostic review, and explicit non-claims without full emoji shaping, platform emoji, GPU route, or scaledemoji support promotion.",
-      "nonClaims": [
-        "producer-only",
-        "no-complete-target-support-claim",
-        "no-complete-emoji-sequence-shaping-claim",
-        "no-complete-color-glyph-fallback-support-claim",
-        "no-gpu-color-glyph-support-claim",
-        "no-platform-emoji-engine-claim",
-        "no-scaledemoji-retirement"
       ]
     },
     {
@@ -1675,50 +1637,23 @@
         "reports/font/fixtures/expected/shaping/gpos-trace.json"
       ],
       "expectedFields": [
-        "afterPositions",
-        "beforePositions",
-        "coverageMatched",
-        "decision",
-        "diagnosticCode",
-        "diagnostics",
-        "disabled",
+        "cases",
         "dumpId",
-        "enabled",
-        "events",
-        "featureTags",
-        "features",
-        "lookupId",
-        "lookupIndex",
-        "lookupType",
-        "matchedClassIds",
-        "matchedGlyphIds",
+        "fixtureFamilyId",
         "nonClaims",
-        "openTypeScriptTags",
         "ownerTickets",
-        "requested",
-        "schemaVersion",
-        "scriptRun",
-        "selectedScript",
-        "sourceTextHash",
-        "sourceTextHashAlgorithm",
-        "stage",
-        "typefaceId",
-        "unicodeVersion",
-        "valueRecords"
+        "schemaVersion"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest",
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.m6PromotedShapingDumpsAreFixtureBackedRatherThanContractOnly",
-        "rtk python3 scripts/validate_font_fixture_assets.py",
-        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
-        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+        "rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGposFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGposFixtureFontsAsDiagnostics --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedMarkAndCursiveGposFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserPreservesMissingGdefAndMalformedAnchorFixtureFacts",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gposTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGposFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedMarkAndCursiveFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineReportsReviewedMarkAndCursiveFixtureDiagnosticsFromRepo",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "GPOS trace golden changes require reviewed Latin fixture provenance, positioned-value and malformed-refusal review, and matrix checkpoint updates without broader script or GPU support promotion.",
+      "updatePolicy": "GPOS trace golden changes require reviewed simple and mark/cursive fixture provenance, parser refusal diagnostics, deterministic cluster-position facts, and no broader script promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-target-support-claim",
-        "no-complete-gsub-gpos-support-claim",
-        "no-greek-cyrillic-hebrew-promotion-claim",
+        "no-complete-gpos-support-claim",
         "no-native-shaper-oracle-claim",
         "no-gpu-text-route-claim"
       ]
@@ -1737,48 +1672,23 @@
         "reports/font/fixtures/expected/shaping/gsub-trace.json"
       ],
       "expectedFields": [
-        "clusterAction",
-        "coverageMatched",
-        "decision",
-        "diagnosticCode",
-        "diagnostics",
-        "disabled",
+        "cases",
         "dumpId",
-        "enabled",
-        "events",
-        "featureTags",
-        "features",
-        "inputGlyphIds",
-        "lookupId",
-        "lookupIndex",
-        "lookupType",
+        "fixtureFamilyId",
         "nonClaims",
-        "openTypeScriptTags",
-        "outputGlyphIds",
         "ownerTickets",
-        "requested",
-        "schemaVersion",
-        "scriptRun",
-        "selectedScript",
-        "sourceTextHash",
-        "sourceTextHashAlgorithm",
-        "stage",
-        "typefaceId",
-        "unicodeVersion"
+        "schemaVersion"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest",
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.m6PromotedShapingDumpsAreFixtureBackedRatherThanContractOnly",
-        "rtk python3 scripts/validate_font_fixture_assets.py",
-        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
-        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+        "rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGsubFixtureFontsAsDiagnostics",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gsubTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "GSUB trace golden changes require reviewed Latin fixture provenance, substitution-order and malformed-refusal review, and matrix checkpoint updates without broader script or GPU support promotion.",
+      "updatePolicy": "GSUB trace golden changes require reviewed Latin fixture provenance, parser refusal diagnostics, deterministic lookup-order facts, and no broader script promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-target-support-claim",
-        "no-complete-gsub-gpos-support-claim",
-        "no-greek-cyrillic-hebrew-promotion-claim",
+        "no-complete-gsub-support-claim",
         "no-native-shaper-oracle-claim",
         "no-gpu-text-route-claim"
       ]
@@ -1848,157 +1758,6 @@
         "no-parser-support-promotion",
         "no-malformed-recovery-support-claim",
         "no-gpu-support-claim"
-      ]
-    },
-    {
-      "dumpId": "opentype-layout-contract-gpos-trace",
-      "ownerTicket": "KFONT-M6-001",
-      "classification": "golden-gated",
-      "targetSpec": {
-        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
-        "section": "GPOS Target"
-      },
-      "producerPaths": [
-        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/OpenTypeLayoutContract.kt",
-        "font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt",
-        "reports/font/fixtures/expected/shaping/opentype-layout-contract-gpos-trace.json"
-      ],
-      "expectedFields": [
-        "decision",
-        "diagnosticCode",
-        "diagnostics",
-        "disabled",
-        "dumpId",
-        "enabled",
-        "events",
-        "featureTags",
-        "features",
-        "lookupId",
-        "lookupType",
-        "nonClaims",
-        "openTypeScriptTags",
-        "ownerTickets",
-        "requested",
-        "schemaVersion",
-        "scriptRun",
-        "selectedScript",
-        "sourceTextHash",
-        "sourceTextHashAlgorithm",
-        "stage",
-        "typefaceId",
-        "unicodeVersion"
-      ],
-      "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.OpenTypeLayoutEngineContractTest",
-        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
-      ],
-      "updatePolicy": "OpenType layout contract GPOS trace changes require contract review and stable diagnostic review without GPOS lookup implementation or support promotion.",
-      "nonClaims": [
-        "producer-only",
-        "no-complete-target-support-claim",
-        "no-gsub-gpos-lookup-implementation-claim",
-        "no-native-shaper-oracle-claim",
-        "no-gpu-text-route-claim"
-      ]
-    },
-    {
-      "dumpId": "opentype-layout-contract-gsub-trace",
-      "ownerTicket": "KFONT-M6-001",
-      "classification": "golden-gated",
-      "targetSpec": {
-        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
-        "section": "GSUB Target"
-      },
-      "producerPaths": [
-        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/OpenTypeLayoutContract.kt",
-        "font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt",
-        "reports/font/fixtures/expected/shaping/opentype-layout-contract-gsub-trace.json"
-      ],
-      "expectedFields": [
-        "decision",
-        "diagnosticCode",
-        "diagnostics",
-        "disabled",
-        "dumpId",
-        "enabled",
-        "events",
-        "featureTags",
-        "features",
-        "lookupId",
-        "lookupType",
-        "nonClaims",
-        "openTypeScriptTags",
-        "ownerTickets",
-        "requested",
-        "schemaVersion",
-        "scriptRun",
-        "selectedScript",
-        "sourceTextHash",
-        "sourceTextHashAlgorithm",
-        "stage",
-        "typefaceId",
-        "unicodeVersion"
-      ],
-      "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.OpenTypeLayoutEngineContractTest",
-        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
-      ],
-      "updatePolicy": "OpenType layout contract GSUB trace changes require contract review and stable diagnostic review without GSUB lookup implementation or support promotion.",
-      "nonClaims": [
-        "producer-only",
-        "no-complete-target-support-claim",
-        "no-gsub-gpos-lookup-implementation-claim",
-        "no-native-shaper-oracle-claim",
-        "no-gpu-text-route-claim"
-      ]
-    },
-    {
-      "dumpId": "opentype-layout-contract-shaped-glyph-run",
-      "ownerTicket": "KFONT-M6-001",
-      "classification": "golden-gated",
-      "targetSpec": {
-        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
-        "section": "Clusters"
-      },
-      "producerPaths": [
-        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/OpenTypeLayoutContract.kt",
-        "font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt",
-        "reports/font/fixtures/expected/shaping/opentype-layout-contract-shaped-glyph-run.json"
-      ],
-      "expectedFields": [
-        "clusters",
-        "diagnostics",
-        "direction",
-        "dumpId",
-        "glyphId",
-        "glyphRange",
-        "glyphs",
-        "nonClaims",
-        "ownerTickets",
-        "schemaVersion",
-        "script",
-        "source",
-        "sourceTextHash",
-        "sourceTextHashAlgorithm",
-        "sourceUtf16Range",
-        "synthetic",
-        "typefaceId",
-        "unicodeVersion",
-        "xAdvance",
-        "xOffset",
-        "yOffset"
-      ],
-      "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.OpenTypeLayoutEngineContractTest",
-        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
-      ],
-      "updatePolicy": "OpenType layout contract shaped-glyph-run changes require contract review without support promotion.",
-      "nonClaims": [
-        "producer-only",
-        "no-complete-target-support-claim",
-        "no-complex-shaping-support-claim",
-        "no-gsub-gpos-lookup-implementation-claim",
-        "no-gpu-text-route-claim"
       ]
     },
     {
@@ -2402,55 +2161,33 @@
     },
     {
       "dumpId": "shaped-glyph-run",
-      "ownerTicket": "KFONT-M6-002",
+      "ownerTicket": "KFONT-M6-004",
       "classification": "golden-gated",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
         "section": "Clusters"
       },
       "producerPaths": [
-        "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
         "reports/font/fixtures/expected/shaping/shaped-glyph-run.json"
       ],
       "expectedFields": [
-        "caseId",
         "cases",
-        "clusters",
-        "diagnostics",
         "dumpId",
-        "finalPositions",
-        "fixtureId",
-        "glyphId",
-        "glyphRange",
-        "glyphs",
+        "fixtureFamilyId",
         "nonClaims",
         "ownerTickets",
-        "schemaVersion",
-        "source",
-        "sourceTextHashAlgorithm",
-        "sourceUtf16Range",
-        "synthetic",
-        "text",
-        "traceRefs",
-        "unicodeVersion",
-        "xAdvance",
-        "xOffset",
-        "yOffset"
+        "schemaVersion"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.m6SimpleLayoutFixturesAreCheckedInWithSyntheticProvenance",
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.m6PromotedShapingDumpsAreFixtureBackedRatherThanContractOnly",
-        "rtk python3 scripts/validate_font_fixture_assets.py",
-        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
-        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGposFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedMarkAndCursiveFixtureFontsFromRepo",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "Promoted shaped-glyph-run changes require reviewed GSUB/GPOS fixture provenance, cluster/position diff review, and explicit shared ownerTickets without broader script or GPU support promotion.",
+      "updatePolicy": "Shaped glyph run golden changes require reviewed GSUB, simple GPOS, and bounded mark/cursive fixture provenance, cluster-range review, and deterministic advance/offset facts without broader shaping promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-target-support-claim",
         "no-complete-gsub-gpos-support-claim",
-        "no-greek-cyrillic-hebrew-promotion-claim",
         "no-native-shaper-oracle-claim",
         "no-gpu-text-route-claim"
       ]

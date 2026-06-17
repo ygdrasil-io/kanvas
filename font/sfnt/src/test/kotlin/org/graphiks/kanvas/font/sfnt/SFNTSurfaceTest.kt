@@ -13,6 +13,8 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 
@@ -242,55 +244,6 @@ class SFNTSurfaceTest {
 
         assertFalse(hasFormat14)
         assertTrue(Files.readString(expectedDump).contains(diagnostic))
-    }
-
-    @Test
-    fun m6SimpleLayoutFixturesAreCheckedInWithSyntheticProvenance() {
-        val fixturePaths = listOf(
-            "reports/font/fixtures/fonts/shaping/gsub-single-substitution.otf",
-            "reports/font/fixtures/fonts/shaping/gsub-multiple-substitution.otf",
-            "reports/font/fixtures/fonts/shaping/gsub-ligature-fi.otf",
-            "reports/font/fixtures/fonts/shaping/gsub-coverage-malformed.otf",
-            "reports/font/fixtures/fonts/shaping/gsub-ligature-bad-component.otf",
-            "reports/font/fixtures/fonts/shaping/gpos-single-adjustment.otf",
-            "reports/font/fixtures/fonts/shaping/gpos-pair-format1-kerning.otf",
-            "reports/font/fixtures/fonts/shaping/gpos-pair-format2-class.otf",
-            "reports/font/fixtures/fonts/shaping/gpos-valueformat-malformed.otf",
-            "reports/font/fixtures/fonts/shaping/gpos-pair-out-of-range.otf",
-        )
-        val provenanceIndex = Files.readString(fixturePath("reports/font/fixtures/provenance/index.json"))
-
-        fixturePaths.forEach { relativePath ->
-            assertTrue(
-                actual = Files.isRegularFile(fixturePath(relativePath)),
-                message = "Expected checked-in M6 shaping fixture $relativePath",
-            )
-            assertTrue(
-                actual = provenanceIndex.contains(relativePath),
-                message = "Fixture provenance index should reference $relativePath",
-            )
-        }
-
-        listOf(
-            "gsub-single-substitution",
-            "gsub-multiple-substitution",
-            "gsub-ligature-fi",
-            "gsub-coverage-malformed",
-            "gsub-ligature-bad-component",
-            "gpos-single-adjustment",
-            "gpos-pair-format1-kerning",
-            "gpos-pair-format2-class",
-            "gpos-valueformat-malformed",
-            "gpos-pair-out-of-range",
-            "\"kind\": \"synthetic-kanvas\"",
-            "\"ownerTickets\": [\n        \"KFONT-M6-002\"",
-            "\"ownerTickets\": [\n        \"KFONT-M6-004\"",
-        ).forEach { requiredSnippet ->
-            assertTrue(
-                actual = provenanceIndex.contains(requiredSnippet),
-                message = "Fixture provenance index is missing $requiredSnippet",
-            )
-        }
     }
 
     @Test
@@ -2660,6 +2613,85 @@ class SFNTSurfaceTest {
     }
 
     @Test
+    fun defaultOpenTypeFaceParserLoadsReviewedGsubFixtureFontsFromRepo() {
+        val parser = DefaultOpenTypeFaceParser()
+        val cases = listOf(
+            ReviewedGsubFixtureCase(
+                relativePath = "reports/font/fixtures/fonts/shaping/gsub-single-substitution.otf",
+                expected = OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubSingleSubstitutionLookup(
+                            featureTag = "ccmp",
+                            substitutions = listOf(
+                                OpenTypeGsubSingleSubstitution(inputGlyphId = 552, replacementGlyphId = 101),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            ReviewedGsubFixtureCase(
+                relativePath = "reports/font/fixtures/fonts/shaping/gsub-multiple-substitution.otf",
+                expected = OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubMultipleSubstitutionLookup(
+                            featureTag = "ccmp",
+                            substitutions = listOf(
+                                OpenTypeGsubMultipleSubstitution(inputGlyphId = 553, replacementGlyphIds = listOf(101, 102)),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            ReviewedGsubFixtureCase(
+                relativePath = "reports/font/fixtures/fonts/shaping/gsub-ligature-fi.otf",
+                expected = OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubLigatureSubstitutionLookup(
+                            featureTag = "liga",
+                            substitutions = listOf(
+                                OpenTypeGsubLigatureSubstitution(inputGlyphIds = listOf(557, 560), replacementGlyphId = 103),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        cases.forEach { case ->
+            val parsed = parser.parse(fixtureFontSource(case.relativePath))
+
+            assertEquals(emptyList(), parsed.diagnostics, case.relativePath)
+            assertEquals(case.expected, parsed.layout.gsub, case.relativePath)
+            assertTrue(parsed.rawTables.containsKey(SFNTTableTag("GSUB")), case.relativePath)
+        }
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserReportsReviewedMalformedGsubFixtureFontsAsDiagnostics() {
+        val parser = DefaultOpenTypeFaceParser()
+
+        val malformedCoverage = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gsub-coverage-malformed.otf"),
+        )
+        val malformedLigature = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gsub-ligature-bad-component.otf"),
+        )
+
+        assertEquals("font.sfnt.optional-table-malformed", malformedCoverage.diagnostics.single().causeCode)
+        assertTrue(
+            malformedCoverage.diagnostics.single().causeMessage.orEmpty().contains("OpenType GSUB coverage format"),
+            malformedCoverage.diagnostics.single().toString(),
+        )
+        assertEquals(null, malformedCoverage.layout.gsub)
+        assertEquals("font.sfnt.optional-table-malformed", malformedLigature.diagnostics.single().causeCode)
+        assertTrue(
+            malformedLigature.diagnostics.single().causeMessage.orEmpty().contains("compCount"),
+            malformedLigature.diagnostics.single().toString(),
+        )
+        assertEquals(null, malformedLigature.layout.gsub)
+    }
+
+    @Test
     fun defaultOpenTypeFaceParserReportsGposFormat2ExcessiveFinalExpansionAsDiagnostic() {
         val gpos = gposPairAdjustmentFormat2Class0Table(
             coverageGlyphCount = 257,
@@ -2683,6 +2715,185 @@ class SFNTSurfaceTest {
         )
         assertEquals(gpos.toUnsignedByteList(), parsed.layout.tables.getValue(SFNTTableTag("GPOS")))
         assertEquals(null, parsed.layout.gposPairs)
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserLoadsReviewedGposFixtureFontsFromRepo() {
+        val parser = DefaultOpenTypeFaceParser()
+
+        val single = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-single-adjustment.otf"),
+        )
+        assertEquals(emptyList(), single.diagnostics)
+        assertEquals(
+            OpenTypeGposSingleTable(
+                adjustments = listOf(
+                    OpenTypeGposSingleAdjustment(
+                        glyphId = 520,
+                        valueRecord = OpenTypeGposValueRecord(xPlacement = 50, xAdvance = -40),
+                    ),
+                ),
+            ),
+            single.layout.gposSingles,
+        )
+
+        val pairFormat1 = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-pair-format1-kerning.otf"),
+        )
+        assertEquals(emptyList(), pairFormat1.diagnostics)
+        assertEquals(
+            OpenTypeGposPairTable(
+                pairs = listOf(
+                    OpenTypeGposPairAdjustment(
+                        leftGlyphId = 520,
+                        rightGlyphId = 541,
+                        firstValueRecord = OpenTypeGposValueRecord(xAdvance = -55),
+                    ),
+                ),
+            ),
+            pairFormat1.layout.gposPairs,
+        )
+
+        val pairFormat2 = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-pair-format2-class.otf"),
+        )
+        assertEquals(emptyList(), pairFormat2.diagnostics)
+        assertEquals(
+            OpenTypeGposPairTable(
+                pairs = listOf(
+                    OpenTypeGposPairAdjustment(
+                        leftGlyphId = 520,
+                        rightGlyphId = 541,
+                        firstValueRecord = OpenTypeGposValueRecord(xAdvance = -60),
+                    ),
+                ),
+            ),
+            pairFormat2.layout.gposPairs,
+        )
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserLoadsReviewedMarkAndCursiveGposFixtureFontsFromRepo() {
+        val parser = DefaultOpenTypeFaceParser()
+
+        val markToBase = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-mark-to-base.otf"),
+        )
+        assertEquals(emptyList(), markToBase.diagnostics)
+        val markToBaseGdef = assertNotNull(markToBase.layout.gdef)
+        val markToBaseGpos = assertNotNull(markToBase.layout.gpos)
+        val alefGlyphId = assertNotNull(markToBase.cmap.lookupGlyphId(0x0627))
+        val fathaGlyphId = assertNotNull(markToBase.cmap.lookupGlyphId(0x064E))
+        assertEquals(1, markToBaseGdef.glyphClasses[alefGlyphId])
+        assertEquals(3, markToBaseGdef.glyphClasses[fathaGlyphId])
+        val markToBaseLookup = markToBaseGpos.lookups.filterIsInstance<OpenTypeGposMarkToBaseLookup>().first {
+            it.featureTag == "mark" && it.attachments.any { attachment ->
+                attachment.baseGlyphId == alefGlyphId && attachment.markGlyphId == fathaGlyphId
+            }
+        }
+        val markToBaseAttachment = markToBaseLookup.attachments.first { attachment ->
+            attachment.baseGlyphId == alefGlyphId && attachment.markGlyphId == fathaGlyphId
+        }
+        assertEquals(0, markToBaseAttachment.markClass)
+        assertEquals(OpenTypeAnchor(format = 1, x = 99, y = 748), markToBaseAttachment.markAnchor)
+        assertEquals(OpenTypeAnchor(format = 1, x = 120, y = 711), markToBaseAttachment.baseAnchor)
+
+        val markToLigature = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-mark-to-ligature.otf"),
+        )
+        assertEquals(emptyList(), markToLigature.diagnostics)
+        val markToLigatureGpos = assertNotNull(markToLigature.layout.gpos)
+        val ligatureGlyphId = assertNotNull(markToLigature.cmap.lookupGlyphId(0xE000))
+        val ligatureMarkGlyphId = assertNotNull(markToLigature.cmap.lookupGlyphId(0x064E))
+        val markToLigatureLookup = assertNotNull(
+            markToLigatureGpos.lookups.filterIsInstance<OpenTypeGposMarkToLigatureLookup>().firstOrNull {
+                it.featureTag == "mark" && it.attachments.any { attachment ->
+                    attachment.ligatureGlyphId == ligatureGlyphId && attachment.markGlyphId == ligatureMarkGlyphId
+                }
+            },
+            markToLigatureGpos.lookups.toString(),
+        )
+        val ligatureAttachment = markToLigatureLookup.attachments.first { attachment ->
+            attachment.ligatureGlyphId == ligatureGlyphId && attachment.markGlyphId == ligatureMarkGlyphId
+        }
+        assertEquals(0, ligatureAttachment.markClass)
+        assertEquals(0, ligatureAttachment.componentIndex)
+        assertEquals(OpenTypeAnchor(format = 1, x = 99, y = 748), ligatureAttachment.markAnchor)
+        assertEquals(OpenTypeAnchor(format = 1, x = 1050, y = 720), ligatureAttachment.ligatureAnchor)
+
+        val markToMark = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-mark-to-mark.otf"),
+        )
+        assertEquals(emptyList(), markToMark.diagnostics)
+        val markToMarkGpos = assertNotNull(markToMark.layout.gpos)
+        val dotAboveGlyphId = assertNotNull(markToMark.cmap.lookupGlyphId(0xE003))
+        val markToMarkGlyphId = assertNotNull(markToMark.cmap.lookupGlyphId(0x064E))
+        val markToMarkLookup = assertNotNull(
+            markToMarkGpos.lookups.filterIsInstance<OpenTypeGposMarkToMarkLookup>().firstOrNull {
+                it.featureTag == "mkmk" && it.attachments.any { attachment ->
+                    attachment.mark1GlyphId == markToMarkGlyphId && attachment.mark2GlyphId == dotAboveGlyphId
+                }
+            },
+            markToMarkGpos.lookups.toString(),
+        )
+        val markToMarkAttachment = markToMarkLookup.attachments.first { attachment ->
+            attachment.mark1GlyphId == markToMarkGlyphId && attachment.mark2GlyphId == dotAboveGlyphId
+        }
+        assertEquals(0, markToMarkAttachment.markClass)
+        assertEquals(OpenTypeAnchor(format = 1, x = 99, y = 748), markToMarkAttachment.mark1Anchor)
+        assertEquals(OpenTypeAnchor(format = 1, x = 66, y = 929), markToMarkAttachment.mark2Anchor)
+
+        val cursive = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-cursive-attachment.otf"),
+        )
+        assertEquals(emptyList(), cursive.diagnostics)
+        val cursiveGdef = assertNotNull(cursive.layout.gdef)
+        val cursiveGpos = assertNotNull(cursive.layout.gpos)
+        val leftCursiveGlyphId = assertNotNull(cursive.cmap.lookupGlyphId(0xE001))
+        val rightCursiveGlyphId = assertNotNull(cursive.cmap.lookupGlyphId(0xE002))
+        assertEquals(1, cursiveGdef.glyphClasses[leftCursiveGlyphId])
+        assertEquals(1, cursiveGdef.glyphClasses[rightCursiveGlyphId])
+        val cursiveLookup = assertNotNull(
+            cursiveGpos.lookups.filterIsInstance<OpenTypeGposCursiveLookup>().firstOrNull {
+                it.featureTag == "curs" && it.attachments.any { attachment ->
+                    attachment.glyphId == leftCursiveGlyphId && attachment.exitAnchor != null
+                } && it.attachments.any { attachment ->
+                    attachment.glyphId == rightCursiveGlyphId && attachment.entryAnchor != null
+                }
+            },
+            cursiveGpos.lookups.toString(),
+        )
+        val leftAttachment = cursiveLookup.attachments.first { it.glyphId == leftCursiveGlyphId }
+        val rightAttachment = cursiveLookup.attachments.first { it.glyphId == rightCursiveGlyphId }
+        assertEquals(OpenTypeAnchor(format = 1, x = 0, y = 106), leftAttachment.exitAnchor)
+        assertEquals(OpenTypeAnchor(format = 1, x = 226, y = 106), rightAttachment.entryAnchor)
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserPreservesMissingGdefAndMalformedAnchorFixtureFacts() {
+        val parser = DefaultOpenTypeFaceParser()
+
+        val missingGdef = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-missing-gdef.otf"),
+        )
+        assertEquals(emptyList(), missingGdef.diagnostics)
+        assertNull(missingGdef.layout.gdef)
+        assertNotNull(missingGdef.layout.gpos)
+
+        val malformedAnchor = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-anchor-malformed.otf"),
+        )
+        assertEquals(emptyList(), malformedAnchor.diagnostics)
+        val malformedLookup = assertNotNull(malformedAnchor.layout.gpos)
+            .lookups
+            .filterIsInstance<OpenTypeGposMalformedLookup>()
+            .first()
+        assertEquals("mark", malformedLookup.featureTag)
+        assertEquals(4, malformedLookup.lookupType)
+        assertTrue(
+            malformedLookup.message.contains("anchor format 9"),
+            malformedLookup.message,
+        )
     }
 
     @Test
@@ -2751,6 +2962,31 @@ class SFNTSurfaceTest {
         assertEquals(malformedGpos.size, parsed.layout.tables.getValue(SFNTTableTag("GPOS")).size)
         assertEquals(malformedGpos.toUnsignedByteList(), parsed.rawTables.getValue(SFNTTableTag("GPOS")))
         assertEquals(null, parsed.layout.gposPairs)
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserReportsReviewedMalformedGposFixtureFontsAsDiagnostics() {
+        val parser = DefaultOpenTypeFaceParser()
+
+        val malformedValueFormat = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-valueformat-malformed.otf"),
+        )
+        val malformedPairRecords = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-pair-out-of-range.otf"),
+        )
+
+        assertEquals("font.sfnt.optional-table-malformed", malformedValueFormat.diagnostics.single().causeCode)
+        assertTrue(
+            malformedValueFormat.diagnostics.single().causeMessage.orEmpty().contains("PairSet 0 records"),
+            malformedValueFormat.diagnostics.single().toString(),
+        )
+        assertEquals(null, malformedValueFormat.layout.gposSingles)
+        assertEquals("font.sfnt.optional-table-malformed", malformedPairRecords.diagnostics.single().causeCode)
+        assertTrue(
+            malformedPairRecords.diagnostics.single().causeMessage.orEmpty().contains("PairSet"),
+            malformedPairRecords.diagnostics.single().toString(),
+        )
+        assertEquals(null, malformedPairRecords.layout.gposPairs)
     }
 
     @Test
@@ -2836,6 +3072,16 @@ class SFNTSurfaceTest {
             bytes = bytes,
         )
 
+    private fun fixtureFontSource(relativePath: String): FontSource {
+        val path = fixturePath(relativePath)
+        return FontSource(
+            id = FontSourceID(Uuid.random()),
+            kind = FontSourceKind.FILE,
+            displayName = path.fileName.toString(),
+            bytes = Files.readAllBytes(path),
+        )
+    }
+
     private fun fixturePath(relativePath: String): Path =
         projectRoot().resolve(relativePath).normalize()
 
@@ -2853,6 +3099,11 @@ class SFNTSurfaceTest {
         val languageId: Int,
         val nameId: Int,
         val bytes: ByteArray,
+    )
+
+    private data class ReviewedGsubFixtureCase(
+        val relativePath: String,
+        val expected: OpenTypeGsubTable,
     )
 
     private fun testNameRecord(
