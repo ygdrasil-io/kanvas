@@ -370,6 +370,7 @@ private const val DEFAULT_DESTINATION_COPY_MAX_BYTES = 16L * 1024L * 1024L
 private const val DESTINATION_READ_EVIDENCE_ROW = "gpu-renderer.destination-read.strategy"
 private const val DESTINATION_READ_BYTES_PER_PIXEL = 4L
 private const val DESTINATION_READ_ACCEPTED_CODE = "accepted.destination_read.strategy"
+private const val DESTINATION_READ_STRATEGY_UNACCEPTED = "unsupported.destination_read.strategy_unaccepted"
 private const val DESTINATION_READ_STRATEGY_ACTION_MISMATCH =
     "unsupported.destination_read.strategy_action_mismatch"
 private const val DESTINATION_READ_NONCLAIM_LINE =
@@ -392,6 +393,7 @@ private fun GPUDestinationReadStrategyRequest.refusalCode(copyBytes: Long): Stri
         cpuReadbackRequested -> "unsupported.destination_read.cpu_readback_forbidden"
         activeAttachmentSampled -> "unsupported.destination_read.active_attachment_sampled"
         observedTargetGeneration != targetGeneration -> "unsupported.destination_read.target_generation_stale"
+        !strategy.isAcceptedByStrategyGate() -> DESTINATION_READ_STRATEGY_UNACCEPTED
         !strategy.acceptsAction(action) -> DESTINATION_READ_STRATEGY_ACTION_MISMATCH
         strategy == GPUDestinationReadStrategy.CopyTarget && "copy_src" !in sourceUsageLabels ->
             "unsupported.destination_read.copy_usage_missing"
@@ -413,15 +415,14 @@ private fun GPUDestinationReadStrategyRequest.acceptedDiagnostic(): GPUDestinati
         terminal = false,
     )
 
+private fun GPUDestinationReadStrategy.isAcceptedByStrategyGate(): Boolean =
+    this == GPUDestinationReadStrategy.CopyTarget || this == GPUDestinationReadStrategy.BindIntermediate
+
 private fun GPUDestinationReadStrategy.acceptsAction(action: GPUDestinationReadAction): Boolean =
     when (this) {
-        GPUDestinationReadStrategy.None -> action == GPUDestinationReadAction.KeepInPass
-        GPUDestinationReadStrategy.FixedFunction -> action == GPUDestinationReadAction.UseFixedFunctionBlend
         GPUDestinationReadStrategy.CopyTarget -> action == GPUDestinationReadAction.SplitPassAndCopyTarget
         GPUDestinationReadStrategy.BindIntermediate -> action == GPUDestinationReadAction.UseExistingIntermediate
-        GPUDestinationReadStrategy.IsolateLayer -> action == GPUDestinationReadAction.CreateIsolatedLayer ||
-            action == GPUDestinationReadAction.CompositeIsolatedLayer
-        GPUDestinationReadStrategy.Refuse -> action == GPUDestinationReadAction.Refuse
+        else -> false
     }
 
 private fun GPUDestinationReadStrategyRequest.copyTextureDescriptor(

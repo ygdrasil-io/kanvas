@@ -85,6 +85,20 @@ class DestinationReadStrategyGateTest {
                 reason = "unsupported.destination_read.active_attachment_sampled",
             ),
             refusalCase(
+                "none-strategy-unaccepted",
+                requirement = GPUDestinationReadRequirement.None,
+                strategy = GPUDestinationReadStrategy.None,
+                action = GPUDestinationReadAction.KeepInPass,
+                reason = "unsupported.destination_read.strategy_unaccepted",
+            ),
+            refusalCase(
+                "fixed-function-strategy-unaccepted",
+                requirement = GPUDestinationReadRequirement.FixedFunctionBlend,
+                strategy = GPUDestinationReadStrategy.FixedFunction,
+                action = GPUDestinationReadAction.UseFixedFunctionBlend,
+                reason = "unsupported.destination_read.strategy_unaccepted",
+            ),
+            refusalCase(
                 "copy-usage",
                 sourceUsageLabels = setOf("render_attachment"),
                 reason = "unsupported.destination_read.copy_usage_missing",
@@ -105,6 +119,20 @@ class DestinationReadStrategyGateTest {
                 strategy = GPUDestinationReadStrategy.BindIntermediate,
                 action = GPUDestinationReadAction.SplitPassAndCopyTarget,
                 reason = "unsupported.destination_read.strategy_action_mismatch",
+            ),
+            refusalCase(
+                "layer-strategy-unaccepted",
+                requirement = GPUDestinationReadRequirement.LayerIsolation,
+                strategy = GPUDestinationReadStrategy.IsolateLayer,
+                action = GPUDestinationReadAction.CreateIsolatedLayer,
+                reason = "unsupported.destination_read.strategy_unaccepted",
+            ),
+            refusalCase(
+                "refuse-strategy-unaccepted",
+                requirement = GPUDestinationReadRequirement.Refused,
+                strategy = GPUDestinationReadStrategy.Refuse,
+                action = GPUDestinationReadAction.Refuse,
+                reason = "unsupported.destination_read.strategy_unaccepted",
             ),
             refusalCase(
                 "intermediate-unvalidated",

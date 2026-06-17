@@ -24,11 +24,16 @@ Ticket: `KGPU-M5-002`
   evidence without emitting a copy texture line.
 - Accepted routes emit a non-terminal `accepted.destination_read.strategy`
   diagnostic while preserving the canonical dump lines.
+- `NoDestinationRead`, `FixedFunctionAttachmentBlend`,
+  `LayerCompositeIsolation`, and `RefuseDiagnostic` are outside this
+  copy/intermediate gate and refuse with
+  `unsupported.destination_read.strategy_unaccepted`.
 - Material-key boundary evidence proves destination-read descriptor, binding,
   and target-generation hashes remain outside `MaterialKey`.
 - Unsupported variants refuse with stable diagnostics:
   `unsupported.destination_read.bounds_unbounded`,
   `unsupported.destination_read.active_attachment_sampled`,
+  `unsupported.destination_read.strategy_unaccepted`,
   `unsupported.destination_read.copy_usage_missing`,
   `unsupported.destination_read.strategy_action_mismatch`,
   `unsupported.destination_read.texture_binding_missing`,
@@ -68,6 +73,7 @@ Local pre-PR review scope:
 - check that accepted dumps include copy/intermediate, binding, barrier,
   resource, budget, and non-claim evidence;
 - check that accepted routes emit non-terminal diagnostics;
+- check that strategies outside the KGPU-M5-002 copy/intermediate scope refuse;
 - check that strategy/action mismatches refuse instead of producing mixed route
   evidence;
 - check that active-attachment sampling, copy usage, texture binding,

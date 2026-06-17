@@ -88,8 +88,9 @@ rtk git diff --check
   the `gpu-renderer.destination-read.strategy` row with dumpable
   destination-read bounds, target-copy descriptor, existing-intermediate route,
   binding/layout hashes, pass split/copy-before-sample ordering, budget facts,
-  accepted-route diagnostics, material-key exclusion, strategy/action mismatch
-  refusals, and unsupported-variant refusals. The gate records
+  accepted-route diagnostics, material-key exclusion, unsupported strategy
+  refusals, strategy/action mismatch refusals, and unsupported-variant refusals.
+  The gate records
   `routeKind=GPUNative`, `classification=TargetNative`, `promoted=false`,
   `productActivation=false`, and `materialized=false`; it does not claim
   adapter-backed native destination-read execution, framebuffer fetch,
