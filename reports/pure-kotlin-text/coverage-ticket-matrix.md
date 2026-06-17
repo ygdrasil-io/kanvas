@@ -2663,11 +2663,14 @@ complete hit testing/selection, complete ellipsis insertion, or Skia Paragraph
 parity.
 ### PKT-09C: ParagraphInput Contract And Golden Schema
 
-Status: implemented; independent review pending.
+Status: implemented; refreshed by `KFONT-M8-001`.
 
 Files:
 
+- `reports/font/fixtures/expected/paragraph/paragraph-input.json`
 - `reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphStyleContractTest.kt`
 - `reports/pure-kotlin-text/fixture-evidence-manifest.json`
 - `reports/pure-kotlin-text/dump-evidence-index.json`
 - `scripts/validate_pure_kotlin_text_dump_index.py`
@@ -2678,14 +2681,20 @@ Files:
 Evidence:
 
 - `paragraph-input-goldens.json` records the paragraph input golden schema for
-  a multi-style placeholder case plus invalid-range, non-finite metric, and
-  unsupported-baseline negative cases.
+  a rich multi-style placeholder case plus invalid-range, invalid-font-size,
+  invalid-variation-coordinate, non-finite metric, unsupported-baseline, and
+  unsupported-strut-policy negative cases.
+- `paragraph-input.json` now pins the bounded `ParagraphBuilder` input contract
+  with deterministic `unicodeVersion`, `inputHash`, rich style runs, placeholder
+  metadata, and stable input diagnostics.
 - The fixture manifest points both `paragraph` and
   `paragraph-fixture-goldens` at the checked-in paragraph expected dump.
 - The dump evidence index records `paragraph-input-goldens` as `golden-gated`
   producer evidence with non-claiming policy.
-- `TextStackSurfaceTest` loads the expected dump and asserts the schema cases
-  and paragraph non-claims remain present.
+- `ParagraphStyleContractTest` proves snapshot immutability, rich input dump
+  facts, and refusal-before-shaping for invalid constraints.
+- `TextStackSurfaceTest` loads the expected dump and asserts the schema cases,
+  dump fields, and paragraph non-claims remain present.
 
 Validation:
 
@@ -2701,6 +2710,54 @@ Remaining gate: this is paragraph input golden-schema evidence only. It does
 not claim complete paragraph layout, full bidi visual ordering, rich text
 parity, complete selection/hit testing, ellipsis insertion, Skia Paragraph
 parity, CPU oracle evidence, or GPU text evidence.
+### KFONT-M8-001: Expand TextStyle and paragraph style contracts
+
+Status: done; deterministic contract evidence freshly validated.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/KFONT-M8-001-expand-textstyle-and-paragraph-style-contracts.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphStyleContractTest.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/font/fixtures/expected/paragraph/paragraph-input.json`
+- `reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m8-001-textstyle-paragraph-contracts.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+
+Evidence:
+
+- `TextStyle`, `ParagraphStyle`, and `PlaceholderStyle` now carry bounded rich
+  style facts required by the paragraph target, including families, fallback
+  preference, weight/width/slant, synthetic style policy, locale/script hints,
+  OpenType features, variation coordinates, palette selection, decorations,
+  spacing, and placeholder baseline facts.
+- `ParagraphBuilder.build()` emits immutable snapshots whose `dumpInput()`
+  output pins `unicodeVersion`, deterministic `inputHash`, style runs,
+  placeholder runs, and stable input diagnostics.
+- Input validation refuses invalid numeric constraints, invalid or overlapping
+  ranges, unsupported placeholder baselines, and unsupported strut policy
+  before the shaping engine is invoked.
+- `paragraph-input.json` covers multiple style spans, OpenType features,
+  variation coordinates, palette selection, decoration facts, and placeholder
+  metadata without promoting downstream paragraph support claims.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphInputGoldenPinsSchemaCasesAndNonClaims
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: downstream M8 tickets still own multi-style shaping
+segmentation, line breaking, ellipsis insertion, hit testing, selection boxes,
+placeholder geometry layout, CPU oracle evidence, and GPU text evidence.
 ### PKT-10A: Glyph Strike-Key Preimage And Route Diagnostic Dumps
 
 Status: implemented and independently reviewed.
