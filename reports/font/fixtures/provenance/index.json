@@ -50,6 +50,198 @@
       ]
     },
     {
+      "fixtureId": "fallback-emoji-noto-color",
+      "familyId": "font-fallback-catalog",
+      "ownerTickets": [
+        "KFONT-M7-001"
+      ],
+      "source": {
+        "kind": "vendored-external",
+        "project": "Noto Emoji",
+        "url": "https://raw.githubusercontent.com/googlefonts/noto-emoji/f3ae03f5e9b3b8516fa151f7168159ca1a3e7515/fonts/Noto-COLRv1-noflags.ttf",
+        "version": "v2.051 commit f3ae03f5e9b3b8516fa151f7168159ca1a3e7515"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/noto-emoji-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/fallback/Noto-COLRv1-noflags.ttf",
+          "sha256": "469e3b92d63cfc203789f8742f1835b8672c7b5995ab4a832f1699b712a5afcc",
+          "sizeBytes": 2992136,
+          "role": "emoji-colrv1-font"
+        }
+      ],
+      "expectedDumps": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-fallback-support-claim",
+        "no-color-glyph-rendering-claim",
+        "no-platform-font-fallback-claim"
+      ]
+    },
+    {
+      "fixtureId": "fallback-noto-cjk-sc",
+      "familyId": "font-fallback-catalog",
+      "ownerTickets": [
+        "KFONT-M7-001"
+      ],
+      "source": {
+        "kind": "vendored-external",
+        "project": "Noto Sans SC",
+        "url": "https://github.com/notofonts/noto-cjk/releases/download/Sans2.004/18_NotoSansSC.zip",
+        "version": "Sans2.004"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/noto-cjk-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/fallback/NotoSansSC-Regular.otf",
+          "sha256": "faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9",
+          "sizeBytes": 8331336,
+          "role": "cjk-otf-font"
+        }
+      ],
+      "expectedDumps": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-fallback-support-claim",
+        "no-shaping-support-claim",
+        "no-platform-font-fallback-claim"
+      ]
+    },
+    {
+      "fixtureId": "fallback-noto-script-arabic",
+      "familyId": "font-fallback-catalog",
+      "ownerTickets": [
+        "KFONT-M7-001"
+      ],
+      "source": {
+        "kind": "vendored-external",
+        "project": "Noto Naskh Arabic",
+        "url": "https://github.com/notofonts/arabic/releases/download/NotoNaskhArabic-v2.021/NotoNaskhArabic-v2.021.zip",
+        "version": "NotoNaskhArabic-v2.021"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/noto-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
+          "sha256": "6f0a92031367b2f5a2078fe9d24f3433122b61a0bad57c423aad8f3c39aa2e6e",
+          "sizeBytes": 247336,
+          "role": "arabic-ttf-font"
+        }
+      ],
+      "expectedDumps": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-fallback-support-claim",
+        "no-shaping-support-claim",
+        "no-platform-font-fallback-claim"
+      ]
+    },
+    {
+      "fixtureId": "fallback-noto-script-devanagari",
+      "familyId": "font-fallback-catalog",
+      "ownerTickets": [
+        "KFONT-M7-001"
+      ],
+      "source": {
+        "kind": "vendored-external",
+        "project": "Noto Sans Devanagari",
+        "url": "https://github.com/notofonts/devanagari/releases/download/NotoSansDevanagari-v2.006/NotoSansDevanagari-v2.006.zip",
+        "version": "NotoSansDevanagari-v2.006"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/noto-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/fallback/NotoSansDevanagari-Regular.ttf",
+          "sha256": "da2d2135e978c6f68852cfd8201c3a067df1acf73232fe80c58f89e6302ee6e8",
+          "sizeBytes": 282060,
+          "role": "devanagari-ttf-font"
+        }
+      ],
+      "expectedDumps": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-fallback-support-claim",
+        "no-shaping-support-claim",
+        "no-platform-font-fallback-claim"
+      ]
+    },
+    {
+      "fixtureId": "fallback-noto-script-hebrew",
+      "familyId": "font-fallback-catalog",
+      "ownerTickets": [
+        "KFONT-M7-001"
+      ],
+      "source": {
+        "kind": "vendored-external",
+        "project": "Noto Sans Hebrew",
+        "url": "https://github.com/notofonts/hebrew/releases/download/NotoSansHebrew-v3.001/NotoSansHebrew-v3.001.zip",
+        "version": "NotoSansHebrew-v3.001"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/noto-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/fallback/NotoSansHebrew-Regular.ttf",
+          "sha256": "671951828bd5c95db818e5bb12dcea2d0c0dda00311888522be061ee6835125e",
+          "sizeBytes": 66156,
+          "role": "hebrew-ttf-font"
+        }
+      ],
+      "expectedDumps": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-fallback-support-claim",
+        "no-shaping-support-claim",
+        "no-platform-font-fallback-claim"
+      ]
+    },
+    {
+      "fixtureId": "fallback-noto-script-thai",
+      "familyId": "font-fallback-catalog",
+      "ownerTickets": [
+        "KFONT-M7-001"
+      ],
+      "source": {
+        "kind": "vendored-external",
+        "project": "Noto Sans Thai",
+        "url": "https://github.com/notofonts/thai/releases/download/NotoSansThai-v2.002/NotoSansThai-v2.002.zip",
+        "version": "NotoSansThai-v2.002"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/noto-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/fallback/NotoSansThai-Regular.ttf",
+          "sha256": "7f890179ceabb5f34a17702271c83c015c807fc78deaf52de859f6ec8847c1cf",
+          "sizeBytes": 72772,
+          "role": "thai-ttf-font"
+        }
+      ],
+      "expectedDumps": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-fallback-support-claim",
+        "no-shaping-support-claim",
+        "no-platform-font-fallback-claim"
+      ]
+    },
+    {
       "fixtureId": "font-source-liberation-core",
       "familyId": "font-source-sfnt",
       "ownerTickets": [
