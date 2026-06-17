@@ -2119,6 +2119,204 @@ class ColorGlyphSurfaceTest {
         )
     }
 
+    @Test
+    fun colrv1FixtureManifestRecordsBoundsRoutesAndTraversalRefusals() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440419"))
+        val strikeKey = strikeKey(typefaceId = typefaceId, paletteIdentity = "brand-colrv1-fixtures")
+
+        val cycleTable = COLRV1Table(
+            baseGlyphPaintRecords = listOf(
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 160,
+                    paint = COLRV1Paint.ColrGlyph(glyphId = 161),
+                ),
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 161,
+                    paint = COLRV1Paint.Glyph(
+                        glyphId = 162,
+                        paint = COLRV1Paint.ColrGlyph(glyphId = 160),
+                    ),
+                ),
+            ),
+        )
+        val cycleDiagnostic = assertNotNull(cycleTable.paintColrGlyphCycleDiagnostic(glyphId = 160))
+
+        val recursionPlanner = COLRV1ColorGlyphPlanner(
+            colr = COLRV1Table(
+                baseGlyphPaintRecords = listOf(
+                    COLRV1BaseGlyphPaintRecord(glyphId = 300, paint = COLRV1Paint.ColrGlyph(glyphId = 301)),
+                    COLRV1BaseGlyphPaintRecord(glyphId = 301, paint = COLRV1Paint.ColrGlyph(glyphId = 302)),
+                    COLRV1BaseGlyphPaintRecord(
+                        glyphId = 302,
+                        paint = COLRV1Paint.Glyph(
+                            glyphId = 303,
+                            paint = COLRV1Paint.Solid(paletteIndex = 0, alpha = 1f),
+                        ),
+                    ),
+                ),
+            ),
+            cpal = assertNotNull(CPALV0Parser.parse(syntheticCpalV0())),
+            glyphBounds = mapOf(303 to ColorGlyphBounds(xMin = 0, yMin = 0, xMax = 4, yMax = 4)),
+            maxRecursionDepth = 2,
+        )
+        val recursionDecision = recursionPlanner.plan(
+            glyphId = 300,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey,
+            paletteSelection = CPALPaletteSelection(index = 0),
+            allowMonochromeFallback = true,
+            outlineFallback = OutlineGlyphRepresentation(glyphId = 300, pathCommands = listOf("M 0 0", "L 4 4")),
+        )
+        assertNull(recursionDecision.plan)
+        assertEquals("outline", recursionDecision.selectedRoute?.route)
+        val recursionDiagnostic = recursionDecision.diagnostics.single()
+        assertEquals(ColorGlyphDiagnosticCodes.COLRV1BudgetExceeded, recursionDiagnostic.code)
+        assertTrue(recursionDiagnostic.detail.contains("limitName=recursionDepth"))
+        assertTrue(recursionDiagnostic.detail.contains("observed=3"))
+
+        val expandedPlanner = COLRV1ColorGlyphPlanner(
+            colr = COLRV1Table(
+                baseGlyphPaintRecords = listOf(
+                    COLRV1BaseGlyphPaintRecord(
+                        glyphId = 304,
+                        paint = COLRV1Paint.Transform(
+                            paint = COLRV1Paint.Glyph(
+                                glyphId = 305,
+                                paint = COLRV1Paint.Solid(paletteIndex = 1, alpha = 1f),
+                            ),
+                            xx = 1f,
+                            yx = 0f,
+                            xy = 0f,
+                            yy = 1f,
+                            dx = 0f,
+                            dy = 0f,
+                        ),
+                    ),
+                ),
+            ),
+            cpal = assertNotNull(CPALV0Parser.parse(syntheticCpalV0())),
+            glyphBounds = mapOf(305 to ColorGlyphBounds(xMin = 0, yMin = 0, xMax = 5, yMax = 6)),
+            maxExpandedNodeCount = 2,
+        )
+        val expandedDecision = expandedPlanner.plan(
+            glyphId = 304,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey,
+            paletteSelection = CPALPaletteSelection(index = 0),
+            allowMonochromeFallback = true,
+            outlineFallback = OutlineGlyphRepresentation(glyphId = 304, pathCommands = listOf("M 0 0", "L 5 6")),
+        )
+        assertNull(expandedDecision.plan)
+        assertEquals("outline", expandedDecision.selectedRoute?.route)
+        val expandedDiagnostic = expandedDecision.diagnostics.single()
+        assertEquals(ColorGlyphDiagnosticCodes.COLRV1BudgetExceeded, expandedDiagnostic.code)
+        assertTrue(expandedDiagnostic.detail.contains("limitName=expandedPaintCount"))
+        assertTrue(expandedDiagnostic.detail.contains("observed=3"))
+
+        assertNull(
+            COLRV1Parser.parse(
+                syntheticColrV1GlyphSolid(
+                    baseGlyph = 306,
+                    glyph = 307,
+                    paletteIndex = 0,
+                    alphaF2Dot14 = 0x4000,
+                ).copyOf(52),
+            ),
+        )
+
+        val expected = colrv1FixtureManifestJson(
+            cases = listOf(
+                COLRV1FixtureManifestCase(
+                    fixtureId = "color-glyphs-colrv1-solid-glyph-colr-glyph-bounds",
+                    focus = "nested-glyph-colr-glyph-bounds",
+                    fixtureKind = "synthetic-colrv1-table",
+                    parserExpectation = "parsed-table",
+                    expectedRoute = "colr",
+                    expectedCaseIds = listOf("colrv1-solid-glyph-colr-glyph"),
+                    expectedDumpIds = listOf("color-glyph-plan", "colrv1-paint-graph"),
+                    expectedDiagnosticsJson = emptyList(),
+                    provenanceNotes = "Synthetic COLRv1 bytes from ColorGlyphSurfaceTest cover PaintColrGlyph -> PaintGlyph -> PaintSolid bounds propagation.",
+                ),
+                COLRV1FixtureManifestCase(
+                    fixtureId = "color-glyphs-colrv1-transform-bounds",
+                    focus = "transform-bounds",
+                    fixtureKind = "synthetic-colrv1-table",
+                    parserExpectation = "parsed-table",
+                    expectedRoute = "colr",
+                    expectedCaseIds = listOf(
+                        "colrv1-translate",
+                        "colrv1-transform",
+                        "colrv1-scale",
+                        "colrv1-rotate",
+                        "colrv1-skew",
+                    ),
+                    expectedDumpIds = listOf("color-glyph-plan", "colrv1-paint-graph"),
+                    expectedDiagnosticsJson = emptyList(),
+                    provenanceNotes = "Synthetic COLRv1 bytes from ColorGlyphSurfaceTest cover translate and generic transform matrices classified as transform/scale/rotate/skew.",
+                ),
+                COLRV1FixtureManifestCase(
+                    fixtureId = "color-glyphs-colrv1-composite-clip-bounds",
+                    focus = "composite-clip-bounds",
+                    fixtureKind = "synthetic-colrv1-table",
+                    parserExpectation = "parsed-table",
+                    expectedRoute = "colr",
+                    expectedCaseIds = listOf("colrv1-composite-clip"),
+                    expectedDumpIds = listOf("color-glyph-composite-plan", "color-glyph-plan", "colrv1-paint-graph"),
+                    expectedDiagnosticsJson = emptyList(),
+                    provenanceNotes = "Synthetic COLRv1 bytes from ColorGlyphSurfaceTest cover clip-wrapped composite bounds plus destination-read and layer-isolation hints.",
+                ),
+                COLRV1FixtureManifestCase(
+                    fixtureId = "color-glyphs-colrv1-cycle-refusal",
+                    focus = "paint-colr-glyph-cycle-diagnostic",
+                    fixtureKind = "synthetic-colrv1-table",
+                    parserExpectation = "parsed-table",
+                    expectedRoute = null,
+                    expectedCaseIds = emptyList(),
+                    expectedDumpIds = listOf("colrv1-fixture-manifest", "color-svg-emoji-goldens"),
+                    expectedDiagnosticsJson = listOf(cycleDiagnostic.toCanonicalJson()),
+                    provenanceNotes = "Synthetic parsed COLRv1 table from ColorGlyphSurfaceTest walks 160 -> 161 -> 160 and records the first stable cycle diagnostic.",
+                ),
+                COLRV1FixtureManifestCase(
+                    fixtureId = "color-glyphs-colrv1-recursion-depth-refusal",
+                    focus = "recursion-depth-refusal",
+                    fixtureKind = "synthetic-colrv1-table",
+                    parserExpectation = "parsed-table",
+                    expectedRoute = "outline",
+                    expectedCaseIds = emptyList(),
+                    expectedDumpIds = listOf("colrv1-fixture-manifest"),
+                    expectedDiagnosticsJson = listOf(recursionDiagnostic.toCanonicalJson()),
+                    provenanceNotes = "Synthetic COLRv1 bytes from ColorGlyphSurfaceTest set maxRecursionDepth=2 and force a third nested PaintColrGlyph walk before monochrome outline fallback.",
+                ),
+                COLRV1FixtureManifestCase(
+                    fixtureId = "color-glyphs-colrv1-expanded-paint-count-refusal",
+                    focus = "expanded-paint-budget-refusal",
+                    fixtureKind = "synthetic-colrv1-table",
+                    parserExpectation = "parsed-table",
+                    expectedRoute = "outline",
+                    expectedCaseIds = emptyList(),
+                    expectedDumpIds = listOf("colrv1-fixture-manifest"),
+                    expectedDiagnosticsJson = listOf(expandedDiagnostic.toCanonicalJson()),
+                    provenanceNotes = "Synthetic COLRv1 bytes from ColorGlyphSurfaceTest set maxExpandedNodeCount=2 and force the third expanded node before monochrome outline fallback.",
+                ),
+                COLRV1FixtureManifestCase(
+                    fixtureId = "color-glyphs-colrv1-malformed-offset-refusal",
+                    focus = "malformed-offset-parse-null",
+                    fixtureKind = "synthetic-colrv1-table-bytes",
+                    parserExpectation = "parse-null",
+                    expectedRoute = null,
+                    expectedCaseIds = emptyList(),
+                    expectedDumpIds = listOf("colrv1-fixture-manifest"),
+                    expectedDiagnosticsJson = emptyList(),
+                    provenanceNotes = "Synthetic COLRv1 glyph-solid bytes are truncated to make the paint payload unreadable; the parser must fail closed without inventing a route claim.",
+                ),
+            ),
+        )
+
+        val dump = readProjectFile("reports/font/fixtures/expected/color/colrv1-fixture-manifest.json")
+        assertEquals(expected.trim(), dump.trim())
+        assertEvidenceDumpClean(dump)
+    }
+
     private fun syntheticCpalV0(): ByteArray {
         val bytes = ByteArray(32)
         writeU16(bytes, 0, 0)
@@ -2577,6 +2775,18 @@ class ColorGlyphSurfaceTest {
         val diagnostics: List<ColorGlyphDiagnostic>,
     )
 
+    private data class COLRV1FixtureManifestCase(
+        val fixtureId: String,
+        val focus: String,
+        val fixtureKind: String,
+        val parserExpectation: String,
+        val expectedRoute: String?,
+        val expectedCaseIds: List<String>,
+        val expectedDumpIds: List<String>,
+        val expectedDiagnosticsJson: List<String>,
+        val provenanceNotes: String,
+    )
+
     private data class ColorGlyphCompositePlanFixtureCase(
         val caseId: String,
         val compositePlanJson: String?,
@@ -2659,6 +2869,54 @@ class ColorGlyphSurfaceTest {
         append("}\n")
     }
 
+    private fun colrv1FixtureManifestJson(cases: List<COLRV1FixtureManifestCase>): String = buildString {
+        append("{\n")
+        append("  \"schemaVersion\": 1,\n")
+        append("  \"dumpId\": \"colrv1-fixture-manifest\",\n")
+        append("  \"ownerTickets\": [\"KFONT-M10-005\"],\n")
+        append("  \"fixtureIds\": [\n")
+        append(cases.joinToString(",\n") { case -> "    ${jsonString(case.fixtureId)}" })
+        append("\n  ],\n")
+        append("  \"cases\": [\n")
+        append(
+            cases.joinToString(",\n") { case ->
+                buildString {
+                    append("    {\n")
+                    append("      \"fixtureId\": ").append(jsonString(case.fixtureId)).append(",\n")
+                    append("      \"focus\": ").append(jsonString(case.focus)).append(",\n")
+                    append("      \"fixtureKind\": ").append(jsonString(case.fixtureKind)).append(",\n")
+                    append("      \"parserExpectation\": ").append(jsonString(case.parserExpectation)).append(",\n")
+                    append("      \"expectedRoute\": ")
+                    append(case.expectedRoute?.let(::jsonString) ?: "null")
+                    append(",\n")
+                    append("      \"expectedCaseIds\": ")
+                    append(jsonStringArray(case.expectedCaseIds))
+                    append(",\n")
+                    append("      \"expectedDumpIds\": ")
+                    append(jsonStringArray(case.expectedDumpIds))
+                    append(",\n")
+                    append("      \"expectedDiagnostics\": ")
+                    append(embeddedJsonArray(case.expectedDiagnosticsJson, indent = "      "))
+                    append(",\n")
+                    append("      \"provenance\": {\n")
+                    append("        \"generator\": \"ColorGlyphSurfaceTest\",\n")
+                    append("        \"source\": \"synthetic-color-glyph-fixtures\",\n")
+                    append("        \"notes\": ").append(jsonString(case.provenanceNotes)).append("\n")
+                    append("      }\n")
+                    append("    }")
+                }
+            },
+        )
+        append("\n  ],\n")
+        append(
+            "  \"nonClaims\": [\"no-complete-target-support-claim\", " +
+                "\"no-complete-colrv1-rendering-claim\", " +
+                "\"no-gpu-color-glyph-support-claim\", " +
+                "\"no-platform-color-font-fallback-claim\"]\n",
+        )
+        append("}\n")
+    }
+
     private fun diagnosticsJson(
         diagnostics: List<ColorGlyphDiagnostic>,
         indent: String,
@@ -2667,6 +2925,17 @@ class ColorGlyphSurfaceTest {
         if (diagnostics.isNotEmpty()) {
             append("\n")
             append(diagnostics.joinToString(",\n") { diagnostic -> "$indent  ${diagnostic.toCanonicalJson()}" })
+            append("\n")
+            append(indent)
+        }
+        append("]")
+    }
+
+    private fun embeddedJsonArray(values: List<String>, indent: String): String = buildString {
+        append("[")
+        if (values.isNotEmpty()) {
+            append("\n")
+            append(values.joinToString(",\n") { value -> "$indent  ${normalizeEmbeddedJson(value)}" })
             append("\n")
             append(indent)
         }
@@ -2794,6 +3063,9 @@ class ColorGlyphSurfaceTest {
             }
             append('"')
         }
+
+    private fun jsonStringArray(values: List<String>): String =
+        values.joinToString(prefix = "[", postfix = "]") { value -> jsonString(value) }
 
     private fun assertEvidenceDumpClean(dump: String) {
         val forbiddenTokens = listOf(
