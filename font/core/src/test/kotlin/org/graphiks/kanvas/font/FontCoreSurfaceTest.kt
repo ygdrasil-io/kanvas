@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.font
 
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -554,6 +555,66 @@ class FontCoreSurfaceTest {
     }
 
     @Test
+    fun prefersCoveredCandidateWithRequestedVariationAxisOverCoveredStaticPreferredFamily() {
+        val staticRequested = testFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440083",
+            familyName = "Requested Sans",
+        )
+        val variableFallback = testFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440084",
+            familyName = "Variable Sans",
+            variationAxes = listOf(
+                TypefaceVariationAxisRange(
+                    axisTag = "wght",
+                    minimum = 100.0,
+                    defaultValue = 400.0,
+                    maximum = 900.0,
+                ),
+            ),
+        )
+        val resolver = CatalogFontResolver(
+            catalog = FallbackCatalog(
+                families = mapOf(
+                    "Requested Sans" to FontCollection(listOf(staticRequested)),
+                    "Variable Sans" to FontCollection(listOf(variableFallback)),
+                ),
+            ),
+            policy = FontFallbackPolicy.Default.copy(
+                genericFallbackChains = mapOf("sans-serif" to listOf("Variable Sans")),
+                scriptFallbackChains = emptyMap(),
+                localeFallbackChains = emptyMap(),
+                emojiPreferredFamilies = emptyList(),
+            ),
+            coverage = testCoverage(
+                staticRequested.typeface.id to setOf('x'.code),
+                variableFallback.typeface.id to setOf('x'.code),
+            ),
+        )
+
+        val runs = resolver.resolve(
+            FallbackRequest(
+                text = "x",
+                preferredFamilies = listOf("Requested Sans"),
+                variationCoordinates = listOf(TypefaceVariationCoordinate(axisTag = "wght", value = 650.0)),
+            ),
+        )
+        val trace = resolver.trace(
+            FallbackRequest(
+                text = "x",
+                preferredFamilies = listOf("Requested Sans"),
+                variationCoordinates = listOf(TypefaceVariationCoordinate(axisTag = "wght", value = 650.0)),
+            ),
+        )
+        val decisionJson = trace.decisions.single().toCanonicalJson(clusterStart = 0)
+
+        assertEquals(1, runs.size)
+        assertEquals("Variable Sans", runs.single().face.typeface.familyName)
+        assertContains(decisionJson, """"selectedFamily":"Variable Sans"""")
+        assertContains(decisionJson, """"selectedVariationCoordinates":[{"axisTag":"wght","value":650.0}]""")
+        assertContains(decisionJson, """"requestedVariationCoordinates":[{"axisTag":"wght","value":650.0}]""")
+    }
+
+    @Test
     fun buildsFallbackCatalogFromParsedFacesInDeterministicFamilyOrder() {
         val regular = testFace("550e8400-e29b-41d4-a716-446655440060", "Beta Sans", "Regular")
         val bold = testFace("550e8400-e29b-41d4-a716-446655440061", "Beta Sans", "Bold")
@@ -575,9 +636,38 @@ class FontCoreSurfaceTest {
         }
     }
 
-    private fun testFace(uuid: String, familyName: String, styleName: String = "Regular"): FontFace {
+    private fun testFace(
+        uuid: String,
+        familyName: String,
+        styleName: String = "Regular",
+        variationAxes: List<TypefaceVariationAxisRange> = emptyList(),
+        variationCoordinates: List<TypefaceVariationCoordinate> = emptyList(),
+        variationMetricsSupported: Boolean = true,
+    ): FontFace {
         val sourceId = FontSourceID(Uuid.parse(uuid.replaceRange(uuid.length - 1, uuid.length, "0")))
         val typefaceId = TypefaceID(Uuid.parse(uuid))
+        val identityPreimage = if (familyName.isBlank()) {
+            null
+        } else {
+            typefaceIdentityPreimage(
+                sourceId = sourceId,
+                collectionIndex = 0,
+                postScriptName = "$familyName-$styleName",
+                familyName = familyName,
+                styleName = styleName,
+                outlineFormat = TypefaceOutlineFormat.TRUE_TYPE_GLYF,
+                selectedCMap = TypefaceCMapSelection(
+                    platformId = 3,
+                    encodingId = 10,
+                    format = 12,
+                    language = 0,
+                    unicode = true,
+                ),
+                scalerMode = TypefaceScalerMode.OUTLINE,
+                variationCoordinates = variationCoordinates,
+                tableTags = listOf("cmap", "fvar", "glyf", "head", "name"),
+            )
+        }
         return FontFace(
             typeface = TypefaceData(
                 id = typefaceId,
@@ -589,6 +679,10 @@ class FontCoreSurfaceTest {
                 ),
                 familyName = familyName,
                 styleName = styleName,
+                variationAxes = variationAxes,
+                variationCoordinates = variationCoordinates,
+                variationMetricsSupported = variationMetricsSupported,
+                identityPreimage = identityPreimage,
             ),
         )
     }

@@ -6,8 +6,8 @@
   "sourceTextHashAlgorithm": "sha256-utf16-code-units",
   "sourceDumpRefs": [
     {"dumpId": "cluster-safety-report", "dumpSha256": "b6dfcdb0bb2c391fa59b4d544849a2d9fc305656b3185d3932bf1820740108e8"},
-    {"dumpId": "fallback-decision-trace", "dumpSha256": "7cae2e28116b91e78db9234b71935a77e0702e4e8a9aa627f8adda92d4bef291"},
-    {"dumpId": "resolved-font-runs", "dumpSha256": "f90084de9766247865e4b1521254d82ff01de8bed208579710dedae2de473ee2"},
+    {"dumpId": "fallback-decision-trace", "dumpSha256": "cc90fd8688dac2c2722e6a6484c3622a8e134666899dbf17c1c00ac440032580"},
+    {"dumpId": "resolved-font-runs", "dumpSha256": "49967519842c4d4faab4b3a2cc78cd425b67dc48871cd541171dba42bfefcf94"},
     {"dumpId": "shaped-glyph-run", "dumpSha256": "2a043badc898cad27fb58a788b0eefdc8c528dfc5041097a8d9e4ec2fc929414"}
   ],
   "cases": [
