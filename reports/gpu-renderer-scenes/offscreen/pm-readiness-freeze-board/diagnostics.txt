@@ -1,17 +1,1 @@
-rendered pm-readiness-freeze-board via WebGPU offscreen
-adapter=Apple M2 Max
-fillRectCommands=6
-fillRRectCommands=1
-linearGradientRectCommands=0
-clipCommands=1
-bitmapRectCommands=0
-pmReadinessRow=gpu-renderer.readiness
-pmReadinessClassification=PolicyGated
-readinessDelta=0.0
-releaseBlocking=false
-productRouteActivated=false
-performanceReadinessPromoted=false
-missingGate=KGPU-M9-002
-reportingOnlyGatesVisible=true
-pipelinePmBundleUpdated=false
-nonClaims=no-product-activation,no-release-blocking-gate,no-readiness-delta,no-performance-readiness-from-correctness,no-dashboard-row-promotes-readiness,no-derived-cache-as-observed
+rect-only offscreen render supports only clear, fill-rect, and clip command families: fill-rrect

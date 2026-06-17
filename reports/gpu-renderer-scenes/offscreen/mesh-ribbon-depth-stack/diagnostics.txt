@@ -1,14 +1,1 @@
-rendered mesh-ribbon-depth-stack via WebGPU offscreen
-adapter=Apple M2 Max
-clearCommands=1
-fillRectCommands=0
-fillRRectCommands=1
-linearGradientRectCommands=0
-clipCommands=1
-bitmapRectCommands=0
-meshRibbonCommands=3
-meshRibbonKinds=bounded-ribbon-strip, bounded-ribbon-strip, bounded-ribbon-strip
-meshRibbonRoute=scene-fixture.bounded-ribbon-strip
-meshRibbonFallbackReason=none
-generalVerticesSupport=false
-vertexIndexBufferSupport=false
+rect-only offscreen render supports only clear, fill-rect, and clip command families: fill-rrect, vertices

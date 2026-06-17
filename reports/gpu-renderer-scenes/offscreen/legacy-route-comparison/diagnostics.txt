@@ -1,3 +1,8 @@
 rendered legacy-route-comparison via WebGPU offscreen
 adapter=Apple M2 Max
+clearCommands=0
 fillRectCommands=1
+fillRRectCommands=0
+linearGradientRectCommands=0
+clipCommands=0
+bitmapRectCommands=0
