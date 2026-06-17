@@ -739,6 +739,51 @@
       ]
     },
     {
+      "dumpId": "font-telemetry-pm-bundle",
+      "ownerTicket": "KFONT-M12-001",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Budget Promotion"
+      },
+      "producerPaths": [
+        "build.gradle.kts",
+        "scripts/validate_kfont_m12_001_telemetry_pm_evidence.py",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/font-telemetry-pm-bundle.json"
+      ],
+      "expectedFields": [
+        "artifactId",
+        "bundlePaths",
+        "claimPromotionAllowed",
+        "classification",
+        "domainRows",
+        "nonClaims",
+        "ownerTickets",
+        "pmBundleTask",
+        "remainingGates",
+        "schemaVersion",
+        "sourceDashboardPath",
+        "surfaceId",
+        "warningMode"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Telemetry PM bundle evidence changes require stable tracked-gap classification, explicit advisory wording, bundle path review, and remaining-gate review without producer or release-gate claim expansion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim"
+      ]
+    },
+    {
       "dumpId": "font-telemetry-schema",
       "ownerTicket": "KFONT-M12-001",
       "classification": "golden-gated",

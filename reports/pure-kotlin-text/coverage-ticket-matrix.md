@@ -3685,6 +3685,62 @@ rtk ./gradlew --no-daemon :font:gpu-api:test
 Remaining gate: this is telemetry scaffolding only. It does not measure actual
 runtime performance, promote indicative budgets into release gates, synthesize
 GPU upload evidence, or claim GPU text rendering support.
+
+### KFONT-M12-001: Define font telemetry schema
+
+Status: done; implemented and freshly revalidated for closeout.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt`
+- `reports/pure-kotlin-text/font-telemetry-schema.json`
+- `reports/pure-kotlin-text/font-telemetry-schema-fixture.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m12-001-font-telemetry-schema.md`
+- `reports/pure-kotlin-text/font-telemetry-pm-bundle.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-001-define-font-telemetry-schema.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md`
+- `scripts/validate_kfont_m12_001_telemetry_pm_evidence.py`
+- `build.gradle.kts`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `FontTelemetryEvidenceWriter` now emits a deterministic cross-domain schema
+  for parser, scaler, shaping, paragraph, glyph artifact, and GPU text handoff
+  telemetry with shared dimensions and GPU-only adapter/backend fields.
+- `font-telemetry-schema-fixture.json` records one repeated-run advisory sample
+  for each telemetry domain plus stable refusal cases for missing dimensions
+  and single-run budget misuse.
+- `font-telemetry-pm-bundle.json` now records advisory `tracked-gap`
+  `pipelinePmBundle` packaging for the M12 row and pins one stable sample per
+  telemetry domain without turning budgets into release gates.
+- `FontTelemetrySchemaTest` asserts byte-identical checked-in dumps, required
+  domain coverage, repeated-run aggregation fields, conditional GPU adapter
+  facts, and stable telemetry refusal diagnostics without HarfBuzz or
+  FreeType wording.
+- `validateKfontM12001TelemetryPmEvidence` and its Python validator assert that
+  the PM bundle copies the telemetry schema/dashboard artifacts, preserves
+  `warning-only` wording, and keeps downstream producer work explicit under
+  `KFONT-M12-002`, `KFONT-M12-003`, `KFONT-M12-004`, and `KFONT-M12-005`
+  without keeping the schema slice open.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
+rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: no schema-local gate remains. Downstream producer emission into
+the shared schema is owned by `KFONT-M12-002`, `KFONT-M12-003`,
+`KFONT-M12-004`, and `KFONT-M12-005`; this slice does not promote any
+performance budget, GPU route, or release-gate claim.
 ### KFONT-M1-004: Bundled Source Fixture Manifest
 
 Status: done; merged, independently reviewed, and freshly revalidated for closeout.

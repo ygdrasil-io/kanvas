@@ -416,16 +416,18 @@
         "reports/pure-kotlin-text/font-telemetry-schema.json",
         "reports/pure-kotlin-text/font-telemetry-schema-fixture.json",
         "reports/pure-kotlin-text/2026-06-16-kfont-m12-001-font-telemetry-schema.md",
+        "reports/pure-kotlin-text/font-telemetry-pm-bundle.json",
+        "reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md",
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "reports/pure-kotlin-text/dump-evidence-index.json"
       ],
       "requiredEvidenceGates": [
-        "Wire parser, scaler, shaping, paragraph, glyph artifact, and GPU handoff producers into the shared schema before any telemetry support promotion.",
-        "Add advisory pipelinePerformanceTrendWarnings or PM bundle evidence that ingests the M12 rows without changing claim impact.",
+        "KFONT-M12-002, KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own parser/scaler/shaping/paragraph/glyph/GPU producer emission into the shared schema; keep this family schema-only advisory evidence until those subsystem tickets land.",
         "Keep performance budgets advisory until the dedicated promotion policy is updated."
       ],
       "validationCommands": [
         "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
         "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py"
