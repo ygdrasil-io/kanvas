@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M10-001"
 title: "Complete COLRv0 plan to artifact path"
-status: "proposed"
+status: "done"
 milestone: "M10"
 priority: "P0"
 owner_area: "color"
@@ -69,11 +69,11 @@ data class ColorGlyphPlan(
 
 ## Acceptance Criteria
 
-- [ ] COLRv0 fixtures produce ordered layer plans with palette identity, resolved colors, layer glyph IDs, and bounds.
-- [ ] Malformed CPAL or COLR data emits `text.color.CPAL-malformed` or `text.color.COLR-malformed` with glyph and table offsets where available.
-- [ ] Monochrome outline fallback is recorded only when the route policy accepts it and the dump states that COLRv0 was not used.
-- [ ] `color-glyph-plan.json` is deterministic for repeated runs with the same font bytes and palette selection.
-- [ ] M11 can consume the plan as a typed `ColorGlyphPlan` without reading COLR/CPAL tables.
+- [x] COLRv0 fixtures produce ordered layer plans with palette identity, resolved colors, layer glyph IDs, and bounds.
+- [x] Malformed CPAL or COLR data emits `text.color.CPAL-malformed` or `text.color.COLR-malformed` with glyph and table offsets where available.
+- [x] Monochrome outline fallback is recorded only when the route policy accepts it and the dump states that COLRv0 was not used.
+- [x] `color-glyph-plan.json` is deterministic for repeated runs with the same font bytes and palette selection.
+- [x] M11 can consume the plan as a typed `ColorGlyphPlan` without reading COLR/CPAL tables.
 
 ## Required Evidence
 
@@ -97,13 +97,14 @@ data class ColorGlyphPlan(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test --tests '*COLRv0*'
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.parsesCOLRV0BaseGlyphsFromRawTableBytes --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsCOLRV0PaintGraphWithPaletteIndexes --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsCOLRV0ColorGlyphPlanWithPaletteOverridesArtifactKeysAndDeterministicDump --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.fallsBackToOutlineWhenCOLRPaletteResolutionFailsAndFallbackIsAllowed
 ```
 
 ## Status Notes
 
 - `proposed`: Establishes the first color glyph plan shape consumed by later COLRv1 and GPU handoff work.
 - Move to `ready` only after COLRv0 dump fields and palette diagnostic names are reviewed.
+- `done`: `ColorGlyphPlan` now carries typed COLRv0 layer order, palette facts, bounds, fallback policy, and M9-derived artifact-key hashes with checked-in deterministic dump evidence and fresh refusal/fallback validations; COLRv1, bitmap, SVG, emoji sequence planning, and GPU route registration remain separate non-claims.
 
 ## Linear Labels
 
