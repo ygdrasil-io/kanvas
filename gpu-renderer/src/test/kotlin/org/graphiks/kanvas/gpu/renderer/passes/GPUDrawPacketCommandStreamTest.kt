@@ -1,7 +1,9 @@
 package org.graphiks.kanvas.gpu.renderer.passes
 
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.execution.GPUCommandClass
 import org.graphiks.kanvas.gpu.renderer.execution.GPUCommandEncoderPlan
@@ -12,6 +14,12 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadSlotID
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
+import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationPlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
+import org.graphiks.kanvas.gpu.renderer.resources.ValidatingCommandOperandResourceProvider
 
 /** Verifies the Dawn-shaped packet and command-stream scaffold from spec 37. */
 class GPUDrawPacketCommandStreamTest {
@@ -103,6 +111,55 @@ class GPUDrawPacketCommandStreamTest {
     }
 
     @Test
+    fun `pass command stream maps packets to materialized command operands`() {
+        val packetStream = packetStream()
+        val materialization = ValidatingCommandOperandResourceProvider().materializeCommandOperands(
+            request = commandOperandMaterializationRequest(),
+            context = targetPreparationContext(),
+        )
+        val materialized = materialization as GPUResourceMaterializationDecision.Materialized
+        val commandStream = GPUPassCommandStream.fromDrawPacketStream(
+            streamId = "pass-command-stream-main",
+            packetStream = packetStream,
+            targetStateHash = "rgba8-premul-msaa1",
+            loadStoreLabel = "clear-store",
+            materialization = materialized,
+        )
+
+        assertEquals(
+            listOf(
+                "target-view:root",
+                "render-pipeline:solid-fill",
+                "bind-group:solid-fill:packet-1",
+                "vertex-buffer:solid-quad",
+            ),
+            commandStream.materializedOperandLabels,
+        )
+        assertContains(
+            commandStream.dumpLines(),
+            "passes.command-bridge packet=none command=beginRenderPass " +
+                "operand=target-view:root kind=render-target deviceGeneration=4 " +
+                "owner=render-pass:main-pass usage=render_attachment invalidation=frame-end " +
+                "descriptor=sha256:target-view:root facts=loadStore=clear-store",
+        )
+        assertContains(
+            commandStream.dumpLines(),
+            "passes.command-bridge packet=packet-1 command=setRenderPipeline " +
+                "operand=render-pipeline:solid-fill kind=render-pipeline deviceGeneration=4 " +
+                "owner=render-pass:main-pass usage=render invalidation=device-generation " +
+                "descriptor=sha256:render-pipeline:solid-fill facts=cache=warm",
+        )
+        assertContains(
+            commandStream.dumpLines(),
+            "passes.command-bridge packet=packet-1 command=setBindGroup " +
+                "operand=bind-group:solid-fill:packet-1 kind=bind-group deviceGeneration=4 " +
+                "owner=render-pass:main-pass usage=texture_binding,uniform invalidation=pass-end " +
+                "descriptor=sha256:bind-group:solid-fill:packet-1 facts=layout=layout-solid-v1",
+        )
+        assertFalse(commandStream.dumpLines().joinToString("\n").contains("WGPU"))
+    }
+
+    @Test
     fun `encoder plan preserves packet command and resource generation evidence`() {
         val resources = mutableListOf("payload-generation:7", "target-generation:11")
         val packetStream = packetStream()
@@ -190,5 +247,79 @@ class GPUDrawPacketCommandStreamTest {
             slotId = GPUPayloadSlotID("resource-$commandId"),
             fingerprint = GPUPayloadFingerprint("resource-fingerprint-$commandId"),
             bindingIndex = 0,
+        )
+
+    private fun commandOperandMaterializationRequest(): GPUCommandOperandMaterializationRequest =
+        GPUCommandOperandMaterializationRequest(
+            targetId = "root-target",
+            taskIds = listOf("task-fill-rect"),
+            resourcePlanLabels = listOf("first-route-command-operands"),
+            operands = listOf(
+                commandOperandPlan(
+                    packetId = null,
+                    commandLabel = "beginRenderPass",
+                    label = "target-view:root",
+                    kind = GPUMaterializedCommandOperandKind.RenderTarget,
+                    usageLabels = setOf("render_attachment"),
+                    invalidationPolicy = "frame-end",
+                    evidenceFacts = mapOf("loadStore" to "clear-store"),
+                ),
+                commandOperandPlan(
+                    packetId = "packet-1",
+                    commandLabel = "setRenderPipeline",
+                    label = "render-pipeline:solid-fill",
+                    kind = GPUMaterializedCommandOperandKind.RenderPipeline,
+                    usageLabels = setOf("render"),
+                    invalidationPolicy = "device-generation",
+                    evidenceFacts = mapOf("cache" to "warm"),
+                ),
+                commandOperandPlan(
+                    packetId = "packet-1",
+                    commandLabel = "setBindGroup",
+                    label = "bind-group:solid-fill:packet-1",
+                    kind = GPUMaterializedCommandOperandKind.BindGroup,
+                    usageLabels = setOf("uniform", "texture_binding"),
+                    evidenceFacts = mapOf("layout" to "layout-solid-v1"),
+                ),
+                commandOperandPlan(
+                    packetId = "packet-1",
+                    commandLabel = "draw",
+                    label = "vertex-buffer:solid-quad",
+                    kind = GPUMaterializedCommandOperandKind.VertexBuffer,
+                    usageLabels = setOf("vertex"),
+                    evidenceFacts = mapOf("topology" to "triangle-list"),
+                ),
+            ),
+        )
+
+    private fun commandOperandPlan(
+        packetId: String?,
+        commandLabel: String,
+        label: String,
+        kind: GPUMaterializedCommandOperandKind,
+        usageLabels: Set<String>,
+        invalidationPolicy: String = "pass-end",
+        evidenceFacts: Map<String, String> = emptyMap(),
+    ): GPUCommandOperandMaterializationPlan =
+        GPUCommandOperandMaterializationPlan(
+            packetId = packetId,
+            commandLabel = commandLabel,
+            label = label,
+            kind = kind,
+            descriptorHash = "sha256:$label",
+            deviceGeneration = 4,
+            ownerScope = "render-pass:main-pass",
+            requiredUsageLabels = usageLabels,
+            availableUsageLabels = usageLabels,
+            invalidationPolicy = invalidationPolicy,
+            evidenceFacts = evidenceFacts,
+        )
+
+    private fun targetPreparationContext(): GPUTargetPreparationContext =
+        GPUTargetPreparationContext(
+            targetId = "root-target",
+            frameId = "frame-1",
+            deviceGeneration = 4,
+            budgetClass = "unit-test",
         )
 }

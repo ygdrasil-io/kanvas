@@ -125,6 +125,224 @@ enum class GPUMaterializedResourceRole {
     PassResource,
 }
 
+/** Backend-neutral kind for a live command operand owned by resource materialization. */
+enum class GPUMaterializedCommandOperandKind {
+    /** Render pipeline selected before `setPipeline`. */
+    RenderPipeline,
+    /** Compute pipeline selected before a compute dispatch. */
+    ComputePipeline,
+    /** Uniform buffer bound through a bind group. */
+    UniformBuffer,
+    /** Storage buffer bound through a bind group. */
+    StorageBuffer,
+    /** Vertex buffer consumed by draw commands. */
+    VertexBuffer,
+    /** Index buffer consumed by indexed draw commands. */
+    IndexBuffer,
+    /** Backend bind group or descriptor set facade object. */
+    BindGroup,
+    /** Texture resource used by a pass or copy. */
+    Texture,
+    /** Texture view used by an attachment or sampled binding. */
+    TextureView,
+    /** Sampler object used by sampled texture bindings. */
+    Sampler,
+    /** Current render target attachment. */
+    RenderTarget,
+    /** Destination-copy texture used by read-before-write effects. */
+    DestinationCopyTexture,
+    /** Readback buffer or texture-copy destination. */
+    ReadbackResource,
+}
+
+/**
+ * Provider-owned command operand reference.
+ *
+ * This is the live-resource handoff boundary for command streams. It carries
+ * scoped, dumpable facts that prove a provider validated generation, owner
+ * scope, usage, and invalidation policy without exposing raw WGPU objects or
+ * making the reference durable key material.
+ */
+data class GPUMaterializedCommandOperandReference(
+    val label: String,
+    val kind: GPUMaterializedCommandOperandKind,
+    val descriptorHash: String,
+    val deviceGeneration: Long,
+    val ownerScope: String,
+    val usageLabels: List<String>,
+    val invalidationPolicy: String,
+    val evidenceFacts: Map<String, String> = emptyMap(),
+) {
+    internal val dumpUsageLabelsSnapshot: List<String> = usageLabels.toList()
+    internal val dumpEvidenceFactsSnapshot: Map<String, String> = evidenceFacts.toMap()
+
+    init {
+        require(label.isNotBlank()) { "GPUMaterializedCommandOperandReference.label must not be blank" }
+        requireDumpSafeValue("GPUMaterializedCommandOperandReference.label", label)
+        require(descriptorHash.isNotBlank()) {
+            "GPUMaterializedCommandOperandReference.descriptorHash must not be blank"
+        }
+        requireDumpSafeValue("GPUMaterializedCommandOperandReference.descriptorHash", descriptorHash)
+        require(deviceGeneration >= 0L) {
+            "GPUMaterializedCommandOperandReference.deviceGeneration must be non-negative"
+        }
+        require(ownerScope.isNotBlank()) {
+            "GPUMaterializedCommandOperandReference.ownerScope must not be blank"
+        }
+        requireDumpSafeValue("GPUMaterializedCommandOperandReference.ownerScope", ownerScope)
+        require(usageLabels.none { label -> label.isBlank() }) {
+            "GPUMaterializedCommandOperandReference.usageLabels must not contain blank labels"
+        }
+        usageLabels.forEach { label ->
+            requireDumpSafeValue("GPUMaterializedCommandOperandReference.usageLabels", label)
+        }
+        require(invalidationPolicy.isNotBlank()) {
+            "GPUMaterializedCommandOperandReference.invalidationPolicy must not be blank"
+        }
+        requireDumpSafeValue("GPUMaterializedCommandOperandReference.invalidationPolicy", invalidationPolicy)
+        require(evidenceFacts.keys.none { key -> key.isBlank() }) {
+            "GPUMaterializedCommandOperandReference.evidenceFacts must not contain blank keys"
+        }
+        require(evidenceFacts.values.none { value -> value.isBlank() }) {
+            "GPUMaterializedCommandOperandReference.evidenceFacts must not contain blank values"
+        }
+        evidenceFacts.forEach { (key, value) ->
+            requireDumpSafeValue("GPUMaterializedCommandOperandReference.evidenceFacts key", key)
+            requireDumpSafeValue("GPUMaterializedCommandOperandReference.evidenceFacts value", value)
+        }
+    }
+}
+
+/** Provider output that binds a materialized operand to a pass command. */
+data class GPUMaterializedCommandOperandBinding(
+    val packetId: String? = null,
+    val commandLabel: String,
+    val operand: GPUMaterializedCommandOperandReference,
+) {
+    init {
+        require(packetId == null || packetId.isNotBlank()) {
+            "GPUMaterializedCommandOperandBinding.packetId must not be blank"
+        }
+        packetId?.let { value ->
+            requireDumpSafeValue("GPUMaterializedCommandOperandBinding.packetId", value)
+        }
+        require(commandLabel.isNotBlank()) {
+            "GPUMaterializedCommandOperandBinding.commandLabel must not be blank"
+        }
+        requireDumpSafeValue("GPUMaterializedCommandOperandBinding.commandLabel", commandLabel)
+    }
+}
+
+/** Provider input for one command-stream operand that must be materialized. */
+data class GPUCommandOperandMaterializationPlan(
+    val packetId: String? = null,
+    val commandLabel: String,
+    val label: String,
+    val kind: GPUMaterializedCommandOperandKind,
+    val descriptorHash: String,
+    val deviceGeneration: Long,
+    val ownerScope: String,
+    val requiredUsageLabels: Set<String>,
+    val availableUsageLabels: Set<String>,
+    val invalidationPolicy: String,
+    val evidenceFacts: Map<String, String> = emptyMap(),
+    val evictedReason: String? = null,
+) {
+    internal val dumpRequiredUsageLabelsSnapshot: Set<String> = requiredUsageLabels.toSet()
+    internal val dumpAvailableUsageLabelsSnapshot: Set<String> = availableUsageLabels.toSet()
+    internal val dumpEvidenceFactsSnapshot: Map<String, String> = evidenceFacts.toMap()
+
+    init {
+        require(packetId == null || packetId.isNotBlank()) {
+            "GPUCommandOperandMaterializationPlan.packetId must not be blank"
+        }
+        packetId?.let { value ->
+            requireDumpSafeValue("GPUCommandOperandMaterializationPlan.packetId", value)
+        }
+        require(commandLabel.isNotBlank()) {
+            "GPUCommandOperandMaterializationPlan.commandLabel must not be blank"
+        }
+        requireDumpSafeValue("GPUCommandOperandMaterializationPlan.commandLabel", commandLabel)
+        require(label.isNotBlank()) { "GPUCommandOperandMaterializationPlan.label must not be blank" }
+        requireDumpSafeValue("GPUCommandOperandMaterializationPlan.label", label)
+        require(descriptorHash.isNotBlank()) {
+            "GPUCommandOperandMaterializationPlan.descriptorHash must not be blank"
+        }
+        requireDumpSafeValue("GPUCommandOperandMaterializationPlan.descriptorHash", descriptorHash)
+        require(deviceGeneration >= 0L) {
+            "GPUCommandOperandMaterializationPlan.deviceGeneration must be non-negative"
+        }
+        require(ownerScope.isNotBlank()) {
+            "GPUCommandOperandMaterializationPlan.ownerScope must not be blank"
+        }
+        requireDumpSafeValue("GPUCommandOperandMaterializationPlan.ownerScope", ownerScope)
+        require(requiredUsageLabels.none { label -> label.isBlank() }) {
+            "GPUCommandOperandMaterializationPlan.requiredUsageLabels must not contain blank labels"
+        }
+        requiredUsageLabels.forEach { label ->
+            requireDumpSafeValue("GPUCommandOperandMaterializationPlan.requiredUsageLabels", label)
+        }
+        require(availableUsageLabels.none { label -> label.isBlank() }) {
+            "GPUCommandOperandMaterializationPlan.availableUsageLabels must not contain blank labels"
+        }
+        availableUsageLabels.forEach { label ->
+            requireDumpSafeValue("GPUCommandOperandMaterializationPlan.availableUsageLabels", label)
+        }
+        require(invalidationPolicy.isNotBlank()) {
+            "GPUCommandOperandMaterializationPlan.invalidationPolicy must not be blank"
+        }
+        requireDumpSafeValue("GPUCommandOperandMaterializationPlan.invalidationPolicy", invalidationPolicy)
+        require(evidenceFacts.keys.none { key -> key.isBlank() }) {
+            "GPUCommandOperandMaterializationPlan.evidenceFacts must not contain blank keys"
+        }
+        require(evidenceFacts.values.none { value -> value.isBlank() }) {
+            "GPUCommandOperandMaterializationPlan.evidenceFacts must not contain blank values"
+        }
+        evidenceFacts.forEach { (key, value) ->
+            requireDumpSafeValue("GPUCommandOperandMaterializationPlan.evidenceFacts key", key)
+            requireDumpSafeValue("GPUCommandOperandMaterializationPlan.evidenceFacts value", value)
+        }
+        require(evictedReason == null || evictedReason.isNotBlank()) {
+            "GPUCommandOperandMaterializationPlan.evictedReason must not be blank"
+        }
+        evictedReason?.let { reason ->
+            requireDumpSafeValue("GPUCommandOperandMaterializationPlan.evictedReason", reason)
+        }
+    }
+}
+
+/** Provider request for all operands required by one command-stream bridge. */
+data class GPUCommandOperandMaterializationRequest(
+    val targetId: String,
+    val taskIds: List<String> = emptyList(),
+    val resourcePlanLabels: List<String> = emptyList(),
+    val operands: List<GPUCommandOperandMaterializationPlan>,
+) {
+    internal val dumpTaskIdsSnapshot: List<String> = taskIds.toList()
+    internal val dumpResourcePlanLabelsSnapshot: List<String> = resourcePlanLabels.toList()
+    internal val dumpOperandsSnapshot: List<GPUCommandOperandMaterializationPlan> = operands.toList()
+
+    init {
+        require(targetId.isNotBlank()) { "GPUCommandOperandMaterializationRequest.targetId must not be blank" }
+        requireDumpSafeValue("GPUCommandOperandMaterializationRequest.targetId", targetId)
+        require(taskIds.none { taskId -> taskId.isBlank() }) {
+            "GPUCommandOperandMaterializationRequest.taskIds must not contain blank labels"
+        }
+        taskIds.forEach { taskId ->
+            requireDumpSafeValue("GPUCommandOperandMaterializationRequest.taskIds", taskId)
+        }
+        require(resourcePlanLabels.none { label -> label.isBlank() }) {
+            "GPUCommandOperandMaterializationRequest.resourcePlanLabels must not contain blank labels"
+        }
+        resourcePlanLabels.forEach { label ->
+            requireDumpSafeValue("GPUCommandOperandMaterializationRequest.resourcePlanLabels", label)
+        }
+        require(operands.isNotEmpty()) {
+            "GPUCommandOperandMaterializationRequest.operands must not be empty"
+        }
+    }
+}
+
 /**
  * Evidence-only resource reference used by materialization preimage scaffolds.
  *
@@ -362,11 +580,15 @@ sealed interface GPUResourceMaterializationDecision {
         val targetId: String = UNSPECIFIED_DUMP_VALUE,
         val taskIds: List<String> = emptyList(),
         val resourcePlanLabels: List<String> = emptyList(),
+        val operandRefs: List<GPUMaterializedCommandOperandReference> = emptyList(),
+        val operandBridge: List<GPUMaterializedCommandOperandBinding> = emptyList(),
     ) : GPUResourceMaterializationDecision {
         internal val dumpResourcesSnapshot: List<GPUTextureResourceRef> = resources.toList()
         internal val dumpDiagnosticsSnapshot: List<GPUResourceDiagnostic> = diagnostics.toList()
         internal val dumpTaskIdsSnapshot: List<String> = taskIds.toList()
         internal val dumpResourcePlanLabelsSnapshot: List<String> = resourcePlanLabels.toList()
+        internal val dumpOperandRefsSnapshot: List<GPUMaterializedCommandOperandReference> = operandRefs.toList()
+        internal val dumpOperandBridgeSnapshot: List<GPUMaterializedCommandOperandBinding> = operandBridge.toList()
     }
 
     /**
@@ -450,6 +672,70 @@ interface GPUResourceProvider {
             ),
             targetId = context.targetId,
             resourcePlanLabels = listOf(resourcePlanLabel),
+        )
+    }
+
+    /** Materializes provider-owned command operands or refuses before encoding/submission. */
+    fun materializeCommandOperands(
+        request: GPUCommandOperandMaterializationRequest,
+        context: GPUTargetPreparationContext,
+    ): GPUResourceMaterializationDecision =
+        GPUResourceMaterializationDecision.Refused(
+            diagnostic = GPUResourceDiagnostic.providerUnconfigured(
+                resourceLabel = request.resourcePlanLabel(),
+                targetId = context.targetId,
+            ),
+            targetId = context.targetId,
+            taskIds = request.dumpTaskIdsSnapshot,
+            resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+        )
+}
+
+/** Resource-layer provider that validates command operands without exposing backend handles. */
+class ValidatingCommandOperandResourceProvider : GPUResourceProvider {
+    override fun materializeCommandOperands(
+        request: GPUCommandOperandMaterializationRequest,
+        context: GPUTargetPreparationContext,
+    ): GPUResourceMaterializationDecision {
+        val diagnostics = buildList {
+            if (request.targetId != context.targetId) {
+                add(
+                    GPUResourceDiagnostic.commandOperandTargetMismatch(
+                        resourceLabel = request.resourcePlanLabel(),
+                        requestTargetId = request.targetId,
+                        contextTargetId = context.targetId,
+                    ),
+                )
+            }
+            request.dumpOperandsSnapshot.forEach { plan ->
+                addAll(plan.validationDiagnostics(expectedDeviceGeneration = context.deviceGeneration))
+            }
+        }
+
+        if (diagnostics.isNotEmpty()) {
+            return GPUResourceMaterializationDecision.Refused(
+                diagnostic = diagnostics.first(),
+                targetId = context.targetId,
+                taskIds = request.dumpTaskIdsSnapshot,
+                resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+                diagnostics = diagnostics,
+            )
+        }
+
+        val bridge = request.dumpOperandsSnapshot.map { plan ->
+            GPUMaterializedCommandOperandBinding(
+                packetId = plan.packetId,
+                commandLabel = plan.commandLabel,
+                operand = plan.toMaterializedReference(),
+            )
+        }
+
+        return GPUResourceMaterializationDecision.Materialized(
+            resources = emptyList(),
+            targetId = context.targetId,
+            taskIds = request.dumpTaskIdsSnapshot,
+            resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+            operandBridge = bridge,
         )
     }
 }
@@ -650,6 +936,7 @@ data class GPUSurfaceTextureLease(
     val useToken: GPUUseToken,
     val usageLabels: Set<String> = emptySet(),
     val expiredReason: String? = null,
+    val evictedReason: String? = null,
 ) {
     /**
      * Returns all diagnostics that make this lease illegal for the requested use.
@@ -672,6 +959,12 @@ data class GPUSurfaceTextureLease(
             diagnostics += GPUResourceDiagnostic.surfaceLeaseStale(
                 resourceLabel = targetId,
                 reason = expiredReason,
+            )
+        }
+        if (evictedReason != null) {
+            diagnostics += GPUResourceDiagnostic.resourceEvicted(
+                resourceLabel = targetId,
+                reason = evictedReason,
             )
         }
         if (deviceGeneration != expectedDeviceGeneration) {
@@ -922,6 +1215,40 @@ data class GPUResourceDiagnostic(
                 ),
             )
 
+        /** Builds a refusal when command operand facts target a different surface. */
+        fun commandOperandTargetMismatch(
+            resourceLabel: String,
+            requestTargetId: String,
+            contextTargetId: String,
+        ): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.command_operand_target_mismatch",
+                resourceLabel = resourceLabel,
+                message = "Command operand materialization target mismatch for $resourceLabel: request=$requestTargetId context=$contextTargetId.",
+                terminal = true,
+                facts = mapOf(
+                    "contextTargetId" to contextTargetId,
+                    "requestTargetId" to requestTargetId,
+                ),
+            )
+
+        /** Builds a missing usage diagnostic for a command-stream operand. */
+        fun commandOperandUsageMissing(
+            resourceLabel: String,
+            missingUsageLabels: Set<String>,
+            availableUsageLabels: Set<String>,
+        ): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.command_operand_usage_missing",
+                resourceLabel = resourceLabel,
+                message = "Command operand $resourceLabel is missing usage ${missingUsageLabels.sorted()} from available ${availableUsageLabels.sorted()}.",
+                terminal = true,
+                facts = mapOf(
+                    "availableUsageLabels" to availableUsageLabels.sorted().joinToString(","),
+                    "missingUsageLabels" to missingUsageLabels.sorted().joinToString(","),
+                ),
+            )
+
         /** Builds a missing texture usage diagnostic. */
         fun textureUsageMissing(
             resourceLabel: String,
@@ -945,6 +1272,16 @@ data class GPUResourceDiagnostic(
                 code = "stale.texture.surface_lease",
                 resourceLabel = resourceLabel,
                 message = "Surface texture lease for $resourceLabel is stale: $reason.",
+                terminal = true,
+                facts = mapOf("reason" to reason),
+            )
+
+        /** Builds a resource-residency eviction diagnostic. */
+        fun resourceEvicted(resourceLabel: String, reason: String): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.evicted",
+                resourceLabel = resourceLabel,
+                message = "GPU resource $resourceLabel was evicted before materialization: $reason.",
                 terminal = true,
                 facts = mapOf("reason" to reason),
             )
@@ -1101,15 +1438,25 @@ fun GPUTargetPreparationContext.dumpLines(): List<String> =
  */
 fun GPUResourceMaterializationDecision.dumpLines(): List<String> =
     when (this) {
-        is GPUResourceMaterializationDecision.Materialized ->
+        is GPUResourceMaterializationDecision.Materialized -> {
+            val operandRefs = dumpCommandOperandRefs().sortedWith(
+                compareBy<GPUMaterializedCommandOperandReference> { operand -> operand.label }
+                    .thenBy { operand -> operand.kind.dumpLabel() },
+            )
+            val operandCount = if (operandRefs.isEmpty()) "" else " operands=${operandRefs.size}"
             listOf(
                 "resource.materialization:materialized " +
                     "target=$targetId " +
                     "tasks=${dumpTaskIdsSnapshot.dumpList()} " +
                     "resourcePlans=${dumpResourcePlanLabelsSnapshot.dumpList()} " +
-                    "resourceCount=${dumpResourcesSnapshot.size} " +
+                    "resourceCount=${dumpResourcesSnapshot.size}$operandCount " +
                     "diagnostics=${dumpDiagnosticsSnapshot.dumpCodes()}",
-            ) + dumpDiagnosticsSnapshot.dumpLines()
+            ) +
+                operandRefs.map { operand ->
+                    "resource.materialization:operand ${operand.dumpCommandOperandFields()}"
+                } +
+                dumpDiagnosticsSnapshot.dumpLines()
+        }
         is GPUResourceMaterializationDecision.Deferred ->
             listOf(
                 "resource.materialization:deferred " +
@@ -1152,7 +1499,30 @@ fun GPUResourceMaterializationPreimagePlan.dumpLines(): List<String> {
         nonClaims.dumpLine()
 }
 
+/** Emits scoped, non-handle fields for a materialized command operand reference. */
+fun GPUMaterializedCommandOperandReference.dumpCommandOperandFields(): String =
+    "operand=$label kind=${kind.dumpLabel()} " +
+        "deviceGeneration=$deviceGeneration owner=$ownerScope " +
+        "usage=${dumpUsageLabelsSnapshot.dumpList()} " +
+        "invalidation=$invalidationPolicy descriptor=$descriptorHash " +
+        "facts=${dumpEvidenceFactsSnapshot.dumpFacts()}"
+
 private const val UNSPECIFIED_DUMP_VALUE = "unspecified"
+
+private val RAW_HANDLE_DUMP_PATTERN =
+    Regex("""(?i)(wgpu|externaltexturehandle|gpu[a-z0-9]*handle|@0x[0-9a-f]+|0x[0-9a-f]{6,})""")
+
+private fun requireDumpSafeValue(fieldName: String, value: String) {
+    require(!RAW_HANDLE_DUMP_PATTERN.containsMatchIn(value)) {
+        "$fieldName must not contain raw backend handle evidence"
+    }
+}
+
+private fun GPUResourceMaterializationDecision.Materialized.dumpCommandOperandRefs(): List<GPUMaterializedCommandOperandReference> {
+    val bridgedRefs = dumpOperandBridgeSnapshot.map { binding -> binding.operand }
+    val bridgedLabels = bridgedRefs.map { operand -> operand.label to operand.kind }.toSet()
+    return bridgedRefs + dumpOperandRefsSnapshot.filter { operand -> operand.label to operand.kind !in bridgedLabels }
+}
 
 private fun GPUTextureAllocationPlan.resourcePlanLabel(): String =
     when (this) {
@@ -1173,6 +1543,56 @@ private fun GPUTextureAllocationPlan.planKindLabel(): String =
         is GPUTextureAllocationPlan.UploadFromArtifact -> "UploadFromArtifact"
         is GPUTextureAllocationPlan.Refuse -> "Refuse"
     }
+
+private fun GPUCommandOperandMaterializationRequest.resourcePlanLabel(): String =
+    resourcePlanLabelsOrDefault().first()
+
+private fun GPUCommandOperandMaterializationRequest.resourcePlanLabelsOrDefault(): List<String> =
+    if (dumpResourcePlanLabelsSnapshot.isEmpty()) {
+        listOf("command-operands")
+    } else {
+        dumpResourcePlanLabelsSnapshot
+    }
+
+private fun GPUCommandOperandMaterializationPlan.validationDiagnostics(
+    expectedDeviceGeneration: Long,
+): List<GPUResourceDiagnostic> =
+    buildList {
+        if (deviceGeneration != expectedDeviceGeneration) {
+            add(
+                GPUResourceDiagnostic.deviceGenerationStale(
+                    resourceLabel = label,
+                    expectedDeviceGeneration = expectedDeviceGeneration,
+                    actualDeviceGeneration = deviceGeneration,
+                ),
+            )
+        }
+        val missingUsage = dumpRequiredUsageLabelsSnapshot - dumpAvailableUsageLabelsSnapshot
+        if (missingUsage.isNotEmpty()) {
+            add(
+                GPUResourceDiagnostic.commandOperandUsageMissing(
+                    resourceLabel = label,
+                    missingUsageLabels = missingUsage,
+                    availableUsageLabels = dumpAvailableUsageLabelsSnapshot,
+                ),
+            )
+        }
+        evictedReason?.let { reason ->
+            add(GPUResourceDiagnostic.resourceEvicted(resourceLabel = label, reason = reason))
+        }
+    }
+
+private fun GPUCommandOperandMaterializationPlan.toMaterializedReference(): GPUMaterializedCommandOperandReference =
+    GPUMaterializedCommandOperandReference(
+        label = label,
+        kind = kind,
+        descriptorHash = descriptorHash,
+        deviceGeneration = deviceGeneration,
+        ownerScope = ownerScope,
+        usageLabels = dumpRequiredUsageLabelsSnapshot.sorted(),
+        invalidationPolicy = invalidationPolicy,
+        evidenceFacts = dumpEvidenceFactsSnapshot,
+    )
 
 private fun List<String>.dumpList(): String =
     if (isEmpty()) "none" else sorted().joinToString(",")
@@ -1219,6 +1639,23 @@ private fun GPUMaterializedResourceRole.dumpLabel(): String =
         GPUMaterializedResourceRole.LayerTargetTexture -> "layer-target-texture"
         GPUMaterializedResourceRole.StencilAttachment -> "stencil-attachment"
         GPUMaterializedResourceRole.PassResource -> "pass-resource"
+    }
+
+private fun GPUMaterializedCommandOperandKind.dumpLabel(): String =
+    when (this) {
+        GPUMaterializedCommandOperandKind.RenderPipeline -> "render-pipeline"
+        GPUMaterializedCommandOperandKind.ComputePipeline -> "compute-pipeline"
+        GPUMaterializedCommandOperandKind.UniformBuffer -> "uniform-buffer"
+        GPUMaterializedCommandOperandKind.StorageBuffer -> "storage-buffer"
+        GPUMaterializedCommandOperandKind.VertexBuffer -> "vertex-buffer"
+        GPUMaterializedCommandOperandKind.IndexBuffer -> "index-buffer"
+        GPUMaterializedCommandOperandKind.BindGroup -> "bind-group"
+        GPUMaterializedCommandOperandKind.Texture -> "texture"
+        GPUMaterializedCommandOperandKind.TextureView -> "texture-view"
+        GPUMaterializedCommandOperandKind.Sampler -> "sampler"
+        GPUMaterializedCommandOperandKind.RenderTarget -> "render-target"
+        GPUMaterializedCommandOperandKind.DestinationCopyTexture -> "destination-copy-texture"
+        GPUMaterializedCommandOperandKind.ReadbackResource -> "readback-resource"
     }
 
 private fun List<String>.dumpPreimageList(): String =
