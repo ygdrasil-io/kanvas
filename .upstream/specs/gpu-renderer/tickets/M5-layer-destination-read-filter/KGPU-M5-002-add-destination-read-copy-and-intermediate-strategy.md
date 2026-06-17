@@ -1,7 +1,7 @@
 ---
 id: KGPU-M5-002
 title: "Add destination-read copy and intermediate strategy"
-status: review
+status: done
 milestone: M5
 priority: P0
 owner_area: destination-read
@@ -73,7 +73,7 @@ semantics.
 
 - Expected row: `gpu-renderer.destination-read.strategy`
 - Expected classification: `TargetNative`
-- Claim promotion allowed: no until reviewed.
+- Claim promotion allowed: no for this contract-only gate.
 
 ## Validation
 
@@ -84,7 +84,8 @@ rtk git diff --check
 
 ## Status Notes
 
-- `review`: `GPUDestinationReadStrategyPlanner` adds contract-gate evidence for
+- `done`: `GPUDestinationReadStrategyPlanner` adds accepted contract-gate
+  evidence for
   the `gpu-renderer.destination-read.strategy` row with dumpable
   destination-read bounds, target-copy descriptor, existing-intermediate route,
   binding/layout hashes, pass split/copy-before-sample ordering, budget facts,
@@ -97,8 +98,9 @@ rtk git diff --check
   input-attachment support, CPU readback fallback, or product activation.
 - Evidence: `DestinationReadStrategyGateTest` plus
   `reports/gpu-renderer/2026-06-17-m5-002-destination-read-strategy-gate.md`.
-- Dependency note: KGPU-M5-001 remains `review`, so this ticket cannot move to
-  `done` or support promotion until that dependency is independently accepted.
+- Dependency note: KGPU-M5-001 is `done` on current `master`; KGPU-M5-002 status
+  is no longer dependency-blocked. Support promotion remains blocked on native
+  adapter-backed destination-read copy/intermediate execution evidence.
 
 ## Linear Labels
 

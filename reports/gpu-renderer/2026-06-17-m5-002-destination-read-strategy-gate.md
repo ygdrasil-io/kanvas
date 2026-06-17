@@ -8,7 +8,7 @@ Ticket: `KGPU-M5-002`
 
 | Ticket | Status | Evidence | Remaining gate |
 |---|---|---|---|
-| KGPU-M5-002 | `review` | Added `GPUDestinationReadStrategyPlanner`, destination-read action/copy/budget contracts, accepted/refused diagnostics, canonical copy/intermediate/binding/barrier/resource dumps, and `DestinationReadStrategyGateTest`. | Independent review is still required before moving to `done`. KGPU-M5-001 is also still `review`, so no destination-read support claim can promote until that dependency is accepted. Native adapter-backed destination-copy execution, readback/reference comparison, product activation, framebuffer fetch, input attachments, and CPU readback fallback remain unpromoted. |
+| KGPU-M5-002 | `done` | Added `GPUDestinationReadStrategyPlanner`, destination-read action/copy/budget contracts, accepted/refused diagnostics, canonical copy/intermediate/binding/barrier/resource dumps, and `DestinationReadStrategyGateTest`. | Ticket-status gate closed after independent review and KGPU-M5-001 `done` landed on `master`. Native adapter-backed destination-copy execution, readback/reference comparison, product activation, framebuffer fetch, input attachments, CPU readback fallback, and broad blend-mode support remain unpromoted. |
 
 ## Evidence
 
@@ -58,12 +58,12 @@ strategy planner, action contracts, and extended bounds fields did not exist.
 After implementation, the targeted test, full `:gpu-renderer:check`,
 `rtk git diff --check`, and the status-count command passed.
 
-Current status count after moving KGPU-M5-002 to `review`:
+Current status count after moving KGPU-M5-002 to `done`:
 
 ```text
 blocked 12
-done 32
-review 2
+done 34
+review 0
 ```
 
 ## Review
@@ -81,8 +81,9 @@ Local pre-PR review scope:
   refuse before accepted dumps;
 - check that destination-read bindings stay out of material-key evidence.
 
-No independent review has accepted the ticket yet, so the ticket remains
-`review` rather than `done`.
+Independent review accepted the contract-only evidence after the strategy/action
+and out-of-scope strategy refusals were added. The ticket can be `done` without
+promoting product destination-read support.
 
 ## Non-Claims
 
