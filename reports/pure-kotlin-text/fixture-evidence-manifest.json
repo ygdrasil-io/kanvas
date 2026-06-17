@@ -233,6 +233,47 @@
       ]
     },
     {
+      "familyId": "font-parser-scaler-telemetry",
+      "familyName": "Font parser/scaler telemetry",
+      "classification": "tracked-gap",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "currentEvidencePaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/parser-metrics.json",
+        "reports/pure-kotlin-text/scaler-metrics.json",
+        "reports/pure-kotlin-text/2026-06-17-kfont-m12-002-parser-scaler-metrics.md",
+        "reports/pure-kotlin-text/font-claim-dashboard.json",
+        "reports/pure-kotlin-text/font-telemetry-pm-bundle.json",
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "reports/pure-kotlin-text/dump-evidence-index.json"
+      ],
+      "requiredEvidenceGates": [
+        "KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 still own shaping/paragraph, glyph/cache, and GPU handoff producer emission before the telemetry pack is domain-complete.",
+        "Keep all parser/scaler telemetry rows advisory until the dedicated budget-promotion policy is updated."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk ./gradlew --no-daemon pipelinePmBundle",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py"
+      ],
+      "fixtureCommands": [
+        "FontTelemetryEvidenceWriter emits parser/scaler telemetry dumps under reports/pure-kotlin-text and FontTelemetrySchemaTest asserts byte-identical checked-in goldens."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim"
+      ]
+    },
+    {
       "familyId": "font-source-sfnt",
       "familyName": "Font source/SFNT",
       "classification": "current-supported",
@@ -320,7 +361,7 @@
         "reports/pure-kotlin-text/dump-evidence-index.json"
       ],
       "requiredEvidenceGates": [
-        "KFONT-M12-002, KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own parser/scaler/shaping/paragraph/glyph/GPU producer emission into the shared schema; keep this family schema-only advisory evidence until those subsystem tickets land.",
+        "KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own shaping/paragraph/glyph/GPU producer emission into the shared schema; parser/scaler producer emission is now attached separately and this family remains schema-only advisory evidence until those subsystem tickets land.",
         "Keep performance budgets advisory until the dedicated promotion policy is updated."
       ],
       "validationCommands": [
