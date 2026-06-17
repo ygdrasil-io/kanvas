@@ -63,6 +63,50 @@ class FallbackDecisionDumpTest {
         )
     }
 
+    @Test
+    fun `per fixture fallback assets match repo goldens`() {
+        val bundle = defaultFallbackEvidenceBundle()
+
+        fallbackFixtureIds().forEach { fixtureId ->
+            val expected = Files.readString(projectRoot().resolve("reports/font/fixtures/expected/fallback/$fixtureId.json"))
+            val actual = bundle.fixtureJsonById.getValue(fixtureId)
+
+            assertEquals(expected.trimEnd(), actual.trimEnd())
+            assertContains(actual, """"dumpId":"fallback-fixture"""")
+            assertContains(actual, """"fixtureId":"$fixtureId"""")
+        }
+    }
+
+    @Test
+    fun `fallback decision trace ticket is closed while downstream fallback slices stay explicit`() {
+        val root = projectRoot()
+        val ticket = Files.readString(
+            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/KFONT-M7-002-add-fallback-decision-trace.md"),
+        )
+        val milestoneReadme = Files.readString(
+            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/README.md"),
+        )
+        val statusSummary = Files.readString(
+            root.resolve(".upstream/specs/pure-kotlin-text/tickets/STATUS.md"),
+        )
+        val ticketReport = Files.readString(
+            root.resolve("reports/pure-kotlin-text/2026-06-16-kfont-m7-002-fallback-decision-trace.md"),
+        )
+
+        assertContains(ticket, """status: "done"""")
+        assertContains(ticket, "KFONT-M7-003")
+        assertContains(ticket, "KFONT-M7-005")
+        assertFalse(ticket.contains("remain open before `done`"))
+        assertContains(
+            milestoneReadme,
+            "| [KFONT-M7-002 - Add fallback decision trace](KFONT-M7-002-add-fallback-decision-trace.md) | `done` |",
+        )
+        assertContains(statusSummary, "| M7 | 1 | 0 | 0 | 0 | 2 | 2 |")
+        assertContains(ticketReport, "No ticket-local gate remains")
+        assertContains(ticketReport, "KFONT-M7-003")
+        assertContains(ticketReport, "KFONT-M7-005")
+    }
+
     private fun projectRoot(): Path {
         var current = Path.of("").toAbsolutePath().normalize()
         while (current.parent != null && !Files.isDirectory(current.resolve("reports/pure-kotlin-text"))) {
@@ -70,4 +114,13 @@ class FallbackDecisionDumpTest {
         }
         return current
     }
+
+    private fun fallbackFixtureIds(): List<String> = listOf(
+        "fallback-emoji-preference",
+        "fallback-family-generic",
+        "fallback-family-unavailable",
+        "fallback-locale-serbian",
+        "fallback-missing-glyph",
+        "fallback-script-arabic",
+    )
 }

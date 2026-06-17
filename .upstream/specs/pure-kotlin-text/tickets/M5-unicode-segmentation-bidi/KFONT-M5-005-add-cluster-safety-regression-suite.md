@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M5-005"
 title: "Add cluster safety regression suite"
-status: "proposed"
+status: "review"
 milestone: "M5"
 priority: "P0"
 owner_area: "unicode"
@@ -98,13 +98,17 @@ class ClusterSafetySuite {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test --tests '*ClusterSafety*'
+rtk ./gradlew --no-daemon :font:text:test --tests '*ClusterSafety*' --tests '*Grapheme*' --tests '*Bidi*' --tests '*ScriptItem*'
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 ```
 
 ## Status Notes
 
 - `proposed`: Regression suite depends on the concrete M5 segmentation, bidi, and itemization outputs.
 - Move to `ready` only after fixture list and legacy gate wording are reviewed.
+- `review`: `cluster-safety-report.json` now links checked-in `unicode-segments`, `bidi-runs`, and `script-runs` dumps by content hash, covers bounded Arabic/Devanagari/Thai/CJK-context/emoji/bidi cluster cases plus a synthetic negative split, and keeps `scaledemoji` explicitly visible as a legacy gate, but explicit `text.shaping.emoji-sequence-unsupported` refusal rows, reviewed CJK IVS breadth, and later fallback-boundary coverage remain open before `done`.
 
 ## Linear Labels
 

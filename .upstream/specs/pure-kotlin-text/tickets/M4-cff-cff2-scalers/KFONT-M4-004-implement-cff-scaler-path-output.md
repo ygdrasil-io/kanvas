@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M4-004"
 title: "Implement CFF scaler path output"
-status: "proposed"
+status: "done"
 milestone: "M4"
 priority: "P0"
 owner_area: "font-scaler"
@@ -73,11 +73,11 @@ data class CffGlyphMetrics(
 
 ## Acceptance Criteria
 
-- [ ] OTF/CFF fixture with line, curve, flex, and subroutine glyphs produces stable path command hashes.
-- [ ] Metrics dump records width source, advance, bounds, and font/source identity for each tested glyph.
-- [ ] Missing code point and malformed glyph fixtures produce `.notdef` or a glyph-local refusal with the original diagnostic retained.
-- [ ] Path output is deterministic across repeated runs and independent of host-installed fonts.
-- [ ] External FreeType or Skia comparisons, if present, are labeled drift-only and cannot update pass/fail expectations.
+- [x] OTF/CFF fixture with line, curve, flex, and subroutine glyphs produces stable path command hashes.
+- [x] Metrics dump records width source, advance, bounds, and font/source identity for each tested glyph.
+- [x] Missing code point and malformed glyph fixtures produce `.notdef` or a glyph-local refusal with the original diagnostic retained.
+- [x] Path output is deterministic across repeated runs and independent of host-installed fonts.
+- [x] External FreeType or Skia comparisons, if present, are labeled drift-only and cannot update pass/fail expectations.
 
 ## Required Evidence
 
@@ -107,8 +107,7 @@ rtk ./gradlew --no-daemon :font:scaler:test --tests '*CffScaler*' --tests '*CffP
 
 ## Status Notes
 
-- `proposed`: This is the M4 CFF single-master support promotion ticket.
-- Move to `ready` only after path dump schema and fixture glyph set are accepted.
+- `done`: `cff-scaler-path-output.json` now records deterministic path hashes, metrics, linked charstring evidence, and glyph-local refusal snapshots for the bounded generated CFF scaler route.
 
 ## Linear Labels
 

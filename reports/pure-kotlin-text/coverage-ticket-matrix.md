@@ -645,8 +645,17 @@ Files:
 
 - `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
 - `font/core/src/test/kotlin/org/graphiks/kanvas/font/FallbackDecisionDumpTest.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/FallbackShapingEvidence.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/FallbackShapingEvidenceTest.kt`
 - `reports/font/fixtures/expected/fallback/fallback-decision-trace.json`
+- `reports/font/fixtures/expected/fallback/fallback-emoji-preference.json`
+- `reports/font/fixtures/expected/fallback/fallback-family-generic.json`
+- `reports/font/fixtures/expected/fallback/fallback-family-unavailable.json`
+- `reports/font/fixtures/expected/fallback/fallback-locale-serbian.json`
+- `reports/font/fixtures/expected/fallback/fallback-missing-glyph.json`
+- `reports/font/fixtures/expected/fallback/fallback-script-arabic.json`
 - `reports/font/fixtures/expected/fallback/resolved-font-runs.json`
+- `reports/font/fixtures/expected/shaping/fallback-shaped-glyph-run.json`
 - `reports/pure-kotlin-text/2026-06-16-kfont-m7-002-fallback-decision-trace.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/KFONT-M7-002-add-fallback-decision-trace.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/README.md`
@@ -663,6 +672,14 @@ Evidence:
   six bounded fallback cases: generic-family selection, Arabic script
   fallback, Serbian locale hinting, emoji preference, missing-glyph refusal,
   and family-unavailable refusal.
+- The same bundle now emits six dedicated `fallback-fixture` assets so later
+  evidence can reference each bounded case directly without reslicing the
+  aggregate dumps.
+- `defaultFallbackShapedGlyphRunEvidenceJson()` adds a shaping-owned
+  `fallback-shaped-glyph-run.json` golden that links each bounded shaping case
+  back to `fallback-decision-trace`, `resolved-font-runs`, and the dedicated
+  `fallback-fixture` asset while preserving selected/rejected typeface facts
+  and refusal diagnostics.
 - `ResolvedFontRunEvidence` records deterministic text ranges, cluster ranges,
   selected `TypefaceID`, host-dependent markers, fallback reasons, and shaping
   diagnostic codes for positive cases, while refusal `diagnosticRanges` keep
@@ -677,20 +694,87 @@ Validation:
 rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecisionDump*'
 rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecision*'
 rtk ./gradlew --no-daemon :font:core:test
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.FallbackShapingEvidenceTest
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk git diff --check
 ```
 
-Remaining gate: this is bounded fallback-trace evidence only. It does not yet
-add shaping-plan or `shaped-glyph-run` trace propagation, dedicated
-per-fixture fallback assets, variable-axis-aware fallback, cluster-safe
-fallback segmentation, CPU oracle promotion, or any GPU text-route claim.
+Remaining gate: no ticket-local gate remains. Broader fallback promotion is
+owned by `KFONT-M7-003`, `KFONT-M7-004`, and `KFONT-M7-005`; this slice stays
+bounded fallback-trace evidence only and does not add CPU oracle promotion,
+cluster-safe segmentation, platform fallback claims, or any GPU text-route
+claim.
+
+### KFONT-M7-004: Add cluster-safe fallback segmentation tests
+
+Status: review with bounded fixture evidence.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/FallbackSegmentationReport.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ClusterSafetyReport.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/FallbackSegmentationTest.kt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-arabic-mark.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-cjk-vs.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-devanagari.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-emoji-zwj.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-latin-mark.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-negative-split.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-skin-tone.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-thai.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-vs15-vs16.txt`
+- `reports/font/fixtures/expected/fallback/fallback-segmentation-report.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m7-004-fallback-segmentation.md`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/KFONT-M7-004-add-cluster-safe-fallback-segmentation-tests.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `defaultFallbackClusterEvidenceCases()` adds nine bounded fallback cluster
+  cases that reuse the M5 cluster texts while keeping all behavior pure Kotlin
+  and deterministic.
+- `FallbackSegmentationReport` links checked-in SHA-256 refs for
+  `cluster-safety-report.json`, `fallback-decision-trace.json`,
+  `resolved-font-runs.json`, and `shaped-glyph-run.json`.
+- Positive Arabic, CJK variation-selector, Devanagari, emoji ZWJ, skin-tone,
+  VS15/VS16, Thai, and Latin-mark rows preserve whole-cluster fallback run
+  boundaries.
+- `fallback-cluster-negative-split.txt` keeps `scaledemoji` explicit and
+  records a reviewed split hazard with
+  `text.shaping.cluster-invariant-failed`,
+  `font.fallback-glyph-unavailable`, and
+  `text.shaping.emoji-sequence-unsupported`.
+- `FallbackSegmentationTest` asserts the checked-in golden byte for byte and
+  verifies that every `fallback-cluster-*` fixture is checked in and non-empty.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecision*'
+rtk ./gradlew --no-daemon :font:text:test --tests '*FallbackSegmentation*' --tests '*ClusterSafety*'
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: this bounded M7-004 slice is in `review`, not `done`. The
+negative emoji case still reports a reviewed split hazard instead of a final
+whole-cluster refusal path, dedicated per-fixture fallback trace/resolved-run
+assets remain open, host-dependent fallback markers remain non-normative, and
+`scaledemoji` stays explicitly unretired.
 
 ### KFONT-M7-005: Host-dependent system scan diagnostics
 
-Status: implemented as a bounded review slice.
+Status: implemented as a bounded done slice.
 
 Files:
 
@@ -1134,7 +1218,7 @@ interpolation, phantom-point metrics, CFF/CFF2 support, hinting VM parity, or
 GPU glyph route support.
 ### PKT-04F: TrueType Gvar IUP Interpolation
 
-Status: implemented.
+Status: done; freshly validated with deterministic evidence.
 
 Files:
 
@@ -1158,15 +1242,17 @@ Evidence:
   deterministic `variation-deltas.json` style evidence for one explicit point,
   wraparound interpolation, untouched-contour isolation, `avar`-mapped
   coordinates, composite child-outline propagation, horizontal phantom-point
-  metrics min/default/max positions, `HVAR`-unimplemented warnings, and
-  malformed tuple diagnostics.
+  metrics min/default/max positions, bounded `HVAR` advance-width deltas,
+  bounded `MVAR` vertical-global metric deltas, malformed `HVAR`/`MVAR`
+  table diagnostics, and malformed tuple diagnostics.
 - Tests prove that a single explicit point propagates to the whole contour,
   wraparound interpolation derives deltas for the untouched segment, contours
   with no referenced points remain unchanged, `TrueTypeGlyfScaler` applies
   `avar` remapping before requesting `gvar` deltas, composite outlines inherit
-  interpolated child deltas, and bounded phantom-point deltas now adjust
-  `advanceX` without changing the fallback route for unsupported metrics
-  variation tables.
+  interpolated child deltas, bounded phantom-point deltas adjust `advanceX`,
+  bounded `HVAR` data adjusts horizontal metrics, and bounded `MVAR` data
+  adjusts surfaced vertical global metrics without dropping semantically valid
+  fallback metrics when malformed table data is encountered.
 - Malformed tuple payloads now emit `font.variation-data-malformed` with
   `truetype.gvar-malformed` while preserving the default outline route when the
   fallback remains semantically valid.
@@ -1174,15 +1260,20 @@ Evidence:
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:scaler:test --tests '*IUP*' --tests '*Gvar*'
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*IUP*' --tests '*Gvar*' --tests '*PhantomPoint*' --tests '*Hvar*' --tests '*Mvar*'
 rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk git diff --check
 ```
 
-Remaining gate: this is a bounded TrueType `gvar` IUP slice only. It does not
-claim complete `HVAR`/`VVAR`/`MVAR` application, vertical shaping/layout, complete
-variable-font parity, hinting VM parity, or GPU glyph route support.
+Remaining gate:
+
+- This is still bounded TrueType variation evidence only.
+- It does not claim complete `gvar` parity, complete `HVAR`/`VVAR`/`MVAR`
+  parity beyond the checked-in fixtures, vertical shaping/layout, complete
+  variable-font parity, hinting VM parity, or GPU glyph route support.
 ### PKT-04G: TrueType Vertical Metric Evidence
 
 Status: done; freshly validated with deterministic evidence.
@@ -1378,6 +1469,96 @@ rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 Remaining gate: this is deterministic generated-fixture safety evidence only.
 It does not claim broader real-font corpus coverage, complete public CFF path
 output, complete CFF2 variation support, or GPU glyph route support.
+### KFONT-M4-004: CFF Scaler Path Output
+
+Status: done; freshly validated in this wave.
+
+Files:
+
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/font/fixtures/expected/scaler/cff-scaler-path-output.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m4-004-cff-path-output.md`
+
+Evidence:
+
+- `CFFScaledGlyphEvidence` now records deterministic source/typeface identity,
+  outline commands, path hashes, bounds, metrics, width source, and linked
+  `cff-charstring-trace` evidence for bounded generated CFF glyphs.
+- `cff-scaler-path-output.json` covers basic path output, subroutine path
+  output, flex output, missing-glyph refusal, and malformed-glyph refusal
+  without widening support claims to real-font corpora or GPU routes.
+- Missing glyphs emit `font.scaler.cff.path-output-unavailable`, while
+  malformed glyphs retain the original refusal and add
+  `font.scaler.cff.glyph-malformed` in the deterministic dump.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this remains generated-fixture path-output evidence only. It
+does not claim broader real-font corpus coverage, complete CFF2 variation
+output, native scaler parity, or GPU glyph route support.
+### KFONT-M4-005: CFF2 Variation Path Output
+
+Status: done; freshly validated in this wave.
+
+Files:
+
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/font/fixtures/expected/scaler/cff-charstring-trace.json`
+- `reports/font/fixtures/expected/scaler/cff-scaler-path-output.json`
+- `reports/font/fixtures/expected/scaler/cff2-variation-trace.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m4-005-cff2-variation-path-output.md`
+
+Evidence:
+
+- `CFF2Scaler` now normalizes user-space `fvar` coordinates, applies `avar`
+  remapping, and resolves bounded CFF2 `VariationStore` scalars before
+  executing `blend` for path-output evidence.
+- `cff2-variation-trace.json` records distinct default/min/max/named path
+  hashes, normalized variation coordinates, and per-`blend` vector evidence
+  including `vsindex`, region indexes, scalars, and blended values.
+- The existing `cff-charstring-trace.json` and `cff-scaler-path-output.json`
+  goldens are rebased to serialize deterministic `blendVectors` alongside the
+  pre-existing CFF trace/path evidence.
+- Stable refusal coverage now includes the dedicated
+  `font.scaler.cff2.blend-stack-malformed` route plus
+  `cff2.vsindex-invalid`, `cff2.variation-store-missing`,
+  `cff2.variation-axis`, and `cff2.variation-position-non-finite`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2FixtureInterpreterAppliesVsindexBlendEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScalerNormalizesUserSpaceVariationCoordinatesBeforeBlendAndMetrics --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScalerScaledGlyphEvidenceUsesNormalizedVariationPosition --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScalerAppliesAvarCoordinateMappingBeforeBlend --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScaledGlyphEvidenceRefusesBlendWhenVariationStoreIsMissing --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScaledGlyphEvidenceRefusesInvalidVsIndexDeterministically --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScaledGlyphEvidenceReportsUnknownRequestedAxisWithoutThrowing --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2ScaledGlyphEvidenceReportsNonFiniteAxisWithoutThrowing --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2BlendRejectsMalformedStackWithDedicatedDiagnostic --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cff2VariationTraceGoldenMatchesGeneratedEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffCharStringTraceGoldenMatchesGeneratedEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffScalerPathOutputGoldenMatchesGeneratedEvidence
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this remains generated-fixture CFF2 variation evidence only. It
+does not claim broader real-font CFF2 support, HVAR/VVAR/MVAR advance deltas,
+native-scaler parity, or GPU glyph route support.
 ### PKT-05B: CFF INDEX/DICT Fixture Pack And Refusal Goldens
 
 Status: done; independently reviewed and freshly validated.
@@ -1982,6 +2163,70 @@ Remaining gate: none for bounded KFONT-M5-004 script itemization closeout.
 This remains itemization evidence only and does not claim complete UCD
 coverage, GSUB/GPOS shaping, default feature policy, font fallback, glyph
 mapping, paragraph layout, emoji rendering, or GPU text route support.
+
+### KFONT-M5-005: Add cluster safety regression suite
+
+Status: review with bounded fixture evidence.
+
+Files:
+
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ClusterSafetyReport.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ClusterSafetyTest.kt`
+- `reports/font/fixtures/expected/unicode/cluster-arabic-mark.txt`
+- `reports/font/fixtures/expected/unicode/cluster-cjk-variation-selector.txt`
+- `reports/font/fixtures/expected/unicode/cluster-devanagari-conjunct.txt`
+- `reports/font/fixtures/expected/unicode/cluster-emoji-family-zwj.txt`
+- `reports/font/fixtures/expected/unicode/cluster-emoji-skin-tone.txt`
+- `reports/font/fixtures/expected/unicode/cluster-mixed-bidi.txt`
+- `reports/font/fixtures/expected/unicode/cluster-negative-split.txt`
+- `reports/font/fixtures/expected/unicode/cluster-safety-report.json`
+- `reports/font/fixtures/expected/unicode/cluster-thai-tone.txt`
+- `reports/font/fixtures/expected/unicode/cluster-vs15-vs16.txt`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m5-005-cluster-safety.md`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `.upstream/specs/pure-kotlin-text/tickets/M5-unicode-segmentation-bidi/KFONT-M5-005-add-cluster-safety-regression-suite.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M5-unicode-segmentation-bidi/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `ClusterSafetySuite` emits `cluster-safety-report.json` from Kanvas-owned
+  grapheme, bidi, and script-itemization outputs only; no native or external
+  segmentation/shaping engine is used as a normative oracle.
+- The report links `unicode-segments.json`, `bidi-runs.json`, and
+  `script-runs.json` by content hash and records invariant results for
+  grapheme-cluster integrity, bidi-run boundary alignment, and script-run
+  boundary alignment.
+- The checked-in fixture matrix covers bounded emoji family ZWJ, emoji
+  skin-tone, VS15/VS16, Arabic mark, Devanagari conjunct, Thai tone, CJK
+  variation-selector context, mixed bidi, and a synthetic negative split row.
+- `cluster-negative-split.txt` records a stable
+  `text.shaping.cluster-invariant-failed` diagnostic without widening any
+  shaping or emoji support claim.
+- `ClusterSafetyTest` asserts byte-identical golden output, verifies the
+  ticket fixture set is checked in, and confirms Unicode-version mismatch
+  propagation through the cluster-safety path.
+- Emoji-adjacent rows keep `scaledemoji` explicit as a legacy gate; this slice
+  does not add `emoji-sequence-unsupported`, fallback-route, color-glyph, or
+  GPU evidence.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests '*ClusterSafety*' --tests '*Grapheme*' --tests '*Bidi*' --tests '*ScriptItem*'
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: this bounded M5-005 slice is in `review`, not `done`. An
+explicit `text.shaping.emoji-sequence-unsupported` refusal row, broader
+reviewed CJK IVS coverage, and later fallback-boundary evidence remain open
+before complete cluster-safety closeout or M7 fallback-cluster promotion.
 
 ### KFONT-M6-001: Define `OpenTypeLayoutEngine` Contract And Dumps
 
@@ -3635,6 +3880,62 @@ rtk ./gradlew --no-daemon :font:gpu-api:test
 Remaining gate: this is telemetry scaffolding only. It does not measure actual
 runtime performance, promote indicative budgets into release gates, synthesize
 GPU upload evidence, or claim GPU text rendering support.
+
+### KFONT-M12-001: Define font telemetry schema
+
+Status: done; implemented and freshly revalidated for closeout.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt`
+- `reports/pure-kotlin-text/font-telemetry-schema.json`
+- `reports/pure-kotlin-text/font-telemetry-schema-fixture.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m12-001-font-telemetry-schema.md`
+- `reports/pure-kotlin-text/font-telemetry-pm-bundle.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-001-define-font-telemetry-schema.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md`
+- `scripts/validate_kfont_m12_001_telemetry_pm_evidence.py`
+- `build.gradle.kts`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `FontTelemetryEvidenceWriter` now emits a deterministic cross-domain schema
+  for parser, scaler, shaping, paragraph, glyph artifact, and GPU text handoff
+  telemetry with shared dimensions and GPU-only adapter/backend fields.
+- `font-telemetry-schema-fixture.json` records one repeated-run advisory sample
+  for each telemetry domain plus stable refusal cases for missing dimensions
+  and single-run budget misuse.
+- `font-telemetry-pm-bundle.json` now records advisory `tracked-gap`
+  `pipelinePmBundle` packaging for the M12 row and pins one stable sample per
+  telemetry domain without turning budgets into release gates.
+- `FontTelemetrySchemaTest` asserts byte-identical checked-in dumps, required
+  domain coverage, repeated-run aggregation fields, conditional GPU adapter
+  facts, and stable telemetry refusal diagnostics without HarfBuzz or
+  FreeType wording.
+- `validateKfontM12001TelemetryPmEvidence` and its Python validator assert that
+  the PM bundle copies the telemetry schema/dashboard artifacts, preserves
+  `warning-only` wording, and keeps downstream producer work explicit under
+  `KFONT-M12-002`, `KFONT-M12-003`, `KFONT-M12-004`, and `KFONT-M12-005`
+  without keeping the schema slice open.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
+rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: no schema-local gate remains. Downstream producer emission into
+the shared schema is owned by `KFONT-M12-002`, `KFONT-M12-003`,
+`KFONT-M12-004`, and `KFONT-M12-005`; this slice does not promote any
+performance budget, GPU route, or release-gate claim.
 ### KFONT-M1-004: Bundled Source Fixture Manifest
 
 Status: done; merged, independently reviewed, and freshly revalidated for closeout.

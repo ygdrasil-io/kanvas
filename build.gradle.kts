@@ -3522,6 +3522,20 @@ tasks.register<Exec>("validatePureKotlinTextClaimDashboard") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("validateKfontM12001TelemetryPmEvidence") {
+    group = "verification"
+    description = "Validates the advisory PM bundle evidence for the KFONT-M12-001 telemetry schema slice."
+    commandLine("python3", "scripts/validate_kfont_m12_001_telemetry_pm_evidence.py", rootDir.absolutePath)
+    inputs.file(layout.projectDirectory.file("scripts/validate_kfont_m12_001_telemetry_pm_evidence.py"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-claim-dashboard.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-schema.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-schema-fixture.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-pm-bundle.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"))
+    inputs.file(layout.projectDirectory.file("build.gradle.kts"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register("pipelineSceneDashboardGate") {
     group = "verification"
     description = "Runs the M50 release gate validation for the generated scene dashboard."
@@ -6016,6 +6030,7 @@ tasks.register("pipelinePmBundle") {
 
     dependsOn(
         "validatePureKotlinTextClaimDashboard",
+        "validateKfontM12001TelemetryPmEvidence",
         "pipelineM65RuntimeSmoke",
         "pipelineM86FidelityBurndown",
         "validateM88ReleaseCandidate2",
@@ -6176,6 +6191,11 @@ tasks.register("pipelinePmBundle") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m66-readiness-counters.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m55-performance-gate-candidates.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m59-performance-release-gate.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-claim-dashboard.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-schema.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-schema-fixture.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-pm-bundle.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"))
     outputs.dir(bundleDir)
     outputs.upToDateWhen { false }
 
@@ -6346,6 +6366,18 @@ tasks.register("pipelinePmBundle") {
         }
         if (m65RuntimeRoot.isDirectory) {
             m65RuntimeRoot.copyRecursively(targetRoot.resolve("runtime/m65-runtime-smoke"), overwrite = true)
+        }
+        listOf(
+            "reports/pure-kotlin-text/font-claim-dashboard.json",
+            "reports/pure-kotlin-text/font-telemetry-schema.json",
+            "reports/pure-kotlin-text/font-telemetry-schema-fixture.json",
+            "reports/pure-kotlin-text/font-telemetry-pm-bundle.json",
+            "reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md",
+        ).forEach { path ->
+            val source = rootDir.resolve(path)
+            val destination = targetRoot.resolve(path)
+            destination.parentFile.mkdirs()
+            source.copyTo(destination, overwrite = true)
         }
 
         fun collectReferencedPaths(value: Any?, paths: MutableSet<String>) {

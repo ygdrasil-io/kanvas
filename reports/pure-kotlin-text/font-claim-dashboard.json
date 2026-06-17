@@ -197,6 +197,54 @@
       ]
     },
     {
+      "surfaceId": "cluster-safety",
+      "label": "cluster safety",
+      "classification": "current-supported",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Clusters"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/font/fixtures/expected/unicode/cluster-safety-report.json",
+          "reports/font/fixtures/expected/unicode/unicode-segments.json",
+          "reports/font/fixtures/expected/unicode/bidi-runs.json",
+          "reports/font/fixtures/expected/unicode/script-runs.json",
+          "reports/pure-kotlin-text/dump-evidence-index.json"
+        ],
+        "cpuOracle": [],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/font/fixtures/expected/unicode/cluster-safety-report.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/font/fixtures/expected/unicode/cluster-safety-report.json",
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "KFONT-M5-005 now provides bounded grapheme, bidi, and script boundary-alignment evidence only; shaping, fallback, and paragraph routes remain separate gates.",
+        "Keep `scaledemoji` blocked on explicit emoji-sequence refusal, fallback, and color or route evidence rather than treating segmentation alone as emoji support.",
+        "Add broader reviewed CJK IVS coverage before promoting complete cluster-safety coverage."
+      ],
+      "legacyGates": [
+        "scaledemoji"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-uax29-claim",
+        "no-complete-uax9-claim",
+        "no-fallback-support-claim",
+        "no-emoji-route-support-claim",
+        "no-gpu-text-route-claim"
+      ]
+    },
+    {
       "surfaceId": "complex-shaping",
       "label": "complex shaping",
       "classification": "DependencyGated",
@@ -291,10 +339,12 @@
         ],
         "deterministicDumps": [
           "reports/font/fixtures/expected/fallback/fallback-decision-trace.json",
+          "reports/font/fixtures/expected/fallback/fallback-segmentation-report.json",
           "reports/font/fixtures/expected/fallback/resolved-font-runs.json",
           "reports/font/fixtures/expected/fallback/system-font-scan.json",
           "reports/font/fixtures/expected/fallback/system-font-scan-font-catalog-link.json",
           "reports/font/fixtures/expected/fallback/system-font-scan-fallback-trace.json",
+          "reports/font/fixtures/expected/shaping/fallback-shaped-glyph-run.json",
           "reports/pure-kotlin-text/font-catalog.json",
           "reports/pure-kotlin-text/font-source.json",
           "reports/pure-kotlin-text/typeface-id.json"
@@ -302,15 +352,17 @@
         "cpuOracle": [],
         "gpuArtifacts": [],
         "routeDiagnostics": [
-          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/font/fixtures/expected/fallback/fallback-segmentation-report.json"
         ],
         "refusalDiagnostics": [
-          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/font/fixtures/expected/fallback/fallback-segmentation-report.json"
         ]
       },
       "requiredEvidenceGates": [
         "Add bundled Hebrew/Arabic, Devanagari/Thai, CJK, and optional emoji-capable deterministic catalog rows before fallback promotion.",
-        "Propagate fallback trace and resolved-run dumps into cluster-safe shaping evidence with selected and rejected font facts.",
+        "KFONT-M7-004 now adds bounded cluster-safe fallback segmentation evidence, but the negative emoji row still reports a reviewed split hazard and does not retire `scaledemoji`.",
         "Keep host-dependent system scan examples explicitly non-normative unless a reviewed product decision folds them into the bundled catalog or shared fallback dump surfaces.",
         "Add CPU oracle evidence for fallback decisions before promotion."
       ],
@@ -320,6 +372,7 @@
       "nonClaims": [
         "no-complete-target-support-claim",
         "no-fallback-support-claim",
+        "no-cluster-safe-fallback-claim",
         "no-platform-font-fallback-claim"
       ]
     },
@@ -340,6 +393,7 @@
         "deterministicDumps": [
           "reports/pure-kotlin-text/font-telemetry-schema.json",
           "reports/pure-kotlin-text/font-telemetry-schema-fixture.json",
+          "reports/pure-kotlin-text/font-telemetry-pm-bundle.json",
           "reports/pure-kotlin-text/dump-evidence-index.json"
         ],
         "cpuOracle": [],
@@ -353,8 +407,7 @@
         ]
       },
       "requiredEvidenceGates": [
-        "Wire parser, scaler, shaping, paragraph, glyph artifact, and GPU handoff producers into the shared schema before telemetry promotion.",
-        "Show advisory tracked-gap ingestion in pipelinePerformanceTrendWarnings or PM bundle evidence before claiming dashboard visibility is complete.",
+        "KFONT-M12-002, KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own parser/scaler/shaping/paragraph/glyph/GPU producer emission into the shared schema; keep this row schema-only advisory evidence until those subsystem tickets land.",
         "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
       ],
       "legacyGates": [],

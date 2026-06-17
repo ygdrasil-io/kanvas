@@ -71,7 +71,7 @@ class SystemFontScanTest {
             milestoneReadme,
             "| [KFONT-M7-005 - Add host-dependent system scan diagnostics](KFONT-M7-005-add-host-dependent-system-scan-diagnostics.md) | `done` |",
         )
-        assertContains(statusSummary, "| M7 | 2 | 0 | 0 | 0 | 2 | 1 |")
+        assertContains(statusSummary, "| M7 | 1 | 0 | 0 | 0 | 2 | 2 |")
         assertContains(ticketReport, "No ticket-local gate remains")
         assertContains(ticketReport, "reviewed product decision")
     }

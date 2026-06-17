@@ -251,6 +251,32 @@
           ]
         },
         {
+          "fixtureId": "cff-cff2-scaler-cff-path-output",
+          "targetGate": "cff-path-output",
+          "status": "current-positive-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Generate deterministic CFF scaler fixtures for basic path output, subroutine path output, flex curves, missing glyph refusal, and malformed glyph refusal, then assert path hashes, metrics, and linked charstring evidence.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/cff-scaler-path-output.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "glyph outline dump",
+            "glyph metrics dump",
+            "path hash artifacts",
+            "linked charstring evidence",
+            "missing-glyph refusal diagnostic",
+            "malformed-glyph refusal diagnostic"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-cff-rendering-support-claim",
+            "no-complete-cff2-variation-support-claim"
+          ]
+        },
+        {
           "fixtureId": "cff-cff2-scaler-cff-subroutine-safety",
           "targetGate": "cff-subroutine-safety",
           "status": "current-positive-evidence",
@@ -343,6 +369,37 @@
             "no-complete-target-support-claim",
             "no-complete-cff-rendering-support-claim",
             "no-complete-cff2-variation-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "cff-cff2-scaler-cff2-variation-path-output",
+          "targetGate": "cff2-variation-path-output",
+          "status": "current-positive-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Generate deterministic CFF2 VariationStore fixtures that normalize user-space coordinates, emit distinct default/min/max/named path hashes, serialize blend vectors, and snapshot invalid-vsindex, missing-varstore, unsupported-axis, non-finite-axis, and malformed-blend-stack refusals.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/cff2-variation-trace.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "distinct variation path hash artifacts",
+            "normalized variation position evidence",
+            "blend vector evidence",
+            "font.scaler.cff2.blend-stack-malformed diagnostic",
+            "cff2.vsindex-invalid diagnostic",
+            "cff2.variation-store-missing diagnostic",
+            "cff2.variation-axis diagnostic",
+            "cff2.variation-position-non-finite diagnostic"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-cff-rendering-support-claim",
+            "no-complete-cff2-variation-support-claim",
+            "no-hvar-vvar-mvar-advance-claim",
+            "no-native-scaler-oracle-claim",
+            "no-gpu-text-route-claim"
           ]
         },
         {
@@ -1081,7 +1138,7 @@
           "targetGate": "truetype-gvar-iup",
           "status": "current-positive-evidence",
           "fixtureKind": "synthetic-table-bytes",
-          "generationPolicy": "Generate bounded simple/composite TrueType gvar tuples that prove single-point IUP propagation, wraparound interpolation, untouched contour isolation, horizontal phantom-point advance deltas, avar-normalized coordinates, HVAR-unimplemented warnings, and malformed tuple diagnostics.",
+          "generationPolicy": "Generate bounded simple/composite TrueType gvar tuples that prove single-point IUP propagation, wraparound interpolation, untouched contour isolation, horizontal phantom-point advance deltas, avar-normalized coordinates, bounded HVAR advance-width deltas, bounded MVAR vertical-global metric deltas, and malformed HVAR/MVAR plus tuple diagnostics.",
           "evidencePaths": [
             "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
             "reports/font/fixtures/expected/scaler/truetype-gvar-iup.json",
@@ -1095,13 +1152,16 @@
             "min-default-max phantom metrics dump",
             "avar-normalized outline dump",
             "composite child outline dump",
-            "HVAR-unimplemented warning snapshot",
+            "bounded HVAR advance-width case",
+            "bounded MVAR vertical-global metrics case",
+            "malformed HVAR diagnostic snapshot",
+            "malformed MVAR diagnostic snapshot",
             "malformed tuple diagnostic snapshot"
           ],
           "nonClaims": [
             "no-complete-target-support-claim",
             "no-complete-variable-font-support-claim",
-            "no-hvar-vvar-mvar-metrics-claim",
+            "no-complete-hvar-vvar-mvar-metrics-claim",
             "no-vertical-metrics-claim",
             "no-complete-hinting-vm-claim",
             "no-a8-or-sdf-artifact-claim",
