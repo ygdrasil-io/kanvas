@@ -1175,6 +1175,441 @@ class ColorGlyphSurfaceTest {
     }
 
     @Test
+    fun buildsCOLRV1TransformCompositeClipPlansAndDeterministicPaintGraphDumps() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440417"))
+        val table = COLRV1Table(
+            baseGlyphPaintRecords = listOf(
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 270,
+                    paint = COLRV1Paint.Translate(
+                        paint = COLRV1Paint.Glyph(
+                            glyphId = 271,
+                            paint = COLRV1Paint.Solid(paletteIndex = 1, alpha = 0.75f),
+                        ),
+                        dx = 3,
+                        dy = -4,
+                    ),
+                ),
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 272,
+                    paint = COLRV1Paint.Transform(
+                        paint = COLRV1Paint.Glyph(
+                            glyphId = 273,
+                            paint = COLRV1Paint.Solid(paletteIndex = 0, alpha = 1f),
+                        ),
+                        xx = 1.25f,
+                        yx = 0.5f,
+                        xy = -0.25f,
+                        yy = 1.5f,
+                        dx = 2f,
+                        dy = -1f,
+                    ),
+                ),
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 274,
+                    paint = COLRV1Paint.Transform(
+                        paint = COLRV1Paint.Glyph(
+                            glyphId = 275,
+                            paint = COLRV1Paint.Solid(paletteIndex = 1, alpha = 1f),
+                        ),
+                        xx = 2f,
+                        yx = 0f,
+                        xy = 0f,
+                        yy = 1.5f,
+                        dx = 0f,
+                        dy = 0f,
+                    ),
+                ),
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 276,
+                    paint = COLRV1Paint.Transform(
+                        paint = COLRV1Paint.Glyph(
+                            glyphId = 277,
+                            paint = COLRV1Paint.Solid(paletteIndex = 0, alpha = 1f),
+                        ),
+                        xx = 0f,
+                        yx = 1f,
+                        xy = -1f,
+                        yy = 0f,
+                        dx = 0f,
+                        dy = 0f,
+                    ),
+                ),
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 278,
+                    paint = COLRV1Paint.Transform(
+                        paint = COLRV1Paint.Glyph(
+                            glyphId = 279,
+                            paint = COLRV1Paint.Solid(paletteIndex = 1, alpha = 1f),
+                        ),
+                        xx = 1f,
+                        yx = 0f,
+                        xy = 0.5f,
+                        yy = 1f,
+                        dx = 0f,
+                        dy = 0f,
+                    ),
+                ),
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 280,
+                    paint = COLRV1Paint.Composite(
+                        source = COLRV1Paint.Transform(
+                            paint = COLRV1Paint.Glyph(
+                                glyphId = 281,
+                                paint = COLRV1Paint.Solid(paletteIndex = 0, alpha = 1f),
+                            ),
+                            xx = 1.5f,
+                            yx = 0f,
+                            xy = 0f,
+                            yy = 1.5f,
+                            dx = 1f,
+                            dy = 0f,
+                        ),
+                        mode = COLRV1CompositeMode.MULTIPLY,
+                        backdrop = COLRV1Paint.Translate(
+                            paint = COLRV1Paint.Glyph(
+                                glyphId = 282,
+                                paint = COLRV1Paint.Solid(paletteIndex = 1, alpha = 0.5f),
+                            ),
+                            dx = -2,
+                            dy = 1,
+                        ),
+                    ),
+                ),
+            ),
+            clipRanges = listOf(
+                COLRV1ClipRange(
+                    startGlyphId = 280,
+                    endGlyphId = 280,
+                    box = COLRV1ClipBox(xMin = 2, yMin = 1, xMax = 6, yMax = 5),
+                ),
+            ),
+        )
+        val planner = COLRV1ColorGlyphPlanner(
+            colr = table,
+            cpal = assertNotNull(CPALV0Parser.parse(syntheticCpalV0())),
+            glyphBounds = mapOf(
+                271 to ColorGlyphBounds(xMin = 1, yMin = 2, xMax = 5, yMax = 8),
+                273 to ColorGlyphBounds(xMin = 0, yMin = 0, xMax = 4, yMax = 6),
+                275 to ColorGlyphBounds(xMin = 1, yMin = -2, xMax = 5, yMax = 4),
+                277 to ColorGlyphBounds(xMin = 2, yMin = 1, xMax = 6, yMax = 5),
+                279 to ColorGlyphBounds(xMin = 0, yMin = 0, xMax = 4, yMax = 4),
+                281 to ColorGlyphBounds(xMin = 0, yMin = 0, xMax = 4, yMax = 4),
+                282 to ColorGlyphBounds(xMin = 3, yMin = -1, xMax = 8, yMax = 5),
+            ),
+        )
+        val strikeKey = strikeKey(typefaceId = typefaceId, paletteIdentity = "brand-transform-composite")
+        val graphFixture = readProjectFile("reports/font/fixtures/expected/color/colrv1-paint-graph.json")
+        val planFixture = readProjectFile("reports/font/fixtures/expected/color/color-glyph-plan.json")
+
+        val translateDecision = planner.plan(
+            glyphId = 270,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey,
+            paletteSelection = CPALPaletteSelection(index = 1),
+        )
+        val translatePlan = assertNotNull(translateDecision.plan)
+        val translateGraph = assertNotNull(translatePlan.paintGraph)
+        val translateTransform = assertNotNull(translateGraph.nodes[0].transform)
+        assertEquals("transform-composite-clip", translateGraph.supportedOperationGroup)
+        assertEquals("colrv1-paint-translate", translateGraph.nodes[0].kind)
+        assertEquals("translate", translateTransform.transformKind)
+        assertEquals(ColorGlyphBounds(xMin = 4, yMin = -2, xMax = 8, yMax = 4), translateGraph.bounds)
+        assertEquals(
+            extractGraphCaseJson(graphFixture, "colrv1-translate").trim(),
+            translateGraph.toCanonicalJson().trim(),
+        )
+        assertEquals(
+            extractPlanCaseJson(planFixture, "colrv1-translate").trim(),
+            translatePlan.toCanonicalJson().trim(),
+        )
+
+        val transformDecision = planner.plan(
+            glyphId = 272,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey,
+            paletteSelection = CPALPaletteSelection(index = 1),
+        )
+        val transformPlan = assertNotNull(transformDecision.plan)
+        val transformGraph = assertNotNull(transformPlan.paintGraph)
+        val transformEvidence = assertNotNull(transformGraph.nodes[0].transform)
+        assertEquals("colrv1-paint-transform", transformGraph.nodes[0].kind)
+        assertEquals("transform", transformEvidence.transformKind)
+        assertEquals(ColorGlyphBounds(xMin = 0, yMin = -1, xMax = 7, yMax = 10), transformGraph.bounds)
+        assertEquals(
+            extractGraphCaseJson(graphFixture, "colrv1-transform").trim(),
+            transformGraph.toCanonicalJson().trim(),
+        )
+        assertEquals(
+            extractPlanCaseJson(planFixture, "colrv1-transform").trim(),
+            transformPlan.toCanonicalJson().trim(),
+        )
+
+        val scaleDecision = planner.plan(
+            glyphId = 274,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey,
+            paletteSelection = CPALPaletteSelection(index = 1),
+        )
+        val scalePlan = assertNotNull(scaleDecision.plan)
+        val scaleGraph = assertNotNull(scalePlan.paintGraph)
+        val scaleTransform = assertNotNull(scaleGraph.nodes[0].transform)
+        assertEquals("colrv1-paint-scale", scaleGraph.nodes[0].kind)
+        assertEquals("scale", scaleTransform.transformKind)
+        assertEquals(ColorGlyphBounds(xMin = 2, yMin = -3, xMax = 10, yMax = 6), scaleGraph.bounds)
+        assertEquals(
+            extractGraphCaseJson(graphFixture, "colrv1-scale").trim(),
+            scaleGraph.toCanonicalJson().trim(),
+        )
+        assertEquals(
+            extractPlanCaseJson(planFixture, "colrv1-scale").trim(),
+            scalePlan.toCanonicalJson().trim(),
+        )
+
+        val rotateDecision = planner.plan(
+            glyphId = 276,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey,
+            paletteSelection = CPALPaletteSelection(index = 1),
+        )
+        val rotatePlan = assertNotNull(rotateDecision.plan)
+        val rotateGraph = assertNotNull(rotatePlan.paintGraph)
+        val rotateTransform = assertNotNull(rotateGraph.nodes[0].transform)
+        assertEquals("colrv1-paint-rotate", rotateGraph.nodes[0].kind)
+        assertEquals("rotate", rotateTransform.transformKind)
+        assertEquals(ColorGlyphBounds(xMin = -5, yMin = 2, xMax = -1, yMax = 6), rotateGraph.bounds)
+        assertEquals(
+            extractGraphCaseJson(graphFixture, "colrv1-rotate").trim(),
+            rotateGraph.toCanonicalJson().trim(),
+        )
+        assertEquals(
+            extractPlanCaseJson(planFixture, "colrv1-rotate").trim(),
+            rotatePlan.toCanonicalJson().trim(),
+        )
+
+        val skewDecision = planner.plan(
+            glyphId = 278,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey,
+            paletteSelection = CPALPaletteSelection(index = 1),
+        )
+        val skewPlan = assertNotNull(skewDecision.plan)
+        val skewGraph = assertNotNull(skewPlan.paintGraph)
+        val skewTransform = assertNotNull(skewGraph.nodes[0].transform)
+        assertEquals("colrv1-paint-skew", skewGraph.nodes[0].kind)
+        assertEquals("skew", skewTransform.transformKind)
+        assertEquals(ColorGlyphBounds(xMin = 0, yMin = 0, xMax = 6, yMax = 4), skewGraph.bounds)
+        assertEquals(
+            extractGraphCaseJson(graphFixture, "colrv1-skew").trim(),
+            skewGraph.toCanonicalJson().trim(),
+        )
+        assertEquals(
+            extractPlanCaseJson(planFixture, "colrv1-skew").trim(),
+            skewPlan.toCanonicalJson().trim(),
+        )
+
+        val compositeDecision = planner.plan(
+            glyphId = 280,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey,
+            paletteSelection = CPALPaletteSelection(index = 1),
+        )
+        val compositePlan = assertNotNull(compositeDecision.plan)
+        val compositeGraph = assertNotNull(compositePlan.paintGraph)
+        val clipEvidence = assertNotNull(compositeGraph.nodes[0].clip)
+        val compositeEvidence = assertNotNull(compositeGraph.nodes[1].composite)
+        assertEquals("colrv1-paint-clip-box", compositeGraph.nodes[0].kind)
+        assertEquals("colrv1-paint-composite-multiply", compositeGraph.nodes[1].kind)
+        assertEquals(ColorGlyphBounds(xMin = 2, yMin = 1, xMax = 6, yMax = 5), compositeGraph.bounds)
+        assertEquals(ColorGlyphBounds(xMin = 2, yMin = 1, xMax = 6, yMax = 5), clipEvidence.clipBounds)
+        assertEquals("multiply", compositeEvidence.mode)
+        assertEquals("shader-destination-read", compositeEvidence.destinationReadClass)
+        assertTrue(compositeEvidence.requiresLayerIsolation)
+        val compositePlanDump = assertNotNull(compositeGraph.toCompositePlan()).toCanonicalJson()
+
+        val compositePlanFixture = readProjectFile("reports/font/fixtures/expected/color/color-glyph-composite-plan.json")
+
+        assertEquals(
+            extractGraphCaseJson(graphFixture, "colrv1-composite-clip").trim(),
+            compositeGraph.toCanonicalJson().trim(),
+        )
+        assertEquals(
+            extractPlanCaseJson(planFixture, "colrv1-composite-clip").trim(),
+            compositePlan.toCanonicalJson().trim(),
+        )
+        assertEquals(
+            extractCompositePlanCaseJson(compositePlanFixture, "colrv1-composite-clip").trim(),
+            compositePlanDump.trim(),
+        )
+
+        listOf(
+            translateGraph.toCanonicalJson(),
+            translatePlan.toCanonicalJson(),
+            transformGraph.toCanonicalJson(),
+            transformPlan.toCanonicalJson(),
+            scaleGraph.toCanonicalJson(),
+            scalePlan.toCanonicalJson(),
+            rotateGraph.toCanonicalJson(),
+            rotatePlan.toCanonicalJson(),
+            skewGraph.toCanonicalJson(),
+            skewPlan.toCanonicalJson(),
+            compositeGraph.toCanonicalJson(),
+            compositePlan.toCanonicalJson(),
+            compositePlanDump,
+        ).forEach(::assertEvidenceDumpClean)
+    }
+
+    @Test
+    fun refusesCOLRV1SingularTransformUnsupportedCompositeModeAndClipBudgetOverflowWhenFallbackAllowed() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440418"))
+        val graphFixture = readProjectFile("reports/font/fixtures/expected/color/colrv1-paint-graph.json")
+        val planFixture = readProjectFile("reports/font/fixtures/expected/color/color-glyph-plan.json")
+
+        val singularPlanner = COLRV1ColorGlyphPlanner(
+            colr = COLRV1Table(
+                baseGlyphPaintRecords = listOf(
+                    COLRV1BaseGlyphPaintRecord(
+                        glyphId = 290,
+                        paint = COLRV1Paint.Transform(
+                            paint = COLRV1Paint.Glyph(
+                                glyphId = 291,
+                                paint = COLRV1Paint.Solid(paletteIndex = 1, alpha = 1f),
+                            ),
+                            xx = 1f,
+                            yx = 0f,
+                            xy = 0f,
+                            yy = 0f,
+                            dx = 0f,
+                            dy = 0f,
+                        ),
+                    ),
+                ),
+            ),
+            cpal = assertNotNull(CPALV0Parser.parse(syntheticCpalV0())),
+            glyphBounds = mapOf(291 to ColorGlyphBounds(xMin = 0, yMin = 0, xMax = 4, yMax = 4)),
+        )
+        val singularDecision = singularPlanner.plan(
+            glyphId = 290,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey(typefaceId = typefaceId, paletteIdentity = "brand-transform-composite"),
+            paletteSelection = CPALPaletteSelection(index = 1),
+            allowMonochromeFallback = true,
+            outlineFallback = OutlineGlyphRepresentation(glyphId = 290, pathCommands = listOf("M 0 0", "L 4 4")),
+        )
+        assertNull(singularDecision.plan)
+        assertEquals("outline", singularDecision.selectedRoute?.route)
+        assertEquals(ColorGlyphDiagnosticCodes.COLRMalformed, singularDecision.diagnostics.single().code)
+        assertTrue(singularDecision.diagnostics.single().detail.contains("reason=singular-transform"))
+        val singularDiagnosticsJson = normalizeEmbeddedJson(diagnosticsJson(singularDecision.diagnostics, indent = "      "))
+        assertEquals(
+            extractDiagnosticsCaseJson(planFixture, "colrv1-singular-transform-outline-fallback").trim(),
+            singularDiagnosticsJson.trim(),
+        )
+        assertEquals(
+            extractDiagnosticsCaseJson(graphFixture, "colrv1-singular-transform-outline-fallback").trim(),
+            singularDiagnosticsJson.trim(),
+        )
+
+        val compositePlanner = COLRV1ColorGlyphPlanner(
+            colr = COLRV1Table(
+                baseGlyphPaintRecords = listOf(
+                    COLRV1BaseGlyphPaintRecord(
+                        glyphId = 292,
+                        paint = COLRV1Paint.Composite(
+                            source = COLRV1Paint.Glyph(
+                                glyphId = 293,
+                                paint = COLRV1Paint.Solid(paletteIndex = 0, alpha = 1f),
+                            ),
+                            mode = COLRV1CompositeMode.HUE,
+                            backdrop = COLRV1Paint.Glyph(
+                                glyphId = 294,
+                                paint = COLRV1Paint.Solid(paletteIndex = 1, alpha = 1f),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            cpal = assertNotNull(CPALV0Parser.parse(syntheticCpalV0())),
+            glyphBounds = mapOf(
+                293 to ColorGlyphBounds(xMin = 0, yMin = 0, xMax = 4, yMax = 4),
+                294 to ColorGlyphBounds(xMin = 1, yMin = 1, xMax = 5, yMax = 5),
+            ),
+        )
+        val unsupportedCompositeDecision = compositePlanner.plan(
+            glyphId = 292,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey(typefaceId = typefaceId, paletteIdentity = "brand-transform-composite"),
+            paletteSelection = CPALPaletteSelection(index = 1),
+            allowMonochromeFallback = true,
+            outlineFallback = OutlineGlyphRepresentation(glyphId = 292, pathCommands = listOf("M 0 0", "L 5 5")),
+        )
+        assertNull(unsupportedCompositeDecision.plan)
+        assertEquals("outline", unsupportedCompositeDecision.selectedRoute?.route)
+        assertEquals(ColorGlyphDiagnosticCodes.COLRV1PaintUnsupported, unsupportedCompositeDecision.diagnostics.single().code)
+        assertTrue(unsupportedCompositeDecision.diagnostics.single().detail.contains("reason=composite-mode-unsupported"))
+        assertTrue(unsupportedCompositeDecision.diagnostics.single().detail.contains("mode=hue"))
+        val unsupportedCompositeDiagnosticsJson = normalizeEmbeddedJson(
+            diagnosticsJson(unsupportedCompositeDecision.diagnostics, indent = "      "),
+        )
+        assertEquals(
+            extractDiagnosticsCaseJson(planFixture, "colrv1-unsupported-composite-mode-outline-fallback").trim(),
+            unsupportedCompositeDiagnosticsJson.trim(),
+        )
+        assertEquals(
+            extractDiagnosticsCaseJson(graphFixture, "colrv1-unsupported-composite-mode-outline-fallback").trim(),
+            unsupportedCompositeDiagnosticsJson.trim(),
+        )
+
+        val clipPlanner = COLRV1ColorGlyphPlanner(
+            colr = COLRV1Table(
+                baseGlyphPaintRecords = listOf(
+                    COLRV1BaseGlyphPaintRecord(
+                        glyphId = 295,
+                        paint = COLRV1Paint.Glyph(
+                            glyphId = 296,
+                            paint = COLRV1Paint.Solid(paletteIndex = 1, alpha = 1f),
+                        ),
+                    ),
+                ),
+                clipRanges = listOf(
+                    COLRV1ClipRange(
+                        startGlyphId = 295,
+                        endGlyphId = 295,
+                        box = COLRV1ClipBox(xMin = 0, yMin = 0, xMax = 3, yMax = 3),
+                    ),
+                ),
+            ),
+            cpal = assertNotNull(CPALV0Parser.parse(syntheticCpalV0())),
+            glyphBounds = mapOf(296 to ColorGlyphBounds(xMin = 0, yMin = 0, xMax = 4, yMax = 4)),
+            maxClipBoxCount = 0,
+        )
+        val clipBudgetDecision = clipPlanner.plan(
+            glyphId = 295,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey(typefaceId = typefaceId, paletteIdentity = "brand-transform-composite"),
+            paletteSelection = CPALPaletteSelection(index = 1),
+            allowMonochromeFallback = true,
+            outlineFallback = OutlineGlyphRepresentation(glyphId = 295, pathCommands = listOf("M 0 0", "L 3 3")),
+        )
+        assertNull(clipBudgetDecision.plan)
+        assertEquals("outline", clipBudgetDecision.selectedRoute?.route)
+        assertEquals(ColorGlyphDiagnosticCodes.COLRV1BudgetExceeded, clipBudgetDecision.diagnostics.single().code)
+        assertTrue(clipBudgetDecision.diagnostics.single().detail.contains("limitName=clipBoxes"))
+        assertTrue(clipBudgetDecision.diagnostics.single().detail.contains("observed=1"))
+        val clipBudgetDiagnosticsJson = normalizeEmbeddedJson(
+            diagnosticsJson(clipBudgetDecision.diagnostics, indent = "      "),
+        )
+        assertEquals(
+            extractDiagnosticsCaseJson(planFixture, "colrv1-clip-budget-outline-fallback").trim(),
+            clipBudgetDiagnosticsJson.trim(),
+        )
+        assertEquals(
+            extractDiagnosticsCaseJson(graphFixture, "colrv1-clip-budget-outline-fallback").trim(),
+            clipBudgetDiagnosticsJson.trim(),
+        )
+    }
+
+    @Test
     fun fallsBackToOutlineWhenCOLRPaletteResolutionFailsAndFallbackIsAllowed() {
         val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440402"))
         val planner = COLRV0ColorGlyphPlanner(
@@ -2142,11 +2577,17 @@ class ColorGlyphSurfaceTest {
         val diagnostics: List<ColorGlyphDiagnostic>,
     )
 
+    private data class ColorGlyphCompositePlanFixtureCase(
+        val caseId: String,
+        val compositePlanJson: String?,
+        val diagnostics: List<ColorGlyphDiagnostic>,
+    )
+
     private fun colorGlyphPlanBundleJson(cases: List<ColorGlyphPlanFixtureCase>): String = buildString {
         append("{\n")
         append("  \"schemaVersion\": 1,\n")
         append("  \"dumpId\": \"color-glyph-plan\",\n")
-        append("  \"ownerTickets\": [\"KFONT-M10-001\", \"KFONT-M10-002\"],\n")
+        append("  \"ownerTickets\": [\"KFONT-M10-001\", \"KFONT-M10-002\", \"KFONT-M10-003\", \"KFONT-M10-004\"],\n")
         append("  \"cases\": [\n")
         append(
             cases.joinToString(",\n") { fixtureCase ->
@@ -2182,6 +2623,42 @@ class ColorGlyphSurfaceTest {
         append("}\n")
     }
 
+    private fun colorGlyphCompositePlanBundleJson(cases: List<ColorGlyphCompositePlanFixtureCase>): String = buildString {
+        append("{\n")
+        append("  \"schemaVersion\": 1,\n")
+        append("  \"dumpId\": \"color-glyph-composite-plan\",\n")
+        append("  \"ownerTickets\": [\"KFONT-M10-004\"],\n")
+        append("  \"cases\": [\n")
+        append(
+            cases.joinToString(",\n") { fixtureCase ->
+                buildString {
+                    append("    {\n")
+                    append("      \"caseId\": ").append(jsonString(fixtureCase.caseId)).append(",\n")
+                    append("      \"compositePlan\": ")
+                    append(
+                        fixtureCase.compositePlanJson
+                            ?.trimEnd()
+                            ?.replace("\n", "\n      ")
+                            ?: "null",
+                    )
+                    append(",\n")
+                    append("      \"diagnostics\": ")
+                    append(diagnosticsJson(fixtureCase.diagnostics, indent = "      "))
+                    append("\n")
+                    append("    }")
+                }
+            },
+        )
+        append("\n  ],\n")
+        append(
+            "  \"nonClaims\": [\"no-complete-target-support-claim\", " +
+                "\"no-complete-colrv1-rendering-claim\", " +
+                "\"no-gpu-color-glyph-support-claim\", " +
+                "\"no-platform-color-font-fallback-claim\"]\n",
+        )
+        append("}\n")
+    }
+
     private fun diagnosticsJson(
         diagnostics: List<ColorGlyphDiagnostic>,
         indent: String,
@@ -2202,6 +2679,10 @@ class ColorGlyphSurfaceTest {
 
     private fun extractGraphCaseJson(bundleJson: String, caseId: String): String {
         return extractFixtureCaseFieldJson(bundleJson = bundleJson, caseId = caseId, fieldName = "graph")
+    }
+
+    private fun extractCompositePlanCaseJson(bundleJson: String, caseId: String): String {
+        return extractFixtureCaseFieldJson(bundleJson = bundleJson, caseId = caseId, fieldName = "compositePlan")
     }
 
     private fun extractDiagnosticsCaseJson(bundleJson: String, caseId: String): String {
