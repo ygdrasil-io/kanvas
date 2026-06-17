@@ -25,7 +25,7 @@ primitive color interactions.
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M8-001 - Add `DrawVertices` descriptor and route decisions](KGPU-M8-001-add-drawvertices-descriptor-and-route-decisions.md) | `done` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `vertices` | `KGPU-M2-002`, `KGPU-M7-003` | `vertices legacy` |
 | [KGPU-M8-002 - Add vertex index buffer payload and resource plans](KGPU-M8-002-add-vertex-index-buffer-payload-and-resource-plans.md) | `done` | `P1` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `vertices-resources` | `KGPU-M8-001` | - |
-| [KGPU-M8-003 - Add vertices batching sort and refusal evidence](KGPU-M8-003-add-vertices-batching-sort-and-refusal-evidence.md) | `blocked` | `P2` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `batching` | `KGPU-M8-001`, `KGPU-M8-002` | - |
+| [KGPU-M8-003 - Add vertices batching sort and refusal evidence](KGPU-M8-003-add-vertices-batching-sort-and-refusal-evidence.md) | `done` | `P2` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `batching` | `KGPU-M8-001`, `KGPU-M8-002` | - |
 
 ## Validation Bundle
 
@@ -66,12 +66,21 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Vertices*'
   `019ed5dd-8e76-78a0-8e8d-646398e40e90` found no remaining P0/P1/P2 blockers.
   Evidence report:
   `reports/gpu-renderer/2026-06-17-m8-002-vertices-buffer-plans.md`.
-- KGPU-M8-003 is `blocked` on KGPU-M8-001 and KGPU-M8-002. Batching evidence
-  must not be produced before route and buffer facts exist, because sort/split
-  decisions need material, clip, layer, destination-read, barrier, and
-  upload-generation boundaries.
-- No `DrawVertices`, mesh, primitive blender, vertex/index upload, batching,
-  GPU-native route, or CPU-rasterized mesh texture fallback support is implied.
+- KGPU-M8-003 is `done` with contract-only
+  `GPUVerticesBatchingPlanner` evidence for deterministic adjacent batch keys,
+  sort-window preimages, per-batch `sortWindow` axes, split reasons, telemetry,
+  and refusal rows over accepted M8-001/M8-002 route/buffer evidence. It splits
+  on `sortWindowId`, topology, render-step, pipeline/layout, material, blend,
+  clip, layer, destination-read, barrier, upload-generation, and unknown-overlap
+  boundaries. It remains non-promoted: no product `DrawVertices` support,
+  executable batching, cross-layer batching, destination-read batching,
+  adapter-backed execution, performance readiness, mesh support, or
+  CPU-rasterized mesh texture fallback is claimed. Independent final re-review
+  `019ed5ec-2289-7d53-8778-7948635b5e06` found no remaining P0/P1/P2 blockers.
+  Evidence report: `reports/gpu-renderer/2026-06-17-m8-003-vertices-batching.md`.
+- No `DrawVertices`, mesh, primitive blender, vertex/index upload, executable
+  batching, GPU-native product route, or CPU-rasterized mesh texture fallback
+  support is implied.
 
 ## Status Update Rule
 
