@@ -1,7 +1,7 @@
 ---
 id: KGPU-M5-001
 title: "Add saveLayer isolated target route"
-status: blocked
+status: review
 milestone: M5
 priority: P0
 owner_area: layers-resources
@@ -56,9 +56,9 @@ data class SaveLayerEvidence(val layerPlan: String, val compositePlan: String)
 
 ## Acceptance Criteria
 
-- [ ] Offscreen target ownership is dumpable.
-- [ ] Restore composite route is explicit.
-- [ ] Unsupported layer variants refuse.
+- [x] Offscreen target ownership is dumpable.
+- [x] Restore composite route is explicit.
+- [x] Unsupported layer variants refuse.
 
 ## Required Evidence
 
@@ -83,11 +83,18 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: First isolated layer route is gated on native WebGPU/adapter
-  evidence for provider-owned offscreen target allocation, clear/load/store
-  policy, child draw isolation, restore composite, active-attachment
-  separation, resource generation, and CPU/GPU/reference comparison before any
-  `GPUNative` route claim.
+- `review`: `GPUSaveLayerIsolatedTargetPlanner` adds contract-gate evidence for
+  the `gpu-renderer.savelayer.isolated-target` row with dumpable target
+  descriptor, bounds, clear/load/store, resource ownership, task ordering,
+  restore composite, and unsupported-variant refusals. The gate records
+  `routeKind=GPUNative`, `classification=TargetNative`, `promoted=false`,
+  `productActivation=false`, and `materialized=false`; it does not claim
+  adapter-backed native saveLayer execution or product activation.
+- Evidence: `SaveLayerIsolatedTargetGateTest` plus
+  `reports/gpu-renderer/2026-06-17-m5-001-savelayer-isolated-target-gate.md`.
+- Non-claim: no native saveLayer support, no adapter-backed offscreen target
+  allocation, no CPU-rendered full-layer texture fallback, no arbitrary layer
+  stacks, no filters, and no destination-read support.
 
 ## Linear Labels
 

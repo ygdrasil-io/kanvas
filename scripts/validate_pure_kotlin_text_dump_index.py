@@ -22,6 +22,7 @@ REQUIRED_DUMPS = {
     "cff-cff2-readiness",
     "cff-charstring-trace",
     "cff-index-dict",
+    "cff-scaler-path-output",
     "cff-subroutine-trace",
     "cmap-contract",
     "color-svg-emoji-goldens",

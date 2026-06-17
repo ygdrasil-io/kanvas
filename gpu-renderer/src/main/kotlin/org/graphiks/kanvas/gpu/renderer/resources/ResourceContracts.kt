@@ -70,6 +70,11 @@ data class GPUSamplerDescriptor(
     val magFilter: String,
     val minFilter: String,
     val mipmapFilter: String,
+    val lodMinClamp: String = "0",
+    val lodMaxClamp: String = "0",
+    val compareMode: String = "none",
+    val maxAnisotropy: Int = 1,
+    val capabilityRequirements: Set<String> = emptySet(),
 )
 
 /**
