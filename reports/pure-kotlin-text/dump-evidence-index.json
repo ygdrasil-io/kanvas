@@ -692,6 +692,68 @@
       ]
     },
     {
+      "dumpId": "fallback-shaped-glyph-run",
+      "ownerTicket": "KFONT-M7-002",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Fallback Runs"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/FallbackShapingEvidence.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/FallbackShapingEvidenceTest.kt",
+        "reports/font/fixtures/expected/shaping/fallback-shaped-glyph-run.json"
+      ],
+      "expectedFields": [
+        "advanceX",
+        "advanceY",
+        "bidiLevel",
+        "cases",
+        "clusters",
+        "decisionTraceRef",
+        "diagnostics",
+        "dumpId",
+        "fixtureAssetRef",
+        "fixtureId",
+        "fontSize",
+        "glyphIds",
+        "glyphRange",
+        "glyphRuns",
+        "message",
+        "nonClaims",
+        "offsetX",
+        "offsetY",
+        "ownerTickets",
+        "preferredFamilies",
+        "rejectedTypefaceIds",
+        "request",
+        "resolvedRunsRef",
+        "schemaVersion",
+        "script",
+        "selectedTypefaceIds",
+        "severity",
+        "style",
+        "text",
+        "textRange",
+        "typefaceId"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.FallbackShapingEvidenceTest",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Fallback shaping golden changes require reviewed trace-link integrity, selected/rejected typeface facts, refusal diagnostics, and explicit confirmation that no cluster-safe or complete fallback support claim was introduced.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-cluster-safe-fallback-claim",
+        "no-platform-font-fallback-claim",
+        "no-shaping-engine-claim"
+      ]
+    },
+    {
       "dumpId": "feature-policy-matrix",
       "ownerTicket": "KFONT-M6-006",
       "classification": "golden-gated",
