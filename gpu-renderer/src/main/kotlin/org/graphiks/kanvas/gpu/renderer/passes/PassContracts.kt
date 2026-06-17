@@ -449,6 +449,24 @@ sealed interface GPUPassCommand {
         }
     }
 
+    /** Copies a texture region before later commands sample it. */
+    data class CopyTexture(
+        val sourceLabel: String,
+        val destinationLabel: String,
+        val boundsLabel: String,
+        val tokenLabel: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "copyTexture"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(sourceLabel.isNotBlank()) { "CopyTexture.sourceLabel must not be blank" }
+            require(destinationLabel.isNotBlank()) { "CopyTexture.destinationLabel must not be blank" }
+            require(boundsLabel.isNotBlank()) { "CopyTexture.boundsLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "CopyTexture.tokenLabel must not be blank" }
+        }
+    }
+
     /** Ends a render pass after all packet commands have been emitted. */
     data class EndRenderPass(val passId: String) : GPUPassCommand {
         override val commandLabel: String get() = "endRenderPass"
@@ -795,6 +813,9 @@ private fun GPUPassCommand.dumpLine(): String =
             "passes.command setScissor packet=${packetId.value} scissor=$scissorBoundsHash"
         is GPUPassCommand.Draw ->
             "passes.command draw packet=${packetId.value} vertex=$vertexSourceLabel"
+        is GPUPassCommand.CopyTexture ->
+            "passes.command copyTexture source=$sourceLabel destination=$destinationLabel " +
+                "bounds=$boundsLabel token=$tokenLabel"
         is GPUPassCommand.EndRenderPass ->
             "passes.command endRenderPass pass=$passId"
     }
@@ -810,6 +831,7 @@ private fun GPUPassCommandOperandBridge.matchesCommandOperandKind(): Boolean =
                 GPUMaterializedCommandOperandKind.RenderTarget,
                 GPUMaterializedCommandOperandKind.TextureView,
             )
+        "copyTexture" -> operand.kind == GPUMaterializedCommandOperandKind.DestinationCopyTexture
         "setRenderPipeline" -> operand.kind == GPUMaterializedCommandOperandKind.RenderPipeline
         "setBindGroup" ->
             operand.kind in setOf(
