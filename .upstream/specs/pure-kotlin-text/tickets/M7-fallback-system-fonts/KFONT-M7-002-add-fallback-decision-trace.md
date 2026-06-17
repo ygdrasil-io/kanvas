@@ -112,7 +112,7 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 
 - `proposed`: Decision trace builds on the bundled catalog and M6 shaping contract.
 - Move to `ready` only after scoring fields and dump schemas are reviewed.
-- `review`: `fallback-decision-trace.json` and `resolved-font-runs.json` now cover deterministic generic-family, script, locale, emoji, missing-glyph, and family-unavailable cases with stable candidate reasons, complete-miss cluster ranges, and refusal `diagnosticRanges`, but shaping-trace propagation, dedicated per-fixture assets, and broader fallback promotion gates remain open before `done`.
+- `review`: `fallback-decision-trace.json`, `resolved-font-runs.json`, and the dedicated per-fixture fallback assets now cover deterministic generic-family, script, locale, emoji, missing-glyph, and family-unavailable cases with stable candidate reasons, complete-miss cluster ranges, and refusal `diagnosticRanges`, but shaping-trace propagation and broader fallback promotion gates remain open before `done`.
 
 ## Linear Labels
 
