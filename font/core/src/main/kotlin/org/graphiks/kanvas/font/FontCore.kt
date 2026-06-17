@@ -4415,17 +4415,18 @@ object FallbackEvidenceWriter {
     }
 }
 
-fun defaultFallbackEvidenceBundle(): FallbackEvidenceBundle =
-    FallbackEvidenceWriter.writeBundle(
-        cases = listOf(
-            fallbackFamilyGenericEvidenceCase(),
-            fallbackScriptArabicEvidenceCase(),
-            fallbackLocaleSerbianEvidenceCase(),
-            fallbackEmojiPreferenceEvidenceCase(),
-            fallbackMissingGlyphEvidenceCase(),
-            fallbackFamilyUnavailableEvidenceCase(),
-        ),
+fun defaultFallbackEvidenceCases(): List<FallbackEvidenceCase> =
+    listOf(
+        fallbackFamilyGenericEvidenceCase(),
+        fallbackScriptArabicEvidenceCase(),
+        fallbackLocaleSerbianEvidenceCase(),
+        fallbackEmojiPreferenceEvidenceCase(),
+        fallbackMissingGlyphEvidenceCase(),
+        fallbackFamilyUnavailableEvidenceCase(),
     )
+
+fun defaultFallbackEvidenceBundle(): FallbackEvidenceBundle =
+    FallbackEvidenceWriter.writeBundle(cases = defaultFallbackEvidenceCases())
 
 private fun List<String>.normalizedDiagnosticFieldNames(): List<String> {
     for (fieldName in this) {

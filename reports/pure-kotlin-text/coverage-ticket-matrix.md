@@ -590,7 +590,7 @@ support.
 
 ### KFONT-M7-001: Add bundled deterministic font catalog
 
-Status: implemented as a bounded review slice.
+Status: done; implemented and freshly revalidated for closeout.
 
 Files:
 
@@ -645,6 +645,8 @@ Files:
 
 - `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
 - `font/core/src/test/kotlin/org/graphiks/kanvas/font/FallbackDecisionDumpTest.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/FallbackShapingEvidence.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/FallbackShapingEvidenceTest.kt`
 - `reports/font/fixtures/expected/fallback/fallback-decision-trace.json`
 - `reports/font/fixtures/expected/fallback/fallback-emoji-preference.json`
 - `reports/font/fixtures/expected/fallback/fallback-family-generic.json`
@@ -653,6 +655,7 @@ Files:
 - `reports/font/fixtures/expected/fallback/fallback-missing-glyph.json`
 - `reports/font/fixtures/expected/fallback/fallback-script-arabic.json`
 - `reports/font/fixtures/expected/fallback/resolved-font-runs.json`
+- `reports/font/fixtures/expected/shaping/fallback-shaped-glyph-run.json`
 - `reports/pure-kotlin-text/2026-06-16-kfont-m7-002-fallback-decision-trace.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/KFONT-M7-002-add-fallback-decision-trace.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/README.md`
@@ -672,6 +675,11 @@ Evidence:
 - The same bundle now emits six dedicated `fallback-fixture` assets so later
   evidence can reference each bounded case directly without reslicing the
   aggregate dumps.
+- `defaultFallbackShapedGlyphRunEvidenceJson()` adds a shaping-owned
+  `fallback-shaped-glyph-run.json` golden that links each bounded shaping case
+  back to `fallback-decision-trace`, `resolved-font-runs`, and the dedicated
+  `fallback-fixture` asset while preserving selected/rejected typeface facts
+  and refusal diagnostics.
 - `ResolvedFontRunEvidence` records deterministic text ranges, cluster ranges,
   selected `TypefaceID`, host-dependent markers, fallback reasons, and shaping
   diagnostic codes for positive cases, while refusal `diagnosticRanges` keep
@@ -686,16 +694,18 @@ Validation:
 rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecisionDump*'
 rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecision*'
 rtk ./gradlew --no-daemon :font:core:test
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.FallbackShapingEvidenceTest
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk git diff --check
 ```
 
-Remaining gate: this is bounded fallback-trace evidence only. It does not yet
-add shaping-plan or `shaped-glyph-run` trace propagation, variable-axis-aware
-fallback, cluster-safe fallback segmentation, host-dependent system scan facts,
-CPU oracle promotion, or any GPU text-route claim.
+Remaining gate: no ticket-local gate remains. Broader fallback promotion is
+owned by `KFONT-M7-003`, `KFONT-M7-004`, and `KFONT-M7-005`; this slice stays
+bounded fallback-trace evidence only and does not add CPU oracle promotion,
+cluster-safe segmentation, platform fallback claims, or any GPU text-route
+claim.
 ### PKT-03A: SFNT/OpenType Face Evidence Dumps
 
 Status: implemented and independently reviewed.
