@@ -43,11 +43,11 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Vertices*'
 
 ## Current Evidence
 
-- KGPU-M8-001 is `blocked` because it depends on KGPU-M7-003, which is blocked
-  on KGPU-M5-002 and native destination-read strategy evidence. Remaining gate:
-  accepted primitive blend/color route decisions, vertex descriptor/key/refusal
-  dumps, adapter-backed layout/WGSL/route evidence, and explicit skipped or
-  refused lanes for unsupported topology, color, texcoord, and buffer cases.
+- KGPU-M8-001 is `blocked` even though KGPU-M7-003 is now `done`; remaining
+  gate is accepted primitive blend/color route decisions, vertex
+  descriptor/key/refusal dumps, adapter-backed layout/WGSL/route evidence, and
+  explicit skipped or refused lanes for unsupported topology, color, texcoord,
+  and buffer cases.
 - KGPU-M8-002 is `blocked` on KGPU-M8-001 plus adapter-backed vertex/index
   buffer ownership, upload-before-draw ordering, resource-generation, budget,
   and invalid/stale buffer refusal evidence.
