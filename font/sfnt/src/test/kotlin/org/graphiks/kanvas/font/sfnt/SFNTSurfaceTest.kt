@@ -2660,6 +2660,135 @@ class SFNTSurfaceTest {
     }
 
     @Test
+    fun defaultOpenTypeFaceParserLoadsReviewedGsubContextFixtureFontsFromRepo() {
+        val parser = DefaultOpenTypeFaceParser()
+
+        val format1 = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gsub-context-format1.otf"),
+        )
+        assertEquals(emptyList(), format1.diagnostics)
+        assertEquals(
+            OpenTypeGsubTable(
+                lookups = listOf(
+                    OpenTypeGsubSingleSubstitutionLookup(
+                        featureTag = "ccmp",
+                        lookupIndex = 0,
+                        substitutions = listOf(
+                            OpenTypeGsubSingleSubstitution(inputGlyphId = 552, replacementGlyphId = 555),
+                        ),
+                    ),
+                    OpenTypeGsubContextGlyphLookup(
+                        featureTag = "calt",
+                        lookupIndex = 1,
+                        rules = listOf(
+                            OpenTypeGsubContextGlyphRule(
+                                inputGlyphIds = listOf(552, 553),
+                                nestedLookups = listOf(
+                                    OpenTypeGsubNestedLookupRecord(sequenceIndex = 0, lookupIndex = 0),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            format1.layout.gsub,
+        )
+
+        val format2 = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gsub-context-format2-class.otf"),
+        )
+        assertEquals(emptyList(), format2.diagnostics)
+        assertEquals(
+            OpenTypeGsubTable(
+                lookups = listOf(
+                    OpenTypeGsubSingleSubstitutionLookup(
+                        featureTag = "ccmp",
+                        lookupIndex = 0,
+                        substitutions = listOf(
+                            OpenTypeGsubSingleSubstitution(inputGlyphId = 552, replacementGlyphId = 556),
+                        ),
+                    ),
+                    OpenTypeGsubContextClassLookup(
+                        featureTag = "calt",
+                        lookupIndex = 1,
+                        firstGlyphCoverage = setOf(552),
+                        classDefinitions = mapOf(
+                            552 to 1,
+                            553 to 2,
+                            554 to 3,
+                        ),
+                        rules = listOf(
+                            OpenTypeGsubContextClassRule(
+                                inputClasses = listOf(1, 2, 3),
+                                nestedLookups = listOf(
+                                    OpenTypeGsubNestedLookupRecord(sequenceIndex = 0, lookupIndex = 0),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            format2.layout.gsub,
+        )
+
+        val format3 = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gsub-context-format3-coverage.otf"),
+        )
+        assertEquals(emptyList(), format3.diagnostics)
+        assertEquals(
+            OpenTypeGsubTable(
+                lookups = listOf(
+                    OpenTypeGsubSingleSubstitutionLookup(
+                        featureTag = "ccmp",
+                        lookupIndex = 0,
+                        substitutions = listOf(
+                            OpenTypeGsubSingleSubstitution(inputGlyphId = 552, replacementGlyphId = 557),
+                        ),
+                    ),
+                    OpenTypeGsubContextCoverageLookup(
+                        featureTag = "calt",
+                        lookupIndex = 1,
+                        rules = listOf(
+                            OpenTypeGsubContextCoverageRule(
+                                inputCoverages = listOf(
+                                    setOf(552),
+                                    setOf(553, 554),
+                                    setOf(555),
+                                ),
+                                nestedLookups = listOf(
+                                    OpenTypeGsubNestedLookupRecord(sequenceIndex = 0, lookupIndex = 0),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            format3.layout.gsub,
+        )
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserReportsReviewedMalformedGsubContextFixturesAsDiagnostics() {
+        val parser = DefaultOpenTypeFaceParser()
+
+        val malformedClassDef = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gsub-context-malformed-classdef.otf"),
+        )
+        val nestedCycle = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gsub-context-nested-cycle.otf"),
+        )
+
+        assertEquals("font.sfnt.optional-table-malformed", malformedClassDef.diagnostics.single().causeCode)
+        assertTrue(
+            malformedClassDef.diagnostics.single().causeMessage.orEmpty().contains("ClassDef"),
+            malformedClassDef.diagnostics.single().toString(),
+        )
+        assertEquals(null, malformedClassDef.layout.gsub)
+        assertEquals(emptyList(), nestedCycle.diagnostics)
+        assertTrue(nestedCycle.layout.gsub != null)
+    }
+
+    @Test
     fun defaultOpenTypeFaceParserReportsGposFormat2ExcessiveFinalExpansionAsDiagnostic() {
         val gpos = gposPairAdjustmentFormat2Class0Table(
             coverageGlyphCount = 257,
@@ -2835,6 +2964,16 @@ class SFNTSurfaceTest {
             displayName = "Memory Font",
             bytes = bytes,
         )
+
+    private fun fixtureFontSource(relativePath: String): FontSource {
+        val path = fixturePath(relativePath)
+        return FontSource(
+            id = FontSourceID(Uuid.random()),
+            kind = FontSourceKind.FILE,
+            displayName = path.fileName.toString(),
+            bytes = Files.readAllBytes(path),
+        )
+    }
 
     private fun fixturePath(relativePath: String): Path =
         projectRoot().resolve(relativePath).normalize()

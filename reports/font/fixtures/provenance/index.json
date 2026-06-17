@@ -638,6 +638,65 @@
       ]
     },
     {
+      "fixtureId": "latin-gsub-context-fixtures",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-003"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "simoncozens/test-fonts FallbackPlus-Small",
+        "url": "https://github.com/simoncozens/test-fonts",
+        "version": "d1cd9d87b8a128b25ed9aaf2e7ccb3a37b0e2a23"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/test-fonts-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-context-format1.otf",
+          "sha256": "bbf5815e8fbea604d97a49b3678f793f69f5f9e9503fb48b3ce627e4e055fbfb",
+          "sizeBytes": 19712,
+          "role": "context-format1-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-context-format2-class.otf",
+          "sha256": "f72b76a2d82a3062519f82cc246871de98468ab9a822720b59447fd2584b359f",
+          "sizeBytes": 19732,
+          "role": "context-format2-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-context-format3-coverage.otf",
+          "sha256": "b0b6c9fa035d952764da00c9846b1275714551c62a6304997ff00f0ffd6f305e",
+          "sizeBytes": 19720,
+          "role": "context-format3-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-context-malformed-classdef.otf",
+          "sha256": "f29dbd4f890ce86924980960e5d88193080ac9d7cfd5b6f5e26facf0e0139b93",
+          "sizeBytes": 19732,
+          "role": "context-malformed-classdef-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-context-nested-cycle.otf",
+          "sha256": "f5b221c73ae335fc576ba2837f11009845ea9740ec70788ac712552f04e8cc22",
+          "sizeBytes": 19728,
+          "role": "context-nested-cycle-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/gsub-trace.json",
+        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gsub-support-claim",
+        "no-complete-gsub-gpos-support-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
       "fixtureId": "scaler-roboto-flex-variable",
       "familyId": "truetype-scaler",
       "ownerTickets": [

@@ -6,9 +6,18 @@ import org.graphiks.kanvas.font.FontResolver
 import org.graphiks.kanvas.font.ResolvedFontRun
 import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.kanvas.font.sfnt.CMapTable
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassRule
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassSubtable
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextCoverageLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextCoverageRule
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextGlyphLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextGlyphRule
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubLigatureSubstitution
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubLigatureSubstitutionLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubMultipleSubstitutionLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubNestedLookupRecord
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubSingleSubstitutionLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposPairAdjustment
@@ -725,7 +734,7 @@ public class BasicOpenTypeShapingEngine(
         }
 
         applyStandardLigatures(request, resolvedFeatures, glyphUnits)
-        applyGsubLookups(request, resolvedFeatures, glyphUnits)
+        applyGsubLookups(request, resolvedFeatures, glyphUnits, diagnostics)
         val glyphIds = glyphUnits.map { it.glyphId }
         val clusters = glyphClustersFor(glyphUnits, request.fontSize)
         val totalAdvanceAdjustment = applyPositionAdjustments(
@@ -794,9 +803,11 @@ public class BasicOpenTypeShapingEngine(
         request: ShapingRequest,
         features: RuntimeFeatureGateSet,
         glyphUnits: MutableList<ShapingGlyphUnit>,
+        diagnostics: MutableList<ShapingDiagnostic>,
     ) {
         val typefaceId = request.typefaceId ?: return
         val gsubTable = gsubTablesByTypefaceId[typefaceId] ?: return
+        val lookupsByIndex = gsubTable.lookups.associateBy { it.lookupIndex }
 
         gsubTable.lookups.forEach { lookup ->
             if (!features.isRuntimeEnabled(lookup.featureTag)) {
@@ -806,6 +817,11 @@ public class BasicOpenTypeShapingEngine(
                 is OpenTypeGsubSingleSubstitutionLookup -> applySingleSubstitutionLookup(glyphUnits, lookup)
                 is OpenTypeGsubMultipleSubstitutionLookup -> applyMultipleSubstitutionLookup(glyphUnits, lookup)
                 is OpenTypeGsubLigatureSubstitutionLookup -> applyLigatureSubstitutionLookup(glyphUnits, lookup)
+                is OpenTypeGsubContextGlyphLookup -> applyContextGlyphLookup(glyphUnits, lookup, lookupsByIndex, diagnostics)
+                is OpenTypeGsubContextClassLookup ->
+                    applyContextClassLookup(glyphUnits, lookup, lookupsByIndex, diagnostics)
+                is OpenTypeGsubContextCoverageLookup ->
+                    applyContextCoverageLookup(glyphUnits, lookup, lookupsByIndex, diagnostics)
             }
         }
     }
@@ -876,6 +892,328 @@ public class BasicOpenTypeShapingEngine(
             glyphIndex += 1
         }
     }
+
+    private fun applyContextGlyphLookup(
+        glyphUnits: MutableList<ShapingGlyphUnit>,
+        lookup: OpenTypeGsubContextGlyphLookup,
+        lookupsByIndex: Map<Int, OpenTypeGsubLookup>,
+        diagnostics: MutableList<ShapingDiagnostic>,
+    ) {
+        var glyphIndex = 0
+        while (glyphIndex < glyphUnits.size) {
+            val rule = lookup.rules.firstOrNull { contextGlyphRuleMatchesAt(glyphUnits, glyphIndex, it) }
+            if (rule == null) {
+                glyphIndex += 1
+                continue
+            }
+            val stop = applyNestedLookupsForMatch(
+                glyphUnits = glyphUnits,
+                matchStart = glyphIndex,
+                matchLength = rule.inputGlyphIds.size,
+                nestedLookups = rule.nestedLookups,
+                lookupsByIndex = lookupsByIndex,
+                diagnostics = diagnostics,
+                lookupStack = listOf(lookup.lookupIndex),
+            )
+            glyphIndex += if (stop) rule.inputGlyphIds.size else 1
+        }
+    }
+
+    private fun applyContextClassLookup(
+        glyphUnits: MutableList<ShapingGlyphUnit>,
+        lookup: OpenTypeGsubContextClassLookup,
+        lookupsByIndex: Map<Int, OpenTypeGsubLookup>,
+        diagnostics: MutableList<ShapingDiagnostic>,
+    ) {
+        var glyphIndex = 0
+        while (glyphIndex < glyphUnits.size) {
+            val match = lookup.contextClassSubtables().asSequence().mapNotNull { subtable ->
+                subtable.rules.firstOrNull {
+                    contextClassRuleMatchesAt(glyphUnits, glyphIndex, subtable.firstGlyphCoverage, subtable.classDefinitions, it)
+                }?.let { rule -> subtable to rule }
+            }.firstOrNull()
+            if (match == null) {
+                glyphIndex += 1
+                continue
+            }
+            val (_, rule) = match
+            val stop = applyNestedLookupsForMatch(
+                glyphUnits = glyphUnits,
+                matchStart = glyphIndex,
+                matchLength = rule.inputClasses.size,
+                nestedLookups = rule.nestedLookups,
+                lookupsByIndex = lookupsByIndex,
+                diagnostics = diagnostics,
+                lookupStack = listOf(lookup.lookupIndex),
+            )
+            glyphIndex += if (stop) rule.inputClasses.size else 1
+        }
+    }
+
+    private fun applyContextCoverageLookup(
+        glyphUnits: MutableList<ShapingGlyphUnit>,
+        lookup: OpenTypeGsubContextCoverageLookup,
+        lookupsByIndex: Map<Int, OpenTypeGsubLookup>,
+        diagnostics: MutableList<ShapingDiagnostic>,
+    ) {
+        var glyphIndex = 0
+        while (glyphIndex < glyphUnits.size) {
+            val rule = lookup.rules.firstOrNull { contextCoverageRuleMatchesAt(glyphUnits, glyphIndex, it) }
+            if (rule == null) {
+                glyphIndex += 1
+                continue
+            }
+            val stop = applyNestedLookupsForMatch(
+                glyphUnits = glyphUnits,
+                matchStart = glyphIndex,
+                matchLength = rule.inputCoverages.size,
+                nestedLookups = rule.nestedLookups,
+                lookupsByIndex = lookupsByIndex,
+                diagnostics = diagnostics,
+                lookupStack = listOf(lookup.lookupIndex),
+            )
+            glyphIndex += if (stop) rule.inputCoverages.size else 1
+        }
+    }
+
+    private fun contextGlyphRuleMatchesAt(
+        glyphUnits: List<ShapingGlyphUnit>,
+        glyphIndex: Int,
+        rule: OpenTypeGsubContextGlyphRule,
+    ): Boolean {
+        val endIndex = glyphIndex + rule.inputGlyphIds.size
+        if (endIndex > glyphUnits.size) return false
+        return rule.inputGlyphIds.indices.all { offset ->
+            glyphUnits[glyphIndex + offset].glyphId == rule.inputGlyphIds[offset]
+        }
+    }
+
+    private fun contextClassRuleMatchesAt(
+        glyphUnits: List<ShapingGlyphUnit>,
+        glyphIndex: Int,
+        firstGlyphCoverage: Set<Int>,
+        classDefinitions: Map<Int, Int>,
+        rule: OpenTypeGsubContextClassRule,
+    ): Boolean {
+        val endIndex = glyphIndex + rule.inputClasses.size
+        if (endIndex > glyphUnits.size) return false
+        if (firstGlyphCoverage.isNotEmpty() && glyphUnits[glyphIndex].glyphId !in firstGlyphCoverage) return false
+        return rule.inputClasses.indices.all { offset ->
+            val glyphClass = classDefinitions[glyphUnits[glyphIndex + offset].glyphId] ?: 0
+            glyphClass == rule.inputClasses[offset]
+        }
+    }
+
+    private fun contextCoverageRuleMatchesAt(
+        glyphUnits: List<ShapingGlyphUnit>,
+        glyphIndex: Int,
+        rule: OpenTypeGsubContextCoverageRule,
+    ): Boolean {
+        val endIndex = glyphIndex + rule.inputCoverages.size
+        if (endIndex > glyphUnits.size) return false
+        return rule.inputCoverages.indices.all { offset ->
+            glyphUnits[glyphIndex + offset].glyphId in rule.inputCoverages[offset]
+        }
+    }
+
+    private fun applyNestedLookupsForMatch(
+        glyphUnits: MutableList<ShapingGlyphUnit>,
+        matchStart: Int,
+        matchLength: Int,
+        nestedLookups: List<OpenTypeGsubNestedLookupRecord>,
+        lookupsByIndex: Map<Int, OpenTypeGsubLookup>,
+        diagnostics: MutableList<ShapingDiagnostic>,
+        lookupStack: List<Int>,
+    ): Boolean {
+        val textRange = glyphUnits.subList(matchStart, matchStart + matchLength).let { matched ->
+            matched.minOf { it.textRange.first }..matched.maxOf { it.textRange.last }
+        }
+        val matchSnapshot = glyphUnits.toList()
+        val positionShifts = IntArray(matchLength)
+        for (record in nestedLookups) {
+            if (record.sequenceIndex !in 0 until matchLength) {
+                diagnostics += ShapingDiagnostic(
+                    code = TEXT_SHAPING_LOOKUP_MALFORMED_DIAGNOSTIC_CODE,
+                    message = "GSUB contextual nested lookup sequence index is outside the matched glyph range.",
+                    textRange = textRange,
+                )
+                glyphUnits.clear()
+                glyphUnits.addAll(matchSnapshot)
+                return true
+            }
+            val nestedLookup = lookupsByIndex[record.lookupIndex]
+            if (nestedLookup == null) {
+                diagnostics += ShapingDiagnostic(
+                    code = TEXT_SHAPING_LOOKUP_MALFORMED_DIAGNOSTIC_CODE,
+                    message = "GSUB contextual nested lookup index is missing from the lookup list.",
+                    textRange = textRange,
+                )
+                glyphUnits.clear()
+                glyphUnits.addAll(matchSnapshot)
+                return true
+            }
+            if (record.lookupIndex in lookupStack) {
+                diagnostics += ShapingDiagnostic(
+                    code = TEXT_SHAPING_LOOKUP_CYCLE_DETECTED_DIAGNOSTIC_CODE,
+                    message = "GSUB contextual nested lookup cycle detected.",
+                    textRange = textRange,
+                )
+                glyphUnits.clear()
+                glyphUnits.addAll(matchSnapshot)
+                return true
+            }
+            val targetIndex = matchStart + record.sequenceIndex + positionShifts[record.sequenceIndex]
+            if (targetIndex !in glyphUnits.indices) {
+                diagnostics += ShapingDiagnostic(
+                    code = TEXT_SHAPING_LOOKUP_MALFORMED_DIAGNOSTIC_CODE,
+                    message = "GSUB contextual nested lookup sequence index is outside the matched glyph range.",
+                    textRange = textRange,
+                )
+                glyphUnits.clear()
+                glyphUnits.addAll(matchSnapshot)
+                return true
+            }
+            val sizeBefore = glyphUnits.size
+            val shouldStop = applyLookupAtIndex(
+                glyphUnits = glyphUnits,
+                glyphIndex = targetIndex,
+                lookup = nestedLookup,
+                lookupsByIndex = lookupsByIndex,
+                diagnostics = diagnostics,
+                lookupStack = lookupStack + record.lookupIndex,
+                textRange = textRange,
+            )
+            if (shouldStop) {
+                glyphUnits.clear()
+                glyphUnits.addAll(matchSnapshot)
+                return true
+            }
+            val sizeDelta = glyphUnits.size - sizeBefore
+            if (sizeDelta != 0) {
+                for (position in record.sequenceIndex + 1 until matchLength) {
+                    positionShifts[position] += sizeDelta
+                }
+            }
+        }
+        return false
+    }
+
+    private fun applyLookupAtIndex(
+        glyphUnits: MutableList<ShapingGlyphUnit>,
+        glyphIndex: Int,
+        lookup: OpenTypeGsubLookup,
+        lookupsByIndex: Map<Int, OpenTypeGsubLookup>,
+        diagnostics: MutableList<ShapingDiagnostic>,
+        lookupStack: List<Int>,
+        textRange: IntRange,
+    ): Boolean {
+        when (lookup) {
+            is OpenTypeGsubSingleSubstitutionLookup -> {
+                lookup.substitutions.firstOrNull { it.inputGlyphId == glyphUnits[glyphIndex].glyphId }?.let { substitution ->
+                    glyphUnits[glyphIndex] = glyphUnits[glyphIndex].copy(glyphId = substitution.replacementGlyphId)
+                }
+            }
+            is OpenTypeGsubMultipleSubstitutionLookup -> {
+                lookup.substitutions.firstOrNull { it.inputGlyphId == glyphUnits[glyphIndex].glyphId }?.let { substitution ->
+                    val sourceRange = glyphUnits[glyphIndex].textRange
+                    glyphUnits.removeAt(glyphIndex)
+                    glyphUnits.addAll(
+                        glyphIndex,
+                        substitution.replacementGlyphIds.map { replacementGlyphId ->
+                            ShapingGlyphUnit(glyphId = replacementGlyphId, textRange = sourceRange, codePoint = null)
+                        },
+                    )
+                }
+            }
+            is OpenTypeGsubLigatureSubstitutionLookup -> {
+                lookup.substitutions.firstOrNull { ligatureMatchesAt(glyphUnits, glyphIndex, it) }?.let { substitution ->
+                    val matchedUnits = glyphUnits.subList(glyphIndex, glyphIndex + substitution.inputGlyphIds.size).toList()
+                    repeat(substitution.inputGlyphIds.size) {
+                        glyphUnits.removeAt(glyphIndex)
+                    }
+                    glyphUnits.add(
+                        glyphIndex,
+                        ShapingGlyphUnit(
+                            glyphId = substitution.replacementGlyphId,
+                            textRange = matchedUnits.minOf { it.textRange.first }..matchedUnits.maxOf { it.textRange.last },
+                            codePoint = null,
+                        ),
+                    )
+                }
+            }
+            is OpenTypeGsubContextGlyphLookup -> {
+                val rule = lookup.rules.firstOrNull { contextGlyphRuleMatchesAt(glyphUnits, glyphIndex, it) } ?: return false
+                val shouldStop = applyNestedLookupsForMatch(
+                    glyphUnits = glyphUnits,
+                    matchStart = glyphIndex,
+                    matchLength = rule.inputGlyphIds.size,
+                    nestedLookups = rule.nestedLookups,
+                    lookupsByIndex = lookupsByIndex,
+                    diagnostics = diagnostics,
+                    lookupStack = lookupStack,
+                )
+                if (shouldStop) return true
+            }
+            is OpenTypeGsubContextClassLookup -> {
+                val rule = lookup.contextClassSubtables().asSequence().mapNotNull { subtable ->
+                    subtable.rules.firstOrNull {
+                        contextClassRuleMatchesAt(glyphUnits, glyphIndex, subtable.firstGlyphCoverage, subtable.classDefinitions, it)
+                    }
+                }.firstOrNull() ?: return false
+                val shouldStop = applyNestedLookupsForMatch(
+                    glyphUnits = glyphUnits,
+                    matchStart = glyphIndex,
+                    matchLength = rule.inputClasses.size,
+                    nestedLookups = rule.nestedLookups,
+                    lookupsByIndex = lookupsByIndex,
+                    diagnostics = diagnostics,
+                    lookupStack = lookupStack,
+                )
+                if (shouldStop) return true
+            }
+            is OpenTypeGsubContextCoverageLookup -> {
+                val rule = lookup.rules.firstOrNull { contextCoverageRuleMatchesAt(glyphUnits, glyphIndex, it) } ?: return false
+                val shouldStop = applyNestedLookupsForMatch(
+                    glyphUnits = glyphUnits,
+                    matchStart = glyphIndex,
+                    matchLength = rule.inputCoverages.size,
+                    nestedLookups = rule.nestedLookups,
+                    lookupsByIndex = lookupsByIndex,
+                    diagnostics = diagnostics,
+                    lookupStack = lookupStack,
+                )
+                if (shouldStop) return true
+            }
+        }
+        val hasOverlappingGlyph = glyphUnits.any { glyph ->
+            glyph.textRange.first <= textRange.last && glyph.textRange.last >= textRange.first
+        }
+        val escapedClusterRange = glyphUnits.any { glyph ->
+            glyph.textRange.first <= textRange.last &&
+                glyph.textRange.last >= textRange.first &&
+                (glyph.textRange.first < textRange.first || glyph.textRange.last > textRange.last)
+        }
+        if (!hasOverlappingGlyph || escapedClusterRange) {
+            diagnostics += ShapingDiagnostic(
+                code = TEXT_SHAPING_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE,
+                message = "GSUB contextual lookup left the matched cluster range.",
+                textRange = textRange,
+            )
+            return true
+        }
+        return false
+    }
+
+    private fun OpenTypeGsubContextClassLookup.contextClassSubtables(): List<OpenTypeGsubContextClassSubtable> =
+        subtables.ifEmpty {
+            listOf(
+                OpenTypeGsubContextClassSubtable(
+                    firstGlyphCoverage = firstGlyphCoverage,
+                    classDefinitions = classDefinitions,
+                    rules = rules,
+                ),
+            )
+        }
 
     private fun ligatureMatchesAt(
         glyphUnits: List<ShapingGlyphUnit>,
@@ -1605,6 +1943,13 @@ public const val TEXT_SHAPING_FEATURE_UNSUPPORTED_DIAGNOSTIC_CODE: String = "tex
  */
 public const val TEXT_SHAPING_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE: String =
     "text.shaping.cluster-invariant-failed"
+
+/**
+ * Stable spec diagnostic family emitted when nested GSUB contextual lookups recurse back into
+ * an already active lookup chain.
+ */
+public const val TEXT_SHAPING_LOOKUP_CYCLE_DETECTED_DIAGNOSTIC_CODE: String =
+    "text.shaping.lookup-cycle-detected"
 
 /**
  * Semantic alias emitted when glyph mapping falls back to `.notdef`.
