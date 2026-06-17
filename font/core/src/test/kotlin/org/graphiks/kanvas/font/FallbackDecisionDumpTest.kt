@@ -49,6 +49,20 @@ class FallbackDecisionDumpTest {
         assertTrue(bundle.fallbackDecisionTraceJson.indexOf("fallback-family-generic") < bundle.fallbackDecisionTraceJson.indexOf("fallback-script-arabic"))
     }
 
+    @Test
+    fun `complete miss evidence exposes cluster ranges and shaping fallback diagnostics`() {
+        val bundle = defaultFallbackEvidenceBundle()
+
+        assertContains(
+            bundle.fallbackDecisionTraceJson,
+            """"fixtureId":"fallback-family-unavailable","request":{"text":"ა","locale":null,"preferredFamilies":["Missing Sans"],"style":{"weight":400,"width":5,"slant":"upright"}},"decisions":[{"textRange":"0..0","clusterRange":"0..0"""",
+        )
+        assertContains(
+            bundle.resolvedFontRunsJson,
+            """"fixtureId":"fallback-family-unavailable","request":{"text":"ა","locale":null,"preferredFamilies":["Missing Sans"],"style":{"weight":400,"width":5,"slant":"upright"}},"runs":[],"diagnosticRanges":[{"textRange":"0..0","clusterRange":"0..0","diagnosticCode":"font.fallback-family-unavailable"},{"textRange":"0..0","clusterRange":"0..0","diagnosticCode":"text.shaping.fallback-missing"}]""",
+        )
+    }
+
     private fun projectRoot(): Path {
         var current = Path.of("").toAbsolutePath().normalize()
         while (current.parent != null && !Files.isDirectory(current.resolve("reports/pure-kotlin-text"))) {

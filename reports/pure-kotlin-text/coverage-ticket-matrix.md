@@ -656,7 +656,8 @@ Evidence:
 
 - `FallbackDecisionTrace` now emits deterministic request facts, generic
   family, script/locale hints, candidate ordering, per-candidate reason tokens,
-  selected/rejected typeface facts, and stable refusal diagnostics.
+  selected/rejected typeface facts, stable refusal diagnostics, and
+  deterministic cluster ranges for complete-miss cases.
 - `defaultFallbackEvidenceBundle()` produces byte-stable
   `fallback-decision-trace.json` and `resolved-font-runs.json` evidence for
   six bounded fallback cases: generic-family selection, Arabic script
@@ -664,7 +665,8 @@ Evidence:
   and family-unavailable refusal.
 - `ResolvedFontRunEvidence` records deterministic text ranges, cluster ranges,
   selected `TypefaceID`, host-dependent markers, fallback reasons, and shaping
-  diagnostic codes for positive and refusal cases.
+  diagnostic codes for positive cases, while refusal `diagnosticRanges` keep
+  complete-miss text and cluster coverage when no run can be emitted.
 - `FallbackDecisionDumpTest` asserts byte-identical checked-in dump output and
   verifies stable script/locale/emoji reason tokens plus refusal diagnostics
   without HarfBuzz, FreeType, or `SkTypeface` wording.
@@ -682,10 +684,10 @@ rtk git diff --check
 ```
 
 Remaining gate: this is bounded fallback-trace evidence only. It does not yet
-add complete-miss cluster ranges, shaping-plan or `shaped-glyph-run` trace
-propagation, dedicated per-fixture fallback assets, variable-axis-aware
-fallback, cluster-safe fallback segmentation, host-dependent system scan facts,
-CPU oracle promotion, or any GPU text-route claim.
+add shaping-plan or `shaped-glyph-run` trace propagation, dedicated
+per-fixture fallback assets, variable-axis-aware fallback, cluster-safe
+fallback segmentation, host-dependent system scan facts, CPU oracle promotion,
+or any GPU text-route claim.
 ### PKT-03A: SFNT/OpenType Face Evidence Dumps
 
 Status: implemented and independently reviewed.
