@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M10-005"
 title: "Add COLRv1 recursion, cycle and bounds fixtures"
-status: "proposed"
+status: "done"
 milestone: "M10"
 priority: "P1"
 owner_area: "color"
@@ -65,18 +65,18 @@ data class COLRv1BoundsExpectation(
 
 ## Acceptance Criteria
 
-- [ ] The manifest includes positive bounds fixtures and negative cycle, recursion-depth, operation-budget, and malformed-offset fixtures.
-- [ ] Every fixture records provenance and expected diagnostic codes before support is promoted.
-- [ ] Cycle and recursion cases are minimized and deterministic.
-- [ ] Bounds fixtures cover transform, composite, clip, nested glyph, and nested COLR glyph cases.
-- [ ] Dashboard classification remains `fixture-gated` until fixture bytes, expectations, and review diffs are attached.
+- [x] The manifest includes positive bounds fixtures and negative cycle, recursion-depth, operation-budget, and malformed-offset fixtures.
+- [x] Every fixture records provenance and expected diagnostic codes before support is promoted.
+- [x] Cycle and recursion cases are minimized and deterministic.
+- [x] Bounds fixtures cover transform, composite, clip, nested glyph, and nested COLR glyph cases.
+- [x] Dashboard classification remains `fixture-gated` until fixture bytes, expectations, and review diffs are attached.
 
 ## Required Evidence
 
-- `colrv1-fixture-manifest.json` with provenance and expected route for every fixture.
-- Expected `colrv1-paint-graph.json` dumps for positive bounds fixtures.
+- `reports/font/fixtures/expected/color/colrv1-fixture-manifest.json` with provenance, expected route, expected dump IDs, and refusal snapshots for every fixture.
+- Expected `reports/font/fixtures/expected/color/colrv1-paint-graph.json`, `reports/font/fixtures/expected/color/color-glyph-plan.json`, and `reports/font/fixtures/expected/color/color-glyph-composite-plan.json` case links for the positive bounds fixtures.
 - Refusal snapshots for `text.color.COLRv1-cycle-detected` and `text.color.COLRv1-budget-exceeded`.
-- Review diff showing fixture expectation changes during rebaseline, if any.
+- `reports/pure-kotlin-text/2026-06-17-kfont-m10-005-colrv1-recursion-cycle-bounds-fixtures.md` and `reports/pure-kotlin-text/coverage-ticket-matrix.md` showing the reviewed fixture expectation update.
 
 ## Fallback / Refusal Behavior
 
@@ -94,13 +94,18 @@ data class COLRv1BoundsExpectation(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test --tests '*COLRv1*Fixture*'
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py
 ```
 
 ## Status Notes
 
-- `proposed`: Fixture-gated support evidence for COLRv1 traversal and bounds.
-- Move to `ready` only after fixture manifest fields and generated-font provenance are reviewed.
+- `done`: Fixture-gated support evidence for COLRv1 traversal and bounds is now checked in with deterministic manifest provenance, refusal snapshots, and fresh validation.
+- This ticket does not claim broader COLRv1 rendering support, dedicated malformed-offset parser diagnostics beyond parse-null refusal, GPU composite execution, bitmap/SVG routing, emoji sequence planning, or platform/native fallback behavior.
 
 ## Linear Labels
 
