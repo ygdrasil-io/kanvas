@@ -217,6 +217,47 @@ class GPUPayloadMaterializationProviderTest {
             ),
             expectedCode = "unsupported.resource.binding_generation_stale",
         )
+        assertPayloadRefused(
+            request = payloadMaterializationRequest(
+                resourceBlock = resourceBlock(
+                    resourceDescriptorLabels = listOf("texture:paint-image", "sampler:other-image"),
+                    bindingFacts = listOf(
+                        sampledTextureFact(),
+                        samplerFact(bindingLabel = "sampler:other-image"),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.resource.sampled_texture_sampler_missing",
+        )
+        assertPayloadRefused(
+            request = payloadMaterializationRequest(
+                resourceBlock = resourceBlock(
+                    resourceDescriptorLabels = listOf(
+                        "texture:paint-image",
+                        "texture:mask-image",
+                        "sampler:paint-image",
+                    ),
+                    bindingFacts = listOf(
+                        sampledTextureFact(),
+                        sampledTextureFact(bindingLabel = "texture:mask-image"),
+                        samplerFact(),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.resource.sampled_texture_sampler_missing",
+        )
+        assertPayloadRefused(
+            request = payloadMaterializationRequest(
+                resourceBlock = resourceBlock(
+                    resourceDescriptorLabels = listOf("texture:paint-image"),
+                    bindingFacts = listOf(
+                        sampledTextureFact(),
+                        samplerFact(),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.resource.binding_fact_unexpected",
+        )
     }
 
     /** Accepted sampled binding facts must be visible in bind group evidence dumps. */
@@ -225,23 +266,35 @@ class GPUPayloadMaterializationProviderTest {
         val decision = ValidatingPayloadResourceProvider().materializePayloadBindings(
             request = payloadMaterializationRequest(
                 resourceBlock = resourceBlock(
-                    resourceDescriptorLabels = listOf("texture:paint-image"),
-                    bindingFacts = listOf(sampledTextureFact()),
+                    resourceDescriptorLabels = listOf("texture:paint-image", "sampler:paint-image"),
+                    bindingFacts = listOf(sampledTextureFact(), samplerFact()),
                 ),
             ),
             context = targetPreparationContext(),
         )
 
         val materialized = assertIs<GPUResourceMaterializationDecision.Materialized>(decision)
+        assertEquals(
+            listOf(
+                "payload-upload:pass-a:uniform:0" to GPUMaterializedCommandOperandKind.UniformBuffer,
+                "bind-group:pass-a:resource:0" to GPUMaterializedCommandOperandKind.BindGroup,
+                "texture-view:texture:paint-image" to GPUMaterializedCommandOperandKind.TextureView,
+                "sampler:sampler:paint-image" to GPUMaterializedCommandOperandKind.Sampler,
+            ),
+            materialized.dumpOperandBridgeSnapshot.map { binding -> binding.operand.label to binding.operand.kind },
+        )
         assertContains(
             materialized.dumpLines(),
             "resource.materialization:operand operand=bind-group:pass-a:resource:0 kind=bind-group " +
-                "deviceGeneration=11 owner=payload-scope:pass-a usage=uniform " +
+                "deviceGeneration=11 owner=payload-scope:pass-a usage=sampler,texture_binding,uniform " +
                 "invalidation=pass-end descriptor=layout-solid-v1 " +
-                "facts=bindingCount=1;dynamicOffsets=0;layoutHash=layout-solid-v1;" +
-                "resourceBindingFacts=texture:paint-image:sampled-texture:" +
+                "facts=bindingCount=2;dynamicOffsets=0;layoutHash=layout-solid-v1;" +
+                "resourceBindingFacts=sampler:paint-image:sampler:" +
+                "descriptor=sampler-descriptor:paint-image:usage=sampler:generation=7," +
+                "texture:paint-image:sampled-texture:" +
                 "descriptor=texture-descriptor:paint-image:usage=texture_binding:generation=7;" +
-                "resourceDescriptors=texture:paint-image;uniformBuffer=payload-upload:pass-a:uniform:0",
+                "resourceDescriptors=sampler:paint-image,texture:paint-image;" +
+                "uniformBuffer=payload-upload:pass-a:uniform:0",
         )
     }
 
@@ -318,11 +371,12 @@ class GPUPayloadMaterializationProviderTest {
         dynamicOffsets: List<Long> = listOf(0L),
         resourceDescriptorLabels: List<String> = listOf("uniform:solid-payload"),
         bindingFacts: List<GPUResourceBindingFact> = emptyList(),
+        bindingCount: Int = resourceDescriptorLabels.size,
     ): GPUResourceBindingBlock =
         GPUResourceBindingBlock(
             fingerprint = GPUPayloadFingerprint("resource-fingerprint-solid"),
             bindingPlanHash = bindingPlanHash,
-            bindingCount = 1,
+            bindingCount = bindingCount,
             resourceDescriptorLabels = resourceDescriptorLabels,
             dynamicOffsets = dynamicOffsets,
             bindingFacts = bindingFacts,
@@ -336,14 +390,30 @@ class GPUPayloadMaterializationProviderTest {
         )
 
     private fun sampledTextureFact(
+        bindingLabel: String = "texture:paint-image",
         actualGeneration: Long = 7L,
         availableUsageLabels: Set<String> = setOf("texture_binding"),
     ): GPUResourceBindingFact =
         GPUResourceBindingFact(
-            bindingLabel = "texture:paint-image",
+            bindingLabel = bindingLabel,
             kind = GPUResourceBindingKind.SampledTexture,
-            descriptorHash = "texture-descriptor:paint-image",
+            descriptorHash = "texture-descriptor:${bindingLabel.substringAfter(':')}",
             requiredUsageLabels = setOf("texture_binding"),
+            availableUsageLabels = availableUsageLabels,
+            expectedResourceGeneration = 7L,
+            actualResourceGeneration = actualGeneration,
+        )
+
+    private fun samplerFact(
+        bindingLabel: String = "sampler:paint-image",
+        actualGeneration: Long = 7L,
+        availableUsageLabels: Set<String> = setOf("sampler"),
+    ): GPUResourceBindingFact =
+        GPUResourceBindingFact(
+            bindingLabel = bindingLabel,
+            kind = GPUResourceBindingKind.Sampler,
+            descriptorHash = "sampler-descriptor:${bindingLabel.substringAfter(':')}",
+            requiredUsageLabels = setOf("sampler"),
             availableUsageLabels = availableUsageLabels,
             expectedResourceGeneration = 7L,
             actualResourceGeneration = actualGeneration,
