@@ -590,7 +590,7 @@ support.
 
 ### KFONT-M7-001: Add bundled deterministic font catalog
 
-Status: done; implemented and freshly revalidated for closeout.
+Status: review; bounded deterministic catalog slice implemented and freshly revalidated.
 
 Files:
 
@@ -709,7 +709,7 @@ claim.
 
 ### KFONT-M7-003: Add Variable-Axis-Aware Fallback
 
-Status: review; bounded variable fallback evidence validated.
+Status: done; bounded variable fallback evidence validated.
 
 Files:
 
@@ -723,6 +723,8 @@ Files:
 - `reports/font/fixtures/expected/fallback/fallback-axis-clamped.json`
 - `reports/font/fixtures/expected/fallback/fallback-axis-missing.json`
 - `reports/font/fixtures/expected/fallback/fallback-metrics-variation-missing.json`
+- `reports/font/fixtures/expected/fallback/fallback-multi-axis.json`
+- `reports/font/fixtures/expected/fallback/fallback-named-instance.json`
 - `reports/font/fixtures/expected/fallback/fallback-variable-cff2.json`
 - `reports/font/fixtures/expected/fallback/fallback-decision-trace.json`
 - `reports/font/fixtures/expected/fallback/resolved-font-runs.json`
@@ -731,16 +733,20 @@ Files:
 - `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/KFONT-M7-003-add-variable-axis-aware-fallback.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/README.md`
 - `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
 
 Evidence:
 
 - `CatalogFontResolver` now prefers a covered face with requested axis support
-  over an equally covered static candidate, then records deterministic selected
+  over an equally covered static candidate, prefers a compatible named instance
+  when the request asks for one, and records deterministic selected
   coordinates for the chosen fallback `TypefaceID`.
 - `fallback-decision-trace.json` now carries bounded variable fallback cases for
-  axis clamping, unsupported-axis fallback, missing variation metrics, and a
-  CFF2-backed variable fallback fixture without introducing platform font APIs
-  or native font-engine claims.
+  axis clamping, unsupported-axis fallback, missing variation metrics,
+  named-instance selection, multi-axis ranking, and a CFF2-backed variable
+  fallback fixture without introducing platform font APIs or native
+  font-engine claims.
 - `resolved-font-runs.json` now serializes selected fallback
   `variationCoordinates`, and the per-fixture fallback assets preserve the same
   selected typeface facts for downstream review.
@@ -751,7 +757,7 @@ Evidence:
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecisionDump*' --tests '*VariableFallback*' --tests org.graphiks.kanvas.font.FontCoreSurfaceTest.prefersCoveredCandidateWithRequestedVariationAxisOverCoveredStaticPreferredFamily
+rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecisionDump*' --tests '*VariableFallback*' --tests org.graphiks.kanvas.font.FontCoreSurfaceTest.prefersCoveredCandidateWithRequestedVariationAxisOverCoveredStaticPreferredFamily --tests org.graphiks.kanvas.font.FontCoreSurfaceTest.prefersCoveredCandidateWithRequestedNamedInstanceOverAxisOnlyCandidate --tests org.graphiks.kanvas.font.FontCoreSurfaceTest.prefersCoveredCandidateWithRequestedMultiAxisSupportOverSingleAxisCandidate
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.FallbackShapingEvidenceTest --tests '*VariableFallback*'
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
@@ -759,31 +765,41 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_clai
 rtk git diff --check
 ```
 
-Remaining gate: this remains bounded review evidence only. It does not yet
-claim named-instance compatibility, multi-axis breadth beyond the checked
-`wght` cases, cluster-safe fallback segmentation, host-dependent fallback
-promotion, CPU oracle promotion, or any GPU text-route support.
+Remaining gate: no ticket-local gate remains. This slice still does not add
+host-dependent fallback promotion, CPU oracle promotion, or any GPU text-route
+support.
 
 ### KFONT-M7-004: Add cluster-safe fallback segmentation tests
 
-Status: review with bounded fixture evidence.
+Status: done with bounded fixture evidence.
 
 Files:
 
 - `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
 - `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/FallbackSegmentationReport.kt`
 - `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ClusterSafetyReport.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FallbackDecisionDumpTest.kt`
 - `font/text/src/test/kotlin/org/graphiks/kanvas/text/FallbackSegmentationTest.kt`
 - `reports/font/fixtures/expected/fallback/fallback-cluster-arabic-mark.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-arabic-mark.json`
 - `reports/font/fixtures/expected/fallback/fallback-cluster-cjk-vs.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-cjk-vs.json`
 - `reports/font/fixtures/expected/fallback/fallback-cluster-devanagari.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-devanagari.json`
 - `reports/font/fixtures/expected/fallback/fallback-cluster-emoji-zwj.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-emoji-zwj.json`
 - `reports/font/fixtures/expected/fallback/fallback-cluster-latin-mark.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-latin-mark.json`
 - `reports/font/fixtures/expected/fallback/fallback-cluster-negative-split.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-negative-split.json`
 - `reports/font/fixtures/expected/fallback/fallback-cluster-skin-tone.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-skin-tone.json`
 - `reports/font/fixtures/expected/fallback/fallback-cluster-thai.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-thai.json`
 - `reports/font/fixtures/expected/fallback/fallback-cluster-vs15-vs16.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-vs15-vs16.json`
 - `reports/font/fixtures/expected/fallback/fallback-segmentation-report.json`
+- `reports/font/fixtures/expected/fallback/system-font-scan-fallback-trace.json`
 - `reports/pure-kotlin-text/2026-06-17-kfont-m7-004-fallback-segmentation.md`
 - `reports/pure-kotlin-text/coverage-ticket-matrix.md`
 - `reports/pure-kotlin-text/dump-evidence-index.json`
@@ -804,11 +820,16 @@ Evidence:
 - Positive Arabic, CJK variation-selector, Devanagari, emoji ZWJ, skin-tone,
   VS15/VS16, Thai, and Latin-mark rows preserve whole-cluster fallback run
   boundaries.
-- `fallback-cluster-negative-split.txt` keeps `scaledemoji` explicit and
-  records a reviewed split hazard with
-  `text.shaping.cluster-invariant-failed`,
-  `font.fallback-glyph-unavailable`, and
-  `text.shaping.emoji-sequence-unsupported`.
+- `fallback-cluster-negative-split.txt` keeps `scaledemoji` explicit and now
+  records a whole-cluster refusal path with
+  `text.fallback.cluster-split-forbidden`,
+  `text.fallback.emoji-fallback-unavailable`,
+  `text.shaping.emoji-sequence-unsupported`, and
+  `text.shaping.fallback-missing`.
+- Every `fallback-cluster-*` case now carries dedicated `fallback-fixture`
+  refs for `decisions`, `runs`, and the combined per-fixture asset, while a
+  checked non-normative host-dependent marker row references
+  `host-dependent-system-fallback` without touching the shared fallback dumps.
 - `FallbackSegmentationTest` asserts the checked-in golden byte for byte and
   verifies that every `fallback-cluster-*` fixture is checked in and non-empty.
 
@@ -823,11 +844,9 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 rtk git diff --check
 ```
 
-Remaining gate: this bounded M7-004 slice is in `review`, not `done`. The
-negative emoji case still reports a reviewed split hazard instead of a final
-whole-cluster refusal path, dedicated per-fixture fallback trace/resolved-run
-assets remain open, host-dependent fallback markers remain non-normative, and
-`scaledemoji` stays explicitly unretired.
+Remaining gate: no ticket-local gate remains. This bounded done slice keeps
+`scaledemoji` explicitly unretired and does not add complete fallback,
+emoji-rendering, platform-fallback, or GPU-text support claims.
 
 ### KFONT-M7-005: Host-dependent system scan diagnostics
 
@@ -2352,7 +2371,7 @@ text route.
 
 ### KFONT-M6-002: GSUB Single/Multiple/Ligature Lookup Slice
 
-Status: implemented as a bounded review slice; independent review pending.
+Status: review; independent audit confirmed this remains a bounded parser/runtime slice.
 
 Files:
 
@@ -2390,14 +2409,15 @@ rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest
 ```
 
-Remaining gate: this slice does not yet promote `gsub-trace.json` or
-`shaped-glyph-run.json` contract evidence, does not add malformed/refusal GSUB
-fixture coverage with stable diagnostics, and does not prove explicit
-`ShapingPlan`-driven feature ordering or broader script-policy support.
+Remaining gate: this slice still depends on fixture-backed `gsub-trace.json`
+and `shaped-glyph-run.json` beyond the current M6-001 no-op contract goldens,
+does not add malformed/refusal GSUB fixture coverage with stable diagnostics,
+and does not prove explicit `ShapingPlan`-driven feature ordering or broader
+script-policy support.
 
 ### KFONT-M6-006: Script-Specific Default Feature Policy Slice
 
-Status: implemented as a bounded review slice; independent review pending.
+Status: review; independent audit confirmed this remains a bounded contract-layer slice.
 
 Files:
 
@@ -2441,7 +2461,8 @@ rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 Remaining gate: this slice does not yet execute resolved defaults through full
 GSUB/GPOS runtime behavior, does not add per-script positive/refusal shaping
 fixtures beyond the contract layer, and does not yet prove the `drawString`
-compatibility path records complex-feature non-enablement.
+compatibility path records complex-feature non-enablement; the current
+`shaping-plan.json` evidence remains contract-level only.
 
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 

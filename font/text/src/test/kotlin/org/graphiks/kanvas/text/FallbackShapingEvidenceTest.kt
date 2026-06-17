@@ -28,6 +28,8 @@ class FallbackShapingEvidenceTest {
         assertContains(actual, """"fixtureId":"fallback-axis-clamped"""")
         assertContains(actual, """"fixtureId":"fallback-axis-missing"""")
         assertContains(actual, """"fixtureId":"fallback-metrics-variation-missing"""")
+        assertContains(actual, """"fixtureId":"fallback-named-instance"""")
+        assertContains(actual, """"fixtureId":"fallback-multi-axis"""")
         assertContains(actual, """"fixtureId":"fallback-variable-cff2"""")
         assertContains(actual, """"decisionTraceRef":{"dumpId":"fallback-decision-trace","fixtureId":"fallback-variable-cff2"}""")
         assertContains(actual, """"resolvedRunsRef":{"dumpId":"resolved-font-runs","fixtureId":"fallback-axis-clamped"}""")

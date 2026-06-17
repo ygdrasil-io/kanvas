@@ -615,6 +615,264 @@ class FontCoreSurfaceTest {
     }
 
     @Test
+    fun prefersCoveredCandidateWithRequestedNamedInstanceOverAxisOnlyCandidate() {
+        val axisOnly = testFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440085",
+            familyName = "Axis Only Sans",
+            variationAxes = listOf(
+                TypefaceVariationAxisRange(axisTag = "wdth", minimum = 75.0, defaultValue = 100.0, maximum = 125.0),
+                TypefaceVariationAxisRange(axisTag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+            ),
+        )
+        val namedInstance = testFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440086",
+            familyName = "Named Instance Sans",
+            variationAxes = listOf(
+                TypefaceVariationAxisRange(axisTag = "wdth", minimum = 75.0, defaultValue = 100.0, maximum = 125.0),
+                TypefaceVariationAxisRange(axisTag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+            ),
+            namedInstances = listOf(
+                TypefaceNamedInstance(
+                    name = "Condensed Bold",
+                    coordinates = listOf(
+                        TypefaceVariationCoordinate(axisTag = "wdth", value = 80.0),
+                        TypefaceVariationCoordinate(axisTag = "wght", value = 700.0),
+                    ),
+                ),
+            ),
+        )
+        val resolver = CatalogFontResolver(
+            catalog = FallbackCatalog(
+                families = mapOf(
+                    "Axis Only Sans" to FontCollection(listOf(axisOnly)),
+                    "Named Instance Sans" to FontCollection(listOf(namedInstance)),
+                ),
+            ),
+            policy = FontFallbackPolicy.Default.copy(
+                genericFallbackChains = mapOf("sans-serif" to listOf("Axis Only Sans", "Named Instance Sans")),
+                scriptFallbackChains = emptyMap(),
+                localeFallbackChains = emptyMap(),
+                emojiPreferredFamilies = emptyList(),
+            ),
+            coverage = testCoverage(
+                axisOnly.typeface.id to setOf('x'.code),
+                namedInstance.typeface.id to setOf('x'.code),
+            ),
+        )
+
+        val request = FallbackRequest(
+            text = "x",
+            preferredFamilies = listOf("Missing Sans"),
+            namedInstance = "Condensed Bold",
+        )
+        val runs = resolver.resolve(request)
+        val trace = resolver.trace(request)
+        val decisionJson = trace.decisions.single().toCanonicalJson(clusterStart = 0)
+
+        assertEquals(1, runs.size)
+        assertEquals("Named Instance Sans", runs.single().face.typeface.familyName)
+        assertEquals(
+            listOf(
+                TypefaceVariationCoordinate(axisTag = "wdth", value = 80.0),
+                TypefaceVariationCoordinate(axisTag = "wght", value = 700.0),
+            ),
+            runs.single().face.typeface.variationCoordinates,
+        )
+        assertContains(decisionJson, """"selectedFamily":"Named Instance Sans"""")
+        assertContains(decisionJson, """"selectedNamedInstance":"Condensed Bold"""")
+        assertContains(decisionJson, """"selectedVariationCoordinates":[{"axisTag":"wdth","value":80.0},{"axisTag":"wght","value":700.0}]""")
+    }
+
+    @Test
+    fun prefersCoveredCandidateWithRequestedMultiAxisSupportOverSingleAxisCandidate() {
+        val weightOnly = testFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440087",
+            familyName = "Weight Only Sans",
+            variationAxes = listOf(
+                TypefaceVariationAxisRange(axisTag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+            ),
+        )
+        val multiAxis = testFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440088",
+            familyName = "Multi Axis Sans",
+            variationAxes = listOf(
+                TypefaceVariationAxisRange(axisTag = "wdth", minimum = 75.0, defaultValue = 100.0, maximum = 125.0),
+                TypefaceVariationAxisRange(axisTag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+            ),
+        )
+        val resolver = CatalogFontResolver(
+            catalog = FallbackCatalog(
+                families = mapOf(
+                    "Weight Only Sans" to FontCollection(listOf(weightOnly)),
+                    "Multi Axis Sans" to FontCollection(listOf(multiAxis)),
+                ),
+            ),
+            policy = FontFallbackPolicy.Default.copy(
+                genericFallbackChains = mapOf("sans-serif" to listOf("Weight Only Sans", "Multi Axis Sans")),
+                scriptFallbackChains = emptyMap(),
+                localeFallbackChains = emptyMap(),
+                emojiPreferredFamilies = emptyList(),
+            ),
+            coverage = testCoverage(
+                weightOnly.typeface.id to setOf('x'.code),
+                multiAxis.typeface.id to setOf('x'.code),
+            ),
+        )
+
+        val request = FallbackRequest(
+            text = "x",
+            preferredFamilies = listOf("Missing Sans"),
+            variationCoordinates = listOf(
+                TypefaceVariationCoordinate(axisTag = "wdth", value = 90.0),
+                TypefaceVariationCoordinate(axisTag = "wght", value = 650.0),
+            ),
+        )
+        val runs = resolver.resolve(request)
+        val trace = resolver.trace(request)
+        val decisionJson = trace.decisions.single().toCanonicalJson(clusterStart = 0)
+
+        assertEquals(1, runs.size)
+        assertEquals("Multi Axis Sans", runs.single().face.typeface.familyName)
+        assertContains(decisionJson, """"selectedFamily":"Multi Axis Sans"""")
+        assertContains(decisionJson, """"requestedVariationCoordinates":[{"axisTag":"wdth","value":90.0},{"axisTag":"wght","value":650.0}]""")
+        assertContains(decisionJson, """"selectedVariationCoordinates":[{"axisTag":"wdth","value":90.0},{"axisTag":"wght","value":650.0}]""")
+    }
+
+    @Test
+    fun prefersMetricsSupportingCandidateWhenAxisFactsTie() {
+        val missingMetrics = testFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440089",
+            familyName = "Variable Sans Missing Metrics",
+            variationAxes = listOf(
+                TypefaceVariationAxisRange(axisTag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+            ),
+            variationMetricsSupported = false,
+        )
+        val metricsReady = testFace(
+            uuid = "550e8400-e29b-41d4-a716-44665544008a",
+            familyName = "Variable Sans Metrics Ready",
+            variationAxes = listOf(
+                TypefaceVariationAxisRange(axisTag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+            ),
+        )
+        val resolver = CatalogFontResolver(
+            catalog = FallbackCatalog(
+                families = mapOf(
+                    "Variable Sans Missing Metrics" to FontCollection(listOf(missingMetrics)),
+                    "Variable Sans Metrics Ready" to FontCollection(listOf(metricsReady)),
+                ),
+            ),
+            policy = FontFallbackPolicy.Default.copy(
+                genericFallbackChains = mapOf(
+                    "sans-serif" to listOf("Variable Sans Missing Metrics", "Variable Sans Metrics Ready"),
+                ),
+                scriptFallbackChains = emptyMap(),
+                localeFallbackChains = emptyMap(),
+                emojiPreferredFamilies = emptyList(),
+            ),
+            coverage = testCoverage(
+                missingMetrics.typeface.id to setOf('x'.code),
+                metricsReady.typeface.id to setOf('x'.code),
+            ),
+        )
+
+        val request = FallbackRequest(
+            text = "x",
+            preferredFamilies = listOf("Missing Sans"),
+            variationCoordinates = listOf(TypefaceVariationCoordinate(axisTag = "wght", value = 650.0)),
+        )
+        val runs = resolver.resolve(request)
+        val decisionJson = resolver.trace(request).decisions.single().toCanonicalJson(clusterStart = 0)
+
+        assertEquals("Variable Sans Metrics Ready", runs.single().face.typeface.familyName)
+        assertContains(decisionJson, """"selectedFamily":"Variable Sans Metrics Ready"""")
+        assertFalse(decisionJson.contains("font.metrics-variation-unavailable"))
+    }
+
+    @Test
+    fun omitsSelectedNamedInstanceWhenAxisOverridesLeaveNamedInstanceCoordinates() {
+        val namedInstance = testFace(
+            uuid = "550e8400-e29b-41d4-a716-44665544008b",
+            familyName = "Named Instance Sans",
+            variationAxes = listOf(
+                TypefaceVariationAxisRange(axisTag = "wdth", minimum = 75.0, defaultValue = 100.0, maximum = 125.0),
+                TypefaceVariationAxisRange(axisTag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+            ),
+            namedInstances = listOf(
+                TypefaceNamedInstance(
+                    name = "Condensed Bold",
+                    coordinates = listOf(
+                        TypefaceVariationCoordinate(axisTag = "wdth", value = 80.0),
+                        TypefaceVariationCoordinate(axisTag = "wght", value = 700.0),
+                    ),
+                ),
+            ),
+        )
+        val resolver = CatalogFontResolver(
+            catalog = FallbackCatalog(families = mapOf("Named Instance Sans" to FontCollection(listOf(namedInstance)))),
+            policy = FontFallbackPolicy.Default.copy(
+                genericFallbackChains = mapOf("sans-serif" to listOf("Named Instance Sans")),
+                scriptFallbackChains = emptyMap(),
+                localeFallbackChains = emptyMap(),
+                emojiPreferredFamilies = emptyList(),
+            ),
+            coverage = testCoverage(namedInstance.typeface.id to setOf('x'.code)),
+        )
+
+        val request = FallbackRequest(
+            text = "x",
+            preferredFamilies = listOf("Missing Sans"),
+            namedInstance = "Condensed Bold",
+            variationCoordinates = listOf(TypefaceVariationCoordinate(axisTag = "wght", value = 900.0)),
+        )
+        val runs = resolver.resolve(request)
+        val decisionJson = resolver.trace(request).decisions.single().toCanonicalJson(clusterStart = 0)
+
+        assertEquals(
+            listOf(
+                TypefaceVariationCoordinate(axisTag = "wdth", value = 80.0),
+                TypefaceVariationCoordinate(axisTag = "wght", value = 900.0),
+            ),
+            runs.single().face.typeface.variationCoordinates,
+        )
+        assertContains(decisionJson, """"selectedVariationCoordinates":[{"axisTag":"wdth","value":80.0},{"axisTag":"wght","value":900.0}]""")
+        assertFalse(decisionJson.contains("selectedNamedInstance"))
+    }
+
+    @Test
+    fun emitsStableDiagnosticWhenNamedInstanceCannotBeHonored() {
+        val axisOnly = testFace(
+            uuid = "550e8400-e29b-41d4-a716-44665544008c",
+            familyName = "Axis Only Sans",
+            variationAxes = listOf(
+                TypefaceVariationAxisRange(axisTag = "wdth", minimum = 75.0, defaultValue = 100.0, maximum = 125.0),
+                TypefaceVariationAxisRange(axisTag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+            ),
+        )
+        val resolver = CatalogFontResolver(
+            catalog = FallbackCatalog(families = mapOf("Axis Only Sans" to FontCollection(listOf(axisOnly)))),
+            policy = FontFallbackPolicy.Default.copy(
+                genericFallbackChains = mapOf("sans-serif" to listOf("Axis Only Sans")),
+                scriptFallbackChains = emptyMap(),
+                localeFallbackChains = emptyMap(),
+                emojiPreferredFamilies = emptyList(),
+            ),
+            coverage = testCoverage(axisOnly.typeface.id to setOf('x'.code)),
+        )
+
+        val request = FallbackRequest(
+            text = "x",
+            preferredFamilies = listOf("Missing Sans"),
+            namedInstance = "Condensed Bold",
+        )
+        val decisionJson = resolver.trace(request).decisions.single().toCanonicalJson(clusterStart = 0)
+
+        assertContains(decisionJson, """"selectedFamily":"Axis Only Sans"""")
+        assertContains(decisionJson, """"diagnosticCode":"text.fallback.variation-defaulted"""")
+        assertFalse(decisionJson.contains("selectedNamedInstance"))
+    }
+
+    @Test
     fun buildsFallbackCatalogFromParsedFacesInDeterministicFamilyOrder() {
         val regular = testFace("550e8400-e29b-41d4-a716-446655440060", "Beta Sans", "Regular")
         val bold = testFace("550e8400-e29b-41d4-a716-446655440061", "Beta Sans", "Bold")
@@ -642,6 +900,7 @@ class FontCoreSurfaceTest {
         styleName: String = "Regular",
         variationAxes: List<TypefaceVariationAxisRange> = emptyList(),
         variationCoordinates: List<TypefaceVariationCoordinate> = emptyList(),
+        namedInstances: List<TypefaceNamedInstance> = emptyList(),
         variationMetricsSupported: Boolean = true,
     ): FontFace {
         val sourceId = FontSourceID(Uuid.parse(uuid.replaceRange(uuid.length - 1, uuid.length, "0")))
@@ -681,6 +940,7 @@ class FontCoreSurfaceTest {
                 styleName = styleName,
                 variationAxes = variationAxes,
                 variationCoordinates = variationCoordinates,
+                namedInstances = namedInstances,
                 variationMetricsSupported = variationMetricsSupported,
                 identityPreimage = identityPreimage,
             ),

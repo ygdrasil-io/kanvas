@@ -12,6 +12,8 @@ class VariableFallbackShapingEvidenceTest {
         assertContains(actual, """"fixtureId":"fallback-axis-clamped"""")
         assertContains(actual, """"fixtureId":"fallback-axis-missing"""")
         assertContains(actual, """"fixtureId":"fallback-metrics-variation-missing"""")
+        assertContains(actual, """"fixtureId":"fallback-named-instance"""")
+        assertContains(actual, """"fixtureId":"fallback-multi-axis"""")
         assertContains(actual, """"fixtureId":"fallback-variable-cff2"""")
     }
 }
