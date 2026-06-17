@@ -50,6 +50,10 @@ data class GPUDecodedImageSamplingPlan(
     val tileModeY: String,
     val filterMode: String,
     val mipmapMode: String,
+    val anisotropy: Int = 1,
+    val coordinateTransformClass: String = "affine",
+    val lodMinClamp: String = "0",
+    val lodMaxClamp: String = "0",
 )
 
 /** Encoded image source descriptor. */
@@ -312,6 +316,97 @@ data class GPUDecodedImageShaderRoutePlan(
     val diagnostics: List<GPUImageDiagnostic> = emptyList(),
 )
 
+/** Contract evidence for sampler/tile/mipmap boundaries on image routes. */
+data class GPUImageSamplerBoundaryPlan(
+    val source: GPUDecodedImagePixelsDescriptor,
+    val sampling: GPUDecodedImageSamplingPlan,
+    val textureDescriptor: GPUTextureDescriptor,
+    val viewDescriptor: GPUTextureViewDescriptor,
+    val samplerDescriptor: GPUSamplerDescriptor,
+    val samplerDescriptorHash: String,
+    val samplerBehaviorKey: String,
+    val pipelineKey: String,
+    val routeKind: String,
+    val classification: String = "TargetNative",
+    val promoted: Boolean = false,
+    val diagnostics: List<GPUImageDiagnostic> = emptyList(),
+)
+
+/**
+ * Builds deterministic sampler/tile/mipmap boundary evidence for image routes.
+ *
+ * The boundary is intentionally non-promoting. It records the sampler facts and
+ * key boundaries needed before a future adapter-backed `GPUNative` sampler
+ * claim, and refuses unsupported modes without generating broad tile, mipmap,
+ * anisotropic, cubic, or perspective sampling support.
+ */
+class GPUImageSamplerBoundaryPlanner(
+    private val maxUploadBytes: Long = 1_048_576L,
+) {
+    /** Plans one image sampler boundary without materializing a backend sampler. */
+    fun plan(
+        source: GPUDecodedImagePixelsDescriptor,
+        sampling: GPUDecodedImageSamplingPlan,
+    ): GPUImageSamplerBoundaryPlan {
+        val textureDescriptor = source.toTextureDescriptor()
+        val viewDescriptor = GPUTextureViewDescriptor(
+            textureDescriptorHash = textureDescriptor.stableDescriptorHash(),
+            viewDimension = "2d",
+            mipRange = 0..0,
+            arrayLayerRange = 0..0,
+        )
+        val samplerDescriptor = sampling.toSamplerDescriptor()
+        val samplerDescriptorHash = samplerDescriptor.stableSamplerHash()
+        val samplerBehaviorKey = sampling.samplerBehaviorKey()
+        val pipelineKey = sampling.samplerPipelineKey(textureDescriptor, viewDescriptor)
+        val refusalCode = source.refusalCode(maxUploadBytes) ?: sampling.samplerBoundaryRefusalCode(
+            availableMipLevels = viewDescriptor.mipRange.count(),
+        )
+
+        if (refusalCode != null) {
+            val diagnostic = GPUImageDiagnostic(
+                code = refusalCode,
+                sourceId = source.sourceId.ifBlank { null },
+                message = "Image sampler boundary refused: $refusalCode",
+                terminal = true,
+            )
+
+            return GPUImageSamplerBoundaryPlan(
+                source = source,
+                sampling = sampling,
+                textureDescriptor = textureDescriptor,
+                viewDescriptor = viewDescriptor,
+                samplerDescriptor = samplerDescriptor,
+                samplerDescriptorHash = samplerDescriptorHash,
+                samplerBehaviorKey = samplerBehaviorKey,
+                pipelineKey = pipelineKey,
+                routeKind = "RefuseDiagnostic",
+                diagnostics = listOf(diagnostic),
+            )
+        }
+
+        val diagnostic = GPUImageDiagnostic(
+            code = "sampler-boundary.accepted",
+            sourceId = source.sourceId,
+            message = "Image sampler boundary facts are dumpable; native sampler execution remains unpromoted.",
+            terminal = false,
+        )
+
+        return GPUImageSamplerBoundaryPlan(
+            source = source,
+            sampling = sampling,
+            textureDescriptor = textureDescriptor,
+            viewDescriptor = viewDescriptor,
+            samplerDescriptor = samplerDescriptor,
+            samplerDescriptorHash = samplerDescriptorHash,
+            samplerBehaviorKey = samplerBehaviorKey,
+            pipelineKey = pipelineKey,
+            routeKind = "GPUNative",
+            diagnostics = listOf(diagnostic),
+        )
+    }
+}
+
 /** Builds bounded decoded-pixel image shader evidence without product activation. */
 class GPUDecodedImageShaderPreparedPlanner(
     private val maxUploadBytes: Long = 1_048_576L,
@@ -456,6 +551,46 @@ fun GPUDecodedImageShaderRoutePlan.dumpLines(): List<String> {
     )
 }
 
+/** Emits stable M4 sampler/tile/mipmap boundary evidence lines. */
+fun GPUImageSamplerBoundaryPlan.dumpLines(): List<String> {
+    if (routeKind == "RefuseDiagnostic") {
+        val diagnostic = diagnostics.firstOrNull()
+        return listOf(
+            "sampler-boundary:refused row=gpu-renderer.sampler-boundary " +
+                "reason=${diagnostic?.code ?: "unknown"} source=${source.sourceId} " +
+                "routeKind=RefuseDiagnostic classification=$classification promoted=$promoted",
+            samplerBoundaryNonClaimLine,
+        )
+    }
+
+    return listOf(
+        "sampler-boundary:accepted row=gpu-renderer.sampler-boundary " +
+            "routeKind=$routeKind classification=$classification promoted=$promoted " +
+            "productActivation=false source=${source.sourceId}",
+        "sampler-boundary:sampler descriptor=$samplerDescriptorHash " +
+            "address=${samplerDescriptor.addressModeU}/${samplerDescriptor.addressModeV} " +
+            "filter=${samplerDescriptor.magFilter}/${samplerDescriptor.minFilter} " +
+            "mipmap=${samplerDescriptor.mipmapFilter} " +
+            "lod=${samplerDescriptor.lodMinClamp}..${samplerDescriptor.lodMaxClamp} " +
+            "compare=${samplerDescriptor.compareMode} " +
+            "anisotropy=${samplerDescriptor.maxAnisotropy} " +
+            "capabilities=${samplerDescriptor.capabilityRequirements.dumpCapabilities()}",
+        "sampler-boundary:tile x=${sampling.tileModeX} y=${sampling.tileModeY} " +
+            "address=${samplerDescriptor.addressModeU}/${samplerDescriptor.addressModeV} " +
+            "wgsl=hardware-address-mode broadTileSupport=false",
+        "sampler-boundary:mip requested=${sampling.mipmapMode} " +
+            "availableLevels=${viewDescriptor.mipRange.count()} " +
+            "viewMipRange=${viewDescriptor.mipRange} policy=no-mipmap support=false",
+        "sampler-boundary:key sampler=$samplerBehaviorKey " +
+            "includes=tile-mode,filter-mode,mipmap-mode,lod-clamp,compare-mode,anisotropy,coordinate-transform " +
+            "excludes=texture-handle,upload-artifact-key,pixel-content,row-bytes,sampler-object",
+        "sampler-boundary:pipelineKey=$pipelineKey " +
+            "includes=binding-layout,sample-type,coordinate-transform-class " +
+            "excludes=address-mode,filter-mode,mipmap-mode,lod-clamp,anisotropy,resource-handle,artifact-key,pixel-content",
+        samplerBoundaryNonClaimLine,
+    )
+}
+
 private const val bindingLabel = "sampled-texture.image-shader"
 private const val materialKeyPrefix = "image.shader.decoded-pixels.v1"
 private const val materialSourceKey = "image-source:decoded-pixels"
@@ -466,6 +601,9 @@ private const val decodedImageUploadBudgetClass = "image-small"
 private const val imageNonClaimLine =
     "nonclaim:no-product-activation no-adapter-backed-execution no-codec-support no-mipmap-support " +
         "no-broad-image-support no-cpu-rendered-compat-texture"
+private const val samplerBoundaryNonClaimLine =
+    "nonclaim:no-product-activation no-adapter-backed-execution no-native-sampler-support " +
+        "no-mipmap-support no-broad-tile-mode-support no-perspective-sampling no-cpu-rendered-compat-texture"
 private const val codecNonClaimLine =
     "nonclaim:no-codec-implementation no-decode-output no-uploaded-texture-route-from-provenance " +
         "no-platform-decoder-substitute no-product-activation"
@@ -564,7 +702,27 @@ private fun GPUDecodedImageSamplingPlan.refusalCode(): String? =
     when {
         tileModeX != "clamp" || tileModeY != "clamp" -> "unsupported.image.tile_mode"
         mipmapMode != "none" -> "unsupported.image.mip_required"
+        filterMode == "cubic" -> "unsupported.image.sampling_cubic"
         filterMode !in setOf("nearest", "linear") -> "unsupported.image.sampling_filter"
+        anisotropy < 1 -> "unsupported.image.sampler_anisotropy"
+        anisotropy > 1 -> "unsupported.image.sampling_anisotropic"
+        !hasAcceptedNoMipLodClamp() -> "unsupported.image.sampler_lod_clamp"
+        coordinateTransformClass == "perspective" -> "unsupported.image.perspective_sampling"
+        coordinateTransformClass != "affine" -> "unsupported.image.coordinate_transform"
+        else -> null
+    }
+
+private fun GPUDecodedImageSamplingPlan.samplerBoundaryRefusalCode(availableMipLevels: Int): String? =
+    when {
+        tileModeX != "clamp" || tileModeY != "clamp" -> "unsupported.image.tile_mode"
+        mipmapMode != "none" && availableMipLevels <= 1 -> "unsupported.texture.mipmap_unavailable"
+        filterMode == "cubic" -> "unsupported.image.sampling_cubic"
+        filterMode !in setOf("nearest", "linear") -> "unsupported.image.sampling_filter"
+        anisotropy < 1 -> "unsupported.image.sampler_anisotropy"
+        anisotropy > 1 -> "unsupported.image.sampling_anisotropic"
+        !hasAcceptedNoMipLodClamp() -> "unsupported.image.sampler_lod_clamp"
+        coordinateTransformClass == "perspective" -> "unsupported.image.perspective_sampling"
+        coordinateTransformClass != "affine" -> "unsupported.image.coordinate_transform"
         else -> null
     }
 
@@ -575,6 +733,10 @@ private fun GPUDecodedImageSamplingPlan.toSamplerDescriptor(): GPUSamplerDescrip
         magFilter = filterMode,
         minFilter = filterMode,
         mipmapFilter = mipmapMode,
+        lodMinClamp = lodMinClamp,
+        lodMaxClamp = lodMaxClamp,
+        maxAnisotropy = anisotropy,
+        capabilityRequirements = samplerCapabilityRequirements(),
     )
 
 private fun GPUDecodedImageSamplingPlan.toMaterialSource(): GPUMaterialSourceDescriptor =
@@ -601,10 +763,70 @@ private fun GPUDecodedImageSamplingPlan.materialKey(): MaterialKey {
         "tileModeY=$tileModeY",
         "filterMode=$filterMode",
         "mipmapMode=$mipmapMode",
+        "lodMinClamp=$lodMinClamp",
+        "lodMaxClamp=$lodMaxClamp",
+        "anisotropy=$anisotropy",
+        "compareMode=none",
+        "coordinateTransformClass=$coordinateTransformClass",
         "colorTreatment=sampled-unpremul-srgb-to-target",
     ).joinToString("\n")
 
     return MaterialKey("$materialKeyPrefix:${preimage.stableImageHash()}")
+}
+
+private fun GPUDecodedImageSamplingPlan.samplerBehaviorKey(): String {
+    val preimage = listOf(
+        "version=sampler-boundary-v1",
+        "tileModeX=$tileModeX",
+        "tileModeY=$tileModeY",
+        "filterMode=$filterMode",
+        "mipmapMode=$mipmapMode",
+        "lodMinClamp=$lodMinClamp",
+        "lodMaxClamp=$lodMaxClamp",
+        "compareMode=none",
+        "anisotropy=$anisotropy",
+        "coordinateTransformClass=$coordinateTransformClass",
+    ).joinToString("\n")
+
+    return "sampler-boundary:${preimage.stableImageHash()}"
+}
+
+private fun GPUDecodedImageSamplingPlan.samplerPipelineKey(
+    textureDescriptor: GPUTextureDescriptor,
+    viewDescriptor: GPUTextureViewDescriptor,
+): String {
+    val preimage = listOf(
+        "version=sampler-pipeline-boundary-v1",
+        "bindingLayout=group1.binding1.texture_2d_rgba8_unorm+group1.binding2.sampler",
+        "sampleType=${textureDescriptor.format.lowercase()}",
+        "viewDimension=${viewDescriptor.viewDimension}",
+        "coordinateTransformClass=$coordinateTransformClass",
+    ).joinToString("\n")
+
+    return "pipeline.image-sampler-boundary.v1:${preimage.stableImageHash()}"
+}
+
+private fun GPUDecodedImageSamplingPlan.samplerCapabilityRequirements(): Set<String> =
+    buildSet {
+        if (anisotropy > 1) {
+            add("sampler-anisotropy")
+        }
+    }
+
+private fun GPUDecodedImageSamplingPlan.hasAcceptedNoMipLodClamp(): Boolean {
+    val lodMin = lodMinClamp.toSamplerLodOrNull() ?: return false
+    val lodMax = lodMaxClamp.toSamplerLodOrNull() ?: return false
+    return lodMin == 0.0 && lodMax == 0.0
+}
+
+private fun String.toSamplerLodOrNull(): Double? {
+    val value = toDoubleOrNull() ?: return null
+    return value.takeIf { scalar ->
+        scalar >= 0.0 &&
+            !scalar.isNaN() &&
+            scalar != Double.POSITIVE_INFINITY &&
+            scalar != Double.NEGATIVE_INFINITY
+    }
 }
 
 private fun String.toAddressMode(): String =
@@ -632,6 +854,23 @@ private fun GPUTextureDescriptor.stableDescriptorHash(): String =
         usageLabels.sorted().joinToString(","),
         sampleCount.toString(),
     ).joinToString("|").stableImageHash()
+
+private fun GPUSamplerDescriptor.stableSamplerHash(): String =
+    listOf(
+        addressModeU,
+        addressModeV,
+        magFilter,
+        minFilter,
+        mipmapFilter,
+        lodMinClamp,
+        lodMaxClamp,
+        compareMode,
+        maxAnisotropy.toString(),
+        capabilityRequirements.sorted().joinToString(","),
+    ).joinToString("|").stableImageHash()
+
+private fun Set<String>.dumpCapabilities(): String =
+    if (isEmpty()) "none" else sorted().joinToString(",")
 
 private fun String.isDeterministicImageKeyFact(): Boolean =
     isNotBlank() &&

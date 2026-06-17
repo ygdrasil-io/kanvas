@@ -11,7 +11,7 @@ Base: stacked on `codex/gpu-renderer-m3-clip-prepared`
 | KGPU-M4-001 | `done` | Added `GPUDecodedImageShaderPreparedPlanner`, `GPUDecodedImagePixelsDescriptor`, and bounded decoded-pixel image shader contract evidence with `CPUPreparedGPU`, `UploadedTextureArtifact`, texture/view/sampler/binding, material-key exclusion, and refusal dumps. | Accepted by post-remediation independent review `019ec81d-b49e-7eb2-8a66-6f2d81e0ce95`; no product image drawing, adapter-backed execution, codec support, mipmaps, broad image support, or CPU-rendered compatibility texture is implied. |
 | KGPU-M4-002 | `done` | Added `GPUUploadedTextureArtifactOwnershipGate` resource evidence for artifact type, generation, required usage labels, device generation, active-attachment sampling, descriptor compatibility, and `UploadFromArtifact` allocation planning. | Accepted by post-remediation independent review `019ec81d-b49e-7eb2-8a66-6f2d81e0ce95`; no WebGPU allocation/upload, cache residency claim, product route activation, or live-handle evidence is implied. |
 | KGPU-M4-003 | `done` | Added `GPUImageCodecRegistrySnapshot` provenance/refusal evidence with dumpable codec descriptor facts and `dependency.image.*` diagnostics. | Accepted by post-remediation independent review `019ec81d-b49e-7eb2-8a66-6f2d81e0ce95`; no codec implementation, decode output acceptance, platform decoder substitute, or uploaded-texture route from metadata is implied. |
-| KGPU-M4-004 | `proposed` | Not implemented in this wave. | Native sampler/tile/mipmap promotion needs WebGPU/adapter evidence, behavior-affecting key-boundary evidence, unsupported cubic/aniso/perspective diagnostics, and reference/readback artifacts. |
+| KGPU-M4-004 | `done` | Follow-up evidence added in `reports/gpu-renderer/2026-06-17-m4-004-sampler-boundary-gate.md`: deterministic sampler-boundary dumps, sampler behavior keys, pipeline-key boundary evidence, and stable mip/cubic/aniso/perspective/scalar refusals. | Accepted by independent review `019ed4c5-41ac-7f80-8c45-58ac57e4b08e`; native sampler/tile/mipmap execution, broad support, product activation, and readback/reference promotion remain unclaimed. |
 
 ## Evidence
 
@@ -83,4 +83,6 @@ KGPU-M4-001, KGPU-M4-002, and KGPU-M4-003 for `done`.
   color-managed decode support.
 - No implicit first-frame animation behavior.
 - No hidden CPU-rendered draw/layer/filter/scene compatibility texture.
-- No native sampler/tile/mipmap support claim for KGPU-M4-004.
+- No native sampler/tile/mipmap support claim for KGPU-M4-004; the follow-up
+  sampler-boundary evidence is independently reviewed contract/refusal-only
+  evidence.
