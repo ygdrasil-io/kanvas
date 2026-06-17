@@ -457,13 +457,16 @@
         "reports/font/fixtures/expected/fallback/fallback-variable-cff2.json",
         "reports/font/fixtures/expected/fallback/resolved-font-runs.json",
         "reports/font/fixtures/expected/shaping/fallback-shaped-glyph-run.json",
+        "reports/pure-kotlin-text/font-catalog-duplicate-face.json",
+        "reports/pure-kotlin-text/font-catalog.json",
+        "reports/pure-kotlin-text/2026-06-16-kfont-m7-001-font-catalog.md",
         "reports/pure-kotlin-text/2026-06-16-kfont-m7-002-fallback-decision-trace.md",
         "reports/pure-kotlin-text/2026-06-17-kfont-m7-003-variable-axis-aware-fallback.md",
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "reports/pure-kotlin-text/dump-evidence-index.json"
       ],
       "requiredEvidenceGates": [
-        "Complete fallback support still requires the broader deterministic bundled catalog breadth requested by KFONT-M7-001; the current trace family remains bounded to the checked-in fixture set.",
+        "KFONT-M7-001 now supplies deterministic bundled Hebrew, Arabic, Devanagari, Thai, CJK, and emoji-capable catalog rows plus duplicate-face golden evidence, but this trace family remains bounded until reviewed CPU oracle evidence promotes fallback decisions.",
         "Keep host-dependent system scan facts non-normative; host-scanned examples must stay outside the bundled catalog and shared fallback goldens."
       ],
       "validationCommands": [
@@ -473,6 +476,7 @@
         "rtk ./gradlew --no-daemon :font:core:test",
         "rtk ./gradlew --no-daemon :font:text:test --tests '*VariableFallback*'",
         "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.FallbackShapingEvidenceTest",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
         "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py"

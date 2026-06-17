@@ -590,14 +590,20 @@ support.
 
 ### KFONT-M7-001: Add bundled deterministic font catalog
 
-Status: review; bounded deterministic catalog slice implemented and freshly revalidated.
+Status: implemented, independently reviewed, and freshly revalidated.
 
 Files:
 
 - `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
 - `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCatalogTest.kt`
 - `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontDiagnosticTaxonomyTest.kt`
+- `reports/font/fixtures/provenance/index.json`
 - `reports/pure-kotlin-text/font-catalog.json`
+- `reports/pure-kotlin-text/font-catalog-duplicate-face.json`
+- `reports/pure-kotlin-text/font-fixtures-manifest.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
 - `reports/pure-kotlin-text/2026-06-16-kfont-m7-001-font-catalog.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/KFONT-M7-001-add-bundled-deterministic-font-catalog.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/README.md`
@@ -607,14 +613,23 @@ Evidence:
 
 - `BundledFontCatalogBuilder` emits deterministic `font-catalog.json` output
   for repo-owned bundled fixtures without consulting host font directories.
-- The checked-in dump records bundled source/typeface identities, content
+- The checked-in dump now records bundled source/typeface identities, content
   hashes, family/style/generic facts, script-coverage labels, locale hints,
   outline/scaler facts, variation-axis facts, and provenance/license metadata
-  for Liberation Sans, Source Serif 4, and Roboto Flex.
+  for Liberation Sans, Source Serif 4, Roboto Flex, Noto Sans Hebrew,
+  Noto Naskh Arabic, Noto Sans Devanagari, Noto Sans Thai, Noto Sans SC, and
+  the emoji-capable Noto Color Emoji COLRv1 metadata row.
 - `FontCatalogTest` asserts byte-identical output across repeated loads and
   shuffled input order, duplicate-face refusal, provenance-missing refusal,
   required-table refusal passthrough, outline-format refusal passthrough, and
   exclusion of host-dependent rows.
+- `font-catalog-duplicate-face.json` checks in the ticket-requested duplicate
+  family/style golden so `font.catalog.duplicate-face` regressions stay
+  reviewable.
+- `reports/font/fixtures/provenance/index.json` and
+  `font-fixtures-manifest.json` now pin official upstream URLs, licenses,
+  hashes, and sizes for the new deterministic bundled fallback fixtures while
+  keeping the shared 20 MiB asset budget under validator control.
 - The diagnostic taxonomy now reserves `font.catalog.duplicate-face` and
   `font.catalog.provenance-missing` under a dedicated `font.catalog`
   namespace.
@@ -622,20 +637,20 @@ Evidence:
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:core:test --tests '*FontCatalog*'
-rtk ./gradlew --no-daemon :font:core:test --tests '*DiagnosticTaxonomy*'
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontCatalog*' --tests '*FontFixtureManifest*' --tests '*DiagnosticTaxonomy*'
 rtk ./gradlew --no-daemon :font:core:test
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk git diff --check
 ```
 
-Remaining gate: this is a bounded deterministic catalog slice only. It does
-not yet provide bundled Hebrew/Arabic, Devanagari/Thai, CJK, or emoji-capable
-catalog rows, does not include the ticket's requested checked-in
-duplicate-family conflict golden, and does not claim fallback support,
-cluster-safe fallback segmentation, shaping support, platform font parity, or
-GPU text-route support.
+Remaining gate: this ticket closes only the deterministic bundled catalog
+breadth slice. It does not claim complete fallback support, cluster-safe
+fallback promotion, shaping support, platform font parity, color-glyph
+rendering support, or GPU text-route support. CPU fallback oracle evidence and
+the explicit `scaledemoji` gate remain on the owning fallback tickets.
 
 ### KFONT-M7-002: Add fallback decision trace
 

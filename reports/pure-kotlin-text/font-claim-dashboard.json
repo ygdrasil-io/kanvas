@@ -345,6 +345,7 @@
           "reports/font/fixtures/expected/fallback/system-font-scan-font-catalog-link.json",
           "reports/font/fixtures/expected/fallback/system-font-scan-fallback-trace.json",
           "reports/font/fixtures/expected/shaping/fallback-shaped-glyph-run.json",
+          "reports/pure-kotlin-text/font-catalog-duplicate-face.json",
           "reports/pure-kotlin-text/font-catalog.json",
           "reports/pure-kotlin-text/font-source.json",
           "reports/pure-kotlin-text/typeface-id.json"
@@ -361,7 +362,6 @@
         ]
       },
       "requiredEvidenceGates": [
-        "Add bundled Hebrew/Arabic, Devanagari/Thai, CJK, and optional emoji-capable deterministic catalog rows before fallback promotion.",
         "KFONT-M7-004 now adds bounded cluster-safe fallback segmentation evidence, but the negative emoji row still reports a reviewed split hazard and does not retire `scaledemoji`.",
         "Keep host-dependent system scan examples explicitly non-normative unless a reviewed product decision folds them into the bundled catalog or shared fallback dump surfaces.",
         "Add CPU oracle evidence for fallback decisions before promotion."
