@@ -1,8 +1,21 @@
 package org.graphiks.kanvas.gpu.renderer.geometry
 
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.passes.dumpLines
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandBinding
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceReference
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceDiagnostic
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationPreimagePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
+import org.graphiks.kanvas.gpu.renderer.resources.dumpLines
 
 /** Shape descriptor captured before geometry lowering. */
 data class GPUShapeDescriptor(
@@ -735,6 +748,623 @@ fun GPUGeometryPlan.toStencilCoverPassMaterializationPreimage(): GPUResourceMate
         refusalCode = refusal,
     )
 }
+
+/** Provider input for live bounded stencil-cover materialization. */
+data class GPUStencilCoverMaterializationRequest(
+    val targetId: String,
+    val taskIds: List<String> = emptyList(),
+    val resourcePlanLabels: List<String> = emptyList(),
+    val geometryPlan: GPUGeometryPlan,
+    val passId: String,
+    val targetStateHash: String,
+    val loadStoreLabel: String,
+    val deviceGeneration: Long,
+    val expectedResourceGeneration: Long,
+    val actualResourceGeneration: Long,
+    val availableUsageLabels: Set<String>,
+    val attachmentAvailable: Boolean,
+    val attachmentByteEstimate: Long,
+    val attachmentBudgetBytes: Long,
+    val actualBoundsLabel: String,
+    val actualDepthStencilFormat: String,
+    val actualSampleCount: Int,
+    val stencilCompare: String,
+    val stencilWriteMask: String,
+    val stencilClearValue: Int,
+    val producerPipelineLabel: String,
+    val coverPipelineLabel: String,
+    val producerPacketId: String,
+    val coverPacketId: String,
+    val producerBeforeCoverOrdering: Boolean,
+) {
+    internal val dumpTaskIdsSnapshot: List<String> = taskIds.toList()
+    internal val dumpResourcePlanLabelsSnapshot: List<String> = resourcePlanLabels.toList()
+    internal val dumpAvailableUsageLabelsSnapshot: Set<String> = availableUsageLabels.toSet()
+
+    init {
+        require(targetId.isNotBlank()) { "GPUStencilCoverMaterializationRequest.targetId must not be blank" }
+        require(passId.isNotBlank()) { "GPUStencilCoverMaterializationRequest.passId must not be blank" }
+        require(targetStateHash.isNotBlank()) {
+            "GPUStencilCoverMaterializationRequest.targetStateHash must not be blank"
+        }
+        require(loadStoreLabel.isNotBlank()) {
+            "GPUStencilCoverMaterializationRequest.loadStoreLabel must not be blank"
+        }
+        require(deviceGeneration >= 0L) {
+            "GPUStencilCoverMaterializationRequest.deviceGeneration must be non-negative"
+        }
+        require(expectedResourceGeneration >= 0L) {
+            "GPUStencilCoverMaterializationRequest.expectedResourceGeneration must be non-negative"
+        }
+        require(actualResourceGeneration >= 0L) {
+            "GPUStencilCoverMaterializationRequest.actualResourceGeneration must be non-negative"
+        }
+        require(attachmentByteEstimate >= 0L) {
+            "GPUStencilCoverMaterializationRequest.attachmentByteEstimate must be non-negative"
+        }
+        require(attachmentBudgetBytes >= 0L) {
+            "GPUStencilCoverMaterializationRequest.attachmentBudgetBytes must be non-negative"
+        }
+        require(actualBoundsLabel.isNotBlank()) {
+            "GPUStencilCoverMaterializationRequest.actualBoundsLabel must not be blank"
+        }
+        require(actualDepthStencilFormat.isNotBlank()) {
+            "GPUStencilCoverMaterializationRequest.actualDepthStencilFormat must not be blank"
+        }
+        require(actualSampleCount > 0) {
+            "GPUStencilCoverMaterializationRequest.actualSampleCount must be positive"
+        }
+        require(stencilCompare.isNotBlank()) { "GPUStencilCoverMaterializationRequest.stencilCompare must not be blank" }
+        require(stencilWriteMask.isNotBlank()) {
+            "GPUStencilCoverMaterializationRequest.stencilWriteMask must not be blank"
+        }
+        require(producerPipelineLabel.isNotBlank()) {
+            "GPUStencilCoverMaterializationRequest.producerPipelineLabel must not be blank"
+        }
+        require(coverPipelineLabel.isNotBlank()) {
+            "GPUStencilCoverMaterializationRequest.coverPipelineLabel must not be blank"
+        }
+        require(producerPacketId.isNotBlank()) {
+            "GPUStencilCoverMaterializationRequest.producerPacketId must not be blank"
+        }
+        require(coverPacketId.isNotBlank()) {
+            "GPUStencilCoverMaterializationRequest.coverPacketId must not be blank"
+        }
+        require(producerPacketId != coverPacketId) {
+            "GPUStencilCoverMaterializationRequest producer and cover packet ids must be distinct"
+        }
+        require(taskIds.none { taskId -> taskId.isBlank() }) {
+            "GPUStencilCoverMaterializationRequest.taskIds must not contain blank labels"
+        }
+        require(resourcePlanLabels.none { label -> label.isBlank() }) {
+            "GPUStencilCoverMaterializationRequest.resourcePlanLabels must not contain blank labels"
+        }
+        require(availableUsageLabels.none { label -> label.isBlank() }) {
+            "GPUStencilCoverMaterializationRequest.availableUsageLabels must not contain blank labels"
+        }
+    }
+}
+
+/** Live stencil-cover materialization output used by resource and command-stream evidence. */
+data class GPUStencilCoverMaterializationResult(
+    val resourceDecision: GPUResourceMaterializationDecision,
+    val commandStream: GPUPassCommandStream,
+    val pathLabel: String,
+    val attachmentLabel: String,
+    val producerStepLabel: String,
+    val coverStepLabel: String,
+    val orderingToken: String,
+    val clearLoadStorePolicy: String,
+    val stencilCompare: String,
+    val stencilWriteMask: String,
+    val sampleCount: Int,
+    val adapterBacked: Boolean = false,
+    val productActivation: Boolean = false,
+) {
+    init {
+        require(!adapterBacked) { "GPUStencilCoverMaterializationResult.adapterBacked must stay false" }
+        require(!productActivation) { "GPUStencilCoverMaterializationResult.productActivation must stay false" }
+    }
+
+    /** Emits deterministic stencil-cover live materialization evidence without support promotion. */
+    fun dumpLines(): List<String> {
+        val head = if (resourceDecision is GPUResourceMaterializationDecision.Refused) {
+            "stencil-cover:materialization.refused row=$STENCIL_COVER_LIVE_ROW " +
+                "path=$pathLabel attachment=$attachmentLabel code=${resourceDecision.diagnostic.code} " +
+                "adapterBacked=$adapterBacked productActivation=$productActivation"
+        } else {
+            "stencil-cover:materialization row=$STENCIL_COVER_LIVE_ROW " +
+                "path=$pathLabel attachment=$attachmentLabel " +
+                "producer=$producerStepLabel cover=$coverStepLabel ordering=$orderingToken " +
+                "clear=$clearLoadStorePolicy compare=$stencilCompare writeMask=$stencilWriteMask " +
+                "sampleCount=$sampleCount adapterBacked=$adapterBacked productActivation=$productActivation"
+        }
+        return listOf(head, STENCIL_COVER_LIVE_NONCLAIM_LINE) +
+            resourceDecision.dumpLines() +
+            commandStream.dumpLines()
+    }
+}
+
+/** Validates and materializes accepted bounded stencil-cover gate evidence. */
+class ValidatingStencilCoverMaterializer {
+    /** Materializes stencil attachments and command-stream ordering evidence, or refuses stably. */
+    fun materialize(
+        request: GPUStencilCoverMaterializationRequest,
+        context: GPUTargetPreparationContext,
+    ): GPUStencilCoverMaterializationResult {
+        val diagnostics = request.materializationDiagnostics(context)
+        val pathLabel = request.pathLabel()
+        val attachmentLabel = request.attachmentLabel()
+        val stencilPlan = request.stencilPlanOrNull()
+        val producerStep = stencilPlan?.stencilStepLabel ?: "none"
+        val coverStep = stencilPlan?.coverStepLabel ?: "none"
+        val orderingToken = stencilPlan?.orderingToken ?: "none"
+        val clearPolicy = stencilPlan?.clearLoadStorePolicy ?: "none"
+        val sampleCount = stencilPlan?.sampleCount ?: request.actualSampleCount
+
+        if (diagnostics.isNotEmpty()) {
+            val decision = GPUResourceMaterializationDecision.Refused(
+                diagnostic = diagnostics.first(),
+                targetId = context.targetId,
+                taskIds = request.dumpTaskIdsSnapshot,
+                resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+                diagnostics = diagnostics,
+            )
+            return GPUStencilCoverMaterializationResult(
+                resourceDecision = decision,
+                commandStream = request.refusedCommandStream(diagnostics.first().code),
+                pathLabel = pathLabel,
+                attachmentLabel = attachmentLabel,
+                producerStepLabel = producerStep,
+                coverStepLabel = coverStep,
+                orderingToken = orderingToken,
+                clearLoadStorePolicy = clearPolicy,
+                stencilCompare = request.stencilCompare,
+                stencilWriteMask = request.stencilWriteMask,
+                sampleCount = sampleCount,
+            )
+        }
+
+        val materializedBridge = request.stencilCoverOperandBridge()
+        val decision = GPUResourceMaterializationDecision.Materialized(
+            resources = listOf(GPUTextureResourceRef("texture-ref:$attachmentLabel")),
+            targetId = context.targetId,
+            taskIds = request.dumpTaskIdsSnapshot,
+            resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+            operandBridge = materializedBridge,
+        )
+        return GPUStencilCoverMaterializationResult(
+            resourceDecision = decision,
+            commandStream = request.commandStream(materializedBridge),
+            pathLabel = pathLabel,
+            attachmentLabel = attachmentLabel,
+            producerStepLabel = producerStep,
+            coverStepLabel = coverStep,
+            orderingToken = orderingToken,
+            clearLoadStorePolicy = clearPolicy,
+            stencilCompare = request.stencilCompare,
+            stencilWriteMask = request.stencilWriteMask,
+            sampleCount = sampleCount,
+        )
+    }
+}
+
+private fun GPUStencilCoverMaterializationRequest.materializationDiagnostics(
+    context: GPUTargetPreparationContext,
+): List<GPUResourceDiagnostic> {
+    val attachmentLabel = attachmentLabel()
+    val selectedRoute = geometryPlan.route
+    if (selectedRoute is GPUGeometryRoute.Refused) {
+        return listOf(
+            stencilCoverMaterializationDiagnostic(
+                code = selectedRoute.diagnostic.code,
+                attachmentLabel = attachmentLabel,
+                facts = selectedRoute.diagnostic.facts + mapOf("reason" to selectedRoute.diagnostic.code),
+            ),
+        )
+    }
+    if (selectedRoute !is GPUGeometryRoute.StencilCover) {
+        val code = "unsupported.geometry.stencil_cover_preimage_route"
+        return listOf(stencilCoverMaterializationDiagnostic(code = code, attachmentLabel = attachmentLabel))
+    }
+
+    val stencilPlan = selectedRoute.stencilPlan
+    return buildList {
+        if (targetId != context.targetId) {
+            add(
+                GPUResourceDiagnostic.commandOperandTargetMismatch(
+                    resourceLabel = attachmentLabel,
+                    requestTargetId = targetId,
+                    contextTargetId = context.targetId,
+                ),
+            )
+        }
+        if (deviceGeneration != context.deviceGeneration) {
+            add(
+                GPUResourceDiagnostic.deviceGenerationStale(
+                    resourceLabel = attachmentLabel,
+                    expectedDeviceGeneration = context.deviceGeneration,
+                    actualDeviceGeneration = deviceGeneration,
+                ),
+            )
+        }
+        if (!attachmentAvailable) {
+            add(
+                stencilCoverMaterializationDiagnostic(
+                    code = "unsupported.geometry.stencil_cover_unavailable",
+                    attachmentLabel = attachmentLabel,
+                    facts = mapOf("attachmentAvailable" to "false"),
+                ),
+            )
+        }
+        val missingUsage = requiredStencilAttachmentUsageLabels - dumpAvailableUsageLabelsSnapshot
+        if (missingUsage.isNotEmpty()) {
+            add(
+                stencilCoverMaterializationDiagnostic(
+                    code = "unsupported.geometry.stencil_cover_pass_resources_missing",
+                    attachmentLabel = attachmentLabel,
+                    facts = mapOf(
+                        "availableUsageLabels" to dumpAvailableUsageLabelsSnapshot.sorted().joinToString(","),
+                        "missingUsageLabels" to missingUsage.sorted().joinToString(","),
+                    ),
+                ),
+            )
+        }
+        if (attachmentByteEstimate > attachmentBudgetBytes) {
+            add(
+                stencilCoverMaterializationDiagnostic(
+                    code = "unsupported.geometry.stencil_cover_budget_exceeded",
+                    attachmentLabel = attachmentLabel,
+                    facts = mapOf(
+                        "budgetBytes" to attachmentBudgetBytes.toString(),
+                        "requestedBytes" to attachmentByteEstimate.toString(),
+                    ),
+                ),
+            )
+        }
+        if (actualResourceGeneration != expectedResourceGeneration) {
+            add(
+                stencilCoverMaterializationDiagnostic(
+                    code = "unsupported.geometry.stencil_cover_generation_stale",
+                    attachmentLabel = attachmentLabel,
+                    facts = mapOf(
+                        "actualGeneration" to actualResourceGeneration.toString(),
+                        "expectedGeneration" to expectedResourceGeneration.toString(),
+                    ),
+                ),
+            )
+        }
+        if (actualBoundsLabel != stencilPlan.producerBoundsLabel || actualBoundsLabel != stencilPlan.coverBoundsLabel) {
+            add(
+                stencilCoverMaterializationDiagnostic(
+                    code = "unsupported.geometry.stencil_cover_bounds_mismatch",
+                    attachmentLabel = attachmentLabel,
+                    facts = mapOf(
+                        "actualBounds" to actualBoundsLabel,
+                        "coverBounds" to stencilPlan.coverBoundsLabel,
+                        "producerBounds" to stencilPlan.producerBoundsLabel,
+                    ),
+                ),
+            )
+        }
+        if (actualDepthStencilFormat != stencilPlan.depthStencilFormat) {
+            add(
+                stencilCoverMaterializationDiagnostic(
+                    code = "unsupported.geometry.stencil_cover_depth_stencil_mismatch",
+                    attachmentLabel = attachmentLabel,
+                    facts = mapOf(
+                        "actualFormat" to actualDepthStencilFormat,
+                        "expectedFormat" to stencilPlan.depthStencilFormat,
+                    ),
+                ),
+            )
+        }
+        if (actualSampleCount != stencilPlan.sampleCount) {
+            add(
+                stencilCoverMaterializationDiagnostic(
+                    code = "unsupported.geometry.stencil_cover_sample_count_mismatch",
+                    attachmentLabel = attachmentLabel,
+                    facts = mapOf(
+                        "actualSampleCount" to actualSampleCount.toString(),
+                        "expectedSampleCount" to stencilPlan.sampleCount.toString(),
+                    ),
+                ),
+            )
+        }
+        if (stencilCompare != supportedStencilCoverCompare) {
+            add(
+                stencilCoverMaterializationDiagnostic(
+                    code = "unsupported.geometry.stencil_cover_compare_mismatch",
+                    attachmentLabel = attachmentLabel,
+                    facts = mapOf(
+                        "actualCompare" to stencilCompare,
+                        "expectedCompare" to supportedStencilCoverCompare,
+                    ),
+                ),
+            )
+        }
+        if (stencilWriteMask != supportedStencilCoverWriteMask) {
+            add(
+                stencilCoverMaterializationDiagnostic(
+                    code = "unsupported.geometry.stencil_cover_write_mask_mismatch",
+                    attachmentLabel = attachmentLabel,
+                    facts = mapOf(
+                        "actualWriteMask" to stencilWriteMask,
+                        "expectedWriteMask" to supportedStencilCoverWriteMask,
+                    ),
+                ),
+            )
+        }
+        if (stencilClearValue != supportedStencilCoverClearValue) {
+            add(
+                stencilCoverMaterializationDiagnostic(
+                    code = "unsupported.geometry.stencil_cover_clear_value_mismatch",
+                    attachmentLabel = attachmentLabel,
+                    facts = mapOf(
+                        "actualClearValue" to stencilClearValue.toString(),
+                        "expectedClearValue" to supportedStencilCoverClearValue.toString(),
+                    ),
+                ),
+            )
+        }
+        if (!producerBeforeCoverOrdering || stencilPlan.orderingToken != "producer-before-cover") {
+            add(
+                stencilCoverMaterializationDiagnostic(
+                    code = "unsupported.geometry.stencil_cover_ordering_illegal",
+                    attachmentLabel = attachmentLabel,
+                    facts = mapOf(
+                        "orderingToken" to stencilPlan.orderingToken,
+                        "producerBeforeCoverOrdering" to producerBeforeCoverOrdering.toString(),
+                    ),
+                ),
+            )
+        }
+    }
+}
+
+private fun GPUStencilCoverMaterializationRequest.stencilCoverOperandBridge(): List<GPUMaterializedCommandOperandBinding> {
+    val stencilPlan = requireNotNull(stencilPlanOrNull()) {
+        "accepted stencil-cover materialization requires a stencil plan"
+    }
+    val attachmentLabel = attachmentLabel()
+    val descriptorHash = depthStencilDescriptorHash()
+    val textureOperand = GPUMaterializedCommandOperandReference(
+        label = attachmentLabel,
+        kind = GPUMaterializedCommandOperandKind.Texture,
+        descriptorHash = descriptorHash,
+        deviceGeneration = deviceGeneration,
+        ownerScope = "GPURecorderScope",
+        usageLabels = requiredStencilAttachmentUsageLabels.sorted(),
+        invalidationPolicy = "pass-end",
+        evidenceFacts = mapOf(
+            "allocation" to "create-depth-stencil-attachment",
+            "bounds" to actualBoundsLabel,
+            "bytes" to attachmentByteEstimate.toString(),
+            "format" to actualDepthStencilFormat,
+            "lifetime" to "pass-local",
+            "readback" to (stencilPlan.readbackEvidenceLabel ?: "missing"),
+            "sampleCount" to actualSampleCount.toString(),
+        ),
+    )
+    val depthStencilOperand = GPUMaterializedCommandOperandReference(
+        label = "depth-stencil:$attachmentLabel",
+        kind = GPUMaterializedCommandOperandKind.DepthStencilAttachment,
+        descriptorHash = descriptorHash,
+        deviceGeneration = deviceGeneration,
+        ownerScope = attachmentLabel,
+        usageLabels = requiredStencilAttachmentUsageLabels.sorted(),
+        invalidationPolicy = "pass-end",
+        evidenceFacts = mapOf(
+            "clear" to stencilClearValue.toString(),
+            "clearLoadStore" to stencilPlan.clearLoadStorePolicy,
+            "compare" to stencilCompare,
+            "format" to actualDepthStencilFormat,
+            "load" to "clear",
+            "sampleCount" to actualSampleCount.toString(),
+            "store" to "store",
+            "writeMask" to stencilWriteMask,
+        ),
+    )
+    val producerPipelineOperand = GPUMaterializedCommandOperandReference(
+        label = producerPipelineLabel,
+        kind = GPUMaterializedCommandOperandKind.RenderPipeline,
+        descriptorHash = producerPipelineDescriptorHash(stencilPlan),
+        deviceGeneration = deviceGeneration,
+        ownerScope = "pipeline-cache",
+        usageLabels = listOf("render_pipeline"),
+        invalidationPolicy = "pipeline-cache",
+        evidenceFacts = mapOf(
+            "attachment" to attachmentLabel,
+            "depthStencil" to descriptorHash,
+            "sampleCount" to actualSampleCount.toString(),
+            "state" to stencilPlan.stencilStateLabel,
+            "step" to stencilPlan.stencilStepLabel,
+            "token" to stencilPlan.orderingToken,
+        ),
+    )
+    val coverPipelineOperand = GPUMaterializedCommandOperandReference(
+        label = coverPipelineLabel,
+        kind = GPUMaterializedCommandOperandKind.RenderPipeline,
+        descriptorHash = coverPipelineDescriptorHash(stencilPlan),
+        deviceGeneration = deviceGeneration,
+        ownerScope = "pipeline-cache",
+        usageLabels = listOf("render_pipeline"),
+        invalidationPolicy = "pipeline-cache",
+        evidenceFacts = mapOf(
+            "attachment" to attachmentLabel,
+            "compare" to stencilCompare,
+            "depthStencil" to descriptorHash,
+            "sampleCount" to actualSampleCount.toString(),
+            "step" to stencilPlan.coverStepLabel,
+            "token" to stencilPlan.orderingToken,
+            "writeMask" to stencilWriteMask,
+        ),
+    )
+    return listOf(
+        GPUMaterializedCommandOperandBinding(
+            commandLabel = "prepareStencilAttachment",
+            operand = textureOperand,
+        ),
+        GPUMaterializedCommandOperandBinding(
+            commandLabel = "clearStencilAttachment",
+            operand = depthStencilOperand,
+        ),
+        GPUMaterializedCommandOperandBinding(
+            packetId = producerPacketId,
+            commandLabel = "stencilCoverProducer",
+            operand = producerPipelineOperand,
+        ),
+        GPUMaterializedCommandOperandBinding(
+            packetId = producerPacketId,
+            commandLabel = "stencilCoverProducer",
+            operand = depthStencilOperand,
+        ),
+        GPUMaterializedCommandOperandBinding(
+            packetId = coverPacketId,
+            commandLabel = "stencilCoverDraw",
+            operand = coverPipelineOperand,
+        ),
+        GPUMaterializedCommandOperandBinding(
+            packetId = coverPacketId,
+            commandLabel = "stencilCoverDraw",
+            operand = depthStencilOperand,
+        ),
+    )
+}
+
+private fun GPUStencilCoverMaterializationRequest.commandStream(
+    materializedBridge: List<GPUMaterializedCommandOperandBinding>,
+): GPUPassCommandStream {
+    val stencilPlan = requireNotNull(stencilPlanOrNull()) {
+        "accepted stencil-cover command stream requires a stencil plan"
+    }
+    return GPUPassCommandStream(
+        streamId = "stencil-cover-command-stream:${pathLabel().toMaterializationPreimageLabel()}",
+        packetStreamId = "stencil-cover-packet-stream:${pathLabel().toMaterializationPreimageLabel()}",
+        passId = passId,
+        commands = listOf(
+            GPUPassCommand.PrepareStencilAttachment(
+                attachmentLabel = attachmentLabel(),
+                descriptorHash = depthStencilDescriptorHash(),
+                formatLabel = actualDepthStencilFormat,
+                usageLabel = requiredStencilAttachmentUsageLabels.sorted().joinToString(","),
+                sampleCount = actualSampleCount,
+                byteEstimate = attachmentByteEstimate,
+            ),
+            GPUPassCommand.BeginRenderPass(
+                targetStateHash = targetStateHash,
+                loadStoreLabel = loadStoreLabel,
+            ),
+            GPUPassCommand.ClearStencilAttachment(
+                attachmentLabel = attachmentLabel(),
+                clearValue = stencilClearValue,
+                loadStorePolicy = stencilPlan.clearLoadStorePolicy,
+            ),
+            GPUPassCommand.StencilCoverProducer(
+                attachmentLabel = attachmentLabel(),
+                pipelineLabel = producerPipelineLabel,
+                boundsLabel = stencilPlan.producerBoundsLabel,
+                stencilStateLabel = stencilPlan.stencilStateLabel,
+                tokenLabel = stencilPlan.orderingToken,
+                packetId = GPUDrawPacketID(producerPacketId),
+            ),
+            GPUPassCommand.StencilCoverDraw(
+                attachmentLabel = attachmentLabel(),
+                pipelineLabel = coverPipelineLabel,
+                boundsLabel = stencilPlan.coverBoundsLabel,
+                compareLabel = stencilCompare,
+                writeMaskLabel = stencilWriteMask,
+                tokenLabel = stencilPlan.orderingToken,
+                packetId = GPUDrawPacketID(coverPacketId),
+            ),
+            GPUPassCommand.EndRenderPass(passId = passId),
+        ),
+        operandBridge = materializedBridge.map(GPUPassCommandOperandBridge::fromMaterializedBinding),
+    )
+}
+
+private fun GPUStencilCoverMaterializationRequest.refusedCommandStream(reasonCode: String): GPUPassCommandStream =
+    GPUPassCommandStream(
+        streamId = "stencil-cover-command-stream:${pathLabel().toMaterializationPreimageLabel()}",
+        packetStreamId = "stencil-cover-packet-stream:${pathLabel().toMaterializationPreimageLabel()}",
+        passId = passId,
+        commands = listOf(GPUPassCommand.RefuseStencilCover(pathLabel = pathLabel(), reasonCode = reasonCode)),
+    )
+
+private fun GPUStencilCoverMaterializationRequest.stencilPlanOrNull(): GPUStencilCoverPlan? =
+    (geometryPlan.route as? GPUGeometryRoute.StencilCover)?.stencilPlan
+
+private fun GPUStencilCoverMaterializationRequest.pathLabel(): String =
+    geometryPlan.path?.pathKey ?: "unknown"
+
+private fun GPUStencilCoverMaterializationRequest.attachmentLabel(): String =
+    stencilPlanOrNull()?.passResourceEvidenceLabel ?: geometryPlan.path?.pathKey?.stencilAttachmentFallbackLabel()
+        ?: "stencil-attachment:unknown"
+
+private fun String.stencilAttachmentFallbackLabel(): String =
+    "stencil-attachment:${removePrefix("path:").substringBefore(':').sanitizeForArtifactKey().ifBlank { "unknown" }}"
+
+private fun GPUStencilCoverMaterializationRequest.depthStencilDescriptorHash(): String =
+    stencilPlanOrNull()?.depthStencilEvidenceLabel ?: actualDepthStencilFormat
+
+private fun GPUStencilCoverMaterializationRequest.producerPipelineDescriptorHash(
+    stencilPlan: GPUStencilCoverPlan,
+): String =
+    listOf(
+        "stencil-producer-pipeline",
+        producerPipelineLabel,
+        stencilPlan.stencilStepLabel,
+        stencilPlan.stencilStateLabel,
+        targetStateHash,
+        depthStencilDescriptorHash(),
+    ).joinToString(":")
+
+private fun GPUStencilCoverMaterializationRequest.coverPipelineDescriptorHash(
+    stencilPlan: GPUStencilCoverPlan,
+): String =
+    listOf(
+        "stencil-cover-pipeline",
+        coverPipelineLabel,
+        stencilPlan.coverStepLabel,
+        stencilCompare,
+        stencilWriteMask,
+        targetStateHash,
+        depthStencilDescriptorHash(),
+    ).joinToString(":")
+
+private fun GPUStencilCoverMaterializationRequest.resourcePlanLabelsOrDefault(): List<String> =
+    if (dumpResourcePlanLabelsSnapshot.isEmpty()) {
+        listOf("stencil-cover-materialization")
+    } else {
+        dumpResourcePlanLabelsSnapshot
+    }
+
+private fun stencilCoverMaterializationDiagnostic(
+    code: String,
+    attachmentLabel: String,
+    facts: Map<String, String> = mapOf("reason" to code),
+): GPUResourceDiagnostic =
+    GPUResourceDiagnostic(
+        code = code,
+        resourceLabel = attachmentLabel,
+        message = "Stencil-cover materialization for $attachmentLabel refused: $code.",
+        terminal = true,
+        facts = facts,
+    )
+
+private val requiredStencilAttachmentUsageLabels = setOf("render_attachment", "stencil_attachment")
+
+private const val supportedStencilCoverCompare = "equal"
+
+private const val supportedStencilCoverWriteMask = "0xff"
+
+private const val supportedStencilCoverClearValue = 0
+
+private const val STENCIL_COVER_LIVE_ROW = "gpu-renderer.path.stencil-cover.live"
+
+private const val STENCIL_COVER_LIVE_NONCLAIM_LINE =
+    "stencil-cover:nonclaim nativeStencilCover=false adapterBacked=false productActivation=false " +
+        "gpuReadbackCompleted=false cpuFallback=false broadPathAA=false"
 
 private fun GPUShapeDescriptor.refusalCode(): String? =
     when {
