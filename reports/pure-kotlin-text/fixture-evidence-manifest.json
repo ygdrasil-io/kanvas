@@ -111,7 +111,7 @@
     {
       "familyId": "bidi-run-segmentation",
       "familyName": "Bidi run segmentation",
-      "classification": "fixture-gated",
+      "classification": "tracked-gap",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
         "section": "Bidi Scope"
@@ -493,23 +493,26 @@
       },
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
-        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
-        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt",
-        "reports/font/fixtures/expected/font-source/liberation-scan-root.json"
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/SystemFontScanReport.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/SystemFontScanTest.kt",
+        "reports/font/fixtures/expected/fallback/system-font-scan.json",
+        "reports/font/fixtures/expected/fallback/system-font-scan-font-catalog-link.json",
+        "reports/font/fixtures/expected/fallback/system-font-scan-fallback-trace.json",
+        "reports/pure-kotlin-text/2026-06-17-kfont-m7-005-host-dependent-system-scan.md"
       ],
       "requiredEvidenceGates": [
-        "Add a deterministic scan-root input fixture that lists explicit in-repo paths instead of implicit host roots.",
-        "Add skipped-file diagnostics for unreadable, malformed, unsupported, and duplicate source candidates.",
-        "Mark every system-scan source and fallback catalog dump as host-dependent when it depends on scan input.",
-        "Record fallback order dump fields for source identity, display name, content hash, and scan diagnostic codes.",
+        "Keep the bounded fixture-directory scan explicitly non-normative until a reviewed product decision says whether linked host-dependent examples should be folded into the main bundled catalog or shared fallback dumps.",
+        "Broaden beyond the bounded generated fixture directory only with reviewed explicit scan-root provenance and stable host-dependent wording.",
         "Keep all discovery pure Kotlin with no hidden platform font registry or native font API."
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:core:test",
-        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+        "rtk ./gradlew --no-daemon :font:text:test --tests '*SystemFontScan*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py"
       ],
       "fixtureCommands": [
-        "Generate only deterministic scan-root fixtures from explicit repo paths before promoting system-scan evidence."
+        "KFONT-M7-005 fixture bytes are generated inside defaultSystemFontScanEvidenceBundle() and asserted against checked-in fallback scan/link goldens."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",
