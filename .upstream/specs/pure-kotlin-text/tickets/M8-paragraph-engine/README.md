@@ -24,7 +24,7 @@ M5 supplies Unicode grapheme, bidi, script, and line-break data. M6 supplies sha
 | [KFONT-M8-003 - Implement UAX #14 line breaker](KFONT-M8-003-implement-uax-14-line-breaker.md) | `done` | `P0` | `tracked-gap` | `paragraph` | `KFONT-M5-001`, `KFONT-M8-002` | - |
 | [KFONT-M8-004 - Implement ellipsis and max-lines policy](KFONT-M8-004-implement-ellipsis-and-max-lines-policy.md) | `done` | `P1` | `tracked-gap` | `paragraph` | `KFONT-M8-002`, `KFONT-M8-003` | - |
 | [KFONT-M8-005 - Implement selection and hit-test maps](KFONT-M8-005-implement-selection-and-hit-test-maps.md) | `proposed` | `P1` | `tracked-gap` | `paragraph` | `KFONT-M8-002`, `KFONT-M8-003` | - |
-| [KFONT-M8-006 - Implement placeholder layout metrics](KFONT-M8-006-implement-placeholder-layout-metrics.md) | `proposed` | `P1` | `tracked-gap` | `paragraph` | `KFONT-M8-001`, `KFONT-M8-003` | - |
+| [KFONT-M8-006 - Implement placeholder layout metrics](KFONT-M8-006-implement-placeholder-layout-metrics.md) | `done` | `P1` | `tracked-gap` | `paragraph` | `KFONT-M8-001`, `KFONT-M8-003` | - |
 
 ## Validation Bundle
 
@@ -41,7 +41,8 @@ Required evidence for this milestone includes `paragraph-input.json`, `paragraph
 - `KFONT-M8-002` is `done` with bounded segmentation evidence only: paragraph shaping requests now split/coalesce by shaping-affecting style facts, preserve placeholder exclusion, emit `text.paragraph.cluster-boundary-violation`, and pin `segmentRefs` plus `paragraph-shaping-requests.json` without promoting complete fallback policy, bidi visual ordering, or paragraph parity claims.
 - `KFONT-M8-003` is `done` with bounded UAX #14 evidence only: line-break maps now pin hard newlines, spaces, hyphen punctuation, CJK adjacency, combining-mark clusters, mixed LTR/RTL spacing, emoji ZWJ clusters, and Thai locale-refinement diagnostics without claiming full dictionary-based refinement, complete UAX #14 conformance, or paragraph parity.
 - `KFONT-M8-004` is `done` with bounded end-ellipsis evidence only: `ParagraphLayoutResult` now records `isEllipsized`, `visibleTextRange`, `truncatedTextRange`, and ellipsis glyph provenance, while refusing missing-glyph, no-room, and placeholder-conflict cases without claiming head/middle truncation, full bidi visual-order parity, or placeholder layout parity.
-- `KFONT-M8-005` and `KFONT-M8-006` remain the active gates for hit testing/selection and placeholder layout metrics.
+- `KFONT-M8-006` is `done` with bounded placeholder geometry evidence only: `PlaceholderStyle` now records `participatesInLineHeight`, layout emits deterministic `PlaceholderBox` geometry and `placeholder-layout.json`, and shared paragraph dumps expose `placeholderBoxes` without promoting selection/hit-test behavior, full bidi visual-order parity, or placeholder rendering claims.
+- `KFONT-M8-005` remains the active M8 gate for selection and hit-test maps.
 
 ## Non-Claims
 

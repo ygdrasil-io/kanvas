@@ -361,6 +361,7 @@ public data class PlaceholderStyle(
     public val baselineOffset: Float = height,
     public val alignment: PlaceholderAlignment = PlaceholderAlignment.BASELINE,
     public val baseline: PlaceholderBaseline = PlaceholderBaseline.ALPHABETIC,
+    public val participatesInLineHeight: Boolean = true,
 )
 
 /**
@@ -436,6 +437,7 @@ public class BasicParagraphLayoutEngine(
         }
 
         val brokenRanges = lineBreaker.breakLines(paragraph, maxWidth)
+        val paragraphClusters = textSegmenter.segment(paragraph.text)
         val maxLines = paragraph.paragraphStyle.maxLines
         val visibleRanges = if (maxLines == null) brokenRanges else brokenRanges.take(maxLines)
         val didOverflowHeight = maxLines != null && brokenRanges.size > visibleRanges.size
@@ -470,6 +472,7 @@ public class BasicParagraphLayoutEngine(
 
         var y = 0f
         var paragraphWidth = 0f
+        val placeholderBoxes = mutableListOf<PlaceholderBox>()
         val lines = visibleRanges.mapIndexed { index, textRange ->
             val lineEllipsis = if (index == visibleRanges.lastIndex) ellipsisPlan?.plan else null
             val visibleTextRange = if (lineEllipsis == null) textRange else lineEllipsis.visibleTextRange
@@ -492,15 +495,43 @@ public class BasicParagraphLayoutEngine(
                 shapingPlan.placeholderRanges.sumOf { placeholderRange ->
                     paragraph.placeholderWidthAt(placeholderRange.first).toDouble()
                 }.toFloat()
-            val lineHeight = paragraph.paragraphStyle.lineHeight ?: style.fontSize
-            val ascent = -style.fontSize * ASCENT_FRACTION
-            val descent = style.fontSize * DESCENT_FRACTION
+            val baseLineHeight = paragraph.paragraphStyle.lineHeight ?: style.fontSize
+            val baseAscent = -style.fontSize * ASCENT_FRACTION
+            val baseDescent = style.fontSize * DESCENT_FRACTION
+            val linePlaceholderStyles = paragraph.placeholders.entries
+                .sortedByRange()
+                .filter { (range) -> visibleTextRange?.overlaps(range) == true }
+                .map { (_, placeholder) -> placeholder }
+            val lineAscent = minOf(
+                baseAscent,
+                linePlaceholderStyles
+                    .filter { placeholder -> placeholder.participatesInLineHeight }
+                    .minOfOrNull { placeholder ->
+                        placeholder.topRelativeToBaseline(
+                            textAscent = baseAscent,
+                            lineHeight = baseLineHeight,
+                        )
+                    } ?: baseAscent,
+            )
+            val lineDescent = maxOf(
+                baseDescent,
+                linePlaceholderStyles
+                    .filter { placeholder -> placeholder.participatesInLineHeight }
+                    .maxOfOrNull { placeholder ->
+                        placeholder.bottomRelativeToBaseline(
+                            textAscent = baseAscent,
+                            lineHeight = baseLineHeight,
+                        )
+                    } ?: baseDescent,
+            )
+            val contentHeight = lineDescent - lineAscent
+            val lineHeight = maxOf(baseLineHeight, contentHeight)
             val metrics = LineMetrics(
-                ascent = ascent,
-                descent = descent,
-                leading = lineHeight - style.fontSize,
+                ascent = lineAscent,
+                descent = lineDescent,
+                leading = lineHeight - contentHeight,
                 width = lineWidth,
-                baseline = y - ascent,
+                baseline = y - lineAscent,
             )
             val direction = if ((glyphRuns.firstOrNull()?.bidiLevel ?: 0) % 2 == 0) 1 else -1
             val boxes = if (lineWidth == 0f) {
@@ -517,6 +548,16 @@ public class BasicParagraphLayoutEngine(
                     ),
                 )
             }
+            val linePlaceholderBoxes = resolvePlaceholderBoxes(
+                paragraph = paragraph,
+                clusters = paragraphClusters,
+                visibleTextRange = visibleTextRange,
+                lineIndex = index,
+                lineTop = y,
+                lineHeight = lineHeight,
+                baseline = metrics.baseline,
+            )
+            placeholderBoxes += linePlaceholderBoxes
 
             y += lineHeight
             paragraphWidth = maxOf(paragraphWidth, lineWidth)
@@ -541,6 +582,7 @@ public class BasicParagraphLayoutEngine(
             height = y,
             didOverflowHeight = didOverflowHeight,
             didOverflowWidth = lines.any { it.metrics.width > maxWidth },
+            placeholderBoxes = placeholderBoxes,
             diagnostics = diagnostics,
         )
     }
@@ -566,6 +608,7 @@ public data class ParagraphLayoutResult(
     public val height: Float = 0f,
     public val didOverflowHeight: Boolean = false,
     public val didOverflowWidth: Boolean = false,
+    public val placeholderBoxes: List<PlaceholderBox> = emptyList(),
     public val diagnostics: List<ParagraphLayoutDiagnostic> = emptyList(),
     public val layoutRefused: Boolean = false,
 ) {
@@ -604,6 +647,13 @@ public data class ParagraphLayoutResult(
         ) { (index, line) ->
             line.toDumpJson(index)
         }
+        append(",\n")
+        append("  \"placeholderBoxes\": ")
+        appendParagraphJsonArray(
+            values = placeholderBoxes,
+            entryIndent = "    ",
+            closingIndent = "  ",
+        ) { placeholderBox -> placeholderBox.toDumpJson() }
         append(",\n")
         append("  \"diagnostics\": ")
         appendParagraphJsonArray(
@@ -727,6 +777,28 @@ public data class TextBox(
     public val right: Float,
     public val bottom: Float,
     public val direction: Int = 1,
+)
+
+/**
+ * Deterministic placeholder geometry produced by paragraph layout.
+ *
+ * @property placeholderId Stable placeholder identifier derived from source range.
+ * @property textRange Inclusive UTF-16 range covered by the placeholder token.
+ * @property lineIndex Zero-based visual line index containing the placeholder.
+ * @property participatesInLineHeight True when the placeholder expanded line metrics.
+ */
+public data class PlaceholderBox(
+    public val placeholderId: String,
+    public val textRange: IntRange,
+    public val lineIndex: Int,
+    public val left: Float,
+    public val top: Float,
+    public val right: Float,
+    public val bottom: Float,
+    public val baselineOffset: Float,
+    public val alignment: PlaceholderAlignment,
+    public val baseline: PlaceholderBaseline,
+    public val participatesInLineHeight: Boolean,
 )
 
 /**
@@ -1172,6 +1244,8 @@ private fun PlaceholderStyle.toDumpJson(range: IntRange): String = buildString {
         .append(paragraphJsonString(alignment.serializedName))
         .append(", \"baseline\": ")
         .append(paragraphJsonString(baseline.serializedName))
+        .append(", \"participatesInLineHeight\": ")
+        .append(participatesInLineHeight)
         .append("}")
 }
 
@@ -1242,6 +1316,32 @@ private fun TextBox.toDumpJson(): String = buildString {
         .append(paragraphJsonFloat(bottom))
         .append(", \"direction\": ")
         .append(direction)
+        .append("}")
+}
+
+private fun PlaceholderBox.toDumpJson(): String = buildString {
+    append("{\"placeholderId\": ")
+        .append(paragraphJsonString(placeholderId))
+        .append(", \"textRange\": ")
+        .append(paragraphJsonString(textRange.toDumpLabel()))
+        .append(", \"lineIndex\": ")
+        .append(lineIndex)
+        .append(", \"left\": ")
+        .append(paragraphJsonFloat(left))
+        .append(", \"top\": ")
+        .append(paragraphJsonFloat(top))
+        .append(", \"right\": ")
+        .append(paragraphJsonFloat(right))
+        .append(", \"bottom\": ")
+        .append(paragraphJsonFloat(bottom))
+        .append(", \"baselineOffset\": ")
+        .append(paragraphJsonFloat(baselineOffset))
+        .append(", \"alignment\": ")
+        .append(paragraphJsonString(alignment.serializedName))
+        .append(", \"baseline\": ")
+        .append(paragraphJsonString(baseline.serializedName))
+        .append(", \"participatesInLineHeight\": ")
+        .append(participatesInLineHeight)
         .append("}")
 }
 
@@ -1455,6 +1555,87 @@ private fun Paragraph.placeholderWidthAt(index: Int): Float =
 private fun Paragraph.estimatedWidth(range: IntRange): Float =
     placeholders.entries.firstOrNull { (placeholderRange) -> placeholderRange.overlaps(range) }?.value?.width
         ?: styleAt(range.first).fontSize
+
+private fun resolvePlaceholderBoxes(
+    paragraph: Paragraph,
+    clusters: List<IntRange>,
+    visibleTextRange: IntRange?,
+    lineIndex: Int,
+    lineTop: Float,
+    lineHeight: Float,
+    baseline: Float,
+): List<PlaceholderBox> {
+    if (visibleTextRange == null) return emptyList()
+    val lineClusters = clusters.filter { cluster -> cluster.overlaps(visibleTextRange) }
+    val lineBottom = lineTop + lineHeight
+    var cursorX = 0f
+    val placeholderBoxes = mutableListOf<PlaceholderBox>()
+    lineClusters.forEach { cluster ->
+        val placeholderEntry = paragraph.placeholders.entries.firstOrNull { (range) -> range.overlaps(cluster) }
+        if (placeholderEntry == null) {
+            cursorX += paragraph.estimatedWidth(cluster)
+            return@forEach
+        }
+        val (range, placeholder) = placeholderEntry
+        val top = placeholder.topFor(
+            lineTop = lineTop,
+            lineBottom = lineBottom,
+            baseline = baseline,
+        )
+        val bottom = top + placeholder.height
+        placeholderBoxes += PlaceholderBox(
+            placeholderId = range.toDumpLabel(),
+            textRange = range,
+            lineIndex = lineIndex,
+            left = cursorX,
+            top = top,
+            right = cursorX + placeholder.width,
+            bottom = bottom,
+            baselineOffset = placeholder.baselineOffset,
+            alignment = placeholder.alignment,
+            baseline = placeholder.baseline,
+            participatesInLineHeight = placeholder.participatesInLineHeight,
+        )
+        cursorX += placeholder.width
+    }
+    return placeholderBoxes
+}
+
+private fun PlaceholderStyle.topRelativeToBaseline(
+    textAscent: Float,
+    lineHeight: Float,
+): Float =
+    when (alignment) {
+        PlaceholderAlignment.BASELINE -> -baselineOffset
+        PlaceholderAlignment.ABOVE_BASELINE -> -height
+        PlaceholderAlignment.BELOW_BASELINE -> 0f
+        PlaceholderAlignment.TOP -> textAscent
+        PlaceholderAlignment.BOTTOM -> textAscent + lineHeight - height
+        PlaceholderAlignment.MIDDLE -> textAscent + ((lineHeight - height) / 2f)
+    }
+
+private fun PlaceholderStyle.bottomRelativeToBaseline(
+    textAscent: Float,
+    lineHeight: Float,
+): Float =
+    topRelativeToBaseline(
+        textAscent = textAscent,
+        lineHeight = lineHeight,
+    ) + height
+
+private fun PlaceholderStyle.topFor(
+    lineTop: Float,
+    lineBottom: Float,
+    baseline: Float,
+): Float =
+    when (alignment) {
+        PlaceholderAlignment.BASELINE -> baseline - baselineOffset
+        PlaceholderAlignment.ABOVE_BASELINE -> baseline - height
+        PlaceholderAlignment.BELOW_BASELINE -> baseline
+        PlaceholderAlignment.TOP -> lineTop
+        PlaceholderAlignment.BOTTOM -> lineBottom - height
+        PlaceholderAlignment.MIDDLE -> lineTop + ((lineBottom - lineTop - height) / 2f)
+    }
 
 private fun List<IntRange>.toTextRangeOrNull(): IntRange? =
     if (isEmpty()) null else first().first..last().last

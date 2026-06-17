@@ -2993,6 +2993,57 @@ Remaining gate: this slice proves bounded end ellipsis only. It does not claim
 head/middle truncation variants, full bidi visual-order parity, placeholder
 layout geometry parity, selection geometry, hit testing, Skia Paragraph
 parity, or GPU text support.
+### KFONT-M8-006: Placeholder layout metrics
+
+Status: implemented with local diff review; independent subagent review could
+not be started because the session hit the agent thread limit.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/KFONT-M8-006-implement-placeholder-layout-metrics.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphStyleContractTest.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/font/fixtures/expected/paragraph/paragraph-input.json`
+- `reports/font/fixtures/expected/paragraph/paragraph-layout.json`
+- `reports/font/fixtures/expected/paragraph/placeholder-layout.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m8-006-placeholder-layout-metrics.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+
+Evidence:
+
+- `PlaceholderStyle` now records `participatesInLineHeight` in paragraph input
+  dumps, so placeholder metric participation is explicit instead of being an
+  implicit runtime assumption.
+- `BasicParagraphLayoutEngine` now emits deterministic `PlaceholderBox`
+  geometry with stable `placeholderId`, range, line index, bounds, baseline
+  offset, alignment, baseline, and line-height-participation facts.
+- Line metrics now expand deterministically for baseline, above-baseline,
+  below-baseline, and middle-aligned placeholders, while non-participating
+  placeholder boxes stay out of line-height expansion.
+- Shared paragraph layout dumps now expose `placeholderBoxes`, and the checked
+  `placeholder-layout.json` fixture pins four bounded alignment cases without
+  promoting selection, hit testing, full bidi visual ordering, or placeholder
+  rendering claims.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineComputesPlaceholderBoxesAndExpandsLineMetrics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineKeepsNonParticipatingPlaceholderOutOfLineHeight --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenMatchesRepoFixture --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphPlaceholderLayoutGoldenMatchesRepoFixture --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphPlaceholderLayoutGoldenPinsCasesAndNonClaims
+rtk ./gradlew --no-daemon :font:text:test
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this slice proves bounded placeholder geometry only. It does
+not claim selection/hit-test APIs, full bidi visual-order parity, placeholder
+rendering support, Skia Paragraph parity, or GPU text support; `KFONT-M8-005`
+remains the active paragraph interaction gate.
 ### PKT-10A: Glyph Strike-Key Preimage And Route Diagnostic Dumps
 
 Status: implemented and independently reviewed.

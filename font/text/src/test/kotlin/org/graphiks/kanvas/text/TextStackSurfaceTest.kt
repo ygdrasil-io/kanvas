@@ -60,6 +60,8 @@ import org.graphiks.kanvas.text.paragraph.ParagraphLayoutResult
 import org.graphiks.kanvas.text.paragraph.ParagraphShapingPlan
 import org.graphiks.kanvas.text.paragraph.ParagraphShapingRequest
 import org.graphiks.kanvas.text.paragraph.ParagraphStyle
+import org.graphiks.kanvas.text.paragraph.PlaceholderAlignment
+import org.graphiks.kanvas.text.paragraph.PlaceholderBaseline
 import org.graphiks.kanvas.text.paragraph.PlaceholderStyle
 import org.graphiks.kanvas.text.paragraph.SelectionRange
 import org.graphiks.kanvas.text.paragraph.SimpleLineBreaker
@@ -213,6 +215,56 @@ class TextStackSurfaceTest {
     }
 
     @Test
+    fun basicParagraphLayoutEngineComputesPlaceholderBoxesAndExpandsLineMetrics() {
+        val result = BasicParagraphLayoutEngine(RecordingShapingEngine()).layout(
+            ParagraphBuilder()
+                .append("a", TextStyle(fontSize = 10f))
+                .appendPlaceholder(
+                    PlaceholderStyle(
+                        width = 12f,
+                        height = 18f,
+                        baselineOffset = 14f,
+                        alignment = PlaceholderAlignment.BASELINE,
+                    ),
+                ).build(),
+            maxWidth = 200f,
+        )
+
+        assertFalse(result.layoutRefused)
+        assertEquals(LineMetrics(ascent = -14f, descent = 4f, leading = 0f, width = 22f, baseline = 14f), result.lines.single().metrics)
+        assertEquals(1, result.placeholderBoxes.size)
+        assertEquals("1..1", result.placeholderBoxes.single().placeholderId)
+        assertEquals(10f, result.placeholderBoxes.single().left)
+        assertEquals(0f, result.placeholderBoxes.single().top)
+        assertEquals(22f, result.placeholderBoxes.single().right)
+        assertEquals(18f, result.placeholderBoxes.single().bottom)
+        assertTrue(result.dump().contains("\"placeholderId\": \"1..1\""))
+    }
+
+    @Test
+    fun basicParagraphLayoutEngineKeepsNonParticipatingPlaceholderOutOfLineHeight() {
+        val result = BasicParagraphLayoutEngine(RecordingShapingEngine()).layout(
+            ParagraphBuilder()
+                .append("a", TextStyle(fontSize = 10f))
+                .appendPlaceholder(
+                    PlaceholderStyle(
+                        width = 12f,
+                        height = 18f,
+                        alignment = PlaceholderAlignment.TOP,
+                        participatesInLineHeight = false,
+                    ),
+                ).build(),
+            maxWidth = 200f,
+        )
+
+        assertFalse(result.layoutRefused)
+        assertEquals(LineMetrics(ascent = -8f, descent = 2f, leading = 0f, width = 22f, baseline = 8f), result.lines.single().metrics)
+        assertEquals(0f, result.placeholderBoxes.single().top)
+        assertEquals(18f, result.placeholderBoxes.single().bottom)
+        assertFalse(result.placeholderBoxes.single().participatesInLineHeight)
+    }
+
+    @Test
     fun paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically() {
         val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
         val paragraph = ParagraphBuilder(ParagraphStyle(textDirection = TextDirection.LEFT_TO_RIGHT))
@@ -243,6 +295,7 @@ class TextStackSurfaceTest {
                 {"index": 0, "textRange": "0..4", "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 50.0, "baseline": 8.0}, "boxes": [{"textRange": "0..4", "left": 0.0, "top": 0.0, "right": 50.0, "bottom": 10.0, "direction": 1}], "segmentRefs": ["0..4"], "glyphRunCount": 1, "visibleTextRange": "0..4", "truncatedTextRange": null, "isEllipsized": false, "ellipsisGlyphs": []},
                 {"index": 1, "textRange": "6..6", "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 10.0, "baseline": 18.0}, "boxes": [{"textRange": "6..6", "left": 0.0, "top": 10.0, "right": 10.0, "bottom": 20.0, "direction": 1}], "segmentRefs": ["6..6"], "glyphRunCount": 1, "visibleTextRange": "6..6", "truncatedTextRange": null, "isEllipsized": false, "ellipsisGlyphs": []}
               ],
+              "placeholderBoxes": [],
               "diagnostics": []
             }
             """.trimIndent() + "\n",
@@ -750,6 +803,13 @@ class TextStackSurfaceTest {
     }
 
     @Test
+    fun paragraphPlaceholderLayoutGoldenMatchesRepoFixture() {
+        val expected = Files.readString(projectRoot().resolve("reports/font/fixtures/expected/paragraph/placeholder-layout.json"))
+
+        assertEquals(expected, placeholderLayoutFixtureDump())
+    }
+
+    @Test
     fun paragraphShapingRequestsGoldenMatchesRepoFixture() {
         val expected = Files.readString(projectRoot().resolve("reports/font/fixtures/expected/paragraph/paragraph-shaping-requests.json"))
 
@@ -791,6 +851,51 @@ class TextStackSurfaceTest {
                 "no-complete-paragraph-layout-claim",
                 "no-complete-bidi-visual-ordering-claim",
                 "no-fallback-policy-claim",
+                "no-skia-paragraph-parity-claim",
+            ),
+            dump.requiredStringList("nonClaims"),
+        )
+        assertNoSupportPromotionClaims(dump)
+    }
+
+    @Test
+    fun paragraphPlaceholderLayoutGoldenPinsCasesAndNonClaims() {
+        val dump = readJsonProjectFile(
+            "reports/font/fixtures/expected/paragraph/placeholder-layout.json",
+        )
+        val cases = dump.requiredObjectList("cases")
+
+        assertEquals(1L, dump["schemaVersion"])
+        assertEquals("placeholder-layout", dump.requiredString("dumpId"))
+        assertEquals(listOf("KFONT-M8-006"), dump.requiredStringList("ownerTickets"))
+        assertEquals(
+            listOf(
+                "baseline-aligned-placeholder",
+                "above-baseline-placeholder",
+                "below-baseline-placeholder",
+                "middle-aligned-placeholder",
+            ),
+            cases.map { it.requiredString("caseId") },
+        )
+        assertEquals(-14.0, cases[0].requiredObject("lineMetrics").requiredDouble("ascent"))
+        assertEquals(
+            listOf("1..1"),
+            cases[0].requiredObjectList("placeholderBoxes").map { placeholder -> placeholder.requiredString("placeholderId") },
+        )
+        assertEquals("middle", cases[3].requiredObjectList("placeholderBoxes").single().requiredString("alignment"))
+        assertEquals(
+            listOf(
+                "non-finite-placeholder-metric",
+                "placeholder-ellipsis-conflict",
+                "unsupported-baseline",
+            ),
+            dump.requiredStringList("negativeCases"),
+        )
+        assertEquals(
+            listOf(
+                "no-complete-target-support-claim",
+                "no-complete-paragraph-layout-claim",
+                "no-selection-hit-test-claim",
                 "no-skia-paragraph-parity-claim",
             ),
             dump.requiredStringList("nonClaims"),
@@ -2131,6 +2236,140 @@ class TextStackSurfaceTest {
         return BasicParagraphLayoutEngine(bidiAwareRecordingShapingEngine()).layout(paragraph, maxWidth = 50f).dump()
     }
 
+    private fun placeholderLayoutFixtureDump(): String {
+        val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
+        val cases = listOf(
+            layoutEngine.layout(
+                ParagraphBuilder()
+                    .append("a", TextStyle(fontSize = 10f))
+                    .appendPlaceholder(
+                        PlaceholderStyle(
+                            width = 12f,
+                            height = 18f,
+                            baselineOffset = 14f,
+                            alignment = PlaceholderAlignment.BASELINE,
+                        ),
+                    ).build(),
+                maxWidth = 200f,
+            ).toPlaceholderFixtureCaseJson("baseline-aligned-placeholder"),
+            layoutEngine.layout(
+                ParagraphBuilder()
+                    .append("a", TextStyle(fontSize = 10f))
+                    .appendPlaceholder(
+                        PlaceholderStyle(
+                            width = 8f,
+                            height = 12f,
+                            alignment = PlaceholderAlignment.ABOVE_BASELINE,
+                        ),
+                    ).build(),
+                maxWidth = 200f,
+            ).toPlaceholderFixtureCaseJson("above-baseline-placeholder"),
+            layoutEngine.layout(
+                ParagraphBuilder()
+                    .append("a", TextStyle(fontSize = 10f))
+                    .appendPlaceholder(
+                        PlaceholderStyle(
+                            width = 10f,
+                            height = 8f,
+                            alignment = PlaceholderAlignment.BELOW_BASELINE,
+                        ),
+                    ).build(),
+                maxWidth = 200f,
+            ).toPlaceholderFixtureCaseJson("below-baseline-placeholder"),
+            layoutEngine.layout(
+                ParagraphBuilder()
+                    .append("a", TextStyle(fontSize = 10f))
+                    .appendPlaceholder(
+                        PlaceholderStyle(
+                            width = 9f,
+                            height = 16f,
+                            alignment = PlaceholderAlignment.MIDDLE,
+                            baseline = PlaceholderBaseline.ALPHABETIC,
+                        ),
+                    ).build(),
+                maxWidth = 200f,
+            ).toPlaceholderFixtureCaseJson("middle-aligned-placeholder"),
+        )
+
+        return buildString {
+            append("{\n")
+            append("  \"schemaVersion\": 1,\n")
+            append("  \"dumpId\": \"placeholder-layout\",\n")
+            append("  \"ownerTickets\": [\n")
+            append("    \"KFONT-M8-006\"\n")
+            append("  ],\n")
+            append("  \"cases\": [\n")
+            append(cases.joinToString(",\n") { caseJson -> caseJson.prependIndent("    ") })
+            append("\n  ],\n")
+            append("  \"negativeCases\": [\n")
+            append("    \"non-finite-placeholder-metric\",\n")
+            append("    \"placeholder-ellipsis-conflict\",\n")
+            append("    \"unsupported-baseline\"\n")
+            append("  ],\n")
+            append("  \"nonClaims\": [\n")
+            append("    \"no-complete-target-support-claim\",\n")
+            append("    \"no-complete-paragraph-layout-claim\",\n")
+            append("    \"no-selection-hit-test-claim\",\n")
+            append("    \"no-skia-paragraph-parity-claim\"\n")
+            append("  ]\n")
+            append("}\n")
+        }
+    }
+
+    private fun ParagraphLayoutResult.toPlaceholderFixtureCaseJson(caseId: String): String = buildString {
+        append("{\n")
+        append("  \"caseId\": ").append(jsonString(caseId)).append(",\n")
+        append("  \"lineMetrics\": ").append(lines.single().metrics.toFixtureJson()).append(",\n")
+        append("  \"placeholderBoxes\": [\n")
+        append(placeholderBoxes.joinToString(",\n") { box -> box.toFixtureJson().prependIndent("    ") })
+        append("\n  ],\n")
+        append("  \"diagnostics\": ").append(diagnostics.toFixtureJsonArray()).append("\n")
+        append("}")
+    }
+
+    private fun LineMetrics.toFixtureJson(): String = buildString {
+        append("{\"ascent\": ").append(jsonFloat(ascent))
+        append(", \"descent\": ").append(jsonFloat(descent))
+        append(", \"leading\": ").append(jsonFloat(leading))
+        append(", \"width\": ").append(jsonFloat(width))
+        append(", \"baseline\": ").append(jsonFloat(baseline))
+        append("}")
+    }
+
+    private fun org.graphiks.kanvas.text.paragraph.PlaceholderBox.toFixtureJson(): String = buildString {
+        append("{\"placeholderId\": ").append(jsonString(placeholderId))
+        append(", \"textRange\": ").append(jsonString(textRange.toFixtureLabel()))
+        append(", \"lineIndex\": ").append(lineIndex)
+        append(", \"left\": ").append(jsonFloat(left))
+        append(", \"top\": ").append(jsonFloat(top))
+        append(", \"right\": ").append(jsonFloat(right))
+        append(", \"bottom\": ").append(jsonFloat(bottom))
+        append(", \"baselineOffset\": ").append(jsonFloat(baselineOffset))
+        append(", \"alignment\": ").append(jsonString(alignment.fixtureLabel()))
+        append(", \"baseline\": ").append(jsonString(baseline.fixtureLabel()))
+        append(", \"participatesInLineHeight\": ").append(participatesInLineHeight)
+        append("}")
+    }
+
+    private fun List<ParagraphLayoutDiagnostic>.toFixtureJsonArray(): String =
+        joinToString(prefix = "[", postfix = "]") { diagnostic -> diagnostic.toFixtureJson() }
+
+    private fun PlaceholderAlignment.fixtureLabel(): String =
+        when (this) {
+            PlaceholderAlignment.BASELINE -> "baseline"
+            PlaceholderAlignment.ABOVE_BASELINE -> "above-baseline"
+            PlaceholderAlignment.BELOW_BASELINE -> "below-baseline"
+            PlaceholderAlignment.TOP -> "top"
+            PlaceholderAlignment.BOTTOM -> "bottom"
+            PlaceholderAlignment.MIDDLE -> "middle"
+        }
+
+    private fun PlaceholderBaseline.fixtureLabel(): String =
+        when (this) {
+            PlaceholderBaseline.ALPHABETIC -> "alphabetic"
+            PlaceholderBaseline.IDEOGRAPHIC -> "ideographic"
+        }
+
     private fun paragraphShapingRequestsFixtureDump(): String {
         val mixedStyleParagraph = ParagraphBuilder(
             ParagraphStyle(textDirection = TextDirection.RIGHT_TO_LEFT),
@@ -2537,6 +2776,9 @@ class TextStackSurfaceTest {
         requiredList(key).mapIndexed { index, value ->
             value as? String ?: error("Expected $key[$index] to be a string")
         }
+
+    private fun Map<String, Any?>.requiredDouble(key: String): Double =
+        this[key] as? Double ?: error("Expected $key to be a number")
 
     private fun Map<String, Any?>.requiredLongList(key: String): List<Long> =
         requiredList(key).mapIndexed { index, value ->

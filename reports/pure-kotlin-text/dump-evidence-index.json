@@ -1904,7 +1904,7 @@
     },
     {
       "dumpId": "paragraph-layout-result",
-      "ownerTicket": "KFONT-M8-004",
+      "ownerTicket": "KFONT-M8-006",
       "classification": "golden-gated",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
@@ -1924,6 +1924,7 @@
         "lines",
         "maxWidth",
         "metrics",
+        "placeholderBoxes",
         "placeholders",
         "schema",
         "segmentRefs",
@@ -1933,15 +1934,16 @@
         "visibleTextRange"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutEllipsizesLastVisibleLineAndRecordsRangesAndProvenance --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenEllipsisCannotFitWithinMaxWidth --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenEllipsisShapingFails --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenEllipsisWouldDropVisiblePlaceholder --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutEllipsizesMixedStyleRtlLineWithTrailingStyleProvenance --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenMatchesRepoFixture",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineComputesPlaceholderBoxesAndExpandsLineMetrics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineKeepsNonParticipatingPlaceholderOutOfLineHeight --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutEllipsizesLastVisibleLineAndRecordsRangesAndProvenance --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenEllipsisCannotFitWithinMaxWidth --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenEllipsisShapingFails --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenEllipsisWouldDropVisiblePlaceholder --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutEllipsizesMixedStyleRtlLineWithTrailingStyleProvenance --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenMatchesRepoFixture",
         "rtk python3 scripts/validate_font_fixture_assets.py",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "Paragraph layout golden changes require deterministic segment reference review, visible/truncated-range review, ellipsis glyph provenance review, and explicit shaping/fallback non-claim preservation before promotion.",
+      "updatePolicy": "Paragraph layout golden changes require deterministic segment reference review, visible/truncated-range review, placeholder box geometry review, ellipsis glyph provenance review, and explicit shaping/fallback non-claim preservation before promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-paragraph-layout-claim",
+        "no-selection-hit-test-claim",
         "no-skia-paragraph-parity-claim"
       ]
     },
@@ -1984,6 +1986,46 @@
         "no-complete-paragraph-layout-claim",
         "no-complete-bidi-visual-ordering-claim",
         "no-fallback-policy-claim",
+        "no-skia-paragraph-parity-claim"
+      ]
+    },
+    {
+      "dumpId": "placeholder-layout",
+      "ownerTicket": "KFONT-M8-006",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Placeholders"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphStyleContractTest.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/paragraph/placeholder-layout.json"
+      ],
+      "expectedFields": [
+        "caseId",
+        "cases",
+        "diagnostics",
+        "dumpId",
+        "lineMetrics",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "placeholderBoxes",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineComputesPlaceholderBoxesAndExpandsLineMetrics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineKeepsNonParticipatingPlaceholderOutOfLineHeight --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphPlaceholderLayoutGoldenMatchesRepoFixture --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphPlaceholderLayoutGoldenPinsCasesAndNonClaims",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Placeholder layout golden changes require reviewed alignment, baseline-offset, and line-height-participation diffs plus explicit non-claims without promoting selection, hit testing, placeholder rendering, or Skia Paragraph parity.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-paragraph-layout-claim",
+        "no-selection-hit-test-claim",
         "no-skia-paragraph-parity-claim"
       ]
     },

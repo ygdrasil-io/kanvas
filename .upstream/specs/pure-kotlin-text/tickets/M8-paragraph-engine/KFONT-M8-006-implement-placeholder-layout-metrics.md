@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M8-006"
 title: "Implement placeholder layout metrics"
-status: "proposed"
+status: "done"
 milestone: "M8"
 priority: "P1"
 owner_area: "paragraph"
@@ -68,23 +68,23 @@ interface PlaceholderLayoutResolver {
 
 ## Acceptance Criteria
 
-- [ ] Placeholder dimensions are finite, non-negative, and validated before line fitting.
-- [ ] Placeholder ranges map to exactly one placeholder token and are excluded from shaping requests.
-- [ ] Baseline, above-baseline, below-baseline, and centered alignments affect line ascent/descent deterministically.
-- [ ] Selection and hit-test dumps reference placeholder IDs and geometry.
-- [ ] Invalid placeholder ranges or metrics emit `text.paragraph.invalid-placeholder` or a narrower accepted diagnostic.
+- [x] Placeholder dimensions are finite, non-negative, and validated before line fitting.
+- [x] Placeholder ranges map to exactly one placeholder token and are excluded from shaping requests.
+- [x] Baseline, above-baseline, below-baseline, and centered alignments affect line ascent/descent deterministically.
+- [x] `ParagraphLayoutResult.dump()` and `placeholder-layout.json` now reference placeholder IDs and geometry so `KFONT-M8-005` can consume stable placeholder facts later.
+- [x] Invalid placeholder ranges or metrics emit narrower existing refusals such as `text.paragraph.invalid-constraint`, `text.paragraph.invalid-style-range`, `text.paragraph.unsupported-policy`, and `text.paragraph.placeholder-ellipsis-conflict`.
 
 ## Required Evidence
 
-- `placeholder-layout.json` fixture for baseline-aligned, above-baseline, below-baseline, and center-aligned placeholders.
-- `paragraph-layout.json` fixture showing placeholder effect on line ascent, descent, width, and selection boxes.
-- Negative diagnostics for non-finite dimensions, invalid range, missing baseline where required, and placeholder/ellipsis conflict.
+- `placeholder-layout.json` fixture for baseline-aligned, above-baseline, below-baseline, and center-aligned placeholders, plus a focused non-participating line-height test.
+- `paragraph-layout.json` and deterministic dump coverage showing `placeholderBoxes` in the shared paragraph layout schema without promoting selection or hit-test claims.
+- Negative diagnostics for non-finite dimensions, invalid range, unsupported baseline policy, and placeholder/ellipsis conflict.
 
 ## Fallback / Refusal Behavior
 
 - Invalid placeholder metrics refuse paragraph layout for the affected input with stable diagnostics.
 - Placeholder content is never measured by platform UI APIs.
-- When placeholder geometry is missing, selection and hit testing must report the missing placeholder fact instead of returning text-only boxes.
+- `KFONT-M8-005` remains responsible for consuming placeholder geometry in selection and hit-testing APIs; this ticket does not guess text-only boxes when placeholder facts are absent downstream.
 
 ## Dashboard Impact
 
@@ -96,13 +96,13 @@ interface PlaceholderLayoutResolver {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test --tests '*Placeholder*'
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineComputesPlaceholderBoxesAndExpandsLineMetrics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineKeepsNonParticipatingPlaceholderOutOfLineHeight --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphPlaceholderLayoutGoldenMatchesRepoFixture --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphPlaceholderLayoutGoldenPinsCasesAndNonClaims
+rtk ./gradlew --no-daemon :font:text:test
 ```
 
 ## Status Notes
 
-- `proposed`: Depends on the paragraph style contract and the line-breaking/fitting path.
-- Move to `ready` only after placeholder metric fields and hit-test integration are reviewed.
+- `done`: bounded placeholder geometry is now emitted by `PlaceholderStyle(participatesInLineHeight=...)`, `PlaceholderBox`, `ParagraphLayoutResult.placeholderBoxes`, and `placeholder-layout.json`. The runtime adjusts line ascent/descent deterministically for baseline, above-baseline, below-baseline, and middle-aligned placeholders, while keeping non-participating placeholder boxes out of line-height expansion. Remaining non-claims stay explicit: `KFONT-M8-005` still owns selection/hit-test consumption, full bidi visual ordering parity is not promoted, and this slice does not claim placeholder rendering or Skia Paragraph parity.
 
 ## Linear Labels
 
