@@ -81,8 +81,7 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: Depends on KGPU-M7-003, which remains blocked on KGPU-M5-002 and
-  native destination-read strategy evidence. Remaining gate is accepted
+- `blocked`: KGPU-M7-003 is now `done`, but the remaining gate is accepted
   primitive blend/color route decisions, deterministic descriptor/key/refusal
   dumps, adapter-backed layout/WGSL/route evidence, and explicit skipped or
   refused lanes for unsupported topology, color, texcoord, and buffer cases.
