@@ -228,7 +228,7 @@
       ],
       "requiredEvidenceGates": [
         "KFONT-M5-005 now proves bounded grapheme, bidi-run, and script-run boundary alignment only; GSUB/GPOS shaping, fallback run splitting, and paragraph ordering remain gated on later tickets.",
-        "Keep `scaledemoji` fixture-gated until explicit emoji-sequence refusal, fallback, and color or route evidence land on the owning tickets.",
+        "Keep `scaledemoji` fixture-gated on color, route, and rendering evidence; the explicit emoji-sequence refusal and fallback-boundary proofs now live on the owning KFONT-M7-004 slice.",
         "Broaden reviewed CJK IVS coverage before promoting complete cluster-safety coverage."
       ],
       "validationCommands": [

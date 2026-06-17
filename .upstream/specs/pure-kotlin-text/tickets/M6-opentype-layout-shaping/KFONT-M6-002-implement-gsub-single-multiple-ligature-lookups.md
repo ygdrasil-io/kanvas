@@ -108,7 +108,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextS
 ## Status Notes
 
 - `proposed`: Basic GSUB behavior depends on the M6 contract and M2 table facts.
-- `review`: Bounded parser/runtime support for GSUB LookupType 1/2/4 is implemented and freshly validated in `font/sfnt` and `font/text` surface tests. Remaining gates: promote `gsub-trace.json` and `shaped-glyph-run.json` contract evidence, add malformed/refusal fixture coverage with stable diagnostics, and prove explicit `ShapingPlan`-driven feature ordering plus script-policy boundaries before `done`.
+- `review`: Bounded parser/runtime support for GSUB LookupType 1/2/4 is implemented and freshly validated in `font/sfnt` and `font/text` surface tests. Remaining gate: add reviewed fixture provenance and expected dumps for `gsub-single-substitution.otf`, `gsub-multiple-substitution.otf`, `gsub-ligature-fi.otf`, `gsub-coverage-malformed.otf`, and `gsub-ligature-bad-component.otf`, then promote `gsub-trace.json` / `shaped-glyph-run.json` beyond the current M6-001 contract goldens with explicit `ShapingPlan` ordering.
 - Move to `ready` only after fixture fonts and trace fields are reviewed.
 
 ## Linear Labels
