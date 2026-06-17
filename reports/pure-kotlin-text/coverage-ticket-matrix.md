@@ -3637,6 +3637,64 @@ Remaining gate: this is pure Kotlin SVG glyph plan evidence only. It does not
 claim dynamic SVG support, native/platform SVG fallback behavior, actual `use`
 graph expansion rendering, GPU SVG route support, or retirement of any legacy
 renderer gate.
+### KFONT-M10-008: Implement SVG glyph refusal classes and bounds fixtures
+
+Status: done; freshly validated.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/color/svg-glyph-fixture-manifest.json`
+- `.upstream/specs/pure-kotlin-text/tickets/M10-color-fonts-emoji/KFONT-M10-008-implement-svg-glyph-refusal-classes-and-bounds-fixtures.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M10-color-fonts-emoji/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m10-008-svg-refusal-bounds-fixtures.md`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `scripts/validate_pure_kotlin_text_font_fixtures.py`
+- `scripts/test_validate_pure_kotlin_text_font_fixtures.py`
+
+Evidence:
+
+- `BasicSVGGlyphParser.documentMalformedDiagnostic(...)` now emits stable
+  `text.SVG.document-malformed` evidence keyed by glyph ID, source SHA-256,
+  failure class, and failure message without inventing a broader renderer
+  contract.
+- Checked-in `svg-glyph-fixture-manifest.json` now records deterministic bounds
+  hashes for the positive static-path, gradient/transform/clip, and
+  defs/symbol/bounded-use cases plus explicit refusal rows for script,
+  external-resource, network-reference, animation, filter, `foreignObject`,
+  embedded-text, unsupported CSS selector, malformed-document/path-data, and
+  path-command, gradient-stop, or use-recursion budget overflow cases.
+- Dump index, fixture manifest, and font fixture inventory now keep the SVG
+  glyph family at `fixture-gated` with the new manifest as required CPU-side
+  evidence, while preserving explicit non-claims for dynamic/native SVG and any
+  GPU route proof.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsSVGDocumentMalformedDiagnostic
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.svgGlyphFixtureManifestCapturesBoundsRefusalsAndProvenanceDeterministically
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_font_fixtures.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk git diff --check
+```
+
+Remaining gate: this is CPU-side SVG fixture evidence only. It does not claim
+dynamic SVG support, native/platform SVG fallback behavior, complete SVG
+rendering support, GPU SVG route support, or retirement of the milestone-wide
+color/emoji fixture convergence gate owned by KFONT-M10-010.
 ### PKT-11L: Emoji VS Skin-Tone ZWJ Fixture Evidence
 
 Status: implemented; independent review pending because the current tool policy

@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M10-008"
 title: "Implement SVG glyph refusal classes and bounds fixtures"
-status: "proposed"
+status: "done"
 milestone: "M10"
 priority: "P1"
 owner_area: "color"
@@ -58,11 +58,11 @@ data class SVGGlyphFixtureCase(
 
 ## Acceptance Criteria
 
-- [ ] Positive bounds fixtures cover path, transform, gradient, clip, and bounded `use`.
-- [ ] Refusal fixtures cover scripts, external resources, network references, animation, filters, `foreignObject`, embedded text, unsupported CSS, malformed document, and budget overflow.
-- [ ] Each fixture has provenance, expected diagnostic codes, and expected dump files.
-- [ ] Bounds hashes are deterministic for supported fixtures.
-- [ ] Dashboard classification remains `fixture-gated` until fixture bytes and expectation diffs are reviewed.
+- [x] Positive bounds fixtures cover path, transform, gradient, clip, and bounded `use`.
+- [x] Refusal fixtures cover scripts, external resources, network references, animation, filters, `foreignObject`, embedded text, unsupported CSS, malformed document, and budget overflow.
+- [x] Each fixture has provenance, expected diagnostic codes, and expected dump files.
+- [x] Bounds hashes are deterministic for supported fixtures.
+- [x] Dashboard classification remains `fixture-gated` until fixture bytes and expectation diffs are reviewed.
 
 ## Required Evidence
 
@@ -86,13 +86,22 @@ data class SVGGlyphFixtureCase(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test --tests '*SVGGlyph*Fixture*'
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsSVGDocumentMalformedDiagnostic
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.svgGlyphFixtureManifestCapturesBoundsRefusalsAndProvenanceDeterministically
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_font_fixtures.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
 ```
 
 ## Status Notes
 
 - `proposed`: Fixture-gated proof for the bounded SVG glyph subset and explicit non-support classes.
-- Move to `ready` only after fixture manifest fields and refusal class names are reviewed.
+- `done`: `svg-glyph-fixture-manifest.json` now records positive bounds hashes plus explicit script, external-resource, network-reference, animation, filter, `foreignObject`, embedded-text, unsupported-selector, malformed-document/path-data, and budget refusal expectations with fresh validation.
+- Remaining gate: this is CPU-side SVG fixture evidence only. KFONT-M10-010 still owns the milestone-wide color/emoji manifest convergence, and M11 still owns any GPU SVG route claim.
 
 ## Linear Labels
 

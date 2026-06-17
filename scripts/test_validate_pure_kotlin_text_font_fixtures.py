@@ -71,6 +71,15 @@ class PureKotlinTextFontFixtureInventoryTest(unittest.TestCase):
             for fixture in family["fixtures"]
         }
         self.assertIn("colrv1-solid-glyph-colr-glyph", color_glyph_gates)
+        svg_gates = {
+            fixture["targetGate"]
+            for family in inventory["families"]
+            if family["familyId"] == "svg-glyphs"
+            for fixture in family["fixtures"]
+        }
+        self.assertIn("svg-script-refusal", svg_gates)
+        self.assertIn("svg-malformed-document-refusal", svg_gates)
+        self.assertIn("svg-unsupported-css-selector-refusal", svg_gates)
 
     def test_validator_rejects_missing_font_fixture_gates(self) -> None:
         validator = load_validator()
