@@ -42,7 +42,7 @@ public fun defaultFallbackShapedGlyphRunEvidenceJson(): String {
         append("{\n")
         append("  \"schemaVersion\": 1,\n")
         append("  \"dumpId\": \"fallback-shaped-glyph-run\",\n")
-        append("  \"ownerTickets\": [\"KFONT-M7-002\"],\n")
+        append("  \"ownerTickets\": [\"KFONT-M7-002\", \"KFONT-M7-003\"],\n")
         append("  \"cases\": [\n")
         append(cases.joinToString(",\n") { case -> case.toCanonicalJson().prependIndent("    ") })
         append("\n  ],\n")
@@ -157,6 +157,18 @@ private fun FallbackRequest.toCanonicalJson(): String = buildString {
     append(jsonString("width")).append(":").append(style.width).append(",")
     append(jsonPair("slant", style.slant.serializedName))
     append("}")
+    if (variationCoordinates.isNotEmpty()) {
+        append(",")
+        append(jsonString("variationCoordinates")).append(":").append(
+            variationCoordinates.joinToString(prefix = "[", postfix = "]", separator = ",") { coordinate ->
+                """{"axisTag":${jsonString(coordinate.axisTag)},"value":${coordinate.value}}"""
+            },
+        )
+    }
+    if (namedInstance != null) {
+        append(",")
+        append(jsonPair("namedInstance", namedInstance))
+    }
     append("}")
 }
 

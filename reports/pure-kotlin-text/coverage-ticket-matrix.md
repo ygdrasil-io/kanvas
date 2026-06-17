@@ -707,6 +707,63 @@ bounded fallback-trace evidence only and does not add CPU oracle promotion,
 cluster-safe segmentation, platform fallback claims, or any GPU text-route
 claim.
 
+### KFONT-M7-003: Add Variable-Axis-Aware Fallback
+
+Status: review; bounded variable fallback evidence validated.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FallbackDecisionDumpTest.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/VariableFallbackEvidenceTest.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/FallbackShapingEvidence.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/FallbackShapingEvidenceTest.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/VariableFallbackShapingEvidenceTest.kt`
+- `reports/font/fixtures/expected/fallback/fallback-axis-clamped.json`
+- `reports/font/fixtures/expected/fallback/fallback-axis-missing.json`
+- `reports/font/fixtures/expected/fallback/fallback-metrics-variation-missing.json`
+- `reports/font/fixtures/expected/fallback/fallback-variable-cff2.json`
+- `reports/font/fixtures/expected/fallback/fallback-decision-trace.json`
+- `reports/font/fixtures/expected/fallback/resolved-font-runs.json`
+- `reports/font/fixtures/expected/shaping/fallback-shaped-glyph-run.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m7-003-variable-axis-aware-fallback.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/KFONT-M7-003-add-variable-axis-aware-fallback.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `CatalogFontResolver` now prefers a covered face with requested axis support
+  over an equally covered static candidate, then records deterministic selected
+  coordinates for the chosen fallback `TypefaceID`.
+- `fallback-decision-trace.json` now carries bounded variable fallback cases for
+  axis clamping, unsupported-axis fallback, missing variation metrics, and a
+  CFF2-backed variable fallback fixture without introducing platform font APIs
+  or native font-engine claims.
+- `resolved-font-runs.json` now serializes selected fallback
+  `variationCoordinates`, and the per-fixture fallback assets preserve the same
+  selected typeface facts for downstream review.
+- `fallback-shaped-glyph-run.json` links those variable fixtures into the
+  shaping-owned evidence surface without promoting cluster-safe segmentation or
+  broader shaping support.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecisionDump*' --tests '*VariableFallback*' --tests org.graphiks.kanvas.font.FontCoreSurfaceTest.prefersCoveredCandidateWithRequestedVariationAxisOverCoveredStaticPreferredFamily
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.FallbackShapingEvidenceTest --tests '*VariableFallback*'
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk git diff --check
+```
+
+Remaining gate: this remains bounded review evidence only. It does not yet
+claim named-instance compatibility, multi-axis breadth beyond the checked
+`wght` cases, cluster-safe fallback segmentation, host-dependent fallback
+promotion, CPU oracle promotion, or any GPU text-route support.
+
 ### KFONT-M7-004: Add cluster-safe fallback segmentation tests
 
 Status: review with bounded fixture evidence.

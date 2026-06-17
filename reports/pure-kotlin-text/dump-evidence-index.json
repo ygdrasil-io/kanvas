@@ -646,6 +646,7 @@
       "producerPaths": [
         "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
         "font/core/src/test/kotlin/org/graphiks/kanvas/font/FallbackDecisionDumpTest.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/VariableFallbackEvidenceTest.kt",
         "reports/font/fixtures/expected/fallback/fallback-decision-trace.json",
         "reports/font/fixtures/expected/fallback/system-font-scan-fallback-trace.json"
       ],
@@ -666,6 +667,7 @@
         "reason",
         "reasons",
         "requestedFamilies",
+        "requestedVariationCoordinates",
         "schemaVersion",
         "script",
         "selectedFamily",
@@ -673,11 +675,14 @@
         "selectedScanEntryId",
         "selectedSourceKind",
         "selectedTypefaceId",
+        "selectedVariationCoordinates",
         "styleDistance",
+        "supportedAxes",
         "textRange"
       ],
       "validationCommands": [
         "rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecisionDump*'",
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*VariableFallback*'",
         "rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecision*'",
         "rtk ./gradlew --no-daemon :font:core:test",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
@@ -704,12 +709,17 @@
       "producerPaths": [
         "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
         "font/core/src/test/kotlin/org/graphiks/kanvas/font/FallbackDecisionDumpTest.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/VariableFallbackEvidenceTest.kt",
+        "reports/font/fixtures/expected/fallback/fallback-axis-clamped.json",
+        "reports/font/fixtures/expected/fallback/fallback-axis-missing.json",
         "reports/font/fixtures/expected/fallback/fallback-emoji-preference.json",
         "reports/font/fixtures/expected/fallback/fallback-family-generic.json",
         "reports/font/fixtures/expected/fallback/fallback-family-unavailable.json",
         "reports/font/fixtures/expected/fallback/fallback-locale-serbian.json",
+        "reports/font/fixtures/expected/fallback/fallback-metrics-variation-missing.json",
         "reports/font/fixtures/expected/fallback/fallback-missing-glyph.json",
-        "reports/font/fixtures/expected/fallback/fallback-script-arabic.json"
+        "reports/font/fixtures/expected/fallback/fallback-script-arabic.json",
+        "reports/font/fixtures/expected/fallback/fallback-variable-cff2.json"
       ],
       "expectedFields": [
         "candidateFamilies",
@@ -734,17 +744,21 @@
         "reasons",
         "request",
         "requestedFamilies",
+        "requestedVariationCoordinates",
         "runs",
         "schemaVersion",
         "script",
         "selectedFamily",
         "selectedTypefaceId",
+        "selectedVariationCoordinates",
         "styleDistance",
         "textRange",
-        "typefaceId"
+        "typefaceId",
+        "variationCoordinates"
       ],
       "validationCommands": [
         "rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecisionDump*'",
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*VariableFallback*'",
         "rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecision*'",
         "rtk ./gradlew --no-daemon :font:core:test",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
@@ -841,6 +855,7 @@
         "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/FallbackShapingEvidence.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/FallbackShapingEvidenceTest.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/VariableFallbackShapingEvidenceTest.kt",
         "reports/font/fixtures/expected/shaping/fallback-shaped-glyph-run.json"
       ],
       "expectedFields": [
@@ -874,10 +889,12 @@
         "style",
         "text",
         "textRange",
-        "typefaceId"
+        "typefaceId",
+        "variationCoordinates"
       ],
       "validationCommands": [
         "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.FallbackShapingEvidenceTest",
+        "rtk ./gradlew --no-daemon :font:text:test --tests '*VariableFallback*'",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
         "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
@@ -1668,6 +1685,7 @@
       "producerPaths": [
         "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
         "font/core/src/test/kotlin/org/graphiks/kanvas/font/FallbackDecisionDumpTest.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/VariableFallbackEvidenceTest.kt",
         "reports/font/fixtures/expected/fallback/resolved-font-runs.json"
       ],
       "expectedFields": [
@@ -1685,10 +1703,12 @@
         "ownerTickets",
         "schemaVersion",
         "textRange",
-        "typefaceId"
+        "typefaceId",
+        "variationCoordinates"
       ],
       "validationCommands": [
         "rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecisionDump*'",
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*VariableFallback*'",
         "rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecision*'",
         "rtk ./gradlew --no-daemon :font:core:test",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
