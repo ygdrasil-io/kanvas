@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.glyph.color
 
+import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.kanvas.glyph.GlyphRouteDiagnostic
 import org.graphiks.kanvas.glyph.GlyphStrikeKey
 import org.graphiks.kanvas.glyph.OutlineGlyphRepresentation
@@ -471,6 +472,331 @@ class SimpleCOLRGlyphPlanner(
         } else {
             "colr-v0-missing-palette-layer"
         }
+}
+
+/**
+ * Immutable bounds for one color glyph layer or aggregate color glyph plan.
+ *
+ * Bounds are carried as font-design-space extrema so later CPU/GPU handoff work can reason about
+ * geometry without re-reading COLR/CPAL tables. The bounds are value-object evidence only; this
+ * ticket does not claim rasterization or GPU composite support.
+ */
+data class ColorGlyphBounds(
+    val xMin: Int,
+    val yMin: Int,
+    val xMax: Int,
+    val yMax: Int,
+) {
+    init {
+        require(xMin < xMax) { "Color glyph bounds must have xMin < xMax." }
+        require(yMin < yMax) { "Color glyph bounds must have yMin < yMax." }
+    }
+
+    fun union(other: ColorGlyphBounds): ColorGlyphBounds = ColorGlyphBounds(
+        xMin = minOf(xMin, other.xMin),
+        yMin = minOf(yMin, other.yMin),
+        xMax = maxOf(xMax, other.xMax),
+        yMax = maxOf(yMax, other.yMax),
+    )
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("xMin")).append(": ").append(xMin).append(", ")
+        append(colorGlyphJsonString("yMin")).append(": ").append(yMin).append(", ")
+        append(colorGlyphJsonString("xMax")).append(": ").append(xMax).append(", ")
+        append(colorGlyphJsonString("yMax")).append(": ").append(yMax)
+        append("}")
+    }
+}
+
+/**
+ * Route-scoped artifact-key evidence derived from the M9 [GlyphStrikeKey] preimage rules.
+ *
+ * The hash is intentionally carried as a value object instead of a future renderer handle. M11 can
+ * register typed artifacts from these facts later without reopening COLR/CPAL table state.
+ */
+data class ColorGlyphArtifactKey(
+    val glyphId: Int,
+    val route: String,
+    val strikeKeySha256: String,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("glyphId")).append(": ").append(glyphId).append(", ")
+        append(colorGlyphJsonString("route")).append(": ").append(colorGlyphJsonString(route)).append(", ")
+        append(colorGlyphJsonString("strikeKeySha256")).append(": ")
+        append(colorGlyphJsonString(strikeKeySha256))
+        append("}")
+    }
+}
+
+/**
+ * Stable palette selection facts recorded alongside a resolved COLRv0 color glyph plan.
+ */
+data class ColorGlyphPalette(
+    val identity: String,
+    val selectionIndex: Int,
+    val resolvedIndex: Int,
+    val overrideCount: Int,
+    val colorCount: Int,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("identity")).append(": ").append(colorGlyphJsonString(identity)).append(", ")
+        append(colorGlyphJsonString("selectionIndex")).append(": ").append(selectionIndex).append(", ")
+        append(colorGlyphJsonString("resolvedIndex")).append(": ").append(resolvedIndex).append(", ")
+        append(colorGlyphJsonString("overrideCount")).append(": ").append(overrideCount).append(", ")
+        append(colorGlyphJsonString("colorCount")).append(": ").append(colorCount)
+        append("}")
+    }
+}
+
+/**
+ * Typed COLRv0 layer plan consumed later by artifact registration work.
+ */
+data class COLRV0LayerPlan(
+    val layerIndex: Int,
+    val glyphId: Int,
+    val paletteIndex: Int,
+    val resolvedColor: Int?,
+    val usesForegroundColor: Boolean,
+    val outlineArtifactKey: ColorGlyphArtifactKey,
+    val bounds: ColorGlyphBounds,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("layerIndex")).append(": ").append(layerIndex).append(", ")
+        append(colorGlyphJsonString("glyphId")).append(": ").append(glyphId).append(", ")
+        append(colorGlyphJsonString("paletteIndex")).append(": ").append(paletteIndex).append(", ")
+        append(colorGlyphJsonString("resolvedColorArgb")).append(": ")
+        append(colorGlyphNullableString(resolvedColor?.let(::colorGlyphArgbHex)))
+        append(", ")
+        append(colorGlyphJsonString("usesForegroundColor")).append(": ").append(usesForegroundColor).append(", ")
+        append(colorGlyphJsonString("outlineArtifactKey")).append(": ").append(outlineArtifactKey.toCanonicalJson()).append(", ")
+        append(colorGlyphJsonString("bounds")).append(": ").append(bounds.toCanonicalJson())
+        append("}")
+    }
+}
+
+/**
+ * Deterministic COLRv0 plan proof produced from already-parsed color table facts.
+ */
+data class ColorGlyphPlan(
+    val glyphId: Int,
+    val typefaceId: TypefaceID,
+    val artifactKey: ColorGlyphArtifactKey,
+    val palette: ColorGlyphPalette,
+    val layers: List<COLRV0LayerPlan>,
+    val bounds: ColorGlyphBounds,
+    val fallbackPolicy: String,
+    val diagnostics: List<ColorGlyphDiagnostic> = emptyList(),
+) {
+    val dumpSha256: String
+        get() = colorGlyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    fun toCanonicalJson(): String = canonicalJson(includeDumpSha256 = true)
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendColorGlyphJsonField("schema", ColorGlyphPlanSchema, comma = true)
+        appendColorGlyphJsonField("glyphId", glyphId, comma = true)
+        appendColorGlyphJsonField("typefaceId", typefaceId.value.toString(), comma = true)
+        append("  ").append(colorGlyphJsonString("artifactKey")).append(": ").append(artifactKey.toCanonicalJson()).append(",\n")
+        append("  ").append(colorGlyphJsonString("palette")).append(": ").append(palette.toCanonicalJson()).append(",\n")
+        append("  ").append(colorGlyphJsonString("layers")).append(": ")
+        appendColorGlyphLayerPlansJson(layers, indent = "  ")
+        append(",\n")
+        append("  ").append(colorGlyphJsonString("bounds")).append(": ").append(bounds.toCanonicalJson()).append(",\n")
+        appendColorGlyphJsonField("fallbackPolicy", fallbackPolicy, comma = true)
+        append("  ").append(colorGlyphJsonString("diagnostics")).append(": ")
+        appendColorGlyphDiagnosticsJson(diagnostics, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendColorGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+
+    companion object {
+        const val ColorGlyphPlanSchema: String = "org.graphiks.kanvas.glyph.color.ColorGlyphPlan.v1"
+    }
+}
+
+/**
+ * Result of attempting to convert COLRv0 metadata into a typed color glyph plan.
+ */
+data class COLRV0ColorGlyphPlanDecision(
+    val plan: ColorGlyphPlan?,
+    val selectedRoute: ColorGlyphRoute?,
+    val diagnostics: List<ColorGlyphDiagnostic> = emptyList(),
+)
+
+/**
+ * Promotes parsed COLRv0 and CPAL facts into a deterministic `ColorGlyphPlan`.
+ *
+ * This planner is intentionally CPU-only coordination evidence. It does not decode bitmaps,
+ * rasterize SVG, composite color layers, allocate GPU resources, or claim GPU support.
+ */
+class COLRV0ColorGlyphPlanner(
+    private val colr: COLRV0Table?,
+    private val cpal: CPALTable?,
+    private val layerBounds: Map<Int, ColorGlyphBounds> = emptyMap(),
+) {
+    fun plan(
+        glyphId: Int,
+        typefaceId: TypefaceID,
+        strikeKey: GlyphStrikeKey,
+        paletteSelection: CPALPaletteSelection = CPALPaletteSelection.Default,
+        allowMonochromeFallback: Boolean = false,
+        outlineFallback: OutlineGlyphRepresentation? = null,
+    ): COLRV0ColorGlyphPlanDecision {
+        require(glyphId >= 0) { "COLRv0 color glyph planner requires a non-negative glyphId." }
+
+        val table = colr ?: return refusal(
+            diagnostic = colrMalformedDiagnostic(
+                glyphId = glyphId,
+                detail = "glyphId=$glyphId;tableFamily=COLR;version=0;reason=table-unavailable",
+                message = "COLRv0 table facts are unavailable for glyph $glyphId.",
+            ),
+            glyphId = glyphId,
+            allowMonochromeFallback = allowMonochromeFallback,
+            outlineFallback = outlineFallback,
+        )
+        val paletteTable = cpal ?: return refusal(
+            diagnostic = cpalMalformedDiagnostic(
+                glyphId = glyphId,
+                detail = "glyphId=$glyphId;tableFamily=CPAL;version=0;reason=table-unavailable",
+                message = "COLRv0 palette selection is unavailable for glyph $glyphId: CPAL table facts are missing.",
+            ),
+            glyphId = glyphId,
+            allowMonochromeFallback = allowMonochromeFallback,
+            outlineFallback = outlineFallback,
+        )
+        val palette = paletteSelection.select(paletteTable) ?: return refusal(
+            diagnostic = cpalMalformedDiagnostic(
+                glyphId = glyphId,
+                detail = "glyphId=$glyphId;tableFamily=CPAL;version=0;requestedPaletteIndex=${paletteSelection.index};" +
+                    "availablePaletteCount=${paletteTable.palettes.size}",
+                message = "COLRv0 palette selection is unavailable for glyph $glyphId: requested palette " +
+                    "${paletteSelection.index} is outside the CPAL range.",
+            ),
+            glyphId = glyphId,
+            allowMonochromeFallback = allowMonochromeFallback,
+            outlineFallback = outlineFallback,
+        )
+
+        val layers = table.layersForGlyph(glyphId)
+        if (layers.isEmpty()) {
+            return refusal(
+                diagnostic = colrMalformedDiagnostic(
+                    glyphId = glyphId,
+                    detail = "glyphId=$glyphId;tableFamily=COLR;version=0;reason=missing-base-glyph-record",
+                    message = "COLRv0 base glyph record is unavailable for glyph $glyphId.",
+                ),
+                glyphId = glyphId,
+                allowMonochromeFallback = allowMonochromeFallback,
+                outlineFallback = outlineFallback,
+            )
+        }
+
+        val layerPlans = ArrayList<COLRV0LayerPlan>(layers.size)
+        var aggregateBounds: ColorGlyphBounds? = null
+        layers.forEachIndexed { layerIndex, layer ->
+            val usesForeground = layer.paletteIndex == COLR_FOREGROUND_PALETTE_INDEX
+            val resolvedColor = when {
+                usesForeground -> null
+                else -> palette.colors.getOrNull(layer.paletteIndex) ?: return refusal(
+                    diagnostic = cpalMalformedDiagnostic(
+                        glyphId = glyphId,
+                        detail = "glyphId=$glyphId;tableFamily=CPAL;version=0;requestedPaletteIndex=${palette.index};" +
+                            "layerIndex=$layerIndex;layerGlyphId=${layer.glyphId};paletteEntry=${layer.paletteIndex};" +
+                            "availableColorCount=${palette.colors.size}",
+                        message = "COLRv0 palette selection is unavailable for glyph $glyphId: layer $layerIndex " +
+                            "references missing CPAL entry ${layer.paletteIndex}.",
+                    ),
+                    glyphId = glyphId,
+                    allowMonochromeFallback = allowMonochromeFallback,
+                    outlineFallback = outlineFallback,
+                )
+            }
+
+            val bounds = layerBounds[layer.glyphId] ?: return refusal(
+                diagnostic = colrMalformedDiagnostic(
+                    glyphId = glyphId,
+                    detail = "glyphId=$glyphId;tableFamily=COLR;version=0;layerIndex=$layerIndex;" +
+                        "layerGlyphId=${layer.glyphId};reason=layer-bounds-missing",
+                    message = "COLRv0 layer bounds are unavailable for glyph $glyphId layer $layerIndex.",
+                ),
+                glyphId = glyphId,
+                allowMonochromeFallback = allowMonochromeFallback,
+                outlineFallback = outlineFallback,
+            )
+
+            val outlineArtifactKey = strikeKey.artifactKeyForGlyph(
+                glyphId = layer.glyphId,
+                route = OutlineArtifactRoute,
+            )
+            val layerPlan = COLRV0LayerPlan(
+                layerIndex = layerIndex,
+                glyphId = layer.glyphId,
+                paletteIndex = layer.paletteIndex,
+                resolvedColor = resolvedColor,
+                usesForegroundColor = usesForeground,
+                outlineArtifactKey = outlineArtifactKey,
+                bounds = bounds,
+            )
+            layerPlans += layerPlan
+            aggregateBounds = aggregateBounds?.union(bounds) ?: bounds
+        }
+
+        val plan = ColorGlyphPlan(
+            glyphId = glyphId,
+            typefaceId = typefaceId,
+            artifactKey = strikeKey.artifactKeyForGlyph(
+                glyphId = glyphId,
+                route = ColorArtifactRoute,
+            ),
+            palette = ColorGlyphPalette(
+                identity = strikeKey.paletteIdentity ?: "cpal:${palette.index}",
+                selectionIndex = paletteSelection.index,
+                resolvedIndex = palette.index,
+                overrideCount = paletteSelection.overrides
+                    .map { override -> override.index }
+                    .distinct()
+                    .count { index -> index in palette.colors.indices },
+                colorCount = palette.colors.size,
+            ),
+            layers = layerPlans.toList(),
+            bounds = aggregateBounds ?: error("COLRv0 layer plans must produce aggregate bounds."),
+            fallbackPolicy = "allow-monochrome-outline-fallback",
+            diagnostics = emptyList(),
+        )
+        return COLRV0ColorGlyphPlanDecision(
+            plan = plan,
+            selectedRoute = ColorGlyphRoute(glyphId = glyphId, route = "colr"),
+            diagnostics = emptyList(),
+        )
+    }
+
+    private fun refusal(
+        diagnostic: ColorGlyphDiagnostic,
+        glyphId: Int,
+        allowMonochromeFallback: Boolean,
+        outlineFallback: OutlineGlyphRepresentation?,
+    ): COLRV0ColorGlyphPlanDecision {
+        val selectedRoute = if (allowMonochromeFallback && outlineFallback?.glyphId == glyphId) {
+            ColorGlyphRoute(glyphId = glyphId, route = "outline", outline = outlineFallback)
+        } else {
+            null
+        }
+        return COLRV0ColorGlyphPlanDecision(
+            plan = null,
+            selectedRoute = selectedRoute,
+            diagnostics = listOf(diagnostic),
+        )
+    }
 }
 
 /**
@@ -2509,6 +2835,8 @@ private data class EmojiRouteCandidate(
 private val COLOR_GLYPH_ROUTE_ORDER = listOf("colr", "bitmap", "png", "svg", "outline")
 private val COLOR_GLYPH_ROUTES = COLOR_GLYPH_ROUTE_ORDER.toSet()
 private const val BitmapGlyphPlanSchema = "org.graphiks.kanvas.glyph.color.BitmapGlyphPlan.v1"
+private const val ColorArtifactRoute = "text.glyph.color.COLR"
+private const val OutlineArtifactRoute = "text.glyph.outline"
 
 /**
  * Appends a canonical JSON string field using the module's two-space object indentation.
@@ -2558,6 +2886,23 @@ private fun StringBuilder.appendColorGlyphRoutesJson(routes: List<ColorGlyphRout
 }
 
 /**
+ * Appends typed COLRv0 layer plans as a canonical JSON array.
+ */
+private fun StringBuilder.appendColorGlyphLayerPlansJson(
+    layers: List<COLRV0LayerPlan>,
+    indent: String,
+) {
+    append("[")
+    if (layers.isNotEmpty()) {
+        append("\n")
+        append(layers.joinToString(",\n") { layer -> "$indent  ${layer.toCanonicalJson()}" })
+        append("\n")
+        append(indent)
+    }
+    append("]")
+}
+
+/**
  * Appends diagnostics as a canonical JSON array while preserving route evidence order.
  */
 private fun StringBuilder.appendColorGlyphDiagnosticsJson(diagnostics: List<ColorGlyphDiagnostic>, indent: String) {
@@ -2582,6 +2927,51 @@ private fun colorGlyphFloatToken(value: Float): String {
     } else {
         token
     }
+}
+
+private fun colorGlyphNullableString(value: String?): String =
+    value?.let(::colorGlyphJsonString) ?: "null"
+
+private fun GlyphStrikeKey.artifactKeyForGlyph(glyphId: Int, route: String): ColorGlyphArtifactKey =
+    ColorGlyphArtifactKey(
+        glyphId = glyphId,
+        route = route,
+        strikeKeySha256 = copy(
+            glyphId = glyphId,
+            representationRoute = route,
+            maskFormat = GlyphStrikeKey.NoMaskFormat,
+        ).preimageSha256(glyphId),
+    )
+
+private fun cpalMalformedDiagnostic(
+    glyphId: Int,
+    detail: String,
+    message: String,
+): ColorGlyphDiagnostic = ColorGlyphDiagnostic(
+    glyphId = glyphId,
+    route = "colr",
+    code = ColorGlyphDiagnosticCodes.CPALMalformed,
+    severity = "warning",
+    detail = detail,
+    message = message,
+)
+
+private fun colrMalformedDiagnostic(
+    glyphId: Int,
+    detail: String,
+    message: String,
+): ColorGlyphDiagnostic = ColorGlyphDiagnostic(
+    glyphId = glyphId,
+    route = "colr",
+    code = ColorGlyphDiagnosticCodes.COLRMalformed,
+    severity = "warning",
+    detail = detail,
+    message = message,
+)
+
+private fun colorGlyphArgbHex(color: Int): String {
+    val unsigned = color.toLong() and 0xFFFF_FFFFL
+    return "#%08X".format(unsigned)
 }
 
 /**

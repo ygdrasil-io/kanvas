@@ -570,6 +570,49 @@
       ]
     },
     {
+      "dumpId": "color-glyph-plan",
+      "ownerTicket": "KFONT-M10-001",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
+        "section": "COLR Rendering Policy"
+      },
+      "producerPaths": [
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/color/color-glyph-plan.json"
+      ],
+      "expectedFields": [
+        "artifactKey",
+        "bounds",
+        "diagnostics",
+        "dumpSha256",
+        "fallbackPolicy",
+        "glyphId",
+        "layers",
+        "palette",
+        "schema",
+        "typefaceId"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.parsesCOLRV0BaseGlyphsFromRawTableBytes --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsCOLRV0PaintGraphWithPaletteIndexes --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsCOLRV0ColorGlyphPlanWithPaletteOverridesArtifactKeysAndDeterministicDump --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.fallsBackToOutlineWhenCOLRPaletteResolutionFailsAndFallbackIsAllowed",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "COLRv0 plan golden changes require layer-order, palette, bounds, fallback, and artifact-key review without COLRv1, bitmap, SVG, emoji, GPU, or platform fallback support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-complete-colrv1-rendering-claim",
+        "no-complete-png-bitmap-glyph-routing-claim",
+        "no-complete-svg-in-opentype-rendering-claim",
+        "no-emoji-sequence-shaping-claim",
+        "no-gpu-color-glyph-support-claim",
+        "no-platform-color-font-fallback-claim"
+      ]
+    },
+    {
       "dumpId": "color-svg-emoji-goldens",
       "ownerTicket": "PKT-11D",
       "classification": "golden-gated",
