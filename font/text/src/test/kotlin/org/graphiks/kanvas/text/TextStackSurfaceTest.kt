@@ -43,11 +43,16 @@ import org.graphiks.kanvas.text.paragraph.HitTestResult
 import org.graphiks.kanvas.text.paragraph.BasicParagraphLayoutEngine
 import org.graphiks.kanvas.text.paragraph.FallbackPreference
 import org.graphiks.kanvas.text.paragraph.LineBreaker
+import org.graphiks.kanvas.text.paragraph.LineBreakKind
+import org.graphiks.kanvas.text.paragraph.LineBreakMap
+import org.graphiks.kanvas.text.paragraph.LineBreakOpportunity
 import org.graphiks.kanvas.text.paragraph.LineLayout
 import org.graphiks.kanvas.text.paragraph.LineMetrics
 import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LAYOUT_CONSTRAINT_NEGATIVE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LAYOUT_CONSTRAINT_NON_FINITE_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LINE_BREAK_DATA_UNAVAILABLE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LAYOUT_MAX_LINES_ELLIPSIS_UNSUPPORTED_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LOCALE_BREAK_REFINEMENT_UNAVAILABLE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.Paragraph
 import org.graphiks.kanvas.text.paragraph.ParagraphBuilder
 import org.graphiks.kanvas.text.paragraph.ParagraphLayoutDiagnostic
@@ -63,6 +68,7 @@ import org.graphiks.kanvas.text.paragraph.TextBox
 import org.graphiks.kanvas.text.paragraph.TextDirection
 import org.graphiks.kanvas.text.paragraph.TextPosition
 import org.graphiks.kanvas.text.paragraph.TextStyle
+import org.graphiks.kanvas.text.paragraph.Uax14LineBreaker
 import org.graphiks.kanvas.text.shaping.BasicBidiResolver
 import org.graphiks.kanvas.text.shaping.BasicOpenTypeShapingEngine
 import org.graphiks.kanvas.text.shaping.BasicScriptItemizer
@@ -223,10 +229,10 @@ class TextStackSurfaceTest {
               "input": {
                 "schema": "kanvas.paragraph.input.v1",
                 "unicodeVersion": "16.0.0",
-                "inputHash": "7f497d3e3f7e110e11f6cb7efd28419214a6aa44d93eb24ae7e04713a95e8a11",
+                "inputHash": "69c1a606071eb6233145666e603e36aa73beb26a2f737cd9a7542ad825e34b3f",
                 "text": "aa bb c",
                 "textLength": 7,
-                "paragraphStyle": {"textAlign": "start", "textDirection": "ltr", "maxLines": null, "ellipsis": null, "ellipsisPolicy": "none", "lineHeight": null, "textHeightBehavior": "font-metrics", "defaultLocale": null},
+                "paragraphStyle": {"textAlign": "start", "textDirection": "ltr", "softWrap": true, "maxLines": null, "ellipsis": null, "ellipsisPolicy": "none", "lineHeight": null, "textHeightBehavior": "font-metrics", "defaultLocale": null},
                 "styleRuns": [
                   {"range": "0..6", "fontFamilies": [], "fallbackPreference": "system-default", "typefaceId": null, "fontSize": 10.0, "fontWeight": 400, "fontWidth": 5, "fontSlant": "upright", "syntheticStylePolicy": "allow", "locale": "en-US", "scriptHint": null, "features": [], "variationCoordinates": [], "palette": null, "colorRgba": "000000ff", "decoration": null, "letterSpacing": 0.0, "wordSpacing": 0.0, "heightMultiplier": null}
                 ],
@@ -478,6 +484,163 @@ class TextStackSurfaceTest {
             plan.diagnostics.map { it.code },
         )
         assertEquals(0..1, plan.diagnostics.single().textRange)
+    }
+
+    @Test
+    fun uax14LineBreakerRecordsWhitespacePunctuationCjkAndMandatoryBreaksDeterministically() {
+        val paragraph = ParagraphBuilder()
+            .append("aa-bb cc\n日本", TextStyle(fontSize = 10f))
+            .build()
+
+        val map = Uax14LineBreaker().analyze(paragraph)
+
+        assertEquals(
+            listOf(
+                LineBreakOpportunity(offset = 1, kind = LineBreakKind.PROHIBITED, reason = "default-prohibited", clusterRange = 1..1),
+                LineBreakOpportunity(offset = 2, kind = LineBreakKind.PROHIBITED, reason = "default-prohibited", clusterRange = 2..2),
+                LineBreakOpportunity(offset = 3, kind = LineBreakKind.ALLOWED, reason = "hyphen", clusterRange = 3..3),
+                LineBreakOpportunity(offset = 4, kind = LineBreakKind.PROHIBITED, reason = "default-prohibited", clusterRange = 4..4),
+                LineBreakOpportunity(offset = 5, kind = LineBreakKind.ALLOWED, reason = "space-separator", clusterRange = 5..5),
+                LineBreakOpportunity(offset = 6, kind = LineBreakKind.PROHIBITED, reason = "default-prohibited", clusterRange = 6..6),
+                LineBreakOpportunity(offset = 7, kind = LineBreakKind.PROHIBITED, reason = "default-prohibited", clusterRange = 7..7),
+                LineBreakOpportunity(offset = 8, kind = LineBreakKind.MANDATORY, reason = "explicit-newline", clusterRange = 8..8),
+                LineBreakOpportunity(offset = 9, kind = LineBreakKind.PROHIBITED, reason = "default-prohibited", clusterRange = 9..9),
+                LineBreakOpportunity(offset = 10, kind = LineBreakKind.ALLOWED, reason = "cjk-cluster-boundary", clusterRange = 10..10),
+                LineBreakOpportunity(offset = 11, kind = LineBreakKind.MANDATORY, reason = "end-of-text", clusterRange = 10..10),
+            ),
+            map.opportunities,
+        )
+        assertEquals("16.0.0", map.unicodeVersion)
+        assertEquals(emptyList(), map.diagnostics)
+    }
+
+    @Test
+    fun uax14LineBreakerSuppressesOptionalBreaksWhenSoftWrapIsDisabled() {
+        val paragraph = ParagraphBuilder(
+            ParagraphStyle(softWrap = false),
+        ).append("aa bb-日本", TextStyle(fontSize = 10f)).build()
+
+        val map = Uax14LineBreaker().analyze(paragraph)
+
+        assertEquals(
+            emptyList(),
+            map.opportunities.filter { it.kind == LineBreakKind.ALLOWED },
+        )
+        assertEquals(
+            listOf(0..7),
+            Uax14LineBreaker().breakLines(paragraph, maxWidth = 20f),
+        )
+    }
+
+    @Test
+    fun uax14LineBreakerReportsLocaleBreakRefinementUnavailableForThai() {
+        val paragraph = ParagraphBuilder(
+            ParagraphStyle(defaultLocale = "th-TH"),
+        ).append("\u0E20\u0E32\u0E29\u0E32\u0E44\u0E17\u0E22", TextStyle(fontSize = 10f)).build()
+
+        val map = Uax14LineBreaker().analyze(paragraph)
+
+        assertEquals(
+            listOf(PARAGRAPH_LOCALE_BREAK_REFINEMENT_UNAVAILABLE_DIAGNOSTIC_CODE),
+            map.diagnostics.map { it.code },
+        )
+        assertEquals(0..map.inputTextRange.last, map.diagnostics.single().textRange)
+    }
+
+    @Test
+    fun uax14LineBreakerDoesNotEmitBreakInsideCombiningMarkCluster() {
+        val paragraph = ParagraphBuilder()
+            .append("a\u0301 b", TextStyle(fontSize = 10f))
+            .build()
+
+        val map = Uax14LineBreaker().analyze(paragraph)
+
+        assertEquals(null, map.opportunities.find { it.offset == 1 })
+        assertEquals(
+            listOf(
+                LineBreakOpportunity(offset = 2, kind = LineBreakKind.ALLOWED, reason = "space-separator", clusterRange = 2..2),
+                LineBreakOpportunity(offset = 3, kind = LineBreakKind.PROHIBITED, reason = "default-prohibited", clusterRange = 3..3),
+                LineBreakOpportunity(offset = 4, kind = LineBreakKind.MANDATORY, reason = "end-of-text", clusterRange = 3..3),
+            ),
+            map.opportunities,
+        )
+    }
+
+    @Test
+    fun uax14LineBreakerRefusesWhenUnicodeLineBreakDataIsUnavailable() {
+        val paragraph = ParagraphBuilder()
+            .append("abc", TextStyle(fontSize = 10f))
+            .build()
+
+        val map = Uax14LineBreaker(unicodeDataSet = null).analyze(paragraph)
+
+        assertEquals(emptyList(), map.opportunities)
+        assertEquals(
+            listOf(PARAGRAPH_LINE_BREAK_DATA_UNAVAILABLE_DIAGNOSTIC_CODE),
+            map.diagnostics.map { it.code },
+        )
+    }
+
+    @Test
+    fun paragraphLineBreakGoldenMatchesRepoFixture() {
+        val expected = Files.readString(projectRoot().resolve("reports/font/fixtures/expected/paragraph/line-breaks.json"))
+
+        assertEquals(expected, paragraphLineBreakFixtureDump())
+    }
+
+    @Test
+    fun paragraphLineBreakGoldenPinsCasesAndNonClaims() {
+        val dump = readJsonProjectFile(
+            "reports/font/fixtures/expected/paragraph/line-breaks.json",
+        )
+        val cases = dump.requiredObjectList("cases")
+
+        assertEquals(1L, dump["schemaVersion"])
+        assertEquals("line-breaks", dump.requiredString("dumpId"))
+        assertEquals(listOf("KFONT-M8-003"), dump.requiredStringList("ownerTickets"))
+        assertEquals(
+            listOf(
+                "latin-punctuation-space-newline-cjk",
+                "soft-wrap-disabled",
+                "thai-locale-refinement-limited",
+                "combining-mark-cluster",
+                "mixed-ltr-rtl-space-boundaries",
+                "emoji-zwj-cluster-boundary",
+            ),
+            cases.map { it.requiredString("caseId") },
+        )
+        assertEquals("16.0.0", cases[0].requiredString("unicodeVersion"))
+        assertEquals(
+            listOf(
+                "prohibited",
+                "prohibited",
+                "allowed",
+                "prohibited",
+                "allowed",
+                "prohibited",
+                "prohibited",
+                "mandatory",
+                "prohibited",
+                "allowed",
+                "mandatory",
+            ),
+            cases[0].requiredObjectList("opportunities").map { it.requiredString("kind") },
+        )
+        assertEquals(
+            listOf(PARAGRAPH_LOCALE_BREAK_REFINEMENT_UNAVAILABLE_DIAGNOSTIC_CODE),
+            cases[2].requiredObjectList("diagnostics").map { it.requiredString("code") },
+        )
+        assertEquals(
+            listOf(
+                "no-complete-target-support-claim",
+                "no-complete-uax14-claim",
+                "no-complete-paragraph-layout-claim",
+                "no-locale-dictionary-break-claim",
+                "no-skia-paragraph-parity-claim",
+            ),
+            dump.requiredStringList("nonClaims"),
+        )
+        assertNoSupportPromotionClaims(dump)
     }
 
     @Test
@@ -1943,6 +2106,123 @@ class TextStackSurfaceTest {
             append("}\n")
         }
     }
+
+    private fun paragraphLineBreakFixtureDump(): String {
+        val lineBreaker = Uax14LineBreaker()
+        val latinParagraph = ParagraphBuilder()
+            .append("aa-bb cc\n日本", TextStyle(fontSize = 10f))
+            .build()
+        val softWrapDisabledParagraph = ParagraphBuilder(
+            ParagraphStyle(softWrap = false),
+        ).append("aa bb-日本", TextStyle(fontSize = 10f)).build()
+        val thaiParagraph = ParagraphBuilder(
+            ParagraphStyle(defaultLocale = "th-TH"),
+        ).append("\u0E20\u0E32\u0E29\u0E32\u0E44\u0E17\u0E22", TextStyle(fontSize = 10f)).build()
+        val combiningParagraph = ParagraphBuilder()
+            .append("a\u0301 b", TextStyle(fontSize = 10f))
+            .build()
+        val mixedBidiParagraph = ParagraphBuilder()
+            .append("ab \u05D0\u05D1 cd", TextStyle(fontSize = 10f))
+            .build()
+        val emojiParagraph = ParagraphBuilder()
+            .append("a \uD83D\uDC68\u200D\uD83D\uDC69 b", TextStyle(fontSize = 10f))
+            .build()
+        val cases = listOf(
+            lineBreaker.analyze(latinParagraph).toLineBreakFixtureCaseJson(
+                caseId = "latin-punctuation-space-newline-cjk",
+                text = latinParagraph.text,
+                softWrap = latinParagraph.paragraphStyle.softWrap,
+            ),
+            lineBreaker.analyze(softWrapDisabledParagraph).toLineBreakFixtureCaseJson(
+                caseId = "soft-wrap-disabled",
+                text = softWrapDisabledParagraph.text,
+                softWrap = softWrapDisabledParagraph.paragraphStyle.softWrap,
+            ),
+            lineBreaker.analyze(thaiParagraph).toLineBreakFixtureCaseJson(
+                caseId = "thai-locale-refinement-limited",
+                text = thaiParagraph.text,
+                softWrap = thaiParagraph.paragraphStyle.softWrap,
+            ),
+            lineBreaker.analyze(combiningParagraph).toLineBreakFixtureCaseJson(
+                caseId = "combining-mark-cluster",
+                text = combiningParagraph.text,
+                softWrap = combiningParagraph.paragraphStyle.softWrap,
+            ),
+            lineBreaker.analyze(mixedBidiParagraph).toLineBreakFixtureCaseJson(
+                caseId = "mixed-ltr-rtl-space-boundaries",
+                text = mixedBidiParagraph.text,
+                softWrap = mixedBidiParagraph.paragraphStyle.softWrap,
+            ),
+            lineBreaker.analyze(emojiParagraph).toLineBreakFixtureCaseJson(
+                caseId = "emoji-zwj-cluster-boundary",
+                text = emojiParagraph.text,
+                softWrap = emojiParagraph.paragraphStyle.softWrap,
+            ),
+        )
+
+        return buildString {
+            append("{\n")
+            append("  \"schemaVersion\": 1,\n")
+            append("  \"dumpId\": \"line-breaks\",\n")
+            append("  \"ownerTickets\": [\n")
+            append("    \"KFONT-M8-003\"\n")
+            append("  ],\n")
+            append("  \"cases\": [\n")
+            append(cases.joinToString(",\n") { caseJson -> caseJson.prependIndent("    ") })
+            append("\n  ],\n")
+            append("  \"nonClaims\": [\n")
+            append("    \"no-complete-target-support-claim\",\n")
+            append("    \"no-complete-uax14-claim\",\n")
+            append("    \"no-complete-paragraph-layout-claim\",\n")
+            append("    \"no-locale-dictionary-break-claim\",\n")
+            append("    \"no-skia-paragraph-parity-claim\"\n")
+            append("  ]\n")
+            append("}\n")
+        }
+    }
+
+    private fun LineBreakMap.toLineBreakFixtureCaseJson(
+        caseId: String,
+        text: String,
+        softWrap: Boolean,
+    ): String = buildString {
+        val opportunityArray = opportunities.joinToString(",\n") { opportunity -> opportunity.toFixtureJson().prependIndent("    ") }
+        val diagnosticsArray = diagnostics.joinToString(",\n") { diagnostic -> diagnostic.toFixtureJson().prependIndent("    ") }
+        append("{\n")
+        append("  \"caseId\": ").append(jsonString(caseId)).append(",\n")
+        append("  \"text\": ").append(jsonString(text)).append(",\n")
+        append("  \"softWrap\": ").append(softWrap).append(",\n")
+        append("  \"inputHash\": ").append(jsonString(inputHash)).append(",\n")
+        append("  \"unicodeVersion\": ").append(jsonString(unicodeVersion)).append(",\n")
+        append("  \"opportunities\": [\n")
+        append(opportunityArray)
+        append("\n  ],\n")
+        append("  \"diagnostics\": ")
+        if (diagnosticsArray.isEmpty()) {
+            append("[]\n")
+        } else {
+            append("[\n")
+            append(diagnosticsArray)
+            append("\n  ]\n")
+        }
+        append("}")
+    }
+
+    private fun LineBreakOpportunity.toFixtureJson(): String = buildString {
+        append("{\n")
+        append("  \"offset\": ").append(offset).append(",\n")
+        append("  \"kind\": ").append(jsonString(kind.fixtureLabel())).append(",\n")
+        append("  \"reason\": ").append(jsonString(reason)).append(",\n")
+        append("  \"clusterRange\": ").append(jsonString(clusterRange.toFixtureLabel())).append("\n")
+        append("}")
+    }
+
+    private fun LineBreakKind.fixtureLabel(): String =
+        when (this) {
+            LineBreakKind.MANDATORY -> "mandatory"
+            LineBreakKind.ALLOWED -> "allowed"
+            LineBreakKind.PROHIBITED -> "prohibited"
+        }
 
     private fun ParagraphShapingPlan.toFixtureCaseJson(
         caseId: String,

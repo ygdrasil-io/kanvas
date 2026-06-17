@@ -3,10 +3,10 @@
   "input": {
     "schema": "kanvas.paragraph.input.v1",
     "unicodeVersion": "16.0.0",
-    "inputHash": "a2b07dc679cf13157721b468796be7bcc71541cda49107287e403b582ea64373",
+    "inputHash": "7907f7276769ac31d0f6a9b219f68716cc7dea3c203468a6667dd8c32316f0e0",
     "text": "ab\ufffc\u0633\u0644",
     "textLength": 5,
-    "paragraphStyle": {"textAlign": "start", "textDirection": "rtl", "maxLines": null, "ellipsis": null, "ellipsisPolicy": "none", "lineHeight": null, "textHeightBehavior": "font-metrics", "defaultLocale": null},
+    "paragraphStyle": {"textAlign": "start", "textDirection": "rtl", "softWrap": true, "maxLines": null, "ellipsis": null, "ellipsisPolicy": "none", "lineHeight": null, "textHeightBehavior": "font-metrics", "defaultLocale": null},
     "styleRuns": [
       {"range": "0..1", "fontFamilies": ["Liberation Sans"], "fallbackPreference": "system-default", "typefaceId": null, "fontSize": 10.0, "fontWeight": 400, "fontWidth": 5, "fontSlant": "upright", "syntheticStylePolicy": "allow", "locale": "en-US", "scriptHint": null, "features": [{"tag": "kern", "value": 1}], "variationCoordinates": [], "palette": null, "colorRgba": "000000ff", "decoration": null, "letterSpacing": 0.0, "wordSpacing": 0.0, "heightMultiplier": null},
       {"range": "3..4", "fontFamilies": ["Missing Arabic", "Noto Naskh Arabic"], "fallbackPreference": "prefer-declared-families", "typefaceId": null, "fontSize": 14.0, "fontWeight": 400, "fontWidth": 5, "fontSlant": "upright", "syntheticStylePolicy": "allow", "locale": "ar", "scriptHint": "Arab", "features": [], "variationCoordinates": [{"axisTag": "wght", "value": 550.0}], "palette": null, "colorRgba": "000000ff", "decoration": null, "letterSpacing": 0.0, "wordSpacing": 0.0, "heightMultiplier": null}

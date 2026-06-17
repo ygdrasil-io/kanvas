@@ -2836,8 +2836,8 @@ rtk git diff --check
 ```
 
 Remaining gate: downstream M8 tickets still own multi-style shaping
-segmentation, line breaking, ellipsis insertion, hit testing, selection boxes,
-placeholder geometry layout, CPU oracle evidence, and GPU text evidence.
+segmentation, ellipsis insertion, hit testing, selection boxes, placeholder
+geometry layout, CPU oracle evidence, and GPU text evidence.
 ### KFONT-M8-002: Multi-style shaping segmentation
 
 Status: done; bounded segmentation evidence refreshed.
@@ -2887,9 +2887,62 @@ rtk git diff --check
 ```
 
 Remaining gate: this slice proves bounded segmentation only. It does not claim
-complete fallback-policy behavior, full bidi visual ordering, UAX #14 line
-breaking, ellipsis insertion, hit testing, selection boxes, placeholder
-geometry layout, CPU oracle parity, Skia Paragraph parity, or GPU text support.
+complete fallback-policy behavior, full bidi visual ordering, ellipsis
+insertion, hit testing, selection boxes, placeholder geometry layout, CPU
+oracle parity, Skia Paragraph parity, or GPU text support.
+### KFONT-M8-003: UAX #14 line breaker
+
+Status: done; bounded line-break evidence refreshed.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/KFONT-M8-003-implement-uax-14-line-breaker.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphLineBreaking.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/font/fixtures/expected/paragraph/line-breaks.json`
+- `reports/font/fixtures/expected/paragraph/paragraph-input.json`
+- `reports/font/fixtures/expected/paragraph/paragraph-layout.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m8-003-uax14-line-breaker.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+
+Evidence:
+
+- `Uax14LineBreaker` now emits deterministic `LineBreakMap` values backed by
+  pinned Unicode 16.0.0 data, with explicit `mandatory`, `allowed`, and
+  `prohibited` opportunities plus stable break reasons and cluster references.
+- Optional breaks now honor `ParagraphStyle.softWrap`: hard breaks remain
+  available while soft opportunities are downgraded to
+  `soft-wrap-disabled` refusals when wrapping is disabled.
+- The line-break dump now covers Latin punctuation plus spaces and explicit
+  newline handling, CJK adjacency without spaces, combining-mark clusters,
+  mixed LTR/RTL spacing boundaries, Thai locale-refinement diagnostics, and
+  emoji ZWJ clusters without breaking inside a grapheme cluster.
+- Missing Unicode line-break data now refuses with the stable
+  `text.paragraph.line-break-data-unavailable` diagnostic instead of silently
+  falling back to host line breaking.
+- `ParagraphStyle` dump/input evidence now records `softWrap`, so the refreshed
+  `paragraph-input.json` and `paragraph-layout.json` hashes stay aligned with
+  the paragraph contract after line-break policy became explicit.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.uax14LineBreakerDoesNotEmitBreakInsideCombiningMarkCluster --tests org.graphiks.kanvas.text.TextStackSurfaceTest.uax14LineBreakerRecordsWhitespacePunctuationCjkAndMandatoryBreaksDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.uax14LineBreakerSuppressesOptionalBreaksWhenSoftWrapIsDisabled --tests org.graphiks.kanvas.text.TextStackSurfaceTest.uax14LineBreakerReportsLocaleBreakRefinementUnavailableForThai --tests org.graphiks.kanvas.text.TextStackSurfaceTest.uax14LineBreakerRefusesWhenUnicodeLineBreakDataIsUnavailable --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLineBreakGoldenMatchesRepoFixture --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLineBreakGoldenPinsCasesAndNonClaims
+rtk ./gradlew --no-daemon :font:text:test
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this slice proves bounded line-break planning only. It does not
+claim complete UAX #14 conformance, dictionary-based Thai/Lao/Khmer
+refinement, ellipsis insertion, selection/hit-testing geometry, placeholder
+layout parity, Skia Paragraph parity, or GPU text support.
 ### PKT-10A: Glyph Strike-Key Preimage And Route Diagnostic Dumps
 
 Status: implemented and independently reviewed.

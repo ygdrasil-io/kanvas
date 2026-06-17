@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M8-003"
 title: "Implement UAX #14 line breaker"
-status: "proposed"
+status: "done"
 milestone: "M8"
 priority: "P0"
 owner_area: "paragraph"
@@ -66,11 +66,11 @@ interface Uax14LineBreaker {
 
 ## Acceptance Criteria
 
-- [ ] `line-breaks.json` records mandatory, allowed, and prohibited break positions for hard newlines, spaces, punctuation, CJK text, combining marks, and emoji clusters.
-- [ ] No line break is emitted inside a grapheme cluster.
-- [ ] Soft-wrap disabled mode still records hard breaks but suppresses optional wrapping opportunities for line fitting.
-- [ ] Unsupported locale-specific refinement emits `text.paragraph.locale-break-refinement-unavailable` with locale and range.
-- [ ] Repeated runs with the same Unicode data version and input produce identical break maps.
+- [x] `line-breaks.json` records mandatory, allowed, and prohibited break positions for hard newlines, spaces, punctuation, CJK text, combining marks, and emoji clusters.
+- [x] No line break is emitted inside a grapheme cluster.
+- [x] Soft-wrap disabled mode still records hard breaks but suppresses optional wrapping opportunities for line fitting.
+- [x] Unsupported locale-specific refinement emits `text.paragraph.locale-break-refinement-unavailable` with locale and range.
+- [x] Repeated runs with the same Unicode data version and input produce identical break maps.
 
 ## Required Evidence
 
@@ -99,8 +99,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*LineBreak*'
 
 ## Status Notes
 
-- `proposed`: Blocks reliable wrapping, ellipsis, selection, and placeholder line placement.
-- Move to `ready` only after the dump schema and locale-refinement diagnostic names are accepted.
+- `done`: `Uax14LineBreaker` now emits deterministic break maps plus `line-breaks.json` evidence for punctuation/space/newline/CJK, soft-wrap-disabled refusal of optional breaks, Thai locale-refinement diagnostics, combining-mark clusters, mixed LTR/RTL spacing, and emoji ZWJ clusters without promoting complete UAX #14 or dictionary-break support.
 
 ## Linear Labels
 

@@ -1,0 +1,335 @@
+{
+  "schemaVersion": 1,
+  "dumpId": "line-breaks",
+  "ownerTickets": [
+    "KFONT-M8-003"
+  ],
+  "cases": [
+    {
+      "caseId": "latin-punctuation-space-newline-cjk",
+      "text": "aa-bb cc\n\u65e5\u672c",
+      "softWrap": true,
+      "inputHash": "846f92072adbb2ed05d0e7c6b15a0bddd8060df3c4c9ad85f56560eef5cd3168",
+      "unicodeVersion": "16.0.0",
+      "opportunities": [
+        {
+          "offset": 1,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "1..1"
+        },
+        {
+          "offset": 2,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "2..2"
+        },
+        {
+          "offset": 3,
+          "kind": "allowed",
+          "reason": "hyphen",
+          "clusterRange": "3..3"
+        },
+        {
+          "offset": 4,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "4..4"
+        },
+        {
+          "offset": 5,
+          "kind": "allowed",
+          "reason": "space-separator",
+          "clusterRange": "5..5"
+        },
+        {
+          "offset": 6,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "6..6"
+        },
+        {
+          "offset": 7,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "7..7"
+        },
+        {
+          "offset": 8,
+          "kind": "mandatory",
+          "reason": "explicit-newline",
+          "clusterRange": "8..8"
+        },
+        {
+          "offset": 9,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "9..9"
+        },
+        {
+          "offset": 10,
+          "kind": "allowed",
+          "reason": "cjk-cluster-boundary",
+          "clusterRange": "10..10"
+        },
+        {
+          "offset": 11,
+          "kind": "mandatory",
+          "reason": "end-of-text",
+          "clusterRange": "10..10"
+        }
+      ],
+      "diagnostics": []
+    },
+    {
+      "caseId": "soft-wrap-disabled",
+      "text": "aa bb-\u65e5\u672c",
+      "softWrap": false,
+      "inputHash": "f036d64f30125784919fadbb080a1ca1cc8ed4da41dfdbeb513587583039f7ba",
+      "unicodeVersion": "16.0.0",
+      "opportunities": [
+        {
+          "offset": 1,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "1..1"
+        },
+        {
+          "offset": 2,
+          "kind": "prohibited",
+          "reason": "soft-wrap-disabled",
+          "clusterRange": "2..2"
+        },
+        {
+          "offset": 3,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "3..3"
+        },
+        {
+          "offset": 4,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "4..4"
+        },
+        {
+          "offset": 5,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "5..5"
+        },
+        {
+          "offset": 6,
+          "kind": "prohibited",
+          "reason": "soft-wrap-disabled",
+          "clusterRange": "6..6"
+        },
+        {
+          "offset": 7,
+          "kind": "prohibited",
+          "reason": "soft-wrap-disabled",
+          "clusterRange": "7..7"
+        },
+        {
+          "offset": 8,
+          "kind": "mandatory",
+          "reason": "end-of-text",
+          "clusterRange": "7..7"
+        }
+      ],
+      "diagnostics": []
+    },
+    {
+      "caseId": "thai-locale-refinement-limited",
+      "text": "\u0e20\u0e32\u0e29\u0e32\u0e44\u0e17\u0e22",
+      "softWrap": true,
+      "inputHash": "17d1732d735dc0b4c0f4026d176fdb60ad10f978a2de32d2ffb38f9c91996eda",
+      "unicodeVersion": "16.0.0",
+      "opportunities": [
+        {
+          "offset": 1,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "1..1"
+        },
+        {
+          "offset": 2,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "2..2"
+        },
+        {
+          "offset": 3,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "3..3"
+        },
+        {
+          "offset": 4,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "4..4"
+        },
+        {
+          "offset": 5,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "5..5"
+        },
+        {
+          "offset": 6,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "6..6"
+        },
+        {
+          "offset": 7,
+          "kind": "mandatory",
+          "reason": "end-of-text",
+          "clusterRange": "6..6"
+        }
+      ],
+      "diagnostics": [
+        {
+          "code": "text.paragraph.locale-break-refinement-unavailable",
+          "message": "Locale-specific line break refinement for 'th-TH' is unavailable; using base UAX #14 classes only.",
+          "textRange": "0..6",
+          "severity": "diagnostic"
+        }
+      ]
+    },
+    {
+      "caseId": "combining-mark-cluster",
+      "text": "a\u0301 b",
+      "softWrap": true,
+      "inputHash": "366386973feb66c7dc14bd1f3dc3ee258b200c0e454e4e22b39f3d5c4efcca41",
+      "unicodeVersion": "16.0.0",
+      "opportunities": [
+        {
+          "offset": 2,
+          "kind": "allowed",
+          "reason": "space-separator",
+          "clusterRange": "2..2"
+        },
+        {
+          "offset": 3,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "3..3"
+        },
+        {
+          "offset": 4,
+          "kind": "mandatory",
+          "reason": "end-of-text",
+          "clusterRange": "3..3"
+        }
+      ],
+      "diagnostics": []
+    },
+    {
+      "caseId": "mixed-ltr-rtl-space-boundaries",
+      "text": "ab \u05d0\u05d1 cd",
+      "softWrap": true,
+      "inputHash": "6b5d97cd27c72b4b82cb53064ff701df6d0137a124efab0b923df3f6a0a9fa73",
+      "unicodeVersion": "16.0.0",
+      "opportunities": [
+        {
+          "offset": 1,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "1..1"
+        },
+        {
+          "offset": 2,
+          "kind": "allowed",
+          "reason": "space-separator",
+          "clusterRange": "2..2"
+        },
+        {
+          "offset": 3,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "3..3"
+        },
+        {
+          "offset": 4,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "4..4"
+        },
+        {
+          "offset": 5,
+          "kind": "allowed",
+          "reason": "space-separator",
+          "clusterRange": "5..5"
+        },
+        {
+          "offset": 6,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "6..6"
+        },
+        {
+          "offset": 7,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "7..7"
+        },
+        {
+          "offset": 8,
+          "kind": "mandatory",
+          "reason": "end-of-text",
+          "clusterRange": "7..7"
+        }
+      ],
+      "diagnostics": []
+    },
+    {
+      "caseId": "emoji-zwj-cluster-boundary",
+      "text": "a \ud83d\udc68\u200d\ud83d\udc69 b",
+      "softWrap": true,
+      "inputHash": "edee49e92859a17eb680fee6a57a1d22ea62b771c14b8c87e01585672adb3ba0",
+      "unicodeVersion": "16.0.0",
+      "opportunities": [
+        {
+          "offset": 1,
+          "kind": "allowed",
+          "reason": "space-separator",
+          "clusterRange": "1..1"
+        },
+        {
+          "offset": 2,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "2..6"
+        },
+        {
+          "offset": 7,
+          "kind": "allowed",
+          "reason": "space-separator",
+          "clusterRange": "7..7"
+        },
+        {
+          "offset": 8,
+          "kind": "prohibited",
+          "reason": "default-prohibited",
+          "clusterRange": "8..8"
+        },
+        {
+          "offset": 9,
+          "kind": "mandatory",
+          "reason": "end-of-text",
+          "clusterRange": "8..8"
+        }
+      ],
+      "diagnostics": []
+    }
+  ],
+  "nonClaims": [
+    "no-complete-target-support-claim",
+    "no-complete-uax14-claim",
+    "no-complete-paragraph-layout-claim",
+    "no-locale-dictionary-break-claim",
+    "no-skia-paragraph-parity-claim"
+  ]
+}
