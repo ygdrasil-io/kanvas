@@ -1,11 +1,27 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadSlotID
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadUploadPlan
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingBlock
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadBlock
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadMaterializationRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
+import org.graphiks.kanvas.gpu.renderer.resources.ValidatingPayloadResourceProvider
+import org.graphiks.kanvas.gpu.renderer.resources.dumpLines
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class GPUBackendRuntimeWgpuSmokeTest {
@@ -219,6 +235,68 @@ class GPUBackendRuntimeWgpuSmokeTest {
     }
 
     @Test
+    fun `backend runtime uploads uniform payload bytes and binds them when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
+
+        val uniformBlock = uniformPayloadBlock()
+        val materialization = ValidatingPayloadResourceProvider().materializePayloadBindings(
+            request = payloadMaterializationRequest(uniformBlock),
+            context = GPUTargetPreparationContext(
+                targetId = "root-target",
+                frameId = "frame-1",
+                deviceGeneration = 1,
+                budgetClass = "smoke-test",
+            ),
+        )
+        val materialized = assertIs<GPUResourceMaterializationDecision.Materialized>(materialization)
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(
+                    width = 4,
+                    height = 4,
+                    colorFormat = "rgba8unorm",
+                ),
+            ).use { target ->
+                target.encode(
+                    clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                ) {
+                    drawFullscreenUniformPayloadPass(
+                        wgsl = solidColorPayloadWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendUniformPayloadDraw(
+                                uniformBytes = uniformBlock.bytes.map { byte -> byte.toByte() }.toByteArray(),
+                                materialization = materialized,
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                    )
+                }
+
+                val rgba = target.readRgba()
+                val materializationDump = materialized.dumpLines()
+
+                assertContentEquals(byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()), rgba.copyOfRange(0, 4))
+                assertContains(
+                    materializationDump,
+                    "resource.materialization:operand operand=payload-upload:pass-a:uniform:0 kind=uniform-buffer " +
+                        "deviceGeneration=1 owner=payload-scope:pass-a usage=copy_dst,uniform " +
+                        "invalidation=pass-end descriptor=uniform-fingerprint-smoke " +
+                        "facts=alignment=256;bindingLayout=layout-solid-v1;byteSize=64;generation=1;" +
+                        "scope=pass-a;uploadPlan=upload-solid-v1;uploadScope=pass-a-staging;zeroedPadding=true",
+                )
+                assertTrue(session.executionCacheDumpLines.joinToString("\n").contains("kind=bind-group-layout"))
+                assertTrue(materializationDump.joinToString("\n").contains("productRouteActivated=false"))
+            }
+        }
+    }
+
+    @Test
     fun `backend runtime records WGPU execution cache failure telemetry when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
@@ -286,6 +364,30 @@ class GPUBackendRuntimeWgpuSmokeTest {
             }
         """.trimIndent()
 
+    private fun solidColorPayloadWgsl(): String =
+        """
+            struct Payload {
+                color: vec4f,
+                padding0: vec4f,
+                padding1: vec4f,
+                padding2: vec4f,
+            };
+
+            @group(0) @binding(0) var<uniform> payload: Payload;
+
+            @vertex
+            fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+                let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+                let y = f32(idx & 2u) * 2.0 - 1.0;
+                return vec4f(x, y, 0.0, 1.0);
+            }
+
+            @fragment
+            fn fs_main() -> @location(0) vec4f {
+                return payload.color;
+            }
+        """.trimIndent()
+
     private fun fullscreenWgslWithoutFragmentEntry(): String =
         """
             struct Uniforms {
@@ -306,4 +408,62 @@ class GPUBackendRuntimeWgpuSmokeTest {
                 return uniforms.color;
             }
         """.trimIndent()
+
+    private fun uniformPayloadBlock(): GPUUniformPayloadBlock {
+        val buffer = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN)
+        buffer.putFloat(1f)
+        buffer.putFloat(0f)
+        buffer.putFloat(0f)
+        buffer.putFloat(1f)
+        return GPUUniformPayloadBlock(
+            fingerprint = GPUPayloadFingerprint("uniform-fingerprint-smoke"),
+            packingPlanHash = "solid-rect-layout-v1",
+            byteSize = 64L,
+            zeroedPadding = true,
+            scope = "pass-a",
+            bytes = buffer.array().map { byte -> byte.toInt() and 0xff },
+        )
+    }
+
+    private fun payloadMaterializationRequest(uniformBlock: GPUUniformPayloadBlock): GPUPayloadMaterializationRequest =
+        GPUPayloadMaterializationRequest(
+            targetId = "root-target",
+            packetId = "packet-1",
+            taskIds = listOf("task-payload-upload"),
+            resourcePlanLabels = listOf("payload-materialization:solid-fill"),
+            uniformBlock = uniformBlock,
+            uniformSlot = GPUUniformPayloadSlot(
+                slotId = GPUPayloadSlotID("pass-a:uniform:0"),
+                fingerprint = uniformBlock.fingerprint,
+                byteOffset = 0L,
+            ),
+            resourceBlock = GPUResourceBindingBlock(
+                fingerprint = GPUPayloadFingerprint("resource-fingerprint-smoke"),
+                bindingPlanHash = "layout-solid-v1",
+                bindingCount = 1,
+                resourceDescriptorLabels = listOf("uniform:solid-payload"),
+                dynamicOffsets = listOf(0L),
+            ),
+            resourceSlot = GPUResourceBindingSlot(
+                slotId = GPUPayloadSlotID("pass-a:resource:0"),
+                fingerprint = GPUPayloadFingerprint("resource-fingerprint-smoke"),
+                bindingIndex = 0,
+            ),
+            uploadPlan = GPUPayloadUploadPlan(
+                planHash = "upload-solid-v1",
+                byteRanges = listOf(0L..63L),
+                stagingScope = "pass-a-staging",
+                budgetClass = "smoke-test",
+                beforeUseToken = "before-draw-1",
+            ),
+            reflectedBindingLayoutHash = "layout-solid-v1",
+            deviceGeneration = 1,
+            payloadGeneration = 1L,
+            alignmentBytes = 256L,
+            uploadBudgetBytes = 256L,
+            uploadCapabilityAvailable = true,
+            maxDynamicOffsets = 1,
+            requiredUniformUsageLabels = setOf("copy_dst", "uniform"),
+            availableUniformUsageLabels = setOf("copy_dst", "uniform"),
+        )
 }

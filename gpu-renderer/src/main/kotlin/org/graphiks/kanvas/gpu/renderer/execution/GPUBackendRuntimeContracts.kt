@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 
 /** Describes an offscreen surface allocation request for the low-level GPU backend runtime. */
 data class GPUOffscreenTargetRequest(
@@ -115,6 +117,13 @@ interface GPUBackendRenderRecorder {
         colorFormat: String,
         draws: List<GPUBackendRectDraw>,
     )
+
+    /** Draws a fullscreen pass by uploading prepacked uniform payload bytes for each draw. */
+    fun drawFullscreenUniformPayloadPass(
+        wgsl: String,
+        colorFormat: String,
+        draws: List<GPUBackendUniformPayloadDraw>,
+    )
 }
 
 /** Encodes the rect-scoped payload consumed by the fullscreen pass helper. */
@@ -130,6 +139,57 @@ data class GPUBackendRectDraw(
         require(scissorWidth > 0) { "GPUBackendRectDraw.scissorWidth must be positive" }
         require(scissorHeight > 0) { "GPUBackendRectDraw.scissorHeight must be positive" }
     }
+}
+
+/** Encodes prepacked uniform bytes consumed by the fullscreen pass helper. */
+class GPUBackendUniformPayloadDraw(
+    uniformBytes: ByteArray,
+    val materialization: GPUResourceMaterializationDecision.Materialized,
+    val scissorX: Int,
+    val scissorY: Int,
+    val scissorWidth: Int,
+    val scissorHeight: Int,
+) {
+    private val uniformBytesSnapshot: ByteArray = uniformBytes.copyOf()
+
+    /** Provider-materialized operands consumed by this backend draw. */
+    val materializedOperandLabels: List<String> =
+        materialization.dumpOperandBridgeSnapshot.map { binding -> binding.operand.label }
+
+    /** Uniform payload byte count accepted by provider materialization. */
+    val materializedUniformByteSize: Int =
+        materialization.materializedUniformByteSize()
+
+    init {
+        require(uniformBytes.isNotEmpty()) { "GPUBackendUniformPayloadDraw.uniformBytes must not be empty" }
+        require(scissorWidth > 0) { "GPUBackendUniformPayloadDraw.scissorWidth must be positive" }
+        require(scissorHeight > 0) { "GPUBackendUniformPayloadDraw.scissorHeight must be positive" }
+        val operandKinds = materialization.dumpOperandBridgeSnapshot.map { binding -> binding.operand.kind }.toSet()
+        require(GPUMaterializedCommandOperandKind.UniformBuffer in operandKinds) {
+            "GPUBackendUniformPayloadDraw.materialization must include a uniform-buffer operand"
+        }
+        require(GPUMaterializedCommandOperandKind.BindGroup in operandKinds) {
+            "GPUBackendUniformPayloadDraw.materialization must include a bind-group operand"
+        }
+        require(uniformBytes.size == materializedUniformByteSize) {
+            "GPUBackendUniformPayloadDraw.uniformBytes size ${uniformBytes.size} must match materialized byteSize $materializedUniformByteSize"
+        }
+    }
+
+    /** Returns a defensive copy of the prepacked uniform bytes. */
+    fun uniformBytes(): ByteArray = uniformBytesSnapshot.copyOf()
+}
+
+private fun GPUResourceMaterializationDecision.Materialized.materializedUniformByteSize(): Int {
+    val uniformOperand = dumpOperandBridgeSnapshot
+        .map { binding -> binding.operand }
+        .firstOrNull { operand -> operand.kind == GPUMaterializedCommandOperandKind.UniformBuffer }
+        ?: throw IllegalArgumentException("GPUBackendUniformPayloadDraw.materialization must include a uniform-buffer operand")
+    val byteSize = uniformOperand.dumpEvidenceFactsSnapshot["byteSize"]?.toIntOrNull()
+    require(byteSize != null && byteSize > 0) {
+        "GPUBackendUniformPayloadDraw.materialization uniform-buffer operand must expose positive byteSize"
+    }
+    return byteSize
 }
 
 /** Creates the default WebGPU-backed runtime when the local environment supports it. */

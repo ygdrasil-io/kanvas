@@ -467,6 +467,49 @@ private class WgpuRenderRecorder(
         colorFormat: String,
         draws: List<GPUBackendRectDraw>,
     ) {
+        recordFullscreenUniformPass(
+            wgsl = wgsl,
+            colorFormat = colorFormat,
+            draws = draws.map { draw ->
+                WgpuFullscreenUniformDraw(
+                    uniformPayload = ArrayBuffer.of(draw.rgbaPremul),
+                    uniformSizeBytes = RECT_COLOR_UNIFORM_SIZE_BYTES,
+                    scissorX = draw.scissorX,
+                    scissorY = draw.scissorY,
+                    scissorWidth = draw.scissorWidth,
+                    scissorHeight = draw.scissorHeight,
+                )
+            },
+        )
+    }
+
+    override fun drawFullscreenUniformPayloadPass(
+        wgsl: String,
+        colorFormat: String,
+        draws: List<GPUBackendUniformPayloadDraw>,
+    ) {
+        recordFullscreenUniformPass(
+            wgsl = wgsl,
+            colorFormat = colorFormat,
+            draws = draws.map { draw ->
+                val uniformBytes = draw.uniformBytes()
+                WgpuFullscreenUniformDraw(
+                    uniformPayload = ArrayBuffer.of(uniformBytes),
+                    uniformSizeBytes = draw.materializedUniformByteSize.toULong(),
+                    scissorX = draw.scissorX,
+                    scissorY = draw.scissorY,
+                    scissorWidth = draw.scissorWidth,
+                    scissorHeight = draw.scissorHeight,
+                )
+            },
+        )
+    }
+
+    private fun recordFullscreenUniformPass(
+        wgsl: String,
+        colorFormat: String,
+        draws: List<WgpuFullscreenUniformDraw>,
+    ) {
         require(wgsl.isNotBlank()) { "wgsl must not be blank" }
         require(colorFormat.normalizedColorFormat() == targetFormat.toBackendColorFormat()) {
             "Requested color format $colorFormat does not match target format ${targetFormat.toBackendColorFormat()}"
@@ -495,13 +538,13 @@ private class WgpuRenderRecorder(
             val uniform = resourceScope.track(
                 device.createBuffer(
                     BufferDescriptor(
-                        size = RECT_COLOR_UNIFORM_SIZE_BYTES,
+                        size = draw.uniformSizeBytes,
                         usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
                         label = "GPUBackend.rect.color",
                     ),
                 ),
             ) { it.close() }
-            queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(draw.rgbaPremul))
+            queue.writeBuffer(uniform, 0uL, draw.uniformPayload)
             val bindGroup = resourceScope.track(
                 device.createBindGroup(
                     BindGroupDescriptor(
@@ -523,6 +566,15 @@ private class WgpuRenderRecorder(
             drawAction(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
         }
     }
+
+    private data class WgpuFullscreenUniformDraw(
+        val uniformPayload: ArrayBuffer,
+        val uniformSizeBytes: ULong,
+        val scissorX: Int,
+        val scissorY: Int,
+        val scissorWidth: Int,
+        val scissorHeight: Int,
+    )
 }
 
 private class WgpuExecutionCaches(
