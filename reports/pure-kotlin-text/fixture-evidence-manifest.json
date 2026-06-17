@@ -207,6 +207,7 @@
         "reports/pure-kotlin-text/dump-evidence-index.json",
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
         "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/color/colrv1-fixture-manifest.json",
         "reports/font/fixtures/expected/color/color-glyph-composite-plan.json",
         "reports/font/fixtures/expected/color/color-glyph-plan.json",
         "reports/font/fixtures/expected/color/colrv1-paint-graph.json",
@@ -214,10 +215,11 @@
         "reports/pure-kotlin-text/2026-06-17-kfont-m10-002-colrv1-solid-glyph-colr-glyph.md",
         "reports/pure-kotlin-text/2026-06-17-kfont-m10-003-colrv1-gradient-operation-group.md",
         "reports/pure-kotlin-text/2026-06-17-kfont-m10-004-colrv1-transform-composite-clip.md",
+        "reports/pure-kotlin-text/2026-06-17-kfont-m10-005-colrv1-recursion-cycle-bounds-fixtures.md",
         "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
       ],
       "requiredEvidenceGates": [
-        "KFONT-M10-001 through KFONT-M10-004 now check in typed COLRv0 plus bounded COLRv1 solid/glyph/colr-glyph, gradient, and transform/composite/clip planning evidence with stable artifact-key, bounds, palette, composite facts, destination-read hints, and refusal diagnostics; keep recursion/cycle/bounds fixture expansion, bitmap/SVG routes, emoji sequence planning, and GPU registration on their owning M10/M11 tickets.",
+        "KFONT-M10-001 through KFONT-M10-005 now check in typed COLRv0 plus bounded COLRv1 solid/glyph/colr-glyph, gradient, transform/composite/clip, and recursion/cycle/bounds fixture-manifest evidence with stable artifact-key, bounds, composite facts, expected dump links, and refusal diagnostics; keep bitmap/SVG routes, emoji sequence planning, and GPU registration on their owning M10/M11 tickets.",
         "Do not claim color glyph rendering, emoji shaping, GPU composite execution, dedicated COLRv1 scale/rotate/skew parse-format support, or platform/native fallback from COLRv0/COLRv1 planning evidence alone."
       ],
       "validationCommands": [
@@ -229,7 +231,7 @@
         "rtk ./gradlew --no-daemon :font:glyph:test"
       ],
       "fixtureCommands": [
-        "KFONT-M10-001 through KFONT-M10-004 check in reports/font/fixtures/expected/color/color-glyph-plan.json, reports/font/fixtures/expected/color/colrv1-paint-graph.json, and reports/font/fixtures/expected/color/color-glyph-composite-plan.json, all asserted from ColorGlyphSurfaceTest using synthetic CPAL/COLRv0/COLRv1 table bytes with stable solid, colr-glyph, gradient, transform/composite/clip, singular-transform, unsupported-composite, and clip-budget-overflow cases."
+        "KFONT-M10-001 through KFONT-M10-005 check in reports/font/fixtures/expected/color/color-glyph-plan.json, reports/font/fixtures/expected/color/colrv1-paint-graph.json, reports/font/fixtures/expected/color/color-glyph-composite-plan.json, and reports/font/fixtures/expected/color/colrv1-fixture-manifest.json, all asserted from ColorGlyphSurfaceTest using synthetic CPAL/COLRv0/COLRv1 table bytes with stable solid, colr-glyph, gradient, transform/composite/clip, cycle, recursion-depth, expanded-paint-budget, malformed-offset, singular-transform, unsupported-composite, and clip-budget-overflow cases."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",

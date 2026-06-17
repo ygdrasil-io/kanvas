@@ -62,6 +62,7 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
                 "color-glyph-composite-plan",
                 "color-glyph-plan",
                 "color-svg-emoji-goldens",
+                "colrv1-fixture-manifest",
                 "colrv1-paint-graph",
                 "fallback-catalog-build",
                 "fallback-decision-trace",

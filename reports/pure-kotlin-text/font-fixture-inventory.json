@@ -447,10 +447,12 @@
           "targetGate": "colrv1-budget-refusal",
           "status": "current-refusal-evidence",
           "fixtureKind": "route-diagnostic",
-          "generationPolicy": "Use a synthetic expanded paint count over the configured limit and assert stable budget refusal.",
+          "generationPolicy": "Use a synthetic expanded paint count over the configured limit and assert the stable `expandedPaintCount` budget refusal recorded by the COLRv1 fixture manifest.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
-            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+            "reports/font/fixtures/expected/color/colrv1-fixture-manifest.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+            "reports/pure-kotlin-text/2026-06-17-kfont-m10-005-colrv1-recursion-cycle-bounds-fixtures.md"
           ],
           "expectedArtifacts": [
             "text.color.COLRv1-budget-exceeded diagnostic",
@@ -471,11 +473,13 @@
           "generationPolicy": "Generate bounded COLRv1 transform/composite/clip planning fixtures that cover accepted translate, generic transform, classified scale/rotate/skew, and composite-plus-clip cases, then assert explicit singular-transform, unsupported-composite-mode, and clip-budget-overflow outline-fallback refusals without claiming dedicated transform parse-format support.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/colrv1-fixture-manifest.json",
             "reports/font/fixtures/expected/color/color-glyph-plan.json",
             "reports/font/fixtures/expected/color/colrv1-paint-graph.json",
             "reports/font/fixtures/expected/color/color-glyph-composite-plan.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md",
-            "reports/pure-kotlin-text/2026-06-17-kfont-m10-004-colrv1-transform-composite-clip.md"
+            "reports/pure-kotlin-text/2026-06-17-kfont-m10-004-colrv1-transform-composite-clip.md",
+            "reports/pure-kotlin-text/2026-06-17-kfont-m10-005-colrv1-recursion-cycle-bounds-fixtures.md"
           ],
           "expectedArtifacts": [
             "transform/composite/clip paint-graph bundle cases",
@@ -499,7 +503,9 @@
           "generationPolicy": "Use already-parsed PaintColrGlyph records that refer back to the starting glyph and assert the cycle path.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
-            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+            "reports/font/fixtures/expected/color/colrv1-fixture-manifest.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+            "reports/pure-kotlin-text/2026-06-17-kfont-m10-005-colrv1-recursion-cycle-bounds-fixtures.md"
           ],
           "expectedArtifacts": [
             "text.color.COLRv1-cycle-detected diagnostic",
@@ -535,6 +541,52 @@
             "no-complete-colrv1-rendering-claim",
             "no-gpu-color-glyph-support-claim",
             "no-paintvar-gradient-geometry-claim"
+          ]
+        },
+        {
+          "fixtureId": "color-glyphs-colrv1-malformed-offset-refusal",
+          "targetGate": "colrv1-malformed-offset-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Use truncated synthetic COLRv1 bytes so the paint payload offset becomes unreadable and assert the parser fails closed without inventing a route claim.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/colrv1-fixture-manifest.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+            "reports/pure-kotlin-text/2026-06-17-kfont-m10-005-colrv1-recursion-cycle-bounds-fixtures.md"
+          ],
+          "expectedArtifacts": [
+            "parse-null expectation",
+            "fixture provenance",
+            "no route/support promotion"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-colrv1-rendering-claim",
+            "no-gpu-color-glyph-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "color-glyphs-colrv1-recursion-depth-refusal",
+          "targetGate": "colrv1-recursion-depth-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use a synthetic nested PaintColrGlyph walk beyond the configured recursion depth and assert stable outline fallback plus the `recursionDepth` budget diagnostic recorded by the COLRv1 fixture manifest.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/colrv1-fixture-manifest.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+            "reports/pure-kotlin-text/2026-06-17-kfont-m10-005-colrv1-recursion-cycle-bounds-fixtures.md"
+          ],
+          "expectedArtifacts": [
+            "text.color.COLRv1-budget-exceeded diagnostic",
+            "limitName=recursionDepth detail fact",
+            "outline fallback route fact"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-colrv1-rendering-claim",
+            "no-gpu-color-glyph-support-claim"
           ]
         },
         {
