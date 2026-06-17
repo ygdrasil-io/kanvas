@@ -21,6 +21,18 @@ class FallbackShapingEvidenceTest {
         assertContains(actual, """"fixtureAssetRef":{"dumpId":"fallback-fixture","fixtureId":"fallback-missing-glyph"}""")
     }
 
+    @Test
+    fun `fallback shaped glyph run dump includes variable fallback fixtures`() {
+        val actual = defaultFallbackShapedGlyphRunEvidenceJson()
+
+        assertContains(actual, """"fixtureId":"fallback-axis-clamped"""")
+        assertContains(actual, """"fixtureId":"fallback-axis-missing"""")
+        assertContains(actual, """"fixtureId":"fallback-metrics-variation-missing"""")
+        assertContains(actual, """"fixtureId":"fallback-variable-cff2"""")
+        assertContains(actual, """"decisionTraceRef":{"dumpId":"fallback-decision-trace","fixtureId":"fallback-variable-cff2"}""")
+        assertContains(actual, """"resolvedRunsRef":{"dumpId":"resolved-font-runs","fixtureId":"fallback-axis-clamped"}""")
+    }
+
     private fun projectRoot(): Path {
         var current = Path.of("").toAbsolutePath().normalize()
         while (current.parent != null && !Files.isDirectory(current.resolve("reports/pure-kotlin-text"))) {

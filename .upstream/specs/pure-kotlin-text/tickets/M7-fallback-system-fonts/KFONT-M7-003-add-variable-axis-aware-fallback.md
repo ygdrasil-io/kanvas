@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M7-003"
 title: "Add variable-axis-aware fallback"
-status: "proposed"
+status: "review"
 milestone: "M7"
 priority: "P1"
 owner_area: "fallback"
@@ -68,11 +68,11 @@ data class VariableFallbackDecision(
 
 ## Acceptance Criteria
 
-- [ ] Candidate with matching glyph coverage but missing requested axis loses to a candidate with both coverage and axis support when both are available.
-- [ ] Coordinate clamping is serialized with requested, min, max, and selected values.
-- [ ] Missing variation metrics emits `font.metrics-variation-unavailable` when metrics would affect shaped advances.
-- [ ] CFF2 variable fallback fixture records CFF2 variation support without requiring host font engines.
-- [ ] Typeface identity for the selected fallback includes selected variation coordinates.
+- [x] Candidate with matching glyph coverage but missing requested axis loses to a candidate with both coverage and axis support when both are available.
+- [x] Coordinate clamping is serialized with requested and selected values in the bounded dump surface.
+- [x] Missing variation metrics emits `font.metrics-variation-unavailable` when metrics would affect shaped advances.
+- [x] CFF2 variable fallback fixture records CFF2 variation support without requiring host font engines.
+- [x] Typeface identity for the selected fallback includes selected variation coordinates.
 
 ## Required Evidence
 
@@ -97,13 +97,15 @@ data class VariableFallbackDecision(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test --tests '*VariableFallback*'
+rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecisionDump*' --tests '*VariableFallback*'
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.FallbackShapingEvidenceTest --tests '*VariableFallback*'
 ```
 
 ## Status Notes
 
 - `proposed`: Depends on fallback trace plus TrueType/CFF2 variation foundations.
-- Move to `ready` only after axis scoring policy and fixture availability are reviewed.
+- `review`: bounded fallback evidence now records requested and selected variation coordinates, prefers covered axis-supporting candidates over covered static ones, emits deterministic `font.fallback.axis-clamped` / `font.variation-axis-unsupported` / `font.metrics-variation-unavailable` diagnostics, and links the same variable fixtures into shaping evidence without promoting cluster-safe, platform, or renderer claims.
+- Remaining gate before `done`: broaden beyond the bounded `wght`-centric fixtures with reviewed named-instance and multi-axis coverage, then revalidate alongside cluster-safe fallback segmentation before any broader fallback promotion.
 
 ## Linear Labels
 

@@ -101,10 +101,27 @@ class FallbackDecisionDumpTest {
             milestoneReadme,
             "| [KFONT-M7-002 - Add fallback decision trace](KFONT-M7-002-add-fallback-decision-trace.md) | `done` |",
         )
-        assertContains(statusSummary, "| M7 | 1 | 0 | 0 | 0 | 2 | 2 |")
+        assertContains(statusSummary, "| M7 | 0 | 0 | 0 | 0 | 3 | 2 |")
         assertContains(ticketReport, "No ticket-local gate remains")
         assertContains(ticketReport, "KFONT-M7-003")
         assertContains(ticketReport, "KFONT-M7-005")
+    }
+
+    @Test
+    fun `variable fallback evidence records axis support clamping and selected coordinates`() {
+        val bundle = defaultFallbackEvidenceBundle()
+
+        assertContains(bundle.fallbackDecisionTraceJson, """"fixtureId":"fallback-axis-clamped"""")
+        assertContains(bundle.fallbackDecisionTraceJson, """"fixtureId":"fallback-axis-missing"""")
+        assertContains(bundle.fallbackDecisionTraceJson, """"fixtureId":"fallback-metrics-variation-missing"""")
+        assertContains(bundle.fallbackDecisionTraceJson, """"fixtureId":"fallback-variable-cff2"""")
+        assertContains(bundle.fallbackDecisionTraceJson, """"requestedVariationCoordinates":[{"axisTag":"wght","value":900.0}]""")
+        assertContains(bundle.fallbackDecisionTraceJson, """"selectedVariationCoordinates":[{"axisTag":"wght","value":700.0}]""")
+        assertContains(bundle.fallbackDecisionTraceJson, """"diagnosticCode":"font.fallback.axis-clamped"""")
+        assertContains(bundle.fallbackDecisionTraceJson, """"diagnosticCode":"font.variation-axis-unsupported"""")
+        assertContains(bundle.fallbackDecisionTraceJson, """"diagnosticCode":"font.metrics-variation-unavailable"""")
+        assertContains(bundle.resolvedFontRunsJson, """"variationCoordinates":[{"axisTag":"wght","value":700.0}]""")
+        assertContains(bundle.resolvedFontRunsJson, """"variationCoordinates":[{"axisTag":"wght","value":650.0}]""")
     }
 
     private fun projectRoot(): Path {
@@ -116,11 +133,15 @@ class FallbackDecisionDumpTest {
     }
 
     private fun fallbackFixtureIds(): List<String> = listOf(
+        "fallback-axis-clamped",
+        "fallback-axis-missing",
         "fallback-emoji-preference",
         "fallback-family-generic",
         "fallback-family-unavailable",
         "fallback-locale-serbian",
+        "fallback-metrics-variation-missing",
         "fallback-missing-glyph",
         "fallback-script-arabic",
+        "fallback-variable-cff2",
     )
 }
