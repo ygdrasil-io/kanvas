@@ -127,7 +127,7 @@
       },
       "license": {
         "id": "SIL-OFL-1.1",
-        "path": "reports/font/fixtures/licenses/noto-OFL-1.1.txt"
+        "path": "reports/font/fixtures/licenses/amiri-OFL-1.1.txt"
       },
       "assets": [
         {
@@ -693,6 +693,102 @@
         "no-complete-target-support-claim",
         "no-complete-gsub-support-claim",
         "no-complete-gsub-gpos-support-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "mark-cursive-gpos-amiri-fixtures",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-005"
+      ],
+      "source": {
+        "kind": "vendored-external",
+        "project": "Amiri",
+        "url": "https://github.com/aliftype/amiri/releases/download/1.003/Amiri-1.003.zip",
+        "version": "1.003"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/amiri-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-cursive-attachment.otf",
+          "sha256": "3b5c1eb037e92ef311192db31a5afc7191819221f93f7dd218fa74224d16ab1e",
+          "sizeBytes": 437800,
+          "role": "cursive-attachment-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/gpos-trace.json",
+        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gpos-support-claim",
+        "no-complete-gsub-gpos-support-claim",
+        "no-arabic-complex-shaping-promotion-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "mark-cursive-gpos-noto-fixtures",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-005"
+      ],
+      "source": {
+        "kind": "in-repo-existing",
+        "project": "Noto Naskh Arabic",
+        "url": "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
+        "version": "repo-vendored-existing"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/noto-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-anchor-malformed.otf",
+          "sha256": "8aa886f59701b30abd0bc84ea7fd29a9467900db422c964fa5cfe22e676d1bbf",
+          "sizeBytes": 247556,
+          "role": "mark-anchor-malformed-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-mark-to-base.otf",
+          "sha256": "6f0a92031367b2f5a2078fe9d24f3433122b61a0bad57c423aad8f3c39aa2e6e",
+          "sizeBytes": 247336,
+          "role": "mark-to-base-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-mark-to-ligature.otf",
+          "sha256": "09277a3b801737af020ec29c0a3d563a544a57e9f5f26fb2596038c2b0d4e382",
+          "sizeBytes": 247356,
+          "role": "mark-to-ligature-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-mark-to-mark.otf",
+          "sha256": "811e1c551b485eeb83e50b243bd119de3e800fc1fc594d416fcad7fd87dcc0fa",
+          "sizeBytes": 247356,
+          "role": "mark-to-mark-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-missing-gdef.otf",
+          "sha256": "8eacae5c7771e5ee9a840fb7f0c60599a536f5349b270b1b95a8889b4c8b3c33",
+          "sizeBytes": 246880,
+          "role": "mark-missing-gdef-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/gpos-trace.json",
+        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gpos-support-claim",
+        "no-complete-gsub-gpos-support-claim",
+        "no-arabic-complex-shaping-promotion-claim",
         "no-native-shaper-oracle-claim"
       ]
     },
