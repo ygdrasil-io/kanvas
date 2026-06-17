@@ -4842,6 +4842,65 @@ not claim complete emoji shaping support, complete color-glyph fallback
 support, platform emoji-engine parity, GPU emoji route support, or retirement
 of `scaledemoji`. `KFONT-M10-010` still owns the milestone-wide color/emoji
 fixture-manifest convergence gate.
+### KFONT-M10-010: Add color/emoji fixture manifest
+
+Status: done; freshly validated.
+
+Files:
+
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_color_emoji_fixture_manifest.py`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_color_emoji_fixture_manifest.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `.upstream/specs/pure-kotlin-text/tickets/M10-color-fonts-emoji/KFONT-M10-010-add-color-emoji-fixture-manifest.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M10-color-fonts-emoji/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m10-010-color-emoji-fixture-manifest.md`
+
+Evidence:
+
+- Checked-in `color-emoji-fixture-manifest.json` now converges the M10 color
+  evidence into one deterministic manifest with 39 rows covering COLRv0,
+  COLRv1 solid/glyph/gradient/transform/composite plus cycle/budget/malformed
+  refusals, CBDT/CBLC and sbix PNG, SVG positive/refusal classes, and emoji
+  route traces.
+- Every row records fixture family, font source or synthetic provenance,
+  license note, source hash, generated recipe when applicable, expected route,
+  expected diagnostics, expected dump files, legacy-gate linkage, and whether
+  adapter-backed GPU evidence is still required.
+- The manifest maps `scaledemoji`, `scaledemoji_rendering`, and
+  `coloremoji_blendmodes` to specific fixture IDs and preserves explicit
+  remaining-evidence text so CPU/text fixtures do not retire those gates.
+- Rebaseline policy is now explicit: ordinary runs must not overwrite goldens,
+  old/new manifest diffs plus linked dump diffs require review, and behavior
+  changes need a stated reason before check-in.
+- Dump index and fixture-evidence manifest now reference the converged manifest
+  as CPU-side coordination evidence only, without promoting COLRv1, bitmap,
+  SVG, emoji, GPU, or platform fallback support.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.ColorEmojiFixtureManifestMatchesRepoFixture
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_color_emoji_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_color_emoji_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this is fixture convergence and provenance evidence only. It
+does not claim GPU COLR/bitmap/SVG/emoji execution, platform emoji parity, or
+retirement of `scaledemoji`, `scaledemoji_rendering`, or
+`coloremoji_blendmodes`; those remain gated on M11 adapter-backed GPU proof.
 ### PKT-11L: Emoji VS Skin-Tone ZWJ Fixture Evidence
 
 Status: implemented; independent review pending because the current tool policy
