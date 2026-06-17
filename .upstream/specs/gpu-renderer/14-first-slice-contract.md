@@ -86,6 +86,10 @@ The slice must exercise these contracts:
 - `GPURecording`;
 - `GPUTaskList`;
 - `GPUDrawPass`;
+- `GPUDrawPacket`;
+- `GPUDrawPacketStream`;
+- `GPUPassCommand`;
+- `GPUPassCommandStream`;
 - `GPURenderStep`;
 - `GPUPaintDescriptor`;
 - `GPUPaintPipelinePlan`;
@@ -125,6 +129,7 @@ The slice must exercise these contracts:
 - `GPUResourceProvider`;
 - `GPUTargetTextureDescriptor` for the render attachment descriptor;
 - `GPUExecutionContext` or a deterministic test double;
+- `GPUCommandEncoderPlan`;
 - `GPUBlendPlan`, `GPUColorPlan`, and `GPUTargetState`;
 - route diagnostics;
 - `GPUTelemetryLedger` for counters.
@@ -223,6 +228,8 @@ Every slice fixture must be able to dump:
 - binding and packing plan hashes;
 - render pipeline key;
 - pass command;
+- draw packet stream;
+- pass command stream;
 - resource plan;
 - telemetry counters.
 
@@ -252,6 +259,8 @@ Minimum isolated fixtures:
 - WGSL validation failure fixture using an intentionally invalid test module;
 - stale device-generation resource refusal using a test double;
 - illegal active-attachment sampling refusal using target texture descriptors.
+- order-preserving solid rect packet stream that maps one accepted invocation to
+  one shading packet and one pass command stream.
 - unsupported path or complex clip atlas-route refusal when such commands enter
   the isolated module fixture set.
 

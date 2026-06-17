@@ -36,14 +36,14 @@ class RenderGpuRendererSceneOffscreenMainTest {
     @Test
     fun `candidate scenes are not accepted by WebGPU offscreen runner`() {
         val candidate = GPURendererSceneHumanDocs.candidateScenes.single {
-            it.sceneId.value == "runtime-effect-uniform-ladder"
+            it.sceneId.value == "gradient-tile-mode-boundary"
         }
         val root = Files.createTempDirectory("gpu-renderer-scenes-candidate-offscreen")
         val failure = assertFailsWith<IllegalStateException> {
             renderGpuRendererSceneOffscreen(arrayOf(candidate.sceneId.value, root.toString()))
         }
 
-        assertContains(failure.message.orEmpty(), "Unknown GPU renderer scene: runtime-effect-uniform-ladder")
+        assertContains(failure.message.orEmpty(), "Unknown GPU renderer scene: gradient-tile-mode-boundary")
     }
 
     @Test
@@ -72,7 +72,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
-    fun `catalogued rect rrect gradient clip and bitmap scenes route to WebGPU offscreen instead of runner subset`() {
+    fun `catalogued faithful subset scenes render through WebGPU offscreen`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
         val rectOnlyScenes = listOf(
             RenderedShapeExpectation("activation-candidate-boundary-board", fillRectCount = 6),
@@ -82,210 +82,28 @@ class RenderGpuRendererSceneOffscreenMainTest {
             RenderedShapeExpectation("cache-pressure-deck", fillRectCount = 2),
             RenderedShapeExpectation("cache-source-ledger-board", fillRectCount = 5),
             RenderedShapeExpectation("frame-gate-blocker-board", fillRectCount = 6),
-            RenderedShapeExpectation(
-                sceneId = "pm-readiness-freeze-board",
-                fillRectCount = 6,
-                fillRRectCount = 1,
-                clipCount = 1,
-            ),
             RenderedShapeExpectation("legacy-route-comparison", fillRectCount = 1),
-            RenderedShapeExpectation(
-                sceneId = "legacy-inventory-hygiene-board",
-                fillRectCount = 7,
-                fillRRectCount = 1,
-                clipCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "shadow-parity-migration-gate-board",
-                fillRectCount = 8,
-                fillRRectCount = 1,
-                clipCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "legacy-retirement-blocker-board",
-                fillRectCount = 7,
-                fillRRectCount = 1,
-                clipCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "rounded-panel-gradient",
-                fillRectCount = 0,
-                fillRRectCount = 1,
-                linearGradientRectCount = 1,
-                clipCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "rrect-gradient-route-board",
-                fillRectCount = 4,
-                fillRRectCount = 2,
-                linearGradientRectCount = 1,
-                clipCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "release-gate-progress-board",
-                fillRectCount = 1,
-                fillRRectCount = 1,
-                linearGradientRectCount = 1,
-                clipCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "path-badge-and-stroke",
-                fillRectCount = 1,
-                fillRRectCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "path-coverage-review-board",
-                fillRectCount = 4,
-                fillRRectCount = 1,
-                clipCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "path-stencil-cover-gate-board",
-                fillRectCount = 6,
-                fillRRectCount = 1,
-                clipCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "texture-swatch-board",
-                fillRectCount = 0,
-                bitmapRectCount = 2,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "asset-intake-thumbnail-grid",
-                fillRectCount = 0,
-                fillRRectCount = 1,
-                clipCount = 1,
-                bitmapRectCount = 2,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "photo-contact-sheet",
-                fillRectCount = 0,
-                fillRRectCount = 1,
-                clipCount = 1,
-                bitmapRectCount = 4,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "codec-provenance-gate-board",
-                fillRectCount = 3,
-                fillRRectCount = 1,
-                clipCount = 1,
-                bitmapRectCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "sampler-boundary-gate-board",
-                fillRectCount = 4,
-                fillRRectCount = 1,
-                clipCount = 1,
-                bitmapRectCount = 2,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "savelayer-isolation-gate-board",
-                fillRectCount = 7,
-                fillRRectCount = 1,
-                clipCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "destination-read-strategy-gate-board",
-                fillRectCount = 8,
-                fillRRectCount = 1,
-                clipCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "clipped-avatar-grid",
-                fillRectCount = 0,
-                clipCount = 1,
-                bitmapRectCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "filtered-photo-chip",
-                fillRectCount = 0,
-                bitmapRectCount = 1,
-                filterNodeCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "tinted-avatar-card",
-                fillRectCount = 0,
-                fillRRectCount = 1,
-                clipCount = 1,
-                bitmapRectCount = 1,
-                filterNodeCount = 1,
-            ),
             RenderedShapeExpectation("filter-dag-refusal-board", fillRectCount = 5),
-            RenderedShapeExpectation(
-                sceneId = "layered-shadow-card",
-                fillRectCount = 0,
-                saveLayerCount = 1,
-                filterNodeCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "notification-shadow-stack",
-                fillRectCount = 0,
-                saveLayerCount = 2,
-                filterNodeCount = 2,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "text-handoff-boundary-board",
-                fillRectCount = 4,
-                fillRRectCount = 1,
-                clipCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "a8-glyph-atlas-gate-board",
-                fillRectCount = 6,
-                fillRRectCount = 1,
-                clipCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "text-resource-binding-gate-board",
-                fillRectCount = 6,
-                fillRRectCount = 1,
-                clipCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "text-representation-gate-board",
-                fillRectCount = 8,
-                fillRRectCount = 1,
-                clipCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "runtime-effect-color-tile",
-                fillRectCount = 0,
-                runtimeEffectCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "runtime-effect-descriptor-gate-board",
-                fillRectCount = 6,
-                fillRRectCount = 1,
-                clipCount = 1,
-                runtimeEffectCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "runtime-effect-refusal-gate-board",
-                fillRectCount = 3,
-                fillRRectCount = 1,
-                clipCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "sdr-color-boundary-board",
-                fillRectCount = 7,
-                fillRRectCount = 1,
-                clipCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "mesh-ribbon",
-                fillRectCount = 0,
-                meshRibbonCount = 1,
-            ),
-            RenderedShapeExpectation(
-                sceneId = "vertices-route-gate-board",
-                fillRectCount = 7,
-                fillRRectCount = 1,
-                clipCount = 1,
-            ),
         )
 
         rectOnlyScenes.forEach { expectation ->
             assertRenderedShapeScene(root, expectation)
+        }
+    }
+
+    @Test
+    fun `catalogued richer scenes stay not yet rendered offscreen until the faithful subset grows`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
+        val unsupportedScenes = listOf(
+            "rounded-panel-gradient" to listOf("fill-rrect", "linear-gradient-rect"),
+            "texture-swatch-board" to listOf("bitmap-rect"),
+            "layered-shadow-card" to listOf("save-layer", "filter-node"),
+            "runtime-effect-color-tile" to listOf("runtime-effect"),
+            "mesh-ribbon" to listOf("vertices"),
+        )
+
+        unsupportedScenes.forEach { (sceneId, families) ->
+            assertNotYetRenderedScene(root, sceneId, families)
         }
     }
 
@@ -314,6 +132,69 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
+    fun `offscreen frame sample report serializes raw samples with adapter provenance`() {
+        val report = OffscreenFrameSampleReport.sampled(
+            sceneId = "frame-gate-blocker-board",
+            adapterInfo = "AdapterInfo(device=Apple M2 Max, isFallbackAdapter=false)",
+            warmupFrames = 2,
+            samples = listOf(13_000_000L, 12_000_000L, 10_000_000L, 10_500_000L),
+            diagnostics = listOf("sampled frame-gate-blocker-board via WebGPU offscreen render+readback"),
+        )
+
+        val json = report.toJson()
+
+        assertContains(json, "\"schemaVersion\": 1")
+        assertContains(json, "\"sceneId\": \"frame-gate-blocker-board\"")
+        assertContains(json, "\"status\": \"sampled\"")
+        assertContains(json, "\"backend\": \"webgpu-offscreen\"")
+        assertContains(json, "\"metricName\": \"frame-time-ms\"")
+        assertContains(json, "\"metricSource\": \"wall-clock-offscreen-render-readback\"")
+        assertContains(json, "\"adapterInfo\": \"AdapterInfo(device=Apple M2 Max, isFallbackAdapter=false)\"")
+        assertContains(json, "\"rawSampleCount\": 4")
+        assertContains(json, "\"warmupFrames\": 2")
+        assertContains(json, "\"stableFrames\": 2")
+        assertContains(
+            json,
+            "{\"frameIndex\": 1, \"phase\": \"warmup\", \"durationNanos\": 13000000, \"durationMs\": 13.0000}",
+        )
+        assertContains(
+            json,
+            "{\"frameIndex\": 3, \"phase\": \"stable\", \"durationNanos\": 10000000, \"durationMs\": 10.0000}",
+        )
+    }
+
+    @Test
+    fun `offscreen frame sample report rejects invalid sample evidence`() {
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenFrameSampleReport.sampled(
+                sceneId = "frame-gate-blocker-board",
+                adapterInfo = "adapter",
+                warmupFrames = 1,
+                samples = emptyList(),
+                diagnostics = listOf("sampled"),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenFrameSampleReport.sampled(
+                sceneId = "frame-gate-blocker-board",
+                adapterInfo = "adapter",
+                warmupFrames = 2,
+                samples = listOf(1L, 2L),
+                diagnostics = listOf("sampled"),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OffscreenFrameSampleReport.sampled(
+                sceneId = "frame-gate-blocker-board",
+                adapterInfo = "adapter",
+                warmupFrames = 1,
+                samples = listOf(1L, 0L),
+                diagnostics = listOf("sampled"),
+            )
+        }
+    }
+
+    @Test
     fun `rect only command preparation rejects scenes without fill rectangles`() {
         val failure = assertFailsWith<IllegalArgumentException> {
             prepareRectOnlyDrawPlan(
@@ -328,7 +209,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
-    fun `rect only command preparation rejects bitmap markers without fixture payloads`() {
+    fun `rect only command preparation rejects bitmap command families outside the faithful subset`() {
         val failure = assertFailsWith<IllegalArgumentException> {
             prepareRectOnlyDrawPlan(
                 sceneId = "bitmap-marker-only",
@@ -338,25 +219,27 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "fixture-backed BitmapRect payloads: marker")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, and clip command families")
+        assertContains(failure.message ?: "", "bitmap-rect")
     }
 
     @Test
-    fun `rect only command preparation rejects filter markers without fixture payloads`() {
+    fun `rect only command preparation rejects filter command families outside the faithful subset`() {
         val failure = assertFailsWith<IllegalArgumentException> {
             prepareRectOnlyDrawPlan(
                 sceneId = "filter-marker-only",
-                commands = listOf(testBitmapRect(), SceneCommand.FilterNode("marker")),
+                commands = listOf(SceneCommand.FilterNode("marker")),
                 width = 320,
                 height = 200,
             )
         }
 
-        assertContains(failure.message ?: "", "fixture-backed FilterNode payloads: marker")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, and clip command families")
+        assertContains(failure.message ?: "", "filter-node")
     }
 
     @Test
-    fun `rect only command preparation rejects save layer markers without fixture payloads`() {
+    fun `rect only command preparation rejects save layer command families outside the faithful subset`() {
         val failure = assertFailsWith<IllegalArgumentException> {
             prepareRectOnlyDrawPlan(
                 sceneId = "save-layer-marker-only",
@@ -366,11 +249,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "fixture-backed SaveLayer payloads: marker")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, and clip command families")
+        assertContains(failure.message ?: "", "save-layer")
     }
 
     @Test
-    fun `rect only command preparation rejects runtime effect markers without fixture payloads`() {
+    fun `rect only command preparation rejects runtime effect command families outside the faithful subset`() {
         val failure = assertFailsWith<IllegalArgumentException> {
             prepareRectOnlyDrawPlan(
                 sceneId = "runtime-effect-marker-only",
@@ -380,11 +264,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "fixture-backed RuntimeEffectTile payloads: marker")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, and clip command families")
+        assertContains(failure.message ?: "", "runtime-effect")
     }
 
     @Test
-    fun `rect only command preparation rejects mesh ribbon markers without fixture payloads`() {
+    fun `rect only command preparation rejects mesh ribbon command families outside the faithful subset`() {
         val failure = assertFailsWith<IllegalArgumentException> {
             prepareRectOnlyDrawPlan(
                 sceneId = "mesh-ribbon-marker-only",
@@ -394,11 +279,12 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "fixture-backed MeshRibbon payloads: marker")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, and clip command families")
+        assertContains(failure.message ?: "", "vertices")
     }
 
     @Test
-    fun `rect only command preparation rejects runtime effects outside the registered SimpleRT contract`() {
+    fun `rect only command preparation rejects runtime effect scenes before descriptor-specific validation`() {
         val failure = assertFailsWith<IllegalArgumentException> {
             prepareRectOnlyDrawPlan(
                 sceneId = "runtime-effect-wrong-descriptor",
@@ -416,7 +302,8 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only registered runtime.simple_rt RuntimeEffectTile payloads")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, and clip command families")
+        assertContains(failure.message ?: "", "runtime-effect")
     }
 
     @Test
@@ -440,7 +327,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
-    fun `rect only command preparation rejects out of bounds mesh ribbons`() {
+    fun `rect only command preparation rejects mesh ribbon scenes before bounds validation`() {
         val failure = assertFailsWith<IllegalArgumentException> {
             prepareRectOnlyDrawPlan(
                 sceneId = "oversize-mesh-ribbon",
@@ -457,7 +344,8 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "MeshRibbon bounds inside positive target: ribbon")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, and clip command families")
+        assertContains(failure.message ?: "", "vertices")
     }
 
     @Test
@@ -677,11 +565,29 @@ class RenderGpuRendererSceneOffscreenMainTest {
             assertContains(runJson, "clearCommands=1")
             assertContains(runJson, "pathStencilCoverRow=gpu-renderer.path.stencil-cover")
             assertContains(runJson, "pathStencilCoverTicket=KGPU-M3-002")
-            assertContains(runJson, "pathStencilCoverTicketStatus=blocked")
+            assertContains(runJson, "pathStencilCoverTicketStatus=done")
+            assertContains(
+                runJson,
+                "pathStencilCoverClosure=contract-gate-complete-no-product-promotion",
+            )
             assertContains(runJson, "pathStencilCoverClassification=TargetNative")
             assertContains(runJson, "pathStencilCoverRouteKind=GPUNative")
             assertContains(runJson, "pathStencilCoverAdapterRequired=true")
-            assertContains(runJson, "pathStencilCoverRefusalMatrix=depth-stencil-capability:RefuseRequired:coverage.stencil-cover-unavailable,stencil-route-unavailable:RefuseRequired:unsupported.geometry.stencil_cover_unavailable,producer-cover-ordering:RefuseRequired:unsupported.geometry.stencil_cover_ordering_illegal")
+            assertContains(
+                runJson,
+                "pathStencilCoverRefusalMatrix=" +
+                    "depth-stencil-capability:RefuseRequired:coverage.stencil-cover-unavailable," +
+                    "depth-stencil-evidence:RefuseRequired:unsupported.geometry.stencil_cover_unavailable," +
+                    "sample-count-evidence:RefuseRequired:unsupported.geometry.stencil_cover_unavailable," +
+                    "target-state:RefuseRequired:unsupported.geometry.stencil_cover_target," +
+                    "clip-state:RefuseRequired:unsupported.clip.stencil_cover," +
+                    "stencil-route-unavailable:RefuseRequired:unsupported.geometry.stencil_cover_unavailable," +
+                    "producer-cover-ordering:RefuseRequired:unsupported.geometry.stencil_cover_ordering_illegal," +
+                    "pass-resource-evidence:RefuseRequired:unsupported.geometry.stencil_cover_pass_resources_missing," +
+                    "readback-evidence:RefuseRequired:unsupported.execution.readback_unavailable",
+            )
+            assertContains(runJson, "stencilCoverContractEvidenceLinked=true")
+            assertContains(runJson, "explicitSkippedLaneDiagnosticsLinked=true")
             assertContains(runJson, "adapterBackedStencilEvidenceLinked=false")
             assertContains(runJson, "passResourceReadbackArtifactsLinked=false")
             assertContains(runJson, "producerBeforeCoverOrderingProven=false")
@@ -702,6 +608,25 @@ class RenderGpuRendererSceneOffscreenMainTest {
             assertContains(runJson, "vertexIndexBufferSupport=false")
         }
         assertFalse(runJson.contains("runner-subset:$sceneId"), sceneId)
+    }
+
+    private fun assertNotYetRenderedScene(root: Path, sceneId: String, unsupportedFamilies: List<String>) {
+        renderSceneInWebGpuCapableProcess(root, sceneId)
+        val sceneOutput = root.resolve(sceneId)
+        val runJson = sceneOutput.resolve("run.json").readText()
+        val diagnostics = sceneOutput.resolve("diagnostics.txt").readText()
+
+        assertFalse(sceneOutput.resolve("render.png").exists(), sceneId)
+        assertContains(runJson, "\"sceneId\": \"$sceneId\"")
+        assertContains(runJson, "\"status\": \"${OffscreenRunStatus.NotYetRendered.wireName}\"")
+        assertContains(runJson, "\"productRefusal\": false")
+        assertContains(runJson, "\"imagePath\": null")
+        assertContains(runJson, "supports only clear, fill-rect, and clip command families")
+        assertContains(diagnostics, "supports only clear, fill-rect, and clip command families")
+        unsupportedFamilies.forEach { family ->
+            assertContains(runJson, family, ignoreCase = false, message = sceneId)
+            assertContains(diagnostics, family, ignoreCase = false, message = sceneId)
+        }
     }
 
     private fun renderSceneInWebGpuCapableProcess(root: Path, sceneId: String) {

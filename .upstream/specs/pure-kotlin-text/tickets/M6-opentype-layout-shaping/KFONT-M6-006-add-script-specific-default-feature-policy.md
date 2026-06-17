@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-006"
 title: "Add script-specific default feature policy"
-status: "proposed"
+status: "review"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
@@ -73,6 +73,13 @@ data class ResolvedFeatureSet(
 - [ ] Unsupported discretionary features diagnose without blocking required defaults for simple scripts.
 - [ ] Simple `drawString` path records that complex shaping defaults were not implicitly enabled.
 
+## Current Slice
+
+- `RequiredScriptFeaturePolicies` now defines explicit policy rows for Latin, Greek, Cyrillic, Hebrew, Arabic, Devanagari, Thai, CJK, and Emoji.
+- The contract-level `ResolvedFeatureSet` now serializes `requested`, `enabled`, `disabled`, `defaulted`, `unsupported`, and a deterministic language-system choice through `shaping-plan.json`.
+- `feature-policy-matrix.json` is now checked in and tracked by the dump index, fixture manifest, and claim dashboard without support promotion.
+- This slice does not yet prove runtime GSUB/GPOS execution for all scripted defaults, paragraph `drawString` behavior, or per-script positive/refusal fixture families beyond the contract layer.
+
 ## Required Evidence
 
 - `feature-policy-matrix.json` mapping each required script family to OpenType script tags, default features, optional features, and refusal-on-missing features.
@@ -96,12 +103,17 @@ data class ResolvedFeatureSet(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test --tests '*FeaturePolicy*'
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.OpenTypeLayoutEngineContractTest
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk ./gradlew --no-daemon :font:text:test
 ```
 
 ## Status Notes
 
 - `proposed`: Policy ticket depends on script itemization and the M6 shaping contract.
+- `review`: Contract-level feature policy rows, shaping-plan serialization, and evidence tracking are implemented and freshly validated. Remaining gates: add per-script positive/refusal shaping fixtures outside the contract layer, wire runtime GSUB/GPOS execution to the resolved defaults, and document explicit `drawString` non-enablement behavior before `done`.
 - Move to `ready` only after the matrix row feature sets are reviewed.
 
 ## Linear Labels

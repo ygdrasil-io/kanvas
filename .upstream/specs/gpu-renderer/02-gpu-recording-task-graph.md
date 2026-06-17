@@ -35,6 +35,9 @@ consumes those facts instead of reinterpreting matrices ad hoc.
 `GPUTaskList` owns ordered GPU work and resource dependencies.
 
 `GPUDrawPass` owns immutable draw-pass data close to GPU submission.
+The packet and pass-command materialization boundary from `GPUDrawPass` into
+`GPUExecutionContext.submit()` is defined in
+`37-draw-packet-command-stream.md`.
 
 `GPURenderStep` owns the geometry/coverage technique used by a draw inside a
 pass.
@@ -306,7 +309,8 @@ Task phases:
    intermediates, filter render/compute node resources, text atlas pages, text
    instance buffers, destination copy/intermediate resources, bind groups, and
    gathered payload uploads.
-2. `addCommands`: encode commands through the `GPU` facade.
+2. `addCommands`: encode packet-derived pass command streams through the `GPU`
+   facade.
 
 The split exists so route selection, resource failure, and command encoding
 failures are reported separately.

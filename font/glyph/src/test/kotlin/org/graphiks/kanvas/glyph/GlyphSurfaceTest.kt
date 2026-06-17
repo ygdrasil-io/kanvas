@@ -47,12 +47,24 @@ class GlyphSurfaceTest {
             GlyphRunCacheInventory::class.simpleName,
             GlyphRunCacheInventoryItem::class.simpleName,
             GlyphCacheRecord::class.simpleName,
+            GlyphCacheInventoryEntry::class.simpleName,
+            GlyphCacheInventoryDump::class.simpleName,
+            GlyphCacheTelemetryMetadata::class.simpleName,
+            GlyphCacheRouteCount::class.simpleName,
+            GlyphCacheTimingStats::class.simpleName,
+            GlyphCacheBudgetRefusal::class.simpleName,
+            GlyphCacheTelemetrySample::class.simpleName,
+            GlyphCacheTelemetryDump::class.simpleName,
             GlyphMaskSummary::class.simpleName,
             GlyphRouteDiagnostic::class.simpleName,
             GlyphArtifactPlanDecision::class.simpleName,
             GlyphArtifactRouteRejection::class.simpleName,
             GlyphAtlasPackingResult::class.simpleName,
             A8GlyphMaskArtifactEvidence::class.simpleName,
+            A8GlyphMaskEvidenceDump::class.simpleName,
+            GlyphAtlasArtifactEvidence::class.simpleName,
+            GlyphAtlasArtifactEvidenceDump::class.simpleName,
+            GlyphAtlasEvictionTrace::class.simpleName,
         )
 
         assertEquals(
@@ -82,12 +94,24 @@ class GlyphSurfaceTest {
                 "GlyphRunCacheInventory",
                 "GlyphRunCacheInventoryItem",
                 "GlyphCacheRecord",
+                "GlyphCacheInventoryEntry",
+                "GlyphCacheInventoryDump",
+                "GlyphCacheTelemetryMetadata",
+                "GlyphCacheRouteCount",
+                "GlyphCacheTimingStats",
+                "GlyphCacheBudgetRefusal",
+                "GlyphCacheTelemetrySample",
+                "GlyphCacheTelemetryDump",
                 "GlyphMaskSummary",
                 "GlyphRouteDiagnostic",
                 "GlyphArtifactPlanDecision",
                 "GlyphArtifactRouteRejection",
                 "GlyphAtlasPackingResult",
                 "A8GlyphMaskArtifactEvidence",
+                "A8GlyphMaskEvidenceDump",
+                "GlyphAtlasArtifactEvidence",
+                "GlyphAtlasArtifactEvidenceDump",
+                "GlyphAtlasEvictionTrace",
             ),
             names,
         )
@@ -137,7 +161,191 @@ class GlyphSurfaceTest {
             strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441042"),
         )
 
-        assertEquals(A8GlyphMask(glyphId = 51, width = 0, height = 0, pixels = emptyList()), mask)
+        assertEquals(
+            A8GlyphMask(glyphId = 51, width = 0, height = 0, pixels = emptyList()),
+            mask.copy(diagnostics = emptyList(), sourceOutlineSha256 = null),
+        )
+        assertEquals(64, mask.sourceOutlineSha256?.length)
+        assertEquals(1, mask.diagnostics.size)
+        assertEquals("text.glyph.A8-generation-failed", mask.diagnostics.single().route)
+        assertEquals("info", mask.diagnostics.single().severity)
+        assertTrue(mask.diagnostics.single().message.contains("reason=empty-outline"))
+    }
+
+    @Test
+    fun glyphMaskGeneratorRasterizesClosedQuadraticContourToDeterministicA8Mask() {
+        val generator = object : GlyphMaskGenerator {}
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 54,
+            pathCommands = listOf(
+                "M 1 2",
+                "Q 2.5 2 4 2",
+                "Q 4 3.5 4 5",
+                "Q 2.5 5 1 5",
+                "Q 1 3.5 1 2",
+                "Z",
+            ),
+        )
+
+        val mask = generator.generate(
+            outline = outline,
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441080"),
+        )
+
+        assertEquals(54, mask.glyphId)
+        assertEquals(3, mask.width)
+        assertEquals(3, mask.height)
+        assertEquals(1, mask.left)
+        assertEquals(2, mask.top)
+        assertEquals(3, mask.rowBytes)
+        assertEquals(64, mask.sourceOutlineSha256?.length)
+        assertEquals(emptyList(), mask.diagnostics)
+        assertEquals(
+            listOf(
+                255, 255, 255,
+                255, 255, 255,
+                255, 255, 255,
+            ),
+            mask.pixels,
+        )
+    }
+
+    @Test
+    fun glyphMaskGeneratorRasterizesClosedCubicContourToDeterministicA8Mask() {
+        val generator = object : GlyphMaskGenerator {}
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 55,
+            pathCommands = listOf(
+                "M 1 2",
+                "C 2 2 3 2 4 2",
+                "C 4 3 4 4 4 5",
+                "C 3 5 2 5 1 5",
+                "C 1 4 1 3 1 2",
+                "Z",
+            ),
+        )
+
+        val mask = generator.generate(
+            outline = outline,
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441081"),
+        )
+
+        assertEquals(55, mask.glyphId)
+        assertEquals(3, mask.width)
+        assertEquals(3, mask.height)
+        assertEquals(1, mask.left)
+        assertEquals(2, mask.top)
+        assertEquals(3, mask.rowBytes)
+        assertEquals(64, mask.sourceOutlineSha256?.length)
+        assertEquals(emptyList(), mask.diagnostics)
+        assertEquals(
+            listOf(
+                255, 255, 255,
+                255, 255, 255,
+                255, 255, 255,
+            ),
+            mask.pixels,
+        )
+    }
+
+    @Test
+    fun glyphMaskGeneratorReturnsStableDiagnosticForUnsupportedWindingRule() {
+        val generator = object : GlyphMaskGenerator {}
+        val strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441082")
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 56,
+            pathCommands = listOf(
+                "M 1 2",
+                "L 4 2",
+                "L 4 5",
+                "L 1 5",
+                "Z",
+            ),
+            windingRule = "evenOdd",
+        )
+
+        val mask = generator.generate(outline = outline, strikeKey = strikeKey)
+
+        assertEquals(A8GlyphMask(glyphId = 56, width = 0, height = 0, pixels = emptyList()), mask.copy(
+            diagnostics = emptyList(),
+            sourceOutlineSha256 = null,
+        ))
+        assertEquals(64, mask.sourceOutlineSha256?.length)
+        assertEquals(1, mask.diagnostics.size)
+        assertEquals(56, mask.diagnostics.single().glyphId)
+        assertEquals("text.glyph.A8-generation-failed", mask.diagnostics.single().route)
+        assertEquals("warning", mask.diagnostics.single().severity)
+        assertTrue(mask.diagnostics.single().message.contains("reason=unsupported-winding-rule"))
+        assertTrue(mask.diagnostics.single().message.contains(
+            strikeKey.copy(
+                representationRoute = "text.glyph.mask.A8",
+                maskFormat = "A8",
+            ).preimageSha256(glyphId = 56),
+        ))
+    }
+
+    @Test
+    fun glyphMaskGeneratorReturnsStableDiagnosticForMalformedContour() {
+        val generator = object : GlyphMaskGenerator {}
+        val strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441083")
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 57,
+            pathCommands = listOf("L 1 2"),
+        )
+
+        val mask = generator.generate(outline = outline, strikeKey = strikeKey)
+
+        assertEquals(A8GlyphMask(glyphId = 57, width = 0, height = 0, pixels = emptyList()), mask.copy(
+            diagnostics = emptyList(),
+            sourceOutlineSha256 = null,
+        ))
+        assertEquals(64, mask.sourceOutlineSha256?.length)
+        assertEquals(1, mask.diagnostics.size)
+        assertEquals(57, mask.diagnostics.single().glyphId)
+        assertEquals("text.glyph.A8-generation-failed", mask.diagnostics.single().route)
+        assertEquals("warning", mask.diagnostics.single().severity)
+        assertTrue(mask.diagnostics.single().message.contains("reason=malformed-outline"))
+        assertTrue(mask.diagnostics.single().message.contains(
+            strikeKey.copy(
+                representationRoute = "text.glyph.mask.A8",
+                maskFormat = "A8",
+            ).preimageSha256(glyphId = 57),
+        ))
+    }
+
+    @Test
+    fun glyphMaskGeneratorReturnsStableDiagnosticForCoverageOverflow() {
+        val generator = object : GlyphMaskGenerator {}
+        val strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441090")
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 58,
+            pathCommands = listOf(
+                "M 0 0",
+                "L 5000 0",
+                "L 5000 5000",
+                "L 0 5000",
+                "Z",
+            ),
+        )
+
+        val mask = generator.generate(outline = outline, strikeKey = strikeKey)
+
+        assertEquals(
+            A8GlyphMask(glyphId = 58, width = 0, height = 0, pixels = emptyList()),
+            mask.copy(diagnostics = emptyList(), sourceOutlineSha256 = null),
+        )
+        assertEquals(64, mask.sourceOutlineSha256?.length)
+        assertEquals(1, mask.diagnostics.size)
+        assertEquals(58, mask.diagnostics.single().glyphId)
+        assertEquals("text.glyph.A8-generation-failed", mask.diagnostics.single().route)
+        assertEquals("warning", mask.diagnostics.single().severity)
+        assertTrue(mask.diagnostics.single().message.contains("reason=coverage-overflow"))
+        assertTrue(mask.diagnostics.single().message.contains(
+            strikeKey.copy(
+                representationRoute = "text.glyph.mask.A8",
+                maskFormat = "A8",
+            ).preimageSha256(glyphId = 58),
+        ))
     }
 
     @Test
@@ -149,9 +357,18 @@ class GlyphSurfaceTest {
             left = -1,
             top = 3,
             rowBytes = 3,
+            sourceOutlineSha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             pixels = listOf(
                 0, 7, 99,
                 255, 0, 99,
+            ),
+            diagnostics = listOf(
+                GlyphRouteDiagnostic(
+                    glyphId = 70,
+                    route = "text.glyph.A8-generation-failed",
+                    message = "Synthetic diagnostic snapshot.",
+                    severity = "warning",
+                ),
             ),
         )
 
@@ -164,6 +381,8 @@ class GlyphSurfaceTest {
         assertEquals(4, evidence.addressablePixelCount)
         assertEquals(2, evidence.nonZeroPixels)
         assertEquals("79ef38e8384dc02cd1de6202a09cab298e2bac8148fff30a3c437f87e63956eb", evidence.coverageSha256)
+        assertEquals("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", evidence.sourceOutlineSha256)
+        assertEquals(mask.diagnostics, evidence.diagnostics)
         assertEquals(64, evidence.strikeKeySha256.length)
         assertEquals(64, evidence.dumpSha256.length)
         assertEquals(
@@ -177,11 +396,127 @@ class GlyphSurfaceTest {
               "addressablePixelCount": 4,
               "nonZeroPixels": 2,
               "coverageSha256": "79ef38e8384dc02cd1de6202a09cab298e2bac8148fff30a3c437f87e63956eb",
-              "diagnostics": [],
+              "sourceOutlineSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "diagnostics": [
+                {
+                  "glyphId": 70,
+                  "route": "text.glyph.A8-generation-failed",
+                  "severity": "warning",
+                  "message": "Synthetic diagnostic snapshot."
+                }
+              ],
               "dumpSha256": "${evidence.dumpSha256}"
             }
             """.trimIndent() + "\n",
             evidence.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun sdfGlyphArtifactEvidenceRecordsSpreadPaddingBoundsAndCoverageHash() {
+        val mask = SDFGlyphMask(
+            glyphId = 78,
+            width = 3,
+            height = 2,
+            left = -1,
+            top = 2,
+            distanceRange = 16f,
+            pixels = listOf(
+                96, 128, 160,
+                80, 128, 176,
+            ),
+            sourceOutlineSha256 = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        )
+
+        val evidence = SDFGlyphArtifactEvidence.from(
+            mask = mask,
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441093").copy(
+                representationRoute = "text.glyph.mask.SDF",
+                maskFormat = "R8Unorm",
+                sdfSpreadPx = 16f,
+                sdfSourceResolutionPx = 24f,
+            ),
+        )
+
+        assertEquals(78, evidence.glyphId)
+        assertEquals(-1, evidence.left)
+        assertEquals(2, evidence.top)
+        assertEquals(3, evidence.width)
+        assertEquals(2, evidence.height)
+        assertEquals(16f, evidence.spreadPx)
+        assertEquals(24f, evidence.sourceResolutionPx)
+        assertEquals(17, evidence.atlasPaddingPx)
+        assertEquals("R8Unorm", evidence.format)
+        assertEquals("sdf-normalization-r8unorm-v1", evidence.normalizationFormulaVersion)
+        assertEquals(6, evidence.addressablePixelCount)
+        assertEquals("fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210", evidence.sourceOutlineSha256)
+        assertEquals(64, evidence.strikeKeySha256.length)
+        assertEquals(64, evidence.distanceFieldSha256.length)
+
+        val dump = evidence.toCanonicalJson()
+        assertTrue(dump.contains(""""spreadPx": 16"""))
+        assertTrue(dump.contains(""""atlasPaddingPx": 17"""))
+        assertTrue(dump.contains(""""normalizationFormulaVersion": "sdf-normalization-r8unorm-v1""""))
+        assertTrue(dump.contains(""""sourceOutlineSha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210""""))
+    }
+
+    @Test
+    fun sdfGlyphArtifactEvidenceDumpMatchesRepoFixture() {
+        val generator = object : SDFGlyphGenerator {}
+        val defaultOutline = OutlineGlyphRepresentation(
+            glyphId = 79,
+            pathCommands = listOf(
+                "M 1 1",
+                "L 5 1",
+                "L 5 5",
+                "L 1 5",
+                "Z",
+            ),
+        )
+        val widenedOutline = defaultOutline.copy(glyphId = 80)
+
+        val defaultStrikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441094").copy(
+            representationRoute = "text.glyph.mask.SDF",
+            maskFormat = "R8Unorm",
+        )
+        val widenedStrikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441095").copy(
+            representationRoute = "text.glyph.mask.SDF",
+            maskFormat = "R8Unorm",
+            sdfSpreadPx = 16f,
+            sdfSourceResolutionPx = 24f,
+        )
+
+        val dump = SDFGlyphArtifactEvidenceDump(
+            dumpId = "sdf-glyph-artifact",
+            ownerTickets = listOf("KFONT-M9-004"),
+            fixtureIds = listOf(
+                "sdf-default-spread",
+                "sdf-wide-spread",
+            ),
+            artifacts = listOf(
+                SDFGlyphArtifactEvidence.from(
+                    mask = generator.generate(defaultOutline, defaultStrikeKey),
+                    strikeKey = defaultStrikeKey,
+                ),
+                SDFGlyphArtifactEvidence.from(
+                    mask = generator.generate(widenedOutline, widenedStrikeKey),
+                    strikeKey = widenedStrikeKey,
+                ),
+            ),
+            requiredDiagnostics = listOf(
+                "text.glyph.SDF-generation-failed",
+                "text.glyph.SDF-transform-unsupported",
+            ),
+            nonClaims = listOf(
+                "producer-only",
+                "no-gpu-text-route-claim",
+                "no-dftext-retirement",
+            ),
+        )
+
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json"),
+            dump.toCanonicalJson(),
         )
     }
 
@@ -207,7 +542,7 @@ class GlyphSurfaceTest {
         assertEquals(52, mask.glyphId)
         assertEquals(6, mask.width)
         assertEquals(6, mask.height)
-        assertEquals(4f, mask.distanceRange)
+        assertEquals(8f, mask.distanceRange)
         assertEquals(36, mask.pixels.size)
         assertTrue(mask.pixels.any { sample -> sample != 0 })
 
@@ -229,7 +564,70 @@ class GlyphSurfaceTest {
             strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441044"),
         )
 
-        assertEquals(SDFGlyphMask(glyphId = 53, width = 0, height = 0, distanceRange = 4f, pixels = emptyList()), mask)
+        assertEquals(
+            SDFGlyphMask(glyphId = 53, width = 0, height = 0, distanceRange = 8f, pixels = emptyList()),
+            mask.copy(sourceOutlineSha256 = null),
+        )
+        assertEquals(64, mask.sourceOutlineSha256?.length)
+    }
+
+    @Test
+    fun sdfGlyphGeneratorRespectsNonDefaultSpreadFromStrikeKey() {
+        val generator = object : SDFGlyphGenerator {}
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 58,
+            pathCommands = listOf(
+                "M 1 1",
+                "L 5 1",
+                "L 5 5",
+                "L 1 5",
+                "Z",
+            ),
+        )
+
+        val defaultMask = generator.generate(
+            outline = outline,
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441090"),
+        )
+        val widenedSpreadMask = generator.generate(
+            outline = outline,
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441091").copy(
+                sdfSpreadPx = 16f,
+                sdfSourceResolutionPx = 16f,
+                maskFormat = "R8Unorm",
+                representationRoute = "text.glyph.mask.SDF",
+            ),
+        )
+
+        assertEquals(8f, defaultMask.distanceRange)
+        assertEquals(16f, widenedSpreadMask.distanceRange)
+        assertTrue(defaultMask.pixels != widenedSpreadMask.pixels)
+        assertTrue(
+            widenedSpreadMask.pixels[3 * widenedSpreadMask.width + 3] < defaultMask.pixels[3 * defaultMask.width + 3],
+            "Larger spread should flatten normalized interior distances in the SDF mask.",
+        )
+    }
+
+    @Test
+    fun sdfGlyphGeneratorRejectsNonClosedOutlinePath() {
+        val generator = object : SDFGlyphGenerator {}
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            generator.generate(
+                outline = OutlineGlyphRepresentation(
+                    glyphId = 59,
+                    pathCommands = listOf(
+                        "M 1 1",
+                        "L 5 1",
+                        "L 5 5",
+                        "L 1 5",
+                    ),
+                ),
+                strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441092"),
+            )
+        }
+
+        assertTrue(failure.message.orEmpty().contains("closed"))
     }
 
     @Test
@@ -527,6 +925,281 @@ class GlyphSurfaceTest {
                 ),
             )
         }
+    }
+
+    @Test
+    fun glyphAtlasArtifactEvidenceRecordsEntryHashesAndBudgetFacts() {
+        val a8Builder = KotlinGlyphAtlasArtifactBuilder()
+        val strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441120").copy(
+            representationRoute = "text.glyph.mask.A8",
+            maskFormat = "A8",
+            variationCoordinates = mapOf("wght" to 0.4f),
+            paletteIdentity = "cpal.palette.1",
+            rendererDescriptorVersion = "renderer.v2",
+        )
+        val mask = A8GlyphMask(
+            glyphId = 120,
+            width = 2,
+            height = 2,
+            left = -1,
+            top = 3,
+            rowBytes = 3,
+            pixels = listOf(
+                5, 6, 0,
+                7, 8, 0,
+            ),
+            sourceOutlineSha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        )
+        val build = a8Builder.build(
+            masks = listOf(mask),
+            placements = listOf(
+                GlyphAtlasPlacement(glyphId = 120, x = 1, y = 2, width = 2, height = 2),
+            ),
+        )
+
+        val evidence = GlyphAtlasArtifactEvidence.fromA8(
+            buildResult = build,
+            masks = listOf(mask),
+            strikeKeysByGlyphId = mapOf(120 to strikeKey),
+            generation = 4,
+            invalidationToken = "font-source-v4",
+            memoryBudgetClass = "atlas-budget.medium",
+            lifetimeClass = "glyph-run-frame",
+            paddingPx = 1,
+        )
+
+        assertEquals("GlyphAtlasArtifact", evidence.artifactType)
+        assertEquals(4L, evidence.generation)
+        assertEquals("A8", evidence.textureFormat)
+        assertEquals(3, evidence.width)
+        assertEquals(4, evidence.height)
+        assertEquals(3, evidence.rowStride)
+        assertEquals("atlas-budget.medium", evidence.memoryBudgetClass)
+        assertEquals("glyph-run-frame", evidence.lifetimeClass)
+        assertEquals("font-source-v4", evidence.invalidationToken)
+        assertEquals(1, evidence.entryCount)
+        assertEquals(1, evidence.entries.size)
+        assertEquals(120, evidence.entries.single().glyphId)
+        assertEquals(1, evidence.entries.single().paddingPx)
+        assertEquals(-1, evidence.entries.single().sourceLeft)
+        assertEquals(3, evidence.entries.single().sourceTop)
+        assertEquals(64, evidence.artifactKeySha256.length)
+        assertEquals(64, evidence.entries.single().strikeKeySha256.length)
+        assertEquals(64, evidence.entries.single().sourceMaskSha256.length)
+        assertEquals(64, evidence.uploadByteSha256.length)
+        assertTrue(evidence.toCanonicalJson().contains(""""invalidationToken": "font-source-v4""""))
+    }
+
+    @Test
+    fun glyphAtlasArtifactEvidenceKeyChangesWhenStrikeOrMaskFactsChange() {
+        val a8Builder = KotlinGlyphAtlasArtifactBuilder()
+        val baseA8StrikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441121").copy(
+            representationRoute = "text.glyph.mask.A8",
+            maskFormat = "A8",
+            variationCoordinates = mapOf("wght" to 0.4f),
+            paletteIdentity = "cpal.palette.1",
+            rendererDescriptorVersion = "renderer.v1",
+        )
+        val baseA8Mask = A8GlyphMask(
+            glyphId = 121,
+            width = 1,
+            height = 1,
+            pixels = listOf(64),
+            sourceOutlineSha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        )
+        val a8Build = a8Builder.build(
+            masks = listOf(baseA8Mask),
+            placements = listOf(GlyphAtlasPlacement(glyphId = 121, x = 0, y = 0, width = 1, height = 1)),
+        )
+
+        fun a8Artifact(strikeKey: GlyphStrikeKey, mask: A8GlyphMask): GlyphAtlasArtifactEvidence =
+            GlyphAtlasArtifactEvidence.fromA8(
+                buildResult = a8Build,
+                masks = listOf(mask),
+                strikeKeysByGlyphId = mapOf(121 to strikeKey),
+                generation = 1,
+                invalidationToken = "font-source-v1",
+                memoryBudgetClass = "atlas-budget.small",
+                lifetimeClass = "glyph-run-frame",
+            )
+
+        val baseA8 = a8Artifact(baseA8StrikeKey, baseA8Mask)
+        val variation = a8Artifact(baseA8StrikeKey.copy(variationCoordinates = mapOf("wght" to 0.5f)), baseA8Mask)
+        val palette = a8Artifact(baseA8StrikeKey.copy(paletteIdentity = "cpal.palette.2"), baseA8Mask)
+        val renderer = a8Artifact(baseA8StrikeKey.copy(rendererDescriptorVersion = "renderer.v2"), baseA8Mask)
+        val sourceMask = a8Artifact(baseA8StrikeKey, baseA8Mask.copy(pixels = listOf(65)))
+
+        val sdfBuilder = KotlinSDFGlyphAtlasArtifactBuilder(atlasWidth = 5, padding = 1)
+        val baseSdfStrikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441126").copy(
+            representationRoute = "text.glyph.mask.SDF",
+            maskFormat = "R8Unorm",
+            sdfSpreadPx = 8f,
+            sdfSourceResolutionPx = 16f,
+        )
+        val sdfMask = SDFGlyphMask(glyphId = 126, width = 1, height = 1, distanceRange = 8f, pixels = listOf(128))
+        val sdfBuild = sdfBuilder.build(listOf(sdfMask))
+        fun sdfArtifact(strikeKey: GlyphStrikeKey): GlyphAtlasArtifactEvidence =
+            GlyphAtlasArtifactEvidence.fromSdf(
+                buildResult = sdfBuild,
+                masks = listOf(sdfMask),
+                strikeKeysByGlyphId = mapOf(126 to strikeKey),
+                generation = 1,
+                invalidationToken = "font-source-v1",
+                memoryBudgetClass = "atlas-budget.small",
+                lifetimeClass = "glyph-run-frame",
+                paddingPx = 1,
+            )
+        val baseSdf = sdfArtifact(baseSdfStrikeKey)
+        val widenedSdf = sdfArtifact(baseSdfStrikeKey.copy(sdfSpreadPx = 16f, sdfSourceResolutionPx = 24f))
+
+        assertTrue(baseA8.artifactKeySha256 != variation.artifactKeySha256)
+        assertTrue(baseA8.artifactKeySha256 != palette.artifactKeySha256)
+        assertTrue(baseA8.artifactKeySha256 != renderer.artifactKeySha256)
+        assertTrue(baseA8.artifactKeySha256 != sourceMask.artifactKeySha256)
+        assertTrue(baseSdf.artifactKeySha256 != widenedSdf.artifactKeySha256)
+    }
+
+    @Test
+    fun glyphAtlasArtifactEvidenceDumpMatchesRepoFixture() {
+        val a8Builder = KotlinGlyphAtlasArtifactBuilder()
+        val sdfBuilder = KotlinSDFGlyphAtlasArtifactBuilder(atlasWidth = 6, padding = 1)
+
+        val a8StrikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441122").copy(
+            representationRoute = "text.glyph.mask.A8",
+            maskFormat = "A8",
+            variationCoordinates = mapOf("wght" to 0.45f),
+        )
+        val sdfStrikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441123").copy(
+            representationRoute = "text.glyph.mask.SDF",
+            maskFormat = "R8Unorm",
+            sdfSpreadPx = 16f,
+            sdfSourceResolutionPx = 24f,
+            rendererDescriptorVersion = "renderer.v2",
+        )
+
+        val a8Mask = A8GlyphMask(
+            glyphId = 122,
+            width = 2,
+            height = 2,
+            left = 1,
+            top = 2,
+            rowBytes = 2,
+            pixels = listOf(10, 20, 30, 40),
+            sourceOutlineSha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        )
+        val sdfMask = SDFGlyphMask(
+            glyphId = 123,
+            width = 2,
+            height = 2,
+            left = -1,
+            top = 0,
+            distanceRange = 16f,
+            pixels = listOf(96, 128, 160, 192),
+            sourceOutlineSha256 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        )
+
+        val dump = GlyphAtlasArtifactEvidenceDump(
+            dumpId = "glyph-atlas",
+            ownerTickets = listOf("KFONT-M9-005"),
+            fixtureIds = listOf(
+                "a8-atlas",
+                "sdf-atlas",
+            ),
+            artifacts = listOf(
+                GlyphAtlasArtifactEvidence.fromA8(
+                    buildResult = a8Builder.build(
+                        masks = listOf(a8Mask),
+                        placements = listOf(
+                            GlyphAtlasPlacement(glyphId = 122, x = 1, y = 1, width = 2, height = 2),
+                        ),
+                    ),
+                    masks = listOf(a8Mask),
+                    strikeKeysByGlyphId = mapOf(122 to a8StrikeKey),
+                    generation = 7,
+                    invalidationToken = "font-source-v7",
+                    memoryBudgetClass = "atlas-budget.medium",
+                    lifetimeClass = "glyph-run-frame",
+                    paddingPx = 1,
+                ),
+                GlyphAtlasArtifactEvidence.fromSdf(
+                    buildResult = sdfBuilder.build(listOf(sdfMask)),
+                    masks = listOf(sdfMask),
+                    strikeKeysByGlyphId = mapOf(123 to sdfStrikeKey),
+                    generation = 8,
+                    invalidationToken = "font-source-v8",
+                    memoryBudgetClass = "atlas-budget.medium",
+                    lifetimeClass = "glyph-run-frame",
+                    paddingPx = 1,
+                ),
+            ),
+            requiredDiagnostics = listOf(
+                "text.glyph.atlas-capacity-exceeded",
+                "text.glyph.atlas-generation-stale",
+            ),
+            nonClaims = listOf(
+                "producer-only",
+                "no-gpu-text-route-claim",
+                "no-dftext-retirement",
+            ),
+        )
+
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/glyph/glyph-atlas.json"),
+            dump.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun glyphAtlasEvictionTraceMatchesRepoFixture() {
+        val firstStrikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441124").copy(
+            representationRoute = "text.glyph.mask.A8",
+            variationCoordinates = mapOf("wght" to 0.25f),
+        )
+        val secondStrikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441125").copy(
+            representationRoute = "text.glyph.mask.SDF",
+            sdfSpreadPx = 16f,
+            sdfSourceResolutionPx = 24f,
+        )
+
+        val trace = GlyphAtlasEvictionTrace(
+            dumpId = "glyph-atlas-eviction-trace",
+            ownerTickets = listOf("KFONT-M9-005"),
+            fixtureIds = listOf("eviction-order", "stale-generation"),
+            artifactType = "GlyphAtlasArtifact",
+            previousGeneration = 7,
+            nextGeneration = 8,
+            invalidationTokenBefore = "font-source-v7",
+            invalidationTokenAfter = "font-source-v8",
+            budgetBytes = 256,
+            residentBytesBefore = 224,
+            residentBytesAfter = 96,
+            evictions = listOf(
+                GlyphAtlasEvictionTraceEntry(
+                    strikeKeySha256 = firstStrikeKey.preimageSha256(glyphId = 124),
+                    glyphIds = listOf(124, 125),
+                    bytesFreed = 64,
+                ),
+                GlyphAtlasEvictionTraceEntry(
+                    strikeKeySha256 = secondStrikeKey.preimageSha256(glyphId = 126),
+                    glyphIds = listOf(126),
+                    bytesFreed = 64,
+                ),
+            ),
+            requiredDiagnostics = listOf(
+                "text.glyph.atlas-capacity-exceeded",
+                "text.glyph.atlas-generation-stale",
+            ),
+            nonClaims = listOf(
+                "producer-only",
+                "no-gpu-text-route-claim",
+                "no-dftext-retirement",
+            ),
+        )
+
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json"),
+            trace.toCanonicalJson(),
+        )
     }
 
     @Test
@@ -877,6 +1550,10 @@ class GlyphSurfaceTest {
         )
         assertEquals(1, plan.diagnostics.size)
         assertTrue(plan.decisions.all { decision -> decision.keySha256.length == 64 })
+        assertEquals(64, plan.decisions[0].sourceRepresentationSha256?.length)
+        assertEquals(64, plan.decisions[1].sourceRepresentationSha256?.length)
+        assertEquals(64, plan.decisions[2].sourceRepresentationSha256?.length)
+        assertEquals(null, plan.decisions[3].sourceRepresentationSha256)
         assertEquals(plan.diagnostics.single(), plan.decisions.last().diagnostic)
         assertEquals(
             listOf("text.glyph.mask.SDF", "text.glyph.mask.A8"),
@@ -902,6 +1579,7 @@ class GlyphSurfaceTest {
                   "planRef": null,
                   "artifactIntent": null,
                   "keySha256": "${plan.decisions[0].keySha256}",
+                  "sourceRepresentationSha256": "${plan.decisions[0].sourceRepresentationSha256}",
                   "fallbackPolicy": "fallback-selected-after-rejections",
                   "rejectedAlternatives": [
                     {"route": "text.glyph.mask.SDF", "reason": "route-unavailable"},
@@ -918,6 +1596,7 @@ class GlyphSurfaceTest {
                   "planRef": null,
                   "artifactIntent": "CPUPreparedGPU",
                   "keySha256": "${plan.decisions[1].keySha256}",
+                  "sourceRepresentationSha256": "${plan.decisions[1].sourceRepresentationSha256}",
                   "fallbackPolicy": "fallback-selected-after-rejections",
                   "rejectedAlternatives": [
                     {"route": "text.glyph.mask.SDF", "reason": "route-unavailable"}
@@ -933,6 +1612,7 @@ class GlyphSurfaceTest {
                   "planRef": null,
                   "artifactIntent": "CPUPreparedGPU",
                   "keySha256": "${plan.decisions[2].keySha256}",
+                  "sourceRepresentationSha256": "${plan.decisions[2].sourceRepresentationSha256}",
                   "fallbackPolicy": "selected-first-requested-route",
                   "rejectedAlternatives": [],
                   "diagnostic": null
@@ -946,6 +1626,7 @@ class GlyphSurfaceTest {
                   "planRef": null,
                   "artifactIntent": null,
                   "keySha256": "${plan.decisions[3].keySha256}",
+                  "sourceRepresentationSha256": null,
                   "fallbackPolicy": "refuse-no-requested-representation",
                   "rejectedAlternatives": [
                     {"route": "text.glyph.mask.SDF", "reason": "route-unavailable"},
@@ -1097,11 +1778,14 @@ class GlyphSurfaceTest {
         assertEquals(request.policyInputs, plan.policyInputs)
         assertEquals("text.glyph.SDF-transform-unsupported", plan.decisions[0].rejectedAlternatives.first().reason)
         assertEquals("CPUPreparedGPU", plan.decisions[1].artifactIntent)
+        assertEquals(64, plan.decisions[1].sourceRepresentationSha256?.length)
         assertEquals("text.glyph.atlas-capacity-exceeded", plan.decisions[2].rejectedAlternatives[1].reason)
         assertEquals("CPUPreparedGPU", plan.decisions[3].artifactIntent)
+        assertEquals(64, plan.decisions[3].sourceRepresentationSha256?.length)
 
         val dump = plan.toCanonicalGlyphArtifactPlanJson()
         assertTrue(dump.contains(""""artifactIntent": "CPUPreparedGPU""""))
+        assertTrue(dump.contains(""""sourceRepresentationSha256": """"))
         assertTrue(dump.contains(""""transformClass": "perspective""""))
         assertTrue(dump.contains(""""rendererCapabilitySummary": "cpu-only""""))
     }
@@ -1241,6 +1925,114 @@ class GlyphSurfaceTest {
 
         assertEquals(
             readProjectFile("reports/font/fixtures/expected/glyph/glyph-artifact-plan.json"),
+            dump.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun a8GlyphMaskEvidenceDumpMatchesRepoFixture() {
+        val generator = object : GlyphMaskGenerator {}
+
+        val quadratic = generator.generate(
+            outline = OutlineGlyphRepresentation(
+                glyphId = 54,
+                pathCommands = listOf(
+                    "M 1 2",
+                    "Q 2.5 2 4 2",
+                    "Q 4 3.5 4 5",
+                    "Q 2.5 5 1 5",
+                    "Q 1 3.5 1 2",
+                    "Z",
+                ),
+            ),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441084"),
+        )
+        val cubic = generator.generate(
+            outline = OutlineGlyphRepresentation(
+                glyphId = 55,
+                pathCommands = listOf(
+                    "M 1 2",
+                    "C 2 2 3 2 4 2",
+                    "C 4 3 4 4 4 5",
+                    "C 3 5 2 5 1 5",
+                    "C 1 4 1 3 1 2",
+                    "Z",
+                ),
+            ),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441085"),
+        )
+        val composite = generator.generate(
+            outline = OutlineGlyphRepresentation(
+                glyphId = 0,
+                pathCommands = listOf(
+                    "M 50 50",
+                    "L 150 50",
+                    "L 150 150",
+                    "L 50 150",
+                    "Z",
+                    "M 150 50",
+                    "L 250 50",
+                    "L 250 150",
+                    "L 150 150",
+                    "Z",
+                ),
+            ),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441086"),
+        )
+        val notdefEmpty = generator.generate(
+            outline = OutlineGlyphRepresentation(glyphId = 0),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441087"),
+        )
+        val malformed = generator.generate(
+            outline = OutlineGlyphRepresentation(glyphId = 57, pathCommands = listOf("L 1 2")),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441088"),
+        )
+        val unsupportedFill = generator.generate(
+            outline = OutlineGlyphRepresentation(
+                glyphId = 56,
+                pathCommands = listOf(
+                    "M 1 2",
+                    "L 4 2",
+                    "L 4 5",
+                    "L 1 5",
+                    "Z",
+                ),
+                windingRule = "evenOdd",
+            ),
+            strikeKey = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655441089"),
+        )
+
+        val dump = A8GlyphMaskEvidenceDump(
+            dumpId = "a8-glyph-mask",
+            ownerTickets = listOf("KFONT-M9-003"),
+            fixtureIds = listOf(
+                "a8-quadratic-simple",
+                "a8-cubic-simple",
+                "a8-composite-outline",
+                "a8-empty-notdef",
+                "a8-malformed-contour",
+                "a8-unsupported-fill-rule",
+            ),
+            masks = listOf(
+                A8GlyphMaskArtifactEvidence.from(quadratic, strikeKey("550e8400-e29b-41d4-a716-446655441084")),
+                A8GlyphMaskArtifactEvidence.from(cubic, strikeKey("550e8400-e29b-41d4-a716-446655441085")),
+                A8GlyphMaskArtifactEvidence.from(composite, strikeKey("550e8400-e29b-41d4-a716-446655441086")),
+                A8GlyphMaskArtifactEvidence.from(notdefEmpty, strikeKey("550e8400-e29b-41d4-a716-446655441087")),
+                A8GlyphMaskArtifactEvidence.from(malformed, strikeKey("550e8400-e29b-41d4-a716-446655441088")),
+                A8GlyphMaskArtifactEvidence.from(unsupportedFill, strikeKey("550e8400-e29b-41d4-a716-446655441089")),
+            ),
+            requiredDiagnostics = listOf("text.glyph.A8-generation-failed"),
+            nonClaims = listOf(
+                "producer-only",
+                "no-gpu-text-route-claim",
+                "no-lcd-support-claim",
+                "no-sdf-support-claim",
+                "no-external-rasterizer-parity-claim",
+            ),
+        )
+
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/glyph/a8-glyph-mask.json"),
             dump.toCanonicalJson(),
         )
     }
@@ -1445,6 +2237,245 @@ class GlyphSurfaceTest {
             """.trimIndent() + "\n",
             inventory.toCanonicalJson(),
         )
+    }
+
+    @Test
+    fun glyphCacheInventoryDumpMatchesRepoFixture() {
+        val residentA8 = GlyphCacheInventoryEntry.fromRepresentation(
+            strikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441091").copy(
+                glyphId = 65,
+                representationRoute = "text.glyph.mask.A8",
+                maskFormat = "A8",
+            ),
+            representation = A8GlyphMask(
+                glyphId = 65,
+                width = 4,
+                height = 3,
+                left = -1,
+                top = 4,
+                rowBytes = 4,
+                pixels = listOf(
+                    0, 32, 96, 255,
+                    16, 64, 128, 240,
+                    0, 8, 72, 200,
+                ),
+            ),
+            lifecycleState = GlyphCacheInventoryEntry.ResidentState,
+            generation = 8L,
+            invalidationToken = "font-source-v8",
+        )
+        val residentSdf = GlyphCacheInventoryEntry.fromRepresentation(
+            strikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441092").copy(
+                glyphId = 66,
+                representationRoute = "text.glyph.mask.SDF",
+                maskFormat = "SDF",
+                sdfSpreadPx = 8f,
+                sdfSourceResolutionPx = 16f,
+            ),
+            representation = SDFGlyphMask(
+                glyphId = 66,
+                width = 5,
+                height = 5,
+                left = -2,
+                top = 5,
+                distanceRange = 8f,
+                pixels = List(25) { index -> (index * 9) % 256 },
+                sourceOutlineSha256 = "2b7d4f4c03a0e3b1f34d1bc7b53d8bc967bf5744aca7c13d8f4dd2ba0d9271a8",
+            ),
+            lifecycleState = GlyphCacheInventoryEntry.ResidentState,
+            generation = 8L,
+            invalidationToken = "font-source-v8",
+        )
+        val evictedA8 = GlyphCacheInventoryEntry.fromRepresentation(
+            strikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441093").copy(
+                glyphId = 90,
+                representationRoute = "text.glyph.mask.A8",
+                maskFormat = "A8",
+                paletteIdentity = "palette:legacy-ui",
+            ),
+            representation = A8GlyphMask(
+                glyphId = 90,
+                width = 2,
+                height = 2,
+                left = 0,
+                top = 2,
+                rowBytes = 2,
+                pixels = listOf(
+                    255, 180,
+                    12, 0,
+                ),
+            ),
+            lifecycleState = GlyphCacheInventoryEntry.EvictedState,
+            generation = 7L,
+            invalidationToken = "font-source-v7",
+        )
+
+        val dump = GlyphCacheInventoryDump(
+            dumpId = "glyph-cache-inventory",
+            ownerTickets = listOf("KFONT-M9-006"),
+            fixtureIds = listOf("a8-cache-resident", "sdf-cache-resident", "evicted-a8-entry"),
+            budgetBytes = 512,
+            maxEntries = 4,
+            residentEntries = listOf(residentA8, residentSdf),
+            evictedEntries = listOf(evictedA8),
+            requiredDiagnostics = listOf(
+                "text.glyph.artifact-budget-exceeded",
+                "text.glyph.atlas-generation-stale",
+            ),
+            nonClaims = listOf(
+                "no-complete-target-support-claim",
+                "no-gpu-text-route-claim",
+                "no-dftext-retirement",
+            ),
+        )
+
+        assertEquals(3, dump.entryCount)
+        assertEquals(residentA8.residentBytes + residentSdf.residentBytes, dump.residentBytes)
+        assertEquals(evictedA8.residentBytes, dump.evictedBytes)
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/glyph/glyph-cache-inventory.json"),
+            dump.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun glyphCacheTelemetryDumpMatchesRepoFixture() {
+        val coldRefusal = GlyphCacheBudgetRefusal.fromStrikeKey(
+            strikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441094").copy(
+                glyphId = 91,
+                representationRoute = "text.glyph.mask.A8",
+                maskFormat = "A8",
+            ),
+            cacheDomain = "glyph-cache-memory",
+            observedBytes = 544,
+            advisoryLimitBytes = 512,
+        )
+        val warmRefusal = GlyphCacheBudgetRefusal.fromStrikeKey(
+            strikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441095").copy(
+                glyphId = 66,
+                representationRoute = "text.glyph.mask.SDF",
+                maskFormat = "SDF",
+                sdfSpreadPx = 8f,
+                sdfSourceResolutionPx = 16f,
+            ),
+            cacheDomain = "atlas-upload-preparation",
+            observedBytes = 1536,
+            advisoryLimitBytes = 1024,
+        )
+
+        val dump = GlyphCacheTelemetryDump(
+            dumpId = "glyph-cache-telemetry",
+            ownerTickets = listOf("KFONT-M9-006"),
+            fixtureIds = listOf("cold-cache-sample", "warm-cache-sample"),
+            samples = listOf(
+                GlyphCacheTelemetrySample(
+                    metadata = GlyphCacheTelemetryMetadata(
+                        environmentLabel = "ci-macos-arm64",
+                        fontSourceSet = "font-source-liberation-core",
+                        unicodeVersion = "16.0.0",
+                        cacheState = "cold",
+                        sampleLabel = "cold-start",
+                        sampleCount = 5,
+                    ),
+                    routeCounts = listOf(
+                        GlyphCacheRouteCount("text.glyph.mask.A8", 2),
+                        GlyphCacheRouteCount("text.glyph.mask.SDF", 1),
+                    ),
+                    timings = listOf(
+                        GlyphCacheTimingStats("a8-generation", sampleCount = 5, median = 9, p90 = 11, max = 12),
+                        GlyphCacheTimingStats("atlas-pack", sampleCount = 5, median = 6, p90 = 8, max = 9),
+                        GlyphCacheTimingStats("sdf-generation", sampleCount = 5, median = 13, p90 = 16, max = 18),
+                    ),
+                    cacheHitCount = 0,
+                    cacheMissCount = 3,
+                    evictionCount = 1,
+                    invalidationCount = 1,
+                    residentBytes = 352,
+                    uploadPreparationBytes = 768,
+                    artifactBudgetRefusalCount = 1,
+                    budgetRefusals = listOf(coldRefusal),
+                ),
+                GlyphCacheTelemetrySample(
+                    metadata = GlyphCacheTelemetryMetadata(
+                        environmentLabel = "ci-macos-arm64",
+                        fontSourceSet = "font-source-liberation-core",
+                        unicodeVersion = "16.0.0",
+                        cacheState = "warm",
+                        sampleLabel = "warm-repeat",
+                        sampleCount = 5,
+                    ),
+                    routeCounts = listOf(
+                        GlyphCacheRouteCount("text.glyph.mask.A8", 2),
+                        GlyphCacheRouteCount("text.glyph.mask.SDF", 1),
+                    ),
+                    timings = listOf(
+                        GlyphCacheTimingStats("a8-generation", sampleCount = 5, median = 2, p90 = 3, max = 4),
+                        GlyphCacheTimingStats("atlas-pack", sampleCount = 5, median = 1, p90 = 2, max = 2),
+                        GlyphCacheTimingStats("sdf-generation", sampleCount = 5, median = 4, p90 = 5, max = 6),
+                    ),
+                    cacheHitCount = 3,
+                    cacheMissCount = 0,
+                    evictionCount = 0,
+                    invalidationCount = 0,
+                    residentBytes = 352,
+                    uploadPreparationBytes = 256,
+                    artifactBudgetRefusalCount = 1,
+                    budgetRefusals = listOf(warmRefusal),
+                ),
+            ),
+            requiredDiagnostics = listOf(
+                "text.glyph.artifact-budget-exceeded",
+                "text.glyph.telemetry-unavailable",
+            ),
+            nonClaims = listOf(
+                "no-complete-target-support-claim",
+                "no-gpu-upload-execution-claim",
+                "no-hidden-performance-gate",
+            ),
+        )
+
+        assertEquals(2, dump.sampleCount)
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json"),
+            dump.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun glyphCacheTelemetryRemainsAdvisoryAndPublishesStableDiagnostics() {
+        val refusal = GlyphCacheBudgetRefusal.fromStrikeKey(
+            strikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441096").copy(
+                glyphId = 77,
+                representationRoute = "text.glyph.mask.A8",
+                maskFormat = "A8",
+            ),
+            cacheDomain = "atlas-upload-preparation",
+            observedBytes = 4096,
+            advisoryLimitBytes = 2048,
+        )
+
+        assertEquals("text.glyph.artifact-budget-exceeded", refusal.diagnosticCode)
+        assertEquals(64, refusal.keyPreimageSha256.length)
+        assertTrue(refusal.toCanonicalJson().contains(""""cacheDomain": "atlas-upload-preparation""""))
+
+        val unavailable = GlyphRouteDiagnostic.telemetryUnavailable(
+            cacheDomain = "glyph-cache-memory",
+            detail = "fixture-mode-disabled",
+        )
+        assertEquals("text.glyph.telemetry-unavailable", unavailable.route)
+        assertTrue(unavailable.message.contains("glyph-cache-memory"))
+
+        assertFailsWith<IllegalArgumentException> {
+            GlyphCacheTelemetryMetadata(
+                environmentLabel = "ci-macos-arm64",
+                fontSourceSet = "font-source-liberation-core",
+                unicodeVersion = "16.0.0",
+                cacheState = "cold",
+                sampleLabel = "should-fail",
+                sampleCount = 1,
+                releaseGatePromoted = true,
+            )
+        }
     }
 
     @Test

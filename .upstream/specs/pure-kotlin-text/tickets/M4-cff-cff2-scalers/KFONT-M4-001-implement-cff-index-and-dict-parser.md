@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M4-001"
 title: "Implement CFF INDEX and DICT parser"
-status: "proposed"
+status: "done"
 milestone: "M4"
 priority: "P0"
 owner_area: "font-scaler"
@@ -77,11 +77,11 @@ data class CffTopDict(
 
 ## Acceptance Criteria
 
-- [ ] Minimal single-master OTF/CFF fixture parses into a `CffFontSet` with Name, Top DICT, String, Global Subr, CharStrings, and Private DICT ranges.
-- [ ] CID-keyed CFF fixture records FDArray and FDSelect facts for at least two font dicts.
-- [ ] CFF2 fixture records top dict, charstrings, local subrs, and variation store offset metadata without claiming variation output.
-- [ ] Malformed INDEX count, offSize, descending offset, and out-of-table offset fixtures fail with stable diagnostics instead of exceptions.
-- [ ] Unknown DICT operators are preserved in dumps and do not block parsing unless they are required to locate charstrings or private data.
+- [x] Minimal single-master OTF/CFF fixture parses into a `CffFontSet` with Name, Top DICT, String, Global Subr, CharStrings, and Private DICT ranges.
+- [x] CID-keyed CFF fixture records FDArray and FDSelect facts for at least two font dicts.
+- [x] CFF2 fixture records top dict, charstrings, local subrs, and variation store offset metadata without claiming variation output.
+- [x] Malformed INDEX count, offSize, descending offset, and out-of-table offset fixtures fail with stable diagnostics instead of exceptions.
+- [x] Unknown DICT operators are preserved in dumps and do not block parsing unless they are required to locate charstrings or private data.
 
 ## Required Evidence
 
@@ -106,13 +106,17 @@ data class CffTopDict(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:scaler:test --tests '*CffIndex*' --tests '*CffDict*'
+rtk ./gradlew --no-daemon :font:scaler:test --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffIndexDictGoldenMatchesGeneratedEvidence --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffTableEvidenceUsesStableSpecificCffParseDiagnostics --tests org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest.cffTableEvidenceRefusesMalformedIndexAndDictDeterministically
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 ```
 
 ## Status Notes
 
-- `proposed`: Parser scope is bounded to CFF/CFF2 table facts required by later scaler tickets.
-- Move to `ready` only after the fixture names, dump schema, and diagnostic names are accepted.
+- `done`: Generated-fixture CFF/CFF2 table evidence now covers INDEX ranges, typed DICT operands, FDArray/FDSelect facts, CFF2 private/local-subr metadata, and stable parser diagnostics without host-font or native-oracle claims.
+- Remaining non-claims stay explicit: no Type 2 execution completeness claim, no real-world corpus coverage claim, no CFF rendering support claim, and no CFF2 variation output claim.
 
 ## Linear Labels
 

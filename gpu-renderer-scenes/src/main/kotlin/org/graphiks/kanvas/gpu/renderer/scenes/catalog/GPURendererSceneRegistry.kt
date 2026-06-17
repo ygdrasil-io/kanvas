@@ -132,6 +132,7 @@ object GPURendererSceneRegistry {
                 ),
             ),
         ),
+        productRouteSmokeLanesScene,
         scene(
             id = "rounded-panel-gradient",
             title = "Rounded Panel Gradient",
@@ -677,6 +678,7 @@ object GPURendererSceneRegistry {
                 ),
             ),
         ),
+        bitmapSamplerMatrixScene,
         scene(
             id = "savelayer-isolation-gate-board",
             title = "SaveLayer Isolation Gate Board",
@@ -1342,6 +1344,7 @@ object GPURendererSceneRegistry {
                 ),
             ),
         ),
+        runtimeEffectUniformLadderScene,
         scene(
             id = "blend-mode-strip",
             title = "Blend Mode Strip",
@@ -1529,6 +1532,7 @@ object GPURendererSceneRegistry {
                 ),
             ),
         ),
+        meshRibbonDepthStackScene,
         scene(
             id = "cache-pressure-deck",
             title = "Cache Pressure Deck",
@@ -1899,6 +1903,7 @@ object GPURendererSceneRegistry {
                 ),
             ),
         ),
+        legacyParitySnapshotBoardScene,
     )
 
     val registry: SceneRegistry<SceneCommand> = SceneRegistry(scenes)

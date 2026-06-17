@@ -1,7 +1,7 @@
 ---
 id: KGPU-M4-004
 title: "Add sampler tile and mipmap boundary evidence"
-status: blocked
+status: done
 milestone: M4
 priority: P1
 owner_area: textures-samplers
@@ -56,9 +56,9 @@ data class SamplerBoundaryEvidence(val tileMode: String, val mipPolicy: String)
 
 ## Acceptance Criteria
 
-- [ ] Sampler facts are deterministic and dumpable.
-- [ ] Unsupported sampling modes refuse stably.
-- [ ] Pipeline keys include behavior-affecting sampler facts only.
+- [x] Sampler facts are deterministic and dumpable.
+- [x] Unsupported sampling modes refuse stably.
+- [x] Pipeline keys include behavior-affecting sampler facts only.
 
 ## Required Evidence
 
@@ -72,7 +72,7 @@ Unsupported sampling modes refuse instead of silently downgrading.
 
 - Expected row: `gpu-renderer.sampler-boundary`
 - Expected classification: `TargetNative`
-- Claim promotion allowed: no until reviewed.
+- Claim promotion allowed: no product promotion; boundary evidence accepted.
 
 ## Validation
 
@@ -83,13 +83,20 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: Boundary evidence before expansion is gated on native sampler
-  proof. This ticket is `TargetNative`/`GPUNative` and adapter-required;
-  promotion needs real WebGPU/adapter sampler evidence for tile/filter/mipmap
-  mapping, behavior-affecting key boundaries, unsupported
-  cubic/aniso/perspective diagnostics, and reference or readback artifacts. The
-  M4-001 prepared decoded-pixel route and M4-002 uploaded-artifact ownership
-  gate do not by themselves prove native sampler support or mipmap behavior.
+- `done`: Added `GPUImageSamplerBoundaryPlanner` and
+  `ImageSamplerBoundaryGateTest` contract evidence for deterministic sampler
+  descriptor hashes, tile/mip dumps, sampler behavior keys, pipeline-key
+  boundaries, and stable refusals for unavailable mipmaps, cubic sampling,
+  invalid anisotropy, anisotropic sampling, invalid LOD clamps, and perspective
+  sampling. This closes the boundary-evidence gap without claiming native
+  sampler execution: the route remains non-promoted, product activation remains
+  false, and broad tile/mipmap support remains refused until real
+  WebGPU/adapter execution and readback evidence exists.
+- Independent review `019ed4c5-41ac-7f80-8c45-58ac57e4b08e` first found a
+  spec 22 mip-diagnostic mismatch and invalid sampler scalar gap. After
+  remediation, the same review accepted the evidence for `done` and confirmed
+  no native sampler execution, broad tile/mipmap support, or product activation
+  claim.
 
 ## Linear Labels
 

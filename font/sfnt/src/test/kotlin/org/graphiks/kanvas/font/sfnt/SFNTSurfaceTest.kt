@@ -1820,6 +1820,55 @@ class SFNTSurfaceTest {
     }
 
     @Test
+    fun metricsTableParserParsesOptionalVerticalMetricsFromVheaAndVmtx() {
+        val metrics = OpenTypeMetricsTableParser.parse(
+            head = headTable(
+                unitsPerEm = 1000,
+                bounds = OpenTypeFontBounds(xMin = -40, yMin = -200, xMax = 980, yMax = 840),
+                indexToLocFormat = 1,
+            ),
+            hhea = hheaTable(
+                ascender = 820,
+                descender = -180,
+                lineGap = 40,
+                numberOfHMetrics = 1,
+            ),
+            maxp = maxpTable(numGlyphs = 3),
+            hmtx = hmtxTable(
+                metric(advanceWidth = 500, leftSideBearing = -20),
+                extraLeftSideBearing(7),
+                extraLeftSideBearing(11),
+            ),
+            vhea = vheaTable(
+                ascender = 910,
+                descender = -320,
+                lineGap = 70,
+                maxAdvanceHeight = 760,
+                numberOfVMetrics = 2,
+            ),
+            vmtx = vmtxTable(
+                verticalMetric(advanceHeight = 700, topSideBearing = 40),
+                verticalMetric(advanceHeight = 680, topSideBearing = -15),
+                extraTopSideBearing(22),
+            ),
+        )
+
+        assertEquals(910, metrics.verticalAscender)
+        assertEquals(-320, metrics.verticalDescender)
+        assertEquals(70, metrics.verticalLineGap)
+        assertEquals(760, metrics.maxAdvanceHeight)
+        assertEquals(2, metrics.numberOfVMetrics)
+        assertEquals(
+            listOf(
+                VerticalGlyphMetric(glyphId = 0, advanceHeight = 700, topSideBearing = 40),
+                VerticalGlyphMetric(glyphId = 1, advanceHeight = 680, topSideBearing = -15),
+                VerticalGlyphMetric(glyphId = 2, advanceHeight = 680, topSideBearing = 22),
+            ),
+            metrics.verticalMetrics,
+        )
+    }
+
+    @Test
     fun defaultOpenTypeFaceParserExposesOptionalTypographicMetricsWhenTablesExist() {
         val source = memoryFontSource(
             sfntFont(
@@ -1863,6 +1912,65 @@ class SFNTSurfaceTest {
         assertEquals(-96, metrics.underlinePosition)
         assertEquals(51, metrics.strikeoutThickness)
         assertEquals(262, metrics.strikeoutPosition)
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserKeepsHorizontalMetricsWhenOptionalVerticalMetricsAreMalformed() {
+        val malformedVhea = ByteArray(35)
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = -40, yMin = -200, xMax = 980, yMax = 840),
+                    indexToLocFormat = 1,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 820,
+                    descender = -180,
+                    lineGap = 40,
+                    numberOfHMetrics = 2,
+                ),
+                "maxp" to maxpTable(numGlyphs = 3),
+                "hmtx" to hmtxTable(
+                    metric(advanceWidth = 500, leftSideBearing = -20),
+                    metric(advanceWidth = 450, leftSideBearing = 7),
+                    extraLeftSideBearing(11),
+                ),
+                "vhea" to malformedVhea,
+                "vmtx" to vmtxTable(
+                    verticalMetric(advanceHeight = 700, topSideBearing = 40),
+                    verticalMetric(advanceHeight = 680, topSideBearing = -15),
+                    extraTopSideBearing(22),
+                ),
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+        val diagnostic = parsed.diagnostics.single()
+
+        assertEquals(
+            listOf(
+                HorizontalGlyphMetric(glyphId = 0, advanceWidth = 500, leftSideBearing = -20),
+                HorizontalGlyphMetric(glyphId = 1, advanceWidth = 450, leftSideBearing = 7),
+                HorizontalGlyphMetric(glyphId = 2, advanceWidth = 450, leftSideBearing = 11),
+            ),
+            parsed.metrics.horizontalMetrics,
+        )
+        assertEquals(SFNTTableTag("vhea"), diagnostic.table)
+        assertEquals("font.sfnt.optional-table-malformed", diagnostic.causeCode)
+        assertTrue(
+            diagnostic.causeMessage.orEmpty().contains("OpenType vhea table must contain at least 36 bytes"),
+            "Unexpected diagnostic: $diagnostic",
+        )
+        assertEquals(null, parsed.metrics.verticalAscender)
+        assertEquals(null, parsed.metrics.verticalDescender)
+        assertEquals(null, parsed.metrics.verticalLineGap)
+        assertEquals(null, parsed.metrics.maxAdvanceHeight)
+        assertEquals(null, parsed.metrics.numberOfVMetrics)
+        assertEquals(emptyList(), parsed.metrics.verticalMetrics)
+        assertEquals(malformedVhea.toUnsignedByteList(), parsed.rawTables.getValue(SFNTTableTag("vhea")))
     }
 
     @Test
@@ -2363,6 +2471,146 @@ class SFNTSurfaceTest {
     }
 
     @Test
+    fun defaultOpenTypeFaceParserExposesParsedGposSingleAdjustmentsInLayout() {
+        val gpos = gposSingleAdjustmentFormat1Table(
+            glyphId = 7,
+            xPlacement = 40,
+            yPlacement = -20,
+            xAdvance = -30,
+        )
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0041,
+                                endCode = 0x0041,
+                                startGlyphId = 7,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 2,
+                ),
+                "maxp" to maxpTable(numGlyphs = 12),
+                "hmtx" to hmtxTable(
+                    metric(advanceWidth = 500, leftSideBearing = 0),
+                    metric(advanceWidth = 450, leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                    extraLeftSideBearing(leftSideBearing = 0),
+                ),
+                "GPOS" to gpos,
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+
+        assertEquals(emptyList(), parsed.diagnostics)
+        assertEquals(gpos.size, parsed.layout.tables.getValue(SFNTTableTag("GPOS")).size)
+        assertEquals(
+            OpenTypeGposValueRecord(
+                xPlacement = 40,
+                yPlacement = -20,
+                xAdvance = -30,
+            ),
+            parsed.layout.gposSingles?.lookupAdjustment(7),
+        )
+        assertEquals(null, parsed.layout.gposSingles?.lookupAdjustment(11))
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserExposesParsedGsubSingleMultipleAndLigatureLookupsInLayout() {
+        val gsub = gsubSimpleLookupsTable()
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0061,
+                                endCode = 0x0069,
+                                startGlyphId = 5,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 2,
+                ),
+                "maxp" to maxpTable(numGlyphs = 64),
+                "hmtx" to hmtxTable(
+                    metric(advanceWidth = 500, leftSideBearing = 0),
+                    metric(advanceWidth = 450, leftSideBearing = 0),
+                    *Array(62) { extraLeftSideBearing(leftSideBearing = 0) },
+                ),
+                "GSUB" to gsub,
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+
+        assertEquals(emptyList(), parsed.diagnostics)
+        assertEquals(gsub.toUnsignedByteList(), parsed.layout.tables.getValue(SFNTTableTag("GSUB")))
+        assertEquals(
+            OpenTypeGsubTable(
+                lookups = listOf(
+                    OpenTypeGsubSingleSubstitutionLookup(
+                        featureTag = "ccmp",
+                        substitutions = listOf(
+                            OpenTypeGsubSingleSubstitution(inputGlyphId = 5, replacementGlyphId = 15),
+                        ),
+                    ),
+                    OpenTypeGsubMultipleSubstitutionLookup(
+                        featureTag = "ccmp",
+                        substitutions = listOf(
+                            OpenTypeGsubMultipleSubstitution(inputGlyphId = 6, replacementGlyphIds = listOf(16, 17)),
+                        ),
+                    ),
+                    OpenTypeGsubLigatureSubstitutionLookup(
+                        featureTag = "liga",
+                        substitutions = listOf(
+                            OpenTypeGsubLigatureSubstitution(inputGlyphIds = listOf(7, 8), replacementGlyphId = 42),
+                        ),
+                    ),
+                ),
+            ),
+            parsed.layout.gsub,
+        )
+    }
+
+    @Test
     fun defaultOpenTypeFaceParserReportsGposFormat2ExcessiveFinalExpansionAsDiagnostic() {
         val gpos = gposPairAdjustmentFormat2Class0Table(
             coverageGlyphCount = 257,
@@ -2593,6 +2841,11 @@ class SFNTSurfaceTest {
     private data class TestHorizontalMetric(
         val advanceWidth: Int?,
         val leftSideBearing: Int,
+    )
+
+    private data class TestVerticalMetric(
+        val advanceHeight: Int?,
+        val topSideBearing: Int,
     )
 
     private data class TestKernPair(
@@ -3130,6 +3383,37 @@ class SFNTSurfaceTest {
         return table
     }
 
+    private fun vheaTable(
+        ascender: Int,
+        descender: Int,
+        lineGap: Int,
+        maxAdvanceHeight: Int = 0,
+        numberOfVMetrics: Int,
+    ): ByteArray {
+        val table = ByteArray(36)
+        table.writeInt16(4, ascender)
+        table.writeInt16(6, descender)
+        table.writeInt16(8, lineGap)
+        table.writeUInt16(10, maxAdvanceHeight)
+        table.writeUInt16(34, numberOfVMetrics)
+        return table
+    }
+
+    private fun vmtxTable(vararg metrics: TestVerticalMetric): ByteArray {
+        val length = metrics.sumOf { if (it.advanceHeight == null) 2 else 4 }
+        val table = ByteArray(length)
+        var offset = 0
+        metrics.forEach { metric ->
+            if (metric.advanceHeight != null) {
+                table.writeUInt16(offset, metric.advanceHeight)
+                offset += 2
+            }
+            table.writeInt16(offset, metric.topSideBearing)
+            offset += 2
+        }
+        return table
+    }
+
     private fun os2Table(
         averageCharWidth: Int,
         xHeight: Int,
@@ -3272,6 +3556,166 @@ class SFNTSurfaceTest {
         table.writeUInt16(subtableStart + pairSetOffset, 1)
         table.writeUInt16(subtableStart + pairSetOffset + 2, rightGlyphId)
         table.writeInt16(subtableStart + pairSetOffset + 4, xAdvance)
+
+        return table
+    }
+
+    private fun gposSingleAdjustmentFormat1Table(
+        glyphId: Int,
+        xPlacement: Int = 0,
+        yPlacement: Int = 0,
+        xAdvance: Int = 0,
+        scriptTag: String = "latn",
+    ): ByteArray {
+        require(scriptTag.length == 4)
+
+        val table = ByteArray(78)
+        val scriptListOffset = 10
+        val featureListOffset = 30
+        val lookupListOffset = 44
+        val scriptStart = scriptListOffset + 8
+        val langSysStart = scriptStart + 4
+        val featureStart = featureListOffset + 8
+        val lookupStart = lookupListOffset + 4
+        val subtableStart = lookupStart + 8
+        val coverageOffset = 12
+        val valueRecordStart = subtableStart + 6
+
+        table.writeUInt16(0, 1)
+        table.writeUInt16(2, 0)
+        table.writeUInt16(4, scriptListOffset)
+        table.writeUInt16(6, featureListOffset)
+        table.writeUInt16(8, lookupListOffset)
+
+        table.writeUInt16(scriptListOffset, 1)
+        scriptTag.toByteArray(Charsets.ISO_8859_1).copyInto(table, scriptListOffset + 2)
+        table.writeUInt16(scriptListOffset + 6, 8)
+        table.writeUInt16(scriptStart, 4)
+        table.writeUInt16(scriptStart + 2, 0)
+        table.writeUInt16(langSysStart, 0)
+        table.writeUInt16(langSysStart + 2, 0xffff)
+        table.writeUInt16(langSysStart + 4, 1)
+        table.writeUInt16(langSysStart + 6, 0)
+
+        table.writeUInt16(featureListOffset, 1)
+        "kern".toByteArray(Charsets.ISO_8859_1).copyInto(table, featureListOffset + 2)
+        table.writeUInt16(featureListOffset + 6, 8)
+        table.writeUInt16(featureStart, 0)
+        table.writeUInt16(featureStart + 2, 1)
+        table.writeUInt16(featureStart + 4, 0)
+
+        table.writeUInt16(lookupListOffset, 1)
+        table.writeUInt16(lookupListOffset + 2, 4)
+        table.writeUInt16(lookupStart, 1)
+        table.writeUInt16(lookupStart + 2, 0)
+        table.writeUInt16(lookupStart + 4, 1)
+        table.writeUInt16(lookupStart + 6, 8)
+
+        table.writeUInt16(subtableStart, 1)
+        table.writeUInt16(subtableStart + 2, coverageOffset)
+        table.writeUInt16(subtableStart + 4, 0x0007)
+        table.writeInt16(valueRecordStart, xPlacement)
+        table.writeInt16(valueRecordStart + 2, yPlacement)
+        table.writeInt16(valueRecordStart + 4, xAdvance)
+        table.writeUInt16(subtableStart + coverageOffset, 1)
+        table.writeUInt16(subtableStart + coverageOffset + 2, 1)
+        table.writeUInt16(subtableStart + coverageOffset + 4, glyphId)
+
+        return table
+    }
+
+    private fun gsubSimpleLookupsTable(): ByteArray {
+        val table = ByteArray(150)
+        val scriptListOffset = 10
+        val featureListOffset = 32
+        val lookupListOffset = 60
+        val scriptStart = scriptListOffset + 8
+        val langSysStart = scriptStart + 4
+        val feature1Start = featureListOffset + 14
+        val feature2Start = feature1Start + 8
+        val lookupStart = lookupListOffset + 8
+        val singleLookupStart = lookupStart
+        val multipleLookupStart = singleLookupStart + 22
+        val ligatureLookupStart = multipleLookupStart + 28
+
+        table.writeUInt16(0, 1)
+        table.writeUInt16(2, 0)
+        table.writeUInt16(4, scriptListOffset)
+        table.writeUInt16(6, featureListOffset)
+        table.writeUInt16(8, lookupListOffset)
+
+        table.writeUInt16(scriptListOffset, 1)
+        "latn".toByteArray(Charsets.ISO_8859_1).copyInto(table, scriptListOffset + 2)
+        table.writeUInt16(scriptListOffset + 6, 8)
+        table.writeUInt16(scriptStart, 4)
+        table.writeUInt16(scriptStart + 2, 0)
+        table.writeUInt16(langSysStart, 0)
+        table.writeUInt16(langSysStart + 2, 0xffff)
+        table.writeUInt16(langSysStart + 4, 2)
+        table.writeUInt16(langSysStart + 6, 0)
+        table.writeUInt16(langSysStart + 8, 1)
+
+        table.writeUInt16(featureListOffset, 2)
+        "ccmp".toByteArray(Charsets.ISO_8859_1).copyInto(table, featureListOffset + 2)
+        table.writeUInt16(featureListOffset + 6, 14)
+        "liga".toByteArray(Charsets.ISO_8859_1).copyInto(table, featureListOffset + 8)
+        table.writeUInt16(featureListOffset + 12, 22)
+        table.writeUInt16(feature1Start, 0)
+        table.writeUInt16(feature1Start + 2, 2)
+        table.writeUInt16(feature1Start + 4, 0)
+        table.writeUInt16(feature1Start + 6, 1)
+        table.writeUInt16(feature2Start, 0)
+        table.writeUInt16(feature2Start + 2, 1)
+        table.writeUInt16(feature2Start + 4, 2)
+
+        table.writeUInt16(lookupListOffset, 3)
+        table.writeUInt16(lookupListOffset + 2, 8)
+        table.writeUInt16(lookupListOffset + 4, 30)
+        table.writeUInt16(lookupListOffset + 6, 58)
+
+        table.writeUInt16(singleLookupStart, 1)
+        table.writeUInt16(singleLookupStart + 2, 0)
+        table.writeUInt16(singleLookupStart + 4, 1)
+        table.writeUInt16(singleLookupStart + 6, 8)
+        table.writeUInt16(singleLookupStart + 8, 2)
+        table.writeUInt16(singleLookupStart + 10, 8)
+        table.writeUInt16(singleLookupStart + 12, 1)
+        table.writeUInt16(singleLookupStart + 14, 15)
+        table.writeUInt16(singleLookupStart + 16, 1)
+        table.writeUInt16(singleLookupStart + 18, 1)
+        table.writeUInt16(singleLookupStart + 20, 5)
+
+        table.writeUInt16(multipleLookupStart, 2)
+        table.writeUInt16(multipleLookupStart + 2, 0)
+        table.writeUInt16(multipleLookupStart + 4, 1)
+        table.writeUInt16(multipleLookupStart + 6, 8)
+        table.writeUInt16(multipleLookupStart + 8, 1)
+        table.writeUInt16(multipleLookupStart + 10, 14)
+        table.writeUInt16(multipleLookupStart + 12, 1)
+        table.writeUInt16(multipleLookupStart + 14, 8)
+        table.writeUInt16(multipleLookupStart + 16, 2)
+        table.writeUInt16(multipleLookupStart + 18, 16)
+        table.writeUInt16(multipleLookupStart + 20, 17)
+        table.writeUInt16(multipleLookupStart + 22, 1)
+        table.writeUInt16(multipleLookupStart + 24, 1)
+        table.writeUInt16(multipleLookupStart + 26, 6)
+
+        table.writeUInt16(ligatureLookupStart, 4)
+        table.writeUInt16(ligatureLookupStart + 2, 0)
+        table.writeUInt16(ligatureLookupStart + 4, 1)
+        table.writeUInt16(ligatureLookupStart + 6, 8)
+        table.writeUInt16(ligatureLookupStart + 8, 1)
+        table.writeUInt16(ligatureLookupStart + 10, 18)
+        table.writeUInt16(ligatureLookupStart + 12, 1)
+        table.writeUInt16(ligatureLookupStart + 14, 8)
+        table.writeUInt16(ligatureLookupStart + 16, 1)
+        table.writeUInt16(ligatureLookupStart + 18, 4)
+        table.writeUInt16(ligatureLookupStart + 20, 42)
+        table.writeUInt16(ligatureLookupStart + 22, 2)
+        table.writeUInt16(ligatureLookupStart + 24, 8)
+        table.writeUInt16(ligatureLookupStart + 26, 1)
+        table.writeUInt16(ligatureLookupStart + 28, 1)
+        table.writeUInt16(ligatureLookupStart + 30, 7)
 
         return table
     }
@@ -3613,10 +4057,24 @@ class SFNTSurfaceTest {
         leftSideBearing = leftSideBearing,
     )
 
+    private fun verticalMetric(
+        advanceHeight: Int,
+        topSideBearing: Int,
+    ): TestVerticalMetric = TestVerticalMetric(
+        advanceHeight = advanceHeight,
+        topSideBearing = topSideBearing,
+    )
+
     private fun extraLeftSideBearing(leftSideBearing: Int): TestHorizontalMetric =
         TestHorizontalMetric(
             advanceWidth = null,
             leftSideBearing = leftSideBearing,
+        )
+
+    private fun extraTopSideBearing(topSideBearing: Int): TestVerticalMetric =
+        TestVerticalMetric(
+            advanceHeight = null,
+            topSideBearing = topSideBearing,
         )
 
     private fun testKernPair(

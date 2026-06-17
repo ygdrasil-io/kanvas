@@ -451,6 +451,7 @@ class FontCoreSurfaceTest {
 
         assertEquals(
             "start=0 end=1 codePoint=U+0078 requestedFamilies=[Requested Sans] " +
+                "genericFamily=sans-serif script=latin locales=[] " +
                 "candidateFamilies=[Requested Sans,Fallback Sans] selectedFamily=\"Fallback Sans\" " +
                 "selectedTypefaceId=550e8400-e29b-41d4-a716-446655440081 covered=true diagnostic=none",
             trace.dump(),
@@ -472,6 +473,7 @@ class FontCoreSurfaceTest {
 
         assertEquals(
             "start=0 end=1 codePoint=U+0078 requestedFamilies=[Requested Sans] " +
+                "genericFamily=sans-serif script=latin locales=[] " +
                 "candidateFamilies=[Requested Sans] selectedFamily=\"Requested Sans\" " +
                 "selectedTypefaceId=550e8400-e29b-41d4-a716-446655440082 covered=false " +
                 "diagnostic=font.fallback-glyph-unavailable",
@@ -488,6 +490,7 @@ class FontCoreSurfaceTest {
 
         assertEquals(
             "start=0 end=1 codePoint=U+0078 requestedFamilies=[Missing Sans] " +
+                "genericFamily=sans-serif script=latin locales=[] " +
                 "candidateFamilies=[] selectedFamily=none selectedTypefaceId=none covered=false " +
                 "diagnostic=font.fallback-family-unavailable",
             emptyCatalogTrace.dump(),

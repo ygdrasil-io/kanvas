@@ -21,8 +21,10 @@ diagnostic registry policy, key/material/resource boundaries, analysis versus
 materialization boundaries, recording lifetime policy, package/class layout,
 dependency boundaries, and validation
 expectations that future
-implementation tickets must follow. It also defines the `DrawVertices` and
-mesh-like target so
+implementation tickets must follow. It also defines the draw packet and command
+stream materialization bridge so planner output, payload slots, resource
+materialization, and `GPUExecutionContext.submit()` have one explicit contract.
+It also defines the `DrawVertices` and mesh-like target so
 user-provided vertex geometry has a clear GPU route/refusal contract before
 implementation slicing, and the registered runtime-effect registry so
 material, filter, blender, live-edit, and future clip-shader uses share one
@@ -119,6 +121,10 @@ critical-path order, and parallel implementation lanes are centralized in
 - Gather per-draw and per-render-step payload values through
   `GPUPayloadGatherer` and pass-local payload slots; keep payload values
   out of durable keys.
+- Materialize accepted invocations through `GPUDrawPacket`,
+  `GPUDrawPacketStream`, `GPUPassCommand`, `GPUPassCommandStream`, and
+  `GPUCommandEncoderPlan` before submission. Packet streams are scoped pass
+  artifacts, not durable keys or public APIs.
 - Resolve image and texture sources through explicit `GPUTextureOwnershipPlan`,
   `GPUTextureDescriptor`, `GPUTextureViewDescriptor`, `GPUSamplerDescriptor`,
   `GPUImageSourceDescriptor`, and `GPUSampledTextureBinding` contracts.
@@ -302,6 +308,7 @@ critical-path order, and parallel implementation lanes are centralized in
 | `34-analysis-materialization-recording.md` | Analysis versus materialization boundary, late failure classes, recording replay compatibility, ordered recordings, lazy/promise/imported resources, scratch/intermediate lifetimes, and negative CPU-fallback tests. |
 | `35-package-class-layout.md` | Target package/class ownership layout for `:gpu-renderer`, dependency bands, public/internal surface, Graphite orientation table, and package-boundary validation. |
 | `36-implementation-roadmap.md` | Vertical-first implementation roadmap, critical path, parallel lanes, expansion order, commit/review proposal, stop conditions, and open planning questions. |
+| `37-draw-packet-command-stream.md` | Draw packet stream, pass command stream, materialization handoff, WGPU/Dawn-aligned command encoder plan, diagnostics, and validation gates. |
 
 ## Target Shape
 
@@ -388,7 +395,12 @@ flowchart TD
     rte --> pipeline
     abi --> pipeline
     wgsl --> pipeline
+    drawpass --> packet["GPUDrawPacketStream / GPUPassCommandStream"]
+    step --> packet
+    payload --> packet
+    pipeline --> packet
     payload --> resources
+    packet --> resources
     textureplan --> resources
     atlas --> resources
     clipplan --> resources
@@ -399,6 +411,7 @@ flowchart TD
     filterdetail --> resources
     pipeline --> resources["GPUResourceProvider"]
     resources --> execution["GPUExecutionContext / submission"]
+    packet --> execution
     execution --> facade["GPU facade used with wgpu4k"]
     execution --> telemetry["GPUTelemetryLedger / PM gates"]
     facade --> evidence["CPU/GPU evidence or RefuseDiagnostic"]
@@ -438,6 +451,8 @@ The accepted first implementation vertical slice is:
 - `GPUMaterialDictionary` expansion for solid and linear material snippets;
 - `GPUPayloadGatherer` payload slots for solid, linear, rect, and rrect
   values;
+- `GPUDrawPacketStream` and `GPUPassCommandStream` materialization for accepted
+  first-slice packets;
 - validated WGSL binding ABI and Kotlin packing plans;
 - explicit blend/color/target-state plans;
 - execution-context test double or accepted GPU lane evidence;

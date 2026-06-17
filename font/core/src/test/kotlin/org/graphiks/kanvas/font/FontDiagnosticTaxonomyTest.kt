@@ -16,6 +16,7 @@ class FontDiagnosticTaxonomyTest {
 
         assertEquals(
             listOf(
+                "font.catalog",
                 "font.source",
                 "font.sfnt",
                 "font.scaler",
@@ -44,6 +45,18 @@ class FontDiagnosticTaxonomyTest {
     fun `required fields classify source sfnt scaler shaping paragraph and gpu route diagnostics`() {
         val taxonomy = defaultFontDiagnosticTaxonomy()
 
+        assertRequiredFields(
+            taxonomy.code("font.catalog.duplicate-face"),
+            "fixtureId",
+            "familyName",
+            "styleName",
+        )
+        assertRequiredFields(
+            taxonomy.code("font.catalog.provenance-missing"),
+            "fixtureId",
+            "familyName",
+            "styleName",
+        )
         assertRequiredFields(
             taxonomy.code("font.source.bytes-unavailable"),
             "sourceId",

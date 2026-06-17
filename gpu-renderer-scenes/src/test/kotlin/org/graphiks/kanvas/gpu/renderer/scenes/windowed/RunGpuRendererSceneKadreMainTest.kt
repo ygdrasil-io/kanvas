@@ -39,7 +39,7 @@ class RunGpuRendererSceneKadreMainTest {
     @Test
     fun `candidate scenes are not accepted by Kadre windowed runner`() {
         val candidate = GPURendererSceneHumanDocs.candidateScenes.single {
-            it.sceneId.value == "runtime-effect-uniform-ladder"
+            it.sceneId.value == "gradient-tile-mode-boundary"
         }
         val output = Files.createTempDirectory("gpu-renderer-scenes-candidate-windowed")
             .resolve("session.json")
@@ -47,7 +47,7 @@ class RunGpuRendererSceneKadreMainTest {
             runGpuRendererSceneKadre(arrayOf(candidate.sceneId.value, "0", output.toString()))
         }
 
-        assertContains(failure.message.orEmpty(), "Unknown GPU renderer scene: runtime-effect-uniform-ladder")
+        assertContains(failure.message.orEmpty(), "Unknown GPU renderer scene: gradient-tile-mode-boundary")
     }
 
     @Test
@@ -249,11 +249,29 @@ class RunGpuRendererSceneKadreMainTest {
                     assertContains(sessionJson, "bitmapRectCommands=0")
                     assertContains(sessionJson, "pathStencilCoverRow=gpu-renderer.path.stencil-cover")
                     assertContains(sessionJson, "pathStencilCoverTicket=KGPU-M3-002")
-                    assertContains(sessionJson, "pathStencilCoverTicketStatus=blocked")
+                    assertContains(sessionJson, "pathStencilCoverTicketStatus=done")
+                    assertContains(
+                        sessionJson,
+                        "pathStencilCoverClosure=contract-gate-complete-no-product-promotion",
+                    )
                     assertContains(sessionJson, "pathStencilCoverClassification=TargetNative")
                     assertContains(sessionJson, "pathStencilCoverRouteKind=GPUNative")
                     assertContains(sessionJson, "pathStencilCoverAdapterRequired=true")
-                    assertContains(sessionJson, "pathStencilCoverRefusalMatrix=depth-stencil-capability:RefuseRequired:coverage.stencil-cover-unavailable,stencil-route-unavailable:RefuseRequired:unsupported.geometry.stencil_cover_unavailable,producer-cover-ordering:RefuseRequired:unsupported.geometry.stencil_cover_ordering_illegal")
+                    assertContains(
+                        sessionJson,
+                        "pathStencilCoverRefusalMatrix=" +
+                            "depth-stencil-capability:RefuseRequired:coverage.stencil-cover-unavailable," +
+                            "depth-stencil-evidence:RefuseRequired:unsupported.geometry.stencil_cover_unavailable," +
+                            "sample-count-evidence:RefuseRequired:unsupported.geometry.stencil_cover_unavailable," +
+                            "target-state:RefuseRequired:unsupported.geometry.stencil_cover_target," +
+                            "clip-state:RefuseRequired:unsupported.clip.stencil_cover," +
+                            "stencil-route-unavailable:RefuseRequired:unsupported.geometry.stencil_cover_unavailable," +
+                            "producer-cover-ordering:RefuseRequired:unsupported.geometry.stencil_cover_ordering_illegal," +
+                            "pass-resource-evidence:RefuseRequired:unsupported.geometry.stencil_cover_pass_resources_missing," +
+                            "readback-evidence:RefuseRequired:unsupported.execution.readback_unavailable",
+                    )
+                    assertContains(sessionJson, "stencilCoverContractEvidenceLinked=true")
+                    assertContains(sessionJson, "explicitSkippedLaneDiagnosticsLinked=true")
                     assertContains(sessionJson, "adapterBackedStencilEvidenceLinked=false")
                     assertContains(sessionJson, "passResourceReadbackArtifactsLinked=false")
                     assertContains(sessionJson, "producerBeforeCoverOrderingProven=false")
@@ -639,6 +657,66 @@ class RunGpuRendererSceneKadreMainTest {
         )
         assertEquals("presented", presented.status)
         assertContains(presented.toJson(), "\"productRefusal\": false")
+    }
+
+    @Test
+    fun `presented session report serializes raw frame timing samples with warmup and stable phases`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("frame-gate-blocker-board")
+        val report = WindowedSceneSessionReport.presented(
+            scene = scene,
+            requestedFrames = 5,
+            surfaceFormat = "BGRA8Unorm",
+            adapterInfo = "AdapterInfo(device=Apple M2 Max, isFallbackAdapter=false)",
+            frameTiming = WindowedFrameTimingReport.wallClockEncodePresent(
+                warmupFrames = 2,
+                samples = listOf(
+                    12_100_000L,
+                    11_900_000L,
+                    10_400_000L,
+                    10_300_000L,
+                    10_500_000L,
+                ),
+            ),
+        )
+
+        val sessionJson = report.toJson()
+
+        assertContains(sessionJson, "\"frameTiming\": {")
+        assertContains(sessionJson, "\"metricName\": \"frame-time-ms\"")
+        assertContains(sessionJson, "\"metricSource\": \"wall-clock-encode-present\"")
+        assertContains(sessionJson, "\"rawSampleCount\": 5")
+        assertContains(sessionJson, "\"warmupFrames\": 2")
+        assertContains(sessionJson, "\"stableFrames\": 3")
+        assertContains(
+            sessionJson,
+            "{\"frameIndex\": 1, \"phase\": \"warmup\", \"durationNanos\": 12100000, \"durationMs\": 12.1000}",
+        )
+        assertContains(
+            sessionJson,
+            "{\"frameIndex\": 3, \"phase\": \"stable\", \"durationNanos\": 10400000, \"durationMs\": 10.4000}",
+        )
+    }
+
+    @Test
+    fun `frame timing report rejects missing samples and invalid warmup split`() {
+        assertFailsWith<IllegalArgumentException> {
+            WindowedFrameTimingReport.wallClockEncodePresent(
+                warmupFrames = 1,
+                samples = emptyList(),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            WindowedFrameTimingReport.wallClockEncodePresent(
+                warmupFrames = 3,
+                samples = listOf(1L, 2L),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            WindowedFrameTimingReport.wallClockEncodePresent(
+                warmupFrames = 1,
+                samples = listOf(1L, 0L),
+            )
+        }
     }
 
     private fun solidCardStackScene() =

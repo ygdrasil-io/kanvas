@@ -5,6 +5,7 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.util.Locale
 import kotlin.io.path.createDirectories
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
@@ -144,6 +145,7 @@ data class WindowedSceneSessionReport(
     val surface: WindowedSceneSurface,
     val adapterInfo: String?,
     val error: String?,
+    val frameTiming: WindowedFrameTimingReport? = null,
     val diagnostics: List<String> = emptyList(),
 ) {
     val manualValidation: Boolean = true
@@ -160,6 +162,9 @@ data class WindowedSceneSessionReport(
         }
         require(error == null || error.isNotBlank()) { "error must not be blank" }
         require(diagnostics.all { it.isNotBlank() }) { "diagnostics must not contain blank entries" }
+        require(frameTiming == null || frameTiming.rawSampleCount <= requestedFrames) {
+            "frameTiming rawSampleCount must not exceed requestedFrames"
+        }
         requireStatusInvariants()
     }
 
@@ -181,6 +186,9 @@ data class WindowedSceneSessionReport(
                 require(requestedFrames > 0) { "presented reports must have requestedFrames > 0" }
                 require(presentedFrames == requestedFrames) {
                     "presented reports must have presentedFrames == requestedFrames"
+                }
+                require(frameTiming == null || frameTiming.rawSampleCount == presentedFrames) {
+                    "presented reports with frameTiming must include one sample per presented frame"
                 }
                 require(!surface.format.isNullOrBlank()) { "presented reports must include a surface format" }
                 require(!adapterInfo.isNullOrBlank()) { "presented reports must include adapterInfo" }
@@ -206,6 +214,7 @@ data class WindowedSceneSessionReport(
         appendLine("  },")
         appendLine("  \"adapterInfo\": ${adapterInfo?.json() ?: "null"},")
         appendLine("  \"error\": ${error?.json() ?: "null"},")
+        appendLine("  \"frameTiming\": ${frameTiming?.toJson(indent = "  ") ?: "null"},")
         appendLine("  \"diagnostics\": [${diagnostics.joinToString(",") { it.json() }}]")
         appendLine("}")
     }
@@ -302,6 +311,7 @@ data class WindowedSceneSessionReport(
             requestedFrames: Int,
             surfaceFormat: String,
             adapterInfo: String,
+            frameTiming: WindowedFrameTimingReport? = null,
         ): WindowedSceneSessionReport =
             WindowedSceneSessionReport(
                 sceneId = scene.sceneId.value,
@@ -312,10 +322,97 @@ data class WindowedSceneSessionReport(
                 surface = scene.surface(format = surfaceFormat),
                 adapterInfo = adapterInfo,
                 error = null,
+                frameTiming = frameTiming,
                 diagnostics = scene.windowedSceneDiagnostics(),
             )
     }
 }
+
+data class WindowedFrameTimingReport(
+    val metricName: String,
+    val metricSource: String,
+    val warmupFrames: Int,
+    val samples: List<WindowedFrameTimingSample>,
+) {
+    val rawSampleCount: Int get() = samples.size
+    val stableFrames: Int get() = rawSampleCount - warmupFrames
+
+    init {
+        require(metricName.isNotBlank()) { "frame timing metricName must not be blank" }
+        require(metricSource.isNotBlank()) { "frame timing metricSource must not be blank" }
+        require(samples.isNotEmpty()) { "frame timing samples must not be empty" }
+        require(warmupFrames >= 0) { "frame timing warmupFrames must not be negative" }
+        require(warmupFrames < samples.size) { "frame timing warmupFrames must leave at least one stable sample" }
+        require(samples.map { it.frameIndex } == (1..samples.size).toList()) {
+            "frame timing sample frameIndex values must be one-based and contiguous"
+        }
+        samples.forEachIndexed { index, sample ->
+            val expectedPhase = if (index < warmupFrames) "warmup" else "stable"
+            require(sample.phase == expectedPhase) {
+                "frame timing sample phase must match warmup split"
+            }
+        }
+    }
+
+    fun toJson(indent: String): String = buildString {
+        appendLine("{")
+        appendLine("$indent  \"metricName\": ${metricName.json()},")
+        appendLine("$indent  \"metricSource\": ${metricSource.json()},")
+        appendLine("$indent  \"rawSampleCount\": $rawSampleCount,")
+        appendLine("$indent  \"warmupFrames\": $warmupFrames,")
+        appendLine("$indent  \"stableFrames\": $stableFrames,")
+        appendLine("$indent  \"samples\": [")
+        appendLine(samples.joinToString(",\n") { sample -> "$indent    ${sample.toJson()}" })
+        appendLine("$indent  ]")
+        append("$indent}")
+    }
+
+    companion object {
+        fun wallClockEncodePresent(
+            warmupFrames: Int,
+            samples: List<Long>,
+        ): WindowedFrameTimingReport {
+            require(samples.all { sample -> sample > 0L }) {
+                "frame timing wall-clock samples must be positive"
+            }
+            return WindowedFrameTimingReport(
+                metricName = "frame-time-ms",
+                metricSource = "wall-clock-encode-present",
+                warmupFrames = warmupFrames,
+                samples = samples.mapIndexed { index, durationNanos ->
+                    WindowedFrameTimingSample(
+                        frameIndex = index + 1,
+                        phase = if (index < warmupFrames) "warmup" else "stable",
+                        durationNanos = durationNanos,
+                    )
+                },
+            )
+        }
+    }
+}
+
+data class WindowedFrameTimingSample(
+    val frameIndex: Int,
+    val phase: String,
+    val durationNanos: Long,
+) {
+    init {
+        require(frameIndex > 0) { "frame timing sample frameIndex must be positive" }
+        require(phase == "warmup" || phase == "stable") {
+            "frame timing sample phase must be warmup or stable"
+        }
+        require(durationNanos > 0L) { "frame timing sample durationNanos must be positive" }
+    }
+
+    val durationMs: Double get() = durationNanos / 1_000_000.0
+
+    fun toJson(): String =
+        "{\"frameIndex\": $frameIndex, \"phase\": ${phase.json()}, \"durationNanos\": $durationNanos, " +
+            "\"durationMs\": ${durationMs.formatFrameTimingMs()}}"
+}
+
+private fun Double.formatFrameTimingMs(): String =
+    String.format(Locale.US, "%.4f", this)
 
 private fun GPURendererScene<*>.surface(format: String?): WindowedSceneSurface =
     WindowedSceneSurface(

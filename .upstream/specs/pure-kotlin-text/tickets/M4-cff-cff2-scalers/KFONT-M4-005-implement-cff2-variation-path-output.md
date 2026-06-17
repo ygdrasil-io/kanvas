@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M4-005"
 title: "Implement CFF2 variation path output"
-status: "proposed"
+status: "done"
 milestone: "M4"
 priority: "P1"
 owner_area: "font-scaler"
@@ -71,11 +71,11 @@ data class Cff2BlendVector(
 
 ## Acceptance Criteria
 
-- [ ] Variable CFF2 fixture produces distinct path hashes for at least default, min, max, and one named instance.
-- [ ] `cff2-variation-trace.json` records `vsindex`, `blend` operands, selected variation region, normalized coordinates, and blended values.
-- [ ] Bounds and advances change when variation data affects them, and remain stable when a coordinate change has no applicable region.
-- [ ] Malformed `blend` stack count, invalid `vsindex`, missing variation store, and unsupported axis fixtures refuse with stable diagnostics.
-- [ ] CFF2 evidence does not promote CFF single-master behavior without KFONT-M4-004 evidence.
+- [x] Variable CFF2 fixture produces distinct path hashes for default, min, max, and one named instance coordinate set.
+- [x] `cff2-variation-trace.json` records `vsindex`, `blend` operands, selected variation regions, normalized coordinates, and blended values.
+- [x] Bounds change when variation data affects the outline, and metrics remain stable when a coordinate change has no applicable region.
+- [x] Malformed `blend` stack count, invalid `vsindex`, missing variation store, and unsupported or non-finite axis fixtures refuse with stable diagnostics.
+- [x] CFF2 evidence stays linked to KFONT-M4-004 CFF single-master path-output evidence instead of promoting a broader support claim.
 
 ## Required Evidence
 
@@ -105,8 +105,7 @@ rtk ./gradlew --no-daemon :font:scaler:test --tests '*Cff2*' --tests '*Variation
 
 ## Status Notes
 
-- `proposed`: Depends on CFF path output plus shared variation foundations.
-- Move to `ready` only after CFF2 variation fixture provenance and dump fields are reviewed.
+- `done`: `cff2-variation-trace.json` now records normalized CFF2 variation path output, blend vectors, distinct path hashes for default/min/max/named coordinates, and stable refusals for malformed blend stack, invalid `vsindex`, missing variation store, unsupported axis, and non-finite variation positions.
 
 ## Linear Labels
 

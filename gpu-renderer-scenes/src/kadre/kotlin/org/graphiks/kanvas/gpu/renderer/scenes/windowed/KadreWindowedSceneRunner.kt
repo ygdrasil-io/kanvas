@@ -1,33 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.windowed
 
-import ffi.JvmNativeAddress
-import ffi.LibraryLoader
-import io.ygdrasil.webgpu.Color
-import io.ygdrasil.webgpu.ColorTargetState
-import io.ygdrasil.webgpu.CompositeAlphaMode
-import io.ygdrasil.webgpu.FragmentState
-import io.ygdrasil.webgpu.GPUDevice
-import io.ygdrasil.webgpu.GPULoadOp
-import io.ygdrasil.webgpu.GPURenderPipeline
-import io.ygdrasil.webgpu.GPUStoreOp
-import io.ygdrasil.webgpu.GPUTextureFormat
-import io.ygdrasil.webgpu.GPUTextureUsage
-import io.ygdrasil.webgpu.NativeSurface
-import io.ygdrasil.webgpu.PrimitiveState
-import io.ygdrasil.webgpu.RenderPassColorAttachment
-import io.ygdrasil.webgpu.RenderPassDescriptor
-import io.ygdrasil.webgpu.RenderPipelineDescriptor
-import io.ygdrasil.webgpu.ShaderModuleDescriptor
-import io.ygdrasil.webgpu.SurfaceConfiguration
-import io.ygdrasil.webgpu.SurfaceTextureStatus
-import io.ygdrasil.webgpu.VertexState
-import io.ygdrasil.webgpu.WGPU
-import io.ygdrasil.webgpu.WGPUInstanceBackend
-import io.ygdrasil.webgpu.WGPULowLevelApi
-import java.lang.foreign.MemorySegment
 import java.nio.file.Path
 import java.util.Locale
-import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.ActiveEventLoop
 import org.graphiks.kadre.ApplicationHandler
 import org.graphiks.kadre.EventLoop
@@ -38,6 +12,11 @@ import org.graphiks.kadre.core.ControlFlow
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowEvent
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSession
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendWindowSurface
+import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
@@ -91,21 +70,19 @@ class KadreWindowedSceneRunner(private val scene: GPURendererScene<*>) {
     }
 }
 
-@OptIn(WGPULowLevelApi::class)
 private class RectOnlyKadreApp(
     private val scene: GPURendererScene<*>,
     private val requestedFrames: Int,
     private val output: Path,
     private val onComplete: () -> Unit,
 ) : ApplicationHandler {
-    private var wgpu: WGPU? = null
-    private var surface: NativeSurface? = null
-    private var device: GPUDevice? = null
+    private var runtimeSession: GPUBackendSession? = null
+    private var surface: GPUBackendWindowSurface? = null
     private var window: Window? = null
-    private var surfaceFormat: GPUTextureFormat? = null
-    private var surfaceAlphaMode: CompositeAlphaMode = CompositeAlphaMode.Auto
+    private var surfaceFormat: String? = null
     private var adapterInfo: String? = null
     private var presentedFrames = 0
+    private val frameTimingSamplesNanos = mutableListOf<Long>()
     private var completed = false
 
     override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
@@ -126,48 +103,33 @@ private class RectOnlyKadreApp(
                 return
             }
 
-            LibraryLoader.load()
-            val instance = WGPU.createInstance(WGPUInstanceBackend.Metal)
-                ?: run {
-                    completeBlocked(eventLoop, "wgpu-instance-unavailable", "WGPU Metal instance creation returned null")
-                    return
-                }
-            wgpu = instance
-
             val layerAddress = handle.nsLayer.takeIf { it != 0L }
                 ?: run {
                     completeBlocked(eventLoop, "kadre-appkit-required", "Kadre AppKit handle did not expose nsLayer")
                     return
                 }
-            val surf = instance.getSurfaceFromMetalLayer(JvmNativeAddress(MemorySegment.ofAddress(layerAddress)))
-                ?: run {
-                    completeBlocked(eventLoop, "wgpu-surface-unavailable", "WGPU surface creation from Kadre CAMetalLayer returned null")
-                    return
-                }
-            surface = surf
 
-            val adapter = instance.requestAdapter(surf)
+            val session = GPUBackendRuntimeFactory.createOrNull()
                 ?: run {
-                    completeBlocked(eventLoop, "wgpu-adapter-unavailable", "WGPU adapter request failed for Kadre surface")
+                    completeBlocked(eventLoop, "wgpu-runtime-unavailable", "GPU backend runtime creation returned null")
                     return
                 }
+            runtimeSession = session
             try {
-                adapterInfo = adapter.info.toString()
-                surf.computeSurfaceCapabilities(adapter)
-                val gpuDevice = runBlocking { adapter.requestDevice() }
-                    .getOrElse { error ->
-                        completeBlocked(eventLoop, "wgpu-device-unavailable", error.message ?: error.toString())
-                        return
-                    }
-                device = gpuDevice
-                surfaceFormat = surf.supportedFormats.firstOrNull { it == GPUTextureFormat.BGRA8Unorm }
-                    ?: surf.supportedFormats.firstOrNull()
-                    ?: GPUTextureFormat.BGRA8Unorm
-                surfaceAlphaMode = surf.supportedAlphaMode.firstOrNull { it == CompositeAlphaMode.Opaque }
-                    ?: CompositeAlphaMode.Auto
-                configureSurface(win.innerSize)
-            } finally {
-                adapter.close()
+                val windowSurface = session.createWindowSurface(
+                    appKitMetalLayerBinding(
+                        width = win.innerSize.width,
+                        height = win.innerSize.height,
+                        nsLayer = layerAddress,
+                    ),
+                )
+                surface = windowSurface
+                adapterInfo = windowSurface.adapterInfo?.summary
+                surfaceFormat = currentSurfaceFormat()
+            } catch (failure: Throwable) {
+                val error = failure.message ?: failure.toString()
+                completeBlocked(eventLoop, initializationFailureReason(error), error)
+                return
             }
 
             requestNextFrame(eventLoop)
@@ -194,8 +156,8 @@ private class RectOnlyKadreApp(
                     "Window closed before $requestedFrames requested frames were presented.",
                 )
             }
-            is WindowEvent.Resized -> configureSurface(event.size)
-            is WindowEvent.ScaleFactorChanged -> window?.innerSize?.let(::configureSurface)
+            is WindowEvent.Resized -> resizeSurfaceIfDrawable(event.size)
+            is WindowEvent.ScaleFactorChanged -> window?.innerSize?.let(::resizeSurfaceIfDrawable)
         }
     }
 
@@ -203,73 +165,56 @@ private class RectOnlyKadreApp(
         releaseResources()
     }
 
-    private fun configureSurface(size: PhysicalSize<Int>) {
-        val surf = surface ?: return
-        val gpuDevice = device ?: return
-        val format = surfaceFormat ?: return
+    private fun resizeSurfaceIfDrawable(size: PhysicalSize<Int>) {
+        val windowSurface = surface ?: return
         if (size.width <= 0 || size.height <= 0) return
-        surf.configure(
-            SurfaceConfiguration(
-                device = gpuDevice,
-                format = format,
-                usage = GPUTextureUsage.RenderAttachment,
-                alphaMode = surfaceAlphaMode,
-            ),
-            size.width.toUInt(),
-            size.height.toUInt(),
-        )
+        windowSurface.resize(size.width, size.height)
+        surfaceFormat = currentSurfaceFormat()
     }
 
     private fun renderFrame(eventLoop: ActiveEventLoop) {
         if (completed) return
-        val surf = surface ?: return
-        val gpuDevice = device ?: return
-        val format = surfaceFormat ?: return
-        val surfaceTexture = surf.getCurrentTexture()
-        when (surfaceTexture.status) {
-            SurfaceTextureStatus.lost,
-            SurfaceTextureStatus.outdated -> {
-                surfaceTexture.texture.close()
-                window?.innerSize?.let(::configureSurface)
-                requestNextFrame(eventLoop)
-                return
+        val windowSurface = surface ?: return
+        val targetDescriptor = windowSurface.target.descriptor
+        val draw = GPUBackendRectDraw(
+            rgbaPremul = floatArrayOf(1f, 1f, 1f, 1f),
+            scissorX = 0,
+            scissorY = 0,
+            scissorWidth = targetDescriptor.width,
+            scissorHeight = targetDescriptor.height,
+        )
+
+        val frameStartNanos = System.nanoTime()
+        val presented = runCatching {
+            windowSurface.encodeAndPresent(
+                clearColor = WindowedRectOnlySceneShader.clearColor(scene).toGpuClearColor(),
+            ) {
+                drawFullscreenPass(
+                    wgsl = WindowedRectOnlySceneShader.wgsl(scene),
+                    colorFormat = targetDescriptor.colorFormat,
+                    draws = listOf(draw),
+                )
             }
-            SurfaceTextureStatus.outOfMemory,
-            SurfaceTextureStatus.deviceLost -> {
-                surfaceTexture.texture.close()
-                completeBlocked(eventLoop, "wgpu-surface-terminal-status", surfaceTexture.status.name)
-                return
+        }.getOrElse { failure ->
+            val error = failure.message ?: failure.toString()
+            val reason = if (error.startsWith("Surface texture acquisition failed with terminal status")) {
+                "wgpu-surface-terminal-status"
+            } else {
+                "kadre-windowed-run-failed"
             }
-            SurfaceTextureStatus.success,
-            SurfaceTextureStatus.timeout -> Unit
+            completeBlocked(eventLoop, reason, error)
+            return
         }
 
-        val texture = surfaceTexture.texture
-        GpuResourceScope().use { gpuResources ->
-            val textureView = gpuResources.track(texture.createView(null)) { it.close() }
-            val pipeline = gpuResources.track(createScenePipeline(gpuDevice, format)) { it.close() }
-            val encoder = gpuResources.trackIfAutoCloseable(gpuDevice.createCommandEncoder())
-            val renderPass = encoder.beginRenderPass(
-                RenderPassDescriptor(
-                    colorAttachments = listOf(
-                        RenderPassColorAttachment(
-                            view = textureView,
-                            loadOp = GPULoadOp.Clear,
-                            storeOp = GPUStoreOp.Store,
-                            clearValue = WindowedRectOnlySceneShader.clearColor(scene).toWebGpuColor(),
-                        ),
-                    ),
-                ),
-            )
-            renderPass.setPipeline(pipeline)
-            renderPass.draw(3u, 1u, 0u, 0u)
-            renderPass.end()
-            val commandBuffer = gpuResources.trackIfAutoCloseable(encoder.finish())
-            gpuDevice.queue.submit(listOf(commandBuffer))
-            surf.present()
-            presentedFrames++
+        surfaceFormat = currentSurfaceFormat()
+        adapterInfo = windowSurface.adapterInfo?.summary ?: adapterInfo
+        if (!presented) {
+            requestNextFrame(eventLoop)
+            return
         }
 
+        frameTimingSamplesNanos += (System.nanoTime() - frameStartNanos).coerceAtLeast(1L)
+        presentedFrames++
         if (presentedFrames >= requestedFrames) {
             completePresented(eventLoop)
         } else {
@@ -282,26 +227,26 @@ private class RectOnlyKadreApp(
         window?.requestRedraw()
     }
 
-    private fun createScenePipeline(gpuDevice: GPUDevice, format: GPUTextureFormat): GPURenderPipeline {
-        val shader = gpuDevice.createShaderModule(
-            ShaderModuleDescriptor(code = WindowedRectOnlySceneShader.wgsl(scene)),
-        )
-        return try {
-            gpuDevice.createRenderPipeline(
-                RenderPipelineDescriptor(
-                    vertex = VertexState(module = shader, entryPoint = "vs_main"),
-                    primitive = PrimitiveState(),
-                    fragment = FragmentState(
-                        module = shader,
-                        entryPoint = "fs_main",
-                        targets = listOf(ColorTargetState(format = format)),
-                    ),
-                ),
-            )
-        } finally {
-            shader.close()
+    private fun initializationFailureReason(error: String): String =
+        when {
+            "WGPU Metal instance creation returned null" in error -> "wgpu-instance-unavailable"
+            "WGPU surface creation from Metal layer returned null" in error -> "wgpu-surface-unavailable"
+            "WGPU adapter request failed for native surface" in error -> "wgpu-adapter-unavailable"
+            "requestDevice" in error || "device" in error.lowercase(Locale.US) -> "wgpu-device-unavailable"
+            else -> "kadre-windowed-initialization-failed"
         }
-    }
+
+    private fun currentSurfaceFormat(): String? =
+        surface?.target?.descriptor?.colorFormat?.toSessionSurfaceFormat()
+
+    private fun String.toSessionSurfaceFormat(): String =
+        when (lowercase(Locale.US)) {
+            "bgra8unorm" -> "BGRA8Unorm"
+            "bgra8unorm-srgb" -> "BGRA8UnormSrgb"
+            "rgba8unorm" -> "RGBA8Unorm"
+            "rgba8unorm-srgb" -> "RGBA8UnormSrgb"
+            else -> this
+        }
 
     private fun completePresented(eventLoop: ActiveEventLoop) {
         if (completed) return
@@ -310,8 +255,12 @@ private class RectOnlyKadreApp(
             WindowedSceneSessionReport.presented(
                 scene = scene,
                 requestedFrames = requestedFrames,
-                surfaceFormat = surfaceFormat?.name ?: "unknown",
+                surfaceFormat = surfaceFormat ?: "unknown",
                 adapterInfo = adapterInfo ?: "unknown-adapter",
+                frameTiming = WindowedFrameTimingReport.wallClockEncodePresent(
+                    warmupFrames = frameTimingWarmupFrames(frameTimingSamplesNanos.size),
+                    samples = frameTimingSamplesNanos.toList(),
+                ),
             ).writeTo(output)
             onComplete()
         } finally {
@@ -330,7 +279,7 @@ private class RectOnlyKadreApp(
                 reason = reason,
                 requestedFrames = requestedFrames,
                 presentedFrames = presentedFrames,
-                surfaceFormat = surfaceFormat?.name,
+                surfaceFormat = surfaceFormat,
                 adapterInfo = adapterInfo,
                 error = error,
             ).writeTo(output)
@@ -343,50 +292,24 @@ private class RectOnlyKadreApp(
     }
 
     private fun releaseResources() {
-        device?.let { runCatching { it.close() } }
         surface?.let { runCatching { it.close() } }
-        wgpu?.let { runCatching { it.close() } }
-        device = null
+        runtimeSession?.let { runCatching { it.close() } }
         surface = null
-        wgpu = null
+        runtimeSession = null
         window = null
-    }
-
-    private class GpuResourceScope : AutoCloseable {
-        private val closeActions = ArrayDeque<() -> Unit>()
-
-        fun <T> track(resource: T, close: (T) -> Unit): T {
-            closeActions.addFirst { close(resource) }
-            return resource
-        }
-
-        fun <T> trackIfAutoCloseable(resource: T): T {
-            if (resource is AutoCloseable) {
-                track(resource) { it.close() }
-            }
-            return resource
-        }
-
-        override fun close() {
-            var firstFailure: Throwable? = null
-            while (closeActions.isNotEmpty()) {
-                try {
-                    closeActions.removeFirst().invoke()
-                } catch (failure: Throwable) {
-                    if (firstFailure == null) {
-                        firstFailure = failure
-                    } else {
-                        firstFailure.addSuppressed(failure)
-                    }
-                }
-            }
-            firstFailure?.let { throw it }
-        }
     }
 }
 
-private fun SceneColor.toWebGpuColor(): Color =
-    Color(r.toDouble() * a.toDouble(), g.toDouble() * a.toDouble(), b.toDouble() * a.toDouble(), a.toDouble())
+private fun frameTimingWarmupFrames(sampleCount: Int): Int =
+    if (sampleCount <= 1) 0 else minOf(3, sampleCount - 1)
+
+private fun SceneColor.toGpuClearColor(): GPUClearColor =
+    GPUClearColor(
+        red = (r * a).toDouble(),
+        green = (g * a).toDouble(),
+        blue = (b * a).toDouble(),
+        alpha = a.toDouble(),
+    )
 
 private fun GPURendererScene<*>.kadreRunnerRectOnlyUnsupportedReason(): String? {
     val unsupportedFamilies = commands

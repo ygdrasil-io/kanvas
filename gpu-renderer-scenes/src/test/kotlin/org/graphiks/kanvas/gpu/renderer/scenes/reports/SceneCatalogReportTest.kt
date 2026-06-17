@@ -23,6 +23,11 @@ class SceneCatalogReportTest {
     fun `catalog report contains business ids and roadmap correspondence`() {
         val markdown = SceneCatalogReport(GPURendererSceneRegistry.scenes).toMarkdown()
         assertContains(markdown, "| `solid-card-stack` | Solid Card Stack |")
+        assertContains(markdown, "| `product-route-smoke-lanes` | Product Route Smoke Lanes |")
+        assertContains(markdown, "| `bitmap-sampler-matrix` | Bitmap Sampler Matrix |")
+        assertContains(markdown, "| `runtime-effect-uniform-ladder` | Runtime Effect Uniform Ladder |")
+        assertContains(markdown, "| `mesh-ribbon-depth-stack` | Mesh Ribbon Depth Stack |")
+        assertContains(markdown, "| `legacy-parity-snapshot-board` | Legacy Parity Snapshot Board |")
         assertContains(markdown, "KGPU M0,M1")
         assertContains(markdown, "`KGPU-M0-007`,`KGPU-M1-001`,`KGPU-M1-002`")
         assertContains(markdown, "`KGPU-M1-003`,`KGPU-M1-004`")
@@ -62,6 +67,11 @@ class SceneCatalogReportTest {
 
         assertTrue(root.resolve("catalog.md").readText().contains("GPU Renderer Scene Catalog"))
         assertTrue(root.resolve("catalog.json").readText().contains("\"sceneId\": \"solid-card-stack\""))
+        assertTrue(root.resolve("catalog.json").readText().contains("\"sceneId\": \"product-route-smoke-lanes\""))
+        assertTrue(root.resolve("catalog.json").readText().contains("\"sceneId\": \"bitmap-sampler-matrix\""))
+        assertTrue(root.resolve("catalog.json").readText().contains("\"sceneId\": \"runtime-effect-uniform-ladder\""))
+        assertTrue(root.resolve("catalog.json").readText().contains("\"sceneId\": \"mesh-ribbon-depth-stack\""))
+        assertTrue(root.resolve("catalog.json").readText().contains("\"sceneId\": \"legacy-parity-snapshot-board\""))
         assertTrue(
             root.resolve("catalog.json").readText()
                 .contains("\"ticketIds\": [\"KGPU-M0-007\",\"KGPU-M1-001\",\"KGPU-M1-002\"]"),
@@ -112,7 +122,8 @@ class SceneCatalogReportTest {
         assertContains(french, "Preuve:")
         assertContains(french, "## Candidates amont")
         assertContains(french, "### Runtime Effect Uniform Ladder (`runtime-effect-uniform-ladder`)")
-        assertContains(french, "Statut: `fixture-ready`")
+        assertContains(french, "### Gradient Tile Mode Boundary (`gradient-tile-mode-boundary`)")
+        assertContains(french, "Statut: `runner-gap`")
     }
 
     @Test
@@ -128,7 +139,8 @@ class SceneCatalogReportTest {
         assertContains(json, "\"intention\": \"Verifier une pile de cartes solides avec ordre de dessin stable.\"")
         assertContains(json, "\"candidateScenes\": [")
         assertContains(json, "\"sceneId\": \"runtime-effect-uniform-ladder\"")
-        assertContains(json, "\"status\": \"fixture-ready\"")
+        assertContains(json, "\"sceneId\": \"gradient-tile-mode-boundary\"")
+        assertContains(json, "\"status\": \"runner-gap\"")
         assertTrue(json.indexOf("\"scenes\": [") < json.indexOf("\"candidateScenes\": ["))
     }
 

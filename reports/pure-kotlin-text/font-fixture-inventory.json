@@ -26,6 +26,7 @@
           "generationPolicy": "Use synthetic A8 masks with fixed bounds, padding, row stride, atlas size, placement order, and atlas byte hash.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-atlas.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -47,6 +48,7 @@
           "generationPolicy": "Use a bounded atlas request that exceeds capacity before placement and records the stable refusal.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-atlas.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -61,19 +63,87 @@
           ]
         },
         {
+          "fixtureId": "a8-sdf-artifacts-cache-budget-refusal",
+          "targetGate": "cache-budget-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Use fixed cold/warm cache telemetry samples with advisory memory and upload-preparation budget overruns tied to strike-key hashes.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.glyph.artifact-budget-exceeded diagnostic code",
+            "cache-domain refusal facts",
+            "advisory byte limits"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-hidden-performance-gate",
+            "no-gpu-upload-execution-claim"
+          ]
+        },
+        {
+          "fixtureId": "a8-sdf-artifacts-cache-inventory",
+          "targetGate": "cache-inventory",
+          "status": "current-positive-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Use fixed A8 and SDF resident entries plus one evicted A8 entry and assert stable key preimages, hashes, resident bytes, and lifecycle tokens.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-cache-inventory.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "resident cache entry dump",
+            "evicted cache entry dump",
+            "resident/evicted byte accounting"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-gpu-text-route-claim",
+            "no-live-cache-ownership-claim"
+          ]
+        },
+        {
+          "fixtureId": "a8-sdf-artifacts-cache-telemetry",
+          "targetGate": "cache-telemetry",
+          "status": "current-positive-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Use deterministic cold and warm cache samples with fixture timing counters, route counts, hit/miss, eviction, invalidation, resident bytes, and upload-preparation bytes.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "cold cache telemetry sample",
+            "warm cache telemetry sample",
+            "advisory timing counters"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-hidden-performance-gate",
+            "no-gpu-upload-execution-claim"
+          ]
+        },
+        {
           "fixtureId": "a8-sdf-artifacts-sdf-normalization",
           "targetGate": "sdf-normalization",
           "status": "current-positive-evidence",
           "fixtureKind": "structured-dump",
-          "generationPolicy": "Use a closed rectangle outline with fixed spread and assert inside, edge, outside, and mask hash facts.",
+          "generationPolicy": "Use a closed rectangle outline with the stabilized default spread plus an explicit widened spread, then assert inside/edge/outside facts, padding growth, normalization version, and stable CPU-only SDF hashes in the checked-in dump.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
             "sdf mask sample grid",
             "distance range facts",
-            "sdf mask hash"
+            "sdf mask hash",
+            "default/wide spread SDF dump entries"
           ],
           "nonClaims": [
             "no-complete-target-support-claim",
@@ -109,6 +179,7 @@
           "generationPolicy": "Use mismatched artifact/current generation values and assert stable invalidation-token evidence.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -140,6 +211,7 @@
           "evidencePaths": [
             "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
             "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/cff-charstring-trace.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -162,12 +234,67 @@
           "evidencePaths": [
             "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
             "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/cff-charstring-trace.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
             "font.cff-stack-malformed diagnostic",
+            "font.scaler.cff.stack-overflow diagnostic",
+            "font.scaler.cff.trailing-bytes diagnostic",
             "glyph id",
             "operator offset"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-cff-rendering-support-claim",
+            "no-complete-cff2-variation-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "cff-cff2-scaler-cff-path-output",
+          "targetGate": "cff-path-output",
+          "status": "current-positive-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Generate deterministic CFF scaler fixtures for basic path output, subroutine path output, flex curves, missing glyph refusal, and malformed glyph refusal, then assert path hashes, metrics, and linked charstring evidence.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/cff-scaler-path-output.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "glyph outline dump",
+            "glyph metrics dump",
+            "path hash artifacts",
+            "linked charstring evidence",
+            "missing-glyph refusal diagnostic",
+            "malformed-glyph refusal diagnostic"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-cff-rendering-support-claim",
+            "no-complete-cff2-variation-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "cff-cff2-scaler-cff-subroutine-safety",
+          "targetGate": "cff-subroutine-safety",
+          "status": "current-positive-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Generate deterministic local, global, and nested Type 2 subroutine fixtures plus refusal cases for out-of-range indexes, depth limits, missing return, and instruction budgets.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/cff-subroutine-trace.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "serialized execution limits",
+            "nested subroutine call trace",
+            "out-of-range refusal diagnostic",
+            "depth-limit refusal diagnostic",
+            "missing-return refusal diagnostic",
+            "instruction-limit refusal diagnostic"
           ],
           "nonClaims": [
             "no-complete-target-support-claim",
@@ -184,10 +311,12 @@
           "evidencePaths": [
             "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
             "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/cff-charstring-trace.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
             "CFF Type 2 fixture bytes",
+            "cff-charstring-trace.json",
             "outline command dump",
             "bounds and path hash"
           ],
@@ -206,6 +335,7 @@
           "evidencePaths": [
             "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
             "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/cff-charstring-trace.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -239,6 +369,37 @@
             "no-complete-target-support-claim",
             "no-complete-cff-rendering-support-claim",
             "no-complete-cff2-variation-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "cff-cff2-scaler-cff2-variation-path-output",
+          "targetGate": "cff2-variation-path-output",
+          "status": "current-positive-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Generate deterministic CFF2 VariationStore fixtures that normalize user-space coordinates, emit distinct default/min/max/named path hashes, serialize blend vectors, and snapshot invalid-vsindex, missing-varstore, unsupported-axis, non-finite-axis, and malformed-blend-stack refusals.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/cff2-variation-trace.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "distinct variation path hash artifacts",
+            "normalized variation position evidence",
+            "blend vector evidence",
+            "font.scaler.cff2.blend-stack-malformed diagnostic",
+            "cff2.vsindex-invalid diagnostic",
+            "cff2.variation-store-missing diagnostic",
+            "cff2.variation-axis diagnostic",
+            "cff2.variation-position-non-finite diagnostic"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-cff-rendering-support-claim",
+            "no-complete-cff2-variation-support-claim",
+            "no-hvar-vvar-mvar-advance-claim",
+            "no-native-scaler-oracle-claim",
+            "no-gpu-text-route-claim"
           ]
         },
         {
@@ -973,6 +1134,41 @@
           ]
         },
         {
+          "fixtureId": "truetype-scaler-truetype-gvar-iup",
+          "targetGate": "truetype-gvar-iup",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate bounded simple/composite TrueType gvar tuples that prove single-point IUP propagation, wraparound interpolation, untouched contour isolation, horizontal phantom-point advance deltas, avar-normalized coordinates, bounded HVAR advance-width deltas, bounded MVAR vertical-global metric deltas, and malformed HVAR/MVAR plus tuple diagnostics.",
+          "evidencePaths": [
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/truetype-gvar-iup.json",
+            "reports/pure-kotlin-text/2026-06-16-kfont-m3-003-phantom-metrics.md",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "gvar table bytes",
+            "variation delta dump",
+            "min-default-max outline dump",
+            "min-default-max phantom metrics dump",
+            "avar-normalized outline dump",
+            "composite child outline dump",
+            "bounded HVAR advance-width case",
+            "bounded MVAR vertical-global metrics case",
+            "malformed HVAR diagnostic snapshot",
+            "malformed MVAR diagnostic snapshot",
+            "malformed tuple diagnostic snapshot"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-variable-font-support-claim",
+            "no-complete-hvar-vvar-mvar-metrics-claim",
+            "no-vertical-metrics-claim",
+            "no-complete-hinting-vm-claim",
+            "no-a8-or-sdf-artifact-claim",
+            "no-gpu-text-route-claim"
+          ]
+        },
+        {
           "fixtureId": "truetype-scaler-truetype-gvar-simple-delta",
           "targetGate": "truetype-gvar-simple-delta",
           "status": "current-positive-evidence",
@@ -994,6 +1190,42 @@
           ]
         },
         {
+          "fixtureId": "truetype-scaler-truetype-malformed-glyf-isolation",
+          "targetGate": "truetype-malformed-glyf-isolation",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate bounded malformed loca/glyf/gvar fixtures that prove face refusal, per-glyph refusal, positive-control safe glyph dumps, and explicit non-claims around runtime .notdef substitution.",
+          "evidencePaths": [
+            "font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt",
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/truetype-malformed-glyf-isolation.json",
+            "reports/pure-kotlin-text/2026-06-16-kfont-m3-005-malformed-glyf-isolation.md",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "loca face-refusal snapshot",
+            "truncated-header refusal snapshot",
+            "bad-contour refusal snapshot",
+            "flag-repeat refusal snapshot",
+            "coordinate-truncation refusal snapshot",
+            "composite-cycle refusal snapshot",
+            "missing-component refusal snapshot",
+            "invalid-transform refusal snapshot",
+            "malformed gvar warning snapshot",
+            "positive-control glyph dump"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-notdef-substitution-runtime-claim",
+            "no-complete-variable-font-support-claim",
+            "no-hvar-vvar-mvar-metrics-claim",
+            "no-vertical-metrics-claim",
+            "no-complete-hinting-vm-claim",
+            "no-a8-or-sdf-artifact-claim",
+            "no-gpu-text-route-claim"
+          ]
+        },
+        {
           "fixtureId": "truetype-scaler-truetype-simple-glyph",
           "targetGate": "truetype-simple-glyph",
           "status": "current-positive-evidence",
@@ -1012,6 +1244,36 @@
             "no-complete-target-support-claim",
             "no-complete-variable-font-support-claim",
             "no-complete-hinting-vm-claim"
+          ]
+        },
+        {
+          "fixtureId": "truetype-scaler-vertical-metrics",
+          "targetGate": "truetype-vertical-metrics",
+          "status": "current-positive-evidence",
+          "fixtureKind": "synthetic-table-bytes",
+          "generationPolicy": "Generate bounded TrueType `vhea`/`vmtx`/`VVAR` bytes that prove vertical metric dumps, absent-table fallback facts, bounded advance-height deltas, and malformed `VVAR` diagnostics without claiming vertical layout.",
+          "evidencePaths": [
+            "font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt",
+            "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
+            "reports/font/fixtures/expected/scaler/truetype-vertical-metrics.json",
+            "reports/pure-kotlin-text/2026-06-16-kfont-m3-004-vertical-metrics.md",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "vhea table bytes",
+            "vmtx table bytes",
+            "vvar table bytes",
+            "vertical glyph metrics dump",
+            "vertical fallback diagnostic snapshot",
+            "malformed VVAR diagnostic snapshot"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-vertical-shaping-claim",
+            "no-vertical-layout-claim",
+            "no-complete-hvar-mvar-parity-claim",
+            "no-complete-hinting-vm-claim",
+            "no-gpu-text-route-claim"
           ]
         }
       ]
