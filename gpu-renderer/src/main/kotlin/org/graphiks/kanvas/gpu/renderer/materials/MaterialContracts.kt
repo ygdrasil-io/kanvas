@@ -172,6 +172,15 @@ sealed interface GPUMaterialSourceDescriptor {
         override val kind: GPUMaterialSourceKind = GPUMaterialSourceKind.ImageShader
     }
 
+    /** Registered runtime-effect material source descriptor. */
+    data class RuntimeEffect(
+        val effectId: String,
+        val descriptorVersion: Int,
+        val routeContractHash: String,
+    ) : GPUMaterialSourceDescriptor {
+        override val kind: GPUMaterialSourceKind = GPUMaterialSourceKind.RuntimeEffect
+    }
+
     /** Unsupported descriptor. */
     data class Unsupported(val reasonCode: String) : GPUMaterialSourceDescriptor {
         override val kind: GPUMaterialSourceKind = GPUMaterialSourceKind.Unsupported

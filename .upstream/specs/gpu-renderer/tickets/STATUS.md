@@ -13,7 +13,7 @@ product activation, and updates the owning milestone table in the same change.
 | M4 | 0 | 0 | 0 | 0 | 0 | 4 |
 | M5 | 0 | 0 | 0 | 0 | 1 | 3 |
 | M6 | 0 | 0 | 0 | 2 | 0 | 2 |
-| M7 | 0 | 0 | 0 | 3 | 0 | 1 |
+| M7 | 0 | 0 | 0 | 2 | 1 | 1 |
 | M8 | 0 | 0 | 0 | 3 | 0 | 0 |
 | M9 | 0 | 0 | 0 | 1 | 0 | 2 |
 | M10 | 0 | 0 | 0 | 2 | 0 | 2 |
