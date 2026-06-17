@@ -657,17 +657,17 @@ class FontScalerSurfaceTest {
 
         val evidence = scaler.scaledGlyphEvidence(
             glyphId = 0u,
-            position = VariationPosition(axes = mapOf("wght" to 900.0)),
+            position = VariationPosition(axes = mapOf("wght" to 650.0)),
         )
         val dump = evidence.toCanonicalJson()
 
-        assertEquals(listOf(VariationCoordinateEvidence(tag = "wght", value = 900.0)), evidence.requestedVariationPosition)
-        assertEquals(listOf(VariationCoordinateEvidence(tag = "wght", value = 1.0)), evidence.normalizedVariationPosition)
+        assertEquals(listOf(VariationCoordinateEvidence(tag = "wght", value = 650.0)), evidence.requestedVariationPosition)
+        assertEquals(listOf(VariationCoordinateEvidence(tag = "wght", value = 0.5)), evidence.normalizedVariationPosition)
         assertEquals(
             listOf(
                 "M 0.0 0.0",
                 "L 100.0 0.0",
-                "L 120.0 90.0",
+                "L 110.0 95.0",
                 "L 0.0 100.0",
                 "Z",
             ),
@@ -791,7 +791,7 @@ class FontScalerSurfaceTest {
     }
 
     @Test
-    fun trueTypeGlyfEvidenceWarnsWhenMetricsVariationTablesArePresentButUnimplemented() {
+    fun trueTypeGlyfEvidenceAppliesHvarAdvanceWidthDeltas() {
         val simpleSquare = simpleSquareGlyphData().withTrueTypePadding()
         val scaler = TrueTypeGlyfScaler(
             face = syntheticTrueTypeFace(
@@ -799,7 +799,41 @@ class FontScalerSurfaceTest {
                     SFNTTableTag("loca") to shortLocaForOffsets(0, simpleSquare.size, simpleSquare.size)
                         .toUnsignedByteList(),
                     SFNTTableTag("glyf") to simpleSquare.toUnsignedByteList(),
-                    SFNTTableTag("gvar") to singleAxisGvarWithPhantomPointAdvanceDelta().toUnsignedByteList(),
+                    SFNTTableTag("HVAR") to generatedHvarTableOneAxis(
+                        start = 0.0,
+                        peak = 0.5,
+                        end = 1.0,
+                        delta = 40,
+                    ).toUnsignedByteList(),
+                ),
+                variations = VariationTables(
+                    axes = listOf(
+                        variationAxis(tag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+                    ),
+                ),
+            ),
+        )
+
+        val evidence = scaler.scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to 650.0)),
+        )
+
+        assertEquals(640.0, evidence.metrics?.advanceX)
+        assertTrue(evidence.diagnostics.none { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.METRICS_VARIATION_UNAVAILABLE
+        })
+    }
+
+    @Test
+    fun trueTypeGlyfEvidenceReportsMalformedHvarWithoutDroppingBaseMetrics() {
+        val simpleSquare = simpleSquareGlyphData().withTrueTypePadding()
+        val scaler = TrueTypeGlyfScaler(
+            face = syntheticTrueTypeFace(
+                rawTables = mapOf(
+                    SFNTTableTag("loca") to shortLocaForOffsets(0, simpleSquare.size, simpleSquare.size)
+                        .toUnsignedByteList(),
+                    SFNTTableTag("glyf") to simpleSquare.toUnsignedByteList(),
                     SFNTTableTag("HVAR") to listOf(0x00),
                 ),
                 variations = VariationTables(
@@ -812,13 +846,13 @@ class FontScalerSurfaceTest {
 
         val evidence = scaler.scaledGlyphEvidence(
             glyphId = 0u,
-            position = VariationPosition(axes = mapOf("wght" to 900.0)),
+            position = VariationPosition(axes = mapOf("wght" to 650.0)),
         )
 
-        assertEquals(640.0, evidence.metrics?.advanceX)
+        assertEquals(600.0, evidence.metrics?.advanceX)
         assertTrue(evidence.diagnostics.any { diagnostic ->
-            diagnostic.code == FontScalerDiagnosticCodes.METRICS_VARIATION_UNAVAILABLE &&
-                diagnostic.detail == "truetype.metrics-variation-table-unavailable"
+            diagnostic.code == FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED &&
+                diagnostic.detail == "truetype.hvar-table-malformed"
         })
     }
 
@@ -849,7 +883,7 @@ class FontScalerSurfaceTest {
         val evidence = scaler.scaledGlyphEvidence(glyphId = 0u)
         val vertical = evidence.metrics?.verticalMetrics ?: error("missing vertical metrics evidence")
 
-        assertEquals(700.0, evidence.metrics?.advanceY)
+        assertEquals(700.0, evidence.metrics.advanceY)
         assertEquals("present", vertical.state)
         assertEquals("vhea-vmtx", vertical.source)
         assertEquals(700.0, vertical.verticalAdvance)
@@ -881,7 +915,7 @@ class FontScalerSurfaceTest {
         val evidence = scaler.scaledGlyphEvidence(glyphId = 0u)
         val vertical = evidence.metrics?.verticalMetrics ?: error("missing fallback vertical metrics evidence")
 
-        assertEquals(0.0, evidence.metrics?.advanceY)
+        assertEquals(0.0, evidence.metrics.advanceY)
         assertEquals("fallback", vertical.state)
         assertEquals("horizontal-fallback-fact", vertical.source)
         assertEquals(null, vertical.verticalAdvance)
@@ -935,13 +969,112 @@ class FontScalerSurfaceTest {
         )
         val vertical = evidence.metrics?.verticalMetrics ?: error("missing varied vertical metrics evidence")
 
-        assertEquals(720.0, evidence.metrics?.advanceY)
+        assertEquals(720.0, evidence.metrics.advanceY)
         assertEquals("present", vertical.state)
         assertEquals(720.0, vertical.verticalAdvance)
         assertEquals(140.0, vertical.verticalOriginY)
         assertTrue(evidence.diagnostics.none { diagnostic ->
             diagnostic.code == FontScalerDiagnosticCodes.METRICS_VARIATION_UNAVAILABLE &&
                 diagnostic.detail == "truetype.metrics-variation-table-unavailable"
+        })
+    }
+
+    @Test
+    fun trueTypeGlyfEvidenceAppliesMvarVerticalMetricDeltas() {
+        val simpleSquare = simpleSquareGlyphData().withTrueTypePadding()
+        val scaler = TrueTypeGlyfScaler(
+            face = syntheticTrueTypeFace(
+                rawTables = mapOf(
+                    SFNTTableTag("loca") to shortLocaForOffsets(0, simpleSquare.size, simpleSquare.size)
+                        .toUnsignedByteList(),
+                    SFNTTableTag("glyf") to simpleSquare.toUnsignedByteList(),
+                    SFNTTableTag("MVAR") to generatedMvarTableOneAxis(
+                        entries = listOf(
+                            "vasc" to 12,
+                            "vdsc" to -8,
+                            "vlgp" to 5,
+                        ),
+                        start = 0.0,
+                        peak = 0.5,
+                        end = 1.0,
+                    ).toUnsignedByteList(),
+                ),
+                metrics = sfntMetricsForFactory(
+                    verticalAscender = 850,
+                    verticalDescender = -320,
+                    verticalLineGap = 60,
+                    maxAdvanceHeight = 760,
+                    numberOfVMetrics = 1,
+                    verticalMetrics = listOf(
+                        VerticalGlyphMetric(glyphId = 0, advanceHeight = 700, topSideBearing = 40),
+                        VerticalGlyphMetric(glyphId = 1, advanceHeight = 700, topSideBearing = 0),
+                    ),
+                ),
+                variations = VariationTables(
+                    axes = listOf(
+                        variationAxis(tag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+                    ),
+                ),
+            ),
+        )
+
+        val evidence = scaler.scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to 650.0)),
+        )
+        val vertical = evidence.metrics?.verticalMetrics ?: error("missing MVAR vertical metrics evidence")
+
+        assertEquals(862.0, vertical.ascender)
+        assertEquals(-328.0, vertical.descender)
+        assertEquals(65.0, vertical.lineGap)
+        assertTrue(evidence.diagnostics.none { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED &&
+                diagnostic.detail == "truetype.mvar-table-malformed"
+        })
+    }
+
+    @Test
+    fun trueTypeGlyfEvidenceReportsMalformedMvarWithoutDroppingBaseVerticalMetrics() {
+        val simpleSquare = simpleSquareGlyphData().withTrueTypePadding()
+        val scaler = TrueTypeGlyfScaler(
+            face = syntheticTrueTypeFace(
+                rawTables = mapOf(
+                    SFNTTableTag("loca") to shortLocaForOffsets(0, simpleSquare.size, simpleSquare.size)
+                        .toUnsignedByteList(),
+                    SFNTTableTag("glyf") to simpleSquare.toUnsignedByteList(),
+                    SFNTTableTag("MVAR") to listOf(0x00),
+                ),
+                metrics = sfntMetricsForFactory(
+                    verticalAscender = 850,
+                    verticalDescender = -320,
+                    verticalLineGap = 60,
+                    maxAdvanceHeight = 760,
+                    numberOfVMetrics = 1,
+                    verticalMetrics = listOf(
+                        VerticalGlyphMetric(glyphId = 0, advanceHeight = 700, topSideBearing = 40),
+                        VerticalGlyphMetric(glyphId = 1, advanceHeight = 700, topSideBearing = 0),
+                    ),
+                ),
+                variations = VariationTables(
+                    axes = listOf(
+                        variationAxis(tag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+                    ),
+                ),
+            ),
+        )
+
+        val evidence = scaler.scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to 650.0)),
+        )
+        val vertical = evidence.metrics?.verticalMetrics ?: error("missing malformed MVAR vertical metrics evidence")
+
+        assertEquals(850.0, vertical.ascender)
+        assertEquals(-320.0, vertical.descender)
+        assertEquals(60.0, vertical.lineGap)
+        assertTrue(evidence.diagnostics.any { diagnostic ->
+            diagnostic.code == FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED &&
+                diagnostic.detail == "truetype.mvar-table-malformed"
         })
     }
 
@@ -981,7 +1114,7 @@ class FontScalerSurfaceTest {
         )
         val vertical = evidence.metrics?.verticalMetrics ?: error("missing malformed VVAR evidence")
 
-        assertEquals(700.0, evidence.metrics?.advanceY)
+        assertEquals(700.0, evidence.metrics.advanceY)
         assertEquals("diagnostic", vertical.state)
         assertTrue(vertical.diagnostics.contains("truetype.vvar-table-malformed"))
         assertTrue(evidence.diagnostics.any { diagnostic ->
@@ -2194,6 +2327,11 @@ class FontScalerSurfaceTest {
                 advanceX = 600.0,
                 advanceY = 0.0,
                 bounds = GlyphBounds(left = 0.0, top = 0.0, right = 100.0, bottom = 100.0),
+                verticalMetrics = GlyphVerticalMetrics(
+                    state = "fallback",
+                    source = "horizontal-fallback-fact",
+                    diagnostics = listOf("truetype.vertical-metrics-absent"),
+                ),
             ),
             scaler.metrics(glyphId = 0u),
         )
@@ -3571,13 +3709,35 @@ class FontScalerSurfaceTest {
             gvar = phantomPointGvar,
             normalizedAxisOrder = listOf("wght"),
         )
-        val phantomMetricsWarningEvidence = TrueTypeGlyfScaler(
+        val hvarAdvanceEvidence = TrueTypeGlyfScaler(
             face = syntheticTrueTypeFace(
                 rawTables = mapOf(
                     SFNTTableTag("loca") to shortLocaForOffsets(0, paddedSimpleSquare.size, paddedSimpleSquare.size)
                         .toUnsignedByteList(),
                     SFNTTableTag("glyf") to paddedSimpleSquare.toUnsignedByteList(),
-                    SFNTTableTag("gvar") to singleAxisGvarWithPhantomPointAdvanceDelta().toUnsignedByteList(),
+                    SFNTTableTag("HVAR") to generatedHvarTableOneAxis(
+                        start = 0.0,
+                        peak = 0.5,
+                        end = 1.0,
+                        delta = 40,
+                    ).toUnsignedByteList(),
+                ),
+                variations = VariationTables(
+                    axes = listOf(
+                        variationAxis(tag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+                    ),
+                ),
+            ),
+        ).scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to 650.0)),
+        )
+        val malformedHvarEvidence = TrueTypeGlyfScaler(
+            face = syntheticTrueTypeFace(
+                rawTables = mapOf(
+                    SFNTTableTag("loca") to shortLocaForOffsets(0, paddedSimpleSquare.size, paddedSimpleSquare.size)
+                        .toUnsignedByteList(),
+                    SFNTTableTag("glyf") to paddedSimpleSquare.toUnsignedByteList(),
                     SFNTTableTag("HVAR") to listOf(0x00),
                 ),
                 variations = VariationTables(
@@ -3588,7 +3748,74 @@ class FontScalerSurfaceTest {
             ),
         ).scaledGlyphEvidence(
             glyphId = 0u,
-            position = VariationPosition(axes = mapOf("wght" to 900.0)),
+            position = VariationPosition(axes = mapOf("wght" to 650.0)),
+        )
+        val mvarVerticalEvidence = TrueTypeGlyfScaler(
+            face = syntheticTrueTypeFace(
+                rawTables = mapOf(
+                    SFNTTableTag("loca") to shortLocaForOffsets(0, paddedSimpleSquare.size, paddedSimpleSquare.size)
+                        .toUnsignedByteList(),
+                    SFNTTableTag("glyf") to paddedSimpleSquare.toUnsignedByteList(),
+                    SFNTTableTag("MVAR") to generatedMvarTableOneAxis(
+                        entries = listOf(
+                            "vasc" to 12,
+                            "vdsc" to -8,
+                            "vlgp" to 5,
+                        ),
+                        start = 0.0,
+                        peak = 0.5,
+                        end = 1.0,
+                    ).toUnsignedByteList(),
+                ),
+                metrics = sfntMetricsForFactory(
+                    verticalAscender = 850,
+                    verticalDescender = -320,
+                    verticalLineGap = 60,
+                    maxAdvanceHeight = 760,
+                    numberOfVMetrics = 1,
+                    verticalMetrics = listOf(
+                        VerticalGlyphMetric(glyphId = 0, advanceHeight = 700, topSideBearing = 40),
+                        VerticalGlyphMetric(glyphId = 1, advanceHeight = 700, topSideBearing = 0),
+                    ),
+                ),
+                variations = VariationTables(
+                    axes = listOf(
+                        variationAxis(tag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+                    ),
+                ),
+            ),
+        ).scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to 650.0)),
+        )
+        val malformedMvarEvidence = TrueTypeGlyfScaler(
+            face = syntheticTrueTypeFace(
+                rawTables = mapOf(
+                    SFNTTableTag("loca") to shortLocaForOffsets(0, paddedSimpleSquare.size, paddedSimpleSquare.size)
+                        .toUnsignedByteList(),
+                    SFNTTableTag("glyf") to paddedSimpleSquare.toUnsignedByteList(),
+                    SFNTTableTag("MVAR") to listOf(0x00),
+                ),
+                metrics = sfntMetricsForFactory(
+                    verticalAscender = 850,
+                    verticalDescender = -320,
+                    verticalLineGap = 60,
+                    maxAdvanceHeight = 760,
+                    numberOfVMetrics = 1,
+                    verticalMetrics = listOf(
+                        VerticalGlyphMetric(glyphId = 0, advanceHeight = 700, topSideBearing = 40),
+                        VerticalGlyphMetric(glyphId = 1, advanceHeight = 700, topSideBearing = 0),
+                    ),
+                ),
+                variations = VariationTables(
+                    axes = listOf(
+                        variationAxis(tag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+                    ),
+                ),
+            ),
+        ).scaledGlyphEvidence(
+            glyphId = 0u,
+            position = VariationPosition(axes = mapOf("wght" to 650.0)),
         )
 
         val singlePointDefault = singlePointScaler.scaledGlyphEvidence(
@@ -3684,16 +3911,23 @@ class FontScalerSurfaceTest {
               "compositeCase": {
                 "max": ${glyphEvidenceSummaryJson(compositeEvidence).prependIndent("                ").trimStart()}
               },
+              "hvarAdvanceCase": ${glyphEvidenceSummaryJson(hvarAdvanceEvidence).prependIndent("              ").trimStart()},
+              "mvarVerticalCase": ${glyphEvidenceSummaryJson(mvarVerticalEvidence).prependIndent("              ").trimStart()},
               "phantomMetricCase": {
                 "variationDeltas": ${variationDeltaEvidenceJson(phantomPointDeltas, includePhantomPoints = true).prependIndent("                ").trimStart()},
                 "positionEvidence": {
                   "min": ${glyphEvidenceSummaryJson(phantomPointMin).prependIndent("                  ").trimStart()},
                   "default": ${glyphEvidenceSummaryJson(phantomPointDefault).prependIndent("                  ").trimStart()},
                   "max": ${glyphEvidenceSummaryJson(phantomPointMax).prependIndent("                  ").trimStart()}
-                },
-                "metricsVariationWarning": ${glyphEvidenceSummaryJson(phantomMetricsWarningEvidence).prependIndent("                ").trimStart()}
+                }
               },
               "diagnosticSnapshots": {
+                "malformedHvar": [
+                  ${malformedHvarEvidence.diagnostics.joinToString(",\n                  ") { diagnostic -> diagnostic.toCanonicalJson() }}
+                ],
+                "malformedMvar": [
+                  ${malformedMvarEvidence.diagnostics.joinToString(",\n                  ") { diagnostic -> diagnostic.toCanonicalJson() }}
+                ],
                 "malformedTuple": [
                   ${malformedEvidence.diagnostics.joinToString(",\n                  ") { diagnostic -> diagnostic.toCanonicalJson() }}
                 ]
@@ -3701,7 +3935,7 @@ class FontScalerSurfaceTest {
               "nonClaims": [
                 "no-complete-target-support-claim",
                 "no-complete-variable-font-support-claim",
-                "no-hvar-vvar-mvar-metrics-claim",
+                "no-complete-hvar-vvar-mvar-metrics-claim",
                 "no-vertical-metrics-claim",
                 "no-complete-hinting-vm-claim",
                 "no-a8-or-sdf-artifact-claim",
@@ -4812,11 +5046,45 @@ class FontScalerSurfaceTest {
         ) + store
     }
 
+    private fun generatedHvarTableOneAxis(
+        start: Double,
+        peak: Double,
+        end: Double,
+        delta: Int,
+    ): ByteArray {
+        val store = generatedItemVariationStoreOneAxis(
+            start = start,
+            peak = peak,
+            end = end,
+            delta = delta,
+        )
+        return bytes(
+            0x00, 0x01,
+            0x00, 0x00,
+            0x00, 0x00, 0x00, 0x14,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+        ) + store
+    }
+
     private fun generatedItemVariationStoreOneAxis(
         start: Double,
         peak: Double,
         end: Double,
         delta: Int,
+    ): ByteArray = generatedItemVariationStoreOneAxis(
+        start = start,
+        peak = peak,
+        end = end,
+        deltas = listOf(delta),
+    )
+
+    private fun generatedItemVariationStoreOneAxis(
+        start: Double,
+        peak: Double,
+        end: Double,
+        deltas: List<Int>,
     ): ByteArray =
         bytes(
             0x00, 0x01,
@@ -4828,13 +5096,54 @@ class FontScalerSurfaceTest {
             *f2Dot14(start),
             *f2Dot14(peak),
             *f2Dot14(end),
-            0x00, 0x01,
+            0x00, deltas.size,
             0x00, 0x01,
             0x00, 0x01,
             0x00, 0x00,
-            (delta ushr 8) and 0xff,
-            delta and 0xff,
+            *deltas.flatMap { delta ->
+                listOf((delta ushr 8) and 0xff, delta and 0xff)
+            }.toIntArray(),
         )
+
+    private fun generatedMvarTableOneAxis(
+        entries: List<Pair<String, Int>>,
+        start: Double,
+        peak: Double,
+        end: Double,
+    ): ByteArray {
+        val sortedEntries = entries.sortedBy { (tag, _) -> tag }
+        val store = generatedItemVariationStoreOneAxis(
+            start = start,
+            peak = peak,
+            end = end,
+            deltas = sortedEntries.map { (_, delta) -> delta },
+        )
+        val valueRecords = sortedEntries.flatMapIndexed { index, (tag, _) ->
+            require(tag.length == 4) { "MVAR test tag must contain exactly four characters." }
+            val tagBytes = tag.toByteArray(Charsets.US_ASCII)
+            require(tagBytes.size == 4) { "MVAR test tag must encode to exactly four ASCII bytes." }
+            listOf(
+                tagBytes[0].toInt() and 0xff,
+                tagBytes[1].toInt() and 0xff,
+                tagBytes[2].toInt() and 0xff,
+                tagBytes[3].toInt() and 0xff,
+                0x00, 0x00,
+                (index ushr 8) and 0xff,
+                index and 0xff,
+            )
+        }
+        val itemVariationStoreOffset = 12 + sortedEntries.size * 8
+        return bytes(
+            0x00, 0x01,
+            0x00, 0x00,
+            0x00, 0x00,
+            0x00, 0x08,
+            0x00, sortedEntries.size,
+            (itemVariationStoreOffset ushr 8) and 0xff,
+            itemVariationStoreOffset and 0xff,
+            *valueRecords.toIntArray(),
+        ) + store
+    }
 
     private fun syntheticTrueTypeFace(
         rawTables: Map<SFNTTableTag, List<Int>>,

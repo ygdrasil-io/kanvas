@@ -1087,7 +1087,7 @@ interpolation, phantom-point metrics, CFF/CFF2 support, hinting VM parity, or
 GPU glyph route support.
 ### PKT-04F: TrueType Gvar IUP Interpolation
 
-Status: implemented.
+Status: done; freshly validated with deterministic evidence.
 
 Files:
 
@@ -1111,15 +1111,17 @@ Evidence:
   deterministic `variation-deltas.json` style evidence for one explicit point,
   wraparound interpolation, untouched-contour isolation, `avar`-mapped
   coordinates, composite child-outline propagation, horizontal phantom-point
-  metrics min/default/max positions, `HVAR`-unimplemented warnings, and
-  malformed tuple diagnostics.
+  metrics min/default/max positions, bounded `HVAR` advance-width deltas,
+  bounded `MVAR` vertical-global metric deltas, malformed `HVAR`/`MVAR`
+  table diagnostics, and malformed tuple diagnostics.
 - Tests prove that a single explicit point propagates to the whole contour,
   wraparound interpolation derives deltas for the untouched segment, contours
   with no referenced points remain unchanged, `TrueTypeGlyfScaler` applies
   `avar` remapping before requesting `gvar` deltas, composite outlines inherit
-  interpolated child deltas, and bounded phantom-point deltas now adjust
-  `advanceX` without changing the fallback route for unsupported metrics
-  variation tables.
+  interpolated child deltas, bounded phantom-point deltas adjust `advanceX`,
+  bounded `HVAR` data adjusts horizontal metrics, and bounded `MVAR` data
+  adjusts surfaced vertical global metrics without dropping semantically valid
+  fallback metrics when malformed table data is encountered.
 - Malformed tuple payloads now emit `font.variation-data-malformed` with
   `truetype.gvar-malformed` while preserving the default outline route when the
   fallback remains semantically valid.
@@ -1127,15 +1129,20 @@ Evidence:
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:scaler:test --tests '*IUP*' --tests '*Gvar*'
+rtk ./gradlew --no-daemon :font:scaler:test --tests '*IUP*' --tests '*Gvar*' --tests '*PhantomPoint*' --tests '*Hvar*' --tests '*Mvar*'
 rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk git diff --check
 ```
 
-Remaining gate: this is a bounded TrueType `gvar` IUP slice only. It does not
-claim complete `HVAR`/`VVAR`/`MVAR` application, vertical shaping/layout, complete
-variable-font parity, hinting VM parity, or GPU glyph route support.
+Remaining gate:
+
+- This is still bounded TrueType variation evidence only.
+- It does not claim complete `gvar` parity, complete `HVAR`/`VVAR`/`MVAR`
+  parity beyond the checked-in fixtures, vertical shaping/layout, complete
+  variable-font parity, hinting VM parity, or GPU glyph route support.
 ### PKT-04G: TrueType Vertical Metric Evidence
 
 Status: done; freshly validated with deterministic evidence.
