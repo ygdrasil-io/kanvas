@@ -312,7 +312,7 @@
         "reports/pure-kotlin-text/dump-evidence-index.json"
       ],
       "requiredEvidenceGates": [
-        "Add complete-miss cluster ranges and shaping trace references before promoting fallback evidence beyond this bounded review slice.",
+        "Add shaping trace references and dedicated per-fixture fallback assets before promoting fallback evidence beyond this bounded review slice.",
         "Add variable-axis-aware and cluster-safe fallback evidence before claiming complete fallback behavior.",
         "Keep host-dependent system scan facts non-normative until deterministic scan inputs and host markers land."
       ],

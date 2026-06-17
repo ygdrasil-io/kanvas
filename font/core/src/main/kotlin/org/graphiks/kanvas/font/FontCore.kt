@@ -4011,6 +4011,32 @@ data class ResolvedFontRunEvidence(
     }
 }
 
+data class FallbackDiagnosticRangeEvidence(
+    val start: Int,
+    val end: Int,
+    val clusterStart: Int,
+    val clusterEnd: Int,
+    val diagnosticCode: String,
+) {
+    init {
+        require(start >= 0) { "start must be non-negative." }
+        require(end > start) { "end must be greater than start." }
+        require(clusterStart >= 0) { "clusterStart must be non-negative." }
+        require(clusterEnd >= clusterStart) { "clusterEnd must be greater than or equal to clusterStart." }
+        require(diagnosticCode.isStableDiagnosticCode()) {
+            "diagnosticCode must be a stable one-line diagnostic code."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendFontCompactJsonField("textRange", "$start..${end - 1}", comma = true)
+        appendFontCompactJsonField("clusterRange", "$clusterStart..$clusterEnd", comma = true)
+        appendFontCompactJsonField("diagnosticCode", diagnosticCode, comma = false)
+        append("}")
+    }
+}
+
 /**
  * Deterministic trace for the catalog fallback decisions used by [CatalogFontResolver].
  *
@@ -4188,9 +4214,9 @@ private data class FallbackDecisionCaseDump(
         appendFontCompactJsonField("fixtureId", fixtureId, comma = true)
         append("request".evidenceQuoted()).append(":").append(request.toCanonicalJson()).append(",")
         append("decisions".evidenceQuoted()).append(":")
-        append(decisions.joinToString(prefix = "[", postfix = "]", separator = ",") { decision ->
-            decision.toCanonicalJson()
-        })
+        append(decisions.mapIndexed { index, decision ->
+            decision.toCanonicalJson(clusterStart = index, clusterEnd = index)
+        }.joinToString(prefix = "[", postfix = "]", separator = ",") { it })
         append(",")
         appendStringArrayField("diagnostics", diagnostics, comma = false)
         append("}")
@@ -4201,6 +4227,7 @@ private data class ResolvedFontRunsCaseDump(
     val fixtureId: String,
     val request: FallbackRequestSummary,
     val runs: List<ResolvedFontRunEvidence>,
+    val diagnosticRanges: List<FallbackDiagnosticRangeEvidence>,
     val diagnostics: List<String>,
 ) {
     fun toCanonicalJson(): String = buildString {
@@ -4210,14 +4237,21 @@ private data class ResolvedFontRunsCaseDump(
         append("runs".evidenceQuoted()).append(":")
         append(runs.joinToString(prefix = "[", postfix = "]", separator = ",") { run -> run.toCanonicalJson() })
         append(",")
+        append("diagnosticRanges".evidenceQuoted()).append(":")
+        append(diagnosticRanges.joinToString(prefix = "[", postfix = "]", separator = ",") { range -> range.toCanonicalJson() })
+        append(",")
         appendStringArrayField("diagnostics", diagnostics, comma = false)
         append("}")
     }
 }
 
-fun FallbackDecisionTrace.toCanonicalJson(): String = buildString {
+fun FallbackDecisionTrace.toCanonicalJson(
+    clusterStart: Int,
+    clusterEnd: Int = clusterStart,
+): String = buildString {
     append("{")
     appendFontCompactJsonField("textRange", "$start..${end - 1}", comma = true)
+    appendFontCompactJsonField("clusterRange", "$clusterStart..$clusterEnd", comma = true)
     appendFontCompactJsonField("codePoint", codePoint.toCodePointEvidence(), comma = true)
     appendStringArrayField("requestedFamilies", requestedFamilies, comma = true)
     appendFontCompactJsonField("genericFamily", genericFamily, comma = true)
@@ -4233,6 +4267,36 @@ fun FallbackDecisionTrace.toCanonicalJson(): String = buildString {
     append("diagnosticCode".evidenceQuoted()).append(":").append(diagnosticCode.toFontJsonNullableString())
     append("}")
 }
+
+private fun buildFallbackDiagnosticRanges(
+    decisions: List<FallbackDecisionTrace>,
+): List<FallbackDiagnosticRangeEvidence> =
+    decisions.flatMapIndexed { clusterIndex, decision ->
+        buildList {
+            decision.diagnosticCode?.let { diagnosticCode ->
+                add(
+                    FallbackDiagnosticRangeEvidence(
+                        start = decision.start,
+                        end = decision.end,
+                        clusterStart = clusterIndex,
+                        clusterEnd = clusterIndex,
+                        diagnosticCode = diagnosticCode,
+                    ),
+                )
+            }
+            decision.shapingDiagnosticCode()?.let { diagnosticCode ->
+                add(
+                    FallbackDiagnosticRangeEvidence(
+                        start = decision.start,
+                        end = decision.end,
+                        clusterStart = clusterIndex,
+                        clusterEnd = clusterIndex,
+                        diagnosticCode = diagnosticCode,
+                    ),
+                )
+            }
+        }.distinct()
+    }
 
 object FallbackEvidenceWriter {
     fun writeBundle(
@@ -4262,6 +4326,7 @@ object FallbackEvidenceWriter {
                     style = case.request.style,
                 ),
                 runs = case.runs,
+                diagnosticRanges = buildFallbackDiagnosticRanges(case.decisions),
                 diagnostics = case.diagnostics.sorted(),
             )
         }
