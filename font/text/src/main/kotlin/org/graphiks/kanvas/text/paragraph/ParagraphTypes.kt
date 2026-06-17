@@ -1,8 +1,13 @@
 package org.graphiks.kanvas.text.paragraph
 
+import java.security.MessageDigest
+import org.graphiks.kanvas.font.FontSlant
+import org.graphiks.kanvas.font.FontStyle
 import org.graphiks.kanvas.font.TypefaceID
+import org.graphiks.kanvas.font.TypefacePaletteSelection
 import org.graphiks.kanvas.text.shaping.FeatureSet
 import org.graphiks.kanvas.text.shaping.OpenTypeShapingEngine
+import org.graphiks.kanvas.text.shaping.PinnedUnicodeDataGenerator
 import org.graphiks.kanvas.text.shaping.ShapedGlyphRun
 import org.graphiks.kanvas.text.shaping.ShapingDiagnostic
 import org.graphiks.kanvas.text.shaping.ShapingRequest
@@ -78,7 +83,156 @@ public data class Paragraph(
     public val paragraphStyle: ParagraphStyle = ParagraphStyle(),
     public val textStyles: Map<IntRange, TextStyle> = emptyMap(),
     public val placeholders: Map<IntRange, PlaceholderStyle> = emptyMap(),
+) {
+    public val unicodeVersion: String = PinnedUnicodeDataGenerator.PinnedUnicodeVersion
+    public val inputHash: String
+        get() = paragraphInputPreimageJson().toByteArray(Charsets.UTF_8).sha256Hex()
+    public val inputDiagnostics: List<ParagraphLayoutDiagnostic>
+        get() = paragraphInputDiagnostics(this)
+
+    /**
+     * Serializes the immutable paragraph input snapshot into deterministic JSON.
+     */
+    public fun dumpInput(): String = buildString {
+        append("{\n")
+        append("  \"schema\": \"kanvas.paragraph.input.v1\",\n")
+        append("  \"unicodeVersion\": ").append(paragraphJsonString(unicodeVersion)).append(",\n")
+        append("  \"inputHash\": ").append(paragraphJsonString(inputHash)).append(",\n")
+        append("  \"text\": ").append(paragraphJsonString(text)).append(",\n")
+        append("  \"textLength\": ").append(text.length).append(",\n")
+        append("  \"paragraphStyle\": ").append(paragraphStyle.toDumpJson()).append(",\n")
+        append("  \"styleRuns\": ")
+        appendParagraphJsonArray(
+            values = textStyles.entries.sortedByRange(),
+            entryIndent = "    ",
+            closingIndent = "  ",
+        ) { (range, style) ->
+            style.toDumpJson(range)
+        }
+        append(",\n")
+        append("  \"placeholders\": ")
+        appendParagraphJsonArray(
+            values = placeholders.entries.sortedByRange(),
+            entryIndent = "    ",
+            closingIndent = "  ",
+        ) { (range, placeholder) ->
+            placeholder.toDumpJson(range)
+        }
+        append(",\n")
+        append("  \"diagnostics\": ")
+        appendParagraphJsonArray(
+            values = inputDiagnostics,
+            entryIndent = "    ",
+            closingIndent = "  ",
+        ) { diagnostic ->
+            diagnostic.toDumpJson()
+        }
+        append("\n")
+        append("}\n")
+    }
+
+    private fun paragraphInputPreimageJson(): String = buildString {
+        append("{\n")
+        append("  \"schema\": \"kanvas.paragraph.input-preimage.v1\",\n")
+        append("  \"unicodeVersion\": ").append(paragraphJsonString(unicodeVersion)).append(",\n")
+        append("  \"text\": ").append(paragraphJsonString(text)).append(",\n")
+        append("  \"paragraphStyle\": ").append(paragraphStyle.toDumpJson()).append(",\n")
+        append("  \"styleRuns\": ")
+        appendParagraphJsonArray(
+            values = textStyles.entries.sortedByRange(),
+            entryIndent = "    ",
+            closingIndent = "  ",
+        ) { (range, style) ->
+            style.toDumpJson(range)
+        }
+        append(",\n")
+        append("  \"placeholders\": ")
+        appendParagraphJsonArray(
+            values = placeholders.entries.sortedByRange(),
+            entryIndent = "    ",
+            closingIndent = "  ",
+        ) { (range, placeholder) ->
+            placeholder.toDumpJson(range)
+        }
+        append(",\n")
+        append("  \"diagnostics\": ")
+        appendParagraphJsonArray(
+            values = inputDiagnostics,
+            entryIndent = "    ",
+            closingIndent = "  ",
+        ) { diagnostic ->
+            diagnostic.toDumpJson()
+        }
+        append("\n")
+        append("}\n")
+    }
+}
+
+public enum class TextAlign {
+    START,
+    CENTER,
+    END,
+    JUSTIFY,
+}
+
+public enum class TextDirection(
+    public val legacyValue: Int,
+) {
+    AUTO(0),
+    LEFT_TO_RIGHT(1),
+    RIGHT_TO_LEFT(-1),
+}
+
+public enum class EllipsisPolicy {
+    NONE,
+    END,
+}
+
+public enum class TextHeightBehavior {
+    FONT_METRICS,
+    STRUT,
+}
+
+public enum class FallbackPreference {
+    SYSTEM_DEFAULT,
+    PREFER_DECLARED_FAMILIES,
+    PREFER_EXACT_TYPEFACE,
+}
+
+public enum class SyntheticStylePolicy {
+    ALLOW,
+    DISALLOW,
+}
+
+public enum class TextDecorationStyle {
+    SOLID,
+    DOUBLE,
+    DOTTED,
+    DASHED,
+    WAVY,
+}
+
+public data class TextDecorationSpec(
+    public val underline: Boolean = false,
+    public val overline: Boolean = false,
+    public val lineThrough: Boolean = false,
+    public val style: TextDecorationStyle = TextDecorationStyle.SOLID,
+    public val thicknessMultiplier: Float = 1f,
 )
+
+public enum class PlaceholderAlignment {
+    BASELINE,
+    ABOVE_BASELINE,
+    BELOW_BASELINE,
+    TOP,
+    BOTTOM,
+    MIDDLE,
+}
+
+public enum class PlaceholderBaseline {
+    ALPHABETIC,
+    IDEOGRAPHIC,
+}
 
 /**
  * Defines paragraph-wide layout behavior.
@@ -90,11 +244,14 @@ public data class Paragraph(
  * @property lineHeight Optional explicit line height in logical pixels.
  */
 public data class ParagraphStyle(
-    public val textAlign: String = "start",
-    public val textDirection: Int = 0,
+    public val textAlign: TextAlign = TextAlign.START,
+    public val textDirection: TextDirection = TextDirection.AUTO,
     public val maxLines: Int? = null,
     public val ellipsis: String? = null,
+    public val ellipsisPolicy: EllipsisPolicy = if (ellipsis == null) EllipsisPolicy.NONE else EllipsisPolicy.END,
     public val lineHeight: Float? = null,
+    public val textHeightBehavior: TextHeightBehavior = TextHeightBehavior.FONT_METRICS,
+    public val defaultLocale: String? = null,
 )
 
 /**
@@ -128,6 +285,24 @@ public const val PARAGRAPH_LAYOUT_LINE_HEIGHT_NON_FINITE_DIAGNOSTIC_CODE: String
     "text.paragraph.line-height-non-finite"
 
 /**
+ * Stable diagnostic family emitted when paragraph input contracts contain invalid numeric or coordinate facts.
+ */
+public const val PARAGRAPH_INPUT_INVALID_CONSTRAINT_DIAGNOSTIC_CODE: String =
+    "text.paragraph.invalid-constraint"
+
+/**
+ * Stable diagnostic family emitted when paragraph style or placeholder UTF-16 ranges fall outside the input text.
+ */
+public const val PARAGRAPH_INPUT_INVALID_STYLE_RANGE_DIAGNOSTIC_CODE: String =
+    "text.paragraph.invalid-style-range"
+
+/**
+ * Stable diagnostic family emitted when a paragraph policy is captured but not yet supported by the bounded runtime.
+ */
+public const val PARAGRAPH_INPUT_UNSUPPORTED_POLICY_DIAGNOSTIC_CODE: String =
+    "text.paragraph.unsupported-policy"
+
+/**
  * Defines style applied to a logical range of text.
  *
  * @property typefaceId Stable typeface identifier requested for this style
@@ -138,11 +313,22 @@ public const val PARAGRAPH_LAYOUT_LINE_HEIGHT_NON_FINITE_DIAGNOSTIC_CODE: String
  * @property features OpenType feature settings represented as four-character tags to integer values.
  */
 public data class TextStyle(
+    public val fontFamilies: List<String> = emptyList(),
+    public val fallbackPreference: FallbackPreference = FallbackPreference.SYSTEM_DEFAULT,
     public val typefaceId: TypefaceID? = null,
     public val fontSize: Float = 12f,
+    public val fontStyle: FontStyle = FontStyle(),
+    public val syntheticStylePolicy: SyntheticStylePolicy = SyntheticStylePolicy.ALLOW,
     public val colorRgba: Long = 0x000000ff,
     public val locale: String? = null,
+    public val scriptHint: String? = null,
     public val features: Map<String, Int> = emptyMap(),
+    public val variationCoordinates: Map<String, Float> = emptyMap(),
+    public val palette: TypefacePaletteSelection? = null,
+    public val decoration: TextDecorationSpec? = null,
+    public val letterSpacing: Float = 0f,
+    public val wordSpacing: Float = 0f,
+    public val heightMultiplier: Float? = null,
 )
 
 /**
@@ -157,7 +343,8 @@ public data class PlaceholderStyle(
     public val width: Float,
     public val height: Float,
     public val baselineOffset: Float = height,
-    public val alignment: String = "baseline",
+    public val alignment: PlaceholderAlignment = PlaceholderAlignment.BASELINE,
+    public val baseline: PlaceholderBaseline = PlaceholderBaseline.ALPHABETIC,
 )
 
 /**
@@ -215,6 +402,14 @@ public class BasicParagraphLayoutEngine(
                 layoutRefused = true,
             )
         }
+        if (paragraph.inputDiagnostics.isNotEmpty()) {
+            return ParagraphLayoutResult(
+                paragraph = paragraph,
+                maxWidth = maxWidth,
+                diagnostics = paragraph.inputDiagnostics,
+                layoutRefused = true,
+            )
+        }
         if (paragraph.text.isEmpty()) {
             return ParagraphLayoutResult(
                 paragraph = paragraph,
@@ -248,7 +443,7 @@ public class BasicParagraphLayoutEngine(
                     fontSize = style.fontSize,
                     features = FeatureSet(style.features),
                     locale = style.locale,
-                    paragraphDirection = paragraph.paragraphStyle.textDirection,
+                    paragraphDirection = paragraph.paragraphStyle.textDirection.legacyValue,
                 ),
             )
             val glyphRuns = shapingResult.glyphRuns
@@ -337,29 +532,9 @@ public data class ParagraphLayoutResult(
     public fun dump(): String = buildString {
         append("{\n")
         append("  \"schema\": \"kanvas.paragraph.layout.v1\",\n")
-        append("  \"input\": {\n")
-        append("    \"text\": ").append(paragraphJsonString(paragraph.text)).append(",\n")
-        append("    \"textLength\": ").append(paragraph.text.length).append(",\n")
-        append("    \"paragraphStyle\": ").append(paragraph.paragraphStyle.toDumpJson()).append(",\n")
-        append("    \"textStyles\": ")
-        appendParagraphJsonArray(
-            values = paragraph.textStyles.entries.sortedByRange(),
-            entryIndent = "      ",
-            closingIndent = "    ",
-        ) { (range, style) ->
-            style.toDumpJson(range)
-        }
+        append("  \"input\": ")
+        append(paragraph.dumpInput().trimIndent().prependIndent("  ").trimStart())
         append(",\n")
-        append("    \"placeholders\": ")
-        appendParagraphJsonArray(
-            values = paragraph.placeholders.entries.sortedByRange(),
-            entryIndent = "      ",
-            closingIndent = "    ",
-        ) { (range, placeholder) ->
-            placeholder.toDumpJson(range)
-        }
-        append("\n")
-        append("  },\n")
         append("  \"layout\": {\"maxWidth\": ")
             .append(paragraphJsonNullableFloat(maxWidth))
             .append(", \"width\": ")
@@ -618,6 +793,170 @@ private fun paragraphStyleDiagnostic(style: ParagraphStyle): ParagraphLayoutDiag
         else -> null
     }
 
+private fun paragraphInputDiagnostics(paragraph: Paragraph): List<ParagraphLayoutDiagnostic> = buildList {
+    val sortedStyleRanges = paragraph.textStyles.entries.sortedByRange()
+    sortedStyleRanges.zipWithNext().forEach { (previous, current) ->
+        if (previous.key.overlaps(current.key)) {
+            add(
+                ParagraphLayoutDiagnostic(
+                    code = PARAGRAPH_INPUT_INVALID_STYLE_RANGE_DIAGNOSTIC_CODE,
+                    message = "Style ranges ${previous.key.toDumpLabel()} and ${current.key.toDumpLabel()} overlap.",
+                    textRange = current.key,
+                    severity = "refusal",
+                ),
+            )
+        }
+    }
+    sortedStyleRanges.forEach { (range, style) ->
+        if (!range.isValidUtf16RangeFor(paragraph.text.length)) {
+            add(
+                ParagraphLayoutDiagnostic(
+                    code = PARAGRAPH_INPUT_INVALID_STYLE_RANGE_DIAGNOSTIC_CODE,
+                    message = "Style range ${range.toDumpLabel()} falls outside text length ${paragraph.text.length}.",
+                    textRange = range,
+                    severity = "refusal",
+                ),
+            )
+        }
+        if (!style.fontSize.isFinite() || style.fontSize <= 0f) {
+            add(
+                ParagraphLayoutDiagnostic(
+                    code = PARAGRAPH_INPUT_INVALID_CONSTRAINT_DIAGNOSTIC_CODE,
+                    message = "fontSize must be finite and greater than zero.",
+                    textRange = range,
+                    severity = "refusal",
+                ),
+            )
+        }
+        if (style.fontFamilies.any { family -> family.isBlank() }) {
+            add(
+                ParagraphLayoutDiagnostic(
+                    code = PARAGRAPH_INPUT_INVALID_CONSTRAINT_DIAGNOSTIC_CODE,
+                    message = "fontFamilies must not contain blank family names.",
+                    textRange = range,
+                    severity = "refusal",
+                ),
+            )
+        }
+        if (!style.letterSpacing.isFinite() || !style.wordSpacing.isFinite()) {
+            add(
+                ParagraphLayoutDiagnostic(
+                    code = PARAGRAPH_INPUT_INVALID_CONSTRAINT_DIAGNOSTIC_CODE,
+                    message = "letterSpacing and wordSpacing must be finite.",
+                    textRange = range,
+                    severity = "refusal",
+                ),
+            )
+        }
+        if (style.heightMultiplier != null && (!style.heightMultiplier.isFinite() || style.heightMultiplier <= 0f)) {
+            add(
+                ParagraphLayoutDiagnostic(
+                    code = PARAGRAPH_INPUT_INVALID_CONSTRAINT_DIAGNOSTIC_CODE,
+                    message = "heightMultiplier must be finite and greater than zero when present.",
+                    textRange = range,
+                    severity = "refusal",
+                ),
+            )
+        }
+        style.variationCoordinates.entries.sortedBy { it.key }.forEach { (axisTag, value) ->
+            if (!axisTag.isStableVariationAxisTag()) {
+                add(
+                    ParagraphLayoutDiagnostic(
+                        code = PARAGRAPH_INPUT_INVALID_CONSTRAINT_DIAGNOSTIC_CODE,
+                        message = "variation axis tag '$axisTag' must be a four-character printable ASCII OpenType tag.",
+                        textRange = range,
+                        severity = "refusal",
+                    ),
+                )
+            }
+            if (!value.isFinite()) {
+                add(
+                    ParagraphLayoutDiagnostic(
+                        code = PARAGRAPH_INPUT_INVALID_CONSTRAINT_DIAGNOSTIC_CODE,
+                        message = "variation coordinate '$axisTag' must be finite.",
+                        textRange = range,
+                        severity = "refusal",
+                    ),
+                )
+            }
+        }
+    }
+    val sortedPlaceholderRanges = paragraph.placeholders.entries.sortedByRange()
+    sortedPlaceholderRanges.zipWithNext().forEach { (previous, current) ->
+        if (previous.key.overlaps(current.key)) {
+            add(
+                ParagraphLayoutDiagnostic(
+                    code = PARAGRAPH_INPUT_INVALID_STYLE_RANGE_DIAGNOSTIC_CODE,
+                    message = "Placeholder ranges ${previous.key.toDumpLabel()} and ${current.key.toDumpLabel()} overlap.",
+                    textRange = current.key,
+                    severity = "refusal",
+                ),
+            )
+        }
+    }
+    sortedPlaceholderRanges.forEach { (range, placeholder) ->
+        if (!range.isValidUtf16RangeFor(paragraph.text.length)) {
+            add(
+                ParagraphLayoutDiagnostic(
+                    code = PARAGRAPH_INPUT_INVALID_STYLE_RANGE_DIAGNOSTIC_CODE,
+                    message = "Placeholder range ${range.toDumpLabel()} falls outside text length ${paragraph.text.length}.",
+                    textRange = range,
+                    severity = "refusal",
+                ),
+            )
+        }
+        if (range.first != range.last) {
+            add(
+                ParagraphLayoutDiagnostic(
+                    code = PARAGRAPH_INPUT_INVALID_STYLE_RANGE_DIAGNOSTIC_CODE,
+                    message = "Placeholder range ${range.toDumpLabel()} must cover exactly one UTF-16 code unit.",
+                    textRange = range,
+                    severity = "refusal",
+                ),
+            )
+        }
+        if (!placeholder.width.isFinite() || !placeholder.height.isFinite() || !placeholder.baselineOffset.isFinite()) {
+            add(
+                ParagraphLayoutDiagnostic(
+                    code = PARAGRAPH_INPUT_INVALID_CONSTRAINT_DIAGNOSTIC_CODE,
+                    message = "placeholder width, height, and baselineOffset must be finite.",
+                    textRange = range,
+                    severity = "refusal",
+                ),
+            )
+        }
+        if (placeholder.width < 0f || placeholder.height < 0f) {
+            add(
+                ParagraphLayoutDiagnostic(
+                    code = PARAGRAPH_INPUT_INVALID_CONSTRAINT_DIAGNOSTIC_CODE,
+                    message = "placeholder width and height must be non-negative.",
+                    textRange = range,
+                    severity = "refusal",
+                ),
+            )
+        }
+        if (placeholder.baseline != PlaceholderBaseline.ALPHABETIC) {
+            add(
+                ParagraphLayoutDiagnostic(
+                    code = PARAGRAPH_INPUT_UNSUPPORTED_POLICY_DIAGNOSTIC_CODE,
+                    message = "placeholder baseline '${placeholder.baseline.serializedName}' is not supported by the bounded paragraph runtime.",
+                    textRange = range,
+                    severity = "refusal",
+                ),
+            )
+        }
+    }
+    if (paragraph.paragraphStyle.textHeightBehavior != TextHeightBehavior.FONT_METRICS) {
+        add(
+            ParagraphLayoutDiagnostic(
+                code = PARAGRAPH_INPUT_UNSUPPORTED_POLICY_DIAGNOSTIC_CODE,
+                message = "textHeightBehavior '${paragraph.paragraphStyle.textHeightBehavior.serializedName}' is not supported by the bounded paragraph runtime.",
+                severity = "refusal",
+            ),
+        )
+    }
+}
+
 private fun ShapingDiagnostic.toParagraphLayoutDiagnostic(): ParagraphLayoutDiagnostic =
     ParagraphLayoutDiagnostic(
         code = code,
@@ -641,29 +980,63 @@ private fun requireValidMaxWidth(maxWidth: Float) {
 
 private fun ParagraphStyle.toDumpJson(): String = buildString {
     append("{\"textAlign\": ")
-        .append(paragraphJsonString(textAlign))
+        .append(paragraphJsonString(textAlign.serializedName))
         .append(", \"textDirection\": ")
-        .append(textDirection)
+        .append(paragraphJsonString(textDirection.serializedName))
         .append(", \"maxLines\": ")
         .append(maxLines?.toString() ?: "null")
         .append(", \"ellipsis\": ")
         .append(paragraphJsonNullableString(ellipsis))
+        .append(", \"ellipsisPolicy\": ")
+        .append(paragraphJsonString(ellipsisPolicy.serializedName))
         .append(", \"lineHeight\": ")
         .append(paragraphJsonNullableFloat(lineHeight))
+        .append(", \"textHeightBehavior\": ")
+        .append(paragraphJsonString(textHeightBehavior.serializedName))
+        .append(", \"defaultLocale\": ")
+        .append(paragraphJsonNullableString(defaultLocale))
         .append("}")
 }
 
 private fun TextStyle.toDumpJson(range: IntRange): String = buildString {
     append("{\"range\": ")
         .append(paragraphJsonString(range.toDumpLabel()))
+        .append(", \"fontFamilies\": ")
+        .append(fontFamilies.toParagraphJsonStringArray())
+        .append(", \"fallbackPreference\": ")
+        .append(paragraphJsonString(fallbackPreference.serializedName))
         .append(", \"typefaceId\": ")
         .append(typefaceId?.value?.toString()?.let(::paragraphJsonString) ?: "null")
         .append(", \"fontSize\": ")
         .append(paragraphJsonFloat(fontSize))
+        .append(", \"fontWeight\": ")
+        .append(fontStyle.weight)
+        .append(", \"fontWidth\": ")
+        .append(fontStyle.width)
+        .append(", \"fontSlant\": ")
+        .append(paragraphJsonString(fontStyle.slant.serializedName))
+        .append(", \"syntheticStylePolicy\": ")
+        .append(paragraphJsonString(syntheticStylePolicy.serializedName))
         .append(", \"locale\": ")
         .append(paragraphJsonNullableString(locale))
+        .append(", \"scriptHint\": ")
+        .append(paragraphJsonNullableString(scriptHint))
         .append(", \"features\": ")
         .append(features.toDumpJson())
+        .append(", \"variationCoordinates\": ")
+        .append(variationCoordinates.toVariationJson())
+        .append(", \"palette\": ")
+        .append(palette?.toParagraphJson() ?: "null")
+        .append(", \"colorRgba\": ")
+        .append(paragraphJsonString(colorRgba.toUInt().toString(16).padStart(8, '0')))
+        .append(", \"decoration\": ")
+        .append(decoration?.toParagraphJson() ?: "null")
+        .append(", \"letterSpacing\": ")
+        .append(paragraphJsonFloat(letterSpacing))
+        .append(", \"wordSpacing\": ")
+        .append(paragraphJsonFloat(wordSpacing))
+        .append(", \"heightMultiplier\": ")
+        .append(paragraphJsonNullableFloat(heightMultiplier))
         .append("}")
 }
 
@@ -677,7 +1050,9 @@ private fun PlaceholderStyle.toDumpJson(range: IntRange): String = buildString {
         .append(", \"baselineOffset\": ")
         .append(paragraphJsonFloat(baselineOffset))
         .append(", \"alignment\": ")
-        .append(paragraphJsonString(alignment))
+        .append(paragraphJsonString(alignment.serializedName))
+        .append(", \"baseline\": ")
+        .append(paragraphJsonString(baseline.serializedName))
         .append("}")
 }
 
@@ -725,6 +1100,78 @@ private fun TextBox.toDumpJson(): String = buildString {
         .append("}")
 }
 
+private val TextAlign.serializedName: String
+    get() = when (this) {
+        TextAlign.START -> "start"
+        TextAlign.CENTER -> "center"
+        TextAlign.END -> "end"
+        TextAlign.JUSTIFY -> "justify"
+    }
+
+private val TextDirection.serializedName: String
+    get() = when (this) {
+        TextDirection.AUTO -> "auto"
+        TextDirection.LEFT_TO_RIGHT -> "ltr"
+        TextDirection.RIGHT_TO_LEFT -> "rtl"
+    }
+
+private val EllipsisPolicy.serializedName: String
+    get() = when (this) {
+        EllipsisPolicy.NONE -> "none"
+        EllipsisPolicy.END -> "end"
+    }
+
+private val TextHeightBehavior.serializedName: String
+    get() = when (this) {
+        TextHeightBehavior.FONT_METRICS -> "font-metrics"
+        TextHeightBehavior.STRUT -> "strut"
+    }
+
+private val FallbackPreference.serializedName: String
+    get() = when (this) {
+        FallbackPreference.SYSTEM_DEFAULT -> "system-default"
+        FallbackPreference.PREFER_DECLARED_FAMILIES -> "prefer-declared-families"
+        FallbackPreference.PREFER_EXACT_TYPEFACE -> "prefer-exact-typeface"
+    }
+
+private val FontSlant.serializedName: String
+    get() = when (this) {
+        FontSlant.UPRIGHT -> "upright"
+        FontSlant.ITALIC -> "italic"
+        FontSlant.OBLIQUE -> "oblique"
+    }
+
+private val SyntheticStylePolicy.serializedName: String
+    get() = when (this) {
+        SyntheticStylePolicy.ALLOW -> "allow"
+        SyntheticStylePolicy.DISALLOW -> "disallow"
+    }
+
+private val TextDecorationStyle.serializedName: String
+    get() = when (this) {
+        TextDecorationStyle.SOLID -> "solid"
+        TextDecorationStyle.DOUBLE -> "double"
+        TextDecorationStyle.DOTTED -> "dotted"
+        TextDecorationStyle.DASHED -> "dashed"
+        TextDecorationStyle.WAVY -> "wavy"
+    }
+
+private val PlaceholderAlignment.serializedName: String
+    get() = when (this) {
+        PlaceholderAlignment.BASELINE -> "baseline"
+        PlaceholderAlignment.ABOVE_BASELINE -> "above-baseline"
+        PlaceholderAlignment.BELOW_BASELINE -> "below-baseline"
+        PlaceholderAlignment.TOP -> "top"
+        PlaceholderAlignment.BOTTOM -> "bottom"
+        PlaceholderAlignment.MIDDLE -> "middle"
+    }
+
+private val PlaceholderBaseline.serializedName: String
+    get() = when (this) {
+        PlaceholderBaseline.ALPHABETIC -> "alphabetic"
+        PlaceholderBaseline.IDEOGRAPHIC -> "ideographic"
+    }
+
 private fun ParagraphLayoutDiagnostic.toDumpJson(): String = buildString {
     append("{\"code\": ")
         .append(paragraphJsonString(code))
@@ -742,8 +1189,52 @@ private fun Map<String, Int>.toDumpJson(): String =
         "{\"tag\": ${paragraphJsonString(tag)}, \"value\": $value}"
     }
 
+private fun List<String>.toParagraphJsonStringArray(): String =
+    joinToString(prefix = "[", postfix = "]") { paragraphJsonString(it) }
+
+private fun Map<String, Float>.toVariationJson(): String =
+    entries.sortedBy { it.key }.joinToString(prefix = "[", postfix = "]") { (axisTag, value) ->
+        "{\"axisTag\": ${paragraphJsonString(axisTag)}, \"value\": ${paragraphJsonFloat(value)}}"
+    }
+
+private fun TypefacePaletteSelection.toParagraphJson(): String = buildString {
+    append("{\"index\": ")
+        .append(index)
+        .append(", \"overrides\": ")
+        .append(overrides.toParagraphJsonStringArray())
+        .append("}")
+}
+
+private fun TextDecorationSpec.toParagraphJson(): String = buildString {
+    append("{\"underline\": ")
+        .append(underline)
+        .append(", \"overline\": ")
+        .append(overline)
+        .append(", \"lineThrough\": ")
+        .append(lineThrough)
+        .append(", \"style\": ")
+        .append(paragraphJsonString(style.serializedName))
+        .append(", \"thicknessMultiplier\": ")
+        .append(paragraphJsonFloat(thicknessMultiplier))
+        .append("}")
+}
+
 private fun <V> Set<Map.Entry<IntRange, V>>.sortedByRange(): List<Map.Entry<IntRange, V>> =
     sortedWith(compareBy<Map.Entry<IntRange, V>> { it.key.first }.thenBy { it.key.last })
+
+private fun IntRange.isValidUtf16RangeFor(textLength: Int): Boolean =
+    first >= 0 &&
+        last >= first &&
+        textLength > 0 &&
+        last < textLength
+
+private fun String.isStableVariationAxisTag(): Boolean =
+    length == 4 && all { character -> character in ' '..'~' }
+
+private fun ByteArray.sha256Hex(): String =
+    MessageDigest.getInstance("SHA-256").digest(this).joinToString("") { byte ->
+        "%02x".format(byte)
+    }
 
 private fun <T> StringBuilder.appendParagraphJsonArray(
     values: List<T>,

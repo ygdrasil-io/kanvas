@@ -775,21 +775,25 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphStyleContractTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
-        "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json"
+        "reports/font/fixtures/expected/paragraph/paragraph-input.json",
+        "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json",
+        "reports/pure-kotlin-text/2026-06-17-kfont-m8-001-textstyle-paragraph-contracts.md"
       ],
       "requiredEvidenceGates": [
-        "Add rich style runs fixture evidence.",
         "Add bidi paragraph fixture evidence.",
         "Add hard and soft line break fixture evidence.",
         "Add ellipsis, placeholders, selection boxes, and hit testing evidence.",
         "Retain shaping and fallback gates for complete paragraph claims."
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test"
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphInputGoldenPinsSchemaCasesAndNonClaims",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
       ],
       "fixtureCommands": [
-        "Current PKT-09A evidence covers semantic dumps and refusals only."
+        "KFONT-M8-001 now covers paragraph input contracts, input hashing, and refusal diagnostics only."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",
@@ -809,18 +813,21 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphStyleContractTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
-        "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json"
+        "reports/font/fixtures/expected/paragraph/paragraph-input.json",
+        "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json",
+        "reports/pure-kotlin-text/2026-06-17-kfont-m8-001-textstyle-paragraph-contracts.md"
       ],
       "requiredEvidenceGates": [
         "Add bidi visual line ordering rows that name PKT-07 and PKT-08 shaping blockers separately.",
-        "Add rich style, feature, variation, decoration, and placeholder interaction rows.",
         "Add ellipsis, hard-break, soft-wrap, and max-lines policy rows with refusal diagnostics.",
         "Add hit-test, selection box, word boundary, and grapheme boundary golden rows.",
         "Keep paragraph-owned layout diagnostics separate from shaping-owned fallback and script diagnostics."
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphInputGoldenPinsSchemaCasesAndNonClaims",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
       ],
       "fixtureCommands": [
