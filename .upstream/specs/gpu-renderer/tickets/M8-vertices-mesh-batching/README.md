@@ -24,7 +24,7 @@ primitive color interactions.
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M8-001 - Add `DrawVertices` descriptor and route decisions](KGPU-M8-001-add-drawvertices-descriptor-and-route-decisions.md) | `done` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `vertices` | `KGPU-M2-002`, `KGPU-M7-003` | `vertices legacy` |
-| [KGPU-M8-002 - Add vertex index buffer payload and resource plans](KGPU-M8-002-add-vertex-index-buffer-payload-and-resource-plans.md) | `blocked` | `P1` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `vertices-resources` | `KGPU-M8-001` | - |
+| [KGPU-M8-002 - Add vertex index buffer payload and resource plans](KGPU-M8-002-add-vertex-index-buffer-payload-and-resource-plans.md) | `done` | `P1` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `vertices-resources` | `KGPU-M8-001` | - |
 | [KGPU-M8-003 - Add vertices batching sort and refusal evidence](KGPU-M8-003-add-vertices-batching-sort-and-refusal-evidence.md) | `blocked` | `P2` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `batching` | `KGPU-M8-001`, `KGPU-M8-002` | - |
 
 ## Validation Bundle
@@ -55,9 +55,17 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Vertices*'
   texture fallback is claimed. Independent review
   `019ed5c8-898d-7923-83b6-f8c82775d12e` found no P0/P1/P2 blockers. Evidence report:
   `reports/gpu-renderer/2026-06-17-m8-001-vertices-route-decisions.md`.
-- KGPU-M8-002 is `blocked` on KGPU-M8-001 plus adapter-backed vertex/index
-  buffer ownership, upload-before-draw ordering, resource-generation, budget,
-  and invalid/stale buffer refusal evidence.
+- KGPU-M8-002 is `done` with contract-only
+  `GPUVerticesBufferPlanPlanner` evidence for deterministic vertex/index
+  buffer payloads, upload plans, resource ownership/generation facts,
+  material-key exclusion, upload-before-draw dependencies, usage flags,
+  budget checks, invalid/stale refusals, and live-handle refusal. It remains
+  non-promoted: no product `DrawVertices` support, adapter-backed upload,
+  mesh support, batching support, materialized live handles, or CPU-rasterized
+  mesh texture fallback is claimed. Independent re-review
+  `019ed5dd-8e76-78a0-8e8d-646398e40e90` found no remaining P0/P1/P2 blockers.
+  Evidence report:
+  `reports/gpu-renderer/2026-06-17-m8-002-vertices-buffer-plans.md`.
 - KGPU-M8-003 is `blocked` on KGPU-M8-001 and KGPU-M8-002. Batching evidence
   must not be produced before route and buffer facts exist, because sort/split
   decisions need material, clip, layer, destination-read, barrier, and

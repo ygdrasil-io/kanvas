@@ -1,7 +1,7 @@
 ---
 id: KGPU-M8-002
 title: "Add vertex index buffer payload and resource plans"
-status: blocked
+status: done
 milestone: M8
 priority: P1
 owner_area: vertices-resources
@@ -56,9 +56,9 @@ data class VertexBufferEvidence(val layoutHash: String, val uploadPlan: String)
 
 ## Acceptance Criteria
 
-- [ ] Buffer layout and upload plan dumps are deterministic.
-- [ ] Resource facts stay out of material keys.
-- [ ] Invalid buffers refuse.
+- [x] Buffer layout and upload plan dumps are deterministic.
+- [x] Resource facts stay out of material keys.
+- [x] Invalid buffers refuse.
 
 ## Required Evidence
 
@@ -83,11 +83,16 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: Depends on KGPU-M8-001. Remaining gate is adapter-backed
-  vertex/index buffer ownership, upload-before-draw ordering,
-  resource-generation, budget, layout/WGSL ABI, invalid/stale buffer refusals,
-  and proof that resource facts stay out of material keys. No CPU-rasterized
-  mesh texture fallback is allowed.
+- `done`: KGPU-M8-001 is `done`, and this ticket adds contract-only
+  `GPUVerticesBufferPlanPlanner` evidence for deterministic vertex/index
+  payload, upload, and resource plans. The evidence preserves
+  `CPUPreparedGPU`, `TargetPrepared`, `productActivation=false`,
+  `materialized=false`, and stable refusals for missing route decisions,
+  invalid indices, missing upload-before-draw, budget pressure, stale
+  generation facts, missing usage flags, and live-handle leakage. Independent
+  re-review accepted the evidence with no remaining P0/P1/P2 blockers. No
+  adapter-backed upload, product `DrawVertices` support, batching, mesh
+  support, or CPU-rasterized mesh texture fallback is allowed.
 
 ## Linear Labels
 

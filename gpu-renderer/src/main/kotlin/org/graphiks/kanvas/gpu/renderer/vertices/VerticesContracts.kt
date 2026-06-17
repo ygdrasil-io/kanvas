@@ -102,6 +102,19 @@ data class GPUIndexBufferPlan(
     val indexFormat: String,
     val count: Int,
     val validationLabel: String,
+    val sourceDescriptorHash: String = "",
+    val sourceIndexContentHash: String = "",
+    val minIndex: Int = 0,
+    val maxIndex: Int = 0,
+    val byteCount: Long = 0L,
+    val alignment: Int = 4,
+    val usageFlags: List<String> = emptyList(),
+    val ownerScope: String = "GPURecorderScope",
+    val uploadStagingScope: String = "GPURecorderScope",
+    val uploadRequirement: String = "upload-before-draw",
+    val deviceGeneration: Long = 0L,
+    val bufferGeneration: Long = 0L,
+    val materialKey: Boolean = false,
 )
 
 /** Vertex buffer plan. */
@@ -109,6 +122,16 @@ data class GPUVertexBufferPlan(
     val byteCount: Long,
     val layout: GPUVertexLayoutPlan,
     val uploadRequirement: String,
+    val sourceDescriptorHash: String = "",
+    val sourceVertexContentHash: String = "",
+    val layoutHash: String = "",
+    val alignment: Int = 4,
+    val usageFlags: List<String> = emptyList(),
+    val ownerScope: String = "GPURecorderScope",
+    val uploadStagingScope: String = "GPURecorderScope",
+    val deviceGeneration: Long = 0L,
+    val bufferGeneration: Long = 0L,
+    val materialKey: Boolean = false,
 )
 
 /** Vertices route. */
@@ -145,6 +168,150 @@ data class GPUVerticesDiagnostic(
     val message: String,
     val terminal: Boolean,
 )
+
+/** Upload plan for CPU-prepared DrawVertices buffer payloads. */
+data class GPUVerticesBufferUploadPlan(
+    val planHash: String,
+    val stagingScope: String,
+    val byteRanges: List<String>,
+    val totalBytes: Long,
+    val beforeUseToken: String,
+    val budgetClass: String,
+)
+
+/** Resource plan for CPU-prepared DrawVertices buffers before materialization. */
+data class GPUVerticesBufferResourcePlan(
+    val ownerScope: String,
+    val deviceGeneration: Long,
+    val bufferGeneration: Long,
+    val invalidationFacts: List<String>,
+    val usageFlags: List<String>,
+    val liveHandle: Boolean,
+    val materialKey: Boolean,
+)
+
+/** Request for KGPU-M8-002 buffer payload, upload, and resource evidence. */
+data class GPUVerticesBufferPlanRequest(
+    val routeDecision: GPUVerticesRouteDecisionGatePlan,
+    val sourceVertexContentHash: String,
+    val sourceIndexContentHash: String? = null,
+    val sourceIndexType: String = "uint16",
+    val minIndex: Int = 0,
+    val maxIndex: Int = routeDecision.descriptor.vertexCount - 1,
+    val uploadBeforeDraw: Boolean = true,
+    val requiredUsageFlags: Set<String> = setOf("copy_dst", "vertex") +
+        if (routeDecision.descriptor.indexCount != null) setOf("index") else emptySet(),
+    val availableUsageFlags: Set<String> = requiredUsageFlags,
+    val deviceGeneration: Long = 0L,
+    val observedDeviceGeneration: Long = deviceGeneration,
+    val bufferGeneration: Long = 0L,
+    val observedBufferGeneration: Long = bufferGeneration,
+    val maxVertexBufferBytes: Long = DEFAULT_VERTICES_BUFFER_MAX_BYTES,
+    val maxIndexBufferBytes: Long = DEFAULT_VERTICES_BUFFER_MAX_BYTES,
+    val maxTotalUploadBytes: Long = DEFAULT_VERTICES_BUFFER_MAX_BYTES * 2,
+    val budgetPolicyId: String = "vertices-buffer-default",
+    val ownerScope: String = "GPURecorderScope",
+    val uploadStagingScope: String = "GPURecorderScope",
+    val liveResourceHandleExposed: Boolean = false,
+) {
+    init {
+        require(sourceVertexContentHash.isNotBlank()) {
+            "GPUVerticesBufferPlanRequest.sourceVertexContentHash must not be blank"
+        }
+        require(sourceIndexContentHash == null || sourceIndexContentHash.isNotBlank()) {
+            "GPUVerticesBufferPlanRequest.sourceIndexContentHash must not be blank when set"
+        }
+        require(sourceIndexType.isNotBlank()) { "GPUVerticesBufferPlanRequest.sourceIndexType must not be blank" }
+        require(minIndex >= 0) { "GPUVerticesBufferPlanRequest.minIndex must not be negative" }
+        require(maxIndex >= minIndex) { "GPUVerticesBufferPlanRequest.maxIndex must be >= minIndex" }
+        require(deviceGeneration >= 0L) { "GPUVerticesBufferPlanRequest.deviceGeneration must not be negative" }
+        require(observedDeviceGeneration >= 0L) {
+            "GPUVerticesBufferPlanRequest.observedDeviceGeneration must not be negative"
+        }
+        require(bufferGeneration >= 0L) { "GPUVerticesBufferPlanRequest.bufferGeneration must not be negative" }
+        require(observedBufferGeneration >= 0L) {
+            "GPUVerticesBufferPlanRequest.observedBufferGeneration must not be negative"
+        }
+        require(maxVertexBufferBytes > 0L) { "GPUVerticesBufferPlanRequest.maxVertexBufferBytes must be positive" }
+        require(maxIndexBufferBytes > 0L) { "GPUVerticesBufferPlanRequest.maxIndexBufferBytes must be positive" }
+        require(maxTotalUploadBytes > 0L) { "GPUVerticesBufferPlanRequest.maxTotalUploadBytes must be positive" }
+        require(budgetPolicyId.isNotBlank()) { "GPUVerticesBufferPlanRequest.budgetPolicyId must not be blank" }
+        require(ownerScope.isNotBlank()) { "GPUVerticesBufferPlanRequest.ownerScope must not be blank" }
+        require(uploadStagingScope.isNotBlank()) {
+            "GPUVerticesBufferPlanRequest.uploadStagingScope must not be blank"
+        }
+    }
+}
+
+/** Evidence result for KGPU-M8-002 buffer payload, upload, and resource plans. */
+data class GPUVerticesBufferPlanGatePlan(
+    val commandId: String,
+    val evidenceRow: String,
+    val routeKind: String,
+    val classification: String,
+    val promoted: Boolean,
+    val productActivation: Boolean,
+    val materialized: Boolean,
+    val descriptorHash: String,
+    val routeDecisionHash: String,
+    val artifactKey: String,
+    val vertexBufferPlan: GPUVertexBufferPlan,
+    val vertexBufferHash: String,
+    val indexBufferPlan: GPUIndexBufferPlan?,
+    val indexBufferHash: String?,
+    val uploadPlan: GPUVerticesBufferUploadPlan,
+    val resourcePlan: GPUVerticesBufferResourcePlan,
+    val materialKeyFacts: List<String>,
+    val refusalFacts: Map<String, String>,
+    val diagnostics: List<GPUVerticesDiagnostic>,
+) {
+    /** Returns deterministic PM/review lines without claiming product support. */
+    fun dumpLines(): List<String> {
+        val terminal = diagnostics.singleOrNull { diagnostic -> diagnostic.terminal }
+        if (terminal != null) {
+            return listOf(
+                "vertices:buffers.refused row=$evidenceRow routeKind=$routeKind classification=$classification " +
+                    "promoted=$promoted productActivation=$productActivation materialized=$materialized " +
+                    "command=$commandId descriptor=$descriptorHash routeDecision=$routeDecisionHash reason=${terminal.code}",
+                "vertices:refusal facts=${refusalFacts.dumpVerticesFacts()}",
+                VERTICES_BUFFER_NONCLAIM_LINE,
+            )
+        }
+
+        val diagnostic = diagnostics.single()
+        val indexLine = indexBufferPlan?.let { indexPlan ->
+            "vertices:index-buffer hash=$indexBufferHash format=${indexPlan.indexFormat} count=${indexPlan.count} " +
+                "range=${indexPlan.minIndex}..${indexPlan.maxIndex} bytes=${indexPlan.byteCount} " +
+                "alignment=${indexPlan.alignment} usage=${indexPlan.usageFlags.joinToString(",")} " +
+                "owner=${indexPlan.ownerScope} generation=${indexPlan.bufferGeneration} " +
+                "upload=${indexPlan.uploadRequirement}"
+        } ?: "vertices:index-buffer none"
+
+        return listOf(
+            "vertices:buffers row=$evidenceRow routeKind=$routeKind classification=$classification " +
+                "promoted=$promoted productActivation=$productActivation materialized=$materialized " +
+                "command=$commandId descriptor=$descriptorHash routeDecision=$routeDecisionHash artifact=$artifactKey",
+            "vertices:vertex-buffer hash=$vertexBufferHash layout=${vertexBufferPlan.layoutHash} " +
+                "bytes=${vertexBufferPlan.byteCount} alignment=${vertexBufferPlan.alignment} " +
+                "usage=${vertexBufferPlan.usageFlags.joinToString(",")} owner=${vertexBufferPlan.ownerScope} " +
+                "generation=${vertexBufferPlan.bufferGeneration} upload=${vertexBufferPlan.uploadRequirement}",
+            indexLine,
+            "vertices:upload plan=${uploadPlan.planHash} staging=${uploadPlan.stagingScope} " +
+                "ranges=${uploadPlan.byteRanges.joinToString(",")} bytes=${uploadPlan.totalBytes} " +
+                "dependency=${uploadPlan.beforeUseToken} budget=${uploadPlan.budgetClass}",
+            "vertices:resource owner=${resourcePlan.ownerScope} " +
+                "deviceGeneration=${resourcePlan.deviceGeneration} " +
+                "bufferGeneration=${resourcePlan.bufferGeneration} " +
+                "invalidation=${resourcePlan.invalidationFacts.joinToString(",")} " +
+                "usage=${resourcePlan.usageFlags.joinToString(",")} liveHandle=${resourcePlan.liveHandle} " +
+                "materialKey=${resourcePlan.materialKey}",
+            "vertices:key materialFacts=${materialKeyFacts.joinToString(",")} " +
+                "resourceFactsExcluded=bufferBytes,bufferGenerations,resourceHandles,uploadOffsets,vertexIndexPayload",
+            "vertices:diagnostic code=${diagnostic.code} terminal=${diagnostic.terminal}",
+            VERTICES_BUFFER_NONCLAIM_LINE,
+        )
+    }
+}
 
 /** Request for KGPU-M8-001 descriptor and route decision evidence. */
 data class GPUVerticesRouteDecisionRequest(
@@ -351,13 +518,236 @@ class GPUVerticesRouteDecisionPlanner {
         )
 }
 
+/** Planner for CPU-prepared DrawVertices buffer payload, upload, and resource evidence. */
+class GPUVerticesBufferPlanPlanner {
+    /** Plans non-materialized vertex/index buffer payloads or stable refusal evidence. */
+    fun plan(request: GPUVerticesBufferPlanRequest): GPUVerticesBufferPlanGatePlan {
+        val descriptor = request.routeDecision.descriptor
+        val descriptorHash = request.routeDecision.descriptorHash
+        val routeDecisionHash = verticesStableHash(
+            listOf(
+                "vertices-route-decision-gate-v1",
+                request.routeDecision.commandId,
+                request.routeDecision.routeKind,
+                descriptorHash,
+                request.routeDecision.layoutHash,
+                request.routeDecision.pipelineKeyHash,
+            ),
+        )
+        val vertexBytes = descriptor.vertexCount.toLong() * request.routeDecision.layout.strideBytes.toLong()
+        val indexFormat = request.sourceIndexType
+        val indexElementBytes = indexFormat.indexElementBytes()
+        val indexBytes = descriptor.indexCount?.toLong()?.times(indexElementBytes ?: 0L) ?: 0L
+        val totalUploadBytes = vertexBytes + indexBytes
+        val artifactKey = verticesBufferArtifactKey(request, routeDecisionHash)
+        val vertexBufferHash = verticesStableHash(
+            listOf(
+                "vertices-vertex-buffer-v1",
+                descriptorHash,
+                request.routeDecision.layoutHash,
+                request.sourceVertexContentHash,
+                vertexBytes.toString(),
+                request.bufferGeneration.toString(),
+            ),
+        )
+        val indexBufferHash = descriptor.indexCount?.let {
+            verticesStableHash(
+                listOf(
+                    "vertices-index-buffer-v1",
+                    descriptorHash,
+                    indexFormat,
+                    request.sourceIndexContentHash ?: "missing",
+                    it.toString(),
+                    request.minIndex.toString(),
+                    request.maxIndex.toString(),
+                    request.bufferGeneration.toString(),
+                ),
+            )
+        }
+        val vertexBufferPlan = GPUVertexBufferPlan(
+            byteCount = vertexBytes,
+            layout = request.routeDecision.layout,
+            uploadRequirement = "upload-before-draw",
+            sourceDescriptorHash = descriptorHash,
+            sourceVertexContentHash = request.sourceVertexContentHash,
+            layoutHash = request.routeDecision.layoutHash,
+            alignment = VERTICES_BUFFER_ALIGNMENT,
+            usageFlags = listOf("copy_dst", "vertex"),
+            ownerScope = request.ownerScope,
+            uploadStagingScope = request.uploadStagingScope,
+            deviceGeneration = request.deviceGeneration,
+            bufferGeneration = request.bufferGeneration,
+            materialKey = false,
+        )
+        val indexBufferPlan = descriptor.indexCount?.let { indexCount ->
+            GPUIndexBufferPlan(
+                indexFormat = indexFormat,
+                count = indexCount,
+                validationLabel = "range:${request.minIndex}..${request.maxIndex}",
+                sourceDescriptorHash = descriptorHash,
+                sourceIndexContentHash = request.sourceIndexContentHash ?: "missing",
+                minIndex = request.minIndex,
+                maxIndex = request.maxIndex,
+                byteCount = indexBytes,
+                alignment = VERTICES_BUFFER_ALIGNMENT,
+                usageFlags = listOf("copy_dst", "index"),
+                ownerScope = request.ownerScope,
+                uploadStagingScope = request.uploadStagingScope,
+                uploadRequirement = "upload-before-draw",
+                deviceGeneration = request.deviceGeneration,
+                bufferGeneration = request.bufferGeneration,
+                materialKey = false,
+            )
+        }
+        val uploadPlan = GPUVerticesBufferUploadPlan(
+            planHash = verticesStableHash(
+                listOf(
+                    "vertices-buffer-upload-v1",
+                    descriptorHash,
+                    vertexBufferHash,
+                    indexBufferHash ?: "none",
+                    totalUploadBytes.toString(),
+                    request.budgetPolicyId,
+                ),
+            ),
+            stagingScope = request.uploadStagingScope,
+            byteRanges = buildList {
+                add("vertex:0..${vertexBytes - 1L}")
+                if (indexBytes > 0L) {
+                    add("index:$vertexBytes..${totalUploadBytes - 1L}")
+                }
+            },
+            totalBytes = totalUploadBytes,
+            beforeUseToken = "upload-before-draw:${request.routeDecision.commandId}",
+            budgetClass = request.budgetPolicyId,
+        )
+        val resourcePlan = GPUVerticesBufferResourcePlan(
+            ownerScope = request.ownerScope,
+            deviceGeneration = request.deviceGeneration,
+            bufferGeneration = request.bufferGeneration,
+            invalidationFacts = listOf(
+                "buffer-generation:${request.bufferGeneration}",
+                "device-generation:${request.deviceGeneration}",
+            ),
+            usageFlags = (vertexBufferPlan.usageFlags + (indexBufferPlan?.usageFlags ?: emptyList())).distinct().sorted(),
+            liveHandle = false,
+            materialKey = false,
+        )
+        val refusalCode = request.refusalCode(
+            vertexBytes = vertexBytes,
+            indexBytes = indexBytes,
+            totalUploadBytes = totalUploadBytes,
+            indexElementBytes = indexElementBytes,
+        )
+
+        if (refusalCode != null) {
+            return gatePlan(
+                request = request,
+                descriptorHash = descriptorHash,
+                routeDecisionHash = routeDecisionHash,
+                artifactKey = artifactKey,
+                vertexBufferPlan = vertexBufferPlan,
+                vertexBufferHash = vertexBufferHash,
+                indexBufferPlan = indexBufferPlan,
+                indexBufferHash = indexBufferHash,
+                uploadPlan = uploadPlan,
+                resourcePlan = resourcePlan,
+                routeKind = "RefuseDiagnostic",
+                diagnostics = listOf(
+                    GPUVerticesDiagnostic(
+                        code = refusalCode,
+                        verticesLabel = request.routeDecision.commandId,
+                        message = "vertices buffer plan refused: $refusalCode",
+                        terminal = true,
+                    ),
+                ),
+                refusalFacts = request.refusalFacts(
+                    reasonCode = refusalCode,
+                    vertexBytes = vertexBytes,
+                    indexBytes = indexBytes,
+                    totalUploadBytes = totalUploadBytes,
+                    indexElementBytes = indexElementBytes,
+                ),
+            )
+        }
+
+        return gatePlan(
+            request = request,
+            descriptorHash = descriptorHash,
+            routeDecisionHash = routeDecisionHash,
+            artifactKey = artifactKey,
+            vertexBufferPlan = vertexBufferPlan,
+            vertexBufferHash = vertexBufferHash,
+            indexBufferPlan = indexBufferPlan,
+            indexBufferHash = indexBufferHash,
+            uploadPlan = uploadPlan,
+            resourcePlan = resourcePlan,
+            routeKind = "CPUPreparedGPU",
+            diagnostics = listOf(
+                GPUVerticesDiagnostic(
+                    code = VERTICES_BUFFER_ACCEPTED_CODE,
+                    verticesLabel = request.routeDecision.commandId,
+                    message = "vertices buffer payload and resource plans accepted without product activation",
+                    terminal = false,
+                ),
+            ),
+            refusalFacts = emptyMap(),
+        )
+    }
+
+    private fun gatePlan(
+        request: GPUVerticesBufferPlanRequest,
+        descriptorHash: String,
+        routeDecisionHash: String,
+        artifactKey: String,
+        vertexBufferPlan: GPUVertexBufferPlan,
+        vertexBufferHash: String,
+        indexBufferPlan: GPUIndexBufferPlan?,
+        indexBufferHash: String?,
+        uploadPlan: GPUVerticesBufferUploadPlan,
+        resourcePlan: GPUVerticesBufferResourcePlan,
+        routeKind: String,
+        diagnostics: List<GPUVerticesDiagnostic>,
+        refusalFacts: Map<String, String>,
+    ): GPUVerticesBufferPlanGatePlan =
+        GPUVerticesBufferPlanGatePlan(
+            commandId = request.routeDecision.commandId,
+            evidenceRow = VERTICES_BUFFER_EVIDENCE_ROW,
+            routeKind = routeKind,
+            classification = "TargetPrepared",
+            promoted = false,
+            productActivation = false,
+            materialized = false,
+            descriptorHash = descriptorHash,
+            routeDecisionHash = routeDecisionHash,
+            artifactKey = artifactKey,
+            vertexBufferPlan = vertexBufferPlan,
+            vertexBufferHash = vertexBufferHash,
+            indexBufferPlan = indexBufferPlan,
+            indexBufferHash = indexBufferHash,
+            uploadPlan = uploadPlan,
+            resourcePlan = resourcePlan,
+            materialKeyFacts = request.routeDecision.materialKeyFacts,
+            refusalFacts = refusalFacts,
+            diagnostics = diagnostics,
+        )
+}
+
 private const val VERTICES_ROUTE_EVIDENCE_ROW = "gpu-renderer.vertices.descriptor"
 private const val VERTICES_ROUTE_ACCEPTED_CODE = "accepted.vertices.route_decision"
+private const val VERTICES_BUFFER_EVIDENCE_ROW = "gpu-renderer.vertices.buffers"
+private const val VERTICES_BUFFER_ACCEPTED_CODE = "accepted.vertices.buffer_plan"
+private const val DEFAULT_VERTICES_BUFFER_MAX_BYTES = 1_048_576L
+private const val VERTICES_BUFFER_ALIGNMENT = 4
 private const val VERTICES_ROUTE_NONCLAIM_LINE =
     "vertices:nonclaim drawVerticesSupport=false adapterBacked=false " +
         "vertexBufferUpload=false indexBufferUpload=false primitiveBlenderSupport=false " +
         "texcoordMaterialSupport=false meshSupport=false " +
         "productActivation=false cpuRenderedTextureFallback=false"
+private const val VERTICES_BUFFER_NONCLAIM_LINE =
+    "vertices:nonclaim drawVerticesSupport=false adapterBacked=false " +
+        "vertexBufferUpload=false indexBufferUpload=false meshSupport=false batchingSupport=false " +
+        "productActivation=false cpuRenderedTextureFallback=false liveHandles=false"
 
 private fun GPUVerticesRouteDecisionRequest.refusalCode(): String? =
     when {
@@ -400,6 +790,90 @@ private fun GPUVerticesRouteDecisionRequest.refusalFacts(reasonCode: String): Ma
         "adapterEvidence" to (adapterEvidenceLabel ?: "missing"),
         "wgslEvidence" to (wgslLayoutEvidenceLabel ?: "missing"),
     )
+
+private fun GPUVerticesBufferPlanRequest.refusalCode(
+    vertexBytes: Long,
+    indexBytes: Long,
+    totalUploadBytes: Long,
+    indexElementBytes: Long?,
+): String? =
+    when {
+        routeDecision.routeKind != "GPUNative" || routeDecision.diagnostics.any { diagnostic -> diagnostic.terminal } ->
+            "unsupported.vertices.route_decision_required"
+        routeDecision.descriptor.indexCount != null && indexElementBytes == null ->
+            "unsupported.vertices.index_format"
+        routeDecision.descriptor.indexCount != null && sourceIndexContentHash.isNullOrBlank() ->
+            "unsupported.vertices.index_payload_missing"
+        routeDecision.descriptor.indexCount != null && maxIndex >= routeDecision.descriptor.vertexCount ->
+            "unsupported.vertices.index_out_of_range"
+        !uploadBeforeDraw -> "unsupported.vertices.upload_unavailable"
+        !availableUsageFlags.containsAll(requiredUsageFlags) -> "unsupported.vertices.upload_unavailable"
+        vertexBytes > maxVertexBufferBytes || indexBytes > maxIndexBufferBytes ->
+            "unsupported.vertices.buffer_budget_exceeded"
+        totalUploadBytes > maxTotalUploadBytes -> "unsupported.payload.upload_budget_exceeded"
+        observedDeviceGeneration != deviceGeneration || observedBufferGeneration != bufferGeneration ->
+            "unsupported.payload.resource_stale_generation"
+        liveResourceHandleExposed -> "unsupported.vertices.resource_handle_leak"
+        else -> null
+    }
+
+private fun GPUVerticesBufferPlanRequest.refusalFacts(
+    reasonCode: String,
+    vertexBytes: Long,
+    indexBytes: Long,
+    totalUploadBytes: Long,
+    indexElementBytes: Long?,
+): Map<String, String> =
+    linkedMapOf(
+        "reason" to reasonCode,
+        "routeDecisionKind" to routeDecision.routeKind,
+        "vertexBytes" to vertexBytes.toString(),
+        "indexBytes" to indexBytes.toString(),
+        "totalUploadBytes" to totalUploadBytes.toString(),
+        "indexFormat" to sourceIndexType,
+        "indexElementBytes" to (indexElementBytes?.toString() ?: "unsupported"),
+        "minIndex" to minIndex.toString(),
+        "maxIndex" to maxIndex.toString(),
+        "vertexCount" to routeDecision.descriptor.vertexCount.toString(),
+        "indexCount" to (routeDecision.descriptor.indexCount?.toString() ?: "none"),
+        "uploadBeforeDraw" to uploadBeforeDraw.toString(),
+        "requiredUsageFlags" to requiredUsageFlags.sorted().joinToString(","),
+        "availableUsageFlags" to availableUsageFlags.sorted().joinToString(","),
+        "deviceGeneration" to deviceGeneration.toString(),
+        "observedDeviceGeneration" to observedDeviceGeneration.toString(),
+        "bufferGeneration" to bufferGeneration.toString(),
+        "observedBufferGeneration" to observedBufferGeneration.toString(),
+        "liveResourceHandleExposed" to liveResourceHandleExposed.toString(),
+        "budgetPolicy" to budgetPolicyId,
+    )
+
+private fun verticesBufferArtifactKey(
+    request: GPUVerticesBufferPlanRequest,
+    routeDecisionHash: String,
+): String =
+    verticesStableHash(
+        listOf(
+            "vertices-precomputed-buffer-artifact-v1",
+            request.routeDecision.descriptorHash,
+            routeDecisionHash,
+            request.routeDecision.descriptor.descriptorVersion.toString(),
+            request.routeDecision.descriptor.primitiveMode.sourceLabel,
+            request.routeDecision.descriptor.vertexCount.toString(),
+            request.routeDecision.descriptor.indexCount?.toString() ?: "none",
+            request.sourceVertexContentHash,
+            request.sourceIndexContentHash ?: "none",
+            request.sourceIndexType,
+            request.routeDecision.descriptor.primitiveBlendMode,
+            request.budgetPolicyId,
+        ),
+    ).let { hash -> "prepared.vertices.${hash.removePrefix("sha256:")}" }
+
+private fun String.indexElementBytes(): Long? =
+    when (this) {
+        "uint16" -> 2L
+        "uint32" -> 4L
+        else -> null
+    }
 
 private fun GPUVerticesDescriptor.layoutPlan(): GPUVertexLayoutPlan {
     val attributes = mutableListOf("position")
