@@ -40,17 +40,17 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*' --tests '*De
 
 ## Current Slice Notes
 
-- 2026-06-17 independent audit: `KFONT-M6-002` remains in `review` as a bounded GSUB parser/runtime slice because `gsub-trace.json` and `shaped-glyph-run.json` are still M6-001 contract goldens, malformed/refusal GSUB fixtures are still missing, and explicit `ShapingPlan` ordering evidence is still open.
-- `KFONT-M6-004` is in `review` for a bounded parser/runtime slice: `font/sfnt` now exposes GPOS single adjustments plus pair value records, and `BasicOpenTypeShapingEngine` applies the validated `xPlacement`/`yPlacement`/`xAdvance` subset.
-- The milestone still has no full GPOS support claim. Remaining gates for `KFONT-M6-004` are fixture-backed `gpos-trace.json`, `shaped-glyph-run.json`, and layout-contract level malformed/refusal evidence.
-- 2026-06-17 independent audit: `KFONT-M6-006` remains in `review` as a contract-layer policy slice because runtime GSUB/GPOS still consumes `FeatureSet` instead of the resolved default policy output, per-script shaping fixtures are still missing, and explicit `drawString` non-enablement evidence is still open.
+- 2026-06-17 independent audit: merged bounded slices for `KFONT-M6-002`, `KFONT-M6-004`, and `KFONT-M6-006` remain valid `review` slices. Their remaining work is fixture/dump evidence, not a revert to `blocked` or `proposed`.
+- `KFONT-M6-002` stays in `review` on reviewed GSUB fixture provenance plus promoted `gsub-trace.json` / `shaped-glyph-run.json` evidence beyond the current M6-001 contract goldens.
+- `KFONT-M6-004` stays in `review` on reviewed GPOS fixture provenance plus promoted `gpos-trace.json` / `shaped-glyph-run.json` evidence and layout-contract malformed/refusal diagnostics.
+- `KFONT-M6-006` stays in `review` on per-script shaping fixture families, runtime adoption of `ResolvedFeatureSet`, and explicit `drawString` non-enablement evidence.
 
 ## Current Blockers
 
-- 2026-06-16 audit: `KFONT-M6-003` is gated by draft PR `#1706` and missing `gsub-context-*.otf` fixtures.
-- 2026-06-16 audit: `KFONT-M6-005` is gated by draft PR `#1705` and missing `gpos-mark-*` / `gpos-cursive-attachment.otf` fixtures.
-- 2026-06-16 audit: `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009` remain fixture-gated on the above shaping dependencies plus their own Arabic / Devanagari / Thai+CJK fixture families.
-- 2026-06-16 audit: `KFONT-M6-010` remains gated by `KFONT-M6-003`, `KFONT-M6-005`, `KFONT-M4-005`, and missing advanced lookup / variation fixtures.
+- 2026-06-17 audit: `KFONT-M6-002` still depends on absent `gsub-single-substitution.otf`, `gsub-multiple-substitution.otf`, `gsub-ligature-fi.otf`, `gsub-coverage-malformed.otf`, and `gsub-ligature-bad-component.otf`, plus promoted `gsub-trace.json` / `shaped-glyph-run.json` evidence.
+- 2026-06-17 audit: `KFONT-M6-004` still depends on absent `gpos-single-adjustment.otf`, `gpos-pair-format1-kerning.otf`, `gpos-pair-format2-class.otf`, `gpos-valueformat-malformed.otf`, and `gpos-pair-out-of-range.otf`, plus promoted `gpos-trace.json` / `shaped-glyph-run.json` evidence.
+- 2026-06-17 audit: `KFONT-M6-006` still depends on absent per-script shaping fixture families from `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`, plus runtime adoption of `ResolvedFeatureSet`.
+- 2026-06-17 audit: `KFONT-M6-003`, `KFONT-M6-005`, `KFONT-M6-007`, `KFONT-M6-008`, `KFONT-M6-009`, and `KFONT-M6-010` remain gated by the review-state base slices above plus their own named fixture families.
 
 ## Non-Claims
 

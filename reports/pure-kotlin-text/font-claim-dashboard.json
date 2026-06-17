@@ -229,7 +229,7 @@
       },
       "requiredEvidenceGates": [
         "KFONT-M5-005 now provides bounded grapheme, bidi, and script boundary-alignment evidence only; shaping, fallback, and paragraph routes remain separate gates.",
-        "Keep `scaledemoji` blocked on explicit emoji-sequence refusal, fallback, and color or route evidence rather than treating segmentation alone as emoji support.",
+        "Keep `scaledemoji` blocked on color, route, and rendering evidence rather than treating the bounded M5 plus M7 refusal/fallback evidence as emoji support.",
         "Add broader reviewed CJK IVS coverage before promoting complete cluster-safety coverage."
       ],
       "legacyGates": [

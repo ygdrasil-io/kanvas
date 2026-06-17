@@ -112,7 +112,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*GposPair*' --tests '*Kerning
 ## Status Notes
 
 - `proposed`: Base GPOS positioning depends on shaping contract and parsed table facts.
-- `review`: bounded single/pair positioning parser and `BasicOpenTypeShapingEngine` application are implemented and freshly validated; remaining gate stays on `gpos-trace.json`, `shaped-glyph-run.json`, malformed lookup diagnostics at the layout-contract layer, and fixture-backed claim evidence.
+- `review`: bounded single/pair positioning parser and `BasicOpenTypeShapingEngine` application are implemented and freshly validated. Remaining gate: add reviewed fixture provenance and expected dumps for `gpos-single-adjustment.otf`, `gpos-pair-format1-kerning.otf`, `gpos-pair-format2-class.otf`, `gpos-valueformat-malformed.otf`, and `gpos-pair-out-of-range.otf`, then promote `gpos-trace.json` / `shaped-glyph-run.json` and layout-contract malformed/refusal diagnostics beyond the current contract-only goldens.
 - Move to `ready` only after value-format coverage and kerning fixtures are reviewed.
 
 ## Linear Labels
