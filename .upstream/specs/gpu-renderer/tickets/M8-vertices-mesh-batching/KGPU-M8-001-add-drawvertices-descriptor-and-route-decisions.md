@@ -1,7 +1,7 @@
 ---
 id: KGPU-M8-001
 title: "Add `DrawVertices` descriptor and route decisions"
-status: blocked
+status: done
 milestone: M8
 priority: P1
 owner_area: vertices
@@ -54,9 +54,9 @@ data class VerticesRouteEvidence(val descriptorDump: String, val routeKind: Stri
 
 ## Acceptance Criteria
 
-- [ ] Descriptor and route dumps are deterministic.
-- [ ] Unsupported vertices cases refuse stably.
-- [ ] Route kind is explicit.
+- [x] Descriptor and route dumps are deterministic.
+- [x] Unsupported vertices cases refuse stably.
+- [x] Route kind is explicit.
 
 ## Required Evidence
 
@@ -81,11 +81,22 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: KGPU-M7-003 is now `done`, but the remaining gate is accepted
-  primitive blend/color route decisions, deterministic descriptor/key/refusal
-  dumps, adapter-backed layout/WGSL/route evidence, and explicit skipped or
-  refused lanes for unsupported topology, color, texcoord, and buffer cases.
-  Descriptor acceptance alone must not claim `DrawVertices` support.
+- `done`: KGPU-M2-002 and KGPU-M7-003 are `done` on current `master`.
+  This branch adds contract-only `GPUVerticesRouteDecisionPlanner` evidence for
+  typed `GPUVertexMode` descriptors, deterministic descriptor/layout/key/route
+  dumps, stable refusals for topology, triangle fan, nondeterministic source,
+  non-finite positions, vertex/index budgets, attribute/color format,
+  texcoord/local-coordinate, primitive blender, primitive-blend destination-read,
+  and missing WGSL/layout evidence cases. The evidence row remains
+  `gpu-renderer.vertices.descriptor` with `routeKind=GPUNative` or
+  `RefuseDiagnostic`, `classification=TargetNative`, and no promotion,
+  materialization, vertex/index upload, `DrawVertices` product support,
+  primitive blender support, texcoord material support, mesh support, or CPU
+  rendered texture fallback. Independent review
+  `019ed5c8-898d-7923-83b6-f8c82775d12e` found no P0/P1/P2 blockers, no hidden
+  product claim, and no status-count issue.
+- Evidence: `VerticesRouteDecisionTest` plus
+  `reports/gpu-renderer/2026-06-17-m8-001-vertices-route-decisions.md`.
 
 ## Linear Labels
 
