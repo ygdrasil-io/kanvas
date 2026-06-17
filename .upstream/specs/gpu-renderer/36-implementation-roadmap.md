@@ -59,6 +59,7 @@ legacy adapter / test fixture
   -> GPUPayloadGatherPlan / GPUDrawPayloadRef
   -> GPURenderPipelineKey / GPUPipelineCreationPlan
   -> GPUDrawInvocation / GPUDrawPass
+  -> GPUDrawPacketStream / GPUPassCommandStream
   -> GPUResourceMaterializationDecision
   -> GPUCommandScope / GPUCommandSubmission
   -> GPUValidationReport / GPUTelemetryLedger
@@ -128,6 +129,8 @@ NormalizedDrawCommand.FillRect
   -> GPUPayloadGatherPlan
   -> GPURenderPipelineKey
   -> GPUDrawPass
+  -> GPUDrawPacketStream
+  -> GPUPassCommandStream
   -> GPUCommandSubmission
 ```
 
@@ -241,6 +244,9 @@ Implement:
   target descriptors only if the first route needs them;
 - `GPUResourceProvider.materialize`;
 - `GPUCommandScope.Render`;
+- `GPUDrawPacketStream` for accepted packets;
+- `GPUPassCommandStream` for render-pass commands;
+- `GPUCommandEncoderPlan` for the selected `GPU` facade implementation;
 - `GPUExecutionContext.submit`;
 - `GPUReadbackRequest` and `GPUReadbackResult` for evidence.
 
@@ -257,6 +263,7 @@ Promotion evidence:
 
 - materialization decision dump;
 - target preparation dump;
+- packet-stream and pass-command-stream dumps;
 - command submission dump;
 - readback evidence or explicitly skipped evidence with stable reason.
 
@@ -570,6 +577,7 @@ Deliverables:
   doubles;
 - target descriptor and surface lease validation;
 - resource materialization decisions for first-route descriptors;
+- packet-stream and pass-command-stream construction for the first route;
 - command submission object construction;
 - readback request/result evidence or a stable skipped-readback diagnostic.
 

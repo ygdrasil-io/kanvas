@@ -83,8 +83,8 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: PM integration depends on accepted KGPU-M9-002 gate policy plus a
-  PM manifest/dashboard diff that keeps correctness support, activation,
+- `blocked`: KGPU-M9-002 is now accepted, but this ticket still needs a PM
+  manifest/dashboard diff that keeps correctness support, activation,
   performance, cache, and release readiness separate. Missing gates must keep
   `readinessDelta=0.0`, `releaseBlocking=false`, and reporting-only status.
 

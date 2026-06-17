@@ -175,10 +175,10 @@
       "expectation": "ShouldRender",
       "humanDocs": {
         "fr": {
-          "intention": "Rendre visible les blockers du stencil-cover path natif.",
-          "validates": "Valide les diagnostics de capacite depth-stencil, ordering et readback manquant.",
+          "intention": "Rendre visible la gate stencil-cover path natif cloturee sans promotion.",
+          "validates": "Valide le contrat candidate, les diagnostics de refus et les raisons skipped-lane.",
           "nonClaims": "Ne revendique pas la route native stencil-cover ni activation produit.",
-          "evidence": "Preuve WebGPU offscreen avec statut de gate bloque."
+          "evidence": "Preuve WebGPU offscreen avec statut de gate contractuelle."
         }
       }
     },

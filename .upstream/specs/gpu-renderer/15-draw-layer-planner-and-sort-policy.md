@@ -354,6 +354,32 @@ The planner may merge invocations into one binding list when:
 diagnostic mapping from command ID to invocation, binding list, sort key, and
 emitted pass command.
 
+## Packet Materialization Boundary
+
+The planner output is not itself executable command encoding. After insertion,
+sort-window, culling, and merge decisions are fixed, pass materialization must
+produce a `GPUDrawPacketStream` as defined in
+`37-draw-packet-command-stream.md`.
+
+Rules:
+
+- every executable `GPUDrawInvocation` maps to zero or more `GPUDrawPacket`
+  records;
+- every refused, discarded, or culled invocation remains represented in
+  diagnostics even when no executable packet is emitted;
+- packet order must preserve the legal order chosen by this planner;
+- packet grouping may not add new sort axes beyond the planner's accepted sort
+  window;
+- packet streams reference payload slots, binding slots, pipeline keys, and
+  resource descriptors, but never raw backend handles;
+- command-stream state elision is downstream optimization and must not be used
+  as planner correctness evidence.
+
+The first rect/rrect slice may create an order-preserving packet stream with no
+aggressive sorting. That still exercises the full packet/command-stream boundary
+needed before `GPUExecutionContext.submit()` can claim executable route
+evidence.
+
 ## First Slice Policy
 
 For the first rect/rrect slice:
@@ -427,6 +453,8 @@ Promoted planner behavior requires:
 - culling fixture proving a safe opaque cover case and negative culling cases;
 - pass materialization fixture that maps original command IDs to emitted pass
   commands.
+- packet-stream fixture that maps invocations to `GPUDrawPacket` records and
+  then to `GPUPassCommandStream` records.
 
 ## Non-Goals
 

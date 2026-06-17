@@ -21,7 +21,7 @@ M2 parser facts and M3 variation/scaler foundations.
 | [KFONT-M4-001 - Implement CFF INDEX and DICT parser](KFONT-M4-001-implement-cff-index-and-dict-parser.md) | `done` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M2-001`, `KFONT-M2-002`, `KFONT-M2-004` | - |
 | [KFONT-M4-002 - Implement Type 2 charstring stack machine](KFONT-M4-002-implement-type-2-charstring-stack-machine.md) | `done` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M4-001` | - |
 | [KFONT-M4-003 - Add CFF subroutine limits and diagnostics](KFONT-M4-003-add-cff-subroutine-limits-and-diagnostics.md) | `done` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M4-001`, `KFONT-M4-002` | - |
-| [KFONT-M4-004 - Implement CFF scaler path output](KFONT-M4-004-implement-cff-scaler-path-output.md) | `proposed` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M4-002`, `KFONT-M4-003`, `KFONT-M2-004` | - |
+| [KFONT-M4-004 - Implement CFF scaler path output](KFONT-M4-004-implement-cff-scaler-path-output.md) | `done` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M4-002`, `KFONT-M4-003`, `KFONT-M2-004` | - |
 | [KFONT-M4-005 - Implement CFF2 variation path output](KFONT-M4-005-implement-cff2-variation-path-output.md) | `proposed` | `P1` | `tracked-gap` | `font-scaler` | `KFONT-M4-004`, `KFONT-M2-004`, `KFONT-M3-002`, `KFONT-M3-003` | - |
 
 ## Validation Bundle

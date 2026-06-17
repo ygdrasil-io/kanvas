@@ -718,10 +718,12 @@ public class BasicOpenTypeShapingEngine(
                 glyphUnits += ShapingGlyphUnit(
                     glyphId = glyphId ?: missingGlyphId,
                     textRange = clusterRange,
+                    codePoint = codePointRange.codePoint,
                 )
             }
         }
 
+        applyStandardLigatures(request, glyphUnits)
         applyGsubLookups(request, glyphUnits)
         val glyphIds = glyphUnits.map { it.glyphId }
         val clusters = glyphClustersFor(glyphUnits, request.fontSize)
@@ -745,6 +747,39 @@ public class BasicOpenTypeShapingEngine(
             message = "Missing glyph for U+${codePointRange.codePoint.toUpperHex()}.",
             textRange = codePointRange.textRange,
         )
+
+    private fun applyStandardLigatures(
+        request: ShapingRequest,
+        glyphUnits: MutableList<ShapingGlyphUnit>,
+    ) {
+        if (request.features.values["liga"] == 0) return
+        val ligatureGlyphId = glyphMapper.glyphIdFor(request.typefaceId, LATIN_SMALL_FI_LIGATURE_CODE_POINT)
+            ?: return
+
+        var glyphIndex = 0
+        while (glyphIndex + 1 < glyphUnits.size) {
+            val first = glyphUnits[glyphIndex]
+            val second = glyphUnits[glyphIndex + 1]
+            if (
+                first.codePoint == LATIN_SMALL_F_CODE_POINT &&
+                second.codePoint == LATIN_SMALL_I_CODE_POINT
+            ) {
+                glyphUnits.removeAt(glyphIndex)
+                glyphUnits.removeAt(glyphIndex)
+                glyphUnits.add(
+                    glyphIndex,
+                    ShapingGlyphUnit(
+                        glyphId = ligatureGlyphId,
+                        textRange = first.textRange.first..second.textRange.last,
+                        codePoint = LATIN_SMALL_FI_LIGATURE_CODE_POINT,
+                    ),
+                )
+                glyphIndex += 1
+            } else {
+                glyphIndex += 1
+            }
+        }
+    }
 
     private fun applyGsubLookups(
         request: ShapingRequest,
@@ -795,7 +830,7 @@ public class BasicOpenTypeShapingEngine(
             glyphUnits.addAll(
                 glyphIndex,
                 substitution.replacementGlyphIds.map { replacementGlyphId ->
-                    ShapingGlyphUnit(glyphId = replacementGlyphId, textRange = sourceRange)
+                    ShapingGlyphUnit(glyphId = replacementGlyphId, textRange = sourceRange, codePoint = null)
                 },
             )
             glyphIndex += substitution.replacementGlyphIds.size
@@ -825,6 +860,7 @@ public class BasicOpenTypeShapingEngine(
                 ShapingGlyphUnit(
                     glyphId = substitution.replacementGlyphId,
                     textRange = matchedUnits.minOf { it.textRange.first }..matchedUnits.maxOf { it.textRange.last },
+                    codePoint = null,
                 ),
             )
             glyphIndex += 1
@@ -1462,6 +1498,9 @@ private const val SCRIPT_COMMON = "Zyyy"
 private const val SCRIPT_INHERITED = "Zinh"
 private const val SCRIPT_EMOJI = "Zsye"
 private const val ZERO_WIDTH_JOINER = 0x200D
+private const val LATIN_SMALL_F_CODE_POINT = 0x0066
+private const val LATIN_SMALL_I_CODE_POINT = 0x0069
+private const val LATIN_SMALL_FI_LIGATURE_CODE_POINT = 0xFB01
 
 private const val BIDI_LEFT_TO_RIGHT = "L"
 private const val BIDI_RIGHT_TO_LEFT = "R"
@@ -1522,6 +1561,7 @@ private data class BasicPositionAdjustmentContext(
 private data class ShapingGlyphUnit(
     val glyphId: Int,
     val textRange: IntRange,
+    val codePoint: Int?,
 )
 
 private data class EmojiSequence(
