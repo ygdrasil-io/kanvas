@@ -128,6 +128,7 @@ object GPURendererSceneHumanDocs {
         doc("vertices-route-gate-board", "Lister les blockers de route vertices.", "Valide lanes descriptor, primitive blend, buffer upload, ABI et batching.", "Ne revendique pas vertices generaux ni pipeline mesh complet.", "Preuve WebGPU offscreen avec refus vertices."),
         doc("mesh-ribbon-depth-stack", "Verifier plusieurs rubans mesh bornes avec overlaps lisibles dans un cadre simple.", "Valide un stack de MeshRibbon fixture-backed avec ordre visuel stable et clipping borne.", "Ne revendique pas DrawVertices general ni upload libre de vertex/index buffers.", "Preuve WebGPU offscreen et Kadre windowed."),
         doc("cache-pressure-deck", "Representer une pression cache minimale et stable.", "Valide deux rectangles comme deck de pression cache fixture.", "Ne revendique pas telemetry cache runtime observee.", "Preuve WebGPU offscreen et Kadre windowed."),
+        doc("cache-frame-budget-strip", "Rendre visible un budget frame/cache depasse comme refus attendu.", "Valide les lanes budget cible, warning, depassement et gate reporting-only.", "Ne revendique pas mesure runtime WebGPU observee ni gate release-blocking.", "Preuve WebGPU offscreen avec refus budget visible."),
         doc("cache-source-ledger-board", "Rendre visible la classification des sources cache.", "Valide lanes de source cache, stale, generated et policy.", "Ne revendique pas cache WebGPU observe ni eviction runtime.", "Preuve WebGPU offscreen avec ledger diagnostic."),
         doc("frame-gate-blocker-board", "Exposer les blockers de frame gate.", "Valide lanes de politique frame, telemetry et gating reporting-only.", "Ne revendique pas gate FPS release-blocking ni mesure native definitive.", "Preuve WebGPU offscreen avec blockers visibles."),
         doc("pm-readiness-freeze-board", "Montrer que la readiness PM ne bouge pas sans gate.", "Valide lanes de policy, release blocking false et readiness delta zero.", "Ne revendique pas activation produit ni mouvement de readiness.", "Preuve WebGPU offscreen avec diagnostics PM."),
@@ -182,17 +183,6 @@ object GPURendererSceneHumanDocs {
             validationTarget = "Valider glyph masks, atlas entries et binding ressource quand la dependance existe.",
             nonClaims = "Ne revendique pas shaping complexe, font fallback ou emoji/color fonts.",
             rationale = "Couvre M6 sans ajouter de substitut court-terme pour font/atlas.",
-        ),
-        candidate(
-            id = "cache-frame-budget-strip",
-            title = "Cache Frame Budget Strip",
-            milestones = listOf("M9"),
-            tags = setOf(SceneTag.Rect, SceneTag.Cache),
-            status = CandidateSceneStatus.ProductRefusalExpected,
-            intention = "Rendre visible un budget frame/cache depasse comme refus attendu.",
-            validationTarget = "Verifier qu'un budget depasse est expose comme refus produit explicite.",
-            nonClaims = "Ne revendique pas mesure runtime WebGPU observee ni gate release-blocking.",
-            rationale = "Couvre M9 en alignant les refus attendus avec la politique produit.",
         ),
     )
 

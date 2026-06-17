@@ -322,6 +322,14 @@ Valide: Valide deux rectangles comme deck de pression cache fixture.
 Ne revendique pas: Ne revendique pas telemetry cache runtime observee.
 Preuve: Preuve WebGPU offscreen et Kadre windowed.
 
+### Cache Frame Budget Strip (`cache-frame-budget-strip`)
+M9 - Rect, Cache - `ShouldRender`
+
+Intention: Rendre visible un budget frame/cache depasse comme refus attendu.
+Valide: Valide les lanes budget cible, warning, depassement et gate reporting-only.
+Ne revendique pas: Ne revendique pas mesure runtime WebGPU observee ni gate release-blocking.
+Preuve: Preuve WebGPU offscreen avec refus budget visible.
+
 ### Cache Source Ledger Board (`cache-source-ledger-board`)
 M9 - Rect, Cache - `ShouldRender`
 
@@ -423,12 +431,3 @@ Intention: Preparer une scene texte simple-latin adossee a un atlas glyph reel.
 Validation visee: Valider glyph masks, atlas entries et binding ressource quand la dependance existe.
 Ne revendique pas: Ne revendique pas shaping complexe, font fallback ou emoji/color fonts.
 Raison: Couvre M6 sans ajouter de substitut court-terme pour font/atlas.
-
-### Cache Frame Budget Strip (`cache-frame-budget-strip`)
-M9 - Rect, Cache
-
-Statut: `product-refusal-expected`
-Intention: Rendre visible un budget frame/cache depasse comme refus attendu.
-Validation visee: Verifier qu'un budget depasse est expose comme refus produit explicite.
-Ne revendique pas: Ne revendique pas mesure runtime WebGPU observee ni gate release-blocking.
-Raison: Couvre M9 en alignant les refus attendus avec la politique produit.

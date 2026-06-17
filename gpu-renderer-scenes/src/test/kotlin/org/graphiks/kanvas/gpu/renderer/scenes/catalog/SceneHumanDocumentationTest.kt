@@ -41,7 +41,7 @@ class SceneHumanDocumentationTest {
         assertTrue(candidateIds.none { it in executableIds })
         assertEquals(candidateIds.size, candidateIds.toSet().size)
         assertEquals(
-            setOf("M2", "M3", "M5", "M6", "M9"),
+            setOf("M2", "M3", "M5", "M6"),
             candidateMilestones,
         )
     }
@@ -65,6 +65,7 @@ class SceneHumanDocumentationTest {
             "bitmap-sampler-matrix",
             "runtime-effect-uniform-ladder",
             "mesh-ribbon-depth-stack",
+            "cache-frame-budget-strip",
             "legacy-parity-snapshot-board",
         )
         val executableIds = GPURendererSceneRegistry.scenes.map { it.sceneId.value }.toSet()
@@ -82,7 +83,6 @@ class SceneHumanDocumentationTest {
             setOf(
                 CandidateSceneStatus.RunnerGap,
                 CandidateSceneStatus.DependencyGated,
-                CandidateSceneStatus.ProductRefusalExpected,
             ),
             candidateStatuses,
         )

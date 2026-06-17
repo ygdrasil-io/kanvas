@@ -42,6 +42,7 @@
 | `vertices-route-gate-board` | Vertices Route Gate Board | Rect,RRect,Clip,Vertices | KGPU M8 | `KGPU-M8-001`,`KGPU-M8-002`,`KGPU-M8-003` |  | `ShouldRender` |
 | `mesh-ribbon-depth-stack` | Mesh Ribbon Depth Stack | Vertices,RRect,Clip | KGPU M8 |  |  | `ShouldRender` |
 | `cache-pressure-deck` | Cache Pressure Deck | Rect | KGPU M9 |  |  | `ShouldRender` |
+| `cache-frame-budget-strip` | Cache Frame Budget Strip | Rect,Cache | KGPU M9 |  |  | `ShouldRender` |
 | `cache-source-ledger-board` | Cache Source Ledger Board | Rect,Cache | KGPU M9 | `KGPU-M9-001` |  | `ShouldRender` |
 | `frame-gate-blocker-board` | Frame Gate Blocker Board | Rect | KGPU M9 | `KGPU-M9-002` |  | `ShouldRender` |
 | `pm-readiness-freeze-board` | PM Readiness Freeze Board | Rect,RRect,Clip,Cache | KGPU M9 | `KGPU-M9-003` |  | `ShouldRender` |
