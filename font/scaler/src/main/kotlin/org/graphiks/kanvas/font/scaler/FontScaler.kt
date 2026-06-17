@@ -230,6 +230,7 @@ object FontScalerDiagnosticCodes {
     const val SCALER_OUTLINE_UNAVAILABLE: String = "font.scaler.outline-unavailable"
     const val CFF_OPERATOR_UNSUPPORTED: String = "font.cff-operator-unsupported"
     const val CFF_STACK_MALFORMED: String = "font.cff-stack-malformed"
+    const val CFF2_BLEND_STACK_MALFORMED: String = "font.scaler.cff2.blend-stack-malformed"
     const val CFF_TABLE_MALFORMED: String = "font.cff-table-malformed"
     const val CFF_STACK_OVERFLOW: String = "font.scaler.cff.stack-overflow"
     const val CFF_TRAILING_BYTES: String = "font.scaler.cff.trailing-bytes"
@@ -378,6 +379,54 @@ data class Type2ExecutionLimits(
  * This evidence covers generated Type 2/CFF2 charstring fixtures only. It is intentionally not a
  * complete CFF table parser or a claim that OpenType/CFF fonts are fully supported.
  */
+data class CFFBlendVectorEvidence(
+    val vsIndex: Int,
+    val defaults: List<Double>,
+    val deltaSets: List<List<Double>>,
+    val regionIndexes: List<Int> = emptyList(),
+    val scalars: List<Double>,
+    val blendedValues: List<Double>,
+) {
+    init {
+        require(vsIndex >= 0) { "CFF blend vector vsIndex must be non-negative." }
+        require(defaults.isNotEmpty()) { "CFF blend vector defaults must not be empty." }
+        require(defaults.all(Double::isFinite)) { "CFF blend vector defaults must be finite." }
+        require(deltaSets.size == scalars.size) {
+            "CFF blend vector deltaSets must align with scalar count."
+        }
+        require(deltaSets.all { deltas -> deltas.size == defaults.size }) {
+            "CFF blend vector delta rows must align with default value count."
+        }
+        require(regionIndexes.isEmpty() || regionIndexes.size == scalars.size) {
+            "CFF blend vector regionIndexes must be empty or align with scalar count."
+        }
+        require(regionIndexes.all { index -> index >= 0 }) {
+            "CFF blend vector region indexes must be non-negative."
+        }
+        require(scalars.all(Double::isFinite)) { "CFF blend vector scalars must be finite." }
+        require(blendedValues.size == defaults.size) {
+            "CFF blend vector blendedValues must align with default value count."
+        }
+        require(blendedValues.all(Double::isFinite)) { "CFF blend vector blendedValues must be finite." }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  ").append(scalerJsonString("vsIndex")).append(": ").append(vsIndex).append(",\n")
+        append("  ").append(scalerJsonString("defaults")).append(": ")
+            .append(defaults.toScalerNumberJsonArray()).append(",\n")
+        append("  ").append(scalerJsonString("deltaSets")).append(": ")
+            .append(deltaSets.toScalerNumberMatrixJson()).append(",\n")
+        append("  ").append(scalerJsonString("regionIndexes")).append(": ")
+            .append(regionIndexes.toIntJsonArray()).append(",\n")
+        append("  ").append(scalerJsonString("scalars")).append(": ")
+            .append(scalars.toScalerNumberJsonArray()).append(",\n")
+        append("  ").append(scalerJsonString("blendedValues")).append(": ")
+            .append(blendedValues.toScalerNumberJsonArray()).append("\n")
+        append("}")
+    }
+}
+
 data class CFFCharStringEvidence(
     val format: String,
     val glyphId: UInt,
@@ -390,6 +439,7 @@ data class CFFCharStringEvidence(
     val callTrace: List<CFFCharStringCallTrace> = emptyList(),
     val variationPosition: List<VariationCoordinateEvidence> = emptyList(),
     val cff2VsIndex: Int = 0,
+    val blendVectors: List<CFFBlendVectorEvidence> = emptyList(),
     val diagnostics: List<FontScalerDiagnostic> = emptyList(),
 ) {
     init {
@@ -437,6 +487,8 @@ data class CFFCharStringEvidence(
         append("  ").append(scalerJsonString("variationPosition")).append(": ")
             .append(variationPosition.toCoordinateJson()).append(",\n")
         append("  ").append(scalerJsonString("cff2VsIndex")).append(": ").append(cff2VsIndex).append(",\n")
+        append("  ").append(scalerJsonString("blendVectors")).append(": ")
+            .append(blendVectors.toCFFBlendVectorJson()).append(",\n")
         append("  ").append(scalerJsonString("diagnostics")).append(": ")
             .append(diagnostics.toDiagnosticJson()).append("\n")
         append("}")
@@ -3190,6 +3242,12 @@ private fun List<String>.toJsonStringArray(): String =
 private fun List<Int>.toIntJsonArray(): String =
     joinToString(prefix = "[", postfix = "]")
 
+private fun List<Double>.toScalerNumberJsonArray(): String =
+    joinToString(prefix = "[", postfix = "]") { value -> value.toCanonicalScalerNumber() }
+
+private fun List<List<Double>>.toScalerNumberMatrixJson(): String =
+    joinToString(prefix = "[", postfix = "]") { row -> row.toScalerNumberJsonArray() }
+
 private fun List<CFFByteRangeEvidence>.toCFFByteRangeJsonArray(): String =
     joinToString(prefix = "[", postfix = "]") { range -> range.toCanonicalJson() }
 
@@ -3213,6 +3271,9 @@ private fun List<TrueTypeCompositeComponentEvidence>.toCompositeComponentJson():
 
 private fun List<CFFCharStringCallTrace>.toCFFCallTraceJson(): String =
     joinToString(prefix = "[", postfix = "]") { trace -> trace.toCanonicalJson() }
+
+private fun List<CFFBlendVectorEvidence>.toCFFBlendVectorJson(): String =
+    joinToString(prefix = "[", postfix = "]") { vector -> vector.toCanonicalJson() }
 
 private fun List<FontScalerDiagnostic>.toDiagnosticJson(): String =
     joinToString(prefix = "[", postfix = "]") { diagnostic -> diagnostic.toCanonicalJson() }
@@ -4661,6 +4722,22 @@ class CFF2Scaler(
     private val parsedCFF2: ParsedCFFProgram? by lazy {
         face.rawTableBytesOrNull("CFF2")?.let(::parseCFF2Table)
     }
+    private val variationNormalizer: VariationNormalizer? by lazy {
+        if (face.variations.axes.isEmpty()) {
+            null
+        } else {
+            BoundedVariationNormalizer(
+                face.variations.axes.map { axis ->
+                    VariationAxis(
+                        tag = axis.tag.text,
+                        minimum = axis.minimum.value,
+                        defaultValue = axis.defaultValue.value,
+                        maximum = axis.maximum.value,
+                    )
+                },
+            )
+        }
+    }
 
     /**
      * Emits deterministic parser provenance for the selected CFF2 table.
@@ -4685,6 +4762,7 @@ class CFF2Scaler(
      */
     override fun outline(glyphId: UInt, position: VariationPosition): GlyphOutline =
         parsedCFF2?.let { program ->
+            val normalizedPosition = position.normalizedForCff2()
             val axisTags = face.variations.axes.map { axis -> axis.tag.text }
             CFFType2CharStringInterpreter(
                 localSubroutines = program.localSubroutines,
@@ -4693,12 +4771,12 @@ class CFF2Scaler(
                     0 to axisTags.sorted(),
                 ),
                 blendScalarProvider = program.variationStore?.let { store ->
-                    { vsIndex, variationPosition -> store.scalars(vsIndex, axisTags, variationPosition) }
-                },
+                    { vsIndex, variationPosition -> store.resolution(vsIndex, axisTags, variationPosition) }
+                } ?: { _, _ -> throw CFF2VariationStoreException("cff2.variation-store-missing") },
             ).interpretOutline(
                 charString = program.charString(glyphId),
                 glyphId = glyphId,
-                position = position,
+                position = normalizedPosition,
             )
         } ?: unsupportedCFFGlyph("CFF2", "outline", face, glyphId, position)
 
@@ -4711,6 +4789,7 @@ class CFF2Scaler(
      */
     override fun metrics(glyphId: UInt, position: VariationPosition): GlyphMetrics =
         parsedCFF2?.let { program ->
+            val normalizedPosition = position.normalizedForCff2()
             val axisTags = face.variations.axes.map { axis -> axis.tag.text }
             val interpreter = CFFType2CharStringInterpreter(
                 localSubroutines = program.localSubroutines,
@@ -4719,8 +4798,8 @@ class CFF2Scaler(
                     0 to axisTags.sorted(),
                 ),
                 blendScalarProvider = program.variationStore?.let { store ->
-                    { vsIndex, variationPosition -> store.scalars(vsIndex, axisTags, variationPosition) }
-                },
+                    { vsIndex, variationPosition -> store.resolution(vsIndex, axisTags, variationPosition) }
+                } ?: { _, _ -> throw CFF2VariationStoreException("cff2.variation-store-missing") },
             )
             val charString = program.charString(glyphId)
             cffGlyphMetrics(
@@ -4729,16 +4808,107 @@ class CFF2Scaler(
                 outline = interpreter.interpretOutline(
                     charString = charString,
                     glyphId = glyphId,
-                    position = position,
+                    position = normalizedPosition,
                 ),
                 width = interpreter.interpretEvidence(
                     charString = charString,
                     glyphId = glyphId,
                     format = "cff2",
-                    position = position,
+                    position = normalizedPosition,
                 ).width,
             )
         } ?: unsupportedCFFGlyph("CFF2", "metrics", face, glyphId, position)
+
+    /**
+     * Produces deterministic current-state evidence for one CFF2 glyph route.
+     *
+     * This remains generated-fixture evidence only; it does not promote complete real-font CFF2
+     * variation support, fallback font selection, or GPU handoff readiness.
+     */
+    fun scaledGlyphEvidence(
+        glyphId: UInt,
+        position: VariationPosition = VariationPosition(),
+    ): CFFScaledGlyphEvidence {
+        val normalizationDiagnostics = position.normalizationDiagnostics(glyphId)
+        if (normalizationDiagnostics.isNotEmpty()) {
+            return CFFScaledGlyphEvidence(
+                sourceId = face.source.id.value.toString(),
+                typefaceId = face.id.value.toString(),
+                format = "cff2",
+                requestedGlyphId = glyphId,
+                resolvedGlyphId = null,
+                outlineCommands = emptyList(),
+                diagnostics = normalizationDiagnostics,
+            )
+        }
+        val normalizedPosition = position.normalizedForCff2()
+        return scaledCFFGlyphEvidence(
+            face = face,
+            format = "cff2",
+            program = parsedCFF2,
+            glyphId = glyphId,
+            position = normalizedPosition,
+            interpreterProvider = { program ->
+                val axisTags = face.variations.axes.map { axis -> axis.tag.text }
+                CFFType2CharStringInterpreter(
+                    localSubroutines = program.localSubroutines,
+                    globalSubroutines = program.globalSubroutines,
+                    blendAxisTagsByVsIndex = mapOf(
+                        0 to axisTags.sorted(),
+                    ),
+                    blendScalarProvider = program.variationStore?.let { store ->
+                        { vsIndex, variationPosition -> store.resolution(vsIndex, axisTags, variationPosition) }
+                    } ?: { _, _ -> throw CFF2VariationStoreException("cff2.variation-store-missing") },
+                )
+            },
+        )
+    }
+
+    private fun VariationPosition.normalizedForCff2(): VariationPosition {
+        val normalizer = variationNormalizer ?: return this
+        return VariationPosition(axes = normalizer.normalize(this).applyAvarSegmentMaps())
+    }
+
+    private fun VariationPosition.normalizationDiagnostics(glyphId: UInt): List<FontScalerDiagnostic> {
+        if (variationNormalizer == null) {
+            return emptyList()
+        }
+        val supportedAxisTags = face.variations.axes.map { axis -> axis.tag.text }.toSet()
+        return axes.toSortedMap().mapNotNull { (tag, value) ->
+            when {
+                tag !in supportedAxisTags -> FontScalerDiagnostic(
+                    code = FontScalerDiagnosticCodes.VARIATION_AXIS_UNSUPPORTED,
+                    detail = "cff2.variation-axis",
+                    operation = "variation",
+                    glyphId = glyphId,
+                )
+                !value.isFinite() -> FontScalerDiagnostic(
+                    code = FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED,
+                    detail = "cff2.variation-position-non-finite",
+                    operation = "variation",
+                    glyphId = glyphId,
+                )
+                else -> null
+            }
+        }
+    }
+
+    private fun Map<String, Double>.applyAvarSegmentMaps(): Map<String, Double> {
+        val maps = face.variations.axisSegmentMaps
+        if (maps.isEmpty()) return this
+
+        val remapped = LinkedHashMap<String, Double>(size)
+        face.variations.axes
+            .map { axis -> axis.tag.text }
+            .sorted()
+            .forEach { tag ->
+                val value = this[tag] ?: return@forEach
+                val axisIndex = face.variations.axes.indexOfFirst { axis -> axis.tag.text == tag }
+                val segments = maps.getOrNull(axisIndex)?.segments.orEmpty()
+                remapped[tag] = remapAvarCoordinate(value, segments)
+            }
+        return remapped
+    }
 }
 
 private fun cffGlyphMetrics(
@@ -5105,20 +5275,34 @@ private data class CFF2VariationStore(
     val regions: List<CFF2VariationRegion>,
     val regionIndexesByVsIndex: List<List<Int>>,
 ) {
-    fun scalars(
+    fun resolution(
         vsIndex: Int,
         axisTags: List<String>,
         position: VariationPosition,
-    ): List<Double> {
+    ): CFF2BlendResolution {
         if (axisTags.size != axisCount) {
             throw CFF2VariationStoreException("cff2.variation-axis-count")
         }
         val regionIndexes = regionIndexesByVsIndex.getOrNull(vsIndex)
             ?: throw CFF2VariationStoreException("cff2.vsindex-invalid")
-        return regionIndexes.map { regionIndex ->
-            val region = regions.getOrNull(regionIndex)
-                ?: throw CFF2VariationStoreException("cff2.region-index-invalid")
-            region.scalar(axisTags = axisTags, position = position)
+        return CFF2BlendResolution(
+            scalars = regionIndexes.map { regionIndex ->
+                val region = regions.getOrNull(regionIndex)
+                    ?: throw CFF2VariationStoreException("cff2.region-index-invalid")
+                region.scalar(axisTags = axisTags, position = position)
+            },
+            regionIndexes = regionIndexes,
+        )
+    }
+}
+
+data class CFF2BlendResolution(
+    val scalars: List<Double>,
+    val regionIndexes: List<Int> = emptyList(),
+) {
+    init {
+        require(regionIndexes.isEmpty() || regionIndexes.size == scalars.size) {
+            "CFF2 blend resolution regionIndexes must be empty or align with scalar count."
         }
     }
 }
@@ -5863,7 +6047,7 @@ class CFFType2CharStringInterpreter(
     localSubroutines: List<ByteArray> = emptyList(),
     globalSubroutines: List<ByteArray> = emptyList(),
     blendAxisTagsByVsIndex: Map<Int, List<String>> = emptyMap(),
-    private val blendScalarProvider: ((Int, VariationPosition) -> List<Double>)? = null,
+    private val blendScalarProvider: ((Int, VariationPosition) -> CFF2BlendResolution)? = null,
     private val limits: Type2ExecutionLimits = Type2ExecutionLimits(),
 ) : CFFCharStringInterpreter {
     private val localSubroutines: List<ByteArray> = localSubroutines.map { it.copyOf() }
@@ -5943,6 +6127,7 @@ class CFFType2CharStringInterpreter(
             callTrace = state.callTrace.toList(),
             variationPosition = position.toEvidenceCoordinates(),
             cff2VsIndex = state.cff2VsIndex,
+            blendVectors = state.blendVectors.toList(),
         )
     }
 
@@ -6279,30 +6464,46 @@ class CFFType2CharStringInterpreter(
     ) {
         val blendCount = state.popInt(glyphId, operatorOffset)
         if (blendCount <= 0) {
-            malformedCFFStack(glyphId, "cff2.blend-count", operatorOffset)
+            malformedCFFBlendStack(glyphId, "cff2.blend-count", operatorOffset)
         }
-        val scalars = try {
+        val resolution = try {
             blendScalarProvider?.invoke(state.cff2VsIndex, position)
         } catch (error: CFF2VariationStoreException) {
             malformedCFFVariation(glyphId, error.detail, operatorOffset)
-        } ?: blendAxisTagsByVsIndex[state.cff2VsIndex].orEmpty().map { tag ->
-            position.axes[tag] ?: 0.0
-        }
+        } ?: CFF2BlendResolution(
+            scalars = blendAxisTagsByVsIndex[state.cff2VsIndex].orEmpty().map { tag ->
+                position.axes[tag] ?: 0.0
+            },
+        )
+        val scalars = resolution.scalars
         val requiredOperandCount = blendCount * (1 + scalars.size)
         if (state.stack.size < requiredOperandCount) {
-            malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+            malformedCFFBlendStack(glyphId, "cff2.blend-stack-underflow", operatorOffset)
         }
         val start = state.stack.size - requiredOperandCount
         val defaults = state.stack.subList(start, start + blendCount).toList()
         val blended = defaults.toMutableList()
         var deltaOffset = start + blendCount
+        val deltaSets = mutableListOf<List<Double>>()
         scalars.forEach { scalar ->
+            val deltas = mutableListOf<Double>()
             repeat(blendCount) { valueIndex ->
-                blended[valueIndex] += state.stack[deltaOffset++] * scalar
+                val delta = state.stack[deltaOffset++]
+                deltas += delta
+                blended[valueIndex] += delta * scalar
             }
+            deltaSets += deltas
         }
         state.stack.subList(start, state.stack.size).clear()
         state.stack += blended
+        state.blendVectors += CFFBlendVectorEvidence(
+            vsIndex = state.cff2VsIndex,
+            defaults = defaults,
+            deltaSets = deltaSets,
+            regionIndexes = resolution.regionIndexes,
+            scalars = scalars,
+            blendedValues = blended,
+        )
     }
 }
 
@@ -6312,6 +6513,7 @@ private class CFFType2ExecutionState(
     val stack: MutableList<Double> = mutableListOf()
     val commands: MutableList<OutlineCommand> = mutableListOf()
     val callTrace: MutableList<CFFCharStringCallTrace> = mutableListOf()
+    val blendVectors: MutableList<CFFBlendVectorEvidence> = mutableListOf()
     var x: Double = 0.0
     var y: Double = 0.0
     var cff2VsIndex: Int = 0
@@ -6820,6 +7022,21 @@ private fun malformedCFFStack(
             glyphId = glyphId,
         ),
         message = "CFF Type 2 stack is malformed at operator offset $operatorOffset for glyphId $glyphId.",
+    )
+
+private fun malformedCFFBlendStack(
+    glyphId: UInt,
+    detail: String,
+    operatorOffset: Int,
+): Nothing =
+    throw FontScalerRefusalException(
+        diagnostic = FontScalerDiagnostic(
+            code = FontScalerDiagnosticCodes.CFF2_BLEND_STACK_MALFORMED,
+            detail = detail,
+            operation = "charstring",
+            glyphId = glyphId,
+        ),
+        message = "CFF2 blend stack is malformed at operator offset $operatorOffset for glyphId $glyphId.",
     )
 
 private fun overflowedCFFStack(

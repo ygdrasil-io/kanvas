@@ -12,7 +12,7 @@ M2 parser facts and M3 variation/scaler foundations.
 
 - [ ] CFF INDEX/DICT and Type 2 execution have traces and diagnostics.
 - [ ] CFF scaler path output is deterministic for supported fixtures.
-- [ ] CFF2 variation behavior is either implemented with evidence or refused precisely.
+- [x] CFF2 variation behavior is either implemented with evidence or refused precisely.
 
 ## Tickets
 
@@ -22,7 +22,7 @@ M2 parser facts and M3 variation/scaler foundations.
 | [KFONT-M4-002 - Implement Type 2 charstring stack machine](KFONT-M4-002-implement-type-2-charstring-stack-machine.md) | `done` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M4-001` | - |
 | [KFONT-M4-003 - Add CFF subroutine limits and diagnostics](KFONT-M4-003-add-cff-subroutine-limits-and-diagnostics.md) | `done` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M4-001`, `KFONT-M4-002` | - |
 | [KFONT-M4-004 - Implement CFF scaler path output](KFONT-M4-004-implement-cff-scaler-path-output.md) | `done` | `P0` | `tracked-gap` | `font-scaler` | `KFONT-M4-002`, `KFONT-M4-003`, `KFONT-M2-004` | - |
-| [KFONT-M4-005 - Implement CFF2 variation path output](KFONT-M4-005-implement-cff2-variation-path-output.md) | `proposed` | `P1` | `tracked-gap` | `font-scaler` | `KFONT-M4-004`, `KFONT-M2-004`, `KFONT-M3-002`, `KFONT-M3-003` | - |
+| [KFONT-M4-005 - Implement CFF2 variation path output](KFONT-M4-005-implement-cff2-variation-path-output.md) | `done` | `P1` | `tracked-gap` | `font-scaler` | `KFONT-M4-004`, `KFONT-M2-004`, `KFONT-M3-002`, `KFONT-M3-003` | - |
 
 ## Validation Bundle
 
