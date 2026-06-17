@@ -78,7 +78,21 @@ class FallbackDecisionDumpTest {
     }
 
     @Test
-    fun `fallback decision trace ticket is closed while downstream fallback slices stay explicit`() {
+    fun `cluster fixture fallback assets match repo goldens`() {
+        val bundle = defaultFallbackClusterEvidenceBundle()
+
+        fallbackClusterFixtureIds().forEach { fixtureId ->
+            val expected = Files.readString(projectRoot().resolve("reports/font/fixtures/expected/fallback/$fixtureId.json"))
+            val actual = bundle.fixtureJsonById.getValue(fixtureId)
+
+            assertEquals(expected.trimEnd(), actual.trimEnd())
+            assertContains(actual, """"dumpId":"fallback-fixture"""")
+            assertContains(actual, """"fixtureId":"$fixtureId"""")
+        }
+    }
+
+    @Test
+    fun `fallback decision trace ticket is closed while broader fallback backlog stays explicit`() {
         val root = projectRoot()
         val ticket = Files.readString(
             root.resolve(".upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/KFONT-M7-002-add-fallback-decision-trace.md"),
@@ -101,7 +115,7 @@ class FallbackDecisionDumpTest {
             milestoneReadme,
             "| [KFONT-M7-002 - Add fallback decision trace](KFONT-M7-002-add-fallback-decision-trace.md) | `done` |",
         )
-        assertContains(statusSummary, "| M7 | 0 | 0 | 0 | 0 | 3 | 2 |")
+        assertContains(statusSummary, "| M7 | 0 | 0 | 0 | 0 | 1 | 4 |")
         assertContains(ticketReport, "No ticket-local gate remains")
         assertContains(ticketReport, "KFONT-M7-003")
         assertContains(ticketReport, "KFONT-M7-005")
@@ -114,9 +128,20 @@ class FallbackDecisionDumpTest {
         assertContains(bundle.fallbackDecisionTraceJson, """"fixtureId":"fallback-axis-clamped"""")
         assertContains(bundle.fallbackDecisionTraceJson, """"fixtureId":"fallback-axis-missing"""")
         assertContains(bundle.fallbackDecisionTraceJson, """"fixtureId":"fallback-metrics-variation-missing"""")
+        assertContains(bundle.fallbackDecisionTraceJson, """"fixtureId":"fallback-named-instance"""")
+        assertContains(bundle.fallbackDecisionTraceJson, """"fixtureId":"fallback-multi-axis"""")
         assertContains(bundle.fallbackDecisionTraceJson, """"fixtureId":"fallback-variable-cff2"""")
         assertContains(bundle.fallbackDecisionTraceJson, """"requestedVariationCoordinates":[{"axisTag":"wght","value":900.0}]""")
         assertContains(bundle.fallbackDecisionTraceJson, """"selectedVariationCoordinates":[{"axisTag":"wght","value":700.0}]""")
+        assertContains(bundle.fallbackDecisionTraceJson, """"selectedNamedInstance":"Condensed Bold"""")
+        assertContains(
+            bundle.fallbackDecisionTraceJson,
+            """"requestedVariationCoordinates":[{"axisTag":"wdth","value":80.0},{"axisTag":"wght","value":700.0}]""",
+        )
+        assertContains(
+            bundle.fallbackDecisionTraceJson,
+            """"selectedVariationCoordinates":[{"axisTag":"wdth","value":80.0},{"axisTag":"wght","value":700.0}]""",
+        )
         assertContains(bundle.fallbackDecisionTraceJson, """"diagnosticCode":"font.fallback.axis-clamped"""")
         assertContains(bundle.fallbackDecisionTraceJson, """"diagnosticCode":"font.variation-axis-unsupported"""")
         assertContains(bundle.fallbackDecisionTraceJson, """"diagnosticCode":"font.metrics-variation-unavailable"""")
@@ -141,7 +166,21 @@ class FallbackDecisionDumpTest {
         "fallback-locale-serbian",
         "fallback-metrics-variation-missing",
         "fallback-missing-glyph",
+        "fallback-multi-axis",
+        "fallback-named-instance",
         "fallback-script-arabic",
         "fallback-variable-cff2",
+    )
+
+    private fun fallbackClusterFixtureIds(): List<String> = listOf(
+        "fallback-cluster-arabic-mark",
+        "fallback-cluster-cjk-vs",
+        "fallback-cluster-devanagari",
+        "fallback-cluster-emoji-zwj",
+        "fallback-cluster-latin-mark",
+        "fallback-cluster-negative-split",
+        "fallback-cluster-skin-tone",
+        "fallback-cluster-thai",
+        "fallback-cluster-vs15-vs16",
     )
 }

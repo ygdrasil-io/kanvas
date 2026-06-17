@@ -40,8 +40,10 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*' --tests '*De
 
 ## Current Slice Notes
 
+- 2026-06-17 independent audit: `KFONT-M6-002` remains in `review` as a bounded GSUB parser/runtime slice because `gsub-trace.json` and `shaped-glyph-run.json` are still M6-001 contract goldens, malformed/refusal GSUB fixtures are still missing, and explicit `ShapingPlan` ordering evidence is still open.
 - `KFONT-M6-004` is in `review` for a bounded parser/runtime slice: `font/sfnt` now exposes GPOS single adjustments plus pair value records, and `BasicOpenTypeShapingEngine` applies the validated `xPlacement`/`yPlacement`/`xAdvance` subset.
 - The milestone still has no full GPOS support claim. Remaining gates for `KFONT-M6-004` are fixture-backed `gpos-trace.json`, `shaped-glyph-run.json`, and layout-contract level malformed/refusal evidence.
+- 2026-06-17 independent audit: `KFONT-M6-006` remains in `review` as a contract-layer policy slice because runtime GSUB/GPOS still consumes `FeatureSet` instead of the resolved default policy output, per-script shaping fixtures are still missing, and explicit `drawString` non-enablement evidence is still open.
 
 ## Current Blockers
 

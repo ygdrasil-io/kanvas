@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M7-004"
 title: "Add cluster-safe fallback segmentation tests"
-status: "review"
+status: "done"
 milestone: "M7"
 priority: "P0"
 owner_area: "fallback"
@@ -105,8 +105,8 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 ## Status Notes
 
 - `proposed`: Fallback cluster safety depends on M5 cluster invariants and M7 decision traces.
-- `review`: `fallback-segmentation-report.json` now links the checked-in M5 cluster report and M7/M6 dump hashes to nine bounded fallback cluster fixtures. Positive Arabic, Devanagari, Thai, CJK, Latin-mark, skin-tone, VS15/VS16, and emoji ZWJ rows preserve whole-cluster run boundaries, while `fallback-cluster-negative-split.txt` keeps `scaledemoji` explicit and records a reviewed split hazard with `text.shaping.cluster-invariant-failed`, `font.fallback-glyph-unavailable`, and `text.shaping.emoji-sequence-unsupported` without promoting emoji rendering or fallback support.
-- Remaining gate before `done`: convert the negative emoji case from reviewed split-hazard evidence to an actual whole-cluster refusal path, propagate dedicated per-fixture fallback trace and resolved-run assets rather than relying only on shared source-dump hashes, and add a checked non-normative host-dependent marker row before any host-scan claim.
+- `review`: `fallback-segmentation-report.json` now links the checked-in M5 cluster report and M7/M6 dump hashes to nine bounded fallback cluster fixtures. Positive Arabic, Devanagari, Thai, CJK, Latin-mark, skin-tone, VS15/VS16, and emoji ZWJ rows preserve whole-cluster run boundaries, while `fallback-cluster-negative-split.txt` keeps `scaledemoji` explicit and now records a whole-cluster refusal path with `text.fallback.cluster-split-forbidden`, `text.fallback.emoji-fallback-unavailable`, and `text.shaping.emoji-sequence-unsupported` without promoting emoji rendering or fallback support.
+- `done`: the checked-in `fallback-segmentation-report.json` now carries dedicated per-fixture fallback asset refs for all nine bounded `fallback-cluster-*` cases plus a checked non-normative host-dependent marker row that references `host-dependent-system-fallback` without polluting the shared fallback dumps.
 - Move to `ready` only after fixture list and legacy gate wording are reviewed.
 
 ## Linear Labels

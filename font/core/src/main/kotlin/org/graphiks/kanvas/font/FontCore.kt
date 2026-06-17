@@ -956,6 +956,34 @@ override fun toString(): String =
 }
 
 /**
+ * One named variable-font instance advertised by a typeface for fallback selection.
+ */
+class TypefaceNamedInstance(
+    val name: String,
+    coordinates: List<TypefaceVariationCoordinate>,
+) {
+    val coordinates: List<TypefaceVariationCoordinate> = coordinates.normalizedVariationCoordinates()
+
+    init {
+        require(name.isNotBlank()) { "named instance name must not be blank." }
+    }
+
+    override fun equals(other: Any?): Boolean =
+        this === other || other is TypefaceNamedInstance &&
+            name == other.name &&
+            coordinates == other.coordinates
+
+    override fun hashCode(): Int {
+        var result = name.hashCode()
+        result = 31 * result + coordinates.hashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "TypefaceNamedInstance(name=$name, coordinates=$coordinates)"
+}
+
+/**
  * One variable-font axis advertised by a typeface for fallback selection.
  */
 class TypefaceVariationAxisRange(
@@ -3102,6 +3130,7 @@ data class TypefaceData(
     val style: FontStyle = FontStyle.fromStyleName(styleName),
     val variationAxes: List<TypefaceVariationAxisRange> = emptyList(),
     val variationCoordinates: List<TypefaceVariationCoordinate> = emptyList(),
+    val namedInstances: List<TypefaceNamedInstance> = emptyList(),
     val variationMetricsSupported: Boolean = true,
     val identityPreimage: TypefaceIdentityPreimage? = null,
     val diagnostics: List<FontSourceDiagnostic> = emptyList(),
@@ -3118,6 +3147,16 @@ data class TypefaceData(
         }
         require(variationMetricsSupported || variationAxes.isNotEmpty() || variationCoordinates.isEmpty()) {
             "variationMetricsSupported may be false only for variable faces."
+        }
+        require(namedInstances.map { instance -> instance.name }.distinct().size == namedInstances.size) {
+            "namedInstances must use unique names."
+        }
+        require(namedInstances.map { instance -> instance.name } == namedInstances.map { instance -> instance.name }.sorted()) {
+            "namedInstances must be sorted by name."
+        }
+        val variationAxisTags = variationAxes.map { axis -> axis.axisTag }.toSet()
+        require(namedInstances.all { instance -> instance.coordinates.all { coordinate -> coordinate.axisTag in variationAxisTags } }) {
+            "namedInstances coordinates must reference declared variationAxes."
         }
         if (identityPreimage != null) {
             require(identityPreimage.variationCoordinates == variationCoordinates.normalizedVariationCoordinates()) {
@@ -3486,10 +3525,13 @@ class CatalogFontResolver(
 ) : FontResolver {
     data class AxisSelection(
         val selectedVariationCoordinates: List<TypefaceVariationCoordinate>,
+        val selectedNamedInstance: String?,
         val supportedAxes: List<String>,
         val unsupportedAxes: List<String>,
         val clampedAxes: List<String>,
         val metricsVariationUnavailable: Boolean,
+        val namedInstanceMatched: Boolean,
+        val namedInstanceRequestedButUnmatched: Boolean,
     )
 
     private data class CandidateResolution(
@@ -3501,6 +3543,8 @@ class CatalogFontResolver(
         val unsupportedAxisCount: Int,
         val clampedAxisCount: Int,
         val metricsVariationUnavailable: Boolean,
+        val namedInstanceMatched: Boolean,
+        val namedInstanceRequestedButUnmatched: Boolean,
     )
 
     /**
@@ -3605,7 +3649,10 @@ class CatalogFontResolver(
         val candidates = mutableListOf<CandidateResolution>()
         for (family in candidateFamilies) {
             for (face in catalog.families[family]?.faces.orEmpty().orderedByStyleDistance(request.style)) {
-                val axisSelection = face.typeface.selectVariationForFallback(requestedVariationCoordinates)
+                val axisSelection = face.typeface.selectVariationForFallback(
+                    requestedVariationCoordinates = requestedVariationCoordinates,
+                    requestedNamedInstance = request.namedInstance,
+                )
                 val selectedFace = face.withResolvedVariationCoordinates(axisSelection.selectedVariationCoordinates)
                 val covered = coverage.supports(face.typeface.id, codePoint)
                 val reasons = buildList {
@@ -3614,6 +3661,7 @@ class CatalogFontResolver(
                     if (family in scriptChain) add("script-fallback")
                     if (plan.script == "emoji" && family in policy.emojiPreferredFamilies) add("emoji-preference")
                     if (family in genericChain) add("generic-family")
+                    if (axisSelection.namedInstanceMatched) add("named-instance")
                     if (axisSelection.supportedAxes.isNotEmpty()) add("variation-axis")
                     if (covered) add("glyph-coverage")
                 }
@@ -3627,6 +3675,7 @@ class CatalogFontResolver(
                         covered = covered,
                         styleDistance = face.typeface.style.distanceTo(request.style),
                         reasons = reasons.ifEmpty { listOf("catalog-order") },
+                        selectedNamedInstance = axisSelection.selectedNamedInstance,
                         supportedAxes = axisSelection.supportedAxes,
                         selectedVariationCoordinates = axisSelection.selectedVariationCoordinates,
                     ),
@@ -3634,6 +3683,8 @@ class CatalogFontResolver(
                     unsupportedAxisCount = axisSelection.unsupportedAxes.size,
                     clampedAxisCount = axisSelection.clampedAxes.size,
                     metricsVariationUnavailable = axisSelection.metricsVariationUnavailable,
+                    namedInstanceMatched = axisSelection.namedInstanceMatched,
+                    namedInstanceRequestedButUnmatched = axisSelection.namedInstanceRequestedButUnmatched,
                 )
                 candidates += candidate
                 if (firstPlannedCandidate == null) {
@@ -3645,6 +3696,8 @@ class CatalogFontResolver(
             .minWithOrNull(
                 compareBy<CandidateResolution> { candidate -> candidate.unsupportedAxisCount }
                     .thenBy { candidate -> candidate.clampedAxisCount }
+                    .thenBy { candidate -> if (request.namedInstance != null && !candidate.namedInstanceMatched) 1 else 0 }
+                    .thenBy { candidate -> if (candidate.metricsVariationUnavailable) 1 else 0 }
                     .thenBy { candidate -> candidate.trace.styleDistance },
             )
         if (selectedCovered != null) {
@@ -3662,6 +3715,7 @@ class CatalogFontResolver(
                     selectedFamily = selectedCovered.familyName,
                     selectedTypefaceId = selectedCovered.selectedFace.typeface.id,
                     requestedVariationCoordinates = requestedVariationCoordinates,
+                    selectedNamedInstance = selectedCovered.trace.selectedNamedInstance,
                     selectedVariationCoordinates = selectedCovered.selectedFace.typeface.variationCoordinates,
                     covered = true,
                     diagnosticCode = selectedCovered.fallbackDiagnosticCode(),
@@ -3685,6 +3739,7 @@ class CatalogFontResolver(
                     selectedFamily = firstPlannedCandidate.familyName,
                     selectedTypefaceId = firstPlannedCandidate.selectedFace.typeface.id,
                     requestedVariationCoordinates = requestedVariationCoordinates,
+                    selectedNamedInstance = firstPlannedCandidate.trace.selectedNamedInstance,
                     selectedVariationCoordinates = firstPlannedCandidate.selectedFace.typeface.variationCoordinates,
                     covered = false,
                     diagnosticCode = firstPlannedCandidate.fallbackDiagnosticCode(defaultDiagnosticCode = "font.fallback-glyph-unavailable"),
@@ -3706,6 +3761,7 @@ class CatalogFontResolver(
                     selectedFamily = null,
                     selectedTypefaceId = null,
                     requestedVariationCoordinates = requestedVariationCoordinates,
+                    selectedNamedInstance = null,
                     selectedVariationCoordinates = emptyList(),
                     covered = false,
                     diagnosticCode = "font.fallback-family-unavailable",
@@ -3787,6 +3843,7 @@ class CatalogFontResolver(
             unsupportedAxisCount > 0 -> "font.variation-axis-unsupported"
             metricsVariationUnavailable -> "font.metrics-variation-unavailable"
             clampedAxisCount > 0 -> "font.fallback.axis-clamped"
+            namedInstanceRequestedButUnmatched -> "text.fallback.variation-defaulted"
             else -> defaultDiagnosticCode
         }
 }
@@ -4199,6 +4256,7 @@ data class FallbackDecisionTrace(
     val selectedFamily: String?,
     val selectedTypefaceId: TypefaceID?,
     val requestedVariationCoordinates: List<TypefaceVariationCoordinate> = emptyList(),
+    val selectedNamedInstance: String? = null,
     val selectedVariationCoordinates: List<TypefaceVariationCoordinate> = emptyList(),
     val covered: Boolean,
     val diagnosticCode: String? = null,
@@ -4249,6 +4307,10 @@ data class FallbackDecisionTrace(
                 "${coordinate.axisTag}=${coordinate.value.toTypefaceJsonNumber()}"
             })
         }
+        if (selectedNamedInstance != null) {
+            append(" selectedNamedInstance=")
+            append(selectedNamedInstance.evidenceQuoted())
+        }
         if (selectedVariationCoordinates.isNotEmpty()) {
             append(" selectedVariationCoordinates=")
             append(selectedVariationCoordinates.joinToString(prefix = "[", postfix = "]") { coordinate ->
@@ -4268,6 +4330,7 @@ data class FallbackCandidateTrace(
     val covered: Boolean,
     val styleDistance: Int,
     val reasons: List<String>,
+    val selectedNamedInstance: String? = null,
     val supportedAxes: List<String> = emptyList(),
     val selectedVariationCoordinates: List<TypefaceVariationCoordinate> = emptyList(),
     val selected: Boolean = false,
@@ -4293,6 +4356,9 @@ data class FallbackCandidateTrace(
         append("styleDistance".evidenceQuoted()).append(":").append(styleDistance).append(",")
         appendFontCompactJsonField("reason", primaryReason(), comma = true)
         appendStringArrayField("reasons", reasons, comma = true)
+        if (selectedNamedInstance != null) {
+            appendFontCompactJsonField("selectedNamedInstance", selectedNamedInstance, comma = true)
+        }
         if (supportedAxes.isNotEmpty()) {
             appendStringArrayField("supportedAxes", supportedAxes, comma = true)
         }
@@ -4452,6 +4518,9 @@ fun FallbackDecisionTrace.toCanonicalJson(
         append(requestedVariationCoordinates.toCompactJson())
         append(",")
     }
+    if (selectedNamedInstance != null) {
+        appendFontCompactJsonField("selectedNamedInstance", selectedNamedInstance, comma = true)
+    }
     if (selectedVariationCoordinates.isNotEmpty()) {
         append("selectedVariationCoordinates".evidenceQuoted()).append(":")
         append(selectedVariationCoordinates.toCompactJson())
@@ -4589,6 +4658,8 @@ fun defaultFallbackEvidenceCases(): List<FallbackEvidenceCase> =
         fallbackScriptArabicEvidenceCase(),
         fallbackLocaleSerbianEvidenceCase(),
         fallbackMetricsVariationMissingEvidenceCase(),
+        fallbackNamedInstanceEvidenceCase(),
+        fallbackMultiAxisEvidenceCase(),
         fallbackEmojiPreferenceEvidenceCase(),
         fallbackMissingGlyphEvidenceCase(),
         fallbackFamilyUnavailableEvidenceCase(),
@@ -4610,6 +4681,9 @@ fun defaultFallbackClusterEvidenceCases(): List<FallbackEvidenceCase> =
 
 fun defaultFallbackEvidenceBundle(): FallbackEvidenceBundle =
     FallbackEvidenceWriter.writeBundle(cases = defaultFallbackEvidenceCases())
+
+fun defaultFallbackClusterEvidenceBundle(): FallbackEvidenceBundle =
+    FallbackEvidenceWriter.writeBundle(cases = defaultFallbackClusterEvidenceCases())
 
 private fun List<String>.normalizedDiagnosticFieldNames(): List<String> {
     for (fieldName in this) {
@@ -4685,6 +4759,15 @@ private fun List<TypefaceVariationCoordinate>.normalizedVariationCoordinates(): 
         "variation coordinates must have unique axis tags."
     }
     return sorted
+}
+
+private fun List<TypefaceVariationCoordinate>.mergeVariationCoordinates(
+    overrides: List<TypefaceVariationCoordinate>,
+): List<TypefaceVariationCoordinate> {
+    val merged = linkedMapOf<String, TypefaceVariationCoordinate>()
+    normalizedVariationCoordinates().forEach { coordinate -> merged[coordinate.axisTag] = coordinate }
+    overrides.normalizedVariationCoordinates().forEach { coordinate -> merged[coordinate.axisTag] = coordinate }
+    return merged.values.toList().normalizedVariationCoordinates()
 }
 
 private fun List<TypefaceVariationCoordinate>.toCompactJson(): String =
@@ -4845,14 +4928,26 @@ private fun List<FallbackCandidateTrace>.markSelected(
 
 private fun TypefaceData.selectVariationForFallback(
     requestedVariationCoordinates: List<TypefaceVariationCoordinate>,
+    requestedNamedInstance: String? = null,
 ): CatalogFontResolver.AxisSelection {
-    if (requestedVariationCoordinates.isEmpty()) {
+    val normalizedRequestedCoordinates = requestedVariationCoordinates.normalizedVariationCoordinates()
+    val matchedNamedInstance = requestedNamedInstance?.let { namedInstance ->
+        namedInstances.firstOrNull { instance -> instance.name == namedInstance }
+    }
+    val effectiveRequestedCoordinates = matchedNamedInstance
+        ?.coordinates
+        ?.mergeVariationCoordinates(overrides = normalizedRequestedCoordinates)
+        ?: normalizedRequestedCoordinates
+    if (effectiveRequestedCoordinates.isEmpty()) {
         return CatalogFontResolver.AxisSelection(
             selectedVariationCoordinates = variationCoordinates,
+            selectedNamedInstance = null,
             supportedAxes = emptyList(),
             unsupportedAxes = emptyList(),
             clampedAxes = emptyList(),
             metricsVariationUnavailable = false,
+            namedInstanceMatched = false,
+            namedInstanceRequestedButUnmatched = requestedNamedInstance != null,
         )
     }
     val axesByTag = variationAxes.associateBy { axis -> axis.axisTag }
@@ -4860,7 +4955,7 @@ private fun TypefaceData.selectVariationForFallback(
     val unsupportedAxes = mutableListOf<String>()
     val clampedAxes = mutableListOf<String>()
     val selectedCoordinates = mutableListOf<TypefaceVariationCoordinate>()
-    for (coordinate in requestedVariationCoordinates) {
+    for (coordinate in effectiveRequestedCoordinates) {
         val axis = axesByTag[coordinate.axisTag]
         if (axis == null) {
             unsupportedAxes += coordinate.axisTag
@@ -4873,12 +4968,19 @@ private fun TypefaceData.selectVariationForFallback(
         }
         selectedCoordinates += TypefaceVariationCoordinate(axisTag = coordinate.axisTag, value = selectedValue)
     }
+    val normalizedSelectedCoordinates = selectedCoordinates.normalizedVariationCoordinates()
+    val selectedNamedInstance = matchedNamedInstance
+        ?.takeIf { instance -> instance.coordinates == normalizedSelectedCoordinates }
+        ?.name
     return CatalogFontResolver.AxisSelection(
-        selectedVariationCoordinates = selectedCoordinates.normalizedVariationCoordinates(),
+        selectedVariationCoordinates = normalizedSelectedCoordinates,
+        selectedNamedInstance = selectedNamedInstance,
         supportedAxes = supportedAxes.distinct().sorted(),
         unsupportedAxes = unsupportedAxes.distinct().sorted(),
         clampedAxes = clampedAxes.distinct().sorted(),
         metricsVariationUnavailable = supportedAxes.isNotEmpty() && !variationMetricsSupported,
+        namedInstanceMatched = selectedNamedInstance != null,
+        namedInstanceRequestedButUnmatched = requestedNamedInstance != null && selectedNamedInstance == null,
     )
 }
 
@@ -5118,33 +5220,41 @@ private fun fallbackClusterLatinMarkEvidenceCase(): FallbackEvidenceCase {
 }
 
 private fun fallbackClusterNegativeSplitEvidenceCase(): FallbackEvidenceCase {
-    val latin = fallbackFixtureFace(
-        uuid = "550e8400-e29b-41d4-a716-446655440920",
-        familyName = "Alpha Sans",
-    )
-    val emoji = fallbackFixtureFace(
-        uuid = "550e8400-e29b-41d4-a716-446655440921",
-        familyName = "Noto Color Emoji",
-    )
-    val resolver = CatalogFontResolver(
-        catalog = FallbackCatalog(
-            families = mapOf(
-                "Alpha Sans" to FontCollection(listOf(latin)),
-                "Noto Color Emoji" to FontCollection(listOf(emoji)),
-            ),
-        ),
-        policy = FontFallbackPolicy.Default.copy(
-            genericFallbackChains = mapOf("sans-serif" to listOf("Alpha Sans", "Noto Color Emoji")),
-            scriptFallbackChains = emptyMap(),
-            localeFallbackChains = emptyMap(),
-            emojiPreferredFamilies = listOf("Noto Color Emoji"),
-        ),
-        coverage = fallbackTestCoverage(emoji.typeface.id to setOf(0x1F466, 0x1F3FB)),
-    )
-    return resolver.evidenceCase(
+    val text = "\uD83D\uDC66\uD83C\uDFFB\u200D\uD83D\uDC66"
+    val request = FallbackRequest(text = text, preferredFamilies = listOf("Alpha Sans"))
+    val decisions = mutableListOf<FallbackDecisionTrace>()
+    var offset = 0
+    while (offset < text.length) {
+        val codePoint = text.codePointAt(offset)
+        val nextOffset = offset + Character.charCount(codePoint)
+        decisions += FallbackDecisionTrace(
+            start = offset,
+            end = nextOffset,
+            codePoint = codePoint,
+            requestedFamilies = request.preferredFamilies,
+            genericFamily = "sans-serif",
+            script = "emoji",
+            locales = emptyList(),
+            candidateFamilies = listOf("Alpha Sans", "Noto Color Emoji"),
+            candidates = emptyList(),
+            selectedFamily = null,
+            selectedTypefaceId = null,
+            covered = false,
+            diagnosticCode = "text.fallback.cluster-split-forbidden",
+        )
+        offset = nextOffset
+    }
+    return FallbackEvidenceCase(
         fixtureId = "fallback-cluster-negative-split",
-        request = FallbackRequest(text = "\uD83D\uDC66\uD83C\uDFFB\u200D\uD83D\uDC66", preferredFamilies = listOf("Alpha Sans")),
-        additionalDiagnostics = listOf("text.shaping.emoji-sequence-unsupported"),
+        request = request,
+        decisions = decisions,
+        runs = emptyList(),
+        diagnostics = listOf(
+            "text.fallback.cluster-split-forbidden",
+            "text.fallback.emoji-fallback-unavailable",
+            "text.shaping.emoji-sequence-unsupported",
+            "text.shaping.fallback-missing",
+        ),
     )
 }
 
@@ -5395,6 +5505,107 @@ private fun fallbackMetricsVariationMissingEvidenceCase(): FallbackEvidenceCase 
     )
 }
 
+private fun fallbackNamedInstanceEvidenceCase(): FallbackEvidenceCase {
+    val axisOnly = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440914",
+        familyName = "Axis Only Sans",
+        variationAxes = listOf(
+            TypefaceVariationAxisRange(axisTag = "wdth", minimum = 75.0, defaultValue = 100.0, maximum = 125.0),
+            TypefaceVariationAxisRange(axisTag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+        ),
+    )
+    val namedInstance = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440915",
+        familyName = "Named Instance Sans",
+        variationAxes = listOf(
+            TypefaceVariationAxisRange(axisTag = "wdth", minimum = 75.0, defaultValue = 100.0, maximum = 125.0),
+            TypefaceVariationAxisRange(axisTag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+        ),
+        namedInstances = listOf(
+            TypefaceNamedInstance(
+                name = "Condensed Bold",
+                coordinates = listOf(
+                    TypefaceVariationCoordinate(axisTag = "wdth", value = 80.0),
+                    TypefaceVariationCoordinate(axisTag = "wght", value = 700.0),
+                ),
+            ),
+        ),
+    )
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(
+            families = mapOf(
+                "Axis Only Sans" to FontCollection(listOf(axisOnly)),
+                "Named Instance Sans" to FontCollection(listOf(namedInstance)),
+            ),
+        ),
+        policy = FontFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf("sans-serif" to listOf("Axis Only Sans", "Named Instance Sans")),
+            scriptFallbackChains = emptyMap(),
+            localeFallbackChains = emptyMap(),
+            emojiPreferredFamilies = emptyList(),
+        ),
+        coverage = fallbackTestCoverage(
+            axisOnly.typeface.id to setOf('x'.code),
+            namedInstance.typeface.id to setOf('x'.code),
+        ),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-named-instance",
+        request = FallbackRequest(
+            text = "x",
+            preferredFamilies = listOf("Missing Sans"),
+            namedInstance = "Condensed Bold",
+        ),
+    )
+}
+
+private fun fallbackMultiAxisEvidenceCase(): FallbackEvidenceCase {
+    val weightOnly = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440916",
+        familyName = "Weight Only Sans",
+        variationAxes = listOf(
+            TypefaceVariationAxisRange(axisTag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+        ),
+    )
+    val multiAxis = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440917",
+        familyName = "Multi Axis Sans",
+        variationAxes = listOf(
+            TypefaceVariationAxisRange(axisTag = "wdth", minimum = 75.0, defaultValue = 100.0, maximum = 125.0),
+            TypefaceVariationAxisRange(axisTag = "wght", minimum = 100.0, defaultValue = 400.0, maximum = 900.0),
+        ),
+    )
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(
+            families = mapOf(
+                "Weight Only Sans" to FontCollection(listOf(weightOnly)),
+                "Multi Axis Sans" to FontCollection(listOf(multiAxis)),
+            ),
+        ),
+        policy = FontFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf("sans-serif" to listOf("Weight Only Sans", "Multi Axis Sans")),
+            scriptFallbackChains = emptyMap(),
+            localeFallbackChains = emptyMap(),
+            emojiPreferredFamilies = emptyList(),
+        ),
+        coverage = fallbackTestCoverage(
+            weightOnly.typeface.id to setOf('x'.code),
+            multiAxis.typeface.id to setOf('x'.code),
+        ),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-multi-axis",
+        request = FallbackRequest(
+            text = "x",
+            preferredFamilies = listOf("Missing Sans"),
+            variationCoordinates = listOf(
+                TypefaceVariationCoordinate(axisTag = "wdth", value = 80.0),
+                TypefaceVariationCoordinate(axisTag = "wght", value = 700.0),
+            ),
+        ),
+    )
+}
+
 private fun fallbackMissingGlyphEvidenceCase(): FallbackEvidenceCase {
     val requested = fallbackFixtureFace(
         uuid = "550e8400-e29b-41d4-a716-446655440907",
@@ -5456,6 +5667,7 @@ private fun fallbackFixtureFace(
     outlineFormat: TypefaceOutlineFormat = TypefaceOutlineFormat.TRUE_TYPE_GLYF,
     variationAxes: List<TypefaceVariationAxisRange> = emptyList(),
     variationCoordinates: List<TypefaceVariationCoordinate> = emptyList(),
+    namedInstances: List<TypefaceNamedInstance> = emptyList(),
     variationMetricsSupported: Boolean = true,
 ): FontFace {
     val sourceId = FontSourceID(Uuid.parse(uuid.replaceRange(uuid.length - 1, uuid.length, "0")))
@@ -5504,6 +5716,7 @@ private fun fallbackFixtureFace(
             styleName = styleName,
             variationAxes = variationAxes.sortedBy { axis -> axis.axisTag },
             variationCoordinates = variationCoordinates.normalizedVariationCoordinates(),
+            namedInstances = namedInstances.sortedBy { instance -> instance.name },
             variationMetricsSupported = variationMetricsSupported,
             identityPreimage = identityPreimage,
         ),
