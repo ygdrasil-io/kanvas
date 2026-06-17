@@ -269,11 +269,12 @@
         "reports/font/fixtures/expected/color/colrv1-paint-graph.json",
         "reports/pure-kotlin-text/2026-06-17-kfont-m10-001-colrv0-artifact-path.md",
         "reports/pure-kotlin-text/2026-06-17-kfont-m10-002-colrv1-solid-glyph-colr-glyph.md",
+        "reports/pure-kotlin-text/2026-06-17-kfont-m10-003-colrv1-gradient-operation-group.md",
         "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
       ],
       "requiredEvidenceGates": [
-        "KFONT-M10-001 and KFONT-M10-002 now check in typed COLRv0 and bounded COLRv1 solid/glyph/colr-glyph planning evidence with stable artifact-key, bounds, palette, and fallback/refusal facts; keep COLRv1 gradients, transforms, composites, clips, recursion fixtures, bitmap/SVG routes, emoji sequence planning, and GPU registration on their owning M10/M11 tickets.",
-        "Do not claim color glyph rendering, emoji shaping, GPU composite support, gradient/transform/composite execution, or platform/native fallback from COLRv0/COLRv1 planning evidence alone."
+        "KFONT-M10-001 through KFONT-M10-003 now check in typed COLRv0 plus bounded COLRv1 solid/glyph/colr-glyph and gradient planning evidence with stable artifact-key, bounds, palette, geometry, variable-stop, and fallback/refusal facts; keep transform/composite/clip execution, recursion fixtures, bitmap/SVG routes, emoji sequence planning, and GPU registration on their owning M10/M11 tickets.",
+        "Do not claim color glyph rendering, emoji shaping, GPU composite support, transform/composite/clip execution, or platform/native fallback from COLRv0/COLRv1 planning evidence alone."
       ],
       "validationCommands": [
         "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
@@ -281,7 +282,7 @@
         "rtk ./gradlew --no-daemon :font:glyph:test"
       ],
       "fixtureCommands": [
-        "KFONT-M10-001 and KFONT-M10-002 check in reports/font/fixtures/expected/color/color-glyph-plan.json plus reports/font/fixtures/expected/color/colrv1-paint-graph.json and assert them from ColorGlyphSurfaceTest using synthetic CPAL/COLRv0/COLRv1 table bytes with stable fallback/refusal cases."
+        "KFONT-M10-001 through KFONT-M10-003 check in reports/font/fixtures/expected/color/color-glyph-plan.json plus reports/font/fixtures/expected/color/colrv1-paint-graph.json and assert them from ColorGlyphSurfaceTest using synthetic CPAL/COLRv0/COLRv1 table bytes with stable fallback/refusal cases for solid, colr-glyph, linear/radial/sweep gradient, variable-stop, malformed-coordinate, and budget-overflow paths."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",

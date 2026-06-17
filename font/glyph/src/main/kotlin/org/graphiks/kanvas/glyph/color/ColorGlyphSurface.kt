@@ -645,6 +645,114 @@ data class COLRV1ColorGlyphPlanDecision(
     val diagnostics: List<ColorGlyphDiagnostic> = emptyList(),
 )
 
+data class COLRV1GradientStopEvidence(
+    val stopIndex: Int,
+    val offset: Float,
+    val paletteIndex: Int,
+    val resolvedColorArgb: String,
+    val alpha: Float,
+    val varIndexBase: Long? = null,
+    val appliedAlphaDelta: Float? = null,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("stopIndex")).append(": ").append(stopIndex).append(", ")
+        append(colorGlyphJsonString("offset")).append(": ").append(colorGlyphFloatToken(offset)).append(", ")
+        append(colorGlyphJsonString("paletteIndex")).append(": ").append(paletteIndex).append(", ")
+        append(colorGlyphJsonString("resolvedColorArgb")).append(": ").append(colorGlyphJsonString(resolvedColorArgb)).append(", ")
+        append(colorGlyphJsonString("alpha")).append(": ").append(colorGlyphFloatToken(alpha)).append(", ")
+        append(colorGlyphJsonString("varIndexBase")).append(": ").append(varIndexBase ?: "null").append(", ")
+        append(colorGlyphJsonString("appliedAlphaDelta")).append(": ")
+        append(appliedAlphaDelta?.let(::colorGlyphFloatToken) ?: "null")
+        append("}")
+    }
+}
+
+data class COLRV1LinearGradientGeometry(
+    val x0: Int,
+    val y0: Int,
+    val x1: Int,
+    val y1: Int,
+    val x2: Int,
+    val y2: Int,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("x0")).append(": ").append(x0).append(", ")
+        append(colorGlyphJsonString("y0")).append(": ").append(y0).append(", ")
+        append(colorGlyphJsonString("x1")).append(": ").append(x1).append(", ")
+        append(colorGlyphJsonString("y1")).append(": ").append(y1).append(", ")
+        append(colorGlyphJsonString("x2")).append(": ").append(x2).append(", ")
+        append(colorGlyphJsonString("y2")).append(": ").append(y2)
+        append("}")
+    }
+}
+
+data class COLRV1RadialGradientGeometry(
+    val x0: Int,
+    val y0: Int,
+    val radius0: Int,
+    val x1: Int,
+    val y1: Int,
+    val radius1: Int,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("x0")).append(": ").append(x0).append(", ")
+        append(colorGlyphJsonString("y0")).append(": ").append(y0).append(", ")
+        append(colorGlyphJsonString("radius0")).append(": ").append(radius0).append(", ")
+        append(colorGlyphJsonString("x1")).append(": ").append(x1).append(", ")
+        append(colorGlyphJsonString("y1")).append(": ").append(y1).append(", ")
+        append(colorGlyphJsonString("radius1")).append(": ").append(radius1)
+        append("}")
+    }
+}
+
+data class COLRV1SweepGradientGeometry(
+    val centerX: Int,
+    val centerY: Int,
+    val startAngle: Float,
+    val endAngle: Float,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("centerX")).append(": ").append(centerX).append(", ")
+        append(colorGlyphJsonString("centerY")).append(": ").append(centerY).append(", ")
+        append(colorGlyphJsonString("startAngle")).append(": ").append(colorGlyphFloatToken(startAngle)).append(", ")
+        append(colorGlyphJsonString("endAngle")).append(": ").append(colorGlyphFloatToken(endAngle))
+        append("}")
+    }
+}
+
+data class COLRV1GradientEvidence(
+    val extendMode: String,
+    val stops: List<COLRV1GradientStopEvidence>,
+    val variationCoordinates: Map<String, Float> = emptyMap(),
+    val linearGeometry: COLRV1LinearGradientGeometry? = null,
+    val radialGeometry: COLRV1RadialGradientGeometry? = null,
+    val sweepGeometry: COLRV1SweepGradientGeometry? = null,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("extendMode")).append(": ").append(colorGlyphJsonString(extendMode)).append(", ")
+        append(colorGlyphJsonString("stops")).append(": ")
+        append(stops.joinToString(prefix = "[", postfix = "]") { stop -> stop.toCanonicalJson() })
+        append(", ")
+        append(colorGlyphJsonString("variationCoordinates")).append(": ")
+        append(colorGlyphFloatMapJson(variationCoordinates))
+        append(", ")
+        append(colorGlyphJsonString("linearGeometry")).append(": ")
+        append(linearGeometry?.toCanonicalJson() ?: "null")
+        append(", ")
+        append(colorGlyphJsonString("radialGeometry")).append(": ")
+        append(radialGeometry?.toCanonicalJson() ?: "null")
+        append(", ")
+        append(colorGlyphJsonString("sweepGeometry")).append(": ")
+        append(sweepGeometry?.toCanonicalJson() ?: "null")
+        append("}")
+    }
+}
+
 data class COLRV1PaintGraphNode(
     val nodeId: Int,
     val kind: String,
@@ -657,6 +765,7 @@ data class COLRV1PaintGraphNode(
     val varIndexBase: Long? = null,
     val outlineArtifactKey: ColorGlyphArtifactKey? = null,
     val bounds: ColorGlyphBounds? = null,
+    val gradient: COLRV1GradientEvidence? = null,
 ) {
     fun toCanonicalJson(): String = buildString {
         append("{")
@@ -675,6 +784,8 @@ data class COLRV1PaintGraphNode(
         append(outlineArtifactKey?.toCanonicalJson() ?: "null")
         append(", ")
         append(colorGlyphJsonString("bounds")).append(": ").append(bounds?.toCanonicalJson() ?: "null")
+        append(", ")
+        append(colorGlyphJsonString("gradient")).append(": ").append(gradient?.toCanonicalJson() ?: "null")
         append("}")
     }
 }
@@ -905,6 +1016,7 @@ class COLRV1ColorGlyphPlanner(
     private val variationAlphaDeltas: Map<Long, Float> = emptyMap(),
     private val maxRecursionDepth: Int = 8,
     private val maxExpandedNodeCount: Int = 64,
+    private val maxGradientStopCount: Int = 64,
 ) {
     fun plan(
         glyphId: Int,
@@ -961,6 +1073,7 @@ class COLRV1ColorGlyphPlanner(
 
         data class WalkResult(
             val nodeId: Int,
+            val nodeIndex: Int,
             val bounds: ColorGlyphBounds,
         )
 
@@ -1013,6 +1126,58 @@ class COLRV1ColorGlyphPlanner(
 
         fun setNode(index: Int, node: COLRV1PaintGraphNode) {
             nodes[index] = node
+        }
+
+        fun malformedGradientCoordinates(
+            nodeId: Int,
+            paintKind: String,
+            detail: String,
+        ): COLRV1ColorGlyphPlanDecision = malformed(
+            nodeId = nodeId,
+            detail = "reason=malformed-gradient-coordinates;paintKind=$paintKind;$detail",
+            message = "COLRv1 gradient coordinates are malformed for glyph $glyphId node $nodeId.",
+        )
+
+        fun gradientStopEvidence(
+            nodeId: Int,
+            paintKind: String,
+            colorLine: COLRV1ColorLine,
+        ): List<COLRV1GradientStopEvidence> {
+            if (colorLine.stops.size > maxGradientStopCount) {
+                throw COLRV1PlannerRefusal(
+                    budgetExceeded(
+                        limitName = "gradientStops",
+                        limit = maxGradientStopCount,
+                        observed = colorLine.stops.size,
+                    ),
+                )
+            }
+            return colorLine.stops.mapIndexed { stopIndex, stop ->
+                val appliedAlphaDelta = stop.varIndexBase?.let { varIndexBase ->
+                    variationAlphaDeltas[varIndexBase]
+                        ?: throw COLRV1PlannerRefusal(
+                            unsupportedPaint(
+                                nodeId = nodeId,
+                                paintKind = paintKind,
+                                detail = "reason=variable-color-data-unsupported;stopIndex=$stopIndex;varIndexBase=$varIndexBase",
+                            ),
+                        )
+                }
+                val resolvedAlpha = (stop.alpha + (appliedAlphaDelta ?: 0f)).coerceIn(0f, 1f)
+                COLRV1GradientStopEvidence(
+                    stopIndex = stopIndex,
+                    offset = stop.offset,
+                    paletteIndex = stop.paletteIndex,
+                    resolvedColorArgb = resolvePaletteColorArgb(
+                        palette = palette,
+                        paletteIndex = stop.paletteIndex,
+                        alpha = resolvedAlpha,
+                    ),
+                    alpha = resolvedAlpha,
+                    varIndexBase = stop.varIndexBase,
+                    appliedAlphaDelta = appliedAlphaDelta,
+                )
+            }
         }
 
         fun walk(paint: COLRV1Paint, depth: Int): WalkResult? {
@@ -1070,6 +1235,7 @@ class COLRV1ColorGlyphPlanner(
                     )
                     WalkResult(
                         nodeId = nodeIdAndIndex.first,
+                        nodeIndex = nodeIdAndIndex.second,
                         bounds = ColorGlyphBounds(xMin = 0, yMin = 0, xMax = 1, yMax = 1),
                     )
                 }
@@ -1084,6 +1250,13 @@ class COLRV1ColorGlyphPlanner(
                                 message = "COLRv1 glyph bounds are unavailable for glyph $glyphId node ${nodeIdAndIndex.first}.",
                             ),
                         )
+                    val childNode = nodes[child.nodeIndex]
+                    if (childNode.gradient != null && childNode.bounds == null) {
+                        setNode(
+                            child.nodeIndex,
+                            childNode.copy(bounds = bounds),
+                        )
+                    }
                     setNode(
                         nodeIdAndIndex.second,
                         COLRV1PaintGraphNode(
@@ -1098,7 +1271,7 @@ class COLRV1ColorGlyphPlanner(
                             bounds = bounds,
                         ),
                     )
-                    WalkResult(nodeId = nodeIdAndIndex.first, bounds = bounds)
+                    WalkResult(nodeId = nodeIdAndIndex.first, nodeIndex = nodeIdAndIndex.second, bounds = bounds)
                 }
                 is COLRV1Paint.ColrGlyph -> {
                     val nodeIdAndIndex = reserveNode("colrv1-paint-colr-glyph")
@@ -1121,7 +1294,142 @@ class COLRV1ColorGlyphPlanner(
                             bounds = child.bounds,
                         ),
                     )
-                    WalkResult(nodeId = nodeIdAndIndex.first, bounds = child.bounds)
+                    WalkResult(nodeId = nodeIdAndIndex.first, nodeIndex = nodeIdAndIndex.second, bounds = child.bounds)
+                }
+                is COLRV1Paint.LinearGradient -> {
+                    val nodeIdAndIndex = reserveNode("colrv1-paint-linear-gradient")
+                    if (paint.varIndexBase != null) {
+                        throw COLRV1PlannerRefusal(
+                            unsupportedPaint(
+                                nodeId = nodeIdAndIndex.first,
+                                paintKind = "colrv1-paint-linear-gradient",
+                                detail = "reason=variable-gradient-geometry-unsupported;varIndexBase=${paint.varIndexBase}",
+                            ),
+                        )
+                    }
+                    if (paint.x0 == paint.x1 && paint.y0 == paint.y1) {
+                        throw COLRV1PlannerRefusal(
+                            malformedGradientCoordinates(
+                                nodeId = nodeIdAndIndex.first,
+                                paintKind = "colrv1-paint-linear-gradient",
+                                detail = "x0=${paint.x0};y0=${paint.y0};x1=${paint.x1};y1=${paint.y1};x2=${paint.x2};y2=${paint.y2}",
+                            ),
+                        )
+                    }
+                    setNode(
+                        nodeIdAndIndex.second,
+                        COLRV1PaintGraphNode(
+                            nodeId = nodeIdAndIndex.first,
+                            kind = "colrv1-paint-linear-gradient",
+                            gradient = COLRV1GradientEvidence(
+                                extendMode = paint.colorLine.extend.tag,
+                                stops = gradientStopEvidence(
+                                    nodeId = nodeIdAndIndex.first,
+                                    paintKind = "colrv1-paint-linear-gradient",
+                                    colorLine = paint.colorLine,
+                                ),
+                                variationCoordinates = if (paint.colorLine.stops.any { stop -> stop.varIndexBase != null }) {
+                                    strikeKey.variationCoordinates
+                                } else {
+                                    emptyMap()
+                                },
+                                linearGeometry = COLRV1LinearGradientGeometry(
+                                    x0 = paint.x0,
+                                    y0 = paint.y0,
+                                    x1 = paint.x1,
+                                    y1 = paint.y1,
+                                    x2 = paint.x2,
+                                    y2 = paint.y2,
+                                ),
+                            ),
+                            varIndexBase = paint.varIndexBase,
+                        ),
+                    )
+                    WalkResult(
+                        nodeId = nodeIdAndIndex.first,
+                        nodeIndex = nodeIdAndIndex.second,
+                        bounds = ColorGlyphBounds(xMin = 0, yMin = 0, xMax = 1, yMax = 1),
+                    )
+                }
+                is COLRV1Paint.RadialGradient -> {
+                    val nodeIdAndIndex = reserveNode("colrv1-paint-radial-gradient")
+                    if (paint.varIndexBase != null) {
+                        throw COLRV1PlannerRefusal(
+                            unsupportedPaint(
+                                nodeId = nodeIdAndIndex.first,
+                                paintKind = "colrv1-paint-radial-gradient",
+                                detail = "reason=variable-gradient-geometry-unsupported;varIndexBase=${paint.varIndexBase}",
+                            ),
+                        )
+                    }
+                    setNode(
+                        nodeIdAndIndex.second,
+                        COLRV1PaintGraphNode(
+                            nodeId = nodeIdAndIndex.first,
+                            kind = "colrv1-paint-radial-gradient",
+                            gradient = COLRV1GradientEvidence(
+                                extendMode = paint.colorLine.extend.tag,
+                                stops = gradientStopEvidence(
+                                    nodeId = nodeIdAndIndex.first,
+                                    paintKind = "colrv1-paint-radial-gradient",
+                                    colorLine = paint.colorLine,
+                                ),
+                                radialGeometry = COLRV1RadialGradientGeometry(
+                                    x0 = paint.x0,
+                                    y0 = paint.y0,
+                                    radius0 = paint.radius0,
+                                    x1 = paint.x1,
+                                    y1 = paint.y1,
+                                    radius1 = paint.radius1,
+                                ),
+                            ),
+                            varIndexBase = paint.varIndexBase,
+                        ),
+                    )
+                    WalkResult(
+                        nodeId = nodeIdAndIndex.first,
+                        nodeIndex = nodeIdAndIndex.second,
+                        bounds = ColorGlyphBounds(xMin = 0, yMin = 0, xMax = 1, yMax = 1),
+                    )
+                }
+                is COLRV1Paint.SweepGradient -> {
+                    val nodeIdAndIndex = reserveNode("colrv1-paint-sweep-gradient")
+                    if (paint.varIndexBase != null) {
+                        throw COLRV1PlannerRefusal(
+                            unsupportedPaint(
+                                nodeId = nodeIdAndIndex.first,
+                                paintKind = "colrv1-paint-sweep-gradient",
+                                detail = "reason=variable-gradient-geometry-unsupported;varIndexBase=${paint.varIndexBase}",
+                            ),
+                        )
+                    }
+                    setNode(
+                        nodeIdAndIndex.second,
+                        COLRV1PaintGraphNode(
+                            nodeId = nodeIdAndIndex.first,
+                            kind = "colrv1-paint-sweep-gradient",
+                            gradient = COLRV1GradientEvidence(
+                                extendMode = paint.colorLine.extend.tag,
+                                stops = gradientStopEvidence(
+                                    nodeId = nodeIdAndIndex.first,
+                                    paintKind = "colrv1-paint-sweep-gradient",
+                                    colorLine = paint.colorLine,
+                                ),
+                                sweepGeometry = COLRV1SweepGradientGeometry(
+                                    centerX = paint.centerX,
+                                    centerY = paint.centerY,
+                                    startAngle = paint.startAngle,
+                                    endAngle = paint.endAngle,
+                                ),
+                            ),
+                            varIndexBase = paint.varIndexBase,
+                        ),
+                    )
+                    WalkResult(
+                        nodeId = nodeIdAndIndex.first,
+                        nodeIndex = nodeIdAndIndex.second,
+                        bounds = ColorGlyphBounds(xMin = 0, yMin = 0, xMax = 1, yMax = 1),
+                    )
                 }
                 else -> throw COLRV1PlannerRefusal(
                     unsupportedPaint(
@@ -1153,7 +1461,7 @@ class COLRV1ColorGlyphPlanner(
             typefaceId = typefaceId,
             paletteIdentity = strikeKey.paletteIdentity ?: "cpal:${palette.index}",
             rootNodeId = 0,
-            supportedOperationGroup = "solid-glyph-colr-glyph",
+            supportedOperationGroup = if (nodes.any { node -> node.gradient != null }) "gradient-glyph" else "solid-glyph-colr-glyph",
             nodes = nodes.toList(),
             bounds = root.bounds,
             diagnostics = emptyList(),
@@ -3354,6 +3662,18 @@ private fun colorGlyphFloatToken(value: Float): String {
     } else {
         token
     }
+}
+
+private fun colorGlyphFloatMapJson(values: Map<String, Float>): String = buildString {
+    append("{")
+    append(
+        values.entries
+            .sortedBy { entry -> entry.key }
+            .joinToString(", ") { entry ->
+                "${colorGlyphJsonString(entry.key)}: ${colorGlyphFloatToken(entry.value)}"
+            },
+    )
+    append("}")
 }
 
 private fun colorGlyphNullableString(value: String?): String =
