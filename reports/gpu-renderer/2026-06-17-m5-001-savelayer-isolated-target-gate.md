@@ -8,7 +8,7 @@ Ticket: `KGPU-M5-001`
 
 | Ticket | Status | Evidence | Remaining gate |
 |---|---|---|---|
-| KGPU-M5-001 | `review` | Added `GPUSaveLayerIsolatedTargetPlanner`, extended `GPULayerPlan` contracts with dumpable target, initialization, resource, task, pass, and restore-composite facts, and added `SaveLayerIsolatedTargetGateTest`. | Independent review is still required before moving to `done`; native adapter-backed saveLayer execution, readback/reference comparison, product activation, filters, arbitrary layer stacks, and destination reads remain unpromoted. |
+| KGPU-M5-001 | `done` | Added `GPUSaveLayerIsolatedTargetPlanner`, extended `GPULayerPlan` contracts with dumpable target, initialization, resource, task, pass, and restore-composite facts, and added `SaveLayerIsolatedTargetGateTest`. Independent review accepted the evidence after mandatory usage enforcement and refusal-matrix coverage fixes. | Native adapter-backed saveLayer execution, readback/reference comparison, product activation, filters, arbitrary layer stacks, and destination reads remain unpromoted. |
 
 ## Evidence
 
@@ -17,21 +17,28 @@ Ticket: `KGPU-M5-001`
   `classification=TargetNative`, `promoted=false`,
   `productActivation=false`, and `materialized=false`.
 - The accepted bounded transparent fixture dumps save record, device bounds,
-  target descriptor hash, target owner/generation, usage flags, clear/load/store
-  policy, task order, pass separation, fixed-function `srcOver` restore
-  composite, and resource ownership/release policy.
+  target descriptor hash, target owner/generation, mandatory
+  `render_attachment`/`texture_binding` usage flags, clear/load/store policy,
+  task order, pass separation, fixed-function `srcOver` restore composite, and
+  resource ownership/release policy.
 - Target descriptor hashes exclude child draw command ids, target generation,
   and layer scope ownership labels.
 - Unsupported variants refuse with stable diagnostics:
   `unsupported.layer.bounds_unbounded`,
+  `unsupported.layer.bounds_invalid`,
   `unsupported.layer.target_usage_missing`,
   `unsupported.layer.active_attachment_sampled`,
   `unsupported.layer.init_previous_unaccepted`,
   `unsupported.layer.backdrop_filter`,
   `unsupported.layer.filter_chain`,
   `unsupported.layer.restore_blend`,
-  `unsupported.layer.cpu_fallback_forbidden`, and
+  `unsupported.layer.cpu_fallback_forbidden`,
+  `unsupported.layer.preserve_lcd_text`,
+  `unsupported.layer.f16_unavailable`, and
   `unsupported.layer.target_too_large`.
+- The target usage refusal covers caller attempts to drop the mandatory
+  `texture_binding` usage from the contract as well as unavailable required
+  usage labels.
 - Oversized target budget checks saturate instead of overflowing before
   `unsupported.layer.target_too_large`.
 
@@ -40,6 +47,7 @@ Ticket: `KGPU-M5-001`
 ```bash
 rtk ./gradlew --no-daemon -Dkotlin.compiler.execution.strategy=in-process :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.layers.SaveLayerIsolatedTargetGateTest
 rtk ./gradlew --no-daemon -Dkotlin.compiler.execution.strategy=in-process :gpu-renderer:check
+rtk ./gradlew --no-daemon -Dkotlin.compiler.execution.strategy=in-process :gpu-raster:test --tests '*Layer*' --tests '*Filter*'
 rtk git diff --check
 rtk awk '/^status: / {count[$2]++} END {for (s in count) print s, count[s]}' .upstream/specs/gpu-renderer/tickets/M*-*/KGPU-*.md
 ```
@@ -51,12 +59,11 @@ explicit pass dump, removed scope from the target descriptor hash, and hardened
 the budget calculation against overflow; the targeted test and full check
 passed again.
 
-Current status count after moving KGPU-M5-001 to `review`:
+Current status count after moving KGPU-M5-001 to `done`:
 
 ```text
 blocked 13
-done 32
-review 1
+done 33
 ```
 
 ## Review
@@ -68,8 +75,21 @@ Local pre-PR review found two issues before PR publication:
 - extreme target dimensions could overflow byte estimation before budget
   refusal.
 
-Both findings were remediated. No independent review has accepted the ticket
-yet, so the ticket remains `review` rather than `done`.
+Both findings were remediated before the ticket entered independent review.
+
+Independent review then accepted the contract-gate boundary with two required
+fixes:
+
+- enforce internal saveLayer target usages so callers cannot produce a
+  `GPUNative` plan without `render_attachment` and `texture_binding`;
+- include every emitted unsupported-layer refusal in the deterministic test and
+  report matrix.
+
+Both required fixes were applied and revalidated with the targeted
+`SaveLayerIsolatedTargetGateTest`, full `:gpu-renderer:check`, the M5
+`gpu-raster` Layer/Filter validation bundle, `rtk git diff --check`, and the
+status counter. The ticket is `done` as accepted contract-gate evidence only;
+no product route activation or native saveLayer support is claimed.
 
 ## Non-Claims
 

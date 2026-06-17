@@ -75,6 +75,17 @@ class SaveLayerIsolatedTargetGateTest {
                 reason = "unsupported.layer.target_usage_missing",
             ),
             refusalCase(
+                "caller-dropped-texture-binding",
+                requiredUsageLabels = setOf("render_attachment"),
+                availableUsageLabels = setOf("render_attachment"),
+                reason = "unsupported.layer.target_usage_missing",
+            ),
+            refusalCase(
+                "invalid-bounds",
+                bounds = bounds(width = 0, height = 48),
+                reason = "unsupported.layer.bounds_invalid",
+            ),
+            refusalCase(
                 "active-attachment",
                 activeAttachmentSampled = true,
                 reason = "unsupported.layer.active_attachment_sampled",
@@ -103,6 +114,16 @@ class SaveLayerIsolatedTargetGateTest {
                 "cpu-fallback",
                 saveRecord = saveRecord(cpuFallbackRequested = true),
                 reason = "unsupported.layer.cpu_fallback_forbidden",
+            ),
+            refusalCase(
+                "preserve-lcd-text",
+                saveRecord = saveRecord(preserveLCDText = true),
+                reason = "unsupported.layer.preserve_lcd_text",
+            ),
+            refusalCase(
+                "f16-unavailable",
+                saveRecord = saveRecord(f16Requested = true),
+                reason = "unsupported.layer.f16_unavailable",
             ),
             refusalCase(
                 "target-too-large",
@@ -138,6 +159,7 @@ private fun refusalCase(
     reason: String,
     saveRecord: GPULayerSaveRecord = saveRecord(),
     bounds: GPULayerBoundsPlan = bounds(),
+    requiredUsageLabels: Set<String> = setOf("render_attachment", "texture_binding"),
     availableUsageLabels: Set<String> = setOf("render_attachment", "texture_binding"),
     activeAttachmentSampled: Boolean = false,
 ): RefusalCase = RefusalCase(
@@ -147,6 +169,7 @@ private fun refusalCase(
         label = label,
         saveRecord = saveRecord,
         bounds = bounds,
+        requiredUsageLabels = requiredUsageLabels,
         availableUsageLabels = availableUsageLabels,
         activeAttachmentSampled = activeAttachmentSampled,
     ),
@@ -157,6 +180,7 @@ private fun saveLayerRequest(
     saveRecord: GPULayerSaveRecord = saveRecord(),
     bounds: GPULayerBoundsPlan = bounds(),
     deviceGeneration: Long = 17,
+    requiredUsageLabels: Set<String> = setOf("render_attachment", "texture_binding"),
     availableUsageLabels: Set<String> = setOf("render_attachment", "texture_binding"),
     activeAttachmentSampled: Boolean = false,
 ): GPUSaveLayerIsolatedTargetRequest = GPUSaveLayerIsolatedTargetRequest(
@@ -165,6 +189,7 @@ private fun saveLayerRequest(
     bounds = bounds,
     parentTargetLabel = "root-target",
     deviceGeneration = deviceGeneration,
+    requiredUsageLabels = requiredUsageLabels,
     availableUsageLabels = availableUsageLabels,
     activeAttachmentSampled = activeAttachmentSampled,
 )
@@ -176,6 +201,8 @@ private fun saveRecord(
     sourceFilterCount: Int = 0,
     restoreBlendMode: String = "srcOver",
     cpuFallbackRequested: Boolean = false,
+    preserveLCDText: Boolean = false,
+    f16Requested: Boolean = false,
     childCommandIds: List<String> = listOf("draw-rect", "draw-image"),
 ): GPULayerSaveRecord = GPULayerSaveRecord(
     scopeId = scopeId,
@@ -187,6 +214,8 @@ private fun saveRecord(
     sourceFilterCount = sourceFilterCount,
     restoreBlendMode = restoreBlendMode,
     cpuFallbackRequested = cpuFallbackRequested,
+    preserveLCDText = preserveLCDText,
+    f16Requested = f16Requested,
 )
 
 private fun bounds(
