@@ -499,6 +499,87 @@ sealed interface GPUPassCommand {
         }
     }
 
+    /** Materializes or reuses a pass-local depth/stencil attachment before stencil-cover work. */
+    data class PrepareStencilAttachment(
+        val attachmentLabel: String,
+        val descriptorHash: String,
+        val formatLabel: String,
+        val usageLabel: String,
+        val sampleCount: Int,
+        val byteEstimate: Long,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "prepareStencilAttachment"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(attachmentLabel.isNotBlank()) { "PrepareStencilAttachment.attachmentLabel must not be blank" }
+            require(descriptorHash.isNotBlank()) { "PrepareStencilAttachment.descriptorHash must not be blank" }
+            require(formatLabel.isNotBlank()) { "PrepareStencilAttachment.formatLabel must not be blank" }
+            require(usageLabel.isNotBlank()) { "PrepareStencilAttachment.usageLabel must not be blank" }
+            require(sampleCount > 0) { "PrepareStencilAttachment.sampleCount must be positive" }
+            require(byteEstimate >= 0L) { "PrepareStencilAttachment.byteEstimate must be non-negative" }
+        }
+    }
+
+    /** Clears pass-local stencil state before the producer writes coverage. */
+    data class ClearStencilAttachment(
+        val attachmentLabel: String,
+        val clearValue: Int,
+        val loadStorePolicy: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "clearStencilAttachment"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(attachmentLabel.isNotBlank()) { "ClearStencilAttachment.attachmentLabel must not be blank" }
+            require(loadStorePolicy.isNotBlank()) { "ClearStencilAttachment.loadStorePolicy must not be blank" }
+        }
+    }
+
+    /** Emits the bounded path stencil producer command before the cover consumer. */
+    data class StencilCoverProducer(
+        val attachmentLabel: String,
+        val pipelineLabel: String,
+        val boundsLabel: String,
+        val stencilStateLabel: String,
+        val tokenLabel: String,
+        val packetId: GPUDrawPacketID,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "stencilCoverProducer"
+        override val sourcePacketId: GPUDrawPacketID get() = packetId
+
+        init {
+            require(attachmentLabel.isNotBlank()) { "StencilCoverProducer.attachmentLabel must not be blank" }
+            require(pipelineLabel.isNotBlank()) { "StencilCoverProducer.pipelineLabel must not be blank" }
+            require(boundsLabel.isNotBlank()) { "StencilCoverProducer.boundsLabel must not be blank" }
+            require(stencilStateLabel.isNotBlank()) { "StencilCoverProducer.stencilStateLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "StencilCoverProducer.tokenLabel must not be blank" }
+        }
+    }
+
+    /** Emits the cover draw command that consumes producer-written stencil state. */
+    data class StencilCoverDraw(
+        val attachmentLabel: String,
+        val pipelineLabel: String,
+        val boundsLabel: String,
+        val compareLabel: String,
+        val writeMaskLabel: String,
+        val tokenLabel: String,
+        val packetId: GPUDrawPacketID,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "stencilCoverDraw"
+        override val sourcePacketId: GPUDrawPacketID get() = packetId
+
+        init {
+            require(attachmentLabel.isNotBlank()) { "StencilCoverDraw.attachmentLabel must not be blank" }
+            require(pipelineLabel.isNotBlank()) { "StencilCoverDraw.pipelineLabel must not be blank" }
+            require(boundsLabel.isNotBlank()) { "StencilCoverDraw.boundsLabel must not be blank" }
+            require(compareLabel.isNotBlank()) { "StencilCoverDraw.compareLabel must not be blank" }
+            require(writeMaskLabel.isNotBlank()) { "StencilCoverDraw.writeMaskLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "StencilCoverDraw.tokenLabel must not be blank" }
+        }
+    }
+
     /** Renders layer children into the isolated target scope. */
     data class RenderLayerChildren(
         val scopeLabel: String,
@@ -548,6 +629,20 @@ sealed interface GPUPassCommand {
         init {
             require(scopeLabel.isNotBlank()) { "RefuseLayer.scopeLabel must not be blank" }
             require(reasonCode.isNotBlank()) { "RefuseLayer.reasonCode must not be blank" }
+        }
+    }
+
+    /** Records a stable stencil-cover materialization refusal in command-stream evidence. */
+    data class RefuseStencilCover(
+        val pathLabel: String,
+        val reasonCode: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "refuseStencilCover"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(pathLabel.isNotBlank()) { "RefuseStencilCover.pathLabel must not be blank" }
+            require(reasonCode.isNotBlank()) { "RefuseStencilCover.reasonCode must not be blank" }
         }
     }
 
@@ -905,6 +1000,21 @@ private fun GPUPassCommand.dumpLine(): String =
                 "usage=$usageLabel bytes=$byteEstimate"
         is GPUPassCommand.ClearLayerTarget ->
             "passes.command clearLayerTarget target=$targetLabel clear=$clearPolicy"
+        is GPUPassCommand.PrepareStencilAttachment ->
+            "passes.command prepareStencilAttachment attachment=$attachmentLabel " +
+                "descriptor=$descriptorHash format=$formatLabel usage=$usageLabel " +
+                "samples=$sampleCount bytes=$byteEstimate"
+        is GPUPassCommand.ClearStencilAttachment ->
+            "passes.command clearStencilAttachment attachment=$attachmentLabel " +
+                "clear=$clearValue loadStore=$loadStorePolicy"
+        is GPUPassCommand.StencilCoverProducer ->
+            "passes.command stencilCoverProducer attachment=$attachmentLabel " +
+                "pipeline=$pipelineLabel bounds=$boundsLabel state=$stencilStateLabel " +
+                "token=$tokenLabel packet=${packetId.value}"
+        is GPUPassCommand.StencilCoverDraw ->
+            "passes.command stencilCoverDraw attachment=$attachmentLabel " +
+                "pipeline=$pipelineLabel bounds=$boundsLabel compare=$compareLabel " +
+                "writeMask=$writeMaskLabel token=$tokenLabel packet=${packetId.value}"
         is GPUPassCommand.RenderLayerChildren ->
             "passes.command renderLayerChildren scope=$scopeLabel target=$targetLabel " +
                 "children=$childrenLabel token=$tokenLabel"
@@ -913,6 +1023,8 @@ private fun GPUPassCommand.dumpLine(): String =
                 "blend=$blendModeLabel route=$routeLabel token=$tokenLabel"
         is GPUPassCommand.RefuseLayer ->
             "passes.command refuseLayer scope=$scopeLabel reason=$reasonCode"
+        is GPUPassCommand.RefuseStencilCover ->
+            "passes.command refuseStencilCover path=$pathLabel reason=$reasonCode"
         is GPUPassCommand.EndRenderPass ->
             "passes.command endRenderPass pass=$passId"
     }
@@ -932,6 +1044,14 @@ private fun GPUPassCommandOperandBridge.matchesCommandOperandKind(): Boolean =
         "prepareLayerTarget" -> operand.kind == GPUMaterializedCommandOperandKind.Texture
         "clearLayerTarget", "renderLayerChildren" ->
             operand.kind == GPUMaterializedCommandOperandKind.RenderTarget
+        "prepareStencilAttachment" -> operand.kind == GPUMaterializedCommandOperandKind.Texture
+        "clearStencilAttachment" ->
+            operand.kind == GPUMaterializedCommandOperandKind.DepthStencilAttachment
+        "stencilCoverProducer", "stencilCoverDraw" ->
+            operand.kind in setOf(
+                GPUMaterializedCommandOperandKind.RenderPipeline,
+                GPUMaterializedCommandOperandKind.DepthStencilAttachment,
+            )
         "compositeLayer" ->
             operand.kind in setOf(
                 GPUMaterializedCommandOperandKind.TextureView,
