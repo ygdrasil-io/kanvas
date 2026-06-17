@@ -100,6 +100,7 @@ the primary route-kind outcome.
 | M8 | [M8-vertices-mesh-batching](M8-vertices-mesh-batching/README.md) | 3 | Add `DrawVertices`, mesh-like packing, and batching/key evidence. |
 | M9 | [M9-performance-cache-release-gates](M9-performance-cache-release-gates/README.md) | 3 | Promote observed performance/cache telemetry into release-gate candidates. |
 | M10 | [M10-legacy-gpu-raster-migration](M10-legacy-gpu-raster-migration/README.md) | 4 | Migrate or retire legacy `gpu-raster` routes only after route-specific evidence is accepted. |
+| M11 | [M11-graphite-dawn-execution-gap-closure](M11-graphite-dawn-execution-gap-closure/README.md) | 9 | Cut missing execution/resource materialization tickets from the Graphite/Dawn gap matrix without duplicating M0-M10 gates. |
 
 ## Source Of Truth
 

@@ -5,6 +5,9 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceDescriptor
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialTileMode
 import org.graphiks.kanvas.gpu.renderer.materials.MaterialKey
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceReference
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationPreimagePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSampledTextureBinding
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureDescriptor
@@ -591,6 +594,62 @@ fun GPUImageSamplerBoundaryPlan.dumpLines(): List<String> {
     )
 }
 
+/**
+ * Derives texture/sampler binding materialization preimage from sampler boundary evidence.
+ *
+ * The result names descriptor hashes and binding slots only. It does not create
+ * texture or sampler handles, does not inspect cache residency, and does not
+ * activate an image product route.
+ */
+fun GPUImageSamplerBoundaryPlan.toTextureSamplerBindingPreimage(): GPUResourceMaterializationPreimagePlan {
+    val sourceLabel = source.sourceId.toMaterializationPreimageLabel()
+    val planLabel = "image-sampler-binding:$sourceLabel"
+    val refusal = diagnostics.firstOrNull { diagnostic -> diagnostic.terminal }?.code
+    if (refusal != null || routeKind == "RefuseDiagnostic") {
+        return GPUResourceMaterializationPreimagePlan(
+            planLabel = planLabel,
+            sourceGate = samplerBoundarySourceGate,
+            accepted = false,
+            resources = emptyList(),
+            refusalCode = refusal ?: "unsupported.image.sampler_boundary",
+        )
+    }
+
+    return GPUResourceMaterializationPreimagePlan(
+        planLabel = planLabel,
+        sourceGate = samplerBoundarySourceGate,
+        accepted = true,
+        resources = listOf(
+            GPUMaterializedResourceReference(
+                label = "image-texture:$sourceLabel",
+                role = GPUMaterializedResourceRole.SampledTexture,
+                descriptorHash = viewDescriptor.textureDescriptorHash,
+                generation = source.generation,
+                lifetimeClass = "recording-local",
+                usageLabels = textureDescriptor.usageLabels.sorted(),
+                evidenceFacts = mapOf(
+                    "source" to source.sourceId,
+                    "view" to viewDescriptor.viewDimension,
+                ),
+            ),
+            GPUMaterializedResourceReference(
+                label = "image-sampler:${samplerDescriptorHash.removePrefix("sha256:")}",
+                role = GPUMaterializedResourceRole.Sampler,
+                descriptorHash = samplerDescriptorHash,
+                generation = 0,
+                lifetimeClass = "pipeline-cache",
+                evidenceFacts = mapOf(
+                    "address" to "${samplerDescriptor.addressModeU}/${samplerDescriptor.addressModeV}",
+                    "filter" to "${samplerDescriptor.magFilter}/${samplerDescriptor.minFilter}",
+                    "mipmap" to samplerDescriptor.mipmapFilter,
+                ),
+            ),
+        ),
+        bindingLabels = listOf("group1.binding1", "group1.binding2"),
+    )
+}
+
+private const val samplerBoundarySourceGate = "gpu-renderer.sampler-boundary"
 private const val bindingLabel = "sampled-texture.image-shader"
 private const val materialKeyPrefix = "image.shader.decoded-pixels.v1"
 private const val materialSourceKey = "image-source:decoded-pixels"
@@ -845,6 +904,9 @@ private fun String.toMaterialTileMode(): GPUMaterialTileMode =
         "decal" -> GPUMaterialTileMode.Decal
         else -> GPUMaterialTileMode.Clamp
     }
+
+private fun String.toMaterializationPreimageLabel(): String =
+    replace(Regex("[^A-Za-z0-9]+"), "-").trim('-').ifBlank { "unknown" }
 
 private fun GPUTextureDescriptor.stableDescriptorHash(): String =
     listOf(

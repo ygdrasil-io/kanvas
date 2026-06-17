@@ -107,6 +107,131 @@ value class GPUTextureResourceRef(val value: String) {
     }
 }
 
+/** Backend-neutral role for a resource named by materialization preimage evidence. */
+enum class GPUMaterializedResourceRole {
+    /** Texture sampled by a material or shader route. */
+    SampledTexture,
+    /** Sampler descriptor binding with no live sampler object. */
+    Sampler,
+    /** Pass-local copy used for destination-read sampling. */
+    DestinationCopyTexture,
+    /** Already validated intermediate texture used by a live route plan. */
+    IntermediateTexture,
+    /** Isolated saveLayer render target texture. */
+    LayerTargetTexture,
+    /** Depth/stencil attachment facts for a stencil-cover pass. */
+    StencilAttachment,
+    /** Generic pass resource evidence when a narrower role is unavailable. */
+    PassResource,
+}
+
+/**
+ * Evidence-only resource reference used by materialization preimage scaffolds.
+ *
+ * This names the descriptor, role, generation, lifetime, and non-handle facts
+ * that a future resource provider would need. It is not a backend object, does
+ * not carry a live handle, and must remain dumpable without adapter access.
+ */
+data class GPUMaterializedResourceReference(
+    val label: String,
+    val role: GPUMaterializedResourceRole,
+    val descriptorHash: String,
+    val generation: Long,
+    val lifetimeClass: String,
+    val usageLabels: List<String> = emptyList(),
+    val evidenceFacts: Map<String, String> = emptyMap(),
+) {
+    internal val dumpUsageLabelsSnapshot: List<String> = usageLabels.toList()
+    internal val dumpEvidenceFactsSnapshot: Map<String, String> = evidenceFacts.toMap()
+
+    init {
+        require(label.isNotBlank()) { "GPUMaterializedResourceReference.label must not be blank" }
+        require(descriptorHash.isNotBlank()) {
+            "GPUMaterializedResourceReference.descriptorHash must not be blank"
+        }
+        require(generation >= 0) { "GPUMaterializedResourceReference.generation must not be negative" }
+        require(lifetimeClass.isNotBlank()) {
+            "GPUMaterializedResourceReference.lifetimeClass must not be blank"
+        }
+        require(usageLabels.none { label -> label.isBlank() }) {
+            "GPUMaterializedResourceReference.usageLabels must not contain blank labels"
+        }
+        require(evidenceFacts.keys.none { key -> key.isBlank() }) {
+            "GPUMaterializedResourceReference.evidenceFacts must not contain blank keys"
+        }
+        require(evidenceFacts.values.none { value -> value.isBlank() }) {
+            "GPUMaterializedResourceReference.evidenceFacts must not contain blank values"
+        }
+    }
+}
+
+/**
+ * Non-claim flags attached to resource materialization preimage scaffolds.
+ *
+ * The scaffold is intentionally evidence-only. These flags are constructor
+ * guarded so a preimage cannot accidentally become an adapter-backed, live
+ * handle, product-route, provider, or submit claim.
+ */
+data class GPUResourceMaterializationNonClaims(
+    val adapterBacked: Boolean = false,
+    val liveHandles: Boolean = false,
+    val productRoute: Boolean = false,
+    val providerCalled: Boolean = false,
+    val submitCalled: Boolean = false,
+) {
+    init {
+        require(!adapterBacked) { "GPUResourceMaterializationNonClaims.adapterBacked must stay false" }
+        require(!liveHandles) { "GPUResourceMaterializationNonClaims.liveHandles must stay false" }
+        require(!productRoute) { "GPUResourceMaterializationNonClaims.productRoute must stay false" }
+        require(!providerCalled) { "GPUResourceMaterializationNonClaims.providerCalled must stay false" }
+        require(!submitCalled) { "GPUResourceMaterializationNonClaims.submitCalled must stay false" }
+    }
+}
+
+/**
+ * Backend-neutral preimage for future resource materialization.
+ *
+ * Accepted plans list descriptor-backed references and optional binding labels;
+ * refused plans carry a stable reason code and no resources. Both forms are
+ * deterministic evidence and never invoke a provider, submit work, or expose
+ * adapter-backed handles.
+ */
+data class GPUResourceMaterializationPreimagePlan(
+    val planLabel: String,
+    val sourceGate: String,
+    val accepted: Boolean,
+    val resources: List<GPUMaterializedResourceReference>,
+    val bindingLabels: List<String> = emptyList(),
+    val refusalCode: String? = null,
+    val nonClaims: GPUResourceMaterializationNonClaims = GPUResourceMaterializationNonClaims(),
+) {
+    internal val dumpResourcesSnapshot: List<GPUMaterializedResourceReference> = resources.toList()
+    internal val dumpBindingLabelsSnapshot: List<String> = bindingLabels.toList()
+
+    init {
+        require(planLabel.isNotBlank()) { "GPUResourceMaterializationPreimagePlan.planLabel must not be blank" }
+        require(sourceGate.isNotBlank()) { "GPUResourceMaterializationPreimagePlan.sourceGate must not be blank" }
+        require(bindingLabels.none { label -> label.isBlank() }) {
+            "GPUResourceMaterializationPreimagePlan.bindingLabels must not contain blank labels"
+        }
+        if (accepted) {
+            require(refusalCode == null) {
+                "accepted GPUResourceMaterializationPreimagePlan must not carry refusalCode"
+            }
+            require(resources.isNotEmpty()) {
+                "accepted GPUResourceMaterializationPreimagePlan must name at least one resource"
+            }
+        } else {
+            require(!refusalCode.isNullOrBlank()) {
+                "refused GPUResourceMaterializationPreimagePlan must carry refusalCode"
+            }
+            require(resources.isEmpty()) {
+                "refused GPUResourceMaterializationPreimagePlan must not name resources"
+            }
+        }
+    }
+}
+
 /** Token ordering reads, writes, uploads, copies, and mutations. */
 @JvmInline
 value class GPUUseToken(val value: Long)
@@ -1005,6 +1130,28 @@ fun GPUResourceMaterializationDecision.dumpLines(): List<String> =
             ) + dumpDiagnosticsSnapshot.dumpLines()
     }
 
+/** Emits deterministic evidence for a resource materialization preimage plan. */
+fun GPUResourceMaterializationPreimagePlan.dumpLines(): List<String> {
+    val sortedResources = dumpResourcesSnapshot.sortedWith(
+        compareBy<GPUMaterializedResourceReference> { resource -> resource.label }
+            .thenBy { resource -> resource.role.dumpLabel() },
+    )
+    val resourceLabels = sortedResources.map { resource -> resource.label }.dumpPreimageList()
+    val bindingLabels = dumpBindingLabelsSnapshot.dumpPreimageList()
+    val claimFlags = nonClaims.claimFlagDump()
+    val head = if (accepted) {
+        "resource-preimage:accepted plan=$planLabel source=$sourceGate " +
+            "resources=$resourceLabels bindings=$bindingLabels $claimFlags"
+    } else {
+        "resource-preimage:refused plan=$planLabel source=$sourceGate " +
+            "reason=$refusalCode resources=$resourceLabels bindings=$bindingLabels $claimFlags"
+    }
+
+    return listOf(head) +
+        sortedResources.map { resource -> resource.dumpLine() } +
+        nonClaims.dumpLine()
+}
+
 private const val UNSPECIFIED_DUMP_VALUE = "unspecified"
 
 private fun GPUTextureAllocationPlan.resourcePlanLabel(): String =
@@ -1056,3 +1203,30 @@ private fun Map<String, String>.dumpFacts(): String =
         entries.sortedBy { entry -> entry.key }
             .joinToString(";") { entry -> "${entry.key}=${entry.value}" }
     }
+
+private fun GPUMaterializedResourceReference.dumpLine(): String =
+    "resource-preimage:resource label=$label role=${role.dumpLabel()} " +
+        "generation=$generation lifetime=$lifetimeClass descriptor=$descriptorHash " +
+        "usage=${dumpUsageLabelsSnapshot.dumpPreimageList()} " +
+        "facts=${dumpEvidenceFactsSnapshot.dumpFacts()}"
+
+private fun GPUMaterializedResourceRole.dumpLabel(): String =
+    when (this) {
+        GPUMaterializedResourceRole.SampledTexture -> "sampled-texture"
+        GPUMaterializedResourceRole.Sampler -> "sampler"
+        GPUMaterializedResourceRole.DestinationCopyTexture -> "destination-copy-texture"
+        GPUMaterializedResourceRole.IntermediateTexture -> "intermediate-texture"
+        GPUMaterializedResourceRole.LayerTargetTexture -> "layer-target-texture"
+        GPUMaterializedResourceRole.StencilAttachment -> "stencil-attachment"
+        GPUMaterializedResourceRole.PassResource -> "pass-resource"
+    }
+
+private fun List<String>.dumpPreimageList(): String =
+    if (isEmpty()) "none" else sorted().joinToString(",")
+
+private fun GPUResourceMaterializationNonClaims.claimFlagDump(): String =
+    "adapterBacked=$adapterBacked liveHandles=$liveHandles productRoute=$productRoute"
+
+private fun GPUResourceMaterializationNonClaims.dumpLine(): String =
+    "resource-preimage:nonclaim ${claimFlagDump()} " +
+        "providerCalled=$providerCalled submitCalled=$submitCalled"
