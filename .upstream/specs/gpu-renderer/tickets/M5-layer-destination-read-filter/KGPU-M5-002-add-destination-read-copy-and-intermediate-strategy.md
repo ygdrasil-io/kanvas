@@ -1,7 +1,7 @@
 ---
 id: KGPU-M5-002
 title: "Add destination-read copy and intermediate strategy"
-status: blocked
+status: done
 milestone: M5
 priority: P0
 owner_area: destination-read
@@ -56,9 +56,9 @@ data class DestinationReadEvidence(val strategy: String, val bounds: String)
 
 ## Acceptance Criteria
 
-- [ ] Destination-read bounds and resource binding are dumpable.
-- [ ] Active-attachment sampling refuses.
-- [ ] Strategy maps to one route kind.
+- [x] Destination-read bounds and resource binding are dumpable.
+- [x] Active-attachment sampling refuses.
+- [x] Strategy maps to one route kind.
 
 ## Required Evidence
 
@@ -73,7 +73,7 @@ semantics.
 
 - Expected row: `gpu-renderer.destination-read.strategy`
 - Expected classification: `TargetNative`
-- Claim promotion allowed: no until reviewed.
+- Claim promotion allowed: no for this contract-only gate.
 
 ## Validation
 
@@ -84,12 +84,23 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: Depends on KGPU-M5-001 and requires accepted saveLayer/offscreen
-  target ownership plus native WebGPU/adapter evidence for bounded
-  destination-copy or validated intermediate strategy,
-  pass split/copy-before-sample ordering, active-attachment sampling refusal,
-  texture-binding/copy-usage validation, and CPU/GPU/reference evidence before
-  any `GPUNative` destination-read route claim.
+- `done`: `GPUDestinationReadStrategyPlanner` adds accepted contract-gate
+  evidence for
+  the `gpu-renderer.destination-read.strategy` row with dumpable
+  destination-read bounds, target-copy descriptor, existing-intermediate route,
+  binding/layout hashes, pass split/copy-before-sample ordering, budget facts,
+  accepted-route diagnostics, material-key exclusion, unsupported strategy
+  refusals, strategy/action mismatch refusals, and unsupported-variant refusals.
+  The gate records
+  `routeKind=GPUNative`, `classification=TargetNative`, `promoted=false`,
+  `productActivation=false`, and `materialized=false`; it does not claim
+  adapter-backed native destination-read execution, framebuffer fetch,
+  input-attachment support, CPU readback fallback, or product activation.
+- Evidence: `DestinationReadStrategyGateTest` plus
+  `reports/gpu-renderer/2026-06-17-m5-002-destination-read-strategy-gate.md`.
+- Dependency note: KGPU-M5-001 is `done` on current `master`; KGPU-M5-002 status
+  is no longer dependency-blocked. Support promotion remains blocked on native
+  adapter-backed destination-read copy/intermediate execution evidence.
 
 ## Linear Labels
 

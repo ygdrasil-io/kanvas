@@ -23,7 +23,7 @@ nodes depend on M7 descriptor work.
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M5-001 - Add saveLayer isolated target route](KGPU-M5-001-add-savelayer-isolated-target-route.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `layers-resources` | `KGPU-M2-003`, `KGPU-M4-002` | `saveLayer legacy` |
-| [KGPU-M5-002 - Add destination-read copy and intermediate strategy](KGPU-M5-002-add-destination-read-copy-and-intermediate-strategy.md) | `blocked` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `destination-read` | `KGPU-M5-001` | `blend legacy` |
+| [KGPU-M5-002 - Add destination-read copy and intermediate strategy](KGPU-M5-002-add-destination-read-copy-and-intermediate-strategy.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `destination-read` | `KGPU-M5-001` | `blend legacy` |
 | [KGPU-M5-003 - Add simple filter render node route](KGPU-M5-003-add-simple-filter-render-node-route.md) | `blocked` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `filters` | `KGPU-M5-001` | `filter legacy` |
 | [KGPU-M5-004 - Add filter DAG refusal matrix](KGPU-M5-004-add-filter-dag-refusal-matrix.md) | `done` | `P1` | `RefuseRequired` | `RefuseDiagnostic` | `false` | `false` | `filters-validation` | `KGPU-M5-003` | - |
 
@@ -58,10 +58,17 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Layer*' --tests '*Filter*'
   layer stacks, or CPU-rendered full-layer texture fallback is claimed.
   Evidence report:
   `reports/gpu-renderer/2026-06-17-m5-001-savelayer-isolated-target-gate.md`.
-- KGPU-M5-002 remains `blocked` on KGPU-M5-001 and native destination-read copy
-  or intermediate strategy evidence.
-- KGPU-M5-003 remains `blocked` on KGPU-M5-001 and simple filter render-node
-  evidence.
+- KGPU-M5-002 is `done` with contract-gate evidence for dumpable
+  destination-read bounds, target-copy descriptors, existing-intermediate
+  strategy, bindings, pass split/copy-before-sample ordering, budget facts,
+  accepted-route diagnostics, material-key exclusion, unsupported strategy
+  refusals, strategy/action mismatch refusals, and stable unsupported-variant
+  refusals. It remains non-promoted: no adapter-backed native destination-read
+  execution, product activation, framebuffer fetch, input attachments, CPU
+  readback fallback, or broad blend-mode support is claimed.
+  Evidence report:
+  `reports/gpu-renderer/2026-06-17-m5-002-destination-read-strategy-gate.md`.
+- KGPU-M5-003 remains `blocked` on simple filter render-node evidence.
 - KGPU-M5-004 remains `done` as refusal-only evidence.
 
 ## Status Update Rule
