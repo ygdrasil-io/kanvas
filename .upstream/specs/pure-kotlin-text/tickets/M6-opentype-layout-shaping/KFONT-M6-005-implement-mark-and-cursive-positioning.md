@@ -74,21 +74,21 @@ data class CursiveAttachment(
 ## Acceptance Criteria
 
 - [x] Mark-to-base fixture positions a combining mark using GDEF class and anchor data.
-- [x] Mark-to-ligature fixture attaches marks to the correct ligature component.
+- [x] Mark-to-ligature evidence stays bounded: unique matches may attach, while ambiguous reviewed fixture matches refuse deterministically with `text.shaping.mark-positioning-unavailable`.
 - [x] Mark-to-mark fixture stacks two marks deterministically.
 - [x] Cursive fixture applies entry/exit anchors and records attachment chain order.
 - [x] Missing required GDEF or malformed anchor data emits `text.shaping.gdef-required`, `text.shaping.mark-positioning-unavailable`, or `text.shaping.cursive-attachment-unavailable` as appropriate.
 
 ## Required Evidence
 
-- `gpos-trace.json` with anchor formats, glyph classes, mark classes, ligature component index, cursive chain links, attachment vectors, and diagnostics.
+- `gpos-trace.json` with anchor formats, glyph classes, mark classes, cursive chain links, and diagnostics; include ligature component indexes and attachment vectors only when a reviewed mark-to-ligature case proves a unique runtime component choice.
 - `shaped-glyph-run.json` showing final mark offsets, cursive advances, cluster mappings, and run direction.
 - Fixtures: `gpos-mark-to-base.otf`, `gpos-mark-to-ligature.otf`, `gpos-mark-to-mark.otf`, `gpos-cursive-attachment.otf`, `gpos-missing-gdef.otf`, `gpos-anchor-malformed.otf`.
 - Diagnostics asserted in tests: `text.shaping.gdef-required`, `text.shaping.mark-positioning-unavailable`, `text.shaping.cursive-attachment-unavailable`, `text.shaping.lookup-malformed`.
 
 ## Fallback / Refusal Behavior
 
-- Unsupported or malformed paths must emit one of: `text.shaping.gdef-required`, `text.shaping.mark-positioning-unsupported`.
+- Unsupported or malformed paths must emit one of: `text.shaping.gdef-required`, `text.shaping.mark-positioning-unavailable`.
 - Ambiguous mark-to-ligature matches that expose multiple component indexes without a unique runtime choice must emit `text.shaping.mark-positioning-unavailable` instead of silently choosing a component.
 - The diagnostic must name the affected range, glyph, cluster, lookup, font source, or route object when that subject exists.
 - Silent fallback to platform/native/font engine behavior is not allowed; the ticket remains `tracked-gap` until the listed evidence and validation pass.
@@ -104,7 +104,7 @@ data class CursiveAttachment(
 ```bash
 rtk git diff --check
 rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedMarkAndCursiveGposFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserPreservesMissingGdefAndMalformedAnchorFixtureFacts
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gposTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns --tests org.graphiks.kanvas.text.TextStackSurfaceTest.arabicSeedReadinessGoldenPinsDiagnosticsWithoutSupportClaim --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedMarkAndCursiveFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineReportsReviewedMarkAndCursiveFixtureDiagnosticsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapingKeepsReviewedGsubClustersWhenTypefaceHasUnmatchedMarkLookups --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineRefusesAmbiguousLigatureComponentAttachments --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineDoesNotReportUnavailableWhenCursiveMatchHasZeroAdvanceDelta
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gposTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns --tests org.graphiks.kanvas.text.TextStackSurfaceTest.arabicSeedReadinessGoldenPinsDiagnosticsWithoutSupportClaim --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedMarkAndCursiveFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineReportsReviewedMarkAndCursiveFixtureDiagnosticsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapingKeepsReviewedGsubClustersWhenTypefaceHasUnmatchedMarkLookups --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineRefusesAmbiguousLigatureComponentAttachments --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineRefusesAmbiguousSingleCodePointLigatureComponentAttachments --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineDoesNotReportUnavailableWhenCursiveMatchHasZeroAdvanceDelta --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineReportsRtlCursiveAttachmentFailuresWithLogicalTextRange
 rtk run "python3 scripts/validate_font_fixture_assets.py && python3 scripts/validate_pure_kotlin_text_fixture_manifest.py && python3 scripts/validate_pure_kotlin_text_dump_index.py"
 ```
 
@@ -112,7 +112,7 @@ rtk run "python3 scripts/validate_font_fixture_assets.py && python3 scripts/vali
 
 - `review`: parser/runtime slices, checked-in fixture provenance, fresh focused validations, and dump updates for `gpos-trace.json` / `shaped-glyph-run.json` are now in place for bounded mark/cursive positioning.
 - 2026-06-17 closeout: the required fixture set `gpos-mark-to-base.otf`, `gpos-mark-to-ligature.otf`, `gpos-mark-to-mark.otf`, `gpos-cursive-attachment.otf`, `gpos-missing-gdef.otf`, and `gpos-anchor-malformed.otf` is now present in-repo with reviewed provenance and deterministic parser/runtime assertions.
-- `done`: independent review surfaced three bounded-runtime issues, now fixed with fresh regression tests for ambiguous ligature-component refusal, zero-advance cursive matches, and GSUB cluster preservation under mark/cursive-capable typefaces. Fresh parser/runtime/manifest validations are green, and the remaining non-claims stay explicit.
+- `done`: independent review surfaced bounded runtime and evidence gaps, now fixed with fresh regression coverage for ambiguous ligature-component refusal, ambiguous mono-codepoint reviewed-fixture refusal, RTL cursive logical ranges, zero-advance cursive matches, and GSUB cluster preservation under mark/cursive-capable typefaces. Fresh parser/runtime/manifest validations are green, and the remaining non-claims stay explicit.
 
 ## Linear Labels
 

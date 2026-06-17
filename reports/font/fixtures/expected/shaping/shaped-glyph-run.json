@@ -109,8 +109,14 @@
         {"textRange": "0..1", "glyphRange": "0..0"},
         {"textRange": "0..1", "glyphRange": "1..1"}
       ],
-      "clusterMetrics": [[0, 190, -6], [200, 0, 0]],
-      "advanceX10": 200
+      "clusterMetrics": [[200, 0, 0], [200, 0, 0]],
+      "advanceX10": 400,
+      "diagnostics": [
+        {
+          "code": "text.shaping.mark-positioning-unavailable",
+          "message": "Ambiguous ligature component indexes [0, 1, 2, 3] matched glyphs 380,237 on typeface 550e8400-e29b-41d4-a716-446655440625."
+        }
+      ]
     },
     {
       "caseId": "gpos-mark-to-mark",

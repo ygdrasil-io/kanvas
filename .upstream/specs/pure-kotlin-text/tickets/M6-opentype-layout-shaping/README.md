@@ -43,7 +43,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*' --tests '*De
 - 2026-06-18 bounded fixture closeout: `KFONT-M6-002` and `KFONT-M6-004` now land reviewed synthetic Latin fixtures, provenance, and promoted dumps while retaining separate M6-001 contract-only goldens.
 - `KFONT-M6-002` is `done` on reviewed GSUB fixture provenance plus promoted `gsub-trace.json` / `shaped-glyph-run.json` evidence beyond the current M6-001 contract goldens.
 - `KFONT-M6-004` is `done` on reviewed GPOS fixture provenance plus promoted `gpos-trace.json` / `shaped-glyph-run.json` evidence and layout-contract malformed/refusal diagnostics.
-- `KFONT-M6-005` is `done` on bounded mark/cursive parser/runtime support, checked-in reviewed fixture provenance, refreshed `gpos-trace.json` / `shaped-glyph-run.json` evidence, and post-review regressions for ambiguous ligature-component refusal, zero-advance cursive matches, and GSUB cluster preservation under mark/cursive-capable typefaces.
+- `KFONT-M6-005` is `done` on bounded mark/cursive parser/runtime support, checked-in reviewed fixture provenance, refreshed `gpos-trace.json` / `shaped-glyph-run.json` evidence, refusal-only reviewed mono-codepoint ligature evidence, and post-review regressions for ambiguous ligature-component refusal, RTL cursive logical ranges, zero-advance cursive matches, and GSUB cluster preservation under mark/cursive-capable typefaces.
 - `KFONT-M6-006` stays in `review` after the bounded runtime `ResolvedFeatureSet` adoption wave; remaining work is per-script shaping fixture families, the remaining GPOS single/mark policy-routing gap, and explicit OpenType-specific `drawString` non-enablement evidence.
 
 ## Current Blockers
