@@ -41,7 +41,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*' --tests '*De
 ## Current Slice Notes
 
 - 2026-06-17 closeout: `KFONT-M6-002` and `KFONT-M6-004` are now freshly validated `done` slices with checked-in Latin fixture provenance plus promoted `gsub-trace.json`, `gpos-trace.json`, and `shaped-glyph-run.json` evidence.
-- 2026-06-17 closeout: `KFONT-M6-005` is now `done` with bounded parser/runtime mark/cursive positioning, checked-in Noto Naskh Arabic plus Amiri-derived fixture provenance, refreshed `gpos-trace.json` / `shaped-glyph-run.json` evidence, and post-review regression coverage for ambiguous ligature-component refusal, zero-advance cursive matches, and GSUB cluster preservation.
+- 2026-06-17 closeout: `KFONT-M6-005` is now `done` with bounded parser/runtime mark/cursive positioning, checked-in Noto Naskh Arabic plus Amiri-derived fixture provenance, refreshed `gpos-trace.json` / `shaped-glyph-run.json` evidence, refusal-only reviewed mono-codepoint ligature evidence, and post-review regression coverage for ambiguous ligature-component refusal, RTL cursive logical ranges, zero-advance cursive matches, and GSUB cluster preservation.
 - `KFONT-M6-006` is no longer a review-closeout ticket; it is a dependency-gated contract slice blocked on per-script shaping fixture families, runtime adoption of `ResolvedFeatureSet`, and explicit `drawString` non-enablement evidence.
 
 ## Current Blockers

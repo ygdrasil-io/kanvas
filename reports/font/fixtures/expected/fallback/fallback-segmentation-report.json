@@ -8,7 +8,7 @@
     {"dumpId": "cluster-safety-report", "dumpSha256": "eef3af65412ed61a45b7722dab8ad82d0745ea00fcb9d6c6c4069f2eeab1ee1d"},
     {"dumpId": "fallback-decision-trace", "dumpSha256": "eaf927a39fdb5b6c0b4b2541d83fe52afe984b159ac5157e6c2bb02363b638eb"},
     {"dumpId": "resolved-font-runs", "dumpSha256": "7b4549a8ce71c244501ec6428b1525e3ff25f564c2fcaf8ab8874cedef6b067a"},
-    {"dumpId": "shaped-glyph-run", "dumpSha256": "4807697fc747a1f1e4d2ae5fe9063a83e5cff35005704c2622c81567954d777c"}
+    {"dumpId": "shaped-glyph-run", "dumpSha256": "93c5cbebc47968232528526b31612ff05722cfb2e791516238c51664fa42868b"}
   ],
   "cases": [
     {"fixtureName": "fallback-cluster-arabic-mark.txt", "sourceText": "اّ", "inputTextHash": "040ecc2cb8708c7af176bc79dc984fe3d09d696925db2b661d940c7d7d5cf62c", "gate": null, "clusterFixtureName": "cluster-arabic-mark.txt", "fallbackFixtureId": "fallback-cluster-arabic-mark", "sourceDumpIds": ["cluster-safety-report", "fallback-decision-trace", "resolved-font-runs", "shaped-glyph-run"], "decisionTraceRef": {"dumpId": "fallback-fixture", "fixtureId": "fallback-cluster-arabic-mark", "section": "decisions"}, "resolvedRunsRef": {"dumpId": "fallback-fixture", "fixtureId": "fallback-cluster-arabic-mark", "section": "runs"}, "fixtureAssetRef": {"dumpId": "fallback-fixture", "fixtureId": "fallback-cluster-arabic-mark"}, "hostDependent": false, "invariant": {"name": "resolved-run-boundaries-align", "clusterTextRanges": ["0..1"], "fallbackRunRanges": ["0..1"], "passed": true, "diagnostic": null}, "diagnostics": []},

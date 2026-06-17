@@ -745,12 +745,13 @@ public class BasicOpenTypeShapingEngine(
             fontSize = request.fontSize,
             preservePerGlyphClusters = shouldPreservePerGlyphClusters(request.typefaceId, glyphIds),
         )
-        applyPositionAdjustments(request, group, glyphIds, clusters, diagnostics)
+        val baseAdvanceX = clusters.sumOf { cluster -> cluster.advanceX.toDouble() }
+        val totalAdvanceAdjustment = applyPositionAdjustments(request, group, glyphIds, clusters, diagnostics)
 
         return ShapedGlyphRun(
             glyphIds = glyphIds,
             clusters = clusters,
-            advanceX = clusters.sumOf { cluster -> cluster.advanceX.toDouble() }.toFloat(),
+            advanceX = (baseAdvanceX + totalAdvanceAdjustment).toFloat(),
             advanceY = 0f,
             script = group.script,
             bidiLevel = group.bidiLevel,
@@ -1164,12 +1165,9 @@ public class BasicOpenTypeShapingEngine(
                             candidate.markGlyphId == markGlyphId && candidate.ligatureGlyphId == baseOrLigatureGlyphId
                         }
                     }
-                    val ligatureCluster = clusters[glyphClusterIndexes[baseOrLigatureIndex]]
                     val distinctComponentIndexes = attachments.map(OpenTypeGposMarkToLigatureAttachment::componentIndex).distinct()
                     val attachment = when {
                         distinctComponentIndexes.size == 1 -> attachments.firstOrNull()
-                        ligatureCluster.textRange.first == ligatureCluster.textRange.last ->
-                            attachments.firstOrNull { candidate -> candidate.componentIndex == 0 }
                         else -> null
                     }
                     if (attachment != null) {
@@ -1254,7 +1252,7 @@ public class BasicOpenTypeShapingEngine(
             diagnostics += ShapingDiagnostic(
                 code = TEXT_SHAPING_CURSIVE_ATTACHMENT_UNAVAILABLE_DIAGNOSTIC_CODE,
                 message = "No cursive attachment chain matched the shaped glyph sequence on typeface ${adjustmentContext.typefaceId.value}.",
-                textRange = clusters.first().textRange.first..clusters.last().textRange.last,
+                textRange = clusters.minOf { cluster -> cluster.textRange.first }..clusters.maxOf { cluster -> cluster.textRange.last },
             )
         }
         return totalAdvanceAdjustment

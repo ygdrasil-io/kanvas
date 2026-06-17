@@ -2525,11 +2525,13 @@ Evidence:
   facts needed by the checked-in mark/cursive fixtures, including the
   malformed-anchor refusal path and the missing-GDEF fixture facts.
 - `BasicOpenTypeShapingEngine` now applies bounded mark-to-base,
-  mark-to-ligature, mark-to-mark, and cursive attachment offsets while keeping
-  diagnostics stable for missing GDEF and malformed lookup data; ambiguous
+  mark-to-mark, and cursive attachment offsets while keeping diagnostics
+  stable for missing GDEF and malformed lookup data; ambiguous
   multi-component ligature matches now refuse explicitly instead of silently
-  selecting a component, and unrelated GSUB runs keep their original cluster
-  grouping even when the typeface exposes mark/cursive lookups.
+  selecting a component, the reviewed mono-codepoint ligature fixture remains
+  refusal-only until unique component-mapping evidence exists, and unrelated
+  GSUB runs keep their original cluster grouping even when the typeface
+  exposes mark/cursive lookups.
 - Reviewed fixture provenance is now checked in for
   `gpos-mark-to-base.otf`, `gpos-mark-to-ligature.otf`,
   `gpos-mark-to-mark.otf`, `gpos-cursive-attachment.otf`,
@@ -2540,15 +2542,16 @@ Evidence:
 - `TextStackSurfaceTest` now asserts fixture-backed glyph IDs, bounded advances,
   offsets, and stable refusal diagnostics for the new mark/cursive slice.
 - `gpos-trace.json` and the shared `shaped-glyph-run.json` now record bounded
-  mark/cursive attachment vectors, glyph classes, component index, cursive
-  chain links, and refusal diagnostics without broadening Arabic shaping claims.
+  mark/cursive evidence, glyph classes, cursive chain links, and refusal
+  diagnostics without broadening Arabic shaping claims or inventing a
+  ligature-component choice the reviewed fixture cannot prove.
 
 Validation:
 
 ```bash
 rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedMarkAndCursiveGposFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserPreservesMissingGdefAndMalformedAnchorFixtureFacts
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedMarkAndCursiveFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineReportsReviewedMarkAndCursiveFixtureDiagnosticsFromRepo
-rtk ./gradlew --no-daemon :font:text:test --tests '*Gpos*' --tests '*Cursive*'
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedMarkAndCursiveFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineReportsReviewedMarkAndCursiveFixtureDiagnosticsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gposTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapingKeepsReviewedGsubClustersWhenTypefaceHasUnmatchedMarkLookups --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineRefusesAmbiguousLigatureComponentAttachments --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineRefusesAmbiguousSingleCodePointLigatureComponentAttachments --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineDoesNotReportUnavailableWhenCursiveMatchHasZeroAdvanceDelta --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineReportsRtlCursiveAttachmentFailuresWithLogicalTextRange
 rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
