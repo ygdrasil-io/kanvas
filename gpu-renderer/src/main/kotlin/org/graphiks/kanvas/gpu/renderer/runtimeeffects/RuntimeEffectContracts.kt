@@ -368,11 +368,157 @@ data class GPURuntimeEffectDiagnostic(
     val terminal: Boolean,
 )
 
+/** Input for the refusal-only runtime-effect child/source matrix. */
+data class GPURuntimeEffectRefusalMatrixInput(
+    val registrySnapshot: GPURuntimeEffectRegistrySnapshot,
+    val descriptorId: GPURuntimeEffectID,
+    val shapes: List<GPURuntimeEffectRefusalShape>,
+)
+
+/** Dynamic source categories that are never compiled by the GPU renderer. */
+enum class GPURuntimeEffectDynamicSourceKind {
+    /** Skia SkSL source text. */
+    SkSL,
+    /** Raw WGSL source text outside a registered descriptor. */
+    WGSL,
+}
+
+/** Runtime-effect shape that must remain refusal-only in KGPU-M7-002. */
+sealed interface GPURuntimeEffectRefusalShape {
+    val label: String
+
+    /** Arbitrary dynamic source input. */
+    data class DynamicSource(
+        override val label: String,
+        val sourceKind: GPURuntimeEffectDynamicSourceKind,
+    ) : GPURuntimeEffectRefusalShape {
+        init {
+            require(label.isNotBlank()) { "runtime-effect refusal label must not be blank" }
+        }
+    }
+
+    /** Unknown compatibility key or source hash that must not imply descriptor support. */
+    data class CompatibilityKey(
+        override val label: String,
+        val keyHash: String,
+    ) : GPURuntimeEffectRefusalShape {
+        init {
+            require(label.isNotBlank()) { "runtime-effect refusal label must not be blank" }
+            require(keyHash.isNotBlank()) { "runtime-effect compatibility key hash must not be blank" }
+        }
+    }
+
+    /** Child slot or child source shape not promoted by the descriptor route. */
+    data class ChildSlot(
+        override val label: String,
+        val slot: GPURuntimeEffectChildSlotPlan,
+        val childSourceKind: String,
+        val sampleUsage: String,
+    ) : GPURuntimeEffectRefusalShape {
+        init {
+            require(label.isNotBlank()) { "runtime-effect refusal label must not be blank" }
+            require(childSourceKind.isNotBlank()) { "runtime-effect child source kind must not be blank" }
+            require(sampleUsage.isNotBlank()) { "runtime-effect child sample usage must not be blank" }
+        }
+    }
+
+    /** Descriptor placement not accepted by the registered route contract. */
+    data class UnsupportedPlacement(
+        override val label: String,
+        val requestedPlacement: GPURuntimeEffectRoutePlacement,
+    ) : GPURuntimeEffectRefusalShape {
+        init {
+            require(label.isNotBlank()) { "runtime-effect refusal label must not be blank" }
+        }
+    }
+}
+
+/** One PM-visible refusal row for runtime-effect source, child, or placement shapes. */
+data class GPURuntimeEffectRefusalMatrixRow(
+    val label: String,
+    val category: String,
+    val descriptorAnchor: String,
+    val routeKind: String,
+    val classification: String,
+    val productActivation: Boolean,
+    val diagnostic: GPURuntimeEffectDiagnostic,
+    val facts: Map<String, String>,
+)
+
+/** Refusal-only runtime-effect child/source matrix report. */
+data class GPURuntimeEffectRefusalMatrixReport(
+    val evidenceRow: String,
+    val classification: String,
+    val rows: List<GPURuntimeEffectRefusalMatrixRow>,
+) {
+    /** KGPU-M7-002 never promotes runtime-effect source, child, or placement support. */
+    val promotable: Boolean = false
+
+    /** Returns canonical PM/review dump lines for this refusal-only matrix. */
+    fun dumpLines(): List<String> {
+        val rowLines = rows.map { row ->
+            "runtime-effect-refusal row=$evidenceRow category=${row.category} shape=${row.label} " +
+                "descriptor=${row.descriptorAnchor} routeKind=${row.routeKind} " +
+                "classification=${row.classification} reason=${row.diagnostic.code} " +
+                "productActivation=${row.productActivation} facts=${row.facts.dumpRuntimeEffectRefusalFacts()}"
+        }
+        val descriptorAnchor = rows.firstOrNull()?.descriptorAnchor ?: "none"
+        return rowLines + listOf(
+            "runtime-effect-refusal:summary row=$evidenceRow descriptor=$descriptorAnchor " +
+                "refused=${rows.size} promotable=$promotable",
+            RUNTIME_EFFECT_REFUSAL_NONCLAIM_LINE,
+        )
+    }
+}
+
+/** Builds refusal-only child/source evidence without promoting runtime-effect breadth. */
+object GPURuntimeEffectRefusalMatrix {
+    /** Evaluates runtime-effect shapes into stable refusal rows. */
+    fun evaluate(input: GPURuntimeEffectRefusalMatrixInput): GPURuntimeEffectRefusalMatrixReport {
+        val matchingDescriptors = input.registrySnapshot.lookupAll(input.descriptorId)
+        val descriptor = matchingDescriptors.singleOrNull()
+        val anchor = descriptorAnchor(input.descriptorId, matchingDescriptors)
+        val rows = input.shapes.map { shape ->
+            val code = when {
+                matchingDescriptors.isEmpty() -> "unsupported.runtime_effect.unregistered_descriptor"
+                matchingDescriptors.size > 1 -> "unsupported.runtime_effect.descriptor_collision"
+                else -> shape.refusalCode(requireNotNull(descriptor))
+            }
+            GPURuntimeEffectRefusalMatrixRow(
+                label = shape.label,
+                category = shape.category,
+                descriptorAnchor = anchor,
+                routeKind = "RefuseDiagnostic",
+                classification = RUNTIME_EFFECT_REFUSAL_CLASSIFICATION,
+                productActivation = false,
+                diagnostic = GPURuntimeEffectDiagnostic(
+                    code = code,
+                    effectId = input.descriptorId,
+                    message = "runtime-effect refusal matrix row ${shape.label} refused: $code",
+                    terminal = true,
+                ),
+                facts = shape.refusalFacts(descriptor, matchingDescriptors.size),
+            )
+        }
+
+        return GPURuntimeEffectRefusalMatrixReport(
+            evidenceRow = RUNTIME_EFFECT_REFUSAL_EVIDENCE_ROW,
+            classification = RUNTIME_EFFECT_REFUSAL_CLASSIFICATION,
+            rows = rows,
+        )
+    }
+}
+
 private const val RUNTIME_EFFECT_EVIDENCE_ROW = "gpu-renderer.runtime-effect.registered"
 private const val RUNTIME_EFFECT_ACCEPTED_CODE = "accepted.runtime_effect.registered_descriptor"
 private const val RUNTIME_EFFECT_NONCLAIM_LINE =
     "runtime-effect:nonclaim nativeRuntimeEffect=false adapterBacked=false dynamicSkSL=false " +
         "arbitraryWGSL=false children=false blender=false filter=false productActivation=false"
+private const val RUNTIME_EFFECT_REFUSAL_EVIDENCE_ROW = "gpu-renderer.runtime-effect-refusals"
+private const val RUNTIME_EFFECT_REFUSAL_CLASSIFICATION = "RefuseRequired"
+private const val RUNTIME_EFFECT_REFUSAL_NONCLAIM_LINE =
+    "runtime-effect:nonclaim arbitrarySkSL=false arbitraryWGSL=false children=false " +
+        "unsupportedPlacementSupport=false productActivation=false"
 
 private fun GPURuntimeEffectDescriptorRouteRequest.refusalCode(
     descriptor: GPURuntimeEffectDescriptor?,
@@ -486,6 +632,90 @@ private fun GPURuntimeEffectOracleResult.matchesDescriptor(descriptor: GPURuntim
 
 private fun String.isCanonicalRuntimeEffectEvidenceHash(): Boolean =
     matches(Regex("""sha256:[0-9a-f]{64}"""))
+
+private val GPURuntimeEffectRefusalShape.category: String
+    get() = when (this) {
+        is GPURuntimeEffectRefusalShape.DynamicSource -> "source"
+        is GPURuntimeEffectRefusalShape.CompatibilityKey -> "source"
+        is GPURuntimeEffectRefusalShape.ChildSlot -> "child"
+        is GPURuntimeEffectRefusalShape.UnsupportedPlacement -> "placement"
+    }
+
+private fun GPURuntimeEffectRefusalShape.refusalCode(descriptor: GPURuntimeEffectDescriptor): String =
+    when (this) {
+        is GPURuntimeEffectRefusalShape.DynamicSource -> when (sourceKind) {
+            GPURuntimeEffectDynamicSourceKind.SkSL -> "unsupported.runtime_effect.dynamic_sksl_forbidden"
+            GPURuntimeEffectDynamicSourceKind.WGSL -> "unsupported.runtime_effect.dynamic_wgsl_forbidden"
+        }
+        is GPURuntimeEffectRefusalShape.CompatibilityKey ->
+            "unsupported.runtime_effect.compatibility_key_unknown"
+        is GPURuntimeEffectRefusalShape.ChildSlot ->
+            when {
+                childSourceKind == "missing" && slot.required -> "unsupported.runtime_effect.child_missing"
+                childSourceKind !in slot.acceptedSourceKinds -> "unsupported.runtime_effect.child_kind"
+                sampleUsage != "same-pixel" -> "unsupported.runtime_effect.child_sample_radius"
+                else -> "unsupported.runtime_effect.child_count"
+            }
+        is GPURuntimeEffectRefusalShape.UnsupportedPlacement ->
+            if (requestedPlacement in descriptor.routeContract.acceptedPlacements) {
+                "unsupported.runtime_effect.route_unaccepted"
+            } else {
+                "unsupported.runtime_effect.kind_mismatch"
+            }
+    }
+
+private fun GPURuntimeEffectRefusalShape.refusalFacts(
+    descriptor: GPURuntimeEffectDescriptor?,
+    descriptorMatchCount: Int,
+): Map<String, String> {
+    val facts = linkedMapOf("descriptorMatches" to descriptorMatchCount.toString())
+    when (this) {
+        is GPURuntimeEffectRefusalShape.DynamicSource ->
+            facts["sourceKind"] = sourceKind.name
+        is GPURuntimeEffectRefusalShape.CompatibilityKey ->
+            facts["keyHash"] = keyHash
+        is GPURuntimeEffectRefusalShape.ChildSlot -> {
+            facts["slotName"] = slot.slotName
+            facts["acceptedSourceKinds"] = slot.acceptedSourceKinds.stableFactSet()
+            facts["required"] = slot.required.toString()
+            facts["childSourceKind"] = childSourceKind
+            facts["sampleUsage"] = sampleUsage
+        }
+        is GPURuntimeEffectRefusalShape.UnsupportedPlacement -> {
+            facts["requestedPlacement"] = requestedPlacement.name
+            facts["acceptedPlacements"] = descriptor?.routeContract?.acceptedPlacements.stablePlacementFactSet()
+        }
+    }
+    return facts
+}
+
+private fun Map<String, String>.dumpRuntimeEffectRefusalFacts(): String =
+    entries.sortedBy { entry -> entry.key }
+        .joinToString(",") { entry -> "${entry.key}=${entry.value}" }
+
+private fun Set<String>.stableFactSet(): String =
+    if (isEmpty()) {
+        "none"
+    } else {
+        sorted().joinToString("|")
+    }
+
+private fun Set<GPURuntimeEffectRoutePlacement>?.stablePlacementFactSet(): String =
+    if (isNullOrEmpty()) {
+        "none"
+    } else {
+        map { placement -> placement.name }.sorted().joinToString("|")
+    }
+
+private fun descriptorAnchor(
+    id: GPURuntimeEffectID,
+    descriptors: List<GPURuntimeEffectDescriptor>,
+): String =
+    when (descriptors.size) {
+        0 -> "${id.value}@unregistered"
+        1 -> "${descriptors.single().id.value}@${descriptors.single().version.value}"
+        else -> "${id.value}@collision"
+    }
 
 private fun runtimeEffectStableHash(parts: List<String>): String {
     val digest = MessageDigest.getInstance("SHA-256")

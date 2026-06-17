@@ -1,7 +1,7 @@
 ---
 id: KGPU-M7-002
 title: "Add runtime-effect child and source refusal gates"
-status: blocked
+status: done
 milestone: M7
 priority: P0
 owner_area: runtime-effects-validation
@@ -55,9 +55,9 @@ data class RuntimeEffectRefusal(val shape: String, val diagnostic: String)
 
 ## Acceptance Criteria
 
-- [ ] Unsupported shapes emit canonical diagnostics.
-- [ ] Descriptor support cannot imply arbitrary source support.
-- [ ] PM output marks refused shapes as `RefuseRequired`.
+- [x] Unsupported shapes emit canonical diagnostics.
+- [x] Descriptor support cannot imply arbitrary source support.
+- [x] PM output marks refused shapes as `RefuseRequired`.
 
 ## Required Evidence
 
@@ -82,10 +82,22 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: Depends on KGPU-M7-001. Child/source refusal rows must be anchored
-  to the registered descriptor route and compatibility lookup boundary after
-  KGPU-M7-001 has accepted descriptor evidence; no arbitrary SkSL/WGSL source
-  or child-slot support is implied.
+- `done`: KGPU-M7-001 is `done` on current `master`, and this branch adds
+  refusal-only evidence for runtime-effect source, child, and unsupported
+  placement shapes. `GPURuntimeEffectRefusalMatrix` emits
+  `gpu-renderer.runtime-effect-refusals` rows with `classification=RefuseRequired`
+  and `routeKind=RefuseDiagnostic`, anchored to the accepted
+  `runtime.simple.color` descriptor boundary without promoting arbitrary SkSL,
+  arbitrary WGSL, unknown compatibility keys, child runtime effects,
+  unsupported placements, or product activation. Review remediation added
+  stable dump facts for compatibility keys, child slots, sample usage,
+  requested placements, accepted placements, and descriptor match counts, plus
+  explicit `unsupported.runtime_effect.descriptor_collision` coverage.
+  Independent re-review `019ed5b8-bffe-7f52-a451-39c6a61f5ed4` found no
+  remaining P0/P1/P2 blockers and no hidden support or product-activation
+  claim.
+- Evidence: `RuntimeEffectRefusalMatrixTest` plus
+  `reports/gpu-renderer/2026-06-17-m7-002-runtime-effect-refusal-matrix.md`.
 
 ## Linear Labels
 
