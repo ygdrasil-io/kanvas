@@ -10,7 +10,6 @@ legacy behavior change, or support promotion is included.
 
 | Ticket | Blocker |
 |---|---|
-| `KGPU-M4-004` | Native WebGPU/adapter sampler evidence for tile/filter/mipmap mapping, behavior-affecting key boundaries, unsupported cubic/aniso/perspective diagnostics, and reference/readback artifacts. |
 | `KGPU-M5-001` | Native WebGPU/adapter saveLayer isolated-target evidence for offscreen allocation, clear/load/store, child isolation, restore composite, active-attachment separation, resource generation, and CPU/GPU/reference comparison. |
 | `KGPU-M7-001` | Registered descriptor with Kotlin/CPU oracle, complete parser-validated WGSL/reflection through `wgsl4k`, route integration, adapter-backed execution/readback evidence, and unregistered-descriptor refusals. |
 | `KGPU-M9-003` | PM dashboard/manifest evidence that separates correctness, activation, performance, cache, and release readiness without moving readiness. |
@@ -20,6 +19,7 @@ legacy behavior change, or support promotion is included.
 | Ticket | Resolution |
 |---|---|
 | `KGPU-M3-002` | Completed on 2026-06-17 by `reports/gpu-renderer/2026-06-17-m3-002-stencil-cover-gate-contract.md` as independently reviewed contract-gate evidence with stable skipped-lane refusals. The native stencil-cover route remains non-promoted and product activation stays false. |
+| `KGPU-M4-004` | Completed on 2026-06-17 by `reports/gpu-renderer/2026-06-17-m4-004-sampler-boundary-gate.md` as independently reviewed sampler-boundary contract/refusal evidence. Native sampler execution, mipmap support, broad tile support, and product activation remain unpromoted. |
 
 ## Validation
 
@@ -49,10 +49,10 @@ rtk git diff --check
 
 ## Final State
 
-After the 2026-06-17 KGPU-M3-002 follow-up, the GPU renderer ticket catalog has
-no `proposed`, `ready`, `in-progress`, or `review` tickets remaining. The
-remaining non-done tickets are explicitly `blocked` with named adapter,
-dependency, policy, or evidence gates.
+After the 2026-06-17 KGPU-M4-004 follow-up, the GPU renderer ticket catalog has
+no `proposed`, `ready`, `in-progress`, or `review` tickets. The remaining
+non-done tickets are explicitly `blocked` with named adapter, dependency,
+policy, or evidence gates.
 
 ## 2026-06-15 M6 Follow-Up
 
@@ -73,5 +73,6 @@ and independent review `019ed26f-3531-7fd0-8e5d-61f9a15d5a9a`. The sampled
 lane remains candidate/non-release-blocking because its coefficient of
 variation is `0.1472`.
 
-The current catalog total is 31 `done` and 15 `blocked`; no `proposed`,
-`ready`, `in-progress`, or `review` GPU renderer tickets remain.
+After the 2026-06-17 KGPU-M4-004 sampler-boundary follow-up, the current
+catalog total is 32 `done` and 14 `blocked`; no `proposed`, `ready`,
+`in-progress`, or `review` GPU renderer tickets remain.

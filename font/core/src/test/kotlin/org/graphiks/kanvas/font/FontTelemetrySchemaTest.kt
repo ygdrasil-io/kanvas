@@ -55,6 +55,61 @@ class FontTelemetrySchemaTest {
         assertTrue(bundle.fixtureJson.indexOf("telemetry-parser-repeat") < bundle.fixtureJson.indexOf("telemetry-gpu-handoff-repeat"))
     }
 
+    @Test
+    fun `font telemetry PM bundle evidence stays advisory and domain-complete`() {
+        val root = projectRoot()
+        val advisoryJson = Files.readString(root.resolve("reports/pure-kotlin-text/font-telemetry-pm-bundle.json"))
+        val advisoryMarkdown = Files.readString(
+            root.resolve("reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"),
+        )
+
+        assertContains(advisoryJson, """"ownerTickets": ["KFONT-M12-001"]""")
+        assertContains(advisoryJson, """"surfaceId": "font-telemetry-schema"""")
+        assertContains(advisoryJson, """"classification": "tracked-gap"""")
+        assertContains(advisoryJson, """"claimPromotionAllowed": false""")
+        assertContains(advisoryJson, """"pmBundleTask": "pipelinePmBundle"""")
+        assertContains(advisoryJson, """"warningMode": "advisory"""")
+        assertContains(advisoryJson, """"domain": "parser"""")
+        assertContains(advisoryJson, """"domain": "gpu-text-handoff"""")
+        assertContains(advisoryJson, """"bundlePaths": [""")
+        assertContains(advisoryMarkdown, "pipelinePmBundle")
+        assertContains(advisoryMarkdown, "tracked-gap")
+        assertContains(advisoryMarkdown, "warning-only")
+        assertContains(advisoryMarkdown, "KFONT-M12-002")
+        assertContains(advisoryMarkdown, "KFONT-M12-005")
+        assertFalse(advisoryMarkdown.contains("remains open before `done`"))
+    }
+
+    @Test
+    fun `font telemetry schema ticket is closed while downstream telemetry slices stay explicit`() {
+        val root = projectRoot()
+        val ticket = Files.readString(
+            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-001-define-font-telemetry-schema.md"),
+        )
+        val milestoneReadme = Files.readString(
+            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md"),
+        )
+        val statusSummary = Files.readString(
+            root.resolve(".upstream/specs/pure-kotlin-text/tickets/STATUS.md"),
+        )
+        val schemaReport = Files.readString(
+            root.resolve("reports/pure-kotlin-text/2026-06-16-kfont-m12-001-font-telemetry-schema.md"),
+        )
+
+        assertContains(ticket, """status: "done"""")
+        assertContains(ticket, "KFONT-M12-002")
+        assertContains(ticket, "KFONT-M12-005")
+        assertFalse(ticket.contains("producer-side subsystem wiring remains open before `done`"))
+        assertContains(
+            milestoneReadme,
+            "| [KFONT-M12-001 - Define font telemetry schema](KFONT-M12-001-define-font-telemetry-schema.md) | `done` |",
+        )
+        assertContains(statusSummary, "| M12 | 4 | 0 | 0 | 0 | 0 | 1 |")
+        assertContains(schemaReport, "No schema-local gate remains")
+        assertContains(schemaReport, "KFONT-M12-002")
+        assertContains(schemaReport, "KFONT-M12-005")
+    }
+
     private fun projectRoot(): Path {
         var current = Path.of("").toAbsolutePath().normalize()
         while (current.parent != null && !Files.isDirectory(current.resolve("reports/pure-kotlin-text"))) {

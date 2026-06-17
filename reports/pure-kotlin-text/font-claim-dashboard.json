@@ -340,6 +340,7 @@
         "deterministicDumps": [
           "reports/font/fixtures/expected/fallback/fallback-decision-trace.json",
           "reports/font/fixtures/expected/fallback/resolved-font-runs.json",
+          "reports/font/fixtures/expected/shaping/fallback-shaped-glyph-run.json",
           "reports/pure-kotlin-text/font-catalog.json",
           "reports/pure-kotlin-text/font-source.json",
           "reports/pure-kotlin-text/typeface-id.json"
@@ -355,8 +356,7 @@
       },
       "requiredEvidenceGates": [
         "Add bundled Hebrew/Arabic, Devanagari/Thai, CJK, and optional emoji-capable deterministic catalog rows before fallback promotion.",
-        "Propagate fallback trace and resolved-run dumps into cluster-safe shaping evidence with selected and rejected font facts.",
-        "Propagate fallback trace and resolved-run dumps into cluster-safe shaping evidence with selected and rejected font facts.",
+        "Extend fallback shaping evidence to cluster-safe segmentation before claiming complete fallback behavior.",
         "Add CPU oracle evidence for fallback decisions before promotion."
       ],
       "legacyGates": [
@@ -365,6 +365,7 @@
       "nonClaims": [
         "no-complete-target-support-claim",
         "no-fallback-support-claim",
+        "no-cluster-safe-fallback-claim",
         "no-platform-font-fallback-claim"
       ]
     },
@@ -385,6 +386,7 @@
         "deterministicDumps": [
           "reports/pure-kotlin-text/font-telemetry-schema.json",
           "reports/pure-kotlin-text/font-telemetry-schema-fixture.json",
+          "reports/pure-kotlin-text/font-telemetry-pm-bundle.json",
           "reports/pure-kotlin-text/dump-evidence-index.json"
         ],
         "cpuOracle": [],
@@ -398,8 +400,7 @@
         ]
       },
       "requiredEvidenceGates": [
-        "Wire parser, scaler, shaping, paragraph, glyph artifact, and GPU handoff producers into the shared schema before telemetry promotion.",
-        "Show advisory tracked-gap ingestion in pipelinePerformanceTrendWarnings or PM bundle evidence before claiming dashboard visibility is complete.",
+        "KFONT-M12-002, KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own parser/scaler/shaping/paragraph/glyph/GPU producer emission into the shared schema; keep this row schema-only advisory evidence until those subsystem tickets land.",
         "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
       ],
       "legacyGates": [],
