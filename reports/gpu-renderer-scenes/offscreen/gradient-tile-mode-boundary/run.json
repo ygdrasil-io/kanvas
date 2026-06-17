@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sceneId": "gradient-tile-mode-boundary",
+  "status": "rendered",
+  "productRefusal": false,
+  "backend": "webgpu-offscreen",
+  "imagePath": "render.png",
+  "width": 320,
+  "height": 200,
+  "byteCount": 256000,
+  "nonTransparentPixels": 64000,
+  "diagnostics": ["rendered gradient-tile-mode-boundary via WebGPU offscreen","adapter=Apple M2 Max","clearCommands=1","fillRectCommands=6","fillRRectCommands=0","linearGradientRectCommands=0","clipCommands=1","bitmapRectCommands=0"]
+}
