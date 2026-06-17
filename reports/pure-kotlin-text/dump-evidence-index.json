@@ -811,7 +811,7 @@
       "nonClaims": [
         "producer-only",
         "no-complete-font-fallback-claim",
-        "no-host-platform-fallback-claim"
+        "no-platform-font-fallback-claim"
       ]
     },
     {
