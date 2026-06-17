@@ -558,41 +558,65 @@ class TextStackSurfaceTest {
     @Test
     fun gposTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics() {
         val dump = readJsonProjectFile("reports/font/fixtures/expected/shaping/gpos-trace.json")
-        val events = dump.requiredObjectList("events")
-        val singleAdjustment = events.single { it.requiredString("lookupId") == "gpos-single-adjustment" }
-        val pairKerningEvent = events.single { it.requiredString("lookupId") == "gpos-pair-format1-kerning" }
-        val pairClassEvent = events.single { it.requiredString("lookupId") == "gpos-pair-format2-class" }
-        val malformedValueFormat = events.single { it.requiredString("lookupId") == "gpos-valueformat-malformed" }
-        val malformedPairRange = events.single { it.requiredString("lookupId") == "gpos-pair-out-of-range" }
+        val cases = dump.requiredObjectList("cases")
 
-        assertEquals(2L, dump.requiredLong("schemaVersion"))
+        assertEquals(1L, dump.requiredLong("schemaVersion"))
         assertEquals("gpos-trace", dump.requiredString("dumpId"))
-        assertEquals(listOf("KFONT-M6-004"), dump.requiredStringList("ownerTickets"))
-
-        assertEquals(0L, singleAdjustment.requiredLong("lookupIndex"))
-        assertEquals(1L, singleAdjustment.requiredLong("lookupType"))
-        assertEquals(listOf("kern"), singleAdjustment.requiredStringList("featureTags"))
-        assertEquals(listOf(7L), singleAdjustment.requiredLongList("matchedGlyphIds"))
-        assertEquals(listOf(1000L), singleAdjustment.requiredObject("beforePositions").requiredLongList("xAdvances"))
-
-        assertEquals(1L, pairKerningEvent.requiredLong("lookupIndex"))
-        assertEquals(2L, pairKerningEvent.requiredLong("lookupType"))
-        assertEquals(listOf("kern"), pairKerningEvent.requiredStringList("featureTags"))
-        assertEquals(listOf(7L, 11L), pairKerningEvent.requiredLongList("matchedGlyphIds"))
-        assertEquals(listOf(1000L, 1000L), pairKerningEvent.requiredObject("beforePositions").requiredLongList("xAdvances"))
-        assertEquals(listOf(945L, 1000L), pairKerningEvent.requiredObject("afterPositions").requiredLongList("xAdvances"))
-        assertEquals(-55L, pairKerningEvent.requiredObject("valueRecords").requiredObject("first").requiredLong("xAdvance"))
-        assertEquals(0L, pairKerningEvent.requiredObject("valueRecords").requiredObject("second").requiredLong("xAdvance"))
-
-        assertEquals(2L, pairClassEvent.requiredLong("lookupIndex"))
-        assertEquals(2L, pairClassEvent.requiredLong("lookupType"))
-        assertEquals(listOf("kern"), pairClassEvent.requiredStringList("featureTags"))
-        assertEquals(listOf(7L, 11L), pairClassEvent.requiredLongList("matchedGlyphIds"))
-        assertEquals(listOf(1L, 2L), pairClassEvent.requiredLongList("matchedClassIds"))
-        assertEquals(listOf(960L, 1010L), pairClassEvent.requiredObject("afterPositions").requiredLongList("xAdvances"))
-
-        assertEquals("text.shaping.lookup-malformed", malformedValueFormat.requiredString("diagnosticCode"))
-        assertEquals("text.shaping.lookup-malformed", malformedPairRange.requiredString("diagnosticCode"))
+        assertEquals(listOf("KFONT-M6-004", "KFONT-M6-005"), dump.requiredStringList("ownerTickets"))
+        assertEquals("latin-gsub-gpos-fixtures", dump.requiredString("fixtureFamilyId"))
+        assertEquals(
+            listOf(
+                "single-adjustment",
+                "pair-format1-kerning",
+                "pair-format2-class",
+                "mark-to-base",
+                "mark-to-ligature",
+                "mark-to-mark",
+                "cursive-attachment",
+                "valueformat-malformed",
+                "pair-out-of-range",
+                "missing-gdef",
+                "anchor-malformed",
+            ),
+            cases.map { it.requiredString("caseId") },
+        )
+        assertEquals(listOf("kern"), cases[0].requiredStringList("featureOrder"))
+        assertEquals(listOf(520L), cases[0].requiredLongList("glyphIds"))
+        assertEquals(listOf(200L, 0L, 0L), cases[0].requiredLongLists("before")[0])
+        assertEquals(listOf(192L, 10L, 0L), cases[0].requiredLongLists("after")[0])
+        assertEquals(listOf(520L, 541L), cases[1].requiredLongList("glyphIds"))
+        assertEquals(listOf(189L, 0L, 0L), cases[1].requiredLongLists("after")[0])
+        assertEquals(listOf(188L, 0L, 0L), cases[2].requiredLongLists("after")[0])
+        assertEquals(listOf(0L, 1L), cases[2].requiredObjectList("lookups").single().requiredLongList("classIds"))
+        assertEquals(listOf("mark"), cases[3].requiredStringList("featureOrder"))
+        assertEquals(listOf(380L, 8L), cases[3].requiredLongList("glyphIds"))
+        assertEquals(listOf(21L, -37L), cases[3].requiredObjectList("lookups").single().requiredLongList("attachmentVector"))
+        assertEquals(listOf(200L, 0L, 0L), cases[4].requiredLongLists("after")[0])
+        assertEquals(emptyList<Map<String, Any?>>(), cases[4].requiredObjectList("lookups"))
+        assertEquals(
+            TEXT_SHAPING_MARK_POSITIONING_UNAVAILABLE_DIAGNOSTIC_CODE,
+            cases[4].requiredObjectList("diagnostics").single().requiredString("code"),
+        )
+        assertEquals(listOf("mkmk"), cases[5].requiredStringList("featureOrder"))
+        assertEquals(listOf(0L, -7L, 36L), cases[5].requiredLongLists("after")[0])
+        assertEquals(listOf("curs"), cases[6].requiredStringList("featureOrder"))
+        assertEquals(listOf(155L, 0L, 0L), cases[6].requiredLongLists("after")[0])
+        assertEquals(
+            "font.sfnt.optional-table-malformed",
+            cases[7].requiredObjectList("diagnostics").single().requiredString("code"),
+        )
+        assertEquals(
+            "font.sfnt.optional-table-malformed",
+            cases[8].requiredObjectList("diagnostics").single().requiredString("code"),
+        )
+        assertEquals(
+            "text.shaping.gdef-required",
+            cases[9].requiredObjectList("diagnostics").single().requiredString("code"),
+        )
+        assertEquals(
+            "text.shaping.lookup-malformed",
+            cases[10].requiredObjectList("diagnostics").single().requiredString("code"),
+        )
         assertNoSupportPromotionClaims(dump)
     }
 
@@ -603,7 +627,7 @@ class TextStackSurfaceTest {
 
         assertEquals(1L, dump.requiredLong("schemaVersion"))
         assertEquals("shaped-glyph-run", dump.requiredString("dumpId"))
-        assertEquals(listOf("KFONT-M6-002", "KFONT-M6-003", "KFONT-M6-004"), dump.requiredStringList("ownerTickets"))
+        assertEquals(listOf("KFONT-M6-002", "KFONT-M6-003", "KFONT-M6-004", "KFONT-M6-005"), dump.requiredStringList("ownerTickets"))
         assertEquals("latin-gsub-gpos-fixtures", dump.requiredString("fixtureFamilyId"))
         assertEquals(
             listOf(
@@ -618,6 +642,10 @@ class TextStackSurfaceTest {
                 "gpos-single-adjustment",
                 "gpos-pair-format1-kerning",
                 "gpos-pair-format2-class",
+                "gpos-mark-to-base",
+                "gpos-mark-to-ligature",
+                "gpos-mark-to-mark",
+                "gpos-cursive-attachment",
             ),
             cases.map { it.requiredString("caseId") },
         )
@@ -639,6 +667,18 @@ class TextStackSurfaceTest {
         assertEquals(listOf(192L, 10L, 0L), cases[8].requiredLongLists("clusterMetrics")[0])
         assertEquals(listOf(189L, 0L, 0L), cases[9].requiredLongLists("clusterMetrics")[0])
         assertEquals(listOf(188L, 0L, 0L), cases[10].requiredLongLists("clusterMetrics")[0])
+        assertEquals("gpos-trace#mark-to-base", cases[11].requiredString("traceRef"))
+        assertEquals(listOf(0L, 4L, -7L), cases[11].requiredLongLists("clusterMetrics")[0])
+        assertEquals("gpos-trace#mark-to-ligature", cases[12].requiredString("traceRef"))
+        assertEquals(listOf(200L, 0L, 0L), cases[12].requiredLongLists("clusterMetrics")[0])
+        assertEquals(
+            TEXT_SHAPING_MARK_POSITIONING_UNAVAILABLE_DIAGNOSTIC_CODE,
+            cases[12].requiredObjectList("diagnostics").single().requiredString("code"),
+        )
+        assertEquals("gpos-trace#mark-to-mark", cases[13].requiredString("traceRef"))
+        assertEquals(listOf(0L, -7L, 36L), cases[13].requiredLongLists("clusterMetrics")[0])
+        assertEquals("gpos-trace#cursive-attachment", cases[14].requiredString("traceRef"))
+        assertEquals(listOf(155L, 0L, 0L), cases[14].requiredLongLists("clusterMetrics")[0])
         assertNoSupportPromotionClaims(dump)
     }
 

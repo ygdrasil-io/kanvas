@@ -95,20 +95,14 @@
       "featureOrder": ["mark"],
       "glyphIds": [380, 237],
       "before": [[200, 0, 0], [200, 0, 0]],
-      "after": [[0, 190, -6], [200, 0, 0]],
-      "lookups": [
+      "after": [[200, 0, 0], [200, 0, 0]],
+      "lookups": [],
+      "diagnostics": [
         {
-          "lookupType": 5,
-          "featureTag": "mark",
-          "matchedGlyphIds": [237, 380],
-          "glyphClasses": [2, 3],
-          "markClass": 0,
-          "componentIndex": 0,
-          "anchorFormats": [1, 1],
-          "attachmentVector": [951, -28]
+          "code": "text.shaping.mark-positioning-unavailable",
+          "message": "Ambiguous ligature component indexes [0, 1, 2, 3] matched glyphs 380,237 on typeface 550e8400-e29b-41d4-a716-446655440625."
         }
-      ],
-      "diagnostics": []
+      ]
     },
     {
       "caseId": "mark-to-mark",
