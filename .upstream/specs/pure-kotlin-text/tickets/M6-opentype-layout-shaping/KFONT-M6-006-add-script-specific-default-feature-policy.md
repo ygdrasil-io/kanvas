@@ -113,7 +113,7 @@ rtk ./gradlew --no-daemon :font:text:test
 ## Status Notes
 
 - `proposed`: Policy ticket depends on script itemization and the M6 shaping contract.
-- `review`: Contract-level feature policy rows, shaping-plan serialization, and evidence tracking are implemented and freshly validated. Remaining gates: add per-script positive/refusal shaping fixtures outside the contract layer, wire runtime GSUB/GPOS execution to the resolved defaults, and document explicit `drawString` non-enablement behavior before `done`.
+- `review`: Contract-level feature policy rows, shaping-plan serialization, and evidence tracking are implemented and freshly validated. Remaining gate: land the per-script shaping fixture families owned by `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`, wire runtime GSUB/GPOS execution to `ResolvedFeatureSet` instead of raw `FeatureSet`, and document explicit `drawString` complex-feature non-enablement before `done`.
 - Move to `ready` only after the matrix row feature sets are reviewed.
 
 ## Linear Labels

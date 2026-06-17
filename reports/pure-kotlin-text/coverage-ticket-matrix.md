@@ -2242,7 +2242,7 @@ mapping, paragraph layout, emoji rendering, or GPU text route support.
 
 ### KFONT-M5-005: Add cluster safety regression suite
 
-Status: review with bounded fixture evidence.
+Status: review with bounded fixture evidence; independent audit narrowed the remaining gate to CJK IVS breadth only.
 
 Files:
 
@@ -2285,9 +2285,11 @@ Evidence:
 - `ClusterSafetyTest` asserts byte-identical golden output, verifies the
   ticket fixture set is checked in, and confirms Unicode-version mismatch
   propagation through the cluster-safety path.
+- `KFONT-M7-004` now supplies the explicit
+  `text.shaping.emoji-sequence-unsupported` refusal row and fallback-boundary
+  evidence for the shared emoji-adjacent cluster family.
 - Emoji-adjacent rows keep `scaledemoji` explicit as a legacy gate; this slice
-  does not add `emoji-sequence-unsupported`, fallback-route, color-glyph, or
-  GPU evidence.
+  does not retire that gate or add color-glyph, route, or GPU evidence.
 
 Validation:
 
@@ -2299,10 +2301,10 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 rtk git diff --check
 ```
 
-Remaining gate: this bounded M5-005 slice is in `review`, not `done`. An
-explicit `text.shaping.emoji-sequence-unsupported` refusal row, broader
-reviewed CJK IVS coverage, and later fallback-boundary evidence remain open
-before complete cluster-safety closeout or M7 fallback-cluster promotion.
+Remaining gate: this bounded M5-005 slice remains in `review`, not `done`.
+Broader reviewed CJK IVS coverage is still open before complete cluster-safety
+closeout; explicit emoji refusal and fallback-boundary evidence now live on
+the owning `KFONT-M7-004` slice.
 
 ### KFONT-M6-001: Define `OpenTypeLayoutEngine` Contract And Dumps
 
@@ -2371,7 +2373,7 @@ text route.
 
 ### KFONT-M6-002: GSUB Single/Multiple/Ligature Lookup Slice
 
-Status: review; independent audit confirmed this remains a bounded parser/runtime slice.
+Status: review; independent audit confirmed this remains a bounded parser/runtime slice with fixture/dump gates still open.
 
 Files:
 
@@ -2409,15 +2411,56 @@ rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest
 ```
 
-Remaining gate: this slice still depends on fixture-backed `gsub-trace.json`
-and `shaped-glyph-run.json` beyond the current M6-001 no-op contract goldens,
-does not add malformed/refusal GSUB fixture coverage with stable diagnostics,
-and does not prove explicit `ShapingPlan`-driven feature ordering or broader
-script-policy support.
+Remaining gate: reviewed GSUB fixture provenance and expected dumps for
+`gsub-single-substitution.otf`, `gsub-multiple-substitution.otf`,
+`gsub-ligature-fi.otf`, `gsub-coverage-malformed.otf`, and
+`gsub-ligature-bad-component.otf` are still absent. Keep this ticket in review
+until `gsub-trace.json` / `shaped-glyph-run.json` are promoted beyond the
+current M6-001 contract goldens with malformed/refusal diagnostics and explicit
+`ShapingPlan` ordering.
+
+### KFONT-M6-004: GPOS Single/Pair Positioning Slice
+
+Status: review; independent audit confirmed this remains a bounded parser/runtime slice with fixture/dump gates still open.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m6-review-closeout.md`
+
+Evidence:
+
+- `font/sfnt` exposes bounded GPOS single-adjustment and pair-position value
+  record facts needed by the runtime slice without promoting broader shaping
+  support claims.
+- `BasicOpenTypeShapingEngine` applies bounded `xPlacement`, `yPlacement`, and
+  `xAdvance` adjustments for validated single and pair-position subsets while
+  preserving the existing `kern=0` disable path.
+- The merged slice remains limited to parser/runtime surface tests; no
+  fixture-backed `gpos-trace.json` or positioned `shaped-glyph-run.json`
+  promotion exists yet.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest
+rtk ./gradlew --no-daemon :font:text:test --tests '*GposPair*' --tests '*Kerning*'
+```
+
+Remaining gate: reviewed GPOS fixture provenance and expected dumps for
+`gpos-single-adjustment.otf`, `gpos-pair-format1-kerning.otf`,
+`gpos-pair-format2-class.otf`, `gpos-valueformat-malformed.otf`, and
+`gpos-pair-out-of-range.otf` are still absent. Keep this ticket in review until
+`gpos-trace.json` / `shaped-glyph-run.json` are promoted beyond the current
+contract goldens with layout-contract malformed/refusal diagnostics.
 
 ### KFONT-M6-006: Script-Specific Default Feature Policy Slice
 
-Status: review; independent audit confirmed this remains a bounded contract-layer slice.
+Status: review; independent audit confirmed this remains a bounded contract-layer slice with runtime/fixture gates still open.
 
 Files:
 
@@ -2458,11 +2501,12 @@ rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 ```
 
-Remaining gate: this slice does not yet execute resolved defaults through full
-GSUB/GPOS runtime behavior, does not add per-script positive/refusal shaping
-fixtures beyond the contract layer, and does not yet prove the `drawString`
-compatibility path records complex-feature non-enablement; the current
-`shaping-plan.json` evidence remains contract-level only.
+Remaining gate: per-script shaping fixture families from `KFONT-M6-007`,
+`KFONT-M6-008`, and `KFONT-M6-009` are still absent, runtime GSUB/GPOS still
+consumes `FeatureSet` rather than `ResolvedFeatureSet`, and the `drawString`
+compatibility path still lacks explicit complex-feature non-enablement
+evidence. Keep this ticket in review until those gates land beyond the current
+contract-level `shaping-plan.json` evidence.
 
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 

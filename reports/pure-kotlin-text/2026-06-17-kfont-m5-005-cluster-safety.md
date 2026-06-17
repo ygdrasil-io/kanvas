@@ -34,9 +34,12 @@ legacy gate rather than implying emoji support.
   the ticket fixture set is present on disk, and verifies that Unicode-version
   mismatches still surface as
   `text.shaping.unicode-data-version-mismatch` in the cluster-safety path.
-- Emoji-adjacent rows carry the legacy gate `scaledemoji`, but this slice does
-  not retire it and does not add `emoji-sequence-unsupported`,
-  fallback-route, color-glyph, or GPU evidence.
+- `KFONT-M7-004` now covers the explicit `text.shaping.emoji-sequence-unsupported`
+  refusal row and fallback-boundary evidence for the shared emoji-adjacent
+  cluster family, so those are no longer the blocking closeout gates for
+  `KFONT-M5-005`.
+- Emoji-adjacent rows still carry the legacy gate `scaledemoji`, and this slice
+  does not retire it or add color-glyph, route, or GPU evidence.
 
 ## Validation
 
@@ -58,13 +61,9 @@ rtk git diff --check
 
 ## Remaining Gate
 
-This bounded M5-005 slice is ready for `review`, not `done`. Remaining gates:
+This bounded M5-005 slice remains in `review`, not `done`. Remaining gate:
 
-- add an explicit `text.shaping.emoji-sequence-unsupported` refusal row owned
-  by later emoji/shaping route work before claiming emoji-cluster refusal
-  coverage;
 - broaden reviewed CJK IVS coverage beyond the current bounded
-  Script_Extensions/variation-selector context fixture before claiming full
-  CJK variation-selector cluster safety;
-- link later fallback-boundary evidence before M7 cluster-safe fallback work
-  can reuse this ticket as complete closeout.
+  Script_Extensions/variation-selector context fixture family before claiming
+  complete CJK variation-selector cluster safety; explicit emoji refusal and
+  fallback-boundary evidence now live on the owning `KFONT-M7-004` slice.
