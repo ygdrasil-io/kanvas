@@ -1,0 +1,8 @@
+rendered cache-frame-budget-strip via WebGPU offscreen
+adapter=Apple M2 Max
+clearCommands=1
+fillRectCommands=5
+fillRRectCommands=0
+linearGradientRectCommands=0
+clipCommands=0
+bitmapRectCommands=0

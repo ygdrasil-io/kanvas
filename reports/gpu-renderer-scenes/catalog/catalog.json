@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 48,
+  "sceneCount": 49,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -723,6 +723,24 @@
       }
     },
     {
+      "sceneId": "cache-frame-budget-strip",
+      "title": "Cache Frame Budget Strip",
+      "description": "Visible frame and cache budget lanes where the exceeded-budget product refusal remains explicit and reporting-only.",
+      "tags": ["Rect","Cache"],
+      "kgpuMilestones": ["M9"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre visible un budget frame/cache depasse comme refus attendu.",
+          "validates": "Valide les lanes budget cible, warning, depassement et gate reporting-only.",
+          "nonClaims": "Ne revendique pas mesure runtime WebGPU observee ni gate release-blocking.",
+          "evidence": "Preuve WebGPU offscreen avec refus budget visible."
+        }
+      }
+    },
+    {
       "sceneId": "cache-source-ledger-board",
       "title": "Cache Source Ledger Board",
       "description": "Visible cache telemetry source classes without release-gate or readiness movement claims.",
@@ -929,22 +947,6 @@
           "validationTarget": "Valider glyph masks, atlas entries et binding ressource quand la dependance existe.",
           "nonClaims": "Ne revendique pas shaping complexe, font fallback ou emoji/color fonts.",
           "rationale": "Couvre M6 sans ajouter de substitut court-terme pour font/atlas."
-        }
-      }
-    },
-    {
-      "sceneId": "cache-frame-budget-strip",
-      "title": "Cache Frame Budget Strip",
-      "status": "product-refusal-expected",
-      "tags": ["Rect","Cache"],
-      "kgpuMilestones": ["M9"],
-      "ticketIds": [],
-      "humanDocs": {
-        "fr": {
-          "intention": "Rendre visible un budget frame/cache depasse comme refus attendu.",
-          "validationTarget": "Verifier qu'un budget depasse est expose comme refus produit explicite.",
-          "nonClaims": "Ne revendique pas mesure runtime WebGPU observee ni gate release-blocking.",
-          "rationale": "Couvre M9 en alignant les refus attendus avec la politique produit."
         }
       }
     }

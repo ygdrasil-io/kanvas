@@ -524,6 +524,29 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `cache frame budget strip is backed by visible budget refusal lanes`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("cache-frame-budget-strip")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.Cache), scene.tags)
+        assertEquals(listOf("M9"), scene.roadmapLinks.map { it.milestone })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertEquals(
+            listOf(
+                "frame-budget-target",
+                "cache-budget-warning",
+                "budget-exceeded-refusal",
+                "reporting-only-gate",
+                "no-release-blocking-claim",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..5).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M9-001" || it.ticketId == "KGPU-M9-002" })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M9-003" })
+    }
+
+    @Test
     fun `frame gate blocker board is backed by M9 reporting only frame policy blockers`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("frame-gate-blocker-board")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -1399,6 +1422,19 @@ class GPURendererSceneRegistryTest {
                 sceneId = "cache-pressure-deck",
                 tags = setOf(SceneTag.Rect),
                 commandFamilies = listOf("fill-rect", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M9")),
+            ),
+            SceneExpectationRow(
+                sceneId = "cache-frame-budget-strip",
+                tags = setOf(SceneTag.Rect, SceneTag.Cache),
+                commandFamilies = listOf(
+                    "clear",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
                 roadmapLinks = listOf(RoadmapExpectation("M9")),
             ),
             SceneExpectationRow(
