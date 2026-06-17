@@ -1,7 +1,7 @@
 ---
 id: KGPU-M8-003
 title: "Add vertices batching sort and refusal evidence"
-status: blocked
+status: done
 milestone: M8
 priority: P2
 owner_area: batching
@@ -56,9 +56,9 @@ data class VerticesBatchEvidence(val batchKey: String, val splitReasons: List<St
 
 ## Acceptance Criteria
 
-- [ ] Compatible batches have deterministic key dumps.
-- [ ] Incompatible cases split/refuse with stable reasons.
-- [ ] Ordering is preserved.
+- [x] Compatible batches have deterministic key dumps.
+- [x] Incompatible cases split/refuse with stable reasons.
+- [x] Ordering is preserved.
 
 ## Required Evidence
 
@@ -83,11 +83,21 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: Depends on KGPU-M8-001 and KGPU-M8-002. Remaining gate is
-  route/buffer evidence before batching can name compatible keys, sort windows,
-  split reasons, upload-generation boundaries, destination-read stops, layer
-  boundaries, and refusal rows. Batching must not be used as correctness or
-  performance readiness evidence.
+- `done`: KGPU-M8-001 and KGPU-M8-002 are `done`, and this ticket adds
+  contract-only `GPUVerticesBatchingPlanner` evidence for deterministic batch
+  keys, sort-window dumps, adjacent compatibility, split reasons, telemetry,
+  and refusal rows. The evidence preserves `ImplementationCandidate`,
+  `GPUNative`, `productActivation=false`, `materialized=false`, and stable
+  stops for sort-window, topology, render-step, pipeline/layout, material,
+  blend, clip, layer, destination-read, barrier, upload-generation, and
+  unknown-overlap boundaries. It also refuses empty inputs, refused route
+  decisions, refused buffer plans, and ambiguous paint-order regressions. The
+  independent review P2 for cross-window batching is fixed by splitting on
+  `sortWindowId` and exposing per-batch `sortWindow` axes. Independent final
+  re-review `019ed5ec-2289-7d53-8778-7948635b5e06` found no remaining P0/P1/P2
+  blockers. No performance readiness, executable batching, product
+  `DrawVertices` support, adapter-backed execution, or CPU-rasterized mesh
+  texture fallback is claimed.
 
 ## Linear Labels
 
