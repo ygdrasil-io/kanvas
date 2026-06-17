@@ -1,6 +1,6 @@
 # Pure Kotlin Text Coverage And Ticket Matrix
 
-Date: 2026-06-16
+Date: 2026-06-17
 Status: coordination evidence
 
 This report maps `.upstream/specs/pure-kotlin-text/` to implementation slices.
@@ -2838,6 +2838,58 @@ rtk git diff --check
 Remaining gate: downstream M8 tickets still own multi-style shaping
 segmentation, line breaking, ellipsis insertion, hit testing, selection boxes,
 placeholder geometry layout, CPU oracle evidence, and GPU text evidence.
+### KFONT-M8-002: Multi-style shaping segmentation
+
+Status: done; bounded segmentation evidence refreshed.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/KFONT-M8-002-implement-multi-style-shaping-segmentation.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphShapingSegmentation.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/font/fixtures/expected/paragraph/paragraph-layout.json`
+- `reports/font/fixtures/expected/paragraph/paragraph-shaping-requests.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m8-002-multi-style-shaping-segmentation.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+
+Evidence:
+
+- `BasicParagraphShapingSegmenter` now segments paragraph text by grapheme
+  cluster, shaping-affecting style facts, and paragraph direction while
+  excluding placeholder clusters from shaping requests.
+- Adjacent shaping-equivalent ranges now coalesce into one
+  `ParagraphShapingRequest`, which keeps the shaping request stream stable and
+  avoids redundant run boundaries.
+- A style boundary inside a grapheme cluster now widens to the leading style
+  range and emits `text.paragraph.cluster-boundary-violation` instead of
+  splitting inside the cluster.
+- `BasicParagraphLayoutEngine` now shapes each segmented request independently,
+  merges paragraph and shaping diagnostics, restores placeholder widths into
+  the line metrics, and records per-line `segmentRefs` in `paragraph-layout.json`.
+- `paragraph-shaping-requests.json` pins a mixed Latin/Arabic placeholder case
+  plus a combining-mark negative case, including requested family lists,
+  variation axes, placeholder ranges, and bounded non-claims.
+- `paragraph-layout.json` now pins the segmented layout dump with deterministic
+  input hash, placeholder accounting, and line-level `segmentRefs`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineSplitsMixedStyleRangesIntoSeparateShapingRequests --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphShapingSegmenterCoalescesAdjacentEquivalentStyleRuns --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphShapingSegmenterReportsClusterBoundaryViolationsWithoutSplittingCluster --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenMatchesRepoFixture --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphShapingRequestsGoldenMatchesRepoFixture --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphShapingRequestsGoldenPinsCasesAndNonClaims
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this slice proves bounded segmentation only. It does not claim
+complete fallback-policy behavior, full bidi visual ordering, UAX #14 line
+breaking, ellipsis insertion, hit testing, selection boxes, placeholder
+geometry layout, CPU oracle parity, Skia Paragraph parity, or GPU text support.
 ### PKT-10A: Glyph Strike-Key Preimage And Route Diagnostic Dumps
 
 Status: implemented and independently reviewed.

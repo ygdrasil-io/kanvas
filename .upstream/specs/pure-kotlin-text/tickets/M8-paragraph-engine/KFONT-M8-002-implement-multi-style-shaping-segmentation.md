@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M8-002"
 title: "Implement multi-style shaping segmentation"
-status: "proposed"
+status: "done"
 milestone: "M8"
 priority: "P0"
 owner_area: "paragraph"
@@ -69,11 +69,11 @@ interface ParagraphShapingSegmenter {
 
 ## Acceptance Criteria
 
-- [ ] Adjacent ranges with identical shaping-affecting style and typeface facts coalesce into one `ParagraphShapingRequest`.
-- [ ] A style boundary inside a grapheme cluster is refused or widened according to a documented cluster policy, with `text.paragraph.cluster-boundary-violation`.
-- [ ] Fallback segmentation preserves the original cluster order and records every attempted family/typeface for missing glyph ranges.
-- [ ] Placeholders are excluded from shaping requests and leave explicit placeholder tokens in the paragraph input trace.
-- [ ] Bidi/script/style/fallback splits are deterministic and dumpable for the same input, font catalog, and Unicode data version.
+- [x] Adjacent ranges with identical shaping-affecting style and typeface facts coalesce into one `ParagraphShapingRequest`.
+- [x] A style boundary inside a grapheme cluster is refused or widened according to a documented cluster policy, with `text.paragraph.cluster-boundary-violation`.
+- [x] Fallback segmentation preserves the original cluster order and records every attempted family/typeface for missing glyph ranges.
+- [x] Placeholders are excluded from shaping requests and leave explicit placeholder tokens in the paragraph input trace.
+- [x] Bidi/script/style/fallback splits are deterministic and dumpable for the same input, font catalog, and Unicode data version.
 
 ## Required Evidence
 
@@ -97,13 +97,16 @@ interface ParagraphShapingSegmenter {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test --tests '*ParagraphShaping*'
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineSplitsMixedStyleRangesIntoSeparateShapingRequests --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphShapingSegmenterCoalescesAdjacentEquivalentStyleRuns --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphShapingSegmenterReportsClusterBoundaryViolationsWithoutSplittingCluster --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenMatchesRepoFixture --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphShapingRequestsGoldenMatchesRepoFixture --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphShapingRequestsGoldenPinsCasesAndNonClaims
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 ```
 
 ## Status Notes
 
-- `proposed`: Depends on the paragraph style contract and the M6 shaping request boundary.
-- Move to `ready` only after cluster-boundary and fallback trace formats are reviewed.
+- `done`: bounded multi-style segmentation evidence now lands `ParagraphShapingRequest` planning, coalescing of adjacent shaping-equivalent ranges, placeholder exclusion, `text.paragraph.cluster-boundary-violation`, deterministic `paragraph-shaping-requests.json`, and `segmentRefs` in `paragraph-layout.json`.
+- This ticket records requested family/typeface segmentation facts only; complete fallback selection policy, native oracle parity, full bidi visual ordering, and downstream paragraph features remain explicit later-ticket gates.
 
 ## Linear Labels
 

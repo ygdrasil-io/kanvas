@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "dumpId": "paragraph-shaping-requests",
+  "ownerTickets": [
+    "KFONT-M8-002"
+  ],
+  "cases": [
+    {
+      "caseId": "mixed-style-placeholder-fallback-preference",
+      "text": "ab\ufffc\u0633\u0644",
+      "paragraphDirection": "rtl",
+      "requests": [
+        {
+          "textRange": "0..1",
+          "sourceStyleRange": "0..1",
+          "fontFamilies": ["Liberation Sans"],
+          "fallbackPreference": "prefer-declared-families",
+          "fontSize": 10.0,
+          "locale": "en-US",
+          "scriptHint": null,
+          "featureTags": ["kern"],
+          "variationAxes": [],
+          "paragraphDirection": "rtl"
+        },
+        {
+          "textRange": "3..4",
+          "sourceStyleRange": "3..4",
+          "fontFamilies": ["Missing Arabic", "Noto Naskh Arabic"],
+          "fallbackPreference": "prefer-declared-families",
+          "fontSize": 14.0,
+          "locale": "ar",
+          "scriptHint": "Arab",
+          "featureTags": [],
+          "variationAxes": ["wght"],
+          "paragraphDirection": "rtl"
+        }
+      ],
+      "placeholderRanges": ["2..2"],
+      "diagnostics": []
+    },
+    {
+      "caseId": "cluster-boundary-violation-combining-mark",
+      "text": "a\u0301",
+      "paragraphDirection": "auto",
+      "requests": [
+        {
+          "textRange": "0..1",
+          "sourceStyleRange": "0..0",
+          "fontFamilies": ["Liberation Sans"],
+          "fallbackPreference": "system-default",
+          "fontSize": 12.0,
+          "locale": null,
+          "scriptHint": null,
+          "featureTags": [],
+          "variationAxes": [],
+          "paragraphDirection": "auto"
+        }
+      ],
+      "placeholderRanges": [],
+      "diagnostics": [
+        {
+          "code": "text.paragraph.cluster-boundary-violation",
+          "message": "Style boundary intersects grapheme cluster 0..1; the bounded paragraph segmenter widens to the leading style range.",
+          "textRange": "0..1",
+          "severity": "diagnostic"
+        }
+      ]
+    }
+  ],
+  "negativeCases": [
+    "cluster-boundary-violation-combining-mark"
+  ],
+  "nonClaims": [
+    "no-complete-target-support-claim",
+    "no-complete-paragraph-layout-claim",
+    "no-complete-bidi-visual-ordering-claim",
+    "no-fallback-policy-claim",
+    "no-skia-paragraph-parity-claim"
+  ]
+}

@@ -38,8 +38,10 @@ import org.graphiks.kanvas.font.sfnt.OpenTypeKernCoverage
 import org.graphiks.kanvas.font.sfnt.OpenTypeKernFormat0Subtable
 import org.graphiks.kanvas.font.sfnt.OpenTypeKernPair
 import org.graphiks.kanvas.font.sfnt.OpenTypeKernTable
+import org.graphiks.kanvas.text.paragraph.BasicParagraphShapingSegmenter
 import org.graphiks.kanvas.text.paragraph.HitTestResult
 import org.graphiks.kanvas.text.paragraph.BasicParagraphLayoutEngine
+import org.graphiks.kanvas.text.paragraph.FallbackPreference
 import org.graphiks.kanvas.text.paragraph.LineBreaker
 import org.graphiks.kanvas.text.paragraph.LineLayout
 import org.graphiks.kanvas.text.paragraph.LineMetrics
@@ -51,6 +53,8 @@ import org.graphiks.kanvas.text.paragraph.ParagraphBuilder
 import org.graphiks.kanvas.text.paragraph.ParagraphLayoutDiagnostic
 import org.graphiks.kanvas.text.paragraph.ParagraphLayoutEngine
 import org.graphiks.kanvas.text.paragraph.ParagraphLayoutResult
+import org.graphiks.kanvas.text.paragraph.ParagraphShapingPlan
+import org.graphiks.kanvas.text.paragraph.ParagraphShapingRequest
 import org.graphiks.kanvas.text.paragraph.ParagraphStyle
 import org.graphiks.kanvas.text.paragraph.PlaceholderStyle
 import org.graphiks.kanvas.text.paragraph.SelectionRange
@@ -231,8 +235,8 @@ class TextStackSurfaceTest {
               },
               "layout": {"maxWidth": 50.0, "width": 50.0, "height": 20.0, "didOverflowWidth": false, "didOverflowHeight": false, "layoutRefused": false},
               "lines": [
-                {"index": 0, "textRange": "0..4", "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 50.0, "baseline": 8.0}, "boxes": [{"textRange": "0..4", "left": 0.0, "top": 0.0, "right": 50.0, "bottom": 10.0, "direction": 1}], "glyphRunCount": 1},
-                {"index": 1, "textRange": "6..6", "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 10.0, "baseline": 18.0}, "boxes": [{"textRange": "6..6", "left": 0.0, "top": 10.0, "right": 10.0, "bottom": 20.0, "direction": 1}], "glyphRunCount": 1}
+                {"index": 0, "textRange": "0..4", "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 50.0, "baseline": 8.0}, "boxes": [{"textRange": "0..4", "left": 0.0, "top": 0.0, "right": 50.0, "bottom": 10.0, "direction": 1}], "segmentRefs": ["0..4"], "glyphRunCount": 1},
+                {"index": 1, "textRange": "6..6", "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 10.0, "baseline": 18.0}, "boxes": [{"textRange": "6..6", "left": 0.0, "top": 10.0, "right": 10.0, "bottom": 20.0, "direction": 1}], "segmentRefs": ["6..6"], "glyphRunCount": 1}
               ],
               "diagnostics": []
             }
@@ -357,6 +361,179 @@ class TextStackSurfaceTest {
 
         assertEquals(listOf(0..0, 1..2, 3..3), result.lines.map { it.textRange })
         assertEquals(listOf(11, 600, 12), result.lines.flatMap { line -> line.glyphRuns.flatMap { it.glyphIds } })
+    }
+
+    @Test
+    fun basicParagraphLayoutEngineSplitsMixedStyleRangesIntoSeparateShapingRequests() {
+        val shapingEngine = RecordingShapingEngine()
+        val paragraph = ParagraphBuilder(
+            ParagraphStyle(textDirection = TextDirection.RIGHT_TO_LEFT),
+        ).append(
+            "ab",
+            TextStyle(
+                fontFamilies = listOf("Liberation Sans"),
+                fontSize = 10f,
+                locale = "en-US",
+                features = mapOf("kern" to 1),
+            ),
+        ).appendPlaceholder(
+            PlaceholderStyle(width = 12f, height = 8f),
+        ).append(
+            "\u0633\u0644",
+            TextStyle(
+                fontFamilies = listOf("Noto Naskh Arabic"),
+                fontSize = 14f,
+                locale = "ar",
+                scriptHint = "Arab",
+                variationCoordinates = mapOf("wght" to 550f),
+            ),
+        ).build()
+
+        val result = BasicParagraphLayoutEngine(shapingEngine).layout(paragraph, maxWidth = 200f)
+
+        assertEquals(
+            listOf(
+                ShapingRequest(
+                    text = "ab\uFFFC\u0633\u0644",
+                    textRange = 0..1,
+                    fontSize = 10f,
+                    features = FeatureSet(mapOf("kern" to 1)),
+                    locale = "en-US",
+                    paragraphDirection = -1,
+                    preferredFamilies = listOf("Liberation Sans"),
+                ),
+                ShapingRequest(
+                    text = "ab\uFFFC\u0633\u0644",
+                    textRange = 3..4,
+                    fontSize = 14f,
+                    features = FeatureSet(),
+                    locale = "ar",
+                    paragraphDirection = -1,
+                    preferredFamilies = listOf("Noto Naskh Arabic"),
+                ),
+            ),
+            shapingEngine.requests,
+        )
+        assertEquals(2, result.lines.single().glyphRuns.size)
+    }
+
+    @Test
+    fun basicParagraphShapingSegmenterCoalescesAdjacentEquivalentStyleRuns() {
+        val style = TextStyle(
+            fontFamilies = listOf("Liberation Sans"),
+            fallbackPreference = FallbackPreference.PREFER_DECLARED_FAMILIES,
+            fontSize = 12f,
+            locale = "en-US",
+            features = mapOf("kern" to 1),
+            variationCoordinates = mapOf("wght" to 500f),
+        )
+        val paragraph = ParagraphBuilder()
+            .append("ab", style)
+            .append("cd", style.copy())
+            .build()
+
+        val plan = BasicParagraphShapingSegmenter().segment(paragraph, paragraph.text.indices)
+
+        assertEquals(
+            listOf(
+                ParagraphShapingRequest(
+                    textRange = 0..3,
+                    sourceStyleRange = 0..3,
+                    fontFamilies = listOf("Liberation Sans"),
+                    fallbackPreference = FallbackPreference.PREFER_DECLARED_FAMILIES,
+                    fontSize = 12f,
+                    locale = "en-US",
+                    features = mapOf("kern" to 1),
+                    variationCoordinates = mapOf("wght" to 500f),
+                ),
+            ),
+            plan.requests,
+        )
+    }
+
+    @Test
+    fun basicParagraphShapingSegmenterReportsClusterBoundaryViolationsWithoutSplittingCluster() {
+        val paragraph = ParagraphBuilder()
+            .append(
+                "a",
+                TextStyle(
+                    fontFamilies = listOf("Liberation Sans"),
+                    fontSize = 12f,
+                ),
+            ).append(
+                "\u0301",
+                TextStyle(
+                    fontFamilies = listOf("Noto Sans"),
+                    fontSize = 12f,
+                ),
+            ).build()
+
+        val plan = BasicParagraphShapingSegmenter().segment(paragraph, paragraph.text.indices)
+
+        assertEquals(listOf(0..1), plan.requests.map { it.textRange })
+        assertEquals(listOf(0..0), plan.requests.map { it.sourceStyleRange })
+        assertEquals(listOf("Liberation Sans"), plan.requests.single().fontFamilies)
+        assertEquals(
+            listOf("text.paragraph.cluster-boundary-violation"),
+            plan.diagnostics.map { it.code },
+        )
+        assertEquals(0..1, plan.diagnostics.single().textRange)
+    }
+
+    @Test
+    fun paragraphLayoutGoldenMatchesRepoFixture() {
+        val expected = Files.readString(projectRoot().resolve("reports/font/fixtures/expected/paragraph/paragraph-layout.json"))
+
+        assertEquals(expected, paragraphLayoutFixtureDump())
+    }
+
+    @Test
+    fun paragraphShapingRequestsGoldenMatchesRepoFixture() {
+        val expected = Files.readString(projectRoot().resolve("reports/font/fixtures/expected/paragraph/paragraph-shaping-requests.json"))
+
+        assertEquals(expected, paragraphShapingRequestsFixtureDump())
+    }
+
+    @Test
+    fun paragraphShapingRequestsGoldenPinsCasesAndNonClaims() {
+        val dump = readJsonProjectFile(
+            "reports/font/fixtures/expected/paragraph/paragraph-shaping-requests.json",
+        )
+        val cases = dump.requiredObjectList("cases")
+
+        assertEquals(1L, dump["schemaVersion"])
+        assertEquals("paragraph-shaping-requests", dump.requiredString("dumpId"))
+        assertEquals(listOf("KFONT-M8-002"), dump.requiredStringList("ownerTickets"))
+        assertEquals(
+            listOf(
+                "mixed-style-placeholder-fallback-preference",
+                "cluster-boundary-violation-combining-mark",
+            ),
+            cases.map { it.requiredString("caseId") },
+        )
+        assertEquals("rtl", cases[0].requiredString("paragraphDirection"))
+        assertEquals(listOf("2..2"), cases[0].requiredStringList("placeholderRanges"))
+        assertEquals(listOf("Missing Arabic", "Noto Naskh Arabic"), cases[0].requiredObjectList("requests")[1].requiredStringList("fontFamilies"))
+        assertEquals(listOf("wght"), cases[0].requiredObjectList("requests")[1].requiredStringList("variationAxes"))
+        assertEquals(
+            listOf("text.paragraph.cluster-boundary-violation"),
+            cases[1].requiredObjectList("diagnostics").map { it.requiredString("code") },
+        )
+        assertEquals(
+            listOf("cluster-boundary-violation-combining-mark"),
+            dump.requiredStringList("negativeCases"),
+        )
+        assertEquals(
+            listOf(
+                "no-complete-target-support-claim",
+                "no-complete-paragraph-layout-claim",
+                "no-complete-bidi-visual-ordering-claim",
+                "no-fallback-policy-claim",
+                "no-skia-paragraph-parity-claim",
+            ),
+            dump.requiredStringList("nonClaims"),
+        )
+        assertNoSupportPromotionClaims(dump)
     }
 
     @Test
@@ -1662,6 +1839,203 @@ class TextStackSurfaceTest {
         }
     }
 
+    private fun paragraphLayoutFixtureDump(): String {
+        val paragraph = ParagraphBuilder(
+            ParagraphStyle(textDirection = TextDirection.RIGHT_TO_LEFT),
+        ).append(
+            "ab",
+            TextStyle(
+                fontFamilies = listOf("Liberation Sans"),
+                fontSize = 10f,
+                locale = "en-US",
+                features = mapOf("kern" to 1),
+            ),
+        ).appendPlaceholder(
+            PlaceholderStyle(width = 12f, height = 8f),
+        ).append(
+            "\u0633\u0644",
+            TextStyle(
+                fontFamilies = listOf("Missing Arabic", "Noto Naskh Arabic"),
+                fallbackPreference = FallbackPreference.PREFER_DECLARED_FAMILIES,
+                fontSize = 14f,
+                locale = "ar",
+                scriptHint = "Arab",
+                variationCoordinates = mapOf("wght" to 550f),
+            ),
+        ).build()
+
+        return BasicParagraphLayoutEngine(RecordingShapingEngine()).layout(paragraph, maxWidth = 200f).dump()
+    }
+
+    private fun paragraphShapingRequestsFixtureDump(): String {
+        val mixedStyleParagraph = ParagraphBuilder(
+            ParagraphStyle(textDirection = TextDirection.RIGHT_TO_LEFT),
+        ).append(
+            "ab",
+            TextStyle(
+                fontFamilies = listOf("Liberation Sans"),
+                fallbackPreference = FallbackPreference.PREFER_DECLARED_FAMILIES,
+                fontSize = 10f,
+                locale = "en-US",
+                features = mapOf("kern" to 1),
+            ),
+        ).appendPlaceholder(
+            PlaceholderStyle(width = 12f, height = 8f),
+        ).append(
+            "\u0633\u0644",
+            TextStyle(
+                fontFamilies = listOf("Missing Arabic", "Noto Naskh Arabic"),
+                fallbackPreference = FallbackPreference.PREFER_DECLARED_FAMILIES,
+                fontSize = 14f,
+                locale = "ar",
+                scriptHint = "Arab",
+                variationCoordinates = mapOf("wght" to 550f),
+            ),
+        ).build()
+        val clusterBoundaryParagraph = ParagraphBuilder()
+            .append(
+                "a",
+                TextStyle(
+                    fontFamilies = listOf("Liberation Sans"),
+                    fontSize = 12f,
+                ),
+            ).append(
+                "\u0301",
+                TextStyle(
+                    fontFamilies = listOf("Noto Sans"),
+                    fontSize = 12f,
+                ),
+            ).build()
+        val segmenter = BasicParagraphShapingSegmenter()
+        val cases = listOf(
+            segmenter.segment(mixedStyleParagraph, mixedStyleParagraph.text.indices).toFixtureCaseJson(
+                caseId = "mixed-style-placeholder-fallback-preference",
+                paragraphText = mixedStyleParagraph.text,
+                paragraphDirection = mixedStyleParagraph.paragraphStyle.textDirection,
+            ),
+            segmenter.segment(clusterBoundaryParagraph, clusterBoundaryParagraph.text.indices).toFixtureCaseJson(
+                caseId = "cluster-boundary-violation-combining-mark",
+                paragraphText = clusterBoundaryParagraph.text,
+                paragraphDirection = clusterBoundaryParagraph.paragraphStyle.textDirection,
+            ),
+        )
+
+        return buildString {
+            append("{\n")
+            append("  \"schemaVersion\": 1,\n")
+            append("  \"dumpId\": \"paragraph-shaping-requests\",\n")
+            append("  \"ownerTickets\": [\n")
+            append("    \"KFONT-M8-002\"\n")
+            append("  ],\n")
+            append("  \"cases\": [\n")
+            append(cases.joinToString(",\n") { caseJson -> caseJson.prependIndent("    ") })
+            append("\n  ],\n")
+            append("  \"negativeCases\": [\n")
+            append("    \"cluster-boundary-violation-combining-mark\"\n")
+            append("  ],\n")
+            append("  \"nonClaims\": [\n")
+            append("    \"no-complete-target-support-claim\",\n")
+            append("    \"no-complete-paragraph-layout-claim\",\n")
+            append("    \"no-complete-bidi-visual-ordering-claim\",\n")
+            append("    \"no-fallback-policy-claim\",\n")
+            append("    \"no-skia-paragraph-parity-claim\"\n")
+            append("  ]\n")
+            append("}\n")
+        }
+    }
+
+    private fun ParagraphShapingPlan.toFixtureCaseJson(
+        caseId: String,
+        paragraphText: String,
+        paragraphDirection: TextDirection,
+    ): String = buildString {
+        val requestArray = requests.joinToString(",\n") { request -> request.toFixtureJson().prependIndent("    ") }
+        val diagnosticsArray = diagnostics.joinToString(",\n") { diagnostic -> diagnostic.toFixtureJson().prependIndent("    ") }
+        append("{\n")
+        append("  \"caseId\": ").append(jsonString(caseId)).append(",\n")
+        append("  \"text\": ").append(jsonString(paragraphText)).append(",\n")
+        append("  \"paragraphDirection\": ").append(jsonString(paragraphDirection.fixtureLabel())).append(",\n")
+        append("  \"requests\": [\n")
+        append(requestArray)
+        append("\n  ],\n")
+        append("  \"placeholderRanges\": ").append(placeholderRanges.joinToString(prefix = "[", postfix = "]") { range -> jsonString(range.toFixtureLabel()) }).append(",\n")
+        append("  \"diagnostics\": ")
+        if (diagnosticsArray.isEmpty()) {
+            append("[]\n")
+        } else {
+            append("[\n")
+            append(diagnosticsArray)
+            append("\n  ]\n")
+        }
+        append("}")
+    }
+
+    private fun ParagraphShapingRequest.toFixtureJson(): String = buildString {
+        append("{\n")
+        append("  \"textRange\": ").append(jsonString(textRange.toFixtureLabel())).append(",\n")
+        append("  \"sourceStyleRange\": ").append(jsonString(sourceStyleRange.toFixtureLabel())).append(",\n")
+        append("  \"fontFamilies\": ").append(fontFamilies.joinToString(prefix = "[", postfix = "]") { family -> jsonString(family) }).append(",\n")
+        append("  \"fallbackPreference\": ").append(jsonString(fallbackPreference.fixtureLabel())).append(",\n")
+        append("  \"fontSize\": ").append(jsonFloat(fontSize)).append(",\n")
+        append("  \"locale\": ").append(locale?.let(::jsonString) ?: "null").append(",\n")
+        append("  \"scriptHint\": ").append(scriptHint?.let(::jsonString) ?: "null").append(",\n")
+        append("  \"featureTags\": ").append(features.keys.sorted().joinToString(prefix = "[", postfix = "]") { tag -> jsonString(tag) }).append(",\n")
+        append("  \"variationAxes\": ").append(variationCoordinates.keys.sorted().joinToString(prefix = "[", postfix = "]") { axis -> jsonString(axis) }).append(",\n")
+        append("  \"paragraphDirection\": ").append(jsonString(paragraphDirection.fixtureLabel())).append("\n")
+        append("}")
+    }
+
+    private fun ParagraphLayoutDiagnostic.toFixtureJson(): String = buildString {
+        append("{\n")
+        append("  \"code\": ").append(jsonString(code)).append(",\n")
+        append("  \"message\": ").append(jsonString(message)).append(",\n")
+        append("  \"textRange\": ").append(textRange?.let { range -> jsonString(range.toFixtureLabel()) } ?: "null").append(",\n")
+        append("  \"severity\": ").append(jsonString(severity)).append("\n")
+        append("}")
+    }
+
+    private fun TextDirection.fixtureLabel(): String =
+        when (this) {
+            TextDirection.AUTO -> "auto"
+            TextDirection.LEFT_TO_RIGHT -> "ltr"
+            TextDirection.RIGHT_TO_LEFT -> "rtl"
+        }
+
+    private fun FallbackPreference.fixtureLabel(): String =
+        when (this) {
+            FallbackPreference.SYSTEM_DEFAULT -> "system-default"
+            FallbackPreference.PREFER_DECLARED_FAMILIES -> "prefer-declared-families"
+            FallbackPreference.PREFER_EXACT_TYPEFACE -> "prefer-exact-typeface"
+        }
+
+    private fun IntRange.toFixtureLabel(): String = "$first..$last"
+
+    private fun jsonString(value: String): String =
+        buildString {
+            append('"')
+            value.forEach { char ->
+                when (char) {
+                    '\\' -> append("\\\\")
+                    '"' -> append("\\\"")
+                    '\b' -> append("\\b")
+                    '\u000C' -> append("\\f")
+                    '\n' -> append("\\n")
+                    '\r' -> append("\\r")
+                    '\t' -> append("\\t")
+                    else -> if (char.code !in 0x20..0x7E) {
+                        append("\\u")
+                        append(char.code.toString(16).padStart(4, '0'))
+                    } else {
+                        append(char)
+                    }
+                }
+            }
+            append('"')
+        }
+
+    private fun jsonFloat(value: Float): String =
+        if (value.isFinite()) value.toString() else error("Expected finite float fixture value: $value")
+
     private class RecordingFontResolver(
         private val runs: List<ResolvedFontRun>,
     ) : FontResolver {
@@ -1886,12 +2260,22 @@ class TextStackSurfaceTest {
                 else -> error("Unsupported JSON escape \\$escaped at offset ${index - 1}")
             }
 
-        private fun parseNumber(): Long {
+        private fun parseNumber(): Number {
             val start = index
             if (peek() == '-') index += 1
             while (peekOrNull()?.isDigit() == true) index += 1
+            if (peekOrNull() == '.') {
+                index += 1
+                while (peekOrNull()?.isDigit() == true) index += 1
+            }
+            if (peekOrNull() == 'e' || peekOrNull() == 'E') {
+                index += 1
+                if (peekOrNull() == '+' || peekOrNull() == '-') index += 1
+                while (peekOrNull()?.isDigit() == true) index += 1
+            }
             require(start < index) { "Expected JSON value at offset $index" }
-            return source.substring(start, index).toLong()
+            val token = source.substring(start, index)
+            return if ('.' in token || 'e' in token || 'E' in token) token.toDouble() else token.toLong()
         }
 
         private fun parseLiteral(token: String, value: Any?): Any? {

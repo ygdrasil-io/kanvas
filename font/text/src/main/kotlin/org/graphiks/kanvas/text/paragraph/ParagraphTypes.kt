@@ -381,6 +381,7 @@ public interface ParagraphLayoutEngine {
 public class BasicParagraphLayoutEngine(
     private val shapingEngine: OpenTypeShapingEngine,
     private val lineBreaker: LineBreaker = SimpleLineBreaker(),
+    private val paragraphShapingSegmenter: ParagraphShapingSegmenter = BasicParagraphShapingSegmenter(),
 ) : ParagraphLayoutEngine {
     /**
      * Lays out [paragraph] into shaped lines within finite, non-negative [maxWidth] logical pixels.
@@ -435,20 +436,18 @@ public class BasicParagraphLayoutEngine(
         var paragraphWidth = 0f
         val lines = visibleRanges.map { textRange ->
             val style = paragraph.primaryStyleFor(textRange)
-            val shapingResult = shapingEngine.shape(
-                ShapingRequest(
-                    text = paragraph.text,
-                    textRange = textRange,
-                    typefaceId = style.typefaceId,
-                    fontSize = style.fontSize,
-                    features = FeatureSet(style.features),
-                    locale = style.locale,
-                    paragraphDirection = paragraph.paragraphStyle.textDirection.legacyValue,
-                ),
-            )
-            val glyphRuns = shapingResult.glyphRuns
-            diagnostics += shapingResult.diagnostics.map { diagnostic -> diagnostic.toParagraphLayoutDiagnostic() }
-            val lineWidth = glyphRuns.sumOf { it.advanceX.toDouble() }.toFloat()
+            val shapingPlan = paragraphShapingSegmenter.segment(paragraph, textRange)
+            diagnostics += shapingPlan.diagnostics
+            val glyphRuns = mutableListOf<ShapedGlyphRun>()
+            shapingPlan.requests.forEach { request ->
+                val shapingResult = shapingEngine.shape(request.toShapingRequest(paragraph.text))
+                glyphRuns += shapingResult.glyphRuns
+                diagnostics += shapingResult.diagnostics.map { diagnostic -> diagnostic.toParagraphLayoutDiagnostic() }
+            }
+            val lineWidth = glyphRuns.sumOf { it.advanceX.toDouble() }.toFloat() +
+                shapingPlan.placeholderRanges.sumOf { placeholderRange ->
+                    paragraph.placeholderWidthAt(placeholderRange.first).toDouble()
+                }.toFloat()
             val lineHeight = paragraph.paragraphStyle.lineHeight ?: style.fontSize
             val ascent = -style.fontSize * ASCENT_FRACTION
             val descent = style.fontSize * DESCENT_FRACTION
@@ -482,6 +481,7 @@ public class BasicParagraphLayoutEngine(
                 glyphRuns = glyphRuns,
                 metrics = metrics,
                 boxes = boxes,
+                segmentRefs = shapingPlan.requests.map { request -> request.textRange.toDumpLabel() },
             )
         }
 
@@ -684,6 +684,7 @@ public data class LineLayout(
     public val glyphRuns: List<ShapedGlyphRun> = emptyList(),
     public val metrics: LineMetrics = LineMetrics(),
     public val boxes: List<TextBox> = emptyList(),
+    public val segmentRefs: List<String> = emptyList(),
 )
 
 /**
@@ -1065,6 +1066,8 @@ private fun LineLayout.toDumpJson(index: Int): String = buildString {
         .append(metrics.toDumpJson())
         .append(", \"boxes\": ")
         .append(boxes.joinToString(prefix = "[", postfix = "]") { box -> box.toDumpJson() })
+        .append(", \"segmentRefs\": ")
+        .append(segmentRefs.joinToString(prefix = "[", postfix = "]") { segmentRef -> paragraphJsonString(segmentRef) })
         .append(", \"glyphRunCount\": ")
         .append(glyphRuns.size)
         .append("}")
@@ -1303,6 +1306,9 @@ private fun Paragraph.styleAt(index: Int): TextStyle =
 
 private fun Paragraph.estimatedWidthAt(index: Int): Float =
     placeholders.entries.firstOrNull { (range) -> index in range }?.value?.width ?: styleAt(index).fontSize
+
+private fun Paragraph.placeholderWidthAt(index: Int): Float =
+    placeholders.entries.firstOrNull { (range) -> index in range }?.value?.width ?: 0f
 
 private fun Paragraph.estimatedWidth(range: IntRange): Float =
     placeholders.entries.firstOrNull { (placeholderRange) -> placeholderRange.overlaps(range) }?.value?.width
