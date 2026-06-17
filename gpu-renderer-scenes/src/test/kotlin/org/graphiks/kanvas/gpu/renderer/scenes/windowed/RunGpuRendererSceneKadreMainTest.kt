@@ -222,9 +222,10 @@ class RunGpuRendererSceneKadreMainTest {
                     assertContains(sessionJson, "releaseBlocking=false")
                     assertContains(sessionJson, "productRouteActivated=false")
                     assertContains(sessionJson, "performanceReadinessPromoted=false")
-                    assertContains(sessionJson, "missingGate=KGPU-M9-002")
+                    assertContains(sessionJson, "missingGate=none")
                     assertContains(sessionJson, "reportingOnlyGatesVisible=true")
-                    assertContains(sessionJson, "pipelinePmBundleUpdated=false")
+                    assertContains(sessionJson, "pipelinePmBundleUpdated=true")
+                    assertContains(sessionJson, "pmManifestKey=gpuRendererM9ReadinessPmEvidence")
                     assertContains(sessionJson, "nonClaims=no-product-activation,no-release-blocking-gate,no-readiness-delta,no-performance-readiness-from-correctness,no-dashboard-row-promotes-readiness,no-derived-cache-as-observed")
                 } else if (sceneId == "legacy-retirement-blocker-board") {
                     assertContains(sessionJson, "legacyRetirementRow=gpu-renderer.legacy-retirement")
