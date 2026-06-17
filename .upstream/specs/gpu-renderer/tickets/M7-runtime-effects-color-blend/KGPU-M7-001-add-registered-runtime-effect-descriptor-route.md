@@ -1,7 +1,7 @@
 ---
 id: KGPU-M7-001
 title: "Add registered runtime-effect descriptor route"
-status: review
+status: done
 milestone: M7
 priority: P0
 owner_area: runtime-effects
@@ -83,17 +83,20 @@ rtk git diff --check
 
 ## Status Notes
 
-- `review`: Descriptor-backed only. This branch adds contract-gate evidence for
-  a registered `runtime.simple.color` material descriptor with descriptor
-  ID/version, uniform schema and packing, canonical 64-hex `sha256:` CPU oracle
-  hash, parser-validated wgsl4k reflection linkage, material route dump,
-  material-key boundary proof, and stable refusals for unregistered descriptors,
-  descriptor collisions, dynamic SkSL source, wrong placement, missing explicit
-  placement opt-in, WGSL reflection/schema/descriptor mismatch, and missing or
-  non-canonical CPU oracle evidence. The ticket remains in review pending
-  independent acceptance; adapter-backed execution, readback evidence, product
+- `done`: Independent review accepted the descriptor-route contract evidence
+  on 2026-06-17 with no blocking findings. The gate is descriptor-backed only:
+  it records a registered `runtime.simple.color` material descriptor with
+  descriptor ID/version, uniform schema and packing, canonical 64-hex
+  `sha256:` CPU oracle hash, parser-validated wgsl4k reflection linkage,
+  material route dump, material-key boundary proof, and stable refusals for
+  unregistered descriptors, descriptor collisions, dynamic SkSL source, wrong
+  placement, missing explicit placement opt-in, WGSL
+  reflection/schema/descriptor mismatch, and missing or non-canonical CPU
+  oracle evidence. Adapter-backed execution, readback evidence, product
   activation, arbitrary SkSL/WGSL input, children, blenders, filters, and live
   editing remain unpromoted.
+- Evidence: `RegisteredRuntimeEffectRouteTest` plus
+  `reports/gpu-renderer/2026-06-17-m7-001-runtime-effect-descriptor-gate.md`.
 - wgsl4k dependency evolution is tracked by `.upstream/specs/wgsl4k-evolution/`.
 - 2026-06-15 re-evaluation: merged wgsl4k SHA
   `72a35b58758f241756d984a84768ae77308730da` produced Kanvas dependency
