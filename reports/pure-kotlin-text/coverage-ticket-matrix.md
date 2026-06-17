@@ -590,7 +590,7 @@ support.
 
 ### KFONT-M7-001: Add bundled deterministic font catalog
 
-Status: implemented as a bounded review slice.
+Status: done; implemented and freshly revalidated for closeout.
 
 Files:
 
@@ -701,9 +701,10 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 rtk git diff --check
 ```
 
-Remaining gate: this is bounded fallback-trace evidence only. It does not yet
-add variable-axis-aware fallback, cluster-safe fallback segmentation,
-host-dependent system scan facts, CPU oracle promotion, or any GPU text-route
+Remaining gate: no ticket-local gate remains. Broader fallback promotion is
+owned by `KFONT-M7-003`, `KFONT-M7-004`, and `KFONT-M7-005`; this slice stays
+bounded fallback-trace evidence only and does not add CPU oracle promotion,
+cluster-safe segmentation, platform fallback claims, or any GPU text-route
 claim.
 ### PKT-03A: SFNT/OpenType Face Evidence Dumps
 

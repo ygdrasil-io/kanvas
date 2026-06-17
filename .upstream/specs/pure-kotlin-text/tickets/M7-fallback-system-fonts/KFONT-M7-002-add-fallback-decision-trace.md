@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M7-002"
 title: "Add fallback decision trace"
-status: "review"
+status: "done"
 milestone: "M7"
 priority: "P0"
 owner_area: "fallback"
@@ -114,7 +114,7 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 
 - `proposed`: Decision trace builds on the bundled catalog and M6 shaping contract.
 - Move to `ready` only after scoring fields and dump schemas are reviewed.
-- `review`: `fallback-decision-trace.json`, `resolved-font-runs.json`, `fallback-shaped-glyph-run.json`, and the dedicated per-fixture fallback assets now cover deterministic generic-family, script, locale, emoji, missing-glyph, and family-unavailable cases with stable candidate reasons, complete-miss cluster ranges, refusal `diagnosticRanges`, and shaping-linked `decisionTraceRef`/`resolvedRunsRef`/`fixtureAssetRef` facts, but variable-axis-aware fallback, cluster-safe segmentation, host-dependent system scan facts, CPU oracle promotion, and broader fallback promotion gates remain open before `done`.
+- `done`: `fallback-decision-trace.json`, `resolved-font-runs.json`, `fallback-shaped-glyph-run.json`, and the dedicated per-fixture fallback assets now cover deterministic generic-family, script, locale, emoji, missing-glyph, and family-unavailable cases with stable candidate reasons, complete-miss cluster ranges, refusal `diagnosticRanges`, and shaping-linked `decisionTraceRef`/`resolvedRunsRef`/`fixtureAssetRef` facts. Broader fallback promotion remains owned by `KFONT-M7-003`, `KFONT-M7-004`, and `KFONT-M7-005`; this ticket stays bounded fallback-trace evidence only and does not promote cluster-safe, platform, renderer, or GPU fallback claims.
 
 ## Linear Labels
 

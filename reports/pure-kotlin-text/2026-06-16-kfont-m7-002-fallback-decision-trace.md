@@ -63,7 +63,8 @@ rtk git diff --check
 
 ## Remaining gate
 
-This slice keeps `KFONT-M7-002` in `review`, not `done`. The current evidence
-does not yet add variable-axis-aware fallback, cluster-safe fallback
-segmentation, host-dependent system scan facts, CPU oracle promotion, or any
-GPU text-route claim.
+No ticket-local gate remains for `KFONT-M7-002`. Broader fallback promotion is
+owned by `KFONT-M7-003`, `KFONT-M7-004`, and `KFONT-M7-005`. This slice stays
+bounded fallback-trace evidence only and does not add CPU oracle promotion,
+cluster-safe segmentation, platform fallback claims, or any GPU text-route
+claim.
