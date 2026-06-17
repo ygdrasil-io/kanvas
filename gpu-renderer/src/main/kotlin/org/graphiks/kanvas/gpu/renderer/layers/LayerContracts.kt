@@ -1,6 +1,9 @@
 package org.graphiks.kanvas.gpu.renderer.layers
 
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceReference
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationPreimagePlan
 
 /** Layer scope identity. */
 @JvmInline
@@ -279,6 +282,59 @@ data class GPUSaveLayerIsolatedTargetGatePlan(
     }
 }
 
+/**
+ * Derives isolated-target materialization preimage from saveLayer gate evidence.
+ *
+ * The result names the layer target texture descriptor and lifetime facts only.
+ * It does not allocate an offscreen texture, render child commands, composite
+ * the layer, or activate saveLayer product routing.
+ */
+fun GPUSaveLayerIsolatedTargetGatePlan.toIsolatedTargetMaterializationPreimage(): GPUResourceMaterializationPreimagePlan {
+    val planLabel = "savelayer:${layerPlan.saveRecord.scopeId.value.toMaterializationPreimageLabel()}"
+    val refusal = diagnostics.firstOrNull { diagnostic -> diagnostic.terminal }?.code
+    if (refusal != null || routeKind == "RefuseDiagnostic") {
+        return GPUResourceMaterializationPreimagePlan(
+            planLabel = planLabel,
+            sourceGate = SAVE_LAYER_EVIDENCE_ROW,
+            accepted = false,
+            resources = emptyList(),
+            refusalCode = refusal ?: "unsupported.layer.materialization_preimage",
+        )
+    }
+
+    val execution = layerPlan.execution as? GPULayerExecutionPlan.IsolatedTarget
+        ?: return GPUResourceMaterializationPreimagePlan(
+            planLabel = planLabel,
+            sourceGate = SAVE_LAYER_EVIDENCE_ROW,
+            accepted = false,
+            resources = emptyList(),
+            refusalCode = "unsupported.layer.materialization_preimage_route",
+        )
+    val target = execution.target
+    val generation = target.generationLabel.removePrefix(TARGET_GENERATION_PREFIX).toLongOrNull() ?: 0L
+
+    return GPUResourceMaterializationPreimagePlan(
+        planLabel = planLabel,
+        sourceGate = SAVE_LAYER_EVIDENCE_ROW,
+        accepted = true,
+        resources = listOf(
+            GPUMaterializedResourceReference(
+                label = target.targetLabel,
+                role = GPUMaterializedResourceRole.LayerTargetTexture,
+                descriptorHash = target.targetDescriptorHash,
+                generation = generation,
+                lifetimeClass = target.lifetimeClass,
+                usageLabels = target.usageLabels,
+                evidenceFacts = mapOf(
+                    "load" to target.loadOp,
+                    "owner" to target.ownerLabel,
+                    "store" to target.storeOp,
+                ),
+            ),
+        ),
+    )
+}
+
 /** Planner for the contract-only saveLayer isolated target route gate. */
 class GPUSaveLayerIsolatedTargetPlanner {
     /** Plans a contract-only saveLayer isolated target route or a stable refusal. */
@@ -487,6 +543,9 @@ private fun targetDescriptorHash(
         "origin=${request.bounds.originX},${request.bounds.originY}",
     ),
 )
+
+private fun String.toMaterializationPreimageLabel(): String =
+    replace(Regex("[^A-Za-z0-9]+"), "-").trim('-').ifBlank { "unknown" }
 
 private fun stableHash(parts: List<String>): String {
     val digest = MessageDigest.getInstance("SHA-256")
