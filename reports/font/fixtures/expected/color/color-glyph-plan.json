@@ -1,0 +1,15 @@
+{
+  "schema": "org.graphiks.kanvas.glyph.color.ColorGlyphPlan.v1",
+  "glyphId": 100,
+  "typefaceId": "550e8400-e29b-41d4-a716-446655440401",
+  "artifactKey": {"glyphId": 100, "route": "text.glyph.color.COLR", "strikeKeySha256": "5839cf383058d1e999f929c96a12c9cb0ded2f32b2c247db0735c82cf07b64ec"},
+  "palette": {"identity": "brand-alt", "selectionIndex": 1, "resolvedIndex": 1, "overrideCount": 1, "colorCount": 2},
+  "layers": [
+    {"layerIndex": 0, "glyphId": 11, "paletteIndex": 0, "resolvedColorArgb": "#CC99AABB", "usesForegroundColor": false, "outlineArtifactKey": {"glyphId": 11, "route": "text.glyph.outline", "strikeKeySha256": "6635ce8aace1d8da5644518db335a74f6183a59fdb194d3059f26e03d21efd45"}, "bounds": {"xMin": 0, "yMin": -2, "xMax": 6, "yMax": 8}},
+    {"layerIndex": 1, "glyphId": 12, "paletteIndex": 1, "resolvedColorArgb": "#FFFF0000", "usesForegroundColor": false, "outlineArtifactKey": {"glyphId": 12, "route": "text.glyph.outline", "strikeKeySha256": "abc5d141e5acd23a17b6eeba24b4c67fd5dd86bce39f000c1b94166cd11b57a8"}, "bounds": {"xMin": 4, "yMin": -1, "xMax": 10, "yMax": 9}}
+  ],
+  "bounds": {"xMin": 0, "yMin": -2, "xMax": 10, "yMax": 9},
+  "fallbackPolicy": "allow-monochrome-outline-fallback",
+  "diagnostics": [],
+  "dumpSha256": "e85e5accfa8dde5905e8a836537d7ec3a00c860ec057b3a6004825212e714004"
+}
