@@ -590,7 +590,7 @@ support.
 
 ### KFONT-M7-001: Add bundled deterministic font catalog
 
-Status: implemented as a bounded review slice.
+Status: done; implemented and freshly revalidated for closeout.
 
 Files:
 
@@ -727,11 +727,12 @@ Validation:
 rtk ./gradlew --no-daemon :font:text:test --tests '*SystemFontScan*'
 ```
 
-Remaining gate: this is non-normative host-scan review evidence only. It does
-not decide whether the linked examples must be folded into the main bundled
-catalog/shared fallback dumps, does not broaden beyond the bounded generated
-fixture directory, and does not promote any platform-font, normative fallback,
-CPU oracle, or GPU text-route claim.
+Remaining gate: no ticket-local gate remains. The reviewed product decision on
+whether the linked examples should be folded into the main bundled
+catalog/shared fallback dumps stays explicit downstream scope, broader
+scan-root expansion still requires reviewed provenance, and this slice does not
+promote any platform-font, normative fallback, CPU oracle, or GPU text-route
+claim.
 ### PKT-03A: SFNT/OpenType Face Evidence Dumps
 
 Status: implemented and independently reviewed.

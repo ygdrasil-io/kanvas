@@ -48,6 +48,34 @@ class SystemFontScanTest {
         assertTrue(bundle.systemFontScanJson.indexOf("duplicate.ttf") < bundle.systemFontScanJson.indexOf("valid.ttf"))
     }
 
+    @Test
+    fun `host dependent system scan ticket is closed while broader fallback decisions stay explicit`() {
+        val root = projectRoot()
+        val ticket = Files.readString(
+            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/KFONT-M7-005-add-host-dependent-system-scan-diagnostics.md"),
+        )
+        val milestoneReadme = Files.readString(
+            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/README.md"),
+        )
+        val statusSummary = Files.readString(
+            root.resolve(".upstream/specs/pure-kotlin-text/tickets/STATUS.md"),
+        )
+        val ticketReport = Files.readString(
+            root.resolve("reports/pure-kotlin-text/2026-06-17-kfont-m7-005-host-dependent-system-scan.md"),
+        )
+
+        assertContains(ticket, """status: "done"""")
+        assertContains(ticket, "host-dependent links should be folded")
+        assertFalse(ticket.contains("Remaining gate before `done`"))
+        assertContains(
+            milestoneReadme,
+            "| [KFONT-M7-005 - Add host-dependent system scan diagnostics](KFONT-M7-005-add-host-dependent-system-scan-diagnostics.md) | `done` |",
+        )
+        assertContains(statusSummary, "| M7 | 2 | 0 | 0 | 0 | 2 | 1 |")
+        assertContains(ticketReport, "No ticket-local gate remains")
+        assertContains(ticketReport, "reviewed product decision")
+    }
+
     private fun projectRoot(): Path {
         var current = Path.of("").toAbsolutePath().normalize()
         while (current.parent != null && !Files.isDirectory(current.resolve("reports/pure-kotlin-text"))) {

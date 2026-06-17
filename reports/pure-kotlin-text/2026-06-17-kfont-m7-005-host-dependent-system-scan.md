@@ -37,8 +37,10 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*SystemFontScan*'
 
 ## Remaining gate
 
-This remains bounded host-dependent review evidence only. It does not promote
-normative system-font support, bundled-catalog support, platform fallback
-parity, native font APIs, CPU oracle fallback validation, or a decision that
-the main `font-catalog.json` / shared fallback dumps must absorb these linked
-examples.
+No ticket-local gate remains for `KFONT-M7-005`. The reviewed product decision
+about whether the main `font-catalog.json` / shared fallback dumps should
+absorb these linked host-dependent examples remains explicit downstream scope,
+and any broader scan-root expansion still requires reviewed provenance. This
+slice does not promote normative system-font support, bundled-catalog support,
+platform fallback parity, native font APIs, CPU oracle fallback validation, or
+any GPU text-route claim.
