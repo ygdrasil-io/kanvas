@@ -8,7 +8,7 @@ Ticket: `KGPU-M7-001`
 
 | Ticket | Status | Evidence | Remaining gate |
 |---|---|---|---|
-| KGPU-M7-001 | `review` | Added `GPURuntimeEffectDescriptorRoutePlanner`, registry snapshot and lookup contracts, descriptor WGSL evidence linkage, material route evidence, material-key boundary hashes, runtime-effect material source descriptors, and `RegisteredRuntimeEffectRouteTest`. | Independent review acceptance is still required before `done`. Adapter-backed runtime-effect execution, readback evidence, product activation, arbitrary SkSL/WGSL input, child runtime effects, blenders, filter runtime effects, live editing, and broad runtime-effect compatibility remain unpromoted. |
+| KGPU-M7-001 | `done` | Added `GPURuntimeEffectDescriptorRoutePlanner`, registry snapshot and lookup contracts, descriptor WGSL evidence linkage, material route evidence, material-key boundary hashes, runtime-effect material source descriptors, and `RegisteredRuntimeEffectRouteTest`. Independent review accepted the contract-gate evidence on 2026-06-17 with no blocking findings. | Adapter-backed runtime-effect execution, readback evidence, product activation, arbitrary SkSL/WGSL input, child runtime effects, blenders, filter runtime effects, live editing, and broad runtime-effect compatibility remain unpromoted. |
 
 ## Evidence
 
@@ -56,12 +56,14 @@ the targeted test, full `:gpu-renderer:check --rerun-tasks`, M7 `gpu-raster`
 Runtime/Blend/Color validation bundle with `--rerun-tasks`, `rtk git diff
 --check`, and the status-count command passed.
 
-Current status count after moving KGPU-M7-001 to `review`:
+Fresh `master` validation on 2026-06-17 also passed after review acceptance.
+
+Current status count after moving KGPU-M7-001 to `done`:
 
 ```text
-blocked 11
-done 34
-review 1
+blocked 9
+done 37
+review 0
 ```
 
 ## Review
@@ -92,8 +94,14 @@ uniform-schema linkage gap. This branch fixed those by requiring canonical
 `unsupported.runtime_effect.descriptor_collision`, and matching reflected WGSL
 uniform layout facts against the descriptor schema before accepting the route.
 
-Independent review is still required before changing the ticket from `review`
-to `done`.
+Independent review on 2026-06-17 found no blocking P0/P1/P2 issues. The review
+confirmed that acceptance is limited to registered descriptor lookup, that
+collisions, unregistered IDs, dynamic SkSL source, and invalid placements
+refuse before route evidence, that wgsl4k linkage must match descriptor
+ID/version, `routePromotion=not-promoted`, `productActivation=false`, entry
+point, and uniform schema, and that CPU oracle evidence is mandatory with a
+canonical `sha256:` hash. KGPU-M7-001 is `done` as accepted contract-gate
+evidence only.
 
 ## Non-Claims
 
