@@ -64,6 +64,7 @@ class PureKotlinTextFontFixtureInventoryTest(unittest.TestCase):
         self.assertIn("selected-face-cff-cff2-provenance-dump", cff_gates)
         self.assertIn("cff-cff2-malformed-index-dict-refusal", cff_gates)
         self.assertIn("cff2-variation-store-region", cff_gates)
+        self.assertIn("cff2-variation-path-output", cff_gates)
 
     def test_validator_rejects_missing_font_fixture_gates(self) -> None:
         validator = load_validator()
