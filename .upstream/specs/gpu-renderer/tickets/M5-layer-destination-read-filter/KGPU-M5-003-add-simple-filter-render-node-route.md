@@ -1,7 +1,7 @@
 ---
 id: KGPU-M5-003
 title: "Add simple filter render node route"
-status: blocked
+status: review
 milestone: M5
 priority: P0
 owner_area: filters
@@ -55,9 +55,9 @@ data class FilterNodeEvidence(val nodePlan: String, val intermediatePlan: String
 
 ## Acceptance Criteria
 
-- [ ] Filter graph and node plan dumps are linked.
-- [ ] Intermediate ownership is explicit.
-- [ ] Unsupported nodes refuse.
+- [x] Filter graph and node plan dumps are linked.
+- [x] Intermediate ownership is explicit.
+- [x] Unsupported nodes refuse.
 
 ## Required Evidence
 
@@ -82,13 +82,15 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: Depends on KGPU-M5-001 and requires accepted saveLayer/offscreen
-  target ownership plus native WebGPU/adapter evidence for a bounded filter
-  render node, provider-owned intermediate texture ownership, bounds/crop/tile
-  diagnostics, read/write aliasing refusal, WGSL/render-node binding
-  validation, and CPU/GPU/reference comparison before any simple filter
-  `GPUNative` route claim. Runtime-effect filters remain gated by M7
-  descriptors.
+- `review`: KGPU-M5-001 is `done` on current `master`, and this branch adds
+  contract-gate evidence for one bounded `ColorFilter` render-node route:
+  graph/node dumps, provider-owned intermediate descriptor/usage/lifetime,
+  bounds/crop/tile/sampling diagnostics, read/write aliasing refusal,
+  render-node binding validation, budget refusal, and CPU-rendered filter
+  texture fallback refusal. The ticket remains in review pending independent
+  acceptance; adapter-backed native filter execution, product activation,
+  arbitrary filter DAGs, runtime-effect filters, materialized WebGPU textures,
+  and CPU/GPU/reference comparison remain unpromoted.
 
 ## Linear Labels
 

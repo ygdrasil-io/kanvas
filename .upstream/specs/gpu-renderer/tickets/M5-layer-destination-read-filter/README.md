@@ -24,7 +24,7 @@ nodes depend on M7 descriptor work.
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M5-001 - Add saveLayer isolated target route](KGPU-M5-001-add-savelayer-isolated-target-route.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `layers-resources` | `KGPU-M2-003`, `KGPU-M4-002` | `saveLayer legacy` |
 | [KGPU-M5-002 - Add destination-read copy and intermediate strategy](KGPU-M5-002-add-destination-read-copy-and-intermediate-strategy.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `destination-read` | `KGPU-M5-001` | `blend legacy` |
-| [KGPU-M5-003 - Add simple filter render node route](KGPU-M5-003-add-simple-filter-render-node-route.md) | `blocked` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `filters` | `KGPU-M5-001` | `filter legacy` |
+| [KGPU-M5-003 - Add simple filter render node route](KGPU-M5-003-add-simple-filter-render-node-route.md) | `review` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `filters` | `KGPU-M5-001` | `filter legacy` |
 | [KGPU-M5-004 - Add filter DAG refusal matrix](KGPU-M5-004-add-filter-dag-refusal-matrix.md) | `done` | `P1` | `RefuseRequired` | `RefuseDiagnostic` | `false` | `false` | `filters-validation` | `KGPU-M5-003` | - |
 
 ## Validation Bundle
@@ -42,10 +42,10 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Layer*' --tests '*Filter*'
 - No CPU-rendered full-layer fallback.
 - No M5 `GPUNative` route is promoted from contract-only layer,
   destination-read, or filter diagnostics. saveLayer,
-  destination-copy/intermediate, and filter render-node claims remain gated on
-  native WebGPU/adapter evidence.
+  destination-copy/intermediate, and simple filter render-node claims remain
+  gated on native WebGPU/adapter evidence.
 - The M5-004 filter DAG matrix is refusal-only evidence; it does not promote
-  KGPU-M5-003 simple filter node support.
+  arbitrary filter DAG support.
 
 ## Current Evidence
 
@@ -68,7 +68,17 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Layer*' --tests '*Filter*'
   readback fallback, or broad blend-mode support is claimed.
   Evidence report:
   `reports/gpu-renderer/2026-06-17-m5-002-destination-read-strategy-gate.md`.
-- KGPU-M5-003 remains `blocked` on simple filter render-node evidence.
+- KGPU-M5-003 is in `review` with contract-gate evidence for one bounded
+  `ColorFilter` render-node route, provider-owned intermediate facts,
+  bounds/crop/tile/sampling dumps, accepted diagnostics, and stable refusals
+  for unbounded/invalid bounds, multi-node graphs, unsupported nodes, missing
+  intermediate ownership/usages, read-write aliasing, invalid render-node
+  binding, CPU-rendered texture fallback, and intermediate budget overflow. It
+  remains non-promoted: no adapter-backed native filter execution, product
+  activation, arbitrary filter DAG, runtime-effect filter, materialized WebGPU
+  texture, or CPU/GPU/reference comparison is claimed.
+  Evidence report:
+  `reports/gpu-renderer/2026-06-17-m5-003-simple-filter-render-node-gate.md`.
 - KGPU-M5-004 remains `done` as refusal-only evidence.
 
 ## Status Update Rule
