@@ -76,6 +76,8 @@ REQUIRED_FONT_FAMILY_GATES = {
         "colrv1-composite-clip",
         "colrv1-cycle-refusal",
         "colrv1-gradient-operation-group",
+        "colrv1-malformed-offset-refusal",
+        "colrv1-recursion-depth-refusal",
         "colrv1-solid-glyph-colr-glyph",
         "colrv1-solid-gradient-transform",
     ],
