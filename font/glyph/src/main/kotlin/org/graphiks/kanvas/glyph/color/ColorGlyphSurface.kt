@@ -11,6 +11,8 @@ import java.util.zip.CRC32
 import java.util.zip.DataFormatException
 import java.util.zip.Inflater
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 
 /**
  * Plans color glyph routes for emoji, COLR/CPAL, bitmap strikes, PNG glyphs, and SVG glyphs.
@@ -499,6 +501,47 @@ data class ColorGlyphBounds(
         yMax = maxOf(yMax, other.yMax),
     )
 
+    fun intersectConservative(other: ColorGlyphBounds): ColorGlyphBounds {
+        val clippedXMin = maxOf(xMin, other.xMin)
+        val clippedYMin = maxOf(yMin, other.yMin)
+        val clippedXMax = minOf(xMax, other.xMax)
+        val clippedYMax = minOf(yMax, other.yMax)
+        return if (clippedXMin < clippedXMax && clippedYMin < clippedYMax) {
+            ColorGlyphBounds(
+                xMin = clippedXMin,
+                yMin = clippedYMin,
+                xMax = clippedXMax,
+                yMax = clippedYMax,
+            )
+        } else {
+            other
+        }
+    }
+
+    fun transformedBy(
+        xx: Float,
+        yx: Float,
+        xy: Float,
+        yy: Float,
+        dx: Float,
+        dy: Float,
+    ): ColorGlyphBounds {
+        val corners = listOf(
+            xMin.toFloat() to yMin.toFloat(),
+            xMax.toFloat() to yMin.toFloat(),
+            xMin.toFloat() to yMax.toFloat(),
+            xMax.toFloat() to yMax.toFloat(),
+        )
+        val transformedCorners = corners.map { (x, y) ->
+            ((xx * x) + (xy * y) + dx) to ((yx * x) + (yy * y) + dy)
+        }
+        val minX = floor(transformedCorners.minOf { (x, _) -> x }.toDouble()).toInt()
+        val minY = floor(transformedCorners.minOf { (_, y) -> y }.toDouble()).toInt()
+        val maxX = ceil(transformedCorners.maxOf { (x, _) -> x }.toDouble()).toInt()
+        val maxY = ceil(transformedCorners.maxOf { (_, y) -> y }.toDouble()).toInt()
+        return ColorGlyphBounds(xMin = minX, yMin = minY, xMax = maxX, yMax = maxY)
+    }
+
     fun toCanonicalJson(): String = buildString {
         append("{")
         append(colorGlyphJsonString("xMin")).append(": ").append(xMin).append(", ")
@@ -753,6 +796,59 @@ data class COLRV1GradientEvidence(
     }
 }
 
+data class COLRV1TransformEvidence(
+    val transformKind: String,
+    val xx: Float,
+    val yx: Float,
+    val xy: Float,
+    val yy: Float,
+    val dx: Float,
+    val dy: Float,
+    val determinant: Float,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("transformKind")).append(": ").append(colorGlyphJsonString(transformKind)).append(", ")
+        append(colorGlyphJsonString("xx")).append(": ").append(colorGlyphFloatToken(xx)).append(", ")
+        append(colorGlyphJsonString("yx")).append(": ").append(colorGlyphFloatToken(yx)).append(", ")
+        append(colorGlyphJsonString("xy")).append(": ").append(colorGlyphFloatToken(xy)).append(", ")
+        append(colorGlyphJsonString("yy")).append(": ").append(colorGlyphFloatToken(yy)).append(", ")
+        append(colorGlyphJsonString("dx")).append(": ").append(colorGlyphFloatToken(dx)).append(", ")
+        append(colorGlyphJsonString("dy")).append(": ").append(colorGlyphFloatToken(dy)).append(", ")
+        append(colorGlyphJsonString("determinant")).append(": ").append(colorGlyphFloatToken(determinant))
+        append("}")
+    }
+}
+
+data class COLRV1CompositeEvidence(
+    val mode: String,
+    val sourceNodeId: Int,
+    val backdropNodeId: Int,
+    val destinationReadClass: String,
+    val requiresLayerIsolation: Boolean,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("mode")).append(": ").append(colorGlyphJsonString(mode)).append(", ")
+        append(colorGlyphJsonString("sourceNodeId")).append(": ").append(sourceNodeId).append(", ")
+        append(colorGlyphJsonString("backdropNodeId")).append(": ").append(backdropNodeId).append(", ")
+        append(colorGlyphJsonString("destinationReadClass")).append(": ")
+        append(colorGlyphJsonString(destinationReadClass)).append(", ")
+        append(colorGlyphJsonString("requiresLayerIsolation")).append(": ").append(requiresLayerIsolation)
+        append("}")
+    }
+}
+
+data class COLRV1ClipEvidence(
+    val clipBounds: ColorGlyphBounds,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("clipBounds")).append(": ").append(clipBounds.toCanonicalJson())
+        append("}")
+    }
+}
+
 data class COLRV1PaintGraphNode(
     val nodeId: Int,
     val kind: String,
@@ -766,6 +862,9 @@ data class COLRV1PaintGraphNode(
     val outlineArtifactKey: ColorGlyphArtifactKey? = null,
     val bounds: ColorGlyphBounds? = null,
     val gradient: COLRV1GradientEvidence? = null,
+    val transform: COLRV1TransformEvidence? = null,
+    val composite: COLRV1CompositeEvidence? = null,
+    val clip: COLRV1ClipEvidence? = null,
 ) {
     fun toCanonicalJson(): String = buildString {
         append("{")
@@ -786,6 +885,18 @@ data class COLRV1PaintGraphNode(
         append(colorGlyphJsonString("bounds")).append(": ").append(bounds?.toCanonicalJson() ?: "null")
         append(", ")
         append(colorGlyphJsonString("gradient")).append(": ").append(gradient?.toCanonicalJson() ?: "null")
+        if (transform != null) {
+            append(", ")
+            append(colorGlyphJsonString("transform")).append(": ").append(transform.toCanonicalJson())
+        }
+        if (composite != null) {
+            append(", ")
+            append(colorGlyphJsonString("composite")).append(": ").append(composite.toCanonicalJson())
+        }
+        if (clip != null) {
+            append(", ")
+            append(colorGlyphJsonString("clip")).append(": ").append(clip.toCanonicalJson())
+        }
         append("}")
     }
 }
@@ -836,8 +947,116 @@ data class COLRV1PaintGraphEvidence(
         append(indent).append("}")
     }
 
+    fun toCompositePlan(): ColorGlyphCompositePlan? {
+        val operations = nodes
+            .filter { node -> node.transform != null || node.composite != null || node.clip != null }
+            .map { node ->
+                ColorGlyphCompositeOperation(
+                    nodeId = node.nodeId,
+                    kind = node.kind,
+                    childNodeIds = node.childNodeIds,
+                    bounds = node.bounds,
+                    transform = node.transform,
+                    composite = node.composite,
+                    clip = node.clip,
+                )
+            }
+        if (operations.isEmpty()) return null
+        return ColorGlyphCompositePlan(
+            glyphId = glyphId,
+            typefaceId = typefaceId,
+            paletteIdentity = paletteIdentity,
+            supportedOperationGroup = supportedOperationGroup,
+            operations = operations,
+            diagnostics = diagnostics,
+        )
+    }
+
     companion object {
         const val COLRV1PaintGraphSchema: String = "org.graphiks.kanvas.glyph.color.COLRV1PaintGraph.v1"
+    }
+}
+
+data class ColorGlyphCompositeOperation(
+    val nodeId: Int,
+    val kind: String,
+    val childNodeIds: List<Int>,
+    val bounds: ColorGlyphBounds?,
+    val transform: COLRV1TransformEvidence? = null,
+    val composite: COLRV1CompositeEvidence? = null,
+    val clip: COLRV1ClipEvidence? = null,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("nodeId")).append(": ").append(nodeId).append(", ")
+        append(colorGlyphJsonString("kind")).append(": ").append(colorGlyphJsonString(kind)).append(", ")
+        append(colorGlyphJsonString("childNodeIds")).append(": ")
+        append(childNodeIds.joinToString(prefix = "[", postfix = "]"))
+        append(", ")
+        append(colorGlyphJsonString("bounds")).append(": ").append(bounds?.toCanonicalJson() ?: "null")
+        if (transform != null) {
+            append(", ")
+            append(colorGlyphJsonString("transform")).append(": ").append(transform.toCanonicalJson())
+        }
+        if (composite != null) {
+            append(", ")
+            append(colorGlyphJsonString("composite")).append(": ").append(composite.toCanonicalJson())
+        }
+        if (clip != null) {
+            append(", ")
+            append(colorGlyphJsonString("clip")).append(": ").append(clip.toCanonicalJson())
+        }
+        append("}")
+    }
+}
+
+data class ColorGlyphCompositePlan(
+    val glyphId: Int,
+    val typefaceId: TypefaceID,
+    val paletteIdentity: String,
+    val supportedOperationGroup: String,
+    val operations: List<ColorGlyphCompositeOperation>,
+    val diagnostics: List<ColorGlyphDiagnostic> = emptyList(),
+) {
+    val dumpSha256: String
+        get() = colorGlyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    fun toCanonicalJson(): String = canonicalJson(includeDumpSha256 = true)
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        append("  ").append(colorGlyphJsonString("schema")).append(": ")
+        append(colorGlyphJsonString(ColorGlyphCompositePlanSchema)).append(",\n")
+        append("  ").append(colorGlyphJsonString("glyphId")).append(": ").append(glyphId).append(",\n")
+        append("  ").append(colorGlyphJsonString("typefaceId")).append(": ")
+        append(colorGlyphJsonString(typefaceId.value.toString())).append(",\n")
+        append("  ").append(colorGlyphJsonString("paletteIdentity")).append(": ")
+        append(colorGlyphJsonString(paletteIdentity)).append(",\n")
+        append("  ").append(colorGlyphJsonString("supportedOperationGroup")).append(": ")
+        append(colorGlyphJsonString(supportedOperationGroup)).append(",\n")
+        append("  ").append(colorGlyphJsonString("operations")).append(": ")
+        append(
+            operations.joinToString(
+                prefix = "[\n",
+                postfix = "\n  ]",
+                separator = ",\n",
+            ) { operation -> "    ${operation.toCanonicalJson()}" },
+        )
+        append(",\n")
+        append("  ").append(colorGlyphJsonString("diagnostics")).append(": ")
+        appendColorGlyphDiagnosticsJson(diagnostics, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            append("  ").append(colorGlyphJsonString("dumpSha256")).append(": ")
+            append(colorGlyphJsonString(dumpSha256)).append("\n")
+        } else {
+            append("\n")
+        }
+        append("}")
+    }
+
+    companion object {
+        const val ColorGlyphCompositePlanSchema: String = "org.graphiks.kanvas.glyph.color.ColorGlyphCompositePlan.v1"
     }
 }
 
@@ -1017,6 +1236,7 @@ class COLRV1ColorGlyphPlanner(
     private val maxRecursionDepth: Int = 8,
     private val maxExpandedNodeCount: Int = 64,
     private val maxGradientStopCount: Int = 64,
+    private val maxClipBoxCount: Int = 1,
 ) {
     fun plan(
         glyphId: Int,
@@ -1180,6 +1400,38 @@ class COLRV1ColorGlyphPlanner(
             }
         }
 
+        fun wrapWithClip(clipGlyphId: Int, childWalk: () -> WalkResult?): WalkResult? {
+            val clipBox = table.clipBoxForGlyph(clipGlyphId) ?: return childWalk()
+            if (1 > maxClipBoxCount) {
+                throw COLRV1PlannerRefusal(
+                    budgetExceeded(
+                        limitName = "clipBoxes",
+                        limit = maxClipBoxCount,
+                        observed = 1,
+                    ),
+                )
+            }
+            val nodeIdAndIndex = reserveNode("colrv1-paint-clip-box")
+            val child = childWalk() ?: return null
+            val clipBounds = clipBox.toBounds()
+            val clippedBounds = child.bounds.intersectConservative(clipBounds)
+            setNode(
+                nodeIdAndIndex.second,
+                COLRV1PaintGraphNode(
+                    nodeId = nodeIdAndIndex.first,
+                    kind = "colrv1-paint-clip-box",
+                    childNodeIds = listOf(child.nodeId),
+                    bounds = clippedBounds,
+                    clip = COLRV1ClipEvidence(clipBounds = clipBounds),
+                ),
+            )
+            return WalkResult(
+                nodeId = nodeIdAndIndex.first,
+                nodeIndex = nodeIdAndIndex.second,
+                bounds = clippedBounds,
+            )
+        }
+
         fun walk(paint: COLRV1Paint, depth: Int): WalkResult? {
             if (depth > maxRecursionDepth) {
                 val decision = budgetExceeded(
@@ -1283,7 +1535,9 @@ class COLRV1ColorGlyphPlanner(
                                 message = "COLRv1 PaintColrGlyph reference is unavailable for glyph $glyphId node ${nodeIdAndIndex.first}.",
                             ),
                         )
-                    val child = walk(referencedPaint, depth + 1) ?: return null
+                    val child = wrapWithClip(clipGlyphId = paint.glyphId) {
+                        walk(referencedPaint, depth + 1)
+                    } ?: return null
                     setNode(
                         nodeIdAndIndex.second,
                         COLRV1PaintGraphNode(
@@ -1295,6 +1549,149 @@ class COLRV1ColorGlyphPlanner(
                         ),
                     )
                     WalkResult(nodeId = nodeIdAndIndex.first, nodeIndex = nodeIdAndIndex.second, bounds = child.bounds)
+                }
+                is COLRV1Paint.Translate -> {
+                    val nodeIdAndIndex = reserveNode("colrv1-paint-translate")
+                    if (paint.varIndexBase != null) {
+                        throw COLRV1PlannerRefusal(
+                            unsupportedPaint(
+                                nodeId = nodeIdAndIndex.first,
+                                paintKind = "colrv1-paint-translate",
+                                detail = "reason=variable-transform-unsupported;varIndexBase=${paint.varIndexBase}",
+                            ),
+                        )
+                    }
+                    val child = walk(paint.paint, depth + 1) ?: return null
+                    val bounds = child.bounds.transformedBy(
+                        xx = 1f,
+                        yx = 0f,
+                        xy = 0f,
+                        yy = 1f,
+                        dx = paint.dx.toFloat(),
+                        dy = paint.dy.toFloat(),
+                    )
+                    setNode(
+                        nodeIdAndIndex.second,
+                        COLRV1PaintGraphNode(
+                            nodeId = nodeIdAndIndex.first,
+                            kind = "colrv1-paint-translate",
+                            childNodeIds = listOf(child.nodeId),
+                            bounds = bounds,
+                            transform = COLRV1TransformEvidence(
+                                transformKind = "translate",
+                                xx = 1f,
+                                yx = 0f,
+                                xy = 0f,
+                                yy = 1f,
+                                dx = paint.dx.toFloat(),
+                                dy = paint.dy.toFloat(),
+                                determinant = 1f,
+                            ),
+                            varIndexBase = paint.varIndexBase,
+                        ),
+                    )
+                    WalkResult(nodeId = nodeIdAndIndex.first, nodeIndex = nodeIdAndIndex.second, bounds = bounds)
+                }
+                is COLRV1Paint.Transform -> {
+                    val classification = classifyCOLRV1Transform(
+                        xx = paint.xx,
+                        yx = paint.yx,
+                        xy = paint.xy,
+                        yy = paint.yy,
+                    )
+                    val nodeIdAndIndex = reserveNode(classification.nodeKind)
+                    if (paint.varIndexBase != null) {
+                        throw COLRV1PlannerRefusal(
+                            unsupportedPaint(
+                                nodeId = nodeIdAndIndex.first,
+                                paintKind = classification.nodeKind,
+                                detail = "reason=variable-transform-unsupported;varIndexBase=${paint.varIndexBase}",
+                            ),
+                        )
+                    }
+                    if (!paint.xx.isFinite() || !paint.yx.isFinite() || !paint.xy.isFinite() || !paint.yy.isFinite() ||
+                        !paint.dx.isFinite() || !paint.dy.isFinite()
+                    ) {
+                        throw COLRV1PlannerRefusal(
+                            malformed(
+                                nodeId = nodeIdAndIndex.first,
+                                detail = "reason=malformed-transform-payload;paintKind=${classification.nodeKind}",
+                                message = "COLRv1 transform payload is malformed for glyph $glyphId node ${nodeIdAndIndex.first}.",
+                            ),
+                        )
+                    }
+                    val determinant = (paint.xx * paint.yy) - (paint.xy * paint.yx)
+                    if (abs(determinant) <= COLRV1TransformDeterminantEpsilon) {
+                        throw COLRV1PlannerRefusal(
+                            malformed(
+                                nodeId = nodeIdAndIndex.first,
+                                detail = "reason=singular-transform;paintKind=${classification.nodeKind};determinant=${colorGlyphFloatToken(determinant)}",
+                                message = "COLRv1 transform is singular for glyph $glyphId node ${nodeIdAndIndex.first}.",
+                            ),
+                        )
+                    }
+                    val child = walk(paint.paint, depth + 1) ?: return null
+                    val bounds = child.bounds.transformedBy(
+                        xx = paint.xx,
+                        yx = paint.yx,
+                        xy = paint.xy,
+                        yy = paint.yy,
+                        dx = paint.dx,
+                        dy = paint.dy,
+                    )
+                    setNode(
+                        nodeIdAndIndex.second,
+                        COLRV1PaintGraphNode(
+                            nodeId = nodeIdAndIndex.first,
+                            kind = classification.nodeKind,
+                            childNodeIds = listOf(child.nodeId),
+                            bounds = bounds,
+                            transform = COLRV1TransformEvidence(
+                                transformKind = classification.transformKind,
+                                xx = paint.xx,
+                                yx = paint.yx,
+                                xy = paint.xy,
+                                yy = paint.yy,
+                                dx = paint.dx,
+                                dy = paint.dy,
+                                determinant = determinant,
+                            ),
+                            varIndexBase = paint.varIndexBase,
+                        ),
+                    )
+                    WalkResult(nodeId = nodeIdAndIndex.first, nodeIndex = nodeIdAndIndex.second, bounds = bounds)
+                }
+                is COLRV1Paint.Composite -> {
+                    val nodeKind = "colrv1-paint-composite-${paint.mode.graphSuffix}"
+                    val nodeIdAndIndex = reserveNode(nodeKind)
+                    val compositePlan = compositePlanForMode(paint.mode)
+                        ?: throw COLRV1PlannerRefusal(
+                            unsupportedPaint(
+                                nodeId = nodeIdAndIndex.first,
+                                paintKind = nodeKind,
+                                detail = "reason=composite-mode-unsupported;mode=${paint.mode.graphSuffix}",
+                            ),
+                        )
+                    val source = walk(paint.source, depth + 1) ?: return null
+                    val backdrop = walk(paint.backdrop, depth + 1) ?: return null
+                    val bounds = source.bounds.union(backdrop.bounds)
+                    setNode(
+                        nodeIdAndIndex.second,
+                        COLRV1PaintGraphNode(
+                            nodeId = nodeIdAndIndex.first,
+                            kind = nodeKind,
+                            childNodeIds = listOf(source.nodeId, backdrop.nodeId),
+                            bounds = bounds,
+                            composite = COLRV1CompositeEvidence(
+                                mode = paint.mode.graphSuffix,
+                                sourceNodeId = source.nodeId,
+                                backdropNodeId = backdrop.nodeId,
+                                destinationReadClass = compositePlan.destinationReadClass,
+                                requiresLayerIsolation = compositePlan.requiresLayerIsolation,
+                            ),
+                        ),
+                    )
+                    WalkResult(nodeId = nodeIdAndIndex.first, nodeIndex = nodeIdAndIndex.second, bounds = bounds)
                 }
                 is COLRV1Paint.LinearGradient -> {
                     val nodeIdAndIndex = reserveNode("colrv1-paint-linear-gradient")
@@ -1431,7 +1828,7 @@ class COLRV1ColorGlyphPlanner(
                         bounds = ColorGlyphBounds(xMin = 0, yMin = 0, xMax = 1, yMax = 1),
                     )
                 }
-                else -> throw COLRV1PlannerRefusal(
+                is COLRV1Paint.Layers -> throw COLRV1PlannerRefusal(
                     unsupportedPaint(
                         nodeId = nextNodeId,
                         paintKind = paint.colrv1PlannerKind(),
@@ -1442,7 +1839,9 @@ class COLRV1ColorGlyphPlanner(
         }
 
         val root = try {
-            walk(rootPaint, depth = 1)
+            wrapWithClip(clipGlyphId = glyphId) {
+                walk(rootPaint, depth = 1)
+            }
         } catch (refusal: COLRV1PlannerRefusal) {
             return refusal.decision
         } ?: return refusal(
@@ -1461,7 +1860,11 @@ class COLRV1ColorGlyphPlanner(
             typefaceId = typefaceId,
             paletteIdentity = strikeKey.paletteIdentity ?: "cpal:${palette.index}",
             rootNodeId = 0,
-            supportedOperationGroup = if (nodes.any { node -> node.gradient != null }) "gradient-glyph" else "solid-glyph-colr-glyph",
+            supportedOperationGroup = when {
+                nodes.any { node -> node.transform != null || node.composite != null || node.clip != null } -> "transform-composite-clip"
+                nodes.any { node -> node.gradient != null } -> "gradient-glyph"
+                else -> "solid-glyph-colr-glyph"
+            },
             nodes = nodes.toList(),
             bounds = root.bounds,
             diagnostics = emptyList(),
@@ -3664,6 +4067,12 @@ private fun colorGlyphFloatToken(value: Float): String {
     }
 }
 
+private const val ColorGlyphFloatEpsilon: Float = 0.0001f
+private const val COLRV1TransformDeterminantEpsilon: Float = 0.0001f
+
+private fun approxColorGlyphFloat(left: Float, right: Float): Boolean =
+    abs(left - right) <= ColorGlyphFloatEpsilon
+
 private fun colorGlyphFloatMapJson(values: Map<String, Float>): String = buildString {
     append("{")
     append(
@@ -3749,6 +4158,57 @@ private fun COLRV1Paint.colrv1PlannerKind(): String =
         is COLRV1Paint.ColrGlyph -> "colrv1-paint-colr-glyph"
         is COLRV1Paint.Translate -> "colrv1-paint-translate"
         is COLRV1Paint.Transform -> "colrv1-paint-transform"
+    }
+
+private data class COLRV1TransformClassification(
+    val nodeKind: String,
+    val transformKind: String,
+)
+
+private data class COLRV1CompositePlanFacts(
+    val destinationReadClass: String,
+    val requiresLayerIsolation: Boolean,
+)
+
+private fun COLRV1ClipBox.toBounds(): ColorGlyphBounds =
+    ColorGlyphBounds(
+        xMin = xMin,
+        yMin = yMin,
+        xMax = xMax,
+        yMax = yMax,
+    )
+
+private fun classifyCOLRV1Transform(
+    xx: Float,
+    yx: Float,
+    xy: Float,
+    yy: Float,
+): COLRV1TransformClassification =
+    when {
+        approxColorGlyphFloat(yx, 0f) && approxColorGlyphFloat(xy, 0f) &&
+            (!approxColorGlyphFloat(xx, 1f) || !approxColorGlyphFloat(yy, 1f)) ->
+            COLRV1TransformClassification(nodeKind = "colrv1-paint-scale", transformKind = "scale")
+        approxColorGlyphFloat(xx, yy) && approxColorGlyphFloat(xy, -yx) &&
+            (!approxColorGlyphFloat(yx, 0f) || !approxColorGlyphFloat(xy, 0f)) ->
+            COLRV1TransformClassification(nodeKind = "colrv1-paint-rotate", transformKind = "rotate")
+        approxColorGlyphFloat(xx, 1f) && approxColorGlyphFloat(yy, 1f) &&
+            (!approxColorGlyphFloat(xy, 0f) || !approxColorGlyphFloat(yx, 0f)) ->
+            COLRV1TransformClassification(nodeKind = "colrv1-paint-skew", transformKind = "skew")
+        else -> COLRV1TransformClassification(nodeKind = "colrv1-paint-transform", transformKind = "transform")
+    }
+
+private fun compositePlanForMode(mode: COLRV1CompositeMode): COLRV1CompositePlanFacts? =
+    when (mode) {
+        COLRV1CompositeMode.SRC_OVER,
+        COLRV1CompositeMode.PLUS -> COLRV1CompositePlanFacts(
+            destinationReadClass = "none",
+            requiresLayerIsolation = false,
+        )
+        COLRV1CompositeMode.MULTIPLY -> COLRV1CompositePlanFacts(
+            destinationReadClass = "shader-destination-read",
+            requiresLayerIsolation = true,
+        )
+        else -> null
     }
 
 /**

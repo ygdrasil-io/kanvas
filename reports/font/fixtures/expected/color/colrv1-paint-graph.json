@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "dumpId": "colrv1-paint-graph",
-  "ownerTickets": ["KFONT-M10-002", "KFONT-M10-003"],
+  "ownerTickets": ["KFONT-M10-002", "KFONT-M10-003", "KFONT-M10-004"],
   "cases": [
     {
       "caseId": "colrv1-solid-glyph-colr-glyph",
@@ -100,6 +100,131 @@
       "diagnostics": []
     },
     {
+      "caseId": "colrv1-translate",
+      "graph": {
+        "schema": "org.graphiks.kanvas.glyph.color.COLRV1PaintGraph.v1",
+        "glyphId": 270,
+        "typefaceId": "550e8400-e29b-41d4-a716-446655440417",
+        "paletteIdentity": "brand-transform-composite",
+        "rootNodeId": 0,
+        "supportedOperationGroup": "transform-composite-clip",
+        "nodes": [
+          {"nodeId": 1, "kind": "colrv1-paint-translate", "childNodeIds": [2], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": null, "bounds": {"xMin": 4, "yMin": -2, "xMax": 8, "yMax": 4}, "gradient": null, "transform": {"transformKind": "translate", "xx": 1, "yx": 0, "xy": 0, "yy": 1, "dx": 3, "dy": -4, "determinant": 1}},
+          {"nodeId": 2, "kind": "colrv1-paint-glyph", "childNodeIds": [3], "glyphId": 271, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": {"glyphId": 271, "route": "text.glyph.outline", "strikeKeySha256": "90ad0d8e2a3889daea4c693ff0cf6f5591f135005286cbfd07e5d65b6acea1e7"}, "bounds": {"xMin": 1, "yMin": 2, "xMax": 5, "yMax": 8}, "gradient": null},
+          {"nodeId": 3, "kind": "colrv1-paint-solid", "childNodeIds": [], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": 1, "resolvedColorArgb": "#BFDDEE10", "alpha": 0.75, "varIndexBase": null, "outlineArtifactKey": null, "bounds": null, "gradient": null}
+        ],
+        "bounds": {"xMin": 4, "yMin": -2, "xMax": 8, "yMax": 4},
+        "diagnostics": [],
+        "dumpSha256": "4a17c74f7c1e1166cf41a00b354501c37ffc54ffa4db62d7b81ce198e54df42a"
+      },
+      "diagnostics": []
+    },
+    {
+      "caseId": "colrv1-transform",
+      "graph": {
+        "schema": "org.graphiks.kanvas.glyph.color.COLRV1PaintGraph.v1",
+        "glyphId": 272,
+        "typefaceId": "550e8400-e29b-41d4-a716-446655440417",
+        "paletteIdentity": "brand-transform-composite",
+        "rootNodeId": 0,
+        "supportedOperationGroup": "transform-composite-clip",
+        "nodes": [
+          {"nodeId": 1, "kind": "colrv1-paint-transform", "childNodeIds": [2], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": null, "bounds": {"xMin": 0, "yMin": -1, "xMax": 7, "yMax": 10}, "gradient": null, "transform": {"transformKind": "transform", "xx": 1.25, "yx": 0.5, "xy": -0.25, "yy": 1.5, "dx": 2, "dy": -1, "determinant": 2}},
+          {"nodeId": 2, "kind": "colrv1-paint-glyph", "childNodeIds": [3], "glyphId": 273, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": {"glyphId": 273, "route": "text.glyph.outline", "strikeKeySha256": "02e64460c6c38c97375d923d1f5bd3538ee72a3314a54e20f609869c4febc223"}, "bounds": {"xMin": 0, "yMin": 0, "xMax": 4, "yMax": 6}, "gradient": null},
+          {"nodeId": 3, "kind": "colrv1-paint-solid", "childNodeIds": [], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": 0, "resolvedColorArgb": "#CC99AABB", "alpha": 1, "varIndexBase": null, "outlineArtifactKey": null, "bounds": null, "gradient": null}
+        ],
+        "bounds": {"xMin": 0, "yMin": -1, "xMax": 7, "yMax": 10},
+        "diagnostics": [],
+        "dumpSha256": "7cf9acacee6892871dabb6f5ecba84913b5ac3270f1cba997fbd7d5948808fad"
+      },
+      "diagnostics": []
+    },
+    {
+      "caseId": "colrv1-scale",
+      "graph": {
+        "schema": "org.graphiks.kanvas.glyph.color.COLRV1PaintGraph.v1",
+        "glyphId": 274,
+        "typefaceId": "550e8400-e29b-41d4-a716-446655440417",
+        "paletteIdentity": "brand-transform-composite",
+        "rootNodeId": 0,
+        "supportedOperationGroup": "transform-composite-clip",
+        "nodes": [
+          {"nodeId": 1, "kind": "colrv1-paint-scale", "childNodeIds": [2], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": null, "bounds": {"xMin": 2, "yMin": -3, "xMax": 10, "yMax": 6}, "gradient": null, "transform": {"transformKind": "scale", "xx": 2, "yx": 0, "xy": 0, "yy": 1.5, "dx": 0, "dy": 0, "determinant": 3}},
+          {"nodeId": 2, "kind": "colrv1-paint-glyph", "childNodeIds": [3], "glyphId": 275, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": {"glyphId": 275, "route": "text.glyph.outline", "strikeKeySha256": "cb0e8296a16ca4b11a482b4178d0f90367f2d3a573c323dcbede260dd516f8e0"}, "bounds": {"xMin": 1, "yMin": -2, "xMax": 5, "yMax": 4}, "gradient": null},
+          {"nodeId": 3, "kind": "colrv1-paint-solid", "childNodeIds": [], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": 1, "resolvedColorArgb": "#FFDDEE10", "alpha": 1, "varIndexBase": null, "outlineArtifactKey": null, "bounds": null, "gradient": null}
+        ],
+        "bounds": {"xMin": 2, "yMin": -3, "xMax": 10, "yMax": 6},
+        "diagnostics": [],
+        "dumpSha256": "cb248a6b48213a2a55c9714f4a5b0ca14a125b3482634a1274140d45b9218291"
+      },
+      "diagnostics": []
+    },
+    {
+      "caseId": "colrv1-rotate",
+      "graph": {
+        "schema": "org.graphiks.kanvas.glyph.color.COLRV1PaintGraph.v1",
+        "glyphId": 276,
+        "typefaceId": "550e8400-e29b-41d4-a716-446655440417",
+        "paletteIdentity": "brand-transform-composite",
+        "rootNodeId": 0,
+        "supportedOperationGroup": "transform-composite-clip",
+        "nodes": [
+          {"nodeId": 1, "kind": "colrv1-paint-rotate", "childNodeIds": [2], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": null, "bounds": {"xMin": -5, "yMin": 2, "xMax": -1, "yMax": 6}, "gradient": null, "transform": {"transformKind": "rotate", "xx": 0, "yx": 1, "xy": -1, "yy": 0, "dx": 0, "dy": 0, "determinant": 1}},
+          {"nodeId": 2, "kind": "colrv1-paint-glyph", "childNodeIds": [3], "glyphId": 277, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": {"glyphId": 277, "route": "text.glyph.outline", "strikeKeySha256": "f1b542492f446bb14852f39300a4100e2ea28f8ed97ddb1e2cd915717501923b"}, "bounds": {"xMin": 2, "yMin": 1, "xMax": 6, "yMax": 5}, "gradient": null},
+          {"nodeId": 3, "kind": "colrv1-paint-solid", "childNodeIds": [], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": 0, "resolvedColorArgb": "#CC99AABB", "alpha": 1, "varIndexBase": null, "outlineArtifactKey": null, "bounds": null, "gradient": null}
+        ],
+        "bounds": {"xMin": -5, "yMin": 2, "xMax": -1, "yMax": 6},
+        "diagnostics": [],
+        "dumpSha256": "adbba0015f771ceecb8db672c7358f0c86f9bf3aee65cf195a6c8861b40f5ef5"
+      },
+      "diagnostics": []
+    },
+    {
+      "caseId": "colrv1-skew",
+      "graph": {
+        "schema": "org.graphiks.kanvas.glyph.color.COLRV1PaintGraph.v1",
+        "glyphId": 278,
+        "typefaceId": "550e8400-e29b-41d4-a716-446655440417",
+        "paletteIdentity": "brand-transform-composite",
+        "rootNodeId": 0,
+        "supportedOperationGroup": "transform-composite-clip",
+        "nodes": [
+          {"nodeId": 1, "kind": "colrv1-paint-skew", "childNodeIds": [2], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": null, "bounds": {"xMin": 0, "yMin": 0, "xMax": 6, "yMax": 4}, "gradient": null, "transform": {"transformKind": "skew", "xx": 1, "yx": 0, "xy": 0.5, "yy": 1, "dx": 0, "dy": 0, "determinant": 1}},
+          {"nodeId": 2, "kind": "colrv1-paint-glyph", "childNodeIds": [3], "glyphId": 279, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": {"glyphId": 279, "route": "text.glyph.outline", "strikeKeySha256": "1cfa87fa87e142c558b6578cfbe2ef85b6edb27610cf5fe47e7a4ae571b3f293"}, "bounds": {"xMin": 0, "yMin": 0, "xMax": 4, "yMax": 4}, "gradient": null},
+          {"nodeId": 3, "kind": "colrv1-paint-solid", "childNodeIds": [], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": 1, "resolvedColorArgb": "#FFDDEE10", "alpha": 1, "varIndexBase": null, "outlineArtifactKey": null, "bounds": null, "gradient": null}
+        ],
+        "bounds": {"xMin": 0, "yMin": 0, "xMax": 6, "yMax": 4},
+        "diagnostics": [],
+        "dumpSha256": "334022e0cbc6b44a78bc400fd6d14c3485c230c573abc629e24dc8acae7dbd9d"
+      },
+      "diagnostics": []
+    },
+    {
+      "caseId": "colrv1-composite-clip",
+      "graph": {
+        "schema": "org.graphiks.kanvas.glyph.color.COLRV1PaintGraph.v1",
+        "glyphId": 280,
+        "typefaceId": "550e8400-e29b-41d4-a716-446655440417",
+        "paletteIdentity": "brand-transform-composite",
+        "rootNodeId": 0,
+        "supportedOperationGroup": "transform-composite-clip",
+        "nodes": [
+          {"nodeId": 1, "kind": "colrv1-paint-clip-box", "childNodeIds": [2], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": null, "bounds": {"xMin": 2, "yMin": 1, "xMax": 6, "yMax": 5}, "gradient": null, "clip": {"clipBounds": {"xMin": 2, "yMin": 1, "xMax": 6, "yMax": 5}}},
+          {"nodeId": 2, "kind": "colrv1-paint-composite-multiply", "childNodeIds": [3, 6], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": null, "bounds": {"xMin": 1, "yMin": 0, "xMax": 7, "yMax": 6}, "gradient": null, "composite": {"mode": "multiply", "sourceNodeId": 3, "backdropNodeId": 6, "destinationReadClass": "shader-destination-read", "requiresLayerIsolation": true}},
+          {"nodeId": 3, "kind": "colrv1-paint-scale", "childNodeIds": [4], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": null, "bounds": {"xMin": 1, "yMin": 0, "xMax": 7, "yMax": 6}, "gradient": null, "transform": {"transformKind": "scale", "xx": 1.5, "yx": 0, "xy": 0, "yy": 1.5, "dx": 1, "dy": 0, "determinant": 2.25}},
+          {"nodeId": 4, "kind": "colrv1-paint-glyph", "childNodeIds": [5], "glyphId": 281, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": {"glyphId": 281, "route": "text.glyph.outline", "strikeKeySha256": "06b0f2df9d766e46ee91c1eb85f899fe3ab418a20570e374fc8b071d389f140e"}, "bounds": {"xMin": 0, "yMin": 0, "xMax": 4, "yMax": 4}, "gradient": null},
+          {"nodeId": 5, "kind": "colrv1-paint-solid", "childNodeIds": [], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": 0, "resolvedColorArgb": "#CC99AABB", "alpha": 1, "varIndexBase": null, "outlineArtifactKey": null, "bounds": null, "gradient": null},
+          {"nodeId": 6, "kind": "colrv1-paint-translate", "childNodeIds": [7], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": null, "bounds": {"xMin": 1, "yMin": 0, "xMax": 6, "yMax": 6}, "gradient": null, "transform": {"transformKind": "translate", "xx": 1, "yx": 0, "xy": 0, "yy": 1, "dx": -2, "dy": 1, "determinant": 1}},
+          {"nodeId": 7, "kind": "colrv1-paint-glyph", "childNodeIds": [8], "glyphId": 282, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": {"glyphId": 282, "route": "text.glyph.outline", "strikeKeySha256": "4acac38cba29915aaa3ed1f5ccfd17d9442017576b47b3b66da5bfe846d169fd"}, "bounds": {"xMin": 3, "yMin": -1, "xMax": 8, "yMax": 5}, "gradient": null},
+          {"nodeId": 8, "kind": "colrv1-paint-solid", "childNodeIds": [], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": 1, "resolvedColorArgb": "#7FDDEE10", "alpha": 0.5, "varIndexBase": null, "outlineArtifactKey": null, "bounds": null, "gradient": null}
+        ],
+        "bounds": {"xMin": 2, "yMin": 1, "xMax": 6, "yMax": 5},
+        "diagnostics": [],
+        "dumpSha256": "b29b3efe7986cfe77650581f75aefe903fec2e097d8bee533631f964b27de801"
+      },
+      "diagnostics": []
+    },
+    {
       "caseId": "colrv1-var-linear-gradient-outline-fallback",
       "graph": null,
       "diagnostics": [
@@ -118,6 +243,27 @@
       "graph": null,
       "diagnostics": [
         {"glyphId": 260, "route": "colr", "code": "text.color.COLR-malformed", "detail": "glyphId=260;nodeId=2;tableFamily=COLR;version=1;reason=malformed-gradient-coordinates;paintKind=colrv1-paint-linear-gradient;x0=4;y0=4;x1=4;y1=4;x2=9;y2=9", "severity": "warning", "message": "COLRv1 gradient coordinates are malformed for glyph 260 node 2."}
+      ]
+    },
+    {
+      "caseId": "colrv1-singular-transform-outline-fallback",
+      "graph": null,
+      "diagnostics": [
+        {"glyphId": 290, "route": "colr", "code": "text.color.COLR-malformed", "detail": "glyphId=290;nodeId=1;tableFamily=COLR;version=1;reason=singular-transform;paintKind=colrv1-paint-scale;determinant=0", "severity": "warning", "message": "COLRv1 transform is singular for glyph 290 node 1."}
+      ]
+    },
+    {
+      "caseId": "colrv1-unsupported-composite-mode-outline-fallback",
+      "graph": null,
+      "diagnostics": [
+        {"glyphId": 292, "route": "colr", "code": "text.color.COLRv1-paint-unsupported", "detail": "glyphId=292;nodeId=1;paintKind=colrv1-paint-composite-hue;reason=composite-mode-unsupported;mode=hue", "severity": "warning", "message": "COLRv1 paint colrv1-paint-composite-hue is unsupported for glyph 292 node 1."}
+      ]
+    },
+    {
+      "caseId": "colrv1-clip-budget-outline-fallback",
+      "graph": null,
+      "diagnostics": [
+        {"glyphId": 295, "route": "colr", "code": "text.color.COLRv1-budget-exceeded", "detail": "glyphId=295;tableFamily=COLR;version=1;limitName=clipBoxes;limit=0;observed=1", "severity": "warning", "message": "COLRv1 paint graph budget clipBoxes exceeded for glyph 295: observed 1, limit 0."}
       ]
     }
   ],

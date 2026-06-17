@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M10-004"
 title: "Implement COLRv1 transform/composite/clip operation group"
-status: "proposed"
+status: "done"
 milestone: "M10"
 priority: "P0"
 owner_area: "color"
@@ -72,18 +72,18 @@ sealed interface COLRv1CompositeOp : COLRv1PaintOp {
 
 ## Acceptance Criteria
 
-- [ ] Fixtures cover transform, translate, scale, rotate, skew, composite, and clip nodes as separate operation cases.
-- [ ] Composite nodes record blend/composite mode and whether a future renderer route needs destination-read or layer isolation.
-- [ ] Singular transforms, unsupported composite modes, and clip budget overflow emit specific `text.color.*` diagnostics.
-- [ ] Bounds are deterministic after nested transform and clip operations.
-- [ ] `coloremoji_blendmodes` remains open until GPU route evidence proves the promoted composite modes.
+- [x] Fixtures cover transform, translate, scale, rotate, skew, composite, and clip nodes as separate operation cases.
+- [x] Composite nodes record blend/composite mode and whether a future renderer route needs destination-read or layer isolation.
+- [x] Singular transforms, unsupported composite modes, and clip budget overflow emit specific `text.color.*` diagnostics.
+- [x] Bounds are deterministic after nested transform and clip operations.
+- [x] `coloremoji_blendmodes` remains open until GPU route evidence proves the promoted composite modes.
 
 ## Required Evidence
 
-- `colrv1-paint-graph.json` fixtures for transform, composite, and clip graphs.
-- `color-glyph-composite-plan.json` fixture showing destination-read/layer hints for a composite glyph.
-- Refusal fixtures for singular transform, unsupported composite mode, and clip budget overflow.
-- Dashboard note preserving `coloremoji_blendmodes` until renderer evidence exists.
+- `reports/font/fixtures/expected/color/color-glyph-plan.json` bundle cases for translate, generic transform, classified scale/rotate/skew, composite+clip, singular-transform fallback, unsupported-composite fallback, and clip-budget fallback.
+- `reports/font/fixtures/expected/color/colrv1-paint-graph.json` fixtures for transform, composite, and clip graphs plus refusal diagnostics.
+- `reports/font/fixtures/expected/color/color-glyph-composite-plan.json` showing destination-read/layer hints for the composite glyph handoff.
+- `reports/pure-kotlin-text/2026-06-17-kfont-m10-004-colrv1-transform-composite-clip.md` and `reports/pure-kotlin-text/coverage-ticket-matrix.md` preserving `coloremoji_blendmodes` as an open gate until renderer evidence exists.
 
 ## Fallback / Refusal Behavior
 
@@ -101,13 +101,16 @@ sealed interface COLRv1CompositeOp : COLRv1PaintOp {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test --tests '*COLRv1*Composite*'
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsCOLRV1TransformCompositeClipPlansAndDeterministicPaintGraphDumps --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.refusesCOLRV1SingularTransformUnsupportedCompositeModeAndClipBudgetOverflowWhenFallbackAllowed
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 ```
 
 ## Status Notes
 
-- `proposed`: Owns color glyph composite plan facts that feed M11 renderer route validation.
-- Move to `ready` only after composite/layer/destination-read plan fields are reviewed.
+- `done`: Fresh deterministic CPU planning evidence covers bounded transform/composite/clip cases, with checked-in plan/graph/composite dumps and validation; the legacy gate `coloremoji_blendmodes` remains open until CPU oracle and GPU route evidence land.
+- This ticket does not claim dedicated `PaintScale` / `PaintRotate` / `PaintSkew` parse-format support beyond classified generic `PaintTransform` matrices.
 
 ## Linear Labels
 
