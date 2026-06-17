@@ -157,6 +157,8 @@ enum class GPUMaterializedCommandOperandKind {
     Sampler,
     /** Current render target attachment. */
     RenderTarget,
+    /** Current depth/stencil attachment for stencil or depth-producing passes. */
+    DepthStencilAttachment,
     /** Destination-copy texture used by read-before-write effects. */
     DestinationCopyTexture,
     /** Readback buffer or texture-copy destination. */
@@ -2931,6 +2933,7 @@ private fun GPUMaterializedCommandOperandKind.dumpLabel(): String =
         GPUMaterializedCommandOperandKind.TextureView -> "texture-view"
         GPUMaterializedCommandOperandKind.Sampler -> "sampler"
         GPUMaterializedCommandOperandKind.RenderTarget -> "render-target"
+        GPUMaterializedCommandOperandKind.DepthStencilAttachment -> "depth-stencil-attachment"
         GPUMaterializedCommandOperandKind.DestinationCopyTexture -> "destination-copy-texture"
         GPUMaterializedCommandOperandKind.ReadbackResource -> "readback-resource"
     }
