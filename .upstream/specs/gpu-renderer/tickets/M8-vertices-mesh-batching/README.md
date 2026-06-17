@@ -23,7 +23,7 @@ primitive color interactions.
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M8-001 - Add `DrawVertices` descriptor and route decisions](KGPU-M8-001-add-drawvertices-descriptor-and-route-decisions.md) | `blocked` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `vertices` | `KGPU-M2-002`, `KGPU-M7-003` | `vertices legacy` |
+| [KGPU-M8-001 - Add `DrawVertices` descriptor and route decisions](KGPU-M8-001-add-drawvertices-descriptor-and-route-decisions.md) | `done` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `vertices` | `KGPU-M2-002`, `KGPU-M7-003` | `vertices legacy` |
 | [KGPU-M8-002 - Add vertex index buffer payload and resource plans](KGPU-M8-002-add-vertex-index-buffer-payload-and-resource-plans.md) | `blocked` | `P1` | `TargetPrepared` | `CPUPreparedGPU` | `false` | `true` | `vertices-resources` | `KGPU-M8-001` | - |
 | [KGPU-M8-003 - Add vertices batching sort and refusal evidence](KGPU-M8-003-add-vertices-batching-sort-and-refusal-evidence.md) | `blocked` | `P2` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `batching` | `KGPU-M8-001`, `KGPU-M8-002` | - |
 
@@ -43,11 +43,18 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Vertices*'
 
 ## Current Evidence
 
-- KGPU-M8-001 is `blocked` even though KGPU-M7-003 is now `done`; remaining
-  gate is accepted primitive blend/color route decisions, vertex
-  descriptor/key/refusal dumps, adapter-backed layout/WGSL/route evidence, and
-  explicit skipped or refused lanes for unsupported topology, color, texcoord,
-  and buffer cases.
+- KGPU-M8-001 is `done` with contract-only `GPUVerticesRouteDecisionPlanner`
+  evidence for typed `GPUVertexMode` descriptors, deterministic
+  descriptor/layout/key/route dumps, and stable refusals for unsupported
+  topology, triangle fan, nondeterministic sources, non-finite positions,
+  vertex/index budgets, attribute/color format, texcoord/local-coordinate,
+  primitive blender, primitive-blend destination-read, and missing WGSL/layout
+  evidence cases. It remains non-promoted: no `DrawVertices` support,
+  vertex/index upload, primitive blender support, texcoord material support,
+  mesh support, batching support, product activation, or CPU-rasterized mesh
+  texture fallback is claimed. Independent review
+  `019ed5c8-898d-7923-83b6-f8c82775d12e` found no P0/P1/P2 blockers. Evidence report:
+  `reports/gpu-renderer/2026-06-17-m8-001-vertices-route-decisions.md`.
 - KGPU-M8-002 is `blocked` on KGPU-M8-001 plus adapter-backed vertex/index
   buffer ownership, upload-before-draw ordering, resource-generation, budget,
   and invalid/stale buffer refusal evidence.
