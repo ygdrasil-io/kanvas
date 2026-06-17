@@ -8,7 +8,7 @@ Ticket: `KGPU-M5-002`
 
 | Ticket | Status | Evidence | Remaining gate |
 |---|---|---|---|
-| KGPU-M5-002 | `review` | Added `GPUDestinationReadStrategyPlanner`, destination-read action/copy/budget contracts, canonical copy/intermediate/binding/barrier/resource dumps, and `DestinationReadStrategyGateTest`. | Independent review is still required before moving to `done`. KGPU-M5-001 is also still `review`, so no destination-read support claim can promote until that dependency is accepted. Native adapter-backed destination-copy execution, readback/reference comparison, product activation, framebuffer fetch, input attachments, and CPU readback fallback remain unpromoted. |
+| KGPU-M5-002 | `review` | Added `GPUDestinationReadStrategyPlanner`, destination-read action/copy/budget contracts, accepted/refused diagnostics, canonical copy/intermediate/binding/barrier/resource dumps, and `DestinationReadStrategyGateTest`. | Independent review is still required before moving to `done`. KGPU-M5-001 is also still `review`, so no destination-read support claim can promote until that dependency is accepted. Native adapter-backed destination-copy execution, readback/reference comparison, product activation, framebuffer fetch, input attachments, and CPU readback fallback remain unpromoted. |
 
 ## Evidence
 
@@ -22,12 +22,15 @@ Ticket: `KGPU-M5-002`
   copy-before-sample ordering token, budget class, and byte estimate.
 - The validated intermediate fixture dumps `SampleExistingIntermediate`
   evidence without emitting a copy texture line.
+- Accepted routes emit a non-terminal `accepted.destination_read.strategy`
+  diagnostic while preserving the canonical dump lines.
 - Material-key boundary evidence proves destination-read descriptor, binding,
   and target-generation hashes remain outside `MaterialKey`.
 - Unsupported variants refuse with stable diagnostics:
   `unsupported.destination_read.bounds_unbounded`,
   `unsupported.destination_read.active_attachment_sampled`,
   `unsupported.destination_read.copy_usage_missing`,
+  `unsupported.destination_read.strategy_action_mismatch`,
   `unsupported.destination_read.texture_binding_missing`,
   `unsupported.destination_read.intermediate_unvalidated`,
   `unsupported.destination_read.target_generation_stale`,
@@ -64,6 +67,9 @@ Local pre-PR review scope:
 
 - check that accepted dumps include copy/intermediate, binding, barrier,
   resource, budget, and non-claim evidence;
+- check that accepted routes emit non-terminal diagnostics;
+- check that strategy/action mismatches refuse instead of producing mixed route
+  evidence;
 - check that active-attachment sampling, copy usage, texture binding,
   generation, pass split, framebuffer fetch, CPU readback, and budget failures
   refuse before accepted dumps;

@@ -15,7 +15,7 @@ class DestinationReadStrategyGateTest {
         assertFalse(result.promoted)
         assertFalse(result.productActivation)
         assertFalse(result.materialized)
-        assertEquals(emptyList(), result.diagnostics)
+        assertAcceptedDiagnostic(result, GPUDestinationReadRequirement.TargetCopy)
         assertEquals(GPUDestinationReadStrategy.CopyTarget, result.plan.strategy)
         assertEquals(GPUDestinationReadAction.SplitPassAndCopyTarget, result.action)
         assertFalse(result.bindingInMaterialKey)
@@ -48,6 +48,7 @@ class DestinationReadStrategyGateTest {
 
         assertEquals(GPUDestinationReadStrategy.BindIntermediate, result.plan.strategy)
         assertEquals(GPUDestinationReadAction.UseExistingIntermediate, result.action)
+        assertAcceptedDiagnostic(result, GPUDestinationReadRequirement.ExistingIntermediate)
         assertEquals(
             listOf(
                 "destination-read:strategy row=gpu-renderer.destination-read.strategy routeKind=GPUNative classification=TargetNative promoted=false productActivation=false materialized=false requirement=ExistingIntermediate strategy=SampleExistingIntermediate action=UseExistingIntermediate source=intermediate:layer-card generation=42",
@@ -89,9 +90,21 @@ class DestinationReadStrategyGateTest {
                 reason = "unsupported.destination_read.copy_usage_missing",
             ),
             refusalCase(
+                "copy-action-mismatch",
+                action = GPUDestinationReadAction.UseExistingIntermediate,
+                reason = "unsupported.destination_read.strategy_action_mismatch",
+            ),
+            refusalCase(
                 "texture-binding",
                 copyUsageLabels = setOf("copy_dst"),
                 reason = "unsupported.destination_read.texture_binding_missing",
+            ),
+            refusalCase(
+                "intermediate-action-mismatch",
+                requirement = GPUDestinationReadRequirement.ExistingIntermediate,
+                strategy = GPUDestinationReadStrategy.BindIntermediate,
+                action = GPUDestinationReadAction.SplitPassAndCopyTarget,
+                reason = "unsupported.destination_read.strategy_action_mismatch",
             ),
             refusalCase(
                 "intermediate-unvalidated",
@@ -142,6 +155,17 @@ class DestinationReadStrategyGateTest {
             )
         }
     }
+}
+
+private fun assertAcceptedDiagnostic(
+    result: GPUDestinationReadStrategyGatePlan,
+    requirement: GPUDestinationReadRequirement,
+) {
+    val diagnostic = result.diagnostics.single()
+
+    assertEquals("accepted.destination_read.strategy", diagnostic.code)
+    assertEquals(requirement, diagnostic.requirement)
+    assertFalse(diagnostic.terminal)
 }
 
 private data class RefusalCase(

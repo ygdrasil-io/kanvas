@@ -193,7 +193,7 @@ data class GPUDestinationReadStrategyGatePlan(
 
     /** Returns the canonical dump lines for destination-read planning evidence. */
     fun dumpLines(): List<String> {
-        val diagnostic = diagnostics.singleOrNull()
+        val diagnostic = diagnostics.singleOrNull { it.terminal }
         if (diagnostic != null) {
             return listOf(
                 "destination-read:strategy.refused row=$evidenceRow routeKind=$routeKind " +
@@ -314,7 +314,7 @@ class GPUDestinationReadStrategyPlanner {
             budgetPolicy = GPUDestinationReadBudgetPolicy(request.maxCopyBytes, budgetClass),
             bindingInMaterialKey = binding.inMaterialKey,
             materialKeyBoundaryHash = destinationReadMaterialKeyBoundaryHash(request),
-            diagnostics = emptyList(),
+            diagnostics = listOf(request.acceptedDiagnostic()),
         )
     }
 
@@ -369,6 +369,9 @@ data class GPUDestinationReadDiagnostic(
 private const val DEFAULT_DESTINATION_COPY_MAX_BYTES = 16L * 1024L * 1024L
 private const val DESTINATION_READ_EVIDENCE_ROW = "gpu-renderer.destination-read.strategy"
 private const val DESTINATION_READ_BYTES_PER_PIXEL = 4L
+private const val DESTINATION_READ_ACCEPTED_CODE = "accepted.destination_read.strategy"
+private const val DESTINATION_READ_STRATEGY_ACTION_MISMATCH =
+    "unsupported.destination_read.strategy_action_mismatch"
 private const val DESTINATION_READ_NONCLAIM_LINE =
     "destination-read:nonclaim nativeDestinationRead=false adapterBacked=false framebufferFetch=false " +
         "inputAttachment=false cpuReadbackFallback=false productActivation=false"
@@ -389,6 +392,7 @@ private fun GPUDestinationReadStrategyRequest.refusalCode(copyBytes: Long): Stri
         cpuReadbackRequested -> "unsupported.destination_read.cpu_readback_forbidden"
         activeAttachmentSampled -> "unsupported.destination_read.active_attachment_sampled"
         observedTargetGeneration != targetGeneration -> "unsupported.destination_read.target_generation_stale"
+        !strategy.acceptsAction(action) -> DESTINATION_READ_STRATEGY_ACTION_MISMATCH
         strategy == GPUDestinationReadStrategy.CopyTarget && "copy_src" !in sourceUsageLabels ->
             "unsupported.destination_read.copy_usage_missing"
         strategy == GPUDestinationReadStrategy.CopyTarget && "texture_binding" !in copyUsageLabels ->
@@ -399,6 +403,25 @@ private fun GPUDestinationReadStrategyRequest.refusalCode(copyBytes: Long): Stri
             "unsupported.destination_read.pass_split_illegal"
         copyBytes > maxCopyBytes -> "unsupported.destination_read.copy_budget_exceeded"
         else -> null
+    }
+
+private fun GPUDestinationReadStrategyRequest.acceptedDiagnostic(): GPUDestinationReadDiagnostic =
+    GPUDestinationReadDiagnostic(
+        code = DESTINATION_READ_ACCEPTED_CODE,
+        requirement = requirement,
+        message = "destination-read strategy accepted: ${strategy.dumpLabel()} action=$action",
+        terminal = false,
+    )
+
+private fun GPUDestinationReadStrategy.acceptsAction(action: GPUDestinationReadAction): Boolean =
+    when (this) {
+        GPUDestinationReadStrategy.None -> action == GPUDestinationReadAction.KeepInPass
+        GPUDestinationReadStrategy.FixedFunction -> action == GPUDestinationReadAction.UseFixedFunctionBlend
+        GPUDestinationReadStrategy.CopyTarget -> action == GPUDestinationReadAction.SplitPassAndCopyTarget
+        GPUDestinationReadStrategy.BindIntermediate -> action == GPUDestinationReadAction.UseExistingIntermediate
+        GPUDestinationReadStrategy.IsolateLayer -> action == GPUDestinationReadAction.CreateIsolatedLayer ||
+            action == GPUDestinationReadAction.CompositeIsolatedLayer
+        GPUDestinationReadStrategy.Refuse -> action == GPUDestinationReadAction.Refuse
     }
 
 private fun GPUDestinationReadStrategyRequest.copyTextureDescriptor(
