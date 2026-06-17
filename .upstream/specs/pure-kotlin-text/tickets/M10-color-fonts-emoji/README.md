@@ -21,7 +21,7 @@ M2 supplies color, bitmap, and SVG table facts. M5 supplies Unicode emoji data a
 | Ticket | Status | Priority | Claim Impact | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|
 | [KFONT-M10-001 - Complete COLRv0 plan to artifact path](KFONT-M10-001-complete-colrv0-plan-to-artifact-path.md) | `done` | `P0` | `tracked-gap` | `color` | `KFONT-M2-001`, `KFONT-M6-001`, `KFONT-M9-002` | - |
-| [KFONT-M10-002 - Implement COLRv1 solid/glyph/colr-glyph operation group](KFONT-M10-002-implement-colrv1-solid-glyph-colr-glyph-operation-group.md) | `proposed` | `P0` | `tracked-gap` | `color` | `KFONT-M10-001` | - |
+| [KFONT-M10-002 - Implement COLRv1 solid/glyph/colr-glyph operation group](KFONT-M10-002-implement-colrv1-solid-glyph-colr-glyph-operation-group.md) | `done` | `P0` | `tracked-gap` | `color` | `KFONT-M10-001` | - |
 | [KFONT-M10-003 - Implement COLRv1 gradient and variable-gradient operation group](KFONT-M10-003-implement-colrv1-gradient-and-variable-gradient-operation-group.md) | `proposed` | `P1` | `tracked-gap` | `color` | `KFONT-M10-002` | - |
 | [KFONT-M10-004 - Implement COLRv1 transform/composite/clip operation group](KFONT-M10-004-implement-colrv1-transform-composite-clip-operation-group.md) | `proposed` | `P0` | `tracked-gap` | `color` | `KFONT-M10-002`, `KFONT-M10-003` | `coloremoji_blendmodes` |
 | [KFONT-M10-005 - Add COLRv1 recursion, cycle and bounds fixtures](KFONT-M10-005-add-colrv1-recursion-cycle-and-bounds-fixtures.md) | `proposed` | `P1` | `fixture-gated` | `color` | `KFONT-M10-002`, `KFONT-M10-004` | `coloremoji_blendmodes` |
