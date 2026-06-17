@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.filters
 
+import java.security.MessageDigest
+
 /** Filter node identifier. */
 @JvmInline
 value class GPUFilterNodeID(val value: String) {
@@ -133,13 +135,21 @@ data class GPUFilterIntermediatePlan(
     val formatClass: String,
     val usageLabels: Set<String>,
     val lifetimeClass: String,
-)
+    val ownerLabel: String = "",
+    val generation: Long = 0L,
+    val byteEstimate: Long = 0L,
+    val descriptorHash: String = "",
+) {
+    val usageLabel: String
+        get() = usageLabels.canonicalFilterUsageLabels().joinToString(",")
+}
 
 /** Filter render-node plan. */
 data class GPUFilterRenderNodePlan(
     val renderStepLabel: String,
     val pipelineKeyHash: String,
     val payloadPlanHash: String,
+    val bindingPlanHash: String = "",
 )
 
 /** Filter compute-node plan. */
@@ -184,6 +194,257 @@ data class GPUFilterBudgetPolicy(
     val maxPassCount: Int,
     val refusalCode: String? = null,
 )
+
+/** Bounded facts required by the simple filter render-node gate. */
+data class GPUSimpleFilterBounds(
+    val inputBoundsLabel: String,
+    val outputBoundsLabel: String,
+    val conservative: Boolean,
+    val finite: Boolean = true,
+    val width: Int = 0,
+    val height: Int = 0,
+)
+
+/** Request for simple single-node filter render-route evidence. */
+data class GPUSimpleFilterRenderNodeRequest(
+    val label: String = "accepted",
+    val graph: GPUFilterGraphDescriptor,
+    val source: GPUFilterSourcePlan,
+    val bounds: GPUSimpleFilterBounds,
+    val crop: GPUFilterCropPlan,
+    val sampling: GPUFilterSamplingPlan,
+    val targetFormatClass: String,
+    val targetGeneration: Long,
+    val intermediateUsageLabels: Set<String>,
+    val intermediateOwnershipValidated: Boolean = true,
+    val activeAttachmentSampled: Boolean = false,
+    val readWriteAliasing: Boolean = false,
+    val renderNodeBindingValidated: Boolean = true,
+    val cpuRenderedTextureFallbackRequested: Boolean = false,
+    val maxIntermediateBytes: Long = DEFAULT_SIMPLE_FILTER_INTERMEDIATE_MAX_BYTES,
+)
+
+/** Evidence result for the simple filter render-node route gate. */
+data class GPUSimpleFilterRenderNodeGatePlan(
+    val label: String,
+    val evidenceRow: String,
+    val routeKind: String,
+    val classification: String,
+    val promoted: Boolean,
+    val productActivation: Boolean,
+    val materialized: Boolean,
+    val filterPlan: GPUFilterPlan,
+    val bounds: GPUSimpleFilterBounds,
+    val crop: GPUFilterCropPlan,
+    val sampling: GPUFilterSamplingPlan,
+    val intermediate: GPUFilterIntermediatePlan,
+    val source: GPUFilterSourcePlan,
+    val budgetPolicy: GPUFilterBudgetPolicy,
+    val budgetClass: String,
+    val activeAttachmentSampled: Boolean,
+    val readWriteAliasing: Boolean,
+    val diagnostics: List<GPUFilterDiagnostic>,
+) {
+    val graphDescriptorHash: String
+        get() = simpleFilterGraphDescriptorHash(filterPlan.graph)
+
+    val intermediateDescriptorHash: String
+        get() = intermediate.descriptorHash
+
+    val renderPipelineKeyHash: String
+        get() = acceptedRenderNode().pipelineKeyHash
+
+    val payloadPlanHash: String
+        get() = acceptedRenderNode().payloadPlanHash
+
+    val bindingPlanHash: String
+        get() = acceptedRenderNode().bindingPlanHash
+
+    /** Returns canonical PM/review dump lines for this gate. */
+    fun dumpLines(): List<String> {
+        val terminalDiagnostic = diagnostics.singleOrNull { it.terminal }
+        if (terminalDiagnostic != null) {
+            val descriptor = refusedDescriptor()
+            return listOf(
+                "filter:simple-node.refused row=$evidenceRow routeKind=$routeKind " +
+                    "classification=$classification promoted=$promoted productActivation=$productActivation " +
+                    "materialized=$materialized graph=${filterPlan.graph.graphId} " +
+                    "node=${descriptor.nodeId.value} reason=${terminalDiagnostic.code} label=$label",
+                SIMPLE_FILTER_NONCLAIM_LINE,
+            )
+        }
+
+        val descriptor = acceptedDescriptor()
+        val renderNode = acceptedRenderNode()
+        val graph = filterPlan.graph
+        return listOf(
+            "filter:simple-node row=$evidenceRow routeKind=$routeKind classification=$classification " +
+                "promoted=$promoted productActivation=$productActivation materialized=$materialized " +
+                "graph=${graph.graphId} node=${descriptor.nodeId.value} kind=${descriptor.nodeKind} " +
+                "route=GPUNativeRender",
+            "filter:graph id=${graph.graphId} version=${graph.version} source=${graph.sourceRole} " +
+                "nodes=${graph.nodes.dumpNodeList()} edges=${graph.edges.dumpEdgeList()} " +
+                "coordinates=${graph.coordinateSpaces.joinToString(",")} provenance=${graph.provenance} " +
+                "descriptor=$graphDescriptorHash",
+            "filter:bounds node=${descriptor.nodeId.value} input=${bounds.inputBoundsLabel} " +
+                "output=${bounds.outputBoundsLabel} finite=${bounds.finite} conservative=${bounds.conservative} " +
+                "crop=${crop.cropLabel} tile=${crop.tilePolicy.tileModeX}/${crop.tilePolicy.tileModeY} " +
+                "sampling=${sampling.filterMode}/${sampling.mipmapMode} coord=${sampling.coordinateSpaceLabel}",
+            "filter:intermediate label=${intermediate.intermediateLabel} descriptor=$intermediateDescriptorHash " +
+                "owner=${intermediate.ownerLabel} generation=${intermediate.generation} " +
+                "bounds=${intermediate.boundsLabel} format=${intermediate.formatClass} " +
+                "usage=${intermediate.usageLabel} lifetime=${intermediate.lifetimeClass} " +
+                "bytes=${intermediate.byteEstimate}",
+            "filter:render-node step=${renderNode.renderStepLabel} pipeline=${renderNode.pipelineKeyHash} " +
+                "payload=${renderNode.payloadPlanHash} binding=${renderNode.bindingPlanHash}",
+            "filter:resource source=${source.sourceLabel} generation=${intermediate.generation} " +
+                "readWriteAliasing=$readWriteAliasing activeAttachmentSampled=$activeAttachmentSampled " +
+                "budget=$budgetClass intermediateBytes=${intermediate.byteEstimate}",
+            "filter:diagnostic code=${diagnostics.single().code} terminal=${diagnostics.single().terminal}",
+            SIMPLE_FILTER_NONCLAIM_LINE,
+        )
+    }
+
+    private fun acceptedDescriptor(): GPUFilterNodeDescriptor =
+        (filterPlan.nodePlans.single() as GPUFilterNodePlan.Accepted).descriptor
+
+    private fun acceptedRenderNode(): GPUFilterRenderNodePlan =
+        ((filterPlan.nodePlans.single() as GPUFilterNodePlan.Accepted).route as GPUFilterNodeRoute.NativeRender)
+            .renderNode
+
+    private fun refusedDescriptor(): GPUFilterNodeDescriptor =
+        (filterPlan.nodePlans.single() as GPUFilterNodePlan.Refused).descriptor
+}
+
+/** Planner for contract-only simple filter render-node evidence. */
+class GPUSimpleFilterRenderNodePlanner {
+    /** Plans a bounded single-node filter route or returns a stable refusal. */
+    fun plan(request: GPUSimpleFilterRenderNodeRequest): GPUSimpleFilterRenderNodeGatePlan {
+        val intermediateBytes = request.bounds.intermediateByteEstimate()
+        val refusalCode = request.refusalCode(intermediateBytes)
+        if (refusalCode != null) {
+            return refusedPlan(request, refusalCode)
+        }
+
+        val descriptor = request.graph.nodes.single()
+        val usageLabels = request.intermediateUsageLabels.canonicalFilterUsageLabels()
+        val intermediateLabel = "filter-intermediate:${descriptor.nodeId.value}"
+        val intermediateDescriptorHash = simpleFilterIntermediateDescriptorHash(request, descriptor, usageLabels)
+        val intermediate = GPUFilterIntermediatePlan(
+            intermediateLabel = intermediateLabel,
+            boundsLabel = request.bounds.outputBoundsLabel,
+            formatClass = request.targetFormatClass,
+            usageLabels = usageLabels.toSet(),
+            lifetimeClass = SIMPLE_FILTER_LIFETIME_CLASS,
+            ownerLabel = SIMPLE_FILTER_OWNER_LABEL,
+            generation = request.targetGeneration,
+            byteEstimate = intermediateBytes,
+            descriptorHash = intermediateDescriptorHash,
+        )
+        val renderNode = GPUFilterRenderNodePlan(
+            renderStepLabel = SIMPLE_FILTER_RENDER_STEP,
+            pipelineKeyHash = simpleFilterRenderPipelineKeyHash(request, descriptor),
+            payloadPlanHash = simpleFilterPayloadPlanHash(request, descriptor),
+            bindingPlanHash = simpleFilterBindingPlanHash(request, descriptor, intermediate),
+        )
+        val diagnostic = GPUFilterDiagnostic(
+            code = SIMPLE_FILTER_ACCEPTED_CODE,
+            nodeId = descriptor.nodeId,
+            message = "simple filter render node accepted: ${descriptor.nodeKind}",
+            terminal = false,
+        )
+        val filterPlan = GPUFilterPlan(
+            graph = request.graph,
+            nodePlans = listOf(
+                GPUFilterNodePlan.Accepted(
+                    descriptor = descriptor,
+                    route = GPUFilterNodeRoute.NativeRender(renderNode),
+                ),
+            ),
+            intermediates = listOf(intermediate),
+            orderingToken = GPUFilterOrderingToken("filter-order:${request.graph.graphId}:${request.targetGeneration}"),
+            diagnostics = listOf(diagnostic),
+        )
+
+        return GPUSimpleFilterRenderNodeGatePlan(
+            label = request.label,
+            evidenceRow = SIMPLE_FILTER_EVIDENCE_ROW,
+            routeKind = "GPUNative",
+            classification = "TargetNative",
+            promoted = false,
+            productActivation = false,
+            materialized = false,
+            filterPlan = filterPlan,
+            bounds = request.bounds,
+            crop = request.crop,
+            sampling = request.sampling,
+            intermediate = intermediate,
+            source = request.source,
+            budgetPolicy = GPUFilterBudgetPolicy(request.maxIntermediateBytes, maxPassCount = 1),
+            budgetClass = SIMPLE_FILTER_BUDGET_CLASS,
+            activeAttachmentSampled = request.activeAttachmentSampled,
+            readWriteAliasing = request.readWriteAliasing,
+            diagnostics = listOf(diagnostic),
+        )
+    }
+
+    private fun refusedPlan(
+        request: GPUSimpleFilterRenderNodeRequest,
+        refusalCode: String,
+    ): GPUSimpleFilterRenderNodeGatePlan {
+        val descriptor = request.graph.nodes.firstOrNull()
+            ?: GPUFilterNodeDescriptor(
+                nodeId = GPUFilterNodeID("none"),
+                nodeKind = "Unknown",
+                inputLabels = emptyList(),
+                parameterHash = "none",
+            )
+        val diagnostic = GPUFilterDiagnostic(
+            code = refusalCode,
+            nodeId = descriptor.nodeId,
+            message = "simple filter render node refused: $refusalCode",
+            terminal = true,
+        )
+        val filterPlan = GPUFilterPlan(
+            graph = request.graph,
+            nodePlans = listOf(GPUFilterNodePlan.Refused(descriptor, diagnostic)),
+            intermediates = emptyList(),
+            orderingToken = GPUFilterOrderingToken("filter-order:${request.graph.graphId}:${request.targetGeneration}"),
+            diagnostics = listOf(diagnostic),
+        )
+
+        return GPUSimpleFilterRenderNodeGatePlan(
+            label = request.label,
+            evidenceRow = SIMPLE_FILTER_EVIDENCE_ROW,
+            routeKind = "RefuseDiagnostic",
+            classification = "TargetNative",
+            promoted = false,
+            productActivation = false,
+            materialized = false,
+            filterPlan = filterPlan,
+            bounds = request.bounds,
+            crop = request.crop,
+            sampling = request.sampling,
+            intermediate = GPUFilterIntermediatePlan(
+                intermediateLabel = "none",
+                boundsLabel = request.bounds.outputBoundsLabel,
+                formatClass = request.targetFormatClass,
+                usageLabels = emptySet(),
+                lifetimeClass = "none",
+            ),
+            source = request.source,
+            budgetPolicy = GPUFilterBudgetPolicy(
+                maxIntermediateBytes = request.maxIntermediateBytes,
+                maxPassCount = 1,
+                refusalCode = refusalCode,
+            ),
+            budgetClass = "refused",
+            activeAttachmentSampled = request.activeAttachmentSampled,
+            readWriteAliasing = request.readWriteAliasing,
+            diagnostics = listOf(diagnostic),
+        )
+    }
+}
 
 /** Filter intermediate artifact descriptor. */
 data class FilterIntermediateArtifact(
@@ -323,4 +584,167 @@ object GPUFilterDagRefusalMatrix {
             diagnosticCode == null -> "Supportable bounded row only; no filter DAG route is promoted by this matrix."
             else -> "$nodeKind remains refused by $diagnosticCode."
         }
+}
+
+private const val DEFAULT_SIMPLE_FILTER_INTERMEDIATE_MAX_BYTES = 16L * 1024L * 1024L
+private const val SIMPLE_FILTER_EVIDENCE_ROW = "gpu-renderer.filter.simple-node"
+private const val SIMPLE_FILTER_ACCEPTED_CODE = "accepted.filter.simple_node"
+private const val SIMPLE_FILTER_BYTES_PER_PIXEL = 4L
+private const val SIMPLE_FILTER_RENDER_STEP = "filter-render:colorfilter"
+private const val SIMPLE_FILTER_OWNER_LABEL = "GPURecorderScope"
+private const val SIMPLE_FILTER_LIFETIME_CLASS = "layer-local"
+private const val SIMPLE_FILTER_BUDGET_CLASS = "filter-small"
+private const val SIMPLE_FILTER_NONCLAIM_LINE =
+    "filter:nonclaim nativeFilter=false adapterBacked=false arbitraryFilterDag=false runtimeEffectFilter=false " +
+        "cpuRenderedFilterTextureFallback=false productActivation=false"
+
+private val SIMPLE_FILTER_REQUIRED_INTERMEDIATE_USAGE_LABELS = setOf("render_attachment", "texture_binding")
+private val FILTER_USAGE_ORDER = listOf(
+    "render_attachment",
+    "copy_src",
+    "copy_dst",
+    "texture_binding",
+    "storage_binding",
+)
+
+private fun GPUSimpleFilterRenderNodeRequest.refusalCode(intermediateBytes: Long): String? =
+    when {
+        !bounds.finite -> "unsupported.filter.bounds_unbounded"
+        bounds.width <= 0 || bounds.height <= 0 -> "unsupported.filter.bounds_invalid"
+        graph.nodes.size != 1 || graph.edges.isNotEmpty() -> "unsupported.filter.graph_node_limit"
+        graph.nodes.single().nodeKind != "ColorFilter" -> "unsupported.filter.node_unimplemented"
+        !intermediateOwnershipValidated ||
+            (SIMPLE_FILTER_REQUIRED_INTERMEDIATE_USAGE_LABELS - intermediateUsageLabels).isNotEmpty() ->
+            "unsupported.filter.intermediate_unvalidated"
+        activeAttachmentSampled || readWriteAliasing -> "unsupported.filter.read_write_aliasing"
+        !renderNodeBindingValidated -> "unsupported.filter.node_descriptor_invalid"
+        cpuRenderedTextureFallbackRequested -> "unsupported.filter.cpu_rendered_texture_forbidden"
+        intermediateBytes > maxIntermediateBytes -> "unsupported.filter.intermediate_budget_exceeded"
+        else -> null
+    }
+
+private fun GPUSimpleFilterBounds.intermediateByteEstimate(): Long =
+    if (width <= 0 || height <= 0) {
+        0L
+    } else {
+        val pixelCount = runCatching { Math.multiplyExact(width.toLong(), height.toLong()) }
+            .getOrDefault(Long.MAX_VALUE / SIMPLE_FILTER_BYTES_PER_PIXEL + 1L)
+        runCatching { Math.multiplyExact(pixelCount, SIMPLE_FILTER_BYTES_PER_PIXEL) }
+            .getOrDefault(Long.MAX_VALUE)
+    }
+
+private fun Set<String>.canonicalFilterUsageLabels(): List<String> =
+    sortedWith(
+        compareBy(
+            { FILTER_USAGE_ORDER.indexOf(it).let { index -> if (index < 0) Int.MAX_VALUE else index } },
+            { it },
+        ),
+    )
+
+private fun simpleFilterGraphDescriptorHash(graph: GPUFilterGraphDescriptor): String =
+    "sha256:" + simpleFilterStableHash(
+        listOf(
+            "filter-graph-descriptor-v1",
+            graph.graphId,
+            graph.version.toString(),
+            graph.sourceRole,
+            graph.nodes.joinToString(",") { descriptor ->
+                listOf(
+                    descriptor.nodeId.value,
+                    descriptor.nodeKind,
+                    descriptor.inputLabels.joinToString("+"),
+                    descriptor.parameterHash,
+                ).joinToString(":")
+            },
+            graph.edges.dumpEdgeList(),
+            graph.coordinateSpaces.joinToString(","),
+            graph.cropLabel ?: "none",
+            graph.provenance,
+        ),
+    )
+
+private fun simpleFilterIntermediateDescriptorHash(
+    request: GPUSimpleFilterRenderNodeRequest,
+    descriptor: GPUFilterNodeDescriptor,
+    usageLabels: List<String>,
+): String = "sha256:" + simpleFilterStableHash(
+    listOf(
+        "filter-intermediate-texture-v1",
+        request.graph.graphId,
+        descriptor.nodeId.value,
+        request.bounds.outputBoundsLabel,
+        request.bounds.width.toString(),
+        request.bounds.height.toString(),
+        request.targetFormatClass,
+        usageLabels.joinToString(","),
+        "owner=$SIMPLE_FILTER_OWNER_LABEL",
+        "generation=${request.targetGeneration}",
+        "lifetime=$SIMPLE_FILTER_LIFETIME_CLASS",
+    ),
+)
+
+private fun simpleFilterRenderPipelineKeyHash(
+    request: GPUSimpleFilterRenderNodeRequest,
+    descriptor: GPUFilterNodeDescriptor,
+): String = "sha256:" + simpleFilterStableHash(
+    listOf(
+        "filter-render-pipeline-v1",
+        SIMPLE_FILTER_RENDER_STEP,
+        descriptor.nodeKind,
+        request.targetFormatClass,
+        "tile=${request.crop.tilePolicy.tileModeX}/${request.crop.tilePolicy.tileModeY}",
+        "sampling=${request.sampling.filterMode}/${request.sampling.mipmapMode}",
+        "coord=${request.sampling.coordinateSpaceLabel}",
+    ),
+)
+
+private fun simpleFilterPayloadPlanHash(
+    request: GPUSimpleFilterRenderNodeRequest,
+    descriptor: GPUFilterNodeDescriptor,
+): String = "sha256:" + simpleFilterStableHash(
+    listOf(
+        "filter-render-payload-v1",
+        descriptor.nodeId.value,
+        descriptor.parameterHash,
+        request.bounds.inputBoundsLabel,
+        request.bounds.outputBoundsLabel,
+        request.crop.cropLabel,
+    ),
+)
+
+private fun simpleFilterBindingPlanHash(
+    request: GPUSimpleFilterRenderNodeRequest,
+    descriptor: GPUFilterNodeDescriptor,
+    intermediate: GPUFilterIntermediatePlan,
+): String = "sha256:" + simpleFilterStableHash(
+    listOf(
+        "filter-render-binding-v1",
+        descriptor.nodeId.value,
+        descriptor.inputLabels.joinToString(","),
+        "source=${request.source.sourceLabel}",
+        "intermediate=${intermediate.intermediateLabel}",
+        "generation=${request.targetGeneration}",
+    ),
+)
+
+private fun List<GPUFilterNodeDescriptor>.dumpNodeList(): String =
+    if (isEmpty()) {
+        "none"
+    } else {
+        joinToString(",") { descriptor -> descriptor.nodeId.value }
+    }
+
+private fun List<String>.dumpEdgeList(): String =
+    if (isEmpty()) {
+        "none"
+    } else {
+        joinToString(",")
+    }
+
+private fun simpleFilterStableHash(parts: List<String>): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    val bytes = parts.joinToString(separator = "\u001F").toByteArray()
+    return digest.digest(bytes)
+        .take(8)
+        .joinToString("") { byte -> "%02x".format(byte) }
 }

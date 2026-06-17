@@ -15,17 +15,18 @@ and the cited specs:
 ## Decision
 
 M5 is partially actionable. The `GPUNative` saveLayer, destination-read, and
-simple filter routes are not promoted in this branch. The filter DAG refusal
-matrix is implemented as refusal-only evidence because it does not require an
-adapter and must not imply simple filter node support.
+simple filter contract gates now have non-promoted evidence, but product
+support remains gated on adapter-backed execution and reference comparison.
+The filter DAG refusal matrix is implemented as refusal-only evidence because
+it does not require an adapter and must not imply arbitrary filter DAG support.
 
 ## Ticket Gates
 
 | Ticket | Status | Remaining gate |
 |---|---|---|
-| KGPU-M5-001 | `proposed` | Native WebGPU/adapter evidence for provider-owned offscreen layer targets, clear/load/store, child isolation, restore composite, active-attachment separation, resource generation, and CPU/GPU/reference comparison. |
-| KGPU-M5-002 | `blocked` | KGPU-M5-001 plus native bounded destination-copy or validated intermediate strategy, pass split/copy-before-sample ordering, copy/texture usage validation, and CPU/GPU/reference comparison. |
-| KGPU-M5-003 | `blocked` | KGPU-M5-001 plus native bounded filter render-node route, provider-owned intermediate texture ownership, bounds/crop/tile diagnostics, read/write aliasing refusal, WGSL/render-node binding validation, and CPU/GPU/reference comparison. |
+| KGPU-M5-001 | `done` | Contract-gate accepted after independent review. Native adapter-backed saveLayer execution, product activation, materialized WebGPU target, and CPU/GPU/reference comparison remain unpromoted. |
+| KGPU-M5-002 | `done` | Contract-gate accepted after independent review. Native adapter-backed destination-copy execution, framebuffer fetch/input attachments, product activation, and CPU/GPU/reference comparison remain unpromoted. |
+| KGPU-M5-003 | `review` | Contract-gate evidence exists for one bounded `ColorFilter` render-node route. Independent acceptance, adapter-backed native filter execution, product activation, materialized WebGPU texture, arbitrary DAG/runtime-effect support, and CPU/GPU/reference comparison remain unpromoted. |
 | KGPU-M5-004 | `done` | Refusal-only `GPUFilterDagRefusalMatrix` evidence independently reviewed after non-promotion remediation. KGPU-M5-003 support remains unpromoted. |
 
 ## Evidence
@@ -44,12 +45,17 @@ adapter and must not imply simple filter node support.
   non-promotion guard.
 - Independent re-review reported no findings and accepted KGPU-M5-004 for
   `done` after confirming no hidden `GPUNative` or product activation claim.
+- `SimpleFilterRenderNodeRouteTest` covers the KGPU-M5-003 contract gate for a
+  bounded `ColorFilter`, including graph/node/bounds/intermediate/render-node
+  dumps, accepted diagnostics, read-write aliasing refusal, CPU-rendered
+  texture fallback refusal, budget refusal, and non-claims. KGPU-M5-003 is in
+  `review` pending independent acceptance.
 
 ## Non-Claims
 
-- No `GPUNative` saveLayer support is claimed.
-- No destination-read copy/intermediate route is claimed.
-- No simple filter render-node route is claimed.
+- No product `GPUNative` saveLayer support is claimed.
+- No product destination-read copy/intermediate support is claimed.
+- No product simple filter render-node support is claimed.
 - No arbitrary image-filter DAG support is claimed.
 - No framebuffer fetch, active-attachment sampling, CPU readback, or
   CPU-rendered layer/filter texture fallback is claimed.
