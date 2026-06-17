@@ -1936,6 +1936,70 @@ This remains itemization evidence only and does not claim complete UCD
 coverage, GSUB/GPOS shaping, default feature policy, font fallback, glyph
 mapping, paragraph layout, emoji rendering, or GPU text route support.
 
+### KFONT-M5-005: Add cluster safety regression suite
+
+Status: review with bounded fixture evidence.
+
+Files:
+
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ClusterSafetyReport.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ClusterSafetyTest.kt`
+- `reports/font/fixtures/expected/unicode/cluster-arabic-mark.txt`
+- `reports/font/fixtures/expected/unicode/cluster-cjk-variation-selector.txt`
+- `reports/font/fixtures/expected/unicode/cluster-devanagari-conjunct.txt`
+- `reports/font/fixtures/expected/unicode/cluster-emoji-family-zwj.txt`
+- `reports/font/fixtures/expected/unicode/cluster-emoji-skin-tone.txt`
+- `reports/font/fixtures/expected/unicode/cluster-mixed-bidi.txt`
+- `reports/font/fixtures/expected/unicode/cluster-negative-split.txt`
+- `reports/font/fixtures/expected/unicode/cluster-safety-report.json`
+- `reports/font/fixtures/expected/unicode/cluster-thai-tone.txt`
+- `reports/font/fixtures/expected/unicode/cluster-vs15-vs16.txt`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m5-005-cluster-safety.md`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `.upstream/specs/pure-kotlin-text/tickets/M5-unicode-segmentation-bidi/KFONT-M5-005-add-cluster-safety-regression-suite.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M5-unicode-segmentation-bidi/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `ClusterSafetySuite` emits `cluster-safety-report.json` from Kanvas-owned
+  grapheme, bidi, and script-itemization outputs only; no native or external
+  segmentation/shaping engine is used as a normative oracle.
+- The report links `unicode-segments.json`, `bidi-runs.json`, and
+  `script-runs.json` by content hash and records invariant results for
+  grapheme-cluster integrity, bidi-run boundary alignment, and script-run
+  boundary alignment.
+- The checked-in fixture matrix covers bounded emoji family ZWJ, emoji
+  skin-tone, VS15/VS16, Arabic mark, Devanagari conjunct, Thai tone, CJK
+  variation-selector context, mixed bidi, and a synthetic negative split row.
+- `cluster-negative-split.txt` records a stable
+  `text.shaping.cluster-invariant-failed` diagnostic without widening any
+  shaping or emoji support claim.
+- `ClusterSafetyTest` asserts byte-identical golden output, verifies the
+  ticket fixture set is checked in, and confirms Unicode-version mismatch
+  propagation through the cluster-safety path.
+- Emoji-adjacent rows keep `scaledemoji` explicit as a legacy gate; this slice
+  does not add `emoji-sequence-unsupported`, fallback-route, color-glyph, or
+  GPU evidence.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests '*ClusterSafety*' --tests '*Grapheme*' --tests '*Bidi*' --tests '*ScriptItem*'
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: this bounded M5-005 slice is in `review`, not `done`. An
+explicit `text.shaping.emoji-sequence-unsupported` refusal row, broader
+reviewed CJK IVS coverage, and later fallback-boundary evidence remain open
+before complete cluster-safety closeout or M7 fallback-cluster promotion.
+
 ### KFONT-M6-001: Define `OpenTypeLayoutEngine` Contract And Dumps
 
 Status: implemented; independent review pending.
