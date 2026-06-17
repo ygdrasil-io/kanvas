@@ -1660,7 +1660,7 @@
     },
     {
       "dumpId": "gsub-trace",
-      "ownerTicket": "KFONT-M6-002",
+      "ownerTicket": "KFONT-M6-003",
       "classification": "golden-gated",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
@@ -1680,11 +1680,11 @@
         "schemaVersion"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGsubFixtureFontsAsDiagnostics",
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gsubTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo",
+        "rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGsubFixtureFontsAsDiagnostics --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubContextFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGsubContextFixturesAsDiagnostics",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gsubTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubContextFixtureFontsFromRepo",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "GSUB trace golden changes require reviewed Latin fixture provenance, parser refusal diagnostics, deterministic lookup-order facts, and no broader script promotion.",
+      "updatePolicy": "GSUB trace golden changes require reviewed Latin simple/contextual fixture provenance, parser refusal diagnostics, deterministic nested-lookup and cycle-guard facts, and no broader script promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-target-support-claim",
@@ -2161,7 +2161,7 @@
     },
     {
       "dumpId": "shaped-glyph-run",
-      "ownerTicket": "KFONT-M6-004",
+      "ownerTicket": "KFONT-M6-003",
       "classification": "golden-gated",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
@@ -2180,10 +2180,10 @@
         "schemaVersion"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGposFixtureFontsFromRepo",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubContextFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGposFixtureFontsFromRepo",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "Shaped glyph run golden changes require reviewed Latin GSUB/GPOS fixture provenance, cluster-range review, and deterministic advance/offset facts without broader shaping promotion.",
+      "updatePolicy": "Shaped glyph run golden changes require reviewed Latin GSUB simple/contextual and GPOS fixture provenance, cluster-range review, deterministic advance/offset facts, and bounded cycle diagnostics without broader shaping promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-target-support-claim",

@@ -13,6 +13,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 
@@ -2588,18 +2589,21 @@ class SFNTSurfaceTest {
                 lookups = listOf(
                     OpenTypeGsubSingleSubstitutionLookup(
                         featureTag = "ccmp",
+                        lookupIndex = 0,
                         substitutions = listOf(
                             OpenTypeGsubSingleSubstitution(inputGlyphId = 5, replacementGlyphId = 15),
                         ),
                     ),
                     OpenTypeGsubMultipleSubstitutionLookup(
                         featureTag = "ccmp",
+                        lookupIndex = 1,
                         substitutions = listOf(
                             OpenTypeGsubMultipleSubstitution(inputGlyphId = 6, replacementGlyphIds = listOf(16, 17)),
                         ),
                     ),
                     OpenTypeGsubLigatureSubstitutionLookup(
                         featureTag = "liga",
+                        lookupIndex = 2,
                         substitutions = listOf(
                             OpenTypeGsubLigatureSubstitution(inputGlyphIds = listOf(7, 8), replacementGlyphId = 42),
                         ),
@@ -2687,6 +2691,135 @@ class SFNTSurfaceTest {
             malformedLigature.diagnostics.single().toString(),
         )
         assertEquals(null, malformedLigature.layout.gsub)
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserLoadsReviewedGsubContextFixtureFontsFromRepo() {
+        val parser = DefaultOpenTypeFaceParser()
+
+        val format1 = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gsub-context-format1.otf"),
+        )
+        assertEquals(emptyList(), format1.diagnostics)
+        assertEquals(
+            OpenTypeGsubTable(
+                lookups = listOf(
+                        OpenTypeGsubSingleSubstitutionLookup(
+                            featureTag = "ccmp",
+                            lookupIndex = 0,
+                            substitutions = listOf(
+                                OpenTypeGsubSingleSubstitution(inputGlyphId = 552, replacementGlyphId = 555),
+                            ),
+                        ),
+                    OpenTypeGsubContextGlyphLookup(
+                        featureTag = "calt",
+                        lookupIndex = 1,
+                        rules = listOf(
+                            OpenTypeGsubContextGlyphRule(
+                                inputGlyphIds = listOf(552, 553),
+                                nestedLookups = listOf(
+                                    OpenTypeGsubNestedLookupRecord(sequenceIndex = 0, lookupIndex = 0),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            format1.layout.gsub,
+        )
+
+        val format2 = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gsub-context-format2-class.otf"),
+        )
+        assertEquals(emptyList(), format2.diagnostics)
+        assertEquals(
+            OpenTypeGsubTable(
+                lookups = listOf(
+                        OpenTypeGsubSingleSubstitutionLookup(
+                            featureTag = "ccmp",
+                            lookupIndex = 0,
+                            substitutions = listOf(
+                                OpenTypeGsubSingleSubstitution(inputGlyphId = 552, replacementGlyphId = 556),
+                            ),
+                        ),
+                    OpenTypeGsubContextClassLookup(
+                        featureTag = "calt",
+                        lookupIndex = 1,
+                        firstGlyphCoverage = setOf(552),
+                        classDefinitions = mapOf(
+                            552 to 1,
+                            553 to 2,
+                            554 to 3,
+                        ),
+                        rules = listOf(
+                            OpenTypeGsubContextClassRule(
+                                inputClasses = listOf(1, 2, 3),
+                                nestedLookups = listOf(
+                                    OpenTypeGsubNestedLookupRecord(sequenceIndex = 0, lookupIndex = 0),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            format2.layout.gsub,
+        )
+
+        val format3 = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gsub-context-format3-coverage.otf"),
+        )
+        assertEquals(emptyList(), format3.diagnostics)
+        assertEquals(
+            OpenTypeGsubTable(
+                lookups = listOf(
+                        OpenTypeGsubSingleSubstitutionLookup(
+                            featureTag = "ccmp",
+                            lookupIndex = 0,
+                            substitutions = listOf(
+                                OpenTypeGsubSingleSubstitution(inputGlyphId = 552, replacementGlyphId = 557),
+                            ),
+                        ),
+                    OpenTypeGsubContextCoverageLookup(
+                        featureTag = "calt",
+                        lookupIndex = 1,
+                        rules = listOf(
+                            OpenTypeGsubContextCoverageRule(
+                                inputCoverages = listOf(
+                                    setOf(552),
+                                    setOf(553, 554),
+                                    setOf(555),
+                                ),
+                                nestedLookups = listOf(
+                                    OpenTypeGsubNestedLookupRecord(sequenceIndex = 0, lookupIndex = 0),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            format3.layout.gsub,
+        )
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserReportsReviewedMalformedGsubContextFixturesAsDiagnostics() {
+        val parser = DefaultOpenTypeFaceParser()
+
+        val malformedClassDef = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gsub-context-malformed-classdef.otf"),
+        )
+        val nestedCycle = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gsub-context-nested-cycle.otf"),
+        )
+
+        assertEquals("font.sfnt.optional-table-malformed", malformedClassDef.diagnostics.single().causeCode)
+        assertTrue(
+            malformedClassDef.diagnostics.single().causeMessage.orEmpty().contains("ClassDef"),
+            malformedClassDef.diagnostics.single().toString(),
+        )
+        assertEquals(null, malformedClassDef.layout.gsub)
+        assertEquals(emptyList(), nestedCycle.diagnostics)
+        assertNotNull(nestedCycle.layout.gsub)
     }
 
     @Test

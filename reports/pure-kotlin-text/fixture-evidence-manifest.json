@@ -740,22 +740,23 @@
         "reports/font/fixtures/expected/shaping/latin-gsub-gpos-goldens.json",
         "reports/font/fixtures/expected/shaping/gsub-trace.json",
         "reports/font/fixtures/expected/shaping/gpos-trace.json",
-        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json"
+        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json",
+        "reports/pure-kotlin-text/2026-06-17-kfont-m6-003-gsub-contextual-lookups.md"
       ],
       "requiredEvidenceGates": [
-        "Keep this row bounded to reviewed Latin simple GSUB LookupType 1/2/4 and GPOS LookupType 1/2 fixtures plus parser-owned malformed diagnostics; contextual lookups, mark/cursive positioning, and advanced variation/device tables remain separate gates.",
+        "Keep this row bounded to reviewed Latin GSUB LookupType 1/2/4/5 and GPOS LookupType 1/2 fixtures plus parser-owned malformed diagnostics; mark/cursive positioning and advanced variation/device tables remain separate gates.",
         "Keep Greek, Cyrillic, Hebrew, Arabic, Devanagari, Thai, CJK, and Emoji promotion out of this Latin fixture slice even though the checked-in dumps now carry deterministic glyph IDs, cluster ranges, and positioned advances.",
         "Do not claim script-default runtime adoption from these dumps alone; `ResolvedFeatureSet` execution and `drawString` non-enablement remain owned by KFONT-M6-006 and later per-script fixture families."
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGsubFixtureFontsAsDiagnostics --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGposFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGposFixtureFontsAsDiagnostics",
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGposFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gsubTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gposTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns",
+        "rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGsubFixtureFontsAsDiagnostics --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubContextFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGsubContextFixturesAsDiagnostics --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGposFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGposFixtureFontsAsDiagnostics",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubContextFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGposFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gsubTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gposTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns",
         "rtk python3 scripts/validate_font_fixture_assets.py",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
       ],
       "fixtureCommands": [
-        "KFONT-M6-002 and KFONT-M6-004 fixture fonts are checked in under reports/font/fixtures/fonts/shaping and asserted by SFNTSurfaceTest/TextStackSurfaceTest against gsub-trace.json, gpos-trace.json, and shaped-glyph-run.json."
+        "KFONT-M6-002, KFONT-M6-003, and KFONT-M6-004 fixture fonts are checked in under reports/font/fixtures/fonts/shaping and asserted by SFNTSurfaceTest/TextStackSurfaceTest against gsub-trace.json, gpos-trace.json, and shaped-glyph-run.json."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",

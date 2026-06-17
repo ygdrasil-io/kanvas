@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-003"
 title: "Implement GSUB contextual lookups"
-status: "proposed"
+status: "done"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
@@ -67,11 +67,11 @@ data class NestedSubstitutionRecord(
 
 ## Acceptance Criteria
 
-- [ ] Format 1 glyph-sequence context fixture applies a nested substitution only for the matching neighbor sequence.
-- [ ] Format 2 class-based context fixture matches glyph classes and rejects malformed class definitions.
-- [ ] Format 3 coverage-based context fixture matches multiple coverage tables deterministically.
-- [ ] Nested lookup cycles or excessive re-entry emit a stable diagnostic and stop before corrupting the glyph buffer.
-- [ ] Contextual substitutions preserve cluster ranges or refuse with `text.shaping.cluster-invariant-failed`.
+- [x] Format 1 glyph-sequence context fixture applies a nested substitution only for the matching neighbor sequence.
+- [x] Format 2 class-based context fixture matches glyph classes, enforces the first-glyph coverage gate, keeps same-lookup subtables isolated, and rejects malformed class definitions.
+- [x] Format 3 coverage-based context fixture matches multiple coverage tables deterministically.
+- [x] Nested lookup cycles or excessive re-entry emit a stable diagnostic and stop before corrupting the glyph buffer.
+- [x] Contextual substitutions preserve cluster ranges or refuse with `text.shaping.cluster-invariant-failed`.
 
 ## Required Evidence
 
@@ -96,14 +96,16 @@ data class NestedSubstitutionRecord(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test --tests '*GsubContext*'
+rtk ./gradlew --no-daemon :font:sfnt:test :font:text:test
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 ```
 
 ## Status Notes
 
 - `proposed`: Context matching builds on the basic GSUB buffer from KFONT-M6-002.
-- Current blocker audit (2026-06-16): draft PR `#1706` (`KFONT-M6-002`) is still open, and the required fixture set `gsub-context-format1.otf`, `gsub-context-format2-class.otf`, `gsub-context-format3-coverage.otf`, `gsub-context-nested-cycle.otf`, and `gsub-context-malformed-classdef.otf` is not present in-repo. Do not substitute synthetic-only coverage for these fixtures; remaining gate is merge/adopt the simple GSUB base plus add reviewed fixture provenance and expected dump coverage for the contextual rows.
-- Move to `ready` only after context fixture formats and cycle diagnostics are reviewed.
+- `done` (2026-06-17): LookupType 5 formats 1/2/3 now ship checked-in Latin fixture provenance, parser/runtime coverage for first-glyph coverage gating plus isolated format 2 subtables, stable nested-cycle and out-of-range nested-index refusals, refreshed `gsub-trace.json` / `shaped-glyph-run.json` evidence, fresh `:font:sfnt:test` + `:font:text:test` validation, and an independent re-review with no remaining findings.
 
 ## Linear Labels
 
