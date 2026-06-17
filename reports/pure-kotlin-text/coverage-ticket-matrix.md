@@ -2484,9 +2484,12 @@ Evidence:
   nested lookup re-entry.
 - The runtime now enforces the format 2 first-glyph `Coverage` gate, keeps
   multiple format 2 subtables isolated within one lookup, preserves later
-  nested `sequenceIndex` targets after earlier buffer expansion, and emits a
+  nested `sequenceIndex` targets after earlier buffer expansion, emits a
   stable `text.shaping.lookup-malformed` refusal when a contextual nested
-  `sequenceIndex` falls outside the matched range.
+  `sequenceIndex` falls outside the matched range or names a missing
+  `lookupIndex`, and rolls contextual nested substitutions back atomically
+  before emitting `text.shaping.cluster-invariant-failed`, including nested
+  contextual lookups that would escape the outer matched cluster.
 - Reviewed fixture provenance is now checked in for
   `gsub-context-format1.otf`, `gsub-context-format2-class.otf`,
   `gsub-context-format3-coverage.otf`,
@@ -2499,8 +2502,10 @@ Evidence:
   `gsub-trace.json` / `shaped-glyph-run.json` facts for the bounded Latin
   cases.
 - Independent code review initially rejected the first draft for format 2
-  coverage/subtable handling and nested-index stability; the remediating parser
-  and runtime tests now pass and the final re-review returned no remaining
+  coverage/subtable handling, missing nested-lookup refusals, and
+  cluster-invariant rollback gaps; the remediating parser and runtime tests now
+  pass, now cover later `sequenceIndex` escapes plus nested contextual
+  outer-cluster refusals, and the follow-up re-review returned no remaining
   findings.
 
 Validation:

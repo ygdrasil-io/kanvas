@@ -92,6 +92,7 @@ import org.graphiks.kanvas.text.shaping.ShapedGlyphRun
 import org.graphiks.kanvas.text.shaping.ShapingDiagnostic
 import org.graphiks.kanvas.text.shaping.ShapingRequest
 import org.graphiks.kanvas.text.shaping.ShapingResult
+import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_LOOKUP_MALFORMED_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_PARAGRAPH_BIDI_REQUIRED_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TextSegmenter
@@ -1699,6 +1700,309 @@ class TextStackSurfaceTest {
                 ShapingDiagnostic(
                     code = TEXT_SHAPING_LOOKUP_MALFORMED_DIAGNOSTIC_CODE,
                     message = "GSUB contextual nested lookup sequence index is outside the matched glyph range.",
+                    textRange = 0..1,
+                ),
+            ),
+            result.diagnostics,
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineDiagnosesMissingContextNestedLookupIndices() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440632"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                'a'.code to 5,
+                'b'.code to 6,
+            ),
+            gsubTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubContextGlyphLookup(
+                            featureTag = "calt",
+                            lookupIndex = 0,
+                            rules = listOf(
+                                OpenTypeGsubContextGlyphRule(
+                                    inputGlyphIds = listOf(5, 6),
+                                    nestedLookups = listOf(
+                                        OpenTypeGsubNestedLookupRecord(sequenceIndex = 0, lookupIndex = 7),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "ab",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+                features = FeatureSet(mapOf("calt" to 1)),
+            ),
+        )
+
+        assertEquals(listOf(5, 6), result.glyphRuns.single().glyphIds)
+        assertEquals(
+            listOf(
+                ShapingDiagnostic(
+                    code = TEXT_SHAPING_LOOKUP_MALFORMED_DIAGNOSTIC_CODE,
+                    message = "GSUB contextual nested lookup index is missing from the lookup list.",
+                    textRange = 0..1,
+                ),
+            ),
+            result.diagnostics,
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineRollsBackEarlierNestedMutationsWhenALaterContextLookupFails() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440634"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                'a'.code to 5,
+                'b'.code to 6,
+            ),
+            gsubTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubSingleSubstitutionLookup(
+                            featureTag = "salt",
+                            lookupIndex = 0,
+                            substitutions = listOf(
+                                OpenTypeGsubSingleSubstitution(inputGlyphId = 6, replacementGlyphId = 16),
+                            ),
+                        ),
+                        OpenTypeGsubContextGlyphLookup(
+                            featureTag = "calt",
+                            lookupIndex = 1,
+                            rules = listOf(
+                                OpenTypeGsubContextGlyphRule(
+                                    inputGlyphIds = listOf(5, 6),
+                                    nestedLookups = listOf(
+                                        OpenTypeGsubNestedLookupRecord(sequenceIndex = 1, lookupIndex = 0),
+                                        OpenTypeGsubNestedLookupRecord(sequenceIndex = 0, lookupIndex = 7),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "ab",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+                features = FeatureSet(mapOf("salt" to 0, "calt" to 1)),
+            ),
+        )
+
+        assertEquals(listOf(5, 6), result.glyphRuns.single().glyphIds)
+        assertEquals(
+            listOf(
+                ShapingDiagnostic(
+                    code = TEXT_SHAPING_LOOKUP_MALFORMED_DIAGNOSTIC_CODE,
+                    message = "GSUB contextual nested lookup index is missing from the lookup list.",
+                    textRange = 0..1,
+                ),
+            ),
+            result.diagnostics,
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineRefusesContextLookupsThatBreakClusterInvariant() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440633"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                'a'.code to 5,
+                'b'.code to 6,
+                'c'.code to 7,
+            ),
+            gsubTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubLigatureSubstitutionLookup(
+                            featureTag = "liga",
+                            lookupIndex = 0,
+                            substitutions = listOf(
+                                OpenTypeGsubLigatureSubstitution(
+                                    inputGlyphIds = listOf(5, 6, 7),
+                                    replacementGlyphId = 15,
+                                ),
+                            ),
+                        ),
+                        OpenTypeGsubContextGlyphLookup(
+                            featureTag = "calt",
+                            lookupIndex = 1,
+                            rules = listOf(
+                                OpenTypeGsubContextGlyphRule(
+                                    inputGlyphIds = listOf(5, 6),
+                                    nestedLookups = listOf(
+                                        OpenTypeGsubNestedLookupRecord(sequenceIndex = 0, lookupIndex = 0),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "abc",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+                features = FeatureSet(mapOf("liga" to 0, "calt" to 1)),
+            ),
+        )
+
+        assertEquals(listOf(5, 6, 7), result.glyphRuns.single().glyphIds)
+        assertEquals(
+            listOf(
+                ShapingDiagnostic(
+                    code = TEXT_SHAPING_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE,
+                    message = "GSUB contextual lookup left the matched cluster range.",
+                    textRange = 0..1,
+                ),
+            ),
+            result.diagnostics,
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineRefusesLaterNestedLookupsThatEscapeTheMatchedCluster() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440635"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                'a'.code to 5,
+                'b'.code to 6,
+                'c'.code to 7,
+            ),
+            gsubTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubLigatureSubstitutionLookup(
+                            featureTag = "liga",
+                            lookupIndex = 0,
+                            substitutions = listOf(
+                                OpenTypeGsubLigatureSubstitution(
+                                    inputGlyphIds = listOf(6, 7),
+                                    replacementGlyphId = 17,
+                                ),
+                            ),
+                        ),
+                        OpenTypeGsubContextGlyphLookup(
+                            featureTag = "calt",
+                            lookupIndex = 1,
+                            rules = listOf(
+                                OpenTypeGsubContextGlyphRule(
+                                    inputGlyphIds = listOf(5, 6),
+                                    nestedLookups = listOf(
+                                        OpenTypeGsubNestedLookupRecord(sequenceIndex = 1, lookupIndex = 0),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "abc",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+                features = FeatureSet(mapOf("liga" to 0, "calt" to 1)),
+            ),
+        )
+
+        assertEquals(listOf(5, 6, 7), result.glyphRuns.single().glyphIds)
+        assertEquals(
+            listOf(
+                ShapingDiagnostic(
+                    code = TEXT_SHAPING_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE,
+                    message = "GSUB contextual lookup left the matched cluster range.",
+                    textRange = 0..1,
+                ),
+            ),
+            result.diagnostics,
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineRefusesNestedContextLookupsThatEscapeTheOuterMatchedCluster() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440636"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                'a'.code to 5,
+                'b'.code to 6,
+                'c'.code to 7,
+            ),
+            gsubTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubLigatureSubstitutionLookup(
+                            featureTag = "liga",
+                            lookupIndex = 0,
+                            substitutions = listOf(
+                                OpenTypeGsubLigatureSubstitution(
+                                    inputGlyphIds = listOf(6, 7),
+                                    replacementGlyphId = 17,
+                                ),
+                            ),
+                        ),
+                        OpenTypeGsubContextGlyphLookup(
+                            featureTag = "clig",
+                            lookupIndex = 1,
+                            rules = listOf(
+                                OpenTypeGsubContextGlyphRule(
+                                    inputGlyphIds = listOf(6, 7),
+                                    nestedLookups = listOf(
+                                        OpenTypeGsubNestedLookupRecord(sequenceIndex = 0, lookupIndex = 0),
+                                    ),
+                                ),
+                            ),
+                        ),
+                        OpenTypeGsubContextGlyphLookup(
+                            featureTag = "calt",
+                            lookupIndex = 2,
+                            rules = listOf(
+                                OpenTypeGsubContextGlyphRule(
+                                    inputGlyphIds = listOf(5, 6),
+                                    nestedLookups = listOf(
+                                        OpenTypeGsubNestedLookupRecord(sequenceIndex = 1, lookupIndex = 1),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "abc",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+                features = FeatureSet(mapOf("liga" to 0, "clig" to 0, "calt" to 1)),
+            ),
+        )
+
+        assertEquals(listOf(5, 6, 7), result.glyphRuns.single().glyphIds)
+        assertEquals(
+            listOf(
+                ShapingDiagnostic(
+                    code = TEXT_SHAPING_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE,
+                    message = "GSUB contextual lookup left the matched cluster range.",
                     textRange = 0..1,
                 ),
             ),

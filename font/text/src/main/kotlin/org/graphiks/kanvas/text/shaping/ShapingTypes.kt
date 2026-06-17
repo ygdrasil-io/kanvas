@@ -1018,6 +1018,7 @@ public class BasicOpenTypeShapingEngine(
         val textRange = glyphUnits.subList(matchStart, matchStart + matchLength).let { matched ->
             matched.minOf { it.textRange.first }..matched.maxOf { it.textRange.last }
         }
+        val matchSnapshot = glyphUnits.toList()
         val positionShifts = IntArray(matchLength)
         for (record in nestedLookups) {
             if (record.sequenceIndex !in 0 until matchLength) {
@@ -1026,15 +1027,29 @@ public class BasicOpenTypeShapingEngine(
                     message = "GSUB contextual nested lookup sequence index is outside the matched glyph range.",
                     textRange = textRange,
                 )
+                glyphUnits.clear()
+                glyphUnits.addAll(matchSnapshot)
                 return true
             }
-            val nestedLookup = lookupsByIndex[record.lookupIndex] ?: continue
+            val nestedLookup = lookupsByIndex[record.lookupIndex]
+            if (nestedLookup == null) {
+                diagnostics += ShapingDiagnostic(
+                    code = TEXT_SHAPING_LOOKUP_MALFORMED_DIAGNOSTIC_CODE,
+                    message = "GSUB contextual nested lookup index is missing from the lookup list.",
+                    textRange = textRange,
+                )
+                glyphUnits.clear()
+                glyphUnits.addAll(matchSnapshot)
+                return true
+            }
             if (record.lookupIndex in lookupStack) {
                 diagnostics += ShapingDiagnostic(
                     code = TEXT_SHAPING_LOOKUP_CYCLE_DETECTED_DIAGNOSTIC_CODE,
                     message = "GSUB contextual nested lookup cycle detected.",
                     textRange = textRange,
                 )
+                glyphUnits.clear()
+                glyphUnits.addAll(matchSnapshot)
                 return true
             }
             val targetIndex = matchStart + record.sequenceIndex + positionShifts[record.sequenceIndex]
@@ -1044,10 +1059,12 @@ public class BasicOpenTypeShapingEngine(
                     message = "GSUB contextual nested lookup sequence index is outside the matched glyph range.",
                     textRange = textRange,
                 )
+                glyphUnits.clear()
+                glyphUnits.addAll(matchSnapshot)
                 return true
             }
             val sizeBefore = glyphUnits.size
-            applyLookupAtIndex(
+            val shouldStop = applyLookupAtIndex(
                 glyphUnits = glyphUnits,
                 glyphIndex = targetIndex,
                 lookup = nestedLookup,
@@ -1056,6 +1073,11 @@ public class BasicOpenTypeShapingEngine(
                 lookupStack = lookupStack + record.lookupIndex,
                 textRange = textRange,
             )
+            if (shouldStop) {
+                glyphUnits.clear()
+                glyphUnits.addAll(matchSnapshot)
+                return true
+            }
             val sizeDelta = glyphUnits.size - sizeBefore
             if (sizeDelta != 0) {
                 for (position in record.sequenceIndex + 1 until matchLength) {
@@ -1074,7 +1096,7 @@ public class BasicOpenTypeShapingEngine(
         diagnostics: MutableList<ShapingDiagnostic>,
         lookupStack: List<Int>,
         textRange: IntRange,
-    ) {
+    ): Boolean {
         when (lookup) {
             is OpenTypeGsubSingleSubstitutionLookup -> {
                 lookup.substitutions.firstOrNull { it.inputGlyphId == glyphUnits[glyphIndex].glyphId }?.let { substitution ->
@@ -1110,16 +1132,22 @@ public class BasicOpenTypeShapingEngine(
                 }
             }
             is OpenTypeGsubContextGlyphLookup -> {
-                if (lookup.rules.firstOrNull { contextGlyphRuleMatchesAt(glyphUnits, glyphIndex, it) } != null) {
-                    applyNestedLookupsForMatch(
+                val rule = lookup.rules.firstOrNull { contextGlyphRuleMatchesAt(glyphUnits, glyphIndex, it) }
+                if (rule != null) {
+                    val shouldStop = applyNestedLookupsForMatch(
                         glyphUnits = glyphUnits,
                         matchStart = glyphIndex,
-                        matchLength = lookup.rules.first { contextGlyphRuleMatchesAt(glyphUnits, glyphIndex, it) }.inputGlyphIds.size,
-                        nestedLookups = lookup.rules.first { contextGlyphRuleMatchesAt(glyphUnits, glyphIndex, it) }.nestedLookups,
+                        matchLength = rule.inputGlyphIds.size,
+                        nestedLookups = rule.nestedLookups,
                         lookupsByIndex = lookupsByIndex,
                         diagnostics = diagnostics,
                         lookupStack = lookupStack,
                     )
+                    if (shouldStop) {
+                        return true
+                    }
+                } else {
+                    return false
                 }
             }
             is OpenTypeGsubContextClassLookup -> {
@@ -1127,8 +1155,8 @@ public class BasicOpenTypeShapingEngine(
                     subtable.rules.firstOrNull {
                         contextClassRuleMatchesAt(glyphUnits, glyphIndex, subtable.firstGlyphCoverage, subtable.classDefinitions, it)
                     }
-                }.firstOrNull() ?: return
-                applyNestedLookupsForMatch(
+                }.firstOrNull() ?: return false
+                val shouldStop = applyNestedLookupsForMatch(
                     glyphUnits = glyphUnits,
                     matchStart = glyphIndex,
                     matchLength = rule.inputClasses.size,
@@ -1137,10 +1165,13 @@ public class BasicOpenTypeShapingEngine(
                     diagnostics = diagnostics,
                     lookupStack = lookupStack,
                 )
+                if (shouldStop) {
+                    return true
+                }
             }
             is OpenTypeGsubContextCoverageLookup -> {
-                val rule = lookup.rules.firstOrNull { contextCoverageRuleMatchesAt(glyphUnits, glyphIndex, it) } ?: return
-                applyNestedLookupsForMatch(
+                val rule = lookup.rules.firstOrNull { contextCoverageRuleMatchesAt(glyphUnits, glyphIndex, it) } ?: return false
+                val shouldStop = applyNestedLookupsForMatch(
                     glyphUnits = glyphUnits,
                     matchStart = glyphIndex,
                     matchLength = rule.inputCoverages.size,
@@ -1149,15 +1180,28 @@ public class BasicOpenTypeShapingEngine(
                     diagnostics = diagnostics,
                     lookupStack = lookupStack,
                 )
+                if (shouldStop) {
+                    return true
+                }
             }
         }
-        if (glyphUnits.none { it.textRange.first >= textRange.first && it.textRange.last <= textRange.last }) {
+        val hasOverlappingGlyph = glyphUnits.any { glyph ->
+            glyph.textRange.first <= textRange.last && glyph.textRange.last >= textRange.first
+        }
+        val escapedClusterRange = glyphUnits.any { glyph ->
+            glyph.textRange.first <= textRange.last &&
+                glyph.textRange.last >= textRange.first &&
+                (glyph.textRange.first < textRange.first || glyph.textRange.last > textRange.last)
+        }
+        if (!hasOverlappingGlyph || escapedClusterRange) {
             diagnostics += ShapingDiagnostic(
                 code = TEXT_SHAPING_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE,
                 message = "GSUB contextual lookup left the matched cluster range.",
                 textRange = textRange,
             )
+            return true
         }
+        return false
     }
 
     private fun OpenTypeGsubContextClassLookup.contextClassSubtables(): List<OpenTypeGsubContextClassSubtable> =

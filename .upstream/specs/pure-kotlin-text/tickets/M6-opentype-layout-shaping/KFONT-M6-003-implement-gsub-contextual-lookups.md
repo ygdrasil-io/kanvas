@@ -105,7 +105,7 @@ rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 ## Status Notes
 
 - `proposed`: Context matching builds on the basic GSUB buffer from KFONT-M6-002.
-- `done` (2026-06-17): LookupType 5 formats 1/2/3 now ship checked-in Latin fixture provenance, parser/runtime coverage for first-glyph coverage gating plus isolated format 2 subtables, stable nested-cycle and out-of-range nested-index refusals, refreshed `gsub-trace.json` / `shaped-glyph-run.json` evidence, fresh `:font:sfnt:test` + `:font:text:test` validation, and an independent re-review with no remaining findings.
+- `done` (2026-06-17): LookupType 5 formats 1/2/3 now ship checked-in Latin fixture provenance, parser/runtime coverage for first-glyph coverage gating plus isolated format 2 subtables, stable nested-cycle plus missing/out-of-range nested-index refusals, atomic contextual cluster-invariant rollback coverage including nested contextual outer-cluster escapes, refreshed `gsub-trace.json` / `shaped-glyph-run.json` evidence, fresh `:font:sfnt:test` + `:font:text:test` validation, and an independent re-review with no remaining findings.
 
 ## Linear Labels
 

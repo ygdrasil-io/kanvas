@@ -37,9 +37,12 @@ This wave adds the bounded GSUB contextual slice required by
   lookup re-entry.
 - The runtime now enforces the GSUB format 2 first-glyph `Coverage` gate,
   keeps format 2 subtables isolated inside one lookup, preserves later nested
-  `sequenceIndex` targets after earlier expansion, and emits a stable
+  `sequenceIndex` targets after earlier expansion, emits a stable
   `text.shaping.lookup-malformed` refusal when a contextual nested
-  `sequenceIndex` falls outside the matched range.
+  `sequenceIndex` falls outside the matched range or names a missing
+  `lookupIndex`, and rolls contextual nested substitutions back atomically
+  before emitting `text.shaping.cluster-invariant-failed`, including nested
+  contextual lookups that would escape the outer matched cluster.
 - `reports/font/fixtures/provenance/index.json` now records the checked-in
   contextual fixture bytes, hashes, and Apache-2.0 provenance derived from
   `simoncozens/test-fonts FallbackPlus-Small`.
@@ -49,8 +52,10 @@ This wave adds the bounded GSUB contextual slice required by
   keeping mark/cursive positioning, feature-policy adoption, and non-Latin
   promotion explicitly gated elsewhere.
 - Independent review initially found format 2 coverage, nested-position
-  stability, and out-of-range nested-index gaps; the remediating parser/runtime
-  tests now pass and the final re-review returned no remaining findings.
+  stability, missing nested-lookup refusals, and cluster-invariant rollback
+  gaps; the remediating parser/runtime tests now pass, now cover later
+  `sequenceIndex` escapes plus nested contextual outer-cluster refusals, and
+  the follow-up re-review returned no remaining findings.
 
 ## Validation
 
