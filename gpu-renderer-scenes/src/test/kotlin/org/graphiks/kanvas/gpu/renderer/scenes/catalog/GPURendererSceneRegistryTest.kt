@@ -210,6 +210,31 @@ class GPURendererSceneRegistryTest {
     }
 
     @Test
+    fun `gradient tile mode boundary is backed by visible tile mode refusals only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("gradient-tile-mode-boundary")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.Gradient, SceneTag.Clip), scene.tags)
+        assertEquals(listOf("M2"), scene.roadmapLinks.map { it.milestone })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.Clip>(scene.commands[1])
+        assertEquals(
+            listOf(
+                "linear-clamp-supported-lane",
+                "repeat-tile-mode-refusal",
+                "mirror-tile-mode-refusal",
+                "decal-tile-mode-refusal",
+                "local-matrix-refusal",
+                "diagnostic-visible-no-gradient-promotion",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..6).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.commands.none { it is SceneCommand.LinearGradientRect })
+        assertTrue(SceneTag.RRect !in scene.tags)
+    }
+
+    @Test
     fun `rrect gradient route board is backed by native rrect and gradient planning tickets only`() {
         val scene = GPURendererSceneRegistry.registry.requireScene("rrect-gradient-route-board")
         val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
@@ -288,6 +313,31 @@ class GPURendererSceneRegistryTest {
         )
         assertEquals((1..6).toList(), fills.map { it.paintOrder })
         assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M3-001" || it.ticketId == "KGPU-M3-003" })
+    }
+
+    @Test
+    fun `path aa stroke join board is backed by path stroke refusal lanes only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("path-aa-stroke-join-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.Clip, SceneTag.Path, SceneTag.Stroke), scene.tags)
+        assertEquals(listOf("M3"), scene.roadmapLinks.map { it.milestone })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.Clip>(scene.commands[1])
+        assertEquals(
+            listOf(
+                "miter-join-aa-refusal",
+                "round-join-aa-refusal",
+                "bevel-join-aa-refusal",
+                "cap-style-aa-refusal",
+                "coverage-mask-evidence-missing",
+                "stencil-cover-route-not-promoted",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..6).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.commands.none { it.family == "path" || it.family == "stroke" })
+        assertTrue(scene.roadmapLinks.none { it.ticketId == "KGPU-M3-002" })
     }
 
     @Test
@@ -500,6 +550,31 @@ class GPURendererSceneRegistryTest {
                 it.ticketId == "KGPU-M5-001" || it.ticketId == "KGPU-M5-003" || it.ticketId == "KGPU-M5-004"
             },
         )
+    }
+
+    @Test
+    fun `layer filter chain board is backed by bounded fixture and dag refusal lanes only`() {
+        val scene = GPURendererSceneRegistry.registry.requireScene("layer-filter-chain-board")
+        val fills = scene.commands.filterIsInstance<SceneCommand.FillRect>()
+
+        assertEquals(setOf(SceneTag.Rect, SceneTag.Clip, SceneTag.Layer, SceneTag.Filter), scene.tags)
+        assertEquals(listOf("M5"), scene.roadmapLinks.map { it.milestone })
+        assertIs<SceneCommand.Clear>(scene.commands[0])
+        assertIs<SceneCommand.Clip>(scene.commands[1])
+        assertEquals(
+            listOf(
+                "bounded-shadow-fixture-lane",
+                "single-luma-filter-lane",
+                "multi-node-dag-refusal",
+                "intermediate-texture-refusal",
+                "destination-read-refusal",
+                "general-savelayer-not-promoted",
+            ),
+            fills.map { it.label },
+        )
+        assertEquals((1..6).toList(), fills.map { it.paintOrder })
+        assertTrue(scene.commands.none { it is SceneCommand.SaveLayer })
+        assertTrue(scene.commands.none { it is SceneCommand.FilterNode })
     }
 
     @Test
@@ -1038,6 +1113,21 @@ class GPURendererSceneRegistryTest {
                 ),
             ),
             SceneExpectationRow(
+                sceneId = "gradient-tile-mode-boundary",
+                tags = setOf(SceneTag.Rect, SceneTag.Gradient, SceneTag.Clip),
+                commandFamilies = listOf(
+                    "clear",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M2")),
+            ),
+            SceneExpectationRow(
                 sceneId = "path-badge-and-stroke",
                 tags = setOf(SceneTag.RRect, SceneTag.Rect),
                 commandFamilies = listOf("fill-rrect", "fill-rect"),
@@ -1077,6 +1167,21 @@ class GPURendererSceneRegistryTest {
                     "fill-rect",
                 ),
                 roadmapLinks = listOf(RoadmapExpectation("M3", ticketId = "KGPU-M3-002")),
+            ),
+            SceneExpectationRow(
+                sceneId = "path-aa-stroke-join-board",
+                tags = setOf(SceneTag.Rect, SceneTag.Clip, SceneTag.Path, SceneTag.Stroke),
+                commandFamilies = listOf(
+                    "clear",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M3")),
             ),
             SceneExpectationRow(
                 sceneId = "clipped-avatar-grid",
@@ -1191,6 +1296,21 @@ class GPURendererSceneRegistryTest {
                     "fill-rect",
                 ),
                 roadmapLinks = listOf(RoadmapExpectation("M5", ticketId = "KGPU-M5-002")),
+            ),
+            SceneExpectationRow(
+                sceneId = "layer-filter-chain-board",
+                tags = setOf(SceneTag.Rect, SceneTag.Clip, SceneTag.Layer, SceneTag.Filter),
+                commandFamilies = listOf(
+                    "clear",
+                    "clip",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                    "fill-rect",
+                ),
+                roadmapLinks = listOf(RoadmapExpectation("M5")),
             ),
             SceneExpectationRow(
                 sceneId = "layered-shadow-card",

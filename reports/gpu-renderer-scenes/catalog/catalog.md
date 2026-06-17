@@ -9,9 +9,11 @@
 | `rounded-panel-gradient` | Rounded Panel Gradient | RRect,Gradient,Clip | KGPU M2 |  | R1,R2,R3 | `ShouldRender` |
 | `rrect-gradient-route-board` | RRect Gradient Route Board | Rect,RRect,Gradient,Clip | KGPU M2 | `KGPU-M2-001`,`KGPU-M2-002` |  | `ShouldRender` |
 | `release-gate-progress-board` | Release Gate Progress Board | Rect,RRect,Gradient,Clip | KGPU M2 | `KGPU-M2-003`,`KGPU-M2-004` |  | `ShouldRender` |
+| `gradient-tile-mode-boundary` | Gradient Tile Mode Boundary | Rect,Gradient,Clip | KGPU M2 |  |  | `ShouldRender` |
 | `path-badge-and-stroke` | Path Badge And Stroke | RRect,Rect | KGPU M3 |  |  | `ShouldRender` |
 | `path-coverage-review-board` | Path Coverage Review Board | Rect,RRect,Clip,Path,Stroke | KGPU M3 | `KGPU-M3-001`,`KGPU-M3-003`,`KGPU-M3-004`,`KGPU-M3-005` |  | `ShouldRender` |
 | `path-stencil-cover-gate-board` | Path Stencil Cover Gate Board | Rect,RRect,Clip,Path,Stroke | KGPU M3 | `KGPU-M3-002` |  | `ShouldRender` |
+| `path-aa-stroke-join-board` | Path AA Stroke Join Board | Rect,Clip,Path,Stroke | KGPU M3 |  |  | `ShouldRender` |
 | `clipped-avatar-grid` | Clipped Avatar Grid | Clip,Image | KGPU M3,M5 |  |  | `ShouldRender` |
 | `texture-swatch-board` | Texture Swatch Board | Image | KGPU M4 |  |  | `ShouldRender` |
 | `asset-intake-thumbnail-grid` | Asset Intake Thumbnail Grid | Image,Clip,RRect | KGPU M4 | `KGPU-M4-001`,`KGPU-M4-002` |  | `ShouldRender` |
@@ -21,6 +23,7 @@
 | `bitmap-sampler-matrix` | Bitmap Sampler Matrix | Image,Clip,RRect | KGPU M4 |  |  | `ShouldRender` |
 | `savelayer-isolation-gate-board` | SaveLayer Isolation Gate Board | Rect,RRect,Clip,Layer | KGPU M5 | `KGPU-M5-001` |  | `ShouldRender` |
 | `destination-read-strategy-gate-board` | Destination Read Strategy Gate Board | Rect,RRect,Clip,Blend | KGPU M5 | `KGPU-M5-002` |  | `ShouldRender` |
+| `layer-filter-chain-board` | Layer Filter Chain Board | Rect,Clip,Layer,Filter | KGPU M5 |  |  | `ShouldRender` |
 | `layered-shadow-card` | Layered Shadow Card | Layer,Filter | KGPU M5 |  |  | `ShouldRender` |
 | `notification-shadow-stack` | Notification Shadow Stack | Layer,Filter | KGPU M5 |  |  | `ShouldRender` |
 | `filtered-photo-chip` | Filtered Photo Chip | Filter,Image | KGPU M5 |  |  | `ShouldRender` |

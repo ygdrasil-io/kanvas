@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 49,
+  "sceneCount": 52,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -129,6 +129,24 @@
       }
     },
     {
+      "sceneId": "gradient-tile-mode-boundary",
+      "title": "Gradient Tile Mode Boundary",
+      "description": "Visible gradient tile-mode boundaries and local-matrix refusals without promoting repeat, mirror, decal, or transformed gradient support.",
+      "tags": ["Rect","Gradient","Clip"],
+      "kgpuMilestones": ["M2"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre visible les variations tile mode et transform autour des gradients.",
+          "validates": "Valide des lanes de refus repeat, mirror, decal et matrice locale.",
+          "nonClaims": "Ne revendique pas repeat, mirror, decal ou matrices locales completes.",
+          "evidence": "Preuve WebGPU offscreen avec refus gradient visibles."
+        }
+      }
+    },
+    {
       "sceneId": "path-badge-and-stroke",
       "title": "Path Badge And Stroke",
       "description": "Rounded badge and rectangular stroke proxy using current command families.",
@@ -179,6 +197,24 @@
           "validates": "Valide le contrat candidate, les diagnostics de refus et les raisons skipped-lane.",
           "nonClaims": "Ne revendique pas la route native stencil-cover ni activation produit.",
           "evidence": "Preuve WebGPU offscreen avec statut de gate contractuelle."
+        }
+      }
+    },
+    {
+      "sceneId": "path-aa-stroke-join-board",
+      "title": "Path AA Stroke Join Board",
+      "description": "Path AA join and cap refusal lanes for planned stroke coverage without native path or stencil-cover promotion.",
+      "tags": ["Rect","Clip","Path","Stroke"],
+      "kgpuMilestones": ["M3"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Preparer une revue des joins, caps et AA path avant support natif.",
+          "validates": "Valide des lanes de refus AA pour joins, caps, coverage et stencil-cover.",
+          "nonClaims": "Ne revendique pas couverture AA, joins/caps reels ou stencil-cover natif.",
+          "evidence": "Preuve WebGPU offscreen avec refus path/stroke visibles."
         }
       }
     },
@@ -341,6 +377,24 @@
           "validates": "Valide lanes de politique dst-read et blend sans lecture destination active.",
           "nonClaims": "Ne revendique pas framebuffer fetch, dst texture ou blend compose general.",
           "evidence": "Preuve WebGPU offscreen avec refus destination-read."
+        }
+      }
+    },
+    {
+      "sceneId": "layer-filter-chain-board",
+      "title": "Layer Filter Chain Board",
+      "description": "Layer and filter chain boundary lanes that separate bounded fixtures from unsupported filter DAGs and destination reads.",
+      "tags": ["Rect","Clip","Layer","Filter"],
+      "kgpuMilestones": ["M5"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Preparer une scene de chainage layer/filter plus ambitieuse.",
+          "validates": "Valide des lanes de refus pour DAG, texture intermediaire et destination-read.",
+          "nonClaims": "Ne revendique pas saveLayer general, destination-read, intermediate textures ou DAG arbitraire.",
+          "evidence": "Preuve WebGPU offscreen avec refus layer/filter visibles."
         }
       }
     },
@@ -886,54 +940,6 @@
     }
   ],
   "candidateScenes": [
-    {
-      "sceneId": "gradient-tile-mode-boundary",
-      "title": "Gradient Tile Mode Boundary",
-      "status": "runner-gap",
-      "tags": ["RRect","Gradient","Clip"],
-      "kgpuMilestones": ["M2"],
-      "ticketIds": [],
-      "humanDocs": {
-        "fr": {
-          "intention": "Rendre visible les variations tile mode et transform autour des gradients.",
-          "validationTarget": "Verifier que les tile modes non supportes refusent avec raison stable.",
-          "nonClaims": "Ne revendique pas repeat, mirror, decal ou matrices locales completes.",
-          "rationale": "Complete les scenes M2 actuelles qui couvrent surtout le degrade lineaire simple."
-        }
-      }
-    },
-    {
-      "sceneId": "path-aa-stroke-join-board",
-      "title": "Path AA Stroke Join Board",
-      "status": "runner-gap",
-      "tags": ["Path","Stroke","Clip"],
-      "kgpuMilestones": ["M3"],
-      "ticketIds": [],
-      "humanDocs": {
-        "fr": {
-          "intention": "Preparer une revue des joins, caps et AA path avant support natif.",
-          "validationTarget": "Montrer les routes path/stroke attendues et les refus coverage manquants.",
-          "nonClaims": "Ne revendique pas couverture AA, joins/caps reels ou stencil-cover natif.",
-          "rationale": "Couvre un trou M3 entre proxy rectangulaire et vraie couverture path."
-        }
-      }
-    },
-    {
-      "sceneId": "layer-filter-chain-board",
-      "title": "Layer Filter Chain Board",
-      "status": "runner-gap",
-      "tags": ["Layer","Filter"],
-      "kgpuMilestones": ["M5"],
-      "ticketIds": [],
-      "humanDocs": {
-        "fr": {
-          "intention": "Preparer une scene de chainage layer/filter plus ambitieuse.",
-          "validationTarget": "Distinguer bounded fixtures supportees et DAG image-filter non supporte.",
-          "nonClaims": "Ne revendique pas saveLayer general, intermediate textures ou DAG arbitraire.",
-          "rationale": "Couvre les limites M5 autour de SaveLayer, FilterNode et destination-read."
-        }
-      }
-    },
     {
       "sceneId": "simple-latin-glyph-atlas-strip",
       "title": "Simple Latin Glyph Atlas Strip",

@@ -27,6 +27,9 @@ class SceneCatalogReportTest {
         assertContains(markdown, "| `bitmap-sampler-matrix` | Bitmap Sampler Matrix |")
         assertContains(markdown, "| `runtime-effect-uniform-ladder` | Runtime Effect Uniform Ladder |")
         assertContains(markdown, "| `mesh-ribbon-depth-stack` | Mesh Ribbon Depth Stack |")
+        assertContains(markdown, "| `gradient-tile-mode-boundary` | Gradient Tile Mode Boundary |")
+        assertContains(markdown, "| `path-aa-stroke-join-board` | Path AA Stroke Join Board |")
+        assertContains(markdown, "| `layer-filter-chain-board` | Layer Filter Chain Board |")
         assertContains(markdown, "| `legacy-parity-snapshot-board` | Legacy Parity Snapshot Board |")
         assertContains(markdown, "KGPU M0,M1")
         assertContains(markdown, "`KGPU-M0-007`,`KGPU-M1-001`,`KGPU-M1-002`")
@@ -71,6 +74,9 @@ class SceneCatalogReportTest {
         assertTrue(root.resolve("catalog.json").readText().contains("\"sceneId\": \"bitmap-sampler-matrix\""))
         assertTrue(root.resolve("catalog.json").readText().contains("\"sceneId\": \"runtime-effect-uniform-ladder\""))
         assertTrue(root.resolve("catalog.json").readText().contains("\"sceneId\": \"mesh-ribbon-depth-stack\""))
+        assertTrue(root.resolve("catalog.json").readText().contains("\"sceneId\": \"gradient-tile-mode-boundary\""))
+        assertTrue(root.resolve("catalog.json").readText().contains("\"sceneId\": \"path-aa-stroke-join-board\""))
+        assertTrue(root.resolve("catalog.json").readText().contains("\"sceneId\": \"layer-filter-chain-board\""))
         assertTrue(root.resolve("catalog.json").readText().contains("\"sceneId\": \"legacy-parity-snapshot-board\""))
         assertTrue(
             root.resolve("catalog.json").readText()
@@ -123,7 +129,10 @@ class SceneCatalogReportTest {
         assertContains(french, "## Candidates amont")
         assertContains(french, "### Runtime Effect Uniform Ladder (`runtime-effect-uniform-ladder`)")
         assertContains(french, "### Gradient Tile Mode Boundary (`gradient-tile-mode-boundary`)")
-        assertContains(french, "Statut: `runner-gap`")
+        assertContains(french, "### Path AA Stroke Join Board (`path-aa-stroke-join-board`)")
+        assertContains(french, "### Layer Filter Chain Board (`layer-filter-chain-board`)")
+        assertContains(french, "### Simple Latin Glyph Atlas Strip (`simple-latin-glyph-atlas-strip`)")
+        assertContains(french, "Statut: `dependency-gated`")
     }
 
     @Test
@@ -140,7 +149,11 @@ class SceneCatalogReportTest {
         assertContains(json, "\"candidateScenes\": [")
         assertContains(json, "\"sceneId\": \"runtime-effect-uniform-ladder\"")
         assertContains(json, "\"sceneId\": \"gradient-tile-mode-boundary\"")
-        assertContains(json, "\"status\": \"runner-gap\"")
+        assertContains(json, "\"sceneId\": \"path-aa-stroke-join-board\"")
+        assertContains(json, "\"sceneId\": \"layer-filter-chain-board\"")
+        assertContains(json, "\"sceneId\": \"simple-latin-glyph-atlas-strip\"")
+        assertContains(json, "\"status\": \"dependency-gated\"")
+        assertFalse(json.substringAfter("\"candidateScenes\": [").contains("\"status\": \"runner-gap\""))
         assertTrue(json.indexOf("\"scenes\": [") < json.indexOf("\"candidateScenes\": ["))
     }
 
