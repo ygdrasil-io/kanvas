@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
+
 /** Describes an offscreen surface allocation request for the low-level GPU backend runtime. */
 data class GPUOffscreenTargetRequest(
     val width: Int,
@@ -59,6 +61,14 @@ data class GPUBackendAdapterSummary(
 /** Owns a GPU backend session that can allocate offscreen and window-backed targets. */
 interface GPUBackendSession : AutoCloseable {
     val adapterInfo: GPUBackendAdapterSummary?
+
+    /** Reports live execution-cache counters emitted by this session. */
+    val executionCacheTelemetry: List<GPUCacheTelemetry>
+        get() = emptyList()
+
+    /** Reports deterministic execution-cache dump lines without backend handles. */
+    val executionCacheDumpLines: List<String>
+        get() = emptyList()
 
     /** Allocates an offscreen render target using the requested size and color format. */
     fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget

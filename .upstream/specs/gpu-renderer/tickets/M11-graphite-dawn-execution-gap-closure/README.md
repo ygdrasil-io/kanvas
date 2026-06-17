@@ -29,7 +29,7 @@ and do not widen M6 text scope.
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M11-001 - Add WGPU module, pipeline, and bind group layout caches](KGPU-M11-001-add-wgpu-module-pipeline-and-bind-group-layout-caches.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-cache` | `KGPU-M0-005`, `KGPU-M9-001` | `cache reporting-only` |
+| [KGPU-M11-001 - Add WGPU module, pipeline, and bind group layout caches](KGPU-M11-001-add-wgpu-module-pipeline-and-bind-group-layout-caches.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-cache` | `KGPU-M0-005`, `KGPU-M9-001` | `cache reporting-only` |
 | [KGPU-M11-002 - Add payload upload and bind group materialization lane](KGPU-M11-002-add-payload-upload-and-bind-group-materialization-lane.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `payloads-bind-groups` | `KGPU-M11-001`, `KGPU-M11-003` | - |
 | [KGPU-M11-003 - Add resource materialization handles and provider bridge](KGPU-M11-003-add-resource-materialization-handles-and-provider-bridge.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `resources-execution` | `KGPU-M0-005` | - |
 | [KGPU-M11-004 - Add texture and sampler live materialization from boundary evidence](KGPU-M11-004-add-texture-and-sampler-live-materialization-from-boundary-evidence.md) | `proposed` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `textures-samplers` | `KGPU-M4-004`, `KGPU-M11-003` | - |
