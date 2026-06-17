@@ -301,6 +301,24 @@ public const val PARAGRAPH_LAYOUT_LINE_HEIGHT_NON_FINITE_DIAGNOSTIC_CODE: String
     "text.paragraph.line-height-non-finite"
 
 /**
+ * Stable diagnostic family emitted when selection queries provide an invalid logical range.
+ */
+public const val PARAGRAPH_SELECTION_INVALID_RANGE_DIAGNOSTIC_CODE: String =
+    "text.paragraph.invalid-selection-range"
+
+/**
+ * Stable diagnostic family emitted when hit-test coordinates are non-finite.
+ */
+public const val PARAGRAPH_HIT_TEST_POINT_NON_FINITE_DIAGNOSTIC_CODE: String =
+    "text.paragraph.hit-test-point-non-finite"
+
+/**
+ * Stable diagnostic family emitted when hit-test or selection logic cannot preserve grapheme-cluster invariants.
+ */
+public const val PARAGRAPH_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE: String =
+    "text.paragraph.cluster-invariant-failed"
+
+/**
  * Stable diagnostic family emitted when paragraph input contracts contain invalid numeric or coordinate facts.
  */
 public const val PARAGRAPH_INPUT_INVALID_CONSTRAINT_DIAGNOSTIC_CODE: String =
@@ -550,7 +568,7 @@ public class BasicParagraphLayoutEngine(
             }
             val linePlaceholderBoxes = resolvePlaceholderBoxes(
                 paragraph = paragraph,
-                clusters = paragraphClusters,
+                glyphRuns = glyphRuns,
                 visibleTextRange = visibleTextRange,
                 lineIndex = index,
                 lineTop = y,
@@ -663,6 +681,52 @@ public data class ParagraphLayoutResult(
         ) { diagnostic -> diagnostic.toDumpJson() }
         append("\n")
         append("}\n")
+    }
+
+    /**
+     * Builds a deterministic bounded hit-test/selection view for the current paragraph layout.
+     */
+    public fun buildHitTestMap(
+        samplePoints: List<Pair<Float, Float>> = emptyList(),
+        selectionRanges: List<SelectionRange> = emptyList(),
+        wordBoundaryOffsets: List<Int> = emptyList(),
+        graphemeBoundaryOffsets: List<Int> = emptyList(),
+    ): HitTestMap {
+        val diagnostics = mutableListOf<ParagraphLayoutDiagnostic>()
+        val fragments = buildLineFragments()
+        val selectionBoxes = selectionRanges.flatMap { range ->
+            selectionBoxesFor(
+                range = range,
+                fragments = fragments,
+                diagnostics = diagnostics,
+            )
+        }
+        val hitEntries = samplePoints.mapNotNull { (x, y) ->
+            hitEntryFor(
+                x = x,
+                y = y,
+                fragments = fragments,
+                diagnostics = diagnostics,
+            )
+        }
+        return HitTestMap(
+            caretStops = buildCaretStops(fragments),
+            selectionBoxes = selectionBoxes,
+            hitEntries = hitEntries,
+            wordBoundaries = wordBoundaryOffsets.map { offset ->
+                BoundaryQueryResult(
+                    offset = offset,
+                    boundary = paragraph.wordBoundaryAt(offset),
+                )
+            },
+            graphemeBoundaries = graphemeBoundaryOffsets.map { offset ->
+                BoundaryQueryResult(
+                    offset = offset,
+                    boundary = paragraph.graphemeBoundaryAt(offset),
+                )
+            },
+            diagnostics = diagnostics.distinct(),
+        )
     }
 }
 
@@ -815,6 +879,56 @@ public data class HitTestResult(
 )
 
 /**
+ * Deterministic caret stop fact for paragraph hit testing.
+ *
+ * @property offset UTF-16 offset represented by the stop.
+ * @property affinity Stable upstream/downstream disambiguation.
+ * @property lineIndex Zero-based visual line index containing the stop.
+ */
+public data class CaretStop(
+    public val offset: Int,
+    public val affinity: String,
+    public val lineIndex: Int,
+    public val x: Float,
+    public val top: Float,
+    public val bottom: Float,
+    public val placeholderId: String? = null,
+)
+
+/**
+ * Deterministic hit-test sample result recorded for fixture evidence.
+ */
+public data class HitTestEntry(
+    public val pointX: Float,
+    public val pointY: Float,
+    public val lineIndex: Int,
+    public val position: TextPosition,
+    public val isInsideText: Boolean,
+    public val clusterRange: IntRange? = null,
+    public val placeholderId: String? = null,
+)
+
+/**
+ * Deterministic boundary query result sourced from the paragraph segmentation model.
+ */
+public data class BoundaryQueryResult(
+    public val offset: Int,
+    public val boundary: IntRange,
+)
+
+/**
+ * Bounded selection and hit-test contract derived from a laid-out paragraph.
+ */
+public data class HitTestMap(
+    public val caretStops: List<CaretStop> = emptyList(),
+    public val selectionBoxes: List<TextBox> = emptyList(),
+    public val hitEntries: List<HitTestEntry> = emptyList(),
+    public val wordBoundaries: List<BoundaryQueryResult> = emptyList(),
+    public val graphemeBoundaries: List<BoundaryQueryResult> = emptyList(),
+    public val diagnostics: List<ParagraphLayoutDiagnostic> = emptyList(),
+)
+
+/**
  * Represents a logical selection range in paragraph text.
  *
  * @property start Inclusive start text position.
@@ -836,6 +950,17 @@ public data class SelectionRange(
 public data class TextPosition(
     public val offset: Int,
     public val affinity: String = "downstream",
+)
+
+private data class LineFragment(
+    val lineIndex: Int,
+    val textRange: IntRange,
+    val left: Float,
+    val right: Float,
+    val top: Float,
+    val bottom: Float,
+    val direction: Int,
+    val placeholderId: String? = null,
 )
 
 private const val OBJECT_REPLACEMENT_CHARACTER: Char = '\uFFFC'
@@ -1556,9 +1681,304 @@ private fun Paragraph.estimatedWidth(range: IntRange): Float =
     placeholders.entries.firstOrNull { (placeholderRange) -> placeholderRange.overlaps(range) }?.value?.width
         ?: styleAt(range.first).fontSize
 
+private fun Paragraph.graphemeBoundaryAt(offset: Int): IntRange {
+    val clusters = BasicTextSegmenter().segment(text)
+    if (clusters.isEmpty()) return IntRange.EMPTY
+    if (offset <= 0) return clusters.first()
+    if (offset >= text.length) return clusters.last()
+    return clusters.firstOrNull { cluster -> offset in cluster }
+        ?: clusters.firstOrNull { cluster -> offset == cluster.last + 1 }
+        ?: clusters.last()
+}
+
+private fun Paragraph.wordBoundaryAt(offset: Int): IntRange {
+    val clusters = BasicTextSegmenter().segment(text)
+    if (clusters.isEmpty()) return IntRange.EMPTY
+    val clampedOffset = offset.coerceIn(0, text.length)
+    val seedCluster = when {
+        clampedOffset == text.length -> clusters.last()
+        else -> clusters.firstOrNull { cluster -> clampedOffset in cluster }
+            ?: clusters.firstOrNull { cluster -> clampedOffset == cluster.last + 1 }
+            ?: clusters.last()
+    }
+    if (text.substring(seedCluster.first, seedCluster.last + 1).all(Char::isWhitespace)) {
+        return seedCluster
+    }
+    var startIndex = clusters.indexOf(seedCluster)
+    var endIndex = startIndex
+    while (startIndex > 0 && text.substring(clusters[startIndex - 1].first, clusters[startIndex - 1].last + 1).none(Char::isWhitespace)) {
+        startIndex -= 1
+    }
+    while (endIndex < clusters.lastIndex && text.substring(clusters[endIndex + 1].first, clusters[endIndex + 1].last + 1).none(Char::isWhitespace)) {
+        endIndex += 1
+    }
+    return clusters[startIndex].first..clusters[endIndex].last
+}
+
+private fun Paragraph.isGraphemeBoundaryOffset(offset: Int): Boolean {
+    if (offset < 0 || offset > text.length) return false
+    if (offset == 0 || offset == text.length) return true
+    val clusters = BasicTextSegmenter().segment(text)
+    return clusters.any { cluster -> offset == cluster.first || offset == cluster.last + 1 }
+}
+
+private data class ShapedLineFragmentSeed(
+    val textRange: IntRange,
+    val advanceX: Float,
+    val direction: Int,
+)
+
+private fun Paragraph.normalizedShapedLineFragmentSeeds(
+    glyphRuns: List<ShapedGlyphRun>,
+    visibleRange: IntRange,
+): List<ShapedLineFragmentSeed> {
+    val rawSeeds: List<ShapedLineFragmentSeed> = glyphRuns.flatMap { glyphRun ->
+        val direction = if (glyphRun.bidiLevel % 2 == 0) 1 else -1
+        glyphRun.clusters
+            .filter { cluster -> cluster.textRange.overlaps(visibleRange) }
+            .map { cluster ->
+                ShapedLineFragmentSeed(
+                    textRange = cluster.textRange,
+                    advanceX = cluster.advanceX,
+                    direction = direction,
+                )
+            }
+    }
+    val mergedSeeds = mutableListOf<ShapedLineFragmentSeed>()
+    rawSeeds.forEach { seed ->
+        val normalizedRange = if (seed.textRange.first == seed.textRange.last) {
+            graphemeBoundaryAt(seed.textRange.first)
+        } else {
+            seed.textRange
+        }
+        val previous = mergedSeeds.lastOrNull()
+        if (previous != null && previous.textRange == normalizedRange && previous.direction == seed.direction) {
+            mergedSeeds[mergedSeeds.lastIndex] = previous.copy(
+                advanceX = previous.advanceX + seed.advanceX,
+            )
+        } else {
+            mergedSeeds += seed.copy(textRange = normalizedRange)
+        }
+    }
+    return mergedSeeds
+}
+
+private fun ParagraphLayoutResult.buildLineFragments(): List<LineFragment> {
+    return lines.flatMapIndexed { lineIndex, line ->
+        val visibleRange = line.visibleTextRange ?: return@flatMapIndexed emptyList()
+        val placeholderBoxesByRange = placeholderBoxes
+            .filter { placeholder -> placeholder.lineIndex == lineIndex }
+            .associateBy { placeholder -> placeholder.textRange }
+        val lineTop = line.metrics.baseline + line.metrics.ascent
+        val lineBottom = line.metrics.baseline + line.metrics.descent
+        val shapedSeeds = paragraph.normalizedShapedLineFragmentSeeds(
+            glyphRuns = line.glyphRuns,
+            visibleRange = visibleRange,
+        )
+        if (shapedSeeds.isEmpty() && placeholderBoxesByRange.isEmpty()) {
+            return@flatMapIndexed emptyList()
+        }
+
+        if (placeholderBoxesByRange.isEmpty()) {
+            var cursorX = 0f
+            return@flatMapIndexed shapedSeeds.map { seed ->
+                val left = cursorX
+                val right = left + seed.advanceX
+                cursorX += seed.advanceX
+                LineFragment(
+                    lineIndex = lineIndex,
+                    textRange = seed.textRange,
+                    left = left,
+                    right = right,
+                    top = lineTop,
+                    bottom = lineBottom,
+                    direction = seed.direction,
+                )
+            }
+        }
+
+        val lineDirection = line.boxes.firstOrNull()?.direction ?: 1
+        val contentOrder = mutableListOf<Pair<IntRange, Any>>()
+        contentOrder += shapedSeeds.sortedBy { seed -> seed.textRange.first }.map { seed -> seed.textRange to seed }
+        contentOrder += placeholderBoxesByRange.entries
+            .sortedBy { (range) -> range.first }
+            .map { (range, box) -> range to box }
+        contentOrder.sortBy { (range) -> range.first }
+
+        var cursorX = 0f
+        contentOrder.map { (range, content) ->
+            when (content) {
+                is ShapedLineFragmentSeed -> {
+                    val left = cursorX
+                    val right = left + content.advanceX
+                    cursorX += content.advanceX
+                    LineFragment(
+                        lineIndex = lineIndex,
+                        textRange = range,
+                        left = left,
+                        right = right,
+                        top = lineTop,
+                        bottom = lineBottom,
+                        direction = content.direction,
+                    )
+                }
+
+                is PlaceholderBox -> {
+                    val left = cursorX
+                    val right = left + (content.right - content.left)
+                    cursorX = right
+                    LineFragment(
+                        lineIndex = lineIndex,
+                        textRange = range,
+                        left = left,
+                        right = right,
+                        top = content.top,
+                        bottom = content.bottom,
+                        direction = lineDirection,
+                        placeholderId = content.placeholderId,
+                    )
+                }
+
+                else -> error("Unsupported line-fragment content for range ${range.toDumpLabel()}.")
+            }
+        }
+    }
+}
+
+private fun ParagraphLayoutResult.selectionBoxesFor(
+    range: SelectionRange,
+    fragments: List<LineFragment>,
+    diagnostics: MutableList<ParagraphLayoutDiagnostic>,
+): List<TextBox> {
+    val start = range.start.offset
+    val endExclusive = range.end.offset
+    if (start < 0 || endExclusive < start || endExclusive > paragraph.text.length) {
+        diagnostics += ParagraphLayoutDiagnostic(
+            code = PARAGRAPH_SELECTION_INVALID_RANGE_DIAGNOSTIC_CODE,
+            message = "Selection range $start..${endExclusive - 1} is invalid for text length ${paragraph.text.length}.",
+            severity = "refusal",
+        )
+        return emptyList()
+    }
+    if (start == endExclusive) return emptyList()
+    if (!paragraph.isGraphemeBoundaryOffset(start)) {
+        diagnostics += ParagraphLayoutDiagnostic(
+            code = PARAGRAPH_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE,
+            message = "Selection start offset $start cuts grapheme cluster ${paragraph.graphemeBoundaryAt(start).toDumpLabel()}.",
+            severity = "refusal",
+        )
+        return emptyList()
+    }
+    if (!paragraph.isGraphemeBoundaryOffset(endExclusive)) {
+        diagnostics += ParagraphLayoutDiagnostic(
+            code = PARAGRAPH_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE,
+            message = "Selection end offset $endExclusive cuts grapheme cluster ${paragraph.graphemeBoundaryAt(endExclusive).toDumpLabel()}.",
+            severity = "refusal",
+        )
+        return emptyList()
+    }
+    val selectionStart = start
+    val selectionEndInclusive = endExclusive - 1
+    return fragments.filter { fragment ->
+        fragment.textRange.overlaps(selectionStart..selectionEndInclusive)
+    }.map { fragment ->
+        TextBox(
+            textRange = fragment.textRange,
+            left = fragment.left,
+            top = fragment.top,
+            right = fragment.right,
+            bottom = fragment.bottom,
+            direction = fragment.direction,
+        )
+    }
+}
+
+private fun ParagraphLayoutResult.hitEntryFor(
+    x: Float,
+    y: Float,
+    fragments: List<LineFragment>,
+    diagnostics: MutableList<ParagraphLayoutDiagnostic>,
+): HitTestEntry? {
+    if (!x.isFinite() || !y.isFinite()) {
+        diagnostics += ParagraphLayoutDiagnostic(
+            code = PARAGRAPH_HIT_TEST_POINT_NON_FINITE_DIAGNOSTIC_CODE,
+            message = "Hit-test point (${paragraphJsonFloat(x)}, ${paragraphJsonFloat(y)}) must be finite.",
+            severity = "refusal",
+        )
+        return null
+    }
+    val lineFragments = fragments.groupBy { fragment -> fragment.lineIndex }
+    val lineIndex = lineFragments.keys.minByOrNull { index ->
+        val fragmentsOnLine = lineFragments.getValue(index)
+        val top = fragmentsOnLine.minOf { fragment -> fragment.top }
+        val bottom = fragmentsOnLine.maxOf { fragment -> fragment.bottom }
+        when {
+            y < top -> top - y
+            y > bottom -> y - bottom
+            else -> 0f
+        }
+    } ?: 0
+    val fragmentsOnLine = lineFragments[lineIndex].orEmpty()
+    if (fragmentsOnLine.isEmpty()) {
+        diagnostics += ParagraphLayoutDiagnostic(
+            code = PARAGRAPH_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE,
+            message = "No grapheme fragments were available for line $lineIndex during hit testing.",
+            severity = "refusal",
+        )
+        return null
+    }
+    val target = fragmentsOnLine.firstOrNull { fragment -> x in fragment.left..fragment.right } ?: when {
+        x < fragmentsOnLine.first().left -> fragmentsOnLine.first()
+        else -> fragmentsOnLine.last()
+    }
+    val clampedInside = x in target.left..target.right && y in target.top..target.bottom
+    val midpoint = (target.left + target.right) / 2f
+    val position = if (x < midpoint) {
+        TextPosition(offset = target.textRange.first, affinity = "downstream")
+    } else {
+        TextPosition(offset = target.textRange.last + 1, affinity = "upstream")
+    }
+    return HitTestEntry(
+        pointX = x,
+        pointY = y,
+        lineIndex = lineIndex,
+        position = position,
+        isInsideText = clampedInside,
+        clusterRange = target.textRange,
+        placeholderId = target.placeholderId,
+    )
+}
+
+private fun buildCaretStops(fragments: List<LineFragment>): List<CaretStop> = buildList {
+    fragments.forEach { fragment ->
+        add(
+            CaretStop(
+                offset = fragment.textRange.first,
+                affinity = "downstream",
+                lineIndex = fragment.lineIndex,
+                x = fragment.left,
+                top = fragment.top,
+                bottom = fragment.bottom,
+                placeholderId = fragment.placeholderId,
+            ),
+        )
+        add(
+            CaretStop(
+                offset = fragment.textRange.last + 1,
+                affinity = "upstream",
+                lineIndex = fragment.lineIndex,
+                x = fragment.right,
+                top = fragment.top,
+                bottom = fragment.bottom,
+                placeholderId = fragment.placeholderId,
+            ),
+        )
+    }
+}
+
 private fun resolvePlaceholderBoxes(
     paragraph: Paragraph,
-    clusters: List<IntRange>,
+    glyphRuns: List<ShapedGlyphRun>,
     visibleTextRange: IntRange?,
     lineIndex: Int,
     lineTop: Float,
@@ -1566,17 +1986,29 @@ private fun resolvePlaceholderBoxes(
     baseline: Float,
 ): List<PlaceholderBox> {
     if (visibleTextRange == null) return emptyList()
-    val lineClusters = clusters.filter { cluster -> cluster.overlaps(visibleTextRange) }
     val lineBottom = lineTop + lineHeight
+    val shapedSeedsByRange = paragraph.normalizedShapedLineFragmentSeeds(
+        glyphRuns = glyphRuns,
+        visibleRange = visibleTextRange,
+    ).sortedBy { seed -> seed.textRange.first }
+        .associateBy { seed -> seed.textRange }
+    val placeholderEntriesByRange = paragraph.placeholders.entries
+        .filter { (range) -> range.overlaps(visibleTextRange) }
+        .sortedBy { (range) -> range.first }
+        .associateBy { (range) -> range }
+    val lineContentRanges = buildList {
+        addAll(shapedSeedsByRange.keys)
+        addAll(placeholderEntriesByRange.keys)
+    }.sortedBy { range -> range.first }
     var cursorX = 0f
     val placeholderBoxes = mutableListOf<PlaceholderBox>()
-    lineClusters.forEach { cluster ->
-        val placeholderEntry = paragraph.placeholders.entries.firstOrNull { (range) -> range.overlaps(cluster) }
+    lineContentRanges.forEach { range ->
+        val placeholderEntry = placeholderEntriesByRange[range]
         if (placeholderEntry == null) {
-            cursorX += paragraph.estimatedWidth(cluster)
+            cursorX += shapedSeedsByRange[range]?.advanceX ?: paragraph.estimatedWidth(range)
             return@forEach
         }
-        val (range, placeholder) = placeholderEntry
+        val (_, placeholder) = placeholderEntry
         val top = placeholder.topFor(
             lineTop = lineTop,
             lineBottom = lineBottom,
@@ -1596,7 +2028,7 @@ private fun resolvePlaceholderBoxes(
             baseline = placeholder.baseline,
             participatesInLineHeight = placeholder.participatesInLineHeight,
         )
-        cursorX += placeholder.width
+            cursorX += placeholder.width
     }
     return placeholderBoxes
 }

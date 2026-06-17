@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M8-005"
 title: "Implement selection and hit-test maps"
-status: "proposed"
+status: "review"
 milestone: "M8"
 priority: "P1"
 owner_area: "paragraph"
@@ -68,10 +68,16 @@ data class HitTestMap(
 ## Acceptance Criteria
 
 - [ ] Selection boxes are stable for single-line, multi-line, bidi, and mixed-style ranges.
-- [ ] Hit testing at glyph cluster boundaries records upstream/downstream affinity and never returns an offset inside a grapheme cluster.
-- [ ] Placeholder boxes participate in selection and hit testing with explicit placeholder IDs.
-- [ ] Out-of-bounds points clamp or refuse according to a documented policy and emit diagnostics for non-finite coordinates.
-- [ ] `hit-test-map.json` is deterministic and references line IDs from `paragraph-layout.json`.
+- [x] Hit testing at glyph cluster boundaries records upstream/downstream affinity and never returns an offset inside a grapheme cluster.
+- [x] Placeholder boxes participate in selection and hit testing with explicit placeholder IDs.
+- [x] Out-of-bounds points clamp or refuse according to a documented policy and emit diagnostics for non-finite coordinates.
+- [x] `hit-test-map.json` is deterministic and references line IDs from `paragraph-layout.json`.
+
+## Current Slice
+
+- `ParagraphLayoutResult.buildHitTestMap(...)` now derives bounded line-local selection and hit-test facts from shaped cluster advances when they are already available on `LineLayout.glyphRuns`, while keeping logical caret and selection geometry independent from glyph drawing offsets.
+- Selection ranges that cut a grapheme cluster now refuse with `text.paragraph.cluster-invariant-failed` instead of guessing a partial box.
+- The checked-in fixture currently covers multiline placeholder selection, RTL emoji grapheme clamping, invalid selection ranges, and non-finite hit points only.
 
 ## Required Evidence
 
@@ -82,6 +88,7 @@ data class HitTestMap(
 ## Fallback / Refusal Behavior
 
 - Invalid ranges refuse with `text.paragraph.invalid-selection-range`.
+- Finite points outside the laid-out bounds clamp to the nearest line and then the nearest fragment boundary; non-finite points refuse with `text.paragraph.hit-test-point-non-finite`.
 - Cluster invariant failures refuse with `text.paragraph.cluster-invariant-failed`; the engine must not guess a host caret offset.
 - Missing placeholder metrics keep placeholder hit testing refused until KFONT-M8-006 supplies the box facts.
 
@@ -101,7 +108,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*HitTest*'
 ## Status Notes
 
 - `proposed`: Depends on shaped run segmentation and line-break facts; placeholder cases depend on M8-006 for full geometry.
-- Move to `ready` only after caret affinity and out-of-bounds policies are accepted.
+- `review`: bounded paragraph interaction evidence now exposes deterministic `HitTestMap` dumps with `caretStops`, `selectionBoxes`, `hitEntries`, `wordBoundaries`, and `graphemeBoundaries`, consumes `PlaceholderBox` geometry from `KFONT-M8-006`, reuses shaped cluster advances where available, and refuses invalid ranges, grapheme-cut selection boundaries, or non-finite points with stable diagnostics. Remaining gate before `done`: add reviewed mixed LTR/RTL plus mixed-style fixture coverage and explicit multi-run visual-order evidence, and promote structured negative dump rows beyond the current bounded labels/tests without widening support claims.
 
 ## Linear Labels
 

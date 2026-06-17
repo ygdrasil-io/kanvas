@@ -39,8 +39,13 @@ import org.graphiks.kanvas.font.sfnt.OpenTypeKernFormat0Subtable
 import org.graphiks.kanvas.font.sfnt.OpenTypeKernPair
 import org.graphiks.kanvas.font.sfnt.OpenTypeKernTable
 import org.graphiks.kanvas.text.paragraph.BasicParagraphShapingSegmenter
+import org.graphiks.kanvas.text.paragraph.BoundaryQueryResult
+import org.graphiks.kanvas.text.paragraph.CaretStop
 import org.graphiks.kanvas.text.paragraph.HitTestResult
+import org.graphiks.kanvas.text.paragraph.HitTestEntry
+import org.graphiks.kanvas.text.paragraph.HitTestMap
 import org.graphiks.kanvas.text.paragraph.BasicParagraphLayoutEngine
+import org.graphiks.kanvas.text.paragraph.PARAGRAPH_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.FallbackPreference
 import org.graphiks.kanvas.text.paragraph.LineBreaker
 import org.graphiks.kanvas.text.paragraph.LineBreakKind
@@ -48,10 +53,12 @@ import org.graphiks.kanvas.text.paragraph.LineBreakMap
 import org.graphiks.kanvas.text.paragraph.LineBreakOpportunity
 import org.graphiks.kanvas.text.paragraph.LineLayout
 import org.graphiks.kanvas.text.paragraph.LineMetrics
+import org.graphiks.kanvas.text.paragraph.PARAGRAPH_HIT_TEST_POINT_NON_FINITE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LAYOUT_CONSTRAINT_NEGATIVE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LAYOUT_CONSTRAINT_NON_FINITE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LINE_BREAK_DATA_UNAVAILABLE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LOCALE_BREAK_REFINEMENT_UNAVAILABLE_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.paragraph.PARAGRAPH_SELECTION_INVALID_RANGE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.Paragraph
 import org.graphiks.kanvas.text.paragraph.ParagraphBuilder
 import org.graphiks.kanvas.text.paragraph.ParagraphLayoutDiagnostic
@@ -148,10 +155,14 @@ class TextStackSurfaceTest {
             HitTestResult::class.simpleName,
             SelectionRange::class.simpleName,
             TextPosition::class.simpleName,
+            CaretStop::class.simpleName,
+            HitTestEntry::class.simpleName,
+            BoundaryQueryResult::class.simpleName,
+            HitTestMap::class.simpleName,
         )
 
         assertEquals(25, shapingTypes.size)
-        assertEquals(15, paragraphTypes.size)
+        assertEquals(19, paragraphTypes.size)
     }
 
     @Test
@@ -897,6 +908,230 @@ class TextStackSurfaceTest {
                 "no-complete-paragraph-layout-claim",
                 "no-selection-hit-test-claim",
                 "no-skia-paragraph-parity-claim",
+            ),
+            dump.requiredStringList("nonClaims"),
+        )
+        assertNoSupportPromotionClaims(dump)
+    }
+
+    @Test
+    fun paragraphLayoutBuildsHitTestMapWithSelectionPlaceholderAndGraphemeFacts() {
+        val paragraph = ParagraphBuilder()
+            .append("ab", TextStyle(fontSize = 10f))
+            .appendPlaceholder(PlaceholderStyle(width = 12f, height = 8f))
+            .append("cd\nef", TextStyle(fontSize = 10f))
+            .build()
+        val layout = BasicParagraphLayoutEngine(RecordingShapingEngine()).layout(paragraph, maxWidth = 200f)
+
+        val map = layout.buildHitTestMap(
+            samplePoints = listOf(15f to 5f, 25f to 5f, 5f to 15f),
+            selectionRanges = listOf(SelectionRange(TextPosition(1), TextPosition(7))),
+            wordBoundaryOffsets = listOf(0, 6),
+            graphemeBoundaryOffsets = listOf(2, 6),
+        )
+
+        assertEquals(14, map.caretStops.size)
+        assertEquals(listOf("2..2"), map.hitEntries.mapNotNull { entry -> entry.placeholderId }.distinct())
+        assertEquals(listOf("1..1", "2..2", "3..3", "4..4", "6..6"), map.selectionBoxes.map { box -> box.textRange.toFixtureLabel() })
+        assertEquals("2..2", map.hitEntries[1].clusterRange?.toFixtureLabel())
+        assertEquals(TextPosition(7, "upstream"), map.hitEntries[2].position)
+        assertEquals("0..4", map.wordBoundaries[0].boundary.toFixtureLabel())
+        assertEquals("6..7", map.wordBoundaries[1].boundary.toFixtureLabel())
+        assertEquals("2..2", map.graphemeBoundaries[0].boundary.toFixtureLabel())
+        assertEquals("6..6", map.graphemeBoundaries[1].boundary.toFixtureLabel())
+    }
+
+    @Test
+    fun paragraphLayoutHitTestKeepsEmojiClusterBoundariesAndRtlLineDirectionBounded() {
+        val paragraph = ParagraphBuilder(
+            ParagraphStyle(textDirection = TextDirection.RIGHT_TO_LEFT),
+        ).append("a\uD83D\uDC68\u200D\uD83D\uDC69 b", TextStyle(fontSize = 10f)).build()
+        val layout = BasicParagraphLayoutEngine(bidiAwareRecordingShapingEngine()).layout(paragraph, maxWidth = 200f)
+
+        val map = layout.buildHitTestMap(
+            samplePoints = listOf(15f to 5f, 35f to 5f),
+            selectionRanges = listOf(SelectionRange(TextPosition(0), TextPosition(6))),
+            wordBoundaryOffsets = listOf(1),
+            graphemeBoundaryOffsets = listOf(1),
+        )
+        assertEquals(-1, layout.lines.single().boxes.single().direction)
+        assertEquals("1..5", map.hitEntries.first().clusterRange?.toFixtureLabel())
+        assertTrue(map.hitEntries.none { entry -> entry.position.offset in 2..5 })
+        assertEquals("0..0", map.selectionBoxes.first().textRange.toFixtureLabel())
+        assertEquals("0..5", map.wordBoundaries.single().boundary.toFixtureLabel())
+        assertEquals("1..5", map.graphemeBoundaries.single().boundary.toFixtureLabel())
+    }
+
+    @Test
+    fun paragraphLayoutHitTestMapReportsInvalidSelectionAndNonFinitePointDiagnostics() {
+        val paragraph = ParagraphBuilder()
+            .append("abc", TextStyle(fontSize = 10f))
+            .build()
+        val layout = BasicParagraphLayoutEngine(RecordingShapingEngine()).layout(paragraph, maxWidth = 200f)
+
+        val map = layout.buildHitTestMap(
+            samplePoints = listOf(Float.NaN to 0f),
+            selectionRanges = listOf(SelectionRange(TextPosition(2), TextPosition(1))),
+        )
+
+        assertEquals(
+            setOf(
+                PARAGRAPH_SELECTION_INVALID_RANGE_DIAGNOSTIC_CODE,
+                PARAGRAPH_HIT_TEST_POINT_NON_FINITE_DIAGNOSTIC_CODE,
+            ),
+            map.diagnostics.map { diagnostic -> diagnostic.code }.toSet(),
+        )
+    }
+
+    @Test
+    fun paragraphLayoutHitTestMapUsesShapedClusterAdvancesInsteadOfEstimatedWidths() {
+        val paragraph = ParagraphBuilder()
+            .append("ab", TextStyle(fontSize = 20f))
+            .build()
+        val layout = BasicParagraphLayoutEngine(
+            scriptedShapingEngine(
+                0..1 to ShapedGlyphRun(
+                    glyphIds = listOf(7, 11),
+                    clusters = listOf(
+                        GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 12f),
+                        GlyphCluster(textRange = 1..1, glyphRange = 1..1, advanceX = 28f),
+                    ),
+                    advanceX = 40f,
+                    fontSize = 20f,
+                ),
+            ),
+        ).layout(paragraph, maxWidth = 200f)
+
+        val map = layout.buildHitTestMap(
+            samplePoints = listOf(13f to 5f),
+            selectionRanges = listOf(SelectionRange(TextPosition(0), TextPosition(2))),
+        )
+
+        assertEquals(listOf(12f, 40f), map.selectionBoxes.map { box -> box.right })
+        assertEquals(1..1, map.hitEntries.single().clusterRange)
+        assertEquals(1, map.hitEntries.single().position.offset)
+    }
+
+    @Test
+    fun paragraphLayoutHitTestMapKeepsCaretStopsOnLogicalAdvancesDespiteGlyphOffsets() {
+        val paragraph = ParagraphBuilder()
+            .append("AV", TextStyle(fontSize = 20f))
+            .build()
+        val layout = BasicParagraphLayoutEngine(
+            scriptedShapingEngine(
+                0..1 to ShapedGlyphRun(
+                    glyphIds = listOf(7, 11),
+                    clusters = listOf(
+                        GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 19.2f, offsetX = 1f),
+                        GlyphCluster(textRange = 1..1, glyphRange = 1..1, advanceX = 20.2f, offsetX = 0.4f),
+                    ),
+                    advanceX = 39.4f,
+                    fontSize = 20f,
+                ),
+            ),
+        ).layout(paragraph, maxWidth = 200f)
+
+        val map = layout.buildHitTestMap(
+            samplePoints = listOf(20f to 5f),
+            selectionRanges = listOf(SelectionRange(TextPosition(0), TextPosition(2))),
+        )
+
+        assertEquals(listOf(19.2f, 39.4f), map.selectionBoxes.map { box -> box.right })
+        assertEquals(listOf(0f, 19.2f, 39.4f), map.caretStops.distinctBy { stop -> stop.offset }.map { stop -> stop.x })
+        assertEquals(1..1, map.hitEntries.single().clusterRange)
+    }
+
+    @Test
+    fun paragraphLayoutUsesShapedAdvancesForPlaceholderBoxesBeforeInlinePlaceholder() {
+        val paragraph = ParagraphBuilder()
+            .append("ab", TextStyle(fontSize = 20f))
+            .appendPlaceholder(PlaceholderStyle(width = 12f, height = 8f))
+            .build()
+        val layout = BasicParagraphLayoutEngine(
+            scriptedShapingEngine(
+                0..1 to ShapedGlyphRun(
+                    glyphIds = listOf(7, 11),
+                    clusters = listOf(
+                        GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 12f),
+                        GlyphCluster(textRange = 1..1, glyphRange = 1..1, advanceX = 18f),
+                    ),
+                    advanceX = 30f,
+                    fontSize = 20f,
+                ),
+            ),
+        ).layout(paragraph, maxWidth = 200f)
+
+        val placeholderBox = layout.placeholderBoxes.single()
+        val map = layout.buildHitTestMap(
+            samplePoints = listOf(35f to 5f),
+            selectionRanges = listOf(SelectionRange(TextPosition(2), TextPosition(3))),
+        )
+
+        assertEquals(30f, placeholderBox.left)
+        assertEquals(42f, placeholderBox.right)
+        assertEquals(placeholderBox.left, map.selectionBoxes.single().left)
+        assertEquals(placeholderBox.right, map.selectionBoxes.single().right)
+        assertEquals("2..2", map.hitEntries.single().placeholderId)
+    }
+
+    @Test
+    fun paragraphLayoutHitTestMapRefusesSelectionRangeThatCutsGraphemeCluster() {
+        val paragraph = ParagraphBuilder()
+            .append("e\u0301x", TextStyle(fontSize = 10f))
+            .build()
+        val layout = BasicParagraphLayoutEngine(RecordingShapingEngine()).layout(paragraph, maxWidth = 200f)
+
+        val map = layout.buildHitTestMap(
+            selectionRanges = listOf(SelectionRange(TextPosition(1), TextPosition(2))),
+        )
+
+        assertTrue(map.selectionBoxes.isEmpty())
+        assertEquals(
+            setOf(PARAGRAPH_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE),
+            map.diagnostics.map { diagnostic -> diagnostic.code }.toSet(),
+        )
+    }
+
+    @Test
+    fun paragraphHitTestMapGoldenMatchesRepoFixture() {
+        val expected = Files.readString(projectRoot().resolve("reports/font/fixtures/expected/paragraph/hit-test-map.json"))
+
+        assertEquals(expected, hitTestMapFixtureDump())
+    }
+
+    @Test
+    fun paragraphHitTestMapGoldenPinsCasesAndNonClaims() {
+        val dump = readJsonProjectFile(
+            "reports/font/fixtures/expected/paragraph/hit-test-map.json",
+        )
+        val cases = dump.requiredObjectList("cases")
+
+        assertEquals(1L, dump["schemaVersion"])
+        assertEquals("hit-test-map", dump.requiredString("dumpId"))
+        assertEquals(listOf("KFONT-M8-005"), dump.requiredStringList("ownerTickets"))
+        assertEquals(
+            listOf(
+                "multiline-placeholder-selection",
+                "rtl-emoji-grapheme-clamp",
+            ),
+            cases.map { it.requiredString("caseId") },
+        )
+        assertEquals(listOf("0:0..4", "1:6..7"), cases[0].requiredStringList("lineRefs"))
+        assertEquals(listOf("2..2"), cases[0].requiredObjectList("hitEntries").mapNotNull { it["placeholderId"] as? String }.distinct())
+        assertEquals("1..5", cases[1].requiredObjectList("graphemeBoundaries").single().requiredString("boundary"))
+        assertEquals(
+            listOf(
+                "invalid-selection-range",
+                "non-finite-hit-point",
+            ),
+            dump.requiredStringList("negativeCases"),
+        )
+        assertEquals(
+            listOf(
+                "no-complete-target-support-claim",
+                "no-complete-bidi-visual-ordering-claim",
+                "no-skia-paragraph-parity-claim",
+                "no-platform-text-api-claim",
             ),
             dump.requiredStringList("nonClaims"),
         )
@@ -2316,6 +2551,64 @@ class TextStackSurfaceTest {
         }
     }
 
+    private fun hitTestMapFixtureDump(): String {
+        val placeholderParagraph = ParagraphBuilder()
+            .append("ab", TextStyle(fontSize = 10f))
+            .appendPlaceholder(PlaceholderStyle(width = 12f, height = 8f))
+            .append("cd\nef", TextStyle(fontSize = 10f))
+            .build()
+        val rtlEmojiParagraph = ParagraphBuilder(
+            ParagraphStyle(textDirection = TextDirection.RIGHT_TO_LEFT),
+        ).append("a\uD83D\uDC68\u200D\uD83D\uDC69 b", TextStyle(fontSize = 10f)).build()
+
+        val placeholderLayout = BasicParagraphLayoutEngine(RecordingShapingEngine()).layout(placeholderParagraph, maxWidth = 200f)
+        val rtlEmojiLayout = BasicParagraphLayoutEngine(bidiAwareRecordingShapingEngine()).layout(rtlEmojiParagraph, maxWidth = 200f)
+
+        val cases = listOf(
+            placeholderLayout.toHitTestFixtureCaseJson(
+                caseId = "multiline-placeholder-selection",
+                map = placeholderLayout.buildHitTestMap(
+                    samplePoints = listOf(15f to 5f, 25f to 5f, 5f to 15f),
+                    selectionRanges = listOf(SelectionRange(TextPosition(1), TextPosition(7))),
+                    wordBoundaryOffsets = listOf(0, 6),
+                    graphemeBoundaryOffsets = listOf(2, 6),
+                ),
+            ),
+            rtlEmojiLayout.toHitTestFixtureCaseJson(
+                caseId = "rtl-emoji-grapheme-clamp",
+                map = rtlEmojiLayout.buildHitTestMap(
+                    samplePoints = listOf(15f to 5f, 35f to 5f),
+                    selectionRanges = listOf(SelectionRange(TextPosition(0), TextPosition(6))),
+                    wordBoundaryOffsets = listOf(1),
+                    graphemeBoundaryOffsets = listOf(1),
+                ),
+            ),
+        )
+
+        return buildString {
+            append("{\n")
+            append("  \"schemaVersion\": 1,\n")
+            append("  \"dumpId\": \"hit-test-map\",\n")
+            append("  \"ownerTickets\": [\n")
+            append("    \"KFONT-M8-005\"\n")
+            append("  ],\n")
+            append("  \"cases\": [\n")
+            append(cases.joinToString(",\n") { caseJson -> caseJson.prependIndent("    ") })
+            append("\n  ],\n")
+            append("  \"negativeCases\": [\n")
+            append("    \"invalid-selection-range\",\n")
+            append("    \"non-finite-hit-point\"\n")
+            append("  ],\n")
+            append("  \"nonClaims\": [\n")
+            append("    \"no-complete-target-support-claim\",\n")
+            append("    \"no-complete-bidi-visual-ordering-claim\",\n")
+            append("    \"no-skia-paragraph-parity-claim\",\n")
+            append("    \"no-platform-text-api-claim\"\n")
+            append("  ]\n")
+            append("}\n")
+        }
+    }
+
     private fun ParagraphLayoutResult.toPlaceholderFixtureCaseJson(caseId: String): String = buildString {
         append("{\n")
         append("  \"caseId\": ").append(jsonString(caseId)).append(",\n")
@@ -2327,12 +2620,48 @@ class TextStackSurfaceTest {
         append("}")
     }
 
+    private fun ParagraphLayoutResult.toHitTestFixtureCaseJson(
+        caseId: String,
+        map: HitTestMap,
+    ): String = buildString {
+        append("{\n")
+        append("  \"caseId\": ").append(jsonString(caseId)).append(",\n")
+        append("  \"lineRefs\": ").append(lines.mapIndexed { index, line -> "$index:${line.textRange.toFixtureLabel()}" }.joinToString(prefix = "[", postfix = "]") { lineRef -> jsonString(lineRef) }).append(",\n")
+        append("  \"caretStops\": [\n")
+        append(map.caretStops.joinToString(",\n") { stop -> stop.toFixtureJson().prependIndent("    ") })
+        append("\n  ],\n")
+        append("  \"selectionBoxes\": [\n")
+        append(map.selectionBoxes.joinToString(",\n") { box -> box.toFixtureJson().prependIndent("    ") })
+        append("\n  ],\n")
+        append("  \"hitEntries\": [\n")
+        append(map.hitEntries.joinToString(",\n") { entry -> entry.toFixtureJson().prependIndent("    ") })
+        append("\n  ],\n")
+        append("  \"wordBoundaries\": [\n")
+        append(map.wordBoundaries.joinToString(",\n") { boundary -> boundary.toFixtureJson().prependIndent("    ") })
+        append("\n  ],\n")
+        append("  \"graphemeBoundaries\": [\n")
+        append(map.graphemeBoundaries.joinToString(",\n") { boundary -> boundary.toFixtureJson().prependIndent("    ") })
+        append("\n  ],\n")
+        append("  \"diagnostics\": ").append(map.diagnostics.toFixtureJsonArray()).append("\n")
+        append("}")
+    }
+
     private fun LineMetrics.toFixtureJson(): String = buildString {
         append("{\"ascent\": ").append(jsonFloat(ascent))
         append(", \"descent\": ").append(jsonFloat(descent))
         append(", \"leading\": ").append(jsonFloat(leading))
         append(", \"width\": ").append(jsonFloat(width))
         append(", \"baseline\": ").append(jsonFloat(baseline))
+        append("}")
+    }
+
+    private fun TextBox.toFixtureJson(): String = buildString {
+        append("{\"textRange\": ").append(jsonString(textRange.toFixtureLabel()))
+        append(", \"left\": ").append(jsonFloat(left))
+        append(", \"top\": ").append(jsonFloat(top))
+        append(", \"right\": ").append(jsonFloat(right))
+        append(", \"bottom\": ").append(jsonFloat(bottom))
+        append(", \"direction\": ").append(direction)
         append("}")
     }
 
@@ -2348,6 +2677,35 @@ class TextStackSurfaceTest {
         append(", \"alignment\": ").append(jsonString(alignment.fixtureLabel()))
         append(", \"baseline\": ").append(jsonString(baseline.fixtureLabel()))
         append(", \"participatesInLineHeight\": ").append(participatesInLineHeight)
+        append("}")
+    }
+
+    private fun CaretStop.toFixtureJson(): String = buildString {
+        append("{\"offset\": ").append(offset)
+        append(", \"affinity\": ").append(jsonString(affinity))
+        append(", \"lineIndex\": ").append(lineIndex)
+        append(", \"x\": ").append(jsonFloat(x))
+        append(", \"top\": ").append(jsonFloat(top))
+        append(", \"bottom\": ").append(jsonFloat(bottom))
+        append(", \"placeholderId\": ").append(placeholderId?.let(::jsonString) ?: "null")
+        append("}")
+    }
+
+    private fun HitTestEntry.toFixtureJson(): String = buildString {
+        append("{\"pointX\": ").append(jsonFloat(pointX))
+        append(", \"pointY\": ").append(jsonFloat(pointY))
+        append(", \"lineIndex\": ").append(lineIndex)
+        append(", \"position\": {\"offset\": ").append(position.offset)
+        append(", \"affinity\": ").append(jsonString(position.affinity)).append("}")
+        append(", \"isInsideText\": ").append(isInsideText)
+        append(", \"clusterRange\": ").append(clusterRange?.toFixtureLabel()?.let(::jsonString) ?: "null")
+        append(", \"placeholderId\": ").append(placeholderId?.let(::jsonString) ?: "null")
+        append("}")
+    }
+
+    private fun BoundaryQueryResult.toFixtureJson(): String = buildString {
+        append("{\"offset\": ").append(offset)
+        append(", \"boundary\": ").append(jsonString(boundary.toFixtureLabel()))
         append("}")
     }
 
@@ -2719,6 +3077,21 @@ class TextStackSurfaceTest {
                 )
             }
         }
+
+    private fun scriptedShapingEngine(
+        vararg runsByRange: Pair<IntRange, ShapedGlyphRun>,
+    ): OpenTypeShapingEngine {
+        val byRange = runsByRange.toMap()
+        return object : OpenTypeShapingEngine {
+            override fun shape(request: ShapingRequest): ShapingResult =
+                ShapingResult(
+                    glyphRuns = listOf(
+                        byRange[request.textRange]
+                            ?: error("No scripted shaping run for range ${request.textRange}."),
+                    ),
+                )
+        }
+    }
 
     private fun cmapTable(vararg mappings: Pair<Int, Int>): CMapTable =
         CMapTable(

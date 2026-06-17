@@ -3044,6 +3044,63 @@ Remaining gate: this slice proves bounded placeholder geometry only. It does
 not claim selection/hit-test APIs, full bidi visual-order parity, placeholder
 rendering support, Skia Paragraph parity, or GPU text support; `KFONT-M8-005`
 remains the active paragraph interaction gate.
+### KFONT-M8-005: Selection and hit-test maps
+
+Status: implemented and independently reviewed; kept in `review` pending the
+remaining visual-order and fixture gates.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/KFONT-M8-005-implement-selection-and-hit-test-maps.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/font/fixtures/expected/paragraph/hit-test-map.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m8-005-selection-hit-test-maps.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+
+Evidence:
+
+- `ParagraphLayoutResult.buildHitTestMap(...)` now emits deterministic
+  `caretStops`, `selectionBoxes`, `hitEntries`, `wordBoundaries`, and
+  `graphemeBoundaries` from paragraph layout output instead of leaving
+  paragraph interactions implicit.
+- The line-local geometry path now reuses shaped cluster advances where
+  `LineLayout.glyphRuns` already expose them, and keeps logical caret/selection
+  geometry independent from glyph drawing offsets, so bounded hit-test facts no
+  longer depend only on `estimatedWidth(...)` for pure-text lines.
+- Selection boxes now consume `PlaceholderBox` geometry from `KFONT-M8-006`,
+  so multiline selections can pin inline placeholder bounds with stable
+  `placeholderId` facts instead of guessing text-only ranges.
+- Hit testing now clamps to grapheme-cluster boundaries, records
+  upstream/downstream affinity, and keeps RTL emoji cluster hits out of the
+  middle of a grapheme cluster.
+- Selection ranges that cut a grapheme cluster now refuse with
+  `text.paragraph.cluster-invariant-failed`, and finite points outside the
+  laid-out bounds clamp to the nearest line and then the nearest fragment
+  boundary while non-finite points still refuse.
+- `hit-test-map.json` now checks in bounded multiline placeholder and RTL
+  emoji cases, but mixed LTR/RTL plus mixed-style visual-order coverage and
+  structured negative dump rows remain explicit remaining gates.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutBuildsHitTestMapWithSelectionPlaceholderAndGraphemeFacts --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestKeepsEmojiClusterBoundariesAndRtlLineDirectionBounded --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestMapReportsInvalidSelectionAndNonFinitePointDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestMapUsesShapedClusterAdvancesInsteadOfEstimatedWidths --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestMapRefusesSelectionRangeThatCutsGraphemeCluster --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestMapKeepsCaretStopsOnLogicalAdvancesDespiteGlyphOffsets --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutUsesShapedAdvancesForPlaceholderBoxesBeforeInlinePlaceholder --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphHitTestMapGoldenMatchesRepoFixture --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphHitTestMapGoldenPinsCasesAndNonClaims
+rtk ./gradlew --no-daemon :font:text:test
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this slice proves bounded selection and hit-testing only. It
+does not yet prove mixed LTR/RTL plus mixed-style visual ordering across
+multiple runs, structured negative dump rows beyond the current bounded labels
+and focused tests, complete fallback policy, platform caret/selection parity,
+Skia Paragraph parity, CPU oracle parity, or GPU text support.
 ### PKT-10A: Glyph Strike-Key Preimage And Route Diagnostic Dumps
 
 Status: implemented and independently reviewed.
