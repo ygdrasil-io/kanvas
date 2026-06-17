@@ -480,6 +480,7 @@ private fun GPUDestinationReadStrategyRequest.sourceFacts(
         "source=$sourceTargetLabel",
         "sourceUsage=$sourceUsage",
         "copyUsage=$copyUsage",
+        "targetFormat=$targetFormatClass",
     )
     if (strategy == GPUDestinationReadStrategy.BindIntermediate) {
         sourceFacts += "intermediate=$intermediateLabel"

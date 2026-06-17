@@ -1,7 +1,7 @@
 ---
 id: KGPU-M7-003
 title: "Add blend mode allowlist and destination-read refusals"
-status: blocked
+status: done
 milestone: M7
 priority: P0
 owner_area: blend-destination-read
@@ -51,14 +51,15 @@ stable refusals for unsupported modes.
 ## Design Sketch
 
 ```kotlin
-data class BlendRouteEvidence(val mode: String, val routeKind: String)
+data class GPUBlendAllowlistRequest(val mode: GPUBlendMode, val destinationReadPlan: GPUDestinationReadStrategyGatePlan?)
+data class GPUBlendAllowlistGatePlan(val plan: GPUBlendPlan, val diagnostics: List<GPUBlendDiagnostic>)
 ```
 
 ## Acceptance Criteria
 
-- [ ] Supported modes have deterministic state/key dumps.
-- [ ] Unsupported modes refuse stably.
-- [ ] Destination-read modes cite accepted strategy or refuse.
+- [x] Supported modes have deterministic state/key dumps.
+- [x] Unsupported modes refuse stably.
+- [x] Destination-read modes cite accepted strategy or refuse.
 
 ## Required Evidence
 
@@ -72,7 +73,7 @@ Unsupported blend modes refuse or remain legacy-policy gated before activation.
 
 - Expected row: `gpu-renderer.blend-allowlist`
 - Expected classification: `TargetNative`
-- Claim promotion allowed: no until reviewed.
+- Claim promotion allowed: no; this remains contract/refusal evidence only.
 
 ## Validation
 
@@ -83,11 +84,20 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: Depends on KGPU-M5-002 and native destination-read strategy
-  evidence. Remaining gate is target-copy or existing-intermediate evidence
-  with ordering, bounds, resource, payload, readback, and refusal artifacts; no
-  framebuffer-fetch, active-attachment sampling, all-blend-mode support, or
-  CPU-rendered blend fallback is implied.
+- `done`: KGPU-M5-002 is `done`, and this ticket adds
+  `GPUBlendAllowlistPlanner` evidence for the `gpu-renderer.blend-allowlist`
+  row. `Src`, `SrcOver`, and `DstOver` produce deterministic fixed-function
+  blend state, alpha-plan, and pipeline-key dumps. `Multiply`, `Screen`,
+  `Custom`, active-attachment sampling, unaccepted alpha plans,
+  destination-read-without-strategy, destination-read plan mismatches, and
+  destination-read shader routes without validated product strategy refuse
+  stably without exposing executable destination-read actions. No
+  framebuffer-fetch, input-attachment, destination-read texture,
+  all-blend-mode support, product activation, adapter-backed execution, or
+  CPU-rendered blend fallback is implied. Independent review
+  `019ed58b-6d88-7af2-a38f-56ec7b547ee0` found no remaining P0/P1/P2 issues
+  after the alpha-plan, refused-action, mode-coverage, plan-mismatch, and
+  existing-intermediate target-format checks were added.
 
 ## Linear Labels
 

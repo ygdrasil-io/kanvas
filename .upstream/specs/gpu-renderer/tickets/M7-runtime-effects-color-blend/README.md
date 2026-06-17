@@ -28,7 +28,7 @@ blend modes that require destination access. Runtime effects must follow
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M7-001 - Add registered runtime-effect descriptor route](KGPU-M7-001-add-registered-runtime-effect-descriptor-route.md) | `review` | `P0` | `DependencyGated` | `GPUNative` | `false` | `true` | `runtime-effects` | `KGPU-M2-002` | `runtime-effect legacy` |
 | [KGPU-M7-002 - Add runtime-effect child and source refusal gates](KGPU-M7-002-add-runtime-effect-child-and-source-refusal-gates.md) | `blocked` | `P0` | `RefuseRequired` | `RefuseDiagnostic` | `false` | `false` | `runtime-effects-validation` | `KGPU-M7-001` | - |
-| [KGPU-M7-003 - Add blend mode allowlist and destination-read refusals](KGPU-M7-003-add-blend-mode-allowlist-and-destination-read-refusals.md) | `blocked` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `blend-destination-read` | `KGPU-M5-002` | `blend legacy` |
+| [KGPU-M7-003 - Add blend mode allowlist and destination-read refusals](KGPU-M7-003-add-blend-mode-allowlist-and-destination-read-refusals.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `blend-destination-read` | `KGPU-M5-002` | `blend legacy` |
 | [KGPU-M7-004 - Add SDR color plan and HDR profile refusal gates](KGPU-M7-004-add-sdr-color-plan-and-hdr-profile-refusal-gates.md) | `done` | `P1` | `DependencyGated` | `GPUNative` | `false` | `false` | `color` | `KGPU-M2-002` | `color legacy` |
 
 ## Validation Bundle
@@ -62,9 +62,14 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Runtime*' --tests '*Blend*'
 - KGPU-M7-002 is `blocked` on independent acceptance of KGPU-M7-001 so
   child/source refusal rows can be anchored to an accepted descriptor route
   boundary.
-- KGPU-M7-003 is `blocked` on KGPU-M5-002 and native destination-read strategy
-  evidence; no framebuffer-fetch, active-attachment sampling, or CPU-rendered
-  blend fallback is implied.
+- KGPU-M7-003 is `done` with fixed-function allowlist evidence for `Src`,
+  `SrcOver`, and `DstOver`; deterministic alpha-plan/state/key dumps; terminal
+  refusals for unsupported and destination-read blend modes; destination-read
+  plan matching over command id, copy bounds, generation, and target format;
+  and explicit non-claims for framebuffer fetch, input attachments,
+  destination-read textures, all-blend-mode support, product activation,
+  adapter-backed execution, and CPU-rendered blend fallback. Independent review
+  `019ed58b-6d88-7af2-a38f-56ec7b547ee0` found no remaining P0/P1/P2 issues.
 - KGPU-M7-004 is `done` with bounded SDR color boundary evidence:
   deterministic finite-sRGB value/store dumps, behavior key facts that exclude
   source/profile identity, and terminal refusals for HDR, gainmap, ICC/CICP,
