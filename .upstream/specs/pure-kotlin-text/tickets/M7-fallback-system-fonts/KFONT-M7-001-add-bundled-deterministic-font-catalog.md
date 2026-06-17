@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M7-001"
 title: "Add bundled deterministic font catalog"
-status: "review"
+status: "done"
 milestone: "M7"
 priority: "P0"
 owner_area: "fallback"
@@ -95,9 +95,10 @@ data class FontCatalogEntry(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:core:test --tests '*FontCatalog*'
-rtk ./gradlew --no-daemon :font:core:test --tests '*DiagnosticTaxonomy*'
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontCatalog*' --tests '*FontFixtureManifest*' --tests '*DiagnosticTaxonomy*'
 rtk ./gradlew --no-daemon :font:core:test
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
 ```
@@ -106,7 +107,7 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump
 
 - `proposed`: Bundled catalog is the deterministic fallback foundation.
 - Move to `ready` only after catalog fields, fixture families, and provenance requirements are reviewed.
-- `review`: `font-catalog.json` now materializes a deterministic bundled catalog for current repo-owned Latin/CFF/variable fixtures with stable duplicate/provenance diagnostics, but Hebrew/Arabic, Devanagari/Thai, CJK, optional emoji-capable metadata, and a checked-in duplicate-family conflict golden remain open evidence gates before `done`.
+- `done`: `font-catalog.json` now materializes deterministic bundled Latin, Hebrew, Arabic, Devanagari, Thai, CJK, and emoji-capable rows with checked-in fixture provenance under `reports/font/fixtures/`, while `font-catalog-duplicate-face.json` locks the duplicate-family conflict evidence requested by the ticket. This closes the catalog-breadth gate only; fallback support, shaping support, platform-font parity, color-glyph rendering, and GPU text support remain explicit non-claims.
 
 ## Linear Labels
 
