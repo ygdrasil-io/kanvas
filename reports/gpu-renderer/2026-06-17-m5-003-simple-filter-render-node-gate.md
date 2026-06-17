@@ -8,7 +8,7 @@ Ticket: `KGPU-M5-003`
 
 | Ticket | Status | Evidence | Remaining gate |
 |---|---|---|---|
-| KGPU-M5-003 | `review` | Added `GPUSimpleFilterRenderNodePlanner`, bounded simple-filter request/gate contracts, intermediate ownership and usage facts, accepted/refused diagnostics, canonical graph/bounds/intermediate/render-node/resource/non-claim dumps, and `SimpleFilterRenderNodeRouteTest`. | Independent review acceptance is still required before `done`. Adapter-backed native filter execution, product activation, materialized WebGPU textures, arbitrary filter DAGs, runtime-effect filters, CPU-rendered filter texture fallback, and CPU/GPU/reference comparison remain unpromoted. |
+| KGPU-M5-003 | `done` | Added `GPUSimpleFilterRenderNodePlanner`, bounded simple-filter request/gate contracts, intermediate ownership and usage facts, accepted/refused diagnostics, canonical graph/bounds/intermediate/render-node/resource/non-claim dumps, and `SimpleFilterRenderNodeRouteTest`. Independent review accepted the contract-gate evidence on 2026-06-17 with no blocking findings. | Adapter-backed native filter execution, product activation, materialized WebGPU textures, arbitrary filter DAGs, runtime-effect filters, CPU-rendered filter texture fallback, and CPU/GPU/reference comparison remain unpromoted. |
 
 ## Evidence
 
@@ -54,11 +54,17 @@ request, bounds, and gate plan contracts did not exist. After implementation,
 the targeted test, full `:gpu-renderer:check`, M5 `gpu-raster` Layer/Filter
 validation bundle, `rtk git diff --check`, and the status-count command passed.
 
-Current status count after moving KGPU-M5-003 to `review`:
+Fresh `master` validation on 2026-06-17 also passed after review acceptance.
+An earlier parallel run of `:gpu-renderer:check` and the `gpu-raster` bundle
+produced a transient `:font:gpu-api:compileKotlin` classpath error; rerunning
+the `gpu-raster` bundle by itself passed, and isolated
+`:font:gpu-api:compileKotlin` showed the expected `:font:core` dependency.
+
+Current status count after moving KGPU-M5-003 to `done`:
 
 ```text
-blocked 11
-done 34
+blocked 9
+done 36
 review 1
 ```
 
@@ -77,8 +83,13 @@ Local pre-PR review scope:
 - check that non-claims prevent product activation or adapter-backed support
   claims.
 
-Independent review is still required before changing the ticket from `review`
-to `done`.
+Independent review on 2026-06-17 found no blocking P0/P1/P2 issues. The review
+confirmed that the route remains contract-only with `promoted=false`,
+`productActivation=false`, `materialized=false`, and explicit non-claims; that
+the dumps cover graph, node, bounds, intermediate, render-node, resource, and
+refusal evidence; and that stable refusals cover bounds, DAG shape,
+unsupported node, ownership/usages, aliasing, binding, CPU fallback, and
+budget cases. KGPU-M5-003 is `done` as accepted contract-gate evidence only.
 
 ## Non-Claims
 

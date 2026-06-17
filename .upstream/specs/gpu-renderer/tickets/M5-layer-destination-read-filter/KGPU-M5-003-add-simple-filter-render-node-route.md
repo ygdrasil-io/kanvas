@@ -1,7 +1,7 @@
 ---
 id: KGPU-M5-003
 title: "Add simple filter render node route"
-status: review
+status: done
 milestone: M5
 priority: P0
 owner_area: filters
@@ -82,15 +82,17 @@ rtk git diff --check
 
 ## Status Notes
 
-- `review`: KGPU-M5-001 is `done` on current `master`, and this branch adds
-  contract-gate evidence for one bounded `ColorFilter` render-node route:
-  graph/node dumps, provider-owned intermediate descriptor/usage/lifetime,
+- `done`: Independent review accepted the contract-gate evidence on
+  2026-06-17 with no blocking findings. `GPUSimpleFilterRenderNodePlanner`
+  adds evidence for one bounded `ColorFilter` render-node route: graph/node
+  dumps, provider-owned intermediate descriptor/usage/lifetime,
   bounds/crop/tile/sampling diagnostics, read/write aliasing refusal,
   render-node binding validation, budget refusal, and CPU-rendered filter
-  texture fallback refusal. The ticket remains in review pending independent
-  acceptance; adapter-backed native filter execution, product activation,
-  arbitrary filter DAGs, runtime-effect filters, materialized WebGPU textures,
-  and CPU/GPU/reference comparison remain unpromoted.
+  texture fallback refusal. Adapter-backed native filter execution, product
+  activation, arbitrary filter DAGs, runtime-effect filters, materialized
+  WebGPU textures, and CPU/GPU/reference comparison remain unpromoted.
+- Evidence: `SimpleFilterRenderNodeRouteTest` plus
+  `reports/gpu-renderer/2026-06-17-m5-003-simple-filter-render-node-gate.md`.
 
 ## Linear Labels
 
