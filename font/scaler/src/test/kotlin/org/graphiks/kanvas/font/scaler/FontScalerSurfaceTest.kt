@@ -2858,6 +2858,15 @@ class FontScalerSurfaceTest {
     }
 
     @Test
+    fun cffScalerPathOutputGoldenMatchesGeneratedEvidence() {
+        val expected = Files.readString(
+            kanvasProjectRoot().resolve("reports/font/fixtures/expected/scaler/cff-scaler-path-output.json"),
+        ).trimEnd()
+
+        assertEquals(expected, cffScalerPathOutputDump())
+    }
+
+    @Test
     fun cffScalerUsesGeneratedCffTableCharstringsSubrsAndMetrics() {
         val cffTable = generatedCFFTable(
             charStrings = listOf(
@@ -5166,6 +5175,7 @@ class FontScalerSurfaceTest {
             }
         """.trimIndent()
     }
+
     private fun cffSubroutineTraceDump(): String {
         fun limitsJson(limits: Type2ExecutionLimits): String =
             """
@@ -5400,6 +5410,196 @@ class FontScalerSurfaceTest {
             }
         """.trimIndent()
     }
+
+    private fun cffScalerPathOutputDump(): String {
+        val basicScaler = CFFScaler(
+            face = syntheticCFFFace(
+                scalerType = 0x4f54544fu,
+                tableTag = "CFF ",
+                tableBytes = generatedCFFTable(
+                    charStrings = listOf(
+                        type2CharString(type2Number(0), type2Number(0), type2Operator(21), type2Operator(14)),
+                        type2CharString(
+                            type2Number(475),
+                            type2Number(100),
+                            type2Number(200),
+                            type2Operator(21),
+                            type2Number(50),
+                            type2Number(0),
+                            type2Number(0),
+                            type2Number(50),
+                            type2Operator(5),
+                            type2Number(10),
+                            type2Number(0),
+                            type2Number(20),
+                            type2Number(30),
+                            type2Number(40),
+                            type2Number(30),
+                            type2Operator(8),
+                            type2Operator(14),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val subroutineScaler = CFFScaler(
+            face = syntheticCFFFace(
+                scalerType = 0x4f54544fu,
+                tableTag = "CFF ",
+                tableBytes = generatedCFFTable(
+                    charStrings = listOf(
+                        type2CharString(type2Number(0), type2Number(0), type2Operator(21), type2Operator(14)),
+                        type2CharString(
+                            type2Number(475),
+                            type2Number(100),
+                            type2Number(200),
+                            type2Operator(21),
+                            type2Number(-107),
+                            type2Operator(10),
+                            type2Number(-107),
+                            type2Operator(29),
+                            type2Operator(14),
+                        ),
+                    ),
+                    localSubroutines = listOf(
+                        type2CharString(
+                            type2Number(50),
+                            type2Number(0),
+                            type2Operator(5),
+                            type2Operator(11),
+                        ),
+                    ),
+                    globalSubroutines = listOf(
+                        type2CharString(
+                            type2Number(0),
+                            type2Number(-25),
+                            type2Operator(5),
+                            type2Operator(11),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val flexScaler = CFFScaler(
+            face = syntheticCFFFace(
+                scalerType = 0x4f54544fu,
+                tableTag = "CFF ",
+                tableBytes = generatedCFFTable(
+                    charStrings = listOf(
+                        type2CharString(type2Number(0), type2Number(0), type2Operator(21), type2Operator(14)),
+                        type2CharString(
+                            type2Number(480),
+                            type2Number(100),
+                            type2Number(200),
+                            type2Operator(21),
+                            type2Number(5),
+                            type2Number(0),
+                            type2Number(10),
+                            type2Number(10),
+                            type2Number(15),
+                            type2Number(0),
+                            type2Number(15),
+                            type2Number(0),
+                            type2Number(10),
+                            type2Number(-10),
+                            type2Number(5),
+                            type2Number(0),
+                            type2Number(50),
+                            type2EscapedOperator(35),
+                            type2Operator(14),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val malformedScaler = CFFScaler(
+            face = syntheticCFFFace(
+                scalerType = 0x4f54544fu,
+                tableTag = "CFF ",
+                tableBytes = generatedCFFTable(
+                    charStrings = listOf(
+                        type2CharString(type2Number(0), type2Number(0), type2Operator(21), type2Operator(14)),
+                        type2CharString(
+                            type2Number(50),
+                            type2Operator(21),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val basicEvidence = basicScaler.scaledGlyphEvidence(glyphId = 1u)
+        val subroutineEvidence = subroutineScaler.scaledGlyphEvidence(glyphId = 1u)
+        val flexEvidence = flexScaler.scaledGlyphEvidence(glyphId = 1u)
+        val missingGlyphEvidence = basicScaler.scaledGlyphEvidence(glyphId = 9u)
+        val malformedGlyphEvidence = malformedScaler.scaledGlyphEvidence(glyphId = 1u)
+
+        return """
+            {
+              "schemaVersion": 1,
+              "dumpId": "cff-scaler-path-output",
+              "ownerTickets": [
+                "KFONT-M4-004"
+              ],
+              "fixtureIds": [
+                "cff-scaler-basic.otf",
+                "cff-scaler-subroutines.otf",
+                "cff-scaler-flex.otf",
+                "cff-scaler-missing-glyph.otf",
+                "cff-scaler-malformed-glyph.otf"
+              ],
+              "requiredEvidence": [
+                "glyph-outline.json",
+                "glyph-metrics.json",
+                "cff-charstring-trace.json"
+              ],
+              "pathHashArtifacts": {
+                "basic": {
+                  "outlineCommandDumpSha256": "${basicEvidence.outlineCommandDumpSha256}",
+                  "outlineCommandCount": ${basicEvidence.outlineCommands.size}
+                },
+                "subroutines": {
+                  "outlineCommandDumpSha256": "${subroutineEvidence.outlineCommandDumpSha256}",
+                  "outlineCommandCount": ${subroutineEvidence.outlineCommands.size}
+                },
+                "flex": {
+                  "outlineCommandDumpSha256": "${flexEvidence.outlineCommandDumpSha256}",
+                  "outlineCommandCount": ${flexEvidence.outlineCommands.size}
+                }
+              },
+              "positiveFixtures": [
+                {
+                  "fixtureId": "cff-scaler-basic.otf",
+                  "evidence": ${basicEvidence.toCanonicalJson().prependIndent("                    ").trimStart()}
+                },
+                {
+                  "fixtureId": "cff-scaler-subroutines.otf",
+                  "evidence": ${subroutineEvidence.toCanonicalJson().prependIndent("                    ").trimStart()}
+                },
+                {
+                  "fixtureId": "cff-scaler-flex.otf",
+                  "evidence": ${flexEvidence.toCanonicalJson().prependIndent("                    ").trimStart()}
+                }
+              ],
+              "diagnosticSnapshots": {
+                "missingGlyph": [
+                  ${missingGlyphEvidence.diagnostics.joinToString(",\n                  ") { diagnostic -> diagnostic.toCanonicalJson() }}
+                ],
+                "malformedGlyph": [
+                  ${malformedGlyphEvidence.diagnostics.joinToString(",\n                  ") { diagnostic -> diagnostic.toCanonicalJson() }}
+                ]
+              },
+              "nonClaims": [
+                "generated-fixture-evidence-only",
+                "no-complete-cff-rendering-support-claim",
+                "no-complete-cff2-variation-support-claim",
+                "no-native-scaler-oracle-claim",
+                "no-gpu-text-route-claim"
+              ]
+            }
+        """.trimIndent()
+    }
+
     private fun readGeneratedTestInt16(data: ByteArray, offset: Int): Int =
         ((data[offset].toInt() and 0xff) shl 8) or (data[offset + 1].toInt() and 0xff)
 

@@ -241,6 +241,8 @@ object FontScalerDiagnosticCodes {
     const val CFF_INDEX_OFFSIZE_UNSUPPORTED: String = "font.scaler.cff.index-offsize-unsupported"
     const val CFF_DICT_OPERAND_MALFORMED: String = "font.scaler.cff.dict-operand-malformed"
     const val CFF_REQUIRED_OPERATOR_MISSING: String = "font.scaler.cff.required-operator-missing"
+    const val CFF_PATH_OUTPUT_UNAVAILABLE: String = "font.scaler.cff.path-output-unavailable"
+    const val CFF_GLYPH_MALFORMED: String = "font.scaler.cff.glyph-malformed"
     const val VARIATION_DATA_MALFORMED: String = "font.variation-data-malformed"
     const val VARIATION_AXIS_UNSUPPORTED: String = "font.variation-axis-unsupported"
     const val METRICS_VARIATION_UNAVAILABLE: String = "font.metrics-variation-unavailable"
@@ -435,6 +437,98 @@ data class CFFCharStringEvidence(
         append("  ").append(scalerJsonString("variationPosition")).append(": ")
             .append(variationPosition.toCoordinateJson()).append(",\n")
         append("  ").append(scalerJsonString("cff2VsIndex")).append(": ").append(cff2VsIndex).append(",\n")
+        append("  ").append(scalerJsonString("diagnostics")).append(": ")
+            .append(diagnostics.toDiagnosticJson()).append("\n")
+        append("}")
+    }
+}
+
+/**
+ * Deterministic current-state evidence for one scaled CFF glyph route.
+ *
+ * This evidence is generated-fixture only. It proves current bounded path and metrics behavior for
+ * selected CFF glyphs without promoting complete real-font CFF support, fallback selection, or GPU
+ * glyph routes.
+ */
+data class CFFScaledGlyphEvidence(
+    val sourceId: String,
+    val typefaceId: String,
+    val format: String,
+    val requestedGlyphId: UInt,
+    val resolvedGlyphId: UInt? = requestedGlyphId,
+    val notdefUsed: Boolean = false,
+    val scalerFamily: String = CFF_SCALER_FAMILY,
+    val route: String = CFF_SCALER_ROUTE,
+    val fillRule: String = CFF_FILL_RULE,
+    val outlineCommands: List<String>,
+    val outlineCommandDump: String = outlineCommands.joinToString("\n"),
+    val outlineCommandDumpSha256: String = outlineCommandDump.scalerSha256Hex(),
+    val conservativeBounds: GlyphBounds? = null,
+    val metrics: GlyphMetrics? = null,
+    val widthSource: String? = null,
+    val linkedCharStringTraceDumpId: String? = null,
+    val charStringEvidence: CFFCharStringEvidence? = null,
+    val diagnostics: List<FontScalerDiagnostic> = emptyList(),
+) {
+    init {
+        require(sourceId.isStableToken()) { "CFF scaled glyph evidence sourceId must be stable." }
+        require(typefaceId.isStableToken()) { "CFF scaled glyph evidence typefaceId must be stable." }
+        require(format.isStableToken()) { "CFF scaled glyph evidence format must be stable." }
+        require(scalerFamily.isStableToken()) { "CFF scaled glyph evidence scalerFamily must be stable." }
+        require(route.isStableToken()) { "CFF scaled glyph evidence route must be stable." }
+        require(fillRule.isStableToken()) { "CFF scaled glyph evidence fillRule must be stable." }
+        require(widthSource == null || widthSource.isStableToken()) {
+            "CFF scaled glyph evidence widthSource must be stable when present."
+        }
+        require(linkedCharStringTraceDumpId == null || linkedCharStringTraceDumpId.isStableToken()) {
+            "CFF scaled glyph evidence linkedCharStringTraceDumpId must be stable when present."
+        }
+        require(outlineCommands.none { line -> line.any { it == '\n' || it == '\r' } }) {
+            "CFF scaled glyph evidence outline command lines must be single-line."
+        }
+        require(outlineCommandDump == outlineCommands.joinToString("\n")) {
+            "CFF scaled glyph evidence outlineCommandDump must match outlineCommands."
+        }
+        require(outlineCommandDumpSha256 == outlineCommandDump.scalerSha256Hex()) {
+            "CFF scaled glyph evidence outlineCommandDumpSha256 must match outlineCommandDump."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  ").append(scalerJsonString("sourceId")).append(": ")
+            .append(scalerJsonString(sourceId)).append(",\n")
+        append("  ").append(scalerJsonString("typefaceId")).append(": ")
+            .append(scalerJsonString(typefaceId)).append(",\n")
+        append("  ").append(scalerJsonString("format")).append(": ")
+            .append(scalerJsonString(format)).append(",\n")
+        append("  ").append(scalerJsonString("requestedGlyphId")).append(": ")
+            .append(requestedGlyphId.toString()).append(",\n")
+        append("  ").append(scalerJsonString("resolvedGlyphId")).append(": ")
+            .append(resolvedGlyphId?.toString() ?: "null").append(",\n")
+        append("  ").append(scalerJsonString("notdefUsed")).append(": ").append(notdefUsed).append(",\n")
+        append("  ").append(scalerJsonString("scalerFamily")).append(": ")
+            .append(scalerJsonString(scalerFamily)).append(",\n")
+        append("  ").append(scalerJsonString("route")).append(": ")
+            .append(scalerJsonString(route)).append(",\n")
+        append("  ").append(scalerJsonString("fillRule")).append(": ")
+            .append(scalerJsonString(fillRule)).append(",\n")
+        append("  ").append(scalerJsonString("outlineCommands")).append(": ")
+            .append(outlineCommands.toJsonStringArray()).append(",\n")
+        append("  ").append(scalerJsonString("outlineCommandDump")).append(": ")
+            .append(scalerJsonString(outlineCommandDump)).append(",\n")
+        append("  ").append(scalerJsonString("outlineCommandDumpSha256")).append(": ")
+            .append(scalerJsonString(outlineCommandDumpSha256)).append(",\n")
+        append("  ").append(scalerJsonString("conservativeBounds")).append(": ")
+            .append(conservativeBounds?.toCanonicalJson() ?: "null").append(",\n")
+        append("  ").append(scalerJsonString("metrics")).append(": ")
+            .append(metrics?.toCanonicalJson() ?: "null").append(",\n")
+        append("  ").append(scalerJsonString("widthSource")).append(": ")
+            .append(widthSource?.let(::scalerJsonString) ?: "null").append(",\n")
+        append("  ").append(scalerJsonString("linkedCharStringTraceDumpId")).append(": ")
+            .append(linkedCharStringTraceDumpId?.let(::scalerJsonString) ?: "null").append(",\n")
+        append("  ").append(scalerJsonString("charStringEvidence")).append(": ")
+            .append(charStringEvidence?.toCanonicalJson() ?: "null").append(",\n")
         append("  ").append(scalerJsonString("diagnostics")).append(": ")
             .append(diagnostics.toDiagnosticJson()).append("\n")
         append("}")
@@ -3052,6 +3146,10 @@ private fun TrueTypeGlyphHeader.toGlyphBounds(): GlyphBounds =
 
 private const val TRUE_TYPE_GLYF_SCALER_FAMILY = "truetype-glyf"
 private const val TRUE_TYPE_GLYF_SCALER_ROUTE = "font.scaler.truetype-glyf"
+private const val CFF_SCALER_FAMILY = "cff"
+private const val CFF_SCALER_ROUTE = "font.scaler.cff"
+private const val CFF_FILL_RULE = "non-zero"
+private const val CFF_CHARSTRING_TRACE_DUMP_ID = "cff-charstring-trace"
 
 private val fontScalerDiagnosticOrdering = compareBy<FontScalerDiagnostic>(
     { diagnostic -> diagnostic.operation },
@@ -4333,6 +4431,30 @@ class CFFScaler(
                 ).width,
             )
         } ?: unsupportedCFFGlyph("CFF", "metrics", face, glyphId, position)
+
+    /**
+     * Produces deterministic current-state evidence for one CFF glyph route.
+     *
+     * This remains generated-fixture evidence only; it does not promote complete real-font CFF
+     * support, fallback font selection, or GPU handoff readiness.
+     */
+    fun scaledGlyphEvidence(
+        glyphId: UInt,
+        position: VariationPosition = VariationPosition(),
+    ): CFFScaledGlyphEvidence =
+        scaledCFFGlyphEvidence(
+            face = face,
+            format = "cff",
+            program = parsedCFF,
+            glyphId = glyphId,
+            position = position,
+            interpreterProvider = { program ->
+                CFFType2CharStringInterpreter(
+                    localSubroutines = program.localSubroutines,
+                    globalSubroutines = program.globalSubroutines,
+                )
+            },
+        )
 }
 
 /**
@@ -4442,6 +4564,123 @@ private fun cffGlyphMetrics(
     )
 }
 
+private fun scaledCFFGlyphEvidence(
+    face: OpenTypeFaceData,
+    format: String,
+    program: ParsedCFFProgram?,
+    glyphId: UInt,
+    position: VariationPosition,
+    interpreterProvider: (ParsedCFFProgram) -> CFFType2CharStringInterpreter,
+): CFFScaledGlyphEvidence {
+    val sourceId = face.source.id.value.toString()
+    val typefaceId = face.id.value.toString()
+    val parsedProgram = program ?: return CFFScaledGlyphEvidence(
+        sourceId = sourceId,
+        typefaceId = typefaceId,
+        format = format,
+        requestedGlyphId = glyphId,
+        resolvedGlyphId = null,
+        outlineCommands = emptyList(),
+        diagnostics = listOf(
+            cffPathOutputUnavailableDiagnostic(
+                glyphId = glyphId,
+                operation = "outline",
+                detail = "cff.path-output-unavailable",
+            ),
+        ),
+    )
+    if (!parsedProgram.hasGlyph(glyphId)) {
+        return CFFScaledGlyphEvidence(
+            sourceId = sourceId,
+            typefaceId = typefaceId,
+            format = format,
+            requestedGlyphId = glyphId,
+            resolvedGlyphId = null,
+            outlineCommands = emptyList(),
+            diagnostics = listOf(
+                cffPathOutputUnavailableDiagnostic(
+                    glyphId = glyphId,
+                    operation = "outline",
+                    detail = "cff.path-output-unavailable",
+                ),
+            ),
+        )
+    }
+
+    val charString = parsedProgram.charString(glyphId)
+    val interpreter = interpreterProvider(parsedProgram)
+    val diagnostics = mutableListOf<FontScalerDiagnostic>()
+    val charStringEvidence = runCatching {
+        interpreter.interpretEvidence(
+            charString = charString,
+            glyphId = glyphId,
+            format = format,
+            position = position,
+        )
+    }.getOrElse { error ->
+        val diagnostic = error.toFontScalerDiagnosticOrNull(
+            glyphId = glyphId,
+            operation = "charstring",
+        )
+        if (diagnostic != null) {
+            diagnostics += diagnostic
+            diagnostics += cffGlyphMalformedDiagnostic(glyphId = glyphId, operation = "outline")
+            null
+        } else {
+            throw error
+        }
+    }
+
+    val outline = charStringEvidence?.let {
+        interpreter.interpretOutline(
+            charString = charString,
+            glyphId = glyphId,
+            position = position,
+        )
+    }
+    val metrics = if (outline != null && charStringEvidence != null) {
+        runCatching {
+            cffGlyphMetrics(
+                face = face,
+                glyphId = glyphId,
+                outline = outline,
+                width = charStringEvidence.width,
+            )
+        }.getOrElse { error ->
+            val diagnostic = error.toFontScalerDiagnosticOrNull(
+                glyphId = glyphId,
+                operation = "metrics",
+            )
+            if (diagnostic != null) {
+                diagnostics += diagnostic
+                null
+            } else {
+                throw error
+            }
+        }
+    } else {
+        null
+    }
+    return CFFScaledGlyphEvidence(
+        sourceId = sourceId,
+        typefaceId = typefaceId,
+        format = format,
+        requestedGlyphId = glyphId,
+        resolvedGlyphId = glyphId,
+        outlineCommands = charStringEvidence?.outlineCommands.orEmpty(),
+        conservativeBounds = outline?.conservativeBounds(),
+        metrics = metrics,
+        widthSource = when {
+            metrics == null -> null
+            charStringEvidence?.width != null -> "charstring"
+            else -> "hmtx"
+        },
+        linkedCharStringTraceDumpId = if (charStringEvidence != null) CFF_CHARSTRING_TRACE_DUMP_ID else null,
+        charStringEvidence = charStringEvidence,
+        diagnostics = diagnostics.sortedWith(fontScalerDiagnosticOrdering),
+    )
+}
+
 private data class ParsedCFFProgram(
     val charStrings: List<ByteArray>,
     val localSubroutines: List<ByteArray>,
@@ -4457,6 +4696,9 @@ private data class ParsedCFFProgram(
             "CFF top dict operator evidence must be sorted."
         }
     }
+
+    fun hasGlyph(glyphId: UInt): Boolean =
+        glyphId.toLong() <= Int.MAX_VALUE && glyphId.toInt() in charStrings.indices
 
     fun charString(glyphId: UInt): ByteArray {
         require(glyphId.toLong() <= Int.MAX_VALUE) { "CFF glyphId $glyphId does not fit Int." }
@@ -5377,6 +5619,29 @@ private fun unsupportedCFFGlyph(
         "$format $operation for ${face.id.value} glyphId $glyphId requires bounded $format " +
             "table bytes and generated charstring evidence before glyph scaling can be claimed. " +
             "positionAxes=${position.axes.keys.sorted().joinToString(",")}",
+    )
+
+private fun cffPathOutputUnavailableDiagnostic(
+    glyphId: UInt,
+    operation: String,
+    detail: String,
+): FontScalerDiagnostic =
+    FontScalerDiagnostic(
+        code = FontScalerDiagnosticCodes.CFF_PATH_OUTPUT_UNAVAILABLE,
+        detail = detail,
+        operation = operation,
+        glyphId = glyphId,
+    )
+
+private fun cffGlyphMalformedDiagnostic(
+    glyphId: UInt,
+    operation: String,
+): FontScalerDiagnostic =
+    FontScalerDiagnostic(
+        code = FontScalerDiagnosticCodes.CFF_GLYPH_MALFORMED,
+        detail = "cff.glyph-malformed",
+        operation = operation,
+        glyphId = glyphId,
     )
 
 /**
@@ -6447,6 +6712,7 @@ private fun expandedByteLimitedCFFExecution(
         ),
         message = "CFF Type 2 expanded-byte budget exceeded at operator offset $operatorOffset for glyphId $glyphId.",
     )
+
 private fun malformedCFFVariation(
     glyphId: UInt,
     detail: String,
