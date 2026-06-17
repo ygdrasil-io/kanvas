@@ -26,7 +26,7 @@ blend modes that require destination access. Runtime effects must follow
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M7-001 - Add registered runtime-effect descriptor route](KGPU-M7-001-add-registered-runtime-effect-descriptor-route.md) | `review` | `P0` | `DependencyGated` | `GPUNative` | `false` | `true` | `runtime-effects` | `KGPU-M2-002` | `runtime-effect legacy` |
+| [KGPU-M7-001 - Add registered runtime-effect descriptor route](KGPU-M7-001-add-registered-runtime-effect-descriptor-route.md) | `done` | `P0` | `DependencyGated` | `GPUNative` | `false` | `true` | `runtime-effects` | `KGPU-M2-002` | `runtime-effect legacy` |
 | [KGPU-M7-002 - Add runtime-effect child and source refusal gates](KGPU-M7-002-add-runtime-effect-child-and-source-refusal-gates.md) | `blocked` | `P0` | `RefuseRequired` | `RefuseDiagnostic` | `false` | `false` | `runtime-effects-validation` | `KGPU-M7-001` | - |
 | [KGPU-M7-003 - Add blend mode allowlist and destination-read refusals](KGPU-M7-003-add-blend-mode-allowlist-and-destination-read-refusals.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `blend-destination-read` | `KGPU-M5-002` | `blend legacy` |
 | [KGPU-M7-004 - Add SDR color plan and HDR profile refusal gates](KGPU-M7-004-add-sdr-color-plan-and-hdr-profile-refusal-gates.md) | `done` | `P1` | `DependencyGated` | `GPUNative` | `false` | `false` | `color` | `KGPU-M2-002` | `color legacy` |
@@ -47,21 +47,20 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Runtime*' --tests '*Blend*'
 
 ## Current Evidence
 
-- KGPU-M7-001 is in `review` with contract-gate evidence for the registered
-  `runtime.simple.color` material descriptor, descriptor ID/version, uniform
-  schema/packing, canonical 64-hex `sha256:` CPU oracle hash,
-  parser-validated wgsl4k reflection linkage, route/material-key dumps, and
-  stable refusals for unregistered descriptors, descriptor collisions, dynamic
-  SkSL source, wrong placement, missing explicit placement opt-in, WGSL
+- KGPU-M7-001 is `done` with independently reviewed contract-gate evidence for
+  the registered `runtime.simple.color` material descriptor, descriptor
+  ID/version, uniform schema/packing, canonical 64-hex `sha256:` CPU oracle
+  hash, parser-validated wgsl4k reflection linkage, route/material-key dumps,
+  and stable refusals for unregistered descriptors, descriptor collisions,
+  dynamic SkSL source, wrong placement, missing explicit placement opt-in, WGSL
   reflection/schema/descriptor mismatch, and missing or non-canonical CPU oracle
   evidence. It remains non-promoted: no adapter-backed runtime-effect
   execution, readback, product activation, arbitrary SkSL/WGSL input, children,
   blenders, filters, or live editing is claimed.
   Evidence report:
   `reports/gpu-renderer/2026-06-17-m7-001-runtime-effect-descriptor-gate.md`.
-- KGPU-M7-002 is `blocked` on independent acceptance of KGPU-M7-001 so
-  child/source refusal rows can be anchored to an accepted descriptor route
-  boundary.
+- KGPU-M7-002 is `blocked` pending child/source refusal implementation; it can
+  now anchor its rows to the accepted KGPU-M7-001 descriptor route boundary.
 - KGPU-M7-003 is `done` with fixed-function allowlist evidence for `Src`,
   `SrcOver`, and `DstOver`; deterministic alpha-plan/state/key dumps; terminal
   refusals for unsupported and destination-read blend modes; destination-read
