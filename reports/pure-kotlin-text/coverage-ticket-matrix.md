@@ -2688,13 +2688,13 @@ Evidence:
   diagnostics.
 - `BasicParagraphLayoutEngine` now returns structured refusal diagnostics for
   invalid max-width constraints, negative `maxLines`, non-finite `lineHeight`,
-  and max-lines ellipsis requests that overflow while ellipsis insertion remains
-  unsupported.
+  missing ellipsis glyph shaping, no-room-for-ellipsis refusals, and visible
+  placeholder truncation conflicts.
 - Shaping diagnostics produced for shaped lines are merged into paragraph
   diagnostics so layout dumps do not hide missing glyph/fallback or feature
   diagnostics from the shaping layer.
 - Tests cover deterministic dumps, absence of object-identity/`Sk*` tokens,
-  max-line ellipsis refusal, invalid numeric/style refusals, and shaping
+  bounded end-ellipsis insertion, invalid numeric/style refusals, and shaping
   diagnostic propagation.
 - Independent review verdict: `ACCEPT`.
 
@@ -2704,9 +2704,9 @@ Validation:
 rtk ./gradlew --no-daemon :font:text:test
 ```
 
-Remaining gate: this is current-state semantic dump and refusal hardening only.
-It does not claim full rich text, full bidi visual ordering, complete
-selection/hit testing, complete ellipsis insertion, or Skia Paragraph parity.
+Remaining gate: this is semantic dump and bounded refusal hardening only. It
+does not claim full rich text, full bidi visual ordering, complete
+selection/hit testing, placeholder geometry parity, or Skia Paragraph parity.
 ### PKT-09B: Paragraph Fixture And Golden Matrix
 
 Status: implemented with local diff review.
@@ -2836,8 +2836,8 @@ rtk git diff --check
 ```
 
 Remaining gate: downstream M8 tickets still own multi-style shaping
-segmentation, ellipsis insertion, hit testing, selection boxes, placeholder
-geometry layout, CPU oracle evidence, and GPU text evidence.
+segmentation, hit testing, selection boxes, placeholder geometry layout, CPU
+oracle evidence, and GPU text evidence.
 ### KFONT-M8-002: Multi-style shaping segmentation
 
 Status: done; bounded segmentation evidence refreshed.
@@ -2887,9 +2887,9 @@ rtk git diff --check
 ```
 
 Remaining gate: this slice proves bounded segmentation only. It does not claim
-complete fallback-policy behavior, full bidi visual ordering, ellipsis
-insertion, hit testing, selection boxes, placeholder geometry layout, CPU
-oracle parity, Skia Paragraph parity, or GPU text support.
+complete fallback-policy behavior, full bidi visual ordering, hit testing,
+selection boxes, placeholder geometry layout, CPU oracle parity, Skia
+Paragraph parity, or GPU text support.
 ### KFONT-M8-003: UAX #14 line breaker
 
 Status: done; bounded line-break evidence refreshed.
@@ -2941,8 +2941,58 @@ rtk git diff --check
 
 Remaining gate: this slice proves bounded line-break planning only. It does not
 claim complete UAX #14 conformance, dictionary-based Thai/Lao/Khmer
-refinement, ellipsis insertion, selection/hit-testing geometry, placeholder
-layout parity, Skia Paragraph parity, or GPU text support.
+refinement, selection/hit-testing geometry, placeholder layout parity, Skia
+Paragraph parity, or GPU text support.
+### KFONT-M8-004: Ellipsis and max-lines policy
+
+Status: implemented with local diff review; independent subagent review could
+not be started because the session hit the agent thread limit.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/KFONT-M8-004-implement-ellipsis-and-max-lines-policy.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/font/fixtures/expected/paragraph/paragraph-layout.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m8-004-ellipsis-max-lines-policy.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+
+Evidence:
+
+- `BasicParagraphLayoutEngine` now applies bounded end ellipsis when
+  `maxLines` clips additional content, preserving grapheme-cluster safety and
+  shaping the ellipsis with the active trailing style facts.
+- `LineLayout` and `ParagraphLayoutResult.dump()` now record
+  `visibleTextRange`, `truncatedTextRange`, `isEllipsized`, and
+  `ellipsisGlyphs`, so the semantic dump exposes truncation state and glyph
+  provenance instead of hiding clipped text behind an unsupported-policy
+  refusal.
+- The checked-in `paragraph-layout.json` fixture now pins a mixed-style RTL
+  paragraph whose last visible line is ellipsized with trailing Arabic style
+  facts, explicit visible/truncated logical ranges, and visual direction `-1`.
+- Focused tests cover one-line overflow insertion, no-room-for-ellipsis,
+  missing ellipsis glyph shaping, placeholder truncation conflict, and the
+  mixed-style RTL truncation path without promoting head/middle truncation,
+  full bidi visual-order parity, or placeholder geometry parity.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutEllipsizesLastVisibleLineAndRecordsRangesAndProvenance --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenEllipsisCannotFitWithinMaxWidth --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenEllipsisShapingFails --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenEllipsisWouldDropVisiblePlaceholder --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutEllipsizesMixedStyleRtlLineWithTrailingStyleProvenance --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenMatchesRepoFixture
+rtk ./gradlew --no-daemon :font:text:test
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this slice proves bounded end ellipsis only. It does not claim
+head/middle truncation variants, full bidi visual-order parity, placeholder
+layout geometry parity, selection geometry, hit testing, Skia Paragraph
+parity, or GPU text support.
 ### PKT-10A: Glyph Strike-Key Preimage And Route Diagnostic Dumps
 
 Status: implemented and independently reviewed.

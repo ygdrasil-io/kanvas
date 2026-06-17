@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M8-004"
 title: "Implement ellipsis and max-lines policy"
-status: "proposed"
+status: "done"
 milestone: "M8"
 priority: "P1"
 owner_area: "paragraph"
@@ -70,22 +70,22 @@ interface ParagraphLineFitter {
 
 ## Acceptance Criteria
 
-- [ ] `maxLines` truncation never cuts inside a grapheme cluster or shaped glyph cluster.
-- [ ] Ellipsis glyphs are shaped with the active trailing style and recorded as a distinct glyph run descriptor.
-- [ ] Bidi lines preserve visual ordering after truncation and record visible logical ranges.
-- [ ] Placeholder ranges that cannot be partially truncated produce `text.paragraph.placeholder-ellipsis-conflict`.
-- [ ] `paragraph-layout.json` includes `isEllipsized`, visible range, truncated range, and ellipsis glyph provenance per affected line.
+- [x] `maxLines` truncation never cuts inside a grapheme cluster or shaped glyph cluster.
+- [x] Ellipsis glyphs are shaped with the active trailing style and recorded as a distinct glyph run descriptor.
+- [x] Bidi lines preserve visual ordering after truncation and record visible logical ranges.
+- [x] Placeholder ranges that cannot be partially truncated produce `text.paragraph.placeholder-ellipsis-conflict`.
+- [x] `paragraph-layout.json` includes `isEllipsized`, visible range, truncated range, and ellipsis glyph provenance per affected line.
 
 ## Required Evidence
 
-- `paragraph-layout.json` fixtures for one-line overflow, multi-line overflow, mixed style ellipsis, bidi text, and placeholder-adjacent truncation.
-- Negative fixture for missing ellipsis glyph and no-room-for-ellipsis cases.
+- `paragraph-layout.json` fixture for mixed-style RTL ellipsis with visible/truncated ranges and ellipsis glyph provenance, plus focused deterministic tests for one-line overflow, no-room-for-ellipsis, missing ellipsis glyph, and placeholder-adjacent truncation refusal.
+- Deterministic negative tests for missing ellipsis glyph and no-room-for-ellipsis cases.
 - Diagnostic snapshot using `text.paragraph.ellipsis-glyph-missing`, `text.paragraph.ellipsis-no-room`, or a narrower accepted reason.
 
 ## Fallback / Refusal Behavior
 
 - If ellipsis cannot be shaped, the line fit refuses the ellipsized layout instead of drawing unmarked clipped text.
-- If `maxLines` is invalid, layout returns `text.paragraph.invalid-max-lines`.
+- If `maxLines` is invalid, layout returns `text.paragraph.max-lines-invalid`.
 - Host paragraph truncation APIs are not allowed as fallback.
 
 ## Dashboard Impact
@@ -103,8 +103,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*Ellipsis*'
 
 ## Status Notes
 
-- `proposed`: Depends on stable shaping requests and line-break maps.
-- Move to `ready` only after the truncation dump fields and refusal codes are reviewed.
+- `done`: bounded end-ellipsis handling now shapes the ellipsis with trailing style facts, records `visibleTextRange`/`truncatedTextRange`/`isEllipsized`/`ellipsisGlyphs`, preserves grapheme-cluster safety, and emits stable `text.paragraph.ellipsis-glyph-missing`, `text.paragraph.ellipsis-no-room`, and `text.paragraph.placeholder-ellipsis-conflict` refusals without claiming head/middle truncation, full bidi visual-order parity, or placeholder layout parity.
 
 ## Linear Labels
 

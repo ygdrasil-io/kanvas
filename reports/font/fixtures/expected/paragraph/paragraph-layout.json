@@ -3,22 +3,20 @@
   "input": {
     "schema": "kanvas.paragraph.input.v1",
     "unicodeVersion": "16.0.0",
-    "inputHash": "7907f7276769ac31d0f6a9b219f68716cc7dea3c203468a6667dd8c32316f0e0",
-    "text": "ab\ufffc\u0633\u0644",
+    "inputHash": "2622c742c9ae92ade217de52d4c0673d6a5bf1268a5690d4efc1494d5438831b",
+    "text": "ab\u0633\n\u0644",
     "textLength": 5,
-    "paragraphStyle": {"textAlign": "start", "textDirection": "rtl", "softWrap": true, "maxLines": null, "ellipsis": null, "ellipsisPolicy": "none", "lineHeight": null, "textHeightBehavior": "font-metrics", "defaultLocale": null},
+    "paragraphStyle": {"textAlign": "start", "textDirection": "rtl", "softWrap": true, "maxLines": 1, "ellipsis": "\u2026", "ellipsisPolicy": "end", "lineHeight": null, "textHeightBehavior": "font-metrics", "defaultLocale": null},
     "styleRuns": [
       {"range": "0..1", "fontFamilies": ["Liberation Sans"], "fallbackPreference": "system-default", "typefaceId": null, "fontSize": 10.0, "fontWeight": 400, "fontWidth": 5, "fontSlant": "upright", "syntheticStylePolicy": "allow", "locale": "en-US", "scriptHint": null, "features": [{"tag": "kern", "value": 1}], "variationCoordinates": [], "palette": null, "colorRgba": "000000ff", "decoration": null, "letterSpacing": 0.0, "wordSpacing": 0.0, "heightMultiplier": null},
-      {"range": "3..4", "fontFamilies": ["Missing Arabic", "Noto Naskh Arabic"], "fallbackPreference": "prefer-declared-families", "typefaceId": null, "fontSize": 14.0, "fontWeight": 400, "fontWidth": 5, "fontSlant": "upright", "syntheticStylePolicy": "allow", "locale": "ar", "scriptHint": "Arab", "features": [], "variationCoordinates": [{"axisTag": "wght", "value": 550.0}], "palette": null, "colorRgba": "000000ff", "decoration": null, "letterSpacing": 0.0, "wordSpacing": 0.0, "heightMultiplier": null}
+      {"range": "2..4", "fontFamilies": ["Missing Arabic", "Noto Naskh Arabic"], "fallbackPreference": "prefer-declared-families", "typefaceId": null, "fontSize": 14.0, "fontWeight": 400, "fontWidth": 5, "fontSlant": "upright", "syntheticStylePolicy": "allow", "locale": "ar", "scriptHint": "Arab", "features": [], "variationCoordinates": [{"axisTag": "wght", "value": 550.0}], "palette": null, "colorRgba": "000000ff", "decoration": null, "letterSpacing": 0.0, "wordSpacing": 0.0, "heightMultiplier": null}
     ],
-    "placeholders": [
-      {"range": "2..2", "width": 12.0, "height": 8.0, "baselineOffset": 8.0, "alignment": "baseline", "baseline": "alphabetic"}
-    ],
+    "placeholders": [],
     "diagnostics": []
   },
-  "layout": {"maxWidth": 200.0, "width": 60.0, "height": 10.0, "didOverflowWidth": false, "didOverflowHeight": false, "layoutRefused": false},
+  "layout": {"maxWidth": 50.0, "width": 48.0, "height": 10.0, "didOverflowWidth": false, "didOverflowHeight": true, "layoutRefused": false},
   "lines": [
-    {"index": 0, "textRange": "0..4", "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 60.0, "baseline": 8.0}, "boxes": [{"textRange": "0..4", "left": 0.0, "top": 0.0, "right": 60.0, "bottom": 10.0, "direction": 1}], "segmentRefs": ["0..1", "3..4"], "glyphRunCount": 2}
+    {"index": 0, "textRange": "0..2", "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 48.0, "baseline": 8.0}, "boxes": [{"textRange": "0..2", "left": 0.0, "top": 0.0, "right": 48.0, "bottom": 10.0, "direction": -1}], "segmentRefs": ["0..1", "2..2"], "glyphRunCount": 3, "visibleTextRange": "0..2", "truncatedTextRange": "4..4", "isEllipsized": true, "ellipsisGlyphs": [{"glyphCount": 1, "advanceX": 14.0, "script": "Zyyy", "bidiLevel": 1, "typefaceId": null, "fontSize": 14.0}]}
   ],
   "diagnostics": []
 }
