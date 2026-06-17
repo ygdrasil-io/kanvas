@@ -605,6 +605,75 @@
       ]
     },
     {
+      "dumpId": "fallback-segmentation-report",
+      "ownerTicket": "KFONT-M7-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Font Fallback Runs"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ClusterSafetyReport.kt",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/FallbackSegmentationReport.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/FallbackSegmentationTest.kt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-arabic-mark.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-cjk-vs.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-devanagari.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-emoji-zwj.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-latin-mark.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-negative-split.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-skin-tone.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-thai.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-vs15-vs16.txt",
+        "reports/font/fixtures/expected/fallback/fallback-segmentation-report.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "clusterFixtureName",
+        "clusterTextRanges",
+        "code",
+        "diagnostic",
+        "diagnostics",
+        "dumpId",
+        "dumpSha256",
+        "fallbackFixtureId",
+        "fallbackRunRanges",
+        "gate",
+        "inputTextHash",
+        "invariant",
+        "message",
+        "name",
+        "nonClaims",
+        "ownerTickets",
+        "passed",
+        "schemaVersion",
+        "severity",
+        "sourceDumpIds",
+        "sourceDumpRefs",
+        "sourceText",
+        "sourceTextHashAlgorithm",
+        "unicodeVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecision*'",
+        "rtk ./gradlew --no-daemon :font:text:test --tests '*FallbackSegmentation*' --tests '*ClusterSafety*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Fallback segmentation golden changes require reviewed cluster-range diffs, source-dump hash review, explicit legacy-gate visibility, and no fallback or emoji support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-cluster-safe-fallback-support-claim",
+        "no-emoji-rendering-claim",
+        "no-platform-font-fallback-claim",
+        "no-gpu-text-route-claim",
+        "no-scaledemoji-retirement"
+      ]
+    },
+    {
       "dumpId": "feature-policy-matrix",
       "ownerTicket": "KFONT-M6-006",
       "classification": "golden-gated",
