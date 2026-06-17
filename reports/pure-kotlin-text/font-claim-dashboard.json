@@ -337,6 +337,7 @@
         "deterministicDumps": [
           "reports/pure-kotlin-text/font-telemetry-schema.json",
           "reports/pure-kotlin-text/font-telemetry-schema-fixture.json",
+          "reports/pure-kotlin-text/font-telemetry-pm-bundle.json",
           "reports/pure-kotlin-text/dump-evidence-index.json"
         ],
         "cpuOracle": [],
@@ -350,8 +351,7 @@
         ]
       },
       "requiredEvidenceGates": [
-        "Wire parser, scaler, shaping, paragraph, glyph artifact, and GPU handoff producers into the shared schema before telemetry promotion.",
-        "Show advisory tracked-gap ingestion in pipelinePerformanceTrendWarnings or PM bundle evidence before claiming dashboard visibility is complete.",
+        "KFONT-M12-002, KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own parser/scaler/shaping/paragraph/glyph/GPU producer emission into the shared schema; keep this row schema-only advisory evidence until those subsystem tickets land.",
         "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
       ],
       "legacyGates": [],

@@ -230,6 +230,7 @@ object FontScalerDiagnosticCodes {
     const val SCALER_OUTLINE_UNAVAILABLE: String = "font.scaler.outline-unavailable"
     const val CFF_OPERATOR_UNSUPPORTED: String = "font.cff-operator-unsupported"
     const val CFF_STACK_MALFORMED: String = "font.cff-stack-malformed"
+    const val CFF2_BLEND_STACK_MALFORMED: String = "font.scaler.cff2.blend-stack-malformed"
     const val CFF_TABLE_MALFORMED: String = "font.cff-table-malformed"
     const val CFF_STACK_OVERFLOW: String = "font.scaler.cff.stack-overflow"
     const val CFF_TRAILING_BYTES: String = "font.scaler.cff.trailing-bytes"
@@ -241,6 +242,8 @@ object FontScalerDiagnosticCodes {
     const val CFF_INDEX_OFFSIZE_UNSUPPORTED: String = "font.scaler.cff.index-offsize-unsupported"
     const val CFF_DICT_OPERAND_MALFORMED: String = "font.scaler.cff.dict-operand-malformed"
     const val CFF_REQUIRED_OPERATOR_MISSING: String = "font.scaler.cff.required-operator-missing"
+    const val CFF_PATH_OUTPUT_UNAVAILABLE: String = "font.scaler.cff.path-output-unavailable"
+    const val CFF_GLYPH_MALFORMED: String = "font.scaler.cff.glyph-malformed"
     const val VARIATION_DATA_MALFORMED: String = "font.variation-data-malformed"
     const val VARIATION_AXIS_UNSUPPORTED: String = "font.variation-axis-unsupported"
     const val METRICS_VARIATION_UNAVAILABLE: String = "font.metrics-variation-unavailable"
@@ -376,6 +379,54 @@ data class Type2ExecutionLimits(
  * This evidence covers generated Type 2/CFF2 charstring fixtures only. It is intentionally not a
  * complete CFF table parser or a claim that OpenType/CFF fonts are fully supported.
  */
+data class CFFBlendVectorEvidence(
+    val vsIndex: Int,
+    val defaults: List<Double>,
+    val deltaSets: List<List<Double>>,
+    val regionIndexes: List<Int> = emptyList(),
+    val scalars: List<Double>,
+    val blendedValues: List<Double>,
+) {
+    init {
+        require(vsIndex >= 0) { "CFF blend vector vsIndex must be non-negative." }
+        require(defaults.isNotEmpty()) { "CFF blend vector defaults must not be empty." }
+        require(defaults.all(Double::isFinite)) { "CFF blend vector defaults must be finite." }
+        require(deltaSets.size == scalars.size) {
+            "CFF blend vector deltaSets must align with scalar count."
+        }
+        require(deltaSets.all { deltas -> deltas.size == defaults.size }) {
+            "CFF blend vector delta rows must align with default value count."
+        }
+        require(regionIndexes.isEmpty() || regionIndexes.size == scalars.size) {
+            "CFF blend vector regionIndexes must be empty or align with scalar count."
+        }
+        require(regionIndexes.all { index -> index >= 0 }) {
+            "CFF blend vector region indexes must be non-negative."
+        }
+        require(scalars.all(Double::isFinite)) { "CFF blend vector scalars must be finite." }
+        require(blendedValues.size == defaults.size) {
+            "CFF blend vector blendedValues must align with default value count."
+        }
+        require(blendedValues.all(Double::isFinite)) { "CFF blend vector blendedValues must be finite." }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  ").append(scalerJsonString("vsIndex")).append(": ").append(vsIndex).append(",\n")
+        append("  ").append(scalerJsonString("defaults")).append(": ")
+            .append(defaults.toScalerNumberJsonArray()).append(",\n")
+        append("  ").append(scalerJsonString("deltaSets")).append(": ")
+            .append(deltaSets.toScalerNumberMatrixJson()).append(",\n")
+        append("  ").append(scalerJsonString("regionIndexes")).append(": ")
+            .append(regionIndexes.toIntJsonArray()).append(",\n")
+        append("  ").append(scalerJsonString("scalars")).append(": ")
+            .append(scalars.toScalerNumberJsonArray()).append(",\n")
+        append("  ").append(scalerJsonString("blendedValues")).append(": ")
+            .append(blendedValues.toScalerNumberJsonArray()).append("\n")
+        append("}")
+    }
+}
+
 data class CFFCharStringEvidence(
     val format: String,
     val glyphId: UInt,
@@ -388,6 +439,7 @@ data class CFFCharStringEvidence(
     val callTrace: List<CFFCharStringCallTrace> = emptyList(),
     val variationPosition: List<VariationCoordinateEvidence> = emptyList(),
     val cff2VsIndex: Int = 0,
+    val blendVectors: List<CFFBlendVectorEvidence> = emptyList(),
     val diagnostics: List<FontScalerDiagnostic> = emptyList(),
 ) {
     init {
@@ -435,6 +487,100 @@ data class CFFCharStringEvidence(
         append("  ").append(scalerJsonString("variationPosition")).append(": ")
             .append(variationPosition.toCoordinateJson()).append(",\n")
         append("  ").append(scalerJsonString("cff2VsIndex")).append(": ").append(cff2VsIndex).append(",\n")
+        append("  ").append(scalerJsonString("blendVectors")).append(": ")
+            .append(blendVectors.toCFFBlendVectorJson()).append(",\n")
+        append("  ").append(scalerJsonString("diagnostics")).append(": ")
+            .append(diagnostics.toDiagnosticJson()).append("\n")
+        append("}")
+    }
+}
+
+/**
+ * Deterministic current-state evidence for one scaled CFF glyph route.
+ *
+ * This evidence is generated-fixture only. It proves current bounded path and metrics behavior for
+ * selected CFF glyphs without promoting complete real-font CFF support, fallback selection, or GPU
+ * glyph routes.
+ */
+data class CFFScaledGlyphEvidence(
+    val sourceId: String,
+    val typefaceId: String,
+    val format: String,
+    val requestedGlyphId: UInt,
+    val resolvedGlyphId: UInt? = requestedGlyphId,
+    val notdefUsed: Boolean = false,
+    val scalerFamily: String = CFF_SCALER_FAMILY,
+    val route: String = CFF_SCALER_ROUTE,
+    val fillRule: String = CFF_FILL_RULE,
+    val outlineCommands: List<String>,
+    val outlineCommandDump: String = outlineCommands.joinToString("\n"),
+    val outlineCommandDumpSha256: String = outlineCommandDump.scalerSha256Hex(),
+    val conservativeBounds: GlyphBounds? = null,
+    val metrics: GlyphMetrics? = null,
+    val widthSource: String? = null,
+    val linkedCharStringTraceDumpId: String? = null,
+    val charStringEvidence: CFFCharStringEvidence? = null,
+    val diagnostics: List<FontScalerDiagnostic> = emptyList(),
+) {
+    init {
+        require(sourceId.isStableToken()) { "CFF scaled glyph evidence sourceId must be stable." }
+        require(typefaceId.isStableToken()) { "CFF scaled glyph evidence typefaceId must be stable." }
+        require(format.isStableToken()) { "CFF scaled glyph evidence format must be stable." }
+        require(scalerFamily.isStableToken()) { "CFF scaled glyph evidence scalerFamily must be stable." }
+        require(route.isStableToken()) { "CFF scaled glyph evidence route must be stable." }
+        require(fillRule.isStableToken()) { "CFF scaled glyph evidence fillRule must be stable." }
+        require(widthSource == null || widthSource.isStableToken()) {
+            "CFF scaled glyph evidence widthSource must be stable when present."
+        }
+        require(linkedCharStringTraceDumpId == null || linkedCharStringTraceDumpId.isStableToken()) {
+            "CFF scaled glyph evidence linkedCharStringTraceDumpId must be stable when present."
+        }
+        require(outlineCommands.none { line -> line.any { it == '\n' || it == '\r' } }) {
+            "CFF scaled glyph evidence outline command lines must be single-line."
+        }
+        require(outlineCommandDump == outlineCommands.joinToString("\n")) {
+            "CFF scaled glyph evidence outlineCommandDump must match outlineCommands."
+        }
+        require(outlineCommandDumpSha256 == outlineCommandDump.scalerSha256Hex()) {
+            "CFF scaled glyph evidence outlineCommandDumpSha256 must match outlineCommandDump."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  ").append(scalerJsonString("sourceId")).append(": ")
+            .append(scalerJsonString(sourceId)).append(",\n")
+        append("  ").append(scalerJsonString("typefaceId")).append(": ")
+            .append(scalerJsonString(typefaceId)).append(",\n")
+        append("  ").append(scalerJsonString("format")).append(": ")
+            .append(scalerJsonString(format)).append(",\n")
+        append("  ").append(scalerJsonString("requestedGlyphId")).append(": ")
+            .append(requestedGlyphId.toString()).append(",\n")
+        append("  ").append(scalerJsonString("resolvedGlyphId")).append(": ")
+            .append(resolvedGlyphId?.toString() ?: "null").append(",\n")
+        append("  ").append(scalerJsonString("notdefUsed")).append(": ").append(notdefUsed).append(",\n")
+        append("  ").append(scalerJsonString("scalerFamily")).append(": ")
+            .append(scalerJsonString(scalerFamily)).append(",\n")
+        append("  ").append(scalerJsonString("route")).append(": ")
+            .append(scalerJsonString(route)).append(",\n")
+        append("  ").append(scalerJsonString("fillRule")).append(": ")
+            .append(scalerJsonString(fillRule)).append(",\n")
+        append("  ").append(scalerJsonString("outlineCommands")).append(": ")
+            .append(outlineCommands.toJsonStringArray()).append(",\n")
+        append("  ").append(scalerJsonString("outlineCommandDump")).append(": ")
+            .append(scalerJsonString(outlineCommandDump)).append(",\n")
+        append("  ").append(scalerJsonString("outlineCommandDumpSha256")).append(": ")
+            .append(scalerJsonString(outlineCommandDumpSha256)).append(",\n")
+        append("  ").append(scalerJsonString("conservativeBounds")).append(": ")
+            .append(conservativeBounds?.toCanonicalJson() ?: "null").append(",\n")
+        append("  ").append(scalerJsonString("metrics")).append(": ")
+            .append(metrics?.toCanonicalJson() ?: "null").append(",\n")
+        append("  ").append(scalerJsonString("widthSource")).append(": ")
+            .append(widthSource?.let(::scalerJsonString) ?: "null").append(",\n")
+        append("  ").append(scalerJsonString("linkedCharStringTraceDumpId")).append(": ")
+            .append(linkedCharStringTraceDumpId?.let(::scalerJsonString) ?: "null").append(",\n")
+        append("  ").append(scalerJsonString("charStringEvidence")).append(": ")
+            .append(charStringEvidence?.toCanonicalJson() ?: "null").append(",\n")
         append("  ").append(scalerJsonString("diagnostics")).append(": ")
             .append(diagnostics.toDiagnosticJson()).append("\n")
         append("}")
@@ -3052,6 +3198,10 @@ private fun TrueTypeGlyphHeader.toGlyphBounds(): GlyphBounds =
 
 private const val TRUE_TYPE_GLYF_SCALER_FAMILY = "truetype-glyf"
 private const val TRUE_TYPE_GLYF_SCALER_ROUTE = "font.scaler.truetype-glyf"
+private const val CFF_SCALER_FAMILY = "cff"
+private const val CFF_SCALER_ROUTE = "font.scaler.cff"
+private const val CFF_FILL_RULE = "non-zero"
+private const val CFF_CHARSTRING_TRACE_DUMP_ID = "cff-charstring-trace"
 
 private val fontScalerDiagnosticOrdering = compareBy<FontScalerDiagnostic>(
     { diagnostic -> diagnostic.operation },
@@ -3092,6 +3242,12 @@ private fun List<String>.toJsonStringArray(): String =
 private fun List<Int>.toIntJsonArray(): String =
     joinToString(prefix = "[", postfix = "]")
 
+private fun List<Double>.toScalerNumberJsonArray(): String =
+    joinToString(prefix = "[", postfix = "]") { value -> value.toCanonicalScalerNumber() }
+
+private fun List<List<Double>>.toScalerNumberMatrixJson(): String =
+    joinToString(prefix = "[", postfix = "]") { row -> row.toScalerNumberJsonArray() }
+
 private fun List<CFFByteRangeEvidence>.toCFFByteRangeJsonArray(): String =
     joinToString(prefix = "[", postfix = "]") { range -> range.toCanonicalJson() }
 
@@ -3115,6 +3271,9 @@ private fun List<TrueTypeCompositeComponentEvidence>.toCompositeComponentJson():
 
 private fun List<CFFCharStringCallTrace>.toCFFCallTraceJson(): String =
     joinToString(prefix = "[", postfix = "]") { trace -> trace.toCanonicalJson() }
+
+private fun List<CFFBlendVectorEvidence>.toCFFBlendVectorJson(): String =
+    joinToString(prefix = "[", postfix = "]") { vector -> vector.toCanonicalJson() }
 
 private fun List<FontScalerDiagnostic>.toDiagnosticJson(): String =
     joinToString(prefix = "[", postfix = "]") { diagnostic -> diagnostic.toCanonicalJson() }
@@ -3701,10 +3860,11 @@ class TrueTypeGlyfScaler(
      * @return Scaled TrueType glyph metrics.
      */
     override fun metrics(glyphId: UInt, position: VariationPosition): GlyphMetrics =
-        parsedScaler.metrics(
-            glyphId = glyphId,
-            position = position.normalizedForGvar(),
-        )
+        scaledGlyphEvidence(glyphId = glyphId, position = position).metrics
+            ?: parsedScaler.metrics(
+                glyphId = glyphId,
+                position = position.normalizedForGvar(),
+            )
 
     /**
      * Produces deterministic current-state evidence for one TrueType `glyf` glyph.
@@ -3726,14 +3886,18 @@ class TrueTypeGlyfScaler(
             glyphId = glyphId,
             position = normalizedPosition,
             requestedPosition = position,
-            additionalDiagnostics = normalizationDiagnostics + avarDiagnostics() +
-                metricsVariationDiagnostics(glyphId = glyphId, normalizedPosition = normalizedPosition),
+            additionalDiagnostics = normalizationDiagnostics + avarDiagnostics(),
             includeNormalizedVariationPosition = normalizationDiagnostics.isEmpty(),
+        )
+        val horizontalEvidence = attachHorizontalMetricsVariationEvidence(
+            glyphId = glyphId,
+            normalizedPosition = normalizedPosition,
+            evidence = evidence,
         )
         return attachVerticalMetricsEvidence(
             glyphId = glyphId,
             normalizedPosition = normalizedPosition,
-            evidence = evidence,
+            evidence = horizontalEvidence,
         )
     }
 
@@ -3783,27 +3947,60 @@ class TrueTypeGlyfScaler(
         }
     }
 
-    private fun metricsVariationDiagnostics(
+    private fun attachHorizontalMetricsVariationEvidence(
         glyphId: UInt,
         normalizedPosition: VariationPosition,
-    ): List<FontScalerDiagnostic> {
-        if (normalizedPosition.axes.values.none { value -> value != 0.0 }) {
-            return emptyList()
-        }
-        val hasMetricsVariationTables = face.rawTables.keys.any { tag ->
-            tag == SFNTTableTag("HVAR") || tag == SFNTTableTag("MVAR")
-        }
-        if (!hasMetricsVariationTables) {
-            return emptyList()
-        }
-        return listOf(
-            FontScalerDiagnostic(
-                code = FontScalerDiagnosticCodes.METRICS_VARIATION_UNAVAILABLE,
-                detail = "truetype.metrics-variation-table-unavailable",
-                operation = "metrics",
-                glyphId = glyphId,
-                severity = "warning",
+        evidence: ScaledTrueTypeGlyphEvidence,
+    ): ScaledTrueTypeGlyphEvidence {
+        val metrics = evidence.metrics ?: return evidence
+        val horizontalEvidence = resolveHorizontalMetricsVariation(
+            glyphId = glyphId,
+            normalizedPosition = normalizedPosition,
+        )
+        return evidence.copy(
+            metrics = metrics.copy(
+                advanceX = horizontalEvidence.advanceX ?: metrics.advanceX,
             ),
+            diagnostics = evidence.diagnostics + horizontalEvidence.diagnostics,
+        )
+    }
+
+    private fun resolveHorizontalMetricsVariation(
+        glyphId: UInt,
+        normalizedPosition: VariationPosition,
+    ): ResolvedHorizontalMetricsEvidence {
+        if (normalizedPosition.axes.values.none { value -> value != 0.0 }) {
+            return ResolvedHorizontalMetricsEvidence()
+        }
+        val hvarBytes = face.rawTableBytesOrNull("HVAR") ?: return ResolvedHorizontalMetricsEvidence()
+        val baseAdvance = face.metrics.horizontalMetrics
+            .firstOrNull { metric -> metric.glyphId.toUInt() == glyphId }
+            ?.advanceWidth
+            ?.toDouble()
+            ?: return ResolvedHorizontalMetricsEvidence()
+        return runCatching {
+            parseHvarTable(hvarBytes).advanceWidthDelta(
+                glyphId = glyphId,
+                axisTags = face.variations.axes.map { axis -> axis.tag.text },
+                position = normalizedPosition,
+            )
+        }.fold(
+            onSuccess = { delta ->
+                ResolvedHorizontalMetricsEvidence(advanceX = baseAdvance + delta)
+            },
+            onFailure = {
+                ResolvedHorizontalMetricsEvidence(
+                    diagnostics = listOf(
+                        FontScalerDiagnostic(
+                            code = FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED,
+                            detail = "truetype.hvar-table-malformed",
+                            operation = "metrics",
+                            glyphId = glyphId,
+                            severity = "warning",
+                        ),
+                    ),
+                )
+            },
         )
     }
 
@@ -3880,6 +4077,9 @@ class TrueTypeGlyfScaler(
         val topSideBearing = verticalMetric.topSideBearing.toDouble()
         var state = "present"
         var verticalAdvance = baseAdvance
+        var ascender = face.metrics.verticalAscender?.toDouble()
+        var descender = face.metrics.verticalDescender?.toDouble()
+        var lineGap = face.metrics.verticalLineGap?.toDouble()
         val diagnostics = mutableListOf<FontScalerDiagnostic>()
         val detailTokens = mutableListOf<String>()
         if (normalizedPosition.axes.values.any { value -> value != 0.0 }) {
@@ -3915,6 +4115,26 @@ class TrueTypeGlyfScaler(
                     )
                 }
             }
+            face.rawTableBytesOrNull("MVAR")?.let { mvarBytes ->
+                runCatching {
+                    parseMvarTable(mvarBytes)
+                }.onSuccess { table ->
+                    val axisTags = face.variations.axes.map { axis -> axis.tag.text }
+                    ascender = table.adjustedMetricOrNull("vasc", axisTags, normalizedPosition, ascender)
+                    descender = table.adjustedMetricOrNull("vdsc", axisTags, normalizedPosition, descender)
+                    lineGap = table.adjustedMetricOrNull("vlgp", axisTags, normalizedPosition, lineGap)
+                }.onFailure {
+                    state = "diagnostic"
+                    detailTokens += "truetype.mvar-table-malformed"
+                    diagnostics += FontScalerDiagnostic(
+                        code = FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED,
+                        detail = "truetype.mvar-table-malformed",
+                        operation = "metrics",
+                        glyphId = glyphId,
+                        severity = "warning",
+                    )
+                }
+            }
         }
 
         return ResolvedVerticalMetricsEvidence(
@@ -3924,9 +4144,9 @@ class TrueTypeGlyfScaler(
                 verticalAdvance = verticalAdvance,
                 topSideBearing = topSideBearing,
                 verticalOriginY = topSideBearing + metrics.bounds.bottom,
-                ascender = face.metrics.verticalAscender?.toDouble(),
-                descender = face.metrics.verticalDescender?.toDouble(),
-                lineGap = face.metrics.verticalLineGap?.toDouble(),
+                ascender = ascender,
+                descender = descender,
+                lineGap = lineGap,
                 maxAdvanceHeight = face.metrics.maxAdvanceHeight?.toDouble(),
                 diagnostics = detailTokens,
             ),
@@ -3937,6 +4157,11 @@ class TrueTypeGlyfScaler(
 
 private data class ResolvedVerticalMetricsEvidence(
     val metrics: GlyphVerticalMetrics?,
+    val diagnostics: List<FontScalerDiagnostic> = emptyList(),
+)
+
+private data class ResolvedHorizontalMetricsEvidence(
+    val advanceX: Double? = null,
     val diagnostics: List<FontScalerDiagnostic> = emptyList(),
 )
 
@@ -3973,6 +4198,133 @@ private fun OpenTypeFaceData.requiredRawTableBytes(tag: String): ByteArray =
 
 private fun OpenTypeFaceData.rawTableBytesOrNull(tag: String): ByteArray? =
     rawTables[SFNTTableTag(tag)]?.toRawSfntTableBytes(tag)
+
+private data class HvarTable(
+    val axisCount: Int,
+    val regions: List<VvarVariationRegion>,
+    val itemVariationData: List<VvarItemVariationData>,
+    val advanceWidthMapping: DeltaSetIndexMap?,
+) {
+    fun advanceWidthDelta(
+        glyphId: UInt,
+        axisTags: List<String>,
+        position: VariationPosition,
+    ): Double {
+        require(axisTags.size == axisCount) {
+            "HVAR axis tag count ${axisTags.size} does not match axisCount $axisCount."
+        }
+        val deltaSetIndex = advanceWidthMapping?.lookup(glyphId.toInt()) ?: DeltaSetIndex(
+            outerIndex = 0,
+            innerIndex = glyphId.toInt(),
+        )
+        val deltaSet = itemVariationData.getOrNull(deltaSetIndex.outerIndex)
+            ?: throw IllegalArgumentException(
+                "HVAR advanceWidth outer index ${deltaSetIndex.outerIndex} is outside itemVariationData count ${itemVariationData.size}.",
+            )
+        return deltaSet.delta(
+            innerIndex = deltaSetIndex.innerIndex,
+            regions = regions,
+            axisTags = axisTags,
+            position = position,
+        )
+    }
+}
+
+private fun parseHvarTable(data: ByteArray): HvarTable {
+    require(data.size >= 20) { "HVAR table must contain at least 20 bytes." }
+    val majorVersion = readUInt16(data, 0)
+    val minorVersion = readUInt16(data, 2)
+    require(majorVersion == 1 && minorVersion == 0) {
+        "HVAR version must be 1.0, was $majorVersion.$minorVersion."
+    }
+    val itemVariationStoreOffset = readCFFUInt32AsInt(data, 4, "HVAR itemVariationStoreOffset")
+    val advanceWidthMappingOffset = readCFFUInt32AsInt(data, 8, "HVAR advanceWidthMappingOffset")
+    val itemVariationStore = parseVvarItemVariationStore(data = data, offset = itemVariationStoreOffset)
+    val advanceWidthMapping = if (advanceWidthMappingOffset == 0) {
+        null
+    } else {
+        parseDeltaSetIndexMap(data = data, offset = advanceWidthMappingOffset)
+    }
+    return HvarTable(
+        axisCount = itemVariationStore.axisCount,
+        regions = itemVariationStore.regions,
+        itemVariationData = itemVariationStore.itemVariationData,
+        advanceWidthMapping = advanceWidthMapping,
+    )
+}
+
+private data class MvarTable(
+    val axisCount: Int,
+    val regions: List<VvarVariationRegion>,
+    val itemVariationData: List<VvarItemVariationData>,
+    val valueRecords: Map<String, DeltaSetIndex>,
+) {
+    fun adjustedMetricOrNull(
+        valueTag: String,
+        axisTags: List<String>,
+        position: VariationPosition,
+        baseValue: Double?,
+    ): Double? {
+        val metric = baseValue ?: return null
+        val deltaSetIndex = valueRecords[valueTag] ?: return metric
+        require(axisTags.size == axisCount) {
+            "MVAR axis tag count ${axisTags.size} does not match axisCount $axisCount."
+        }
+        val deltaSet = itemVariationData.getOrNull(deltaSetIndex.outerIndex)
+            ?: throw IllegalArgumentException(
+                "MVAR value tag $valueTag outer index ${deltaSetIndex.outerIndex} is outside itemVariationData count ${itemVariationData.size}.",
+            )
+        return metric + deltaSet.delta(
+            innerIndex = deltaSetIndex.innerIndex,
+            regions = regions,
+            axisTags = axisTags,
+            position = position,
+        )
+    }
+}
+
+private fun parseMvarTable(data: ByteArray): MvarTable {
+    require(data.size >= 12) { "MVAR table must contain at least 12 bytes." }
+    val majorVersion = readUInt16(data, 0)
+    val minorVersion = readUInt16(data, 2)
+    require(majorVersion == 1 && minorVersion == 0) {
+        "MVAR version must be 1.0, was $majorVersion.$minorVersion."
+    }
+    val valueRecordSize = readUInt16(data, 6)
+    val valueRecordCount = readUInt16(data, 8)
+    val itemVariationStoreOffset = readUInt16(data, 10)
+    require(valueRecordSize >= 8) { "MVAR valueRecordSize must be at least 8 bytes." }
+    require(valueRecordCount == 0 || itemVariationStoreOffset > 0) {
+        "MVAR itemVariationStoreOffset must be non-zero when valueRecordCount is positive."
+    }
+    requireCFFAvailable(data, 12, valueRecordCount * valueRecordSize, "MVAR value records")
+    val itemVariationStore = parseVvarItemVariationStore(data = data, offset = itemVariationStoreOffset)
+    val records = LinkedHashMap<String, DeltaSetIndex>(valueRecordCount)
+    var previousTag: String? = null
+    repeat(valueRecordCount) { index ->
+        val recordOffset = 12 + index * valueRecordSize
+        val valueTag = String(data, recordOffset, 4, Charsets.US_ASCII)
+        require(valueTag.length == 4 && valueTag.all { ch -> ch.code in 0x20..0x7e }) {
+            "MVAR value tag at index $index must contain four printable ASCII characters."
+        }
+        if (previousTag != null) {
+            require(previousTag!! < valueTag) {
+                "MVAR value records must be strictly ordered by valueTag."
+            }
+        }
+        previousTag = valueTag
+        records[valueTag] = DeltaSetIndex(
+            outerIndex = readUInt16(data, recordOffset + 4),
+            innerIndex = readUInt16(data, recordOffset + 6),
+        )
+    }
+    return MvarTable(
+        axisCount = itemVariationStore.axisCount,
+        regions = itemVariationStore.regions,
+        itemVariationData = itemVariationStore.itemVariationData,
+        valueRecords = records,
+    )
+}
 
 private data class VvarTable(
     val axisCount: Int,
@@ -4333,6 +4685,30 @@ class CFFScaler(
                 ).width,
             )
         } ?: unsupportedCFFGlyph("CFF", "metrics", face, glyphId, position)
+
+    /**
+     * Produces deterministic current-state evidence for one CFF glyph route.
+     *
+     * This remains generated-fixture evidence only; it does not promote complete real-font CFF
+     * support, fallback font selection, or GPU handoff readiness.
+     */
+    fun scaledGlyphEvidence(
+        glyphId: UInt,
+        position: VariationPosition = VariationPosition(),
+    ): CFFScaledGlyphEvidence =
+        scaledCFFGlyphEvidence(
+            face = face,
+            format = "cff",
+            program = parsedCFF,
+            glyphId = glyphId,
+            position = position,
+            interpreterProvider = { program ->
+                CFFType2CharStringInterpreter(
+                    localSubroutines = program.localSubroutines,
+                    globalSubroutines = program.globalSubroutines,
+                )
+            },
+        )
 }
 
 /**
@@ -4345,6 +4721,22 @@ class CFF2Scaler(
 ) : GlyphScaler {
     private val parsedCFF2: ParsedCFFProgram? by lazy {
         face.rawTableBytesOrNull("CFF2")?.let(::parseCFF2Table)
+    }
+    private val variationNormalizer: VariationNormalizer? by lazy {
+        if (face.variations.axes.isEmpty()) {
+            null
+        } else {
+            BoundedVariationNormalizer(
+                face.variations.axes.map { axis ->
+                    VariationAxis(
+                        tag = axis.tag.text,
+                        minimum = axis.minimum.value,
+                        defaultValue = axis.defaultValue.value,
+                        maximum = axis.maximum.value,
+                    )
+                },
+            )
+        }
     }
 
     /**
@@ -4370,6 +4762,7 @@ class CFF2Scaler(
      */
     override fun outline(glyphId: UInt, position: VariationPosition): GlyphOutline =
         parsedCFF2?.let { program ->
+            val normalizedPosition = position.normalizedForCff2()
             val axisTags = face.variations.axes.map { axis -> axis.tag.text }
             CFFType2CharStringInterpreter(
                 localSubroutines = program.localSubroutines,
@@ -4378,12 +4771,12 @@ class CFF2Scaler(
                     0 to axisTags.sorted(),
                 ),
                 blendScalarProvider = program.variationStore?.let { store ->
-                    { vsIndex, variationPosition -> store.scalars(vsIndex, axisTags, variationPosition) }
-                },
+                    { vsIndex, variationPosition -> store.resolution(vsIndex, axisTags, variationPosition) }
+                } ?: { _, _ -> throw CFF2VariationStoreException("cff2.variation-store-missing") },
             ).interpretOutline(
                 charString = program.charString(glyphId),
                 glyphId = glyphId,
-                position = position,
+                position = normalizedPosition,
             )
         } ?: unsupportedCFFGlyph("CFF2", "outline", face, glyphId, position)
 
@@ -4396,6 +4789,7 @@ class CFF2Scaler(
      */
     override fun metrics(glyphId: UInt, position: VariationPosition): GlyphMetrics =
         parsedCFF2?.let { program ->
+            val normalizedPosition = position.normalizedForCff2()
             val axisTags = face.variations.axes.map { axis -> axis.tag.text }
             val interpreter = CFFType2CharStringInterpreter(
                 localSubroutines = program.localSubroutines,
@@ -4404,8 +4798,8 @@ class CFF2Scaler(
                     0 to axisTags.sorted(),
                 ),
                 blendScalarProvider = program.variationStore?.let { store ->
-                    { vsIndex, variationPosition -> store.scalars(vsIndex, axisTags, variationPosition) }
-                },
+                    { vsIndex, variationPosition -> store.resolution(vsIndex, axisTags, variationPosition) }
+                } ?: { _, _ -> throw CFF2VariationStoreException("cff2.variation-store-missing") },
             )
             val charString = program.charString(glyphId)
             cffGlyphMetrics(
@@ -4414,16 +4808,107 @@ class CFF2Scaler(
                 outline = interpreter.interpretOutline(
                     charString = charString,
                     glyphId = glyphId,
-                    position = position,
+                    position = normalizedPosition,
                 ),
                 width = interpreter.interpretEvidence(
                     charString = charString,
                     glyphId = glyphId,
                     format = "cff2",
-                    position = position,
+                    position = normalizedPosition,
                 ).width,
             )
         } ?: unsupportedCFFGlyph("CFF2", "metrics", face, glyphId, position)
+
+    /**
+     * Produces deterministic current-state evidence for one CFF2 glyph route.
+     *
+     * This remains generated-fixture evidence only; it does not promote complete real-font CFF2
+     * variation support, fallback font selection, or GPU handoff readiness.
+     */
+    fun scaledGlyphEvidence(
+        glyphId: UInt,
+        position: VariationPosition = VariationPosition(),
+    ): CFFScaledGlyphEvidence {
+        val normalizationDiagnostics = position.normalizationDiagnostics(glyphId)
+        if (normalizationDiagnostics.isNotEmpty()) {
+            return CFFScaledGlyphEvidence(
+                sourceId = face.source.id.value.toString(),
+                typefaceId = face.id.value.toString(),
+                format = "cff2",
+                requestedGlyphId = glyphId,
+                resolvedGlyphId = null,
+                outlineCommands = emptyList(),
+                diagnostics = normalizationDiagnostics,
+            )
+        }
+        val normalizedPosition = position.normalizedForCff2()
+        return scaledCFFGlyphEvidence(
+            face = face,
+            format = "cff2",
+            program = parsedCFF2,
+            glyphId = glyphId,
+            position = normalizedPosition,
+            interpreterProvider = { program ->
+                val axisTags = face.variations.axes.map { axis -> axis.tag.text }
+                CFFType2CharStringInterpreter(
+                    localSubroutines = program.localSubroutines,
+                    globalSubroutines = program.globalSubroutines,
+                    blendAxisTagsByVsIndex = mapOf(
+                        0 to axisTags.sorted(),
+                    ),
+                    blendScalarProvider = program.variationStore?.let { store ->
+                        { vsIndex, variationPosition -> store.resolution(vsIndex, axisTags, variationPosition) }
+                    } ?: { _, _ -> throw CFF2VariationStoreException("cff2.variation-store-missing") },
+                )
+            },
+        )
+    }
+
+    private fun VariationPosition.normalizedForCff2(): VariationPosition {
+        val normalizer = variationNormalizer ?: return this
+        return VariationPosition(axes = normalizer.normalize(this).applyAvarSegmentMaps())
+    }
+
+    private fun VariationPosition.normalizationDiagnostics(glyphId: UInt): List<FontScalerDiagnostic> {
+        if (variationNormalizer == null) {
+            return emptyList()
+        }
+        val supportedAxisTags = face.variations.axes.map { axis -> axis.tag.text }.toSet()
+        return axes.toSortedMap().mapNotNull { (tag, value) ->
+            when {
+                tag !in supportedAxisTags -> FontScalerDiagnostic(
+                    code = FontScalerDiagnosticCodes.VARIATION_AXIS_UNSUPPORTED,
+                    detail = "cff2.variation-axis",
+                    operation = "variation",
+                    glyphId = glyphId,
+                )
+                !value.isFinite() -> FontScalerDiagnostic(
+                    code = FontScalerDiagnosticCodes.VARIATION_DATA_MALFORMED,
+                    detail = "cff2.variation-position-non-finite",
+                    operation = "variation",
+                    glyphId = glyphId,
+                )
+                else -> null
+            }
+        }
+    }
+
+    private fun Map<String, Double>.applyAvarSegmentMaps(): Map<String, Double> {
+        val maps = face.variations.axisSegmentMaps
+        if (maps.isEmpty()) return this
+
+        val remapped = LinkedHashMap<String, Double>(size)
+        face.variations.axes
+            .map { axis -> axis.tag.text }
+            .sorted()
+            .forEach { tag ->
+                val value = this[tag] ?: return@forEach
+                val axisIndex = face.variations.axes.indexOfFirst { axis -> axis.tag.text == tag }
+                val segments = maps.getOrNull(axisIndex)?.segments.orEmpty()
+                remapped[tag] = remapAvarCoordinate(value, segments)
+            }
+        return remapped
+    }
 }
 
 private fun cffGlyphMetrics(
@@ -4442,6 +4927,123 @@ private fun cffGlyphMetrics(
     )
 }
 
+private fun scaledCFFGlyphEvidence(
+    face: OpenTypeFaceData,
+    format: String,
+    program: ParsedCFFProgram?,
+    glyphId: UInt,
+    position: VariationPosition,
+    interpreterProvider: (ParsedCFFProgram) -> CFFType2CharStringInterpreter,
+): CFFScaledGlyphEvidence {
+    val sourceId = face.source.id.value.toString()
+    val typefaceId = face.id.value.toString()
+    val parsedProgram = program ?: return CFFScaledGlyphEvidence(
+        sourceId = sourceId,
+        typefaceId = typefaceId,
+        format = format,
+        requestedGlyphId = glyphId,
+        resolvedGlyphId = null,
+        outlineCommands = emptyList(),
+        diagnostics = listOf(
+            cffPathOutputUnavailableDiagnostic(
+                glyphId = glyphId,
+                operation = "outline",
+                detail = "cff.path-output-unavailable",
+            ),
+        ),
+    )
+    if (!parsedProgram.hasGlyph(glyphId)) {
+        return CFFScaledGlyphEvidence(
+            sourceId = sourceId,
+            typefaceId = typefaceId,
+            format = format,
+            requestedGlyphId = glyphId,
+            resolvedGlyphId = null,
+            outlineCommands = emptyList(),
+            diagnostics = listOf(
+                cffPathOutputUnavailableDiagnostic(
+                    glyphId = glyphId,
+                    operation = "outline",
+                    detail = "cff.path-output-unavailable",
+                ),
+            ),
+        )
+    }
+
+    val charString = parsedProgram.charString(glyphId)
+    val interpreter = interpreterProvider(parsedProgram)
+    val diagnostics = mutableListOf<FontScalerDiagnostic>()
+    val charStringEvidence = runCatching {
+        interpreter.interpretEvidence(
+            charString = charString,
+            glyphId = glyphId,
+            format = format,
+            position = position,
+        )
+    }.getOrElse { error ->
+        val diagnostic = error.toFontScalerDiagnosticOrNull(
+            glyphId = glyphId,
+            operation = "charstring",
+        )
+        if (diagnostic != null) {
+            diagnostics += diagnostic
+            diagnostics += cffGlyphMalformedDiagnostic(glyphId = glyphId, operation = "outline")
+            null
+        } else {
+            throw error
+        }
+    }
+
+    val outline = charStringEvidence?.let {
+        interpreter.interpretOutline(
+            charString = charString,
+            glyphId = glyphId,
+            position = position,
+        )
+    }
+    val metrics = if (outline != null && charStringEvidence != null) {
+        runCatching {
+            cffGlyphMetrics(
+                face = face,
+                glyphId = glyphId,
+                outline = outline,
+                width = charStringEvidence.width,
+            )
+        }.getOrElse { error ->
+            val diagnostic = error.toFontScalerDiagnosticOrNull(
+                glyphId = glyphId,
+                operation = "metrics",
+            )
+            if (diagnostic != null) {
+                diagnostics += diagnostic
+                null
+            } else {
+                throw error
+            }
+        }
+    } else {
+        null
+    }
+    return CFFScaledGlyphEvidence(
+        sourceId = sourceId,
+        typefaceId = typefaceId,
+        format = format,
+        requestedGlyphId = glyphId,
+        resolvedGlyphId = glyphId,
+        outlineCommands = charStringEvidence?.outlineCommands.orEmpty(),
+        conservativeBounds = outline?.conservativeBounds(),
+        metrics = metrics,
+        widthSource = when {
+            metrics == null -> null
+            charStringEvidence?.width != null -> "charstring"
+            else -> "hmtx"
+        },
+        linkedCharStringTraceDumpId = if (charStringEvidence != null) CFF_CHARSTRING_TRACE_DUMP_ID else null,
+        charStringEvidence = charStringEvidence,
+        diagnostics = diagnostics.sortedWith(fontScalerDiagnosticOrdering),
+    )
+}
+
 private data class ParsedCFFProgram(
     val charStrings: List<ByteArray>,
     val localSubroutines: List<ByteArray>,
@@ -4457,6 +5059,9 @@ private data class ParsedCFFProgram(
             "CFF top dict operator evidence must be sorted."
         }
     }
+
+    fun hasGlyph(glyphId: UInt): Boolean =
+        glyphId.toLong() <= Int.MAX_VALUE && glyphId.toInt() in charStrings.indices
 
     fun charString(glyphId: UInt): ByteArray {
         require(glyphId.toLong() <= Int.MAX_VALUE) { "CFF glyphId $glyphId does not fit Int." }
@@ -4670,20 +5275,34 @@ private data class CFF2VariationStore(
     val regions: List<CFF2VariationRegion>,
     val regionIndexesByVsIndex: List<List<Int>>,
 ) {
-    fun scalars(
+    fun resolution(
         vsIndex: Int,
         axisTags: List<String>,
         position: VariationPosition,
-    ): List<Double> {
+    ): CFF2BlendResolution {
         if (axisTags.size != axisCount) {
             throw CFF2VariationStoreException("cff2.variation-axis-count")
         }
         val regionIndexes = regionIndexesByVsIndex.getOrNull(vsIndex)
             ?: throw CFF2VariationStoreException("cff2.vsindex-invalid")
-        return regionIndexes.map { regionIndex ->
-            val region = regions.getOrNull(regionIndex)
-                ?: throw CFF2VariationStoreException("cff2.region-index-invalid")
-            region.scalar(axisTags = axisTags, position = position)
+        return CFF2BlendResolution(
+            scalars = regionIndexes.map { regionIndex ->
+                val region = regions.getOrNull(regionIndex)
+                    ?: throw CFF2VariationStoreException("cff2.region-index-invalid")
+                region.scalar(axisTags = axisTags, position = position)
+            },
+            regionIndexes = regionIndexes,
+        )
+    }
+}
+
+data class CFF2BlendResolution(
+    val scalars: List<Double>,
+    val regionIndexes: List<Int> = emptyList(),
+) {
+    init {
+        require(regionIndexes.isEmpty() || regionIndexes.size == scalars.size) {
+            "CFF2 blend resolution regionIndexes must be empty or align with scalar count."
         }
     }
 }
@@ -5379,6 +5998,29 @@ private fun unsupportedCFFGlyph(
             "positionAxes=${position.axes.keys.sorted().joinToString(",")}",
     )
 
+private fun cffPathOutputUnavailableDiagnostic(
+    glyphId: UInt,
+    operation: String,
+    detail: String,
+): FontScalerDiagnostic =
+    FontScalerDiagnostic(
+        code = FontScalerDiagnosticCodes.CFF_PATH_OUTPUT_UNAVAILABLE,
+        detail = detail,
+        operation = operation,
+        glyphId = glyphId,
+    )
+
+private fun cffGlyphMalformedDiagnostic(
+    glyphId: UInt,
+    operation: String,
+): FontScalerDiagnostic =
+    FontScalerDiagnostic(
+        code = FontScalerDiagnosticCodes.CFF_GLYPH_MALFORMED,
+        detail = "cff.glyph-malformed",
+        operation = operation,
+        glyphId = glyphId,
+    )
+
 /**
  * Interpreter boundary for CFF and CFF2 charstrings.
  */
@@ -5405,7 +6047,7 @@ class CFFType2CharStringInterpreter(
     localSubroutines: List<ByteArray> = emptyList(),
     globalSubroutines: List<ByteArray> = emptyList(),
     blendAxisTagsByVsIndex: Map<Int, List<String>> = emptyMap(),
-    private val blendScalarProvider: ((Int, VariationPosition) -> List<Double>)? = null,
+    private val blendScalarProvider: ((Int, VariationPosition) -> CFF2BlendResolution)? = null,
     private val limits: Type2ExecutionLimits = Type2ExecutionLimits(),
 ) : CFFCharStringInterpreter {
     private val localSubroutines: List<ByteArray> = localSubroutines.map { it.copyOf() }
@@ -5485,6 +6127,7 @@ class CFFType2CharStringInterpreter(
             callTrace = state.callTrace.toList(),
             variationPosition = position.toEvidenceCoordinates(),
             cff2VsIndex = state.cff2VsIndex,
+            blendVectors = state.blendVectors.toList(),
         )
     }
 
@@ -5821,30 +6464,46 @@ class CFFType2CharStringInterpreter(
     ) {
         val blendCount = state.popInt(glyphId, operatorOffset)
         if (blendCount <= 0) {
-            malformedCFFStack(glyphId, "cff2.blend-count", operatorOffset)
+            malformedCFFBlendStack(glyphId, "cff2.blend-count", operatorOffset)
         }
-        val scalars = try {
+        val resolution = try {
             blendScalarProvider?.invoke(state.cff2VsIndex, position)
         } catch (error: CFF2VariationStoreException) {
             malformedCFFVariation(glyphId, error.detail, operatorOffset)
-        } ?: blendAxisTagsByVsIndex[state.cff2VsIndex].orEmpty().map { tag ->
-            position.axes[tag] ?: 0.0
-        }
+        } ?: CFF2BlendResolution(
+            scalars = blendAxisTagsByVsIndex[state.cff2VsIndex].orEmpty().map { tag ->
+                position.axes[tag] ?: 0.0
+            },
+        )
+        val scalars = resolution.scalars
         val requiredOperandCount = blendCount * (1 + scalars.size)
         if (state.stack.size < requiredOperandCount) {
-            malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
+            malformedCFFBlendStack(glyphId, "cff2.blend-stack-underflow", operatorOffset)
         }
         val start = state.stack.size - requiredOperandCount
         val defaults = state.stack.subList(start, start + blendCount).toList()
         val blended = defaults.toMutableList()
         var deltaOffset = start + blendCount
+        val deltaSets = mutableListOf<List<Double>>()
         scalars.forEach { scalar ->
+            val deltas = mutableListOf<Double>()
             repeat(blendCount) { valueIndex ->
-                blended[valueIndex] += state.stack[deltaOffset++] * scalar
+                val delta = state.stack[deltaOffset++]
+                deltas += delta
+                blended[valueIndex] += delta * scalar
             }
+            deltaSets += deltas
         }
         state.stack.subList(start, state.stack.size).clear()
         state.stack += blended
+        state.blendVectors += CFFBlendVectorEvidence(
+            vsIndex = state.cff2VsIndex,
+            defaults = defaults,
+            deltaSets = deltaSets,
+            regionIndexes = resolution.regionIndexes,
+            scalars = scalars,
+            blendedValues = blended,
+        )
     }
 }
 
@@ -5854,6 +6513,7 @@ private class CFFType2ExecutionState(
     val stack: MutableList<Double> = mutableListOf()
     val commands: MutableList<OutlineCommand> = mutableListOf()
     val callTrace: MutableList<CFFCharStringCallTrace> = mutableListOf()
+    val blendVectors: MutableList<CFFBlendVectorEvidence> = mutableListOf()
     var x: Double = 0.0
     var y: Double = 0.0
     var cff2VsIndex: Int = 0
@@ -6364,6 +7024,21 @@ private fun malformedCFFStack(
         message = "CFF Type 2 stack is malformed at operator offset $operatorOffset for glyphId $glyphId.",
     )
 
+private fun malformedCFFBlendStack(
+    glyphId: UInt,
+    detail: String,
+    operatorOffset: Int,
+): Nothing =
+    throw FontScalerRefusalException(
+        diagnostic = FontScalerDiagnostic(
+            code = FontScalerDiagnosticCodes.CFF2_BLEND_STACK_MALFORMED,
+            detail = detail,
+            operation = "charstring",
+            glyphId = glyphId,
+        ),
+        message = "CFF2 blend stack is malformed at operator offset $operatorOffset for glyphId $glyphId.",
+    )
+
 private fun overflowedCFFStack(
     glyphId: UInt,
     operatorOffset: Int,
@@ -6447,6 +7122,7 @@ private fun expandedByteLimitedCFFExecution(
         ),
         message = "CFF Type 2 expanded-byte budget exceeded at operator offset $operatorOffset for glyphId $glyphId.",
     )
+
 private fun malformedCFFVariation(
     glyphId: UInt,
     detail: String,
