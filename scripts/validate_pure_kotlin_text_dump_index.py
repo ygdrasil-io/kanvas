@@ -19,6 +19,7 @@ REQUIRED_DUMPS = {
     "a8-atlas-build-result",
     "a8-sdf-atlas-lifecycle",
     "arabic-seed-readiness",
+    "bitmap-glyph-plan",
     "cff-cff2-readiness",
     "cff-charstring-trace",
     "cff-index-dict",

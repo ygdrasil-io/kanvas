@@ -3141,6 +3141,8 @@ data class BitmapGlyphPlan(
             tableFamily: String,
             sourcePayload: ByteArray,
             image: PNGGlyphImage,
+            originX: Int = 0,
+            originY: Int = 0,
         ): BitmapGlyphPlan {
             require(requestedSizePx.isFinite() && requestedSizePx > 0f) {
                 "Bitmap glyph requested size must be finite and positive."
@@ -3168,8 +3170,8 @@ data class BitmapGlyphPlan(
                 top = 0,
                 width = image.width,
                 height = image.height,
-                originX = 0,
-                originY = 0,
+                originX = originX,
+                originY = originY,
                 scalingPolicy = if (requestedSizePx == strike.ppem.toFloat()) {
                     "exact-strike"
                 } else {
@@ -3210,6 +3212,44 @@ data class BitmapGlyphPlan(
                     "sourcePayloadSha256=$payloadHash",
                 message = "Bitmap glyph payload format $normalizedFormat is unsupported for glyph $glyphId " +
                     "from $normalizedFamily.",
+            )
+        }
+
+        /**
+         * Builds a stable refusal diagnostic when no embedded bitmap strike can satisfy the
+         * requested size.
+         *
+         * @param glyphId glyph identifier whose embedded bitmap strikes were considered.
+         * @param requestedSizePx requested glyph size in pixels.
+         * @param availableStrikes available embedded bitmap strikes considered for this glyph.
+         * @return stable strike-unavailable diagnostic.
+         */
+        fun strikeUnavailableDiagnostic(
+            glyphId: Int,
+            requestedSizePx: Float,
+            availableStrikes: List<BitmapStrikeSelection>,
+        ): ColorGlyphDiagnostic {
+            require(requestedSizePx.isFinite() && requestedSizePx > 0f) {
+                "Bitmap strike-unavailable requested size must be finite and positive."
+            }
+            val availablePpems = availableStrikes
+                .sortedWith(BITMAP_STRIKE_STABLE_ORDER)
+                .filter { selection -> selection.glyphId == glyphId || availableStrikes.none { it.glyphId == glyphId } }
+                .map { selection -> selection.ppem }
+            val availableLabel = if (availablePpems.isEmpty()) {
+                "none"
+            } else {
+                availablePpems.joinToString(separator = ",")
+            }
+            return ColorGlyphDiagnostic(
+                glyphId = glyphId,
+                route = "bitmap",
+                code = ColorGlyphDiagnosticCodes.BitmapStrikeUnavailable,
+                severity = "warning",
+                detail = "glyphId=$glyphId;requestedSizePx=${colorGlyphFloatToken(requestedSizePx)};" +
+                    "availableStrikes=$availableLabel",
+                message = "Bitmap glyph strike is unavailable for glyph $glyphId at " +
+                    "${colorGlyphFloatToken(requestedSizePx)}px: available strikes $availableLabel.",
             )
         }
 

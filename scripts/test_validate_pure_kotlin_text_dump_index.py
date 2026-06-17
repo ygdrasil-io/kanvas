@@ -53,6 +53,7 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
                 "a8-glyph-mask",
                 "a8-sdf-atlas-lifecycle",
                 "arabic-seed-readiness",
+                "bitmap-glyph-plan",
                 "bidi-runs",
                 "cff-cff2-readiness",
                 "cff-charstring-trace",

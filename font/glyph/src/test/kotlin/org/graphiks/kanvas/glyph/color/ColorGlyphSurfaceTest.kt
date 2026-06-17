@@ -2012,6 +2012,125 @@ class ColorGlyphSurfaceTest {
     }
 
     @Test
+    fun bitmapGlyphPlanBundleCapturesCbdtSbixAndBitmapRefusalsDeterministically() {
+        val cbdtPayload = syntheticRgbaPng(
+            width = 2,
+            height = 1,
+            pixels = intArrayOf(
+                argb(alpha = 0x44, red = 0x11, green = 0x22, blue = 0x33),
+                argb(alpha = 0x88, red = 0x55, green = 0x66, blue = 0x77),
+            ),
+        )
+        val cbdtPlan = BitmapGlyphPlan.fromPNG(
+            strike = BitmapStrikeSelection(
+                glyphId = 185,
+                width = 2,
+                height = 1,
+                format = "png",
+                ppem = 16,
+            ),
+            requestedSizePx = 18f,
+            tableFamily = "CBDT/CBLC",
+            sourcePayload = cbdtPayload,
+            image = assertNotNull(BasicPNGGlyphDecoder.decode(glyphId = 185, bytes = cbdtPayload)),
+            originX = 0,
+            originY = 0,
+        )
+
+        val sbixPayload = syntheticRgbaPng(
+            width = 1,
+            height = 2,
+            pixels = intArrayOf(
+                argb(alpha = 0xFF, red = 0x20, green = 0x40, blue = 0x60),
+                argb(alpha = 0xAA, red = 0x90, green = 0x70, blue = 0x50),
+            ),
+        )
+        val sbixPlan = BitmapGlyphPlan.fromPNG(
+            strike = BitmapStrikeSelection(
+                glyphId = 186,
+                width = 1,
+                height = 2,
+                format = "png",
+                ppem = 20,
+            ),
+            requestedSizePx = 20f,
+            tableFamily = "sbix",
+            sourcePayload = sbixPayload,
+            image = assertNotNull(BasicPNGGlyphDecoder.decode(glyphId = 186, bytes = sbixPayload)),
+            originX = -3,
+            originY = 5,
+        )
+
+        val strikeUnavailable = BitmapGlyphPlan.strikeUnavailableDiagnostic(
+            glyphId = 187,
+            requestedSizePx = 18f,
+            availableStrikes = listOf(
+                BitmapStrikeSelection(glyphId = 187, width = 16, height = 16, format = "png", ppem = 16),
+                BitmapStrikeSelection(glyphId = 187, width = 24, height = 24, format = "png", ppem = 24),
+            ),
+        )
+        val malformedPayload = ByteArray(33)
+        val malformedDiagnostic = BitmapGlyphPlan.pngDecodeFailedDiagnostic(
+            glyphId = 188,
+            tableFamily = "CBDT/CBLC",
+            sourcePayload = malformedPayload,
+            failure = assertFailsWith<IllegalArgumentException> {
+                BasicPNGGlyphDecoder.decode(glyphId = 188, bytes = malformedPayload)
+            },
+        )
+        val nonPngDiagnostic = BitmapGlyphPlan.unsupportedPayloadDiagnostic(
+            glyphId = 189,
+            tableFamily = "sbix",
+            sourceFormat = "jpeg",
+            sourcePayload = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x00),
+        )
+
+        val expected = bitmapGlyphPlanBundleJson(
+            cases = listOf(
+                BitmapGlyphPlanFixtureCase(
+                    caseId = "cbdt-cblc-png",
+                    tableFamily = "CBDT/CBLC",
+                    expectedGpuHandoffArtifactType = "BitmapGlyphPlan",
+                    planJson = cbdtPlan.toCanonicalJson(),
+                    diagnostics = emptyList(),
+                ),
+                BitmapGlyphPlanFixtureCase(
+                    caseId = "sbix-png",
+                    tableFamily = "sbix",
+                    expectedGpuHandoffArtifactType = "BitmapGlyphPlan",
+                    planJson = sbixPlan.toCanonicalJson(),
+                    diagnostics = emptyList(),
+                ),
+                BitmapGlyphPlanFixtureCase(
+                    caseId = "unavailable-strike-refusal",
+                    tableFamily = "bitmap",
+                    expectedGpuHandoffArtifactType = "refusal",
+                    planJson = null,
+                    diagnostics = listOf(strikeUnavailable),
+                ),
+                BitmapGlyphPlanFixtureCase(
+                    caseId = "malformed-png-refusal",
+                    tableFamily = "CBDT/CBLC",
+                    expectedGpuHandoffArtifactType = "refusal",
+                    planJson = null,
+                    diagnostics = listOf(malformedDiagnostic),
+                ),
+                BitmapGlyphPlanFixtureCase(
+                    caseId = "non-png-payload-refusal",
+                    tableFamily = "sbix",
+                    expectedGpuHandoffArtifactType = "refusal",
+                    planJson = null,
+                    diagnostics = listOf(nonPngDiagnostic),
+                ),
+            ),
+        )
+
+        val dump = readProjectFile("reports/font/fixtures/expected/color/bitmap-glyph-plan.json")
+        assertEquals(expected.trim(), dump.trim())
+        assertEvidenceDumpClean(dump)
+    }
+
+    @Test
     fun rejectsBasicPNGGlyphPayloadsWithInvalidCrc() {
         val png = syntheticRgbaPng(
             width = 1,
@@ -2768,6 +2887,14 @@ class ColorGlyphSurfaceTest {
             .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xFF) }
     }
 
+    private data class BitmapGlyphPlanFixtureCase(
+        val caseId: String,
+        val tableFamily: String,
+        val expectedGpuHandoffArtifactType: String,
+        val planJson: String?,
+        val diagnostics: List<ColorGlyphDiagnostic>,
+    )
+
     private data class ColorGlyphPlanFixtureCase(
         val caseId: String,
         val route: String,
@@ -2865,6 +2992,47 @@ class ColorGlyphSurfaceTest {
                 "\"no-complete-colrv1-rendering-claim\", " +
                 "\"no-gpu-color-glyph-support-claim\", " +
                 "\"no-platform-color-font-fallback-claim\"]\n",
+        )
+        append("}\n")
+    }
+
+    private fun bitmapGlyphPlanBundleJson(cases: List<BitmapGlyphPlanFixtureCase>): String = buildString {
+        append("{\n")
+        append("  \"schemaVersion\": 1,\n")
+        append("  \"dumpId\": \"bitmap-glyph-plan\",\n")
+        append("  \"ownerTickets\": [\"KFONT-M10-006\"],\n")
+        append("  \"cases\": [\n")
+        append(
+            cases.joinToString(",\n") { fixtureCase ->
+                buildString {
+                    append("    {\n")
+                    append("      \"caseId\": ").append(jsonString(fixtureCase.caseId)).append(",\n")
+                    append("      \"tableFamily\": ").append(jsonString(fixtureCase.tableFamily)).append(",\n")
+                    append(
+                        "      \"expectedGpuHandoffArtifactType\": " +
+                            jsonString(fixtureCase.expectedGpuHandoffArtifactType) + ",\n",
+                    )
+                    append("      \"plan\": ")
+                    append(
+                        fixtureCase.planJson
+                            ?.trimEnd()
+                            ?.replace("\n", "\n      ")
+                            ?: "null",
+                    )
+                    append(",\n")
+                    append("      \"diagnostics\": ")
+                    append(diagnosticsJson(fixtureCase.diagnostics, indent = "      "))
+                    append("\n")
+                    append("    }")
+                }
+            },
+        )
+        append("\n  ],\n")
+        append(
+            "  \"nonClaims\": [\"no-complete-target-support-claim\", " +
+                "\"no-complete-png-bitmap-glyph-routing-claim\", " +
+                "\"no-gpu-bitmap-glyph-route-claim\", " +
+                "\"no-platform-bitmap-codec-claim\"]\n",
         )
         append("}\n")
     }
