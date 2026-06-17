@@ -4,6 +4,11 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandBinding
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
+import org.graphiks.kanvas.gpu.renderer.resources.dumpCommandOperandFields
 
 /** Stable render-step identifier. */
 @JvmInline
@@ -455,6 +460,27 @@ sealed interface GPUPassCommand {
     }
 }
 
+/** Packet-to-command bridge for provider-materialized command operands. */
+data class GPUPassCommandOperandBridge(
+    val packetId: GPUDrawPacketID?,
+    val commandLabel: String,
+    val operand: GPUMaterializedCommandOperandReference,
+) {
+    init {
+        require(commandLabel.isNotBlank()) { "GPUPassCommandOperandBridge.commandLabel must not be blank" }
+    }
+
+    companion object {
+        /** Converts provider-owned string evidence into pass-local typed packet evidence. */
+        fun fromMaterializedBinding(binding: GPUMaterializedCommandOperandBinding): GPUPassCommandOperandBridge =
+            GPUPassCommandOperandBridge(
+                packetId = binding.packetId?.let(::GPUDrawPacketID),
+                commandLabel = binding.commandLabel,
+                operand = binding.operand,
+            )
+    }
+}
+
 /**
  * Linearized pass command stream before a concrete command encoder records WGPU calls.
  *
@@ -467,12 +493,16 @@ class GPUPassCommandStream(
     val passId: String,
     commands: List<GPUPassCommand>,
     diagnostics: List<GPUPassDiagnostic> = emptyList(),
+    operandBridge: List<GPUPassCommandOperandBridge> = emptyList(),
 ) {
     /** Commands copied in facade call order. */
     val commands: List<GPUPassCommand> = commands.toList()
 
     /** Command-stream diagnostics copied before encoder planning. */
     val diagnostics: List<GPUPassDiagnostic> = diagnostics.toList()
+
+    /** Provider-materialized packet-to-command operands copied before encoder planning. */
+    val operandBridge: List<GPUPassCommandOperandBridge> = operandBridge.toList()
 
     /** Facade operation labels in encoded order. */
     val commandLabels: List<String>
@@ -486,11 +516,26 @@ class GPUPassCommandStream(
     val commandCount: Int
         get() = commands.size
 
+    /** Materialized operand labels in bridge order. */
+    val materializedOperandLabels: List<String>
+        get() = operandBridge.map { bridge -> bridge.operand.label }
+
     init {
         require(streamId.isNotBlank()) { "GPUPassCommandStream.streamId must not be blank" }
         require(packetStreamId.isNotBlank()) { "GPUPassCommandStream.packetStreamId must not be blank" }
         require(passId.isNotBlank()) { "GPUPassCommandStream.passId must not be blank" }
         require(commands.isNotEmpty()) { "GPUPassCommandStream.commands must not be empty" }
+        val packetIds = sourcePacketIds.toSet()
+        val commandKeys = commands.map { command -> command.sourcePacketId to command.commandLabel }.toSet()
+        require(operandBridge.all { bridge -> bridge.packetId == null || bridge.packetId in packetIds }) {
+            "GPUPassCommandStream operandBridge packets must belong to source packet ids"
+        }
+        require(operandBridge.all { bridge -> bridge.packetId to bridge.commandLabel in commandKeys }) {
+            "GPUPassCommandStream operandBridge command labels must match the bridged packet"
+        }
+        require(operandBridge.all { bridge -> bridge.matchesCommandOperandKind() }) {
+            "GPUPassCommandStream operandBridge operand kinds must match the bridged command"
+        }
     }
 
     companion object {
@@ -500,6 +545,8 @@ class GPUPassCommandStream(
             packetStream: GPUDrawPacketStream,
             targetStateHash: String,
             loadStoreLabel: String,
+            materialization: GPUResourceMaterializationDecision.Materialized? = null,
+            operandBridge: List<GPUPassCommandOperandBridge> = emptyList(),
         ): GPUPassCommandStream {
             val commands = buildList {
                 add(
@@ -543,6 +590,13 @@ class GPUPassCommandStream(
                 }
                 add(GPUPassCommand.EndRenderPass(passId = packetStream.passId))
             }
+            val materializedOperandBridge =
+                materialization?.dumpOperandBridgeSnapshot
+                    ?.map(GPUPassCommandOperandBridge::fromMaterializedBinding)
+                    .orEmpty()
+            require(materializedOperandBridge.isEmpty() || operandBridge.isEmpty()) {
+                "GPUPassCommandStream accepts either provider materialization or explicit operandBridge, not both"
+            }
 
             return GPUPassCommandStream(
                 streamId = streamId,
@@ -550,6 +604,7 @@ class GPUPassCommandStream(
                 passId = packetStream.passId,
                 commands = commands,
                 diagnostics = packetStream.diagnostics,
+                operandBridge = materializedOperandBridge.ifEmpty { operandBridge },
             )
         }
     }
@@ -636,7 +691,10 @@ fun GPUPassCommandStream.dumpLines(): List<String> =
             "commands=${commandLabels.dumpSequence()} " +
             "packets=${sourcePacketIds.map { packetId -> packetId.value }.dumpSequence()} " +
             "diagnostics=${diagnostics.dumpCodes()}",
-    ) + commands.map { command -> command.dumpLine() } + diagnostics.dumpLines()
+    ) +
+        commands.map { command -> command.dumpLine() } +
+        operandBridge.map { bridge -> bridge.dumpLine() } +
+        diagnostics.dumpLines()
 
 /** Draw pass descriptor close to GPU submission. */
 data class GPUDrawPass(
@@ -739,6 +797,35 @@ private fun GPUPassCommand.dumpLine(): String =
             "passes.command draw packet=${packetId.value} vertex=$vertexSourceLabel"
         is GPUPassCommand.EndRenderPass ->
             "passes.command endRenderPass pass=$passId"
+    }
+
+private fun GPUPassCommandOperandBridge.dumpLine(): String =
+    "passes.command-bridge packet=${packetId?.value ?: NONE_DUMP_VALUE} command=$commandLabel " +
+        operand.dumpCommandOperandFields()
+
+private fun GPUPassCommandOperandBridge.matchesCommandOperandKind(): Boolean =
+    when (commandLabel) {
+        "beginRenderPass" ->
+            operand.kind in setOf(
+                GPUMaterializedCommandOperandKind.RenderTarget,
+                GPUMaterializedCommandOperandKind.TextureView,
+            )
+        "setRenderPipeline" -> operand.kind == GPUMaterializedCommandOperandKind.RenderPipeline
+        "setBindGroup" ->
+            operand.kind in setOf(
+                GPUMaterializedCommandOperandKind.BindGroup,
+                GPUMaterializedCommandOperandKind.UniformBuffer,
+                GPUMaterializedCommandOperandKind.StorageBuffer,
+                GPUMaterializedCommandOperandKind.Texture,
+                GPUMaterializedCommandOperandKind.TextureView,
+                GPUMaterializedCommandOperandKind.Sampler,
+            )
+        "draw" ->
+            operand.kind in setOf(
+                GPUMaterializedCommandOperandKind.VertexBuffer,
+                GPUMaterializedCommandOperandKind.IndexBuffer,
+            )
+        else -> false
     }
 
 private fun List<GPURenderStepAttribute>.dumpAttributes(): String =

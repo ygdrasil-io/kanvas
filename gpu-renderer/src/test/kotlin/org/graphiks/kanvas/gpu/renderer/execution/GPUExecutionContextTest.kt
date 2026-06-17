@@ -7,6 +7,9 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawPayloadRef
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineCacheKey
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineCreationPlan
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeyPreimage
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandBinding
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceDiagnostic
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
@@ -413,6 +416,46 @@ class GPUExecutionContextTest {
         }
 
         assertContains(failure.message.orEmpty(), "preflight target must match materialization target")
+    }
+
+    /** Ensures first-route submit requires provider bridge evidence, not loose operand refs. */
+    @Test
+    fun `first route render submit request rejects unbridged operand refs`() {
+        val materialization = GPUResourceMaterializationDecision.Materialized(
+            resources = listOf(GPUTextureResourceRef("surface-ref")),
+            targetId = "surface",
+            taskIds = listOf("task-fill"),
+            resourcePlanLabels = listOf("surface"),
+            operandRefs = listOf(renderTargetOperandBinding().operand),
+        )
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            GPUFirstRouteRenderSubmitRequest(
+                preflightRequest = GPUExecutionPreflightRequest(
+                    scope = GPUCommandScope.Render(label = "root-pass", useTokenLabels = listOf("surface-write")),
+                    target = GPUSurfaceTarget(
+                        targetId = "surface",
+                        descriptor = GPUSurfaceTargetDescriptor(
+                            width = 64,
+                            height = 64,
+                            colorFormat = "rgba8unorm",
+                            surfaceBacked = true,
+                            usageLabels = setOf("render_attachment"),
+                        ),
+                        deviceGeneration = GPUDeviceGeneration(11),
+                    ),
+                    materializationDecision = materialization,
+                    taskIds = listOf("task-fill"),
+                    passIds = listOf("pass-root"),
+                ),
+                pass = drawPass(),
+                materialization = materialization,
+                pipelinePlan = renderPipelinePlan(),
+                payloadRefs = listOf(GPUDrawPayloadRef(commandIdValue = 42, renderStepIdentity = "fill-rect")),
+            )
+        }
+
+        assertContains(failure.message.orEmpty(), "bridged materialized command operands")
     }
 
     /** Ensures terminal preflight diagnostics keep their own facts after submit evidence is attached. */
@@ -871,6 +914,7 @@ class GPUExecutionContextTest {
             targetId = "surface",
             taskIds = listOf("task-fill"),
             resourcePlanLabels = listOf("surface"),
+            operandBridge = listOf(renderTargetOperandBinding()),
         )
         return GPUFirstRouteRenderSubmitRequest(
             preflightRequest = GPUExecutionPreflightRequest(
@@ -899,6 +943,21 @@ class GPUExecutionContextTest {
             readbackRequests = readbackRequests,
         )
     }
+
+    private fun renderTargetOperandBinding(): GPUMaterializedCommandOperandBinding =
+        GPUMaterializedCommandOperandBinding(
+            packetId = null,
+            commandLabel = "beginRenderPass",
+            operand = GPUMaterializedCommandOperandReference(
+                label = "target-view:surface",
+                kind = GPUMaterializedCommandOperandKind.RenderTarget,
+                descriptorHash = "sha256:target-view:surface",
+                deviceGeneration = 11,
+                ownerScope = "render-pass:root-pass",
+                usageLabels = listOf("render_attachment"),
+                invalidationPolicy = "frame-end",
+            ),
+        )
 
     /** Creates an accepted draw pass shape used by first-route submit tests. */
     private fun drawPass(
