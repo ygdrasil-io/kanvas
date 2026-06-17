@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M7-003"
 title: "Add variable-axis-aware fallback"
-status: "review"
+status: "done"
 milestone: "M7"
 priority: "P1"
 owner_area: "fallback"
@@ -105,7 +105,8 @@ rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.Fallb
 
 - `proposed`: Depends on fallback trace plus TrueType/CFF2 variation foundations.
 - `review`: bounded fallback evidence now records requested and selected variation coordinates, prefers covered axis-supporting candidates over covered static ones, emits deterministic `font.fallback.axis-clamped` / `font.variation-axis-unsupported` / `font.metrics-variation-unavailable` diagnostics, and links the same variable fixtures into shaping evidence without promoting cluster-safe, platform, or renderer claims.
-- Remaining gate before `done`: broaden beyond the bounded `wght`-centric fixtures with reviewed named-instance and multi-axis coverage, then revalidate alongside cluster-safe fallback segmentation before any broader fallback promotion.
+- `review`: bounded fallback evidence now also covers named-instance selection and multi-axis ranking through deterministic `fallback-named-instance` and `fallback-multi-axis` fixtures, and fresh surface tests now verify metrics-aware ranking, honest `selectedNamedInstance` serialization, and a stable `text.fallback.variation-defaulted` diagnostic when a requested named instance cannot be honored.
+- `done`: the broadened variable fallback slice has now been revalidated alongside cluster-safe fallback segmentation, while broader fallback promotion remains bounded by explicit host-dependent, CPU-oracle, and GPU-route non-claims.
 
 ## Linear Labels
 

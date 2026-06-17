@@ -6,6 +6,7 @@ import java.nio.file.Paths
 import java.security.MessageDigest
 import org.graphiks.kanvas.font.FallbackEvidenceCase
 import org.graphiks.kanvas.font.ResolvedFontRunEvidence
+import org.graphiks.kanvas.font.defaultFallbackClusterEvidenceBundle
 import org.graphiks.kanvas.font.defaultFallbackClusterEvidenceCases
 
 public data class FallbackSegmentationDumpRef(
@@ -21,6 +22,19 @@ public data class FallbackSegmentationInvariantResult(
     val diagnostic: ShapingDiagnostic?,
 )
 
+public data class FallbackSegmentationFixtureRef(
+    val dumpId: String,
+    val fixtureId: String,
+    val section: String? = null,
+)
+
+public data class FallbackSegmentationHostDependentMarker(
+    val name: String,
+    val normativeStatus: String,
+    val hostDependent: Boolean,
+    val hostDependentSourceRef: FallbackSegmentationFixtureRef,
+)
+
 public data class FallbackSegmentationCase(
     val fixtureName: String,
     val sourceText: String,
@@ -29,6 +43,10 @@ public data class FallbackSegmentationCase(
     val clusterFixtureName: String,
     val fallbackFixtureId: String,
     val sourceDumpIds: List<String>,
+    val decisionTraceRef: FallbackSegmentationFixtureRef,
+    val resolvedRunsRef: FallbackSegmentationFixtureRef,
+    val fixtureAssetRef: FallbackSegmentationFixtureRef,
+    val hostDependent: Boolean,
     val invariant: FallbackSegmentationInvariantResult,
     val diagnostics: List<ShapingDiagnostic>,
 )
@@ -37,6 +55,7 @@ public data class FallbackSegmentationReport(
     val unicodeVersion: String,
     val sourceDumpRefs: List<FallbackSegmentationDumpRef>,
     val cases: List<FallbackSegmentationCase>,
+    val hostDependentMarkers: List<FallbackSegmentationHostDependentMarker>,
 ) {
     public fun toCanonicalJson(): String = buildString {
         append("{\n")
@@ -50,6 +69,9 @@ public data class FallbackSegmentationReport(
         append("\n  ],\n")
         append("  \"cases\": [\n")
         append(cases.joinToString(",\n") { case -> case.toCanonicalJson().prependIndent("    ") })
+        append("\n  ],\n")
+        append("  \"hostDependentMarkers\": [\n")
+        append(hostDependentMarkers.joinToString(",\n") { marker -> marker.toCanonicalJson().prependIndent("    ") })
         append("\n  ],\n")
         append("  \"nonClaims\": [\n")
         append(FallbackSegmentationNonClaims.joinToString(",\n") { nonClaim -> "    ${jsonString(nonClaim)}" })
@@ -65,11 +87,11 @@ public fun defaultFallbackSegmentationReport(): FallbackSegmentationReport {
     val clusterReport = defaultClusterSafetyReport()
 
     return FallbackSegmentationReport(
-        unicodeVersion = clusterReport.unicodeVersion,
-        sourceDumpRefs = sourceDumpRefs.sortedBy { ref -> ref.dumpId },
-        cases =
-            defaultFallbackSegmentationFixtureSpecs()
-                .sortedBy { spec -> spec.fixtureName }
+            unicodeVersion = clusterReport.unicodeVersion,
+            sourceDumpRefs = sourceDumpRefs.sortedBy { ref -> ref.dumpId },
+            cases =
+                defaultFallbackSegmentationFixtureSpecs()
+                    .sortedBy { spec -> spec.fixtureName }
                 .map { spec ->
                     val clusterCase =
                         requireNotNull(clusterCasesByFixtureName[spec.clusterFixtureName]) {
@@ -81,6 +103,17 @@ public fun defaultFallbackSegmentationReport(): FallbackSegmentationReport {
                         }
                     buildFallbackSegmentationCase(spec, clusterCase, fallbackCase)
                 },
+            hostDependentMarkers = listOf(
+                FallbackSegmentationHostDependentMarker(
+                    name = "host-dependent-system-fallback",
+                    normativeStatus = "non-normative",
+                    hostDependent = true,
+                    hostDependentSourceRef = FallbackSegmentationFixtureRef(
+                        dumpId = "fallback-decision-trace",
+                        fixtureId = "host-dependent-system-fallback",
+                    ),
+                ),
+            ),
     )
 }
 
@@ -172,6 +205,21 @@ private fun buildFallbackSegmentationCase(
         clusterFixtureName = spec.clusterFixtureName,
         fallbackFixtureId = spec.fallbackFixtureId,
         sourceDumpIds = FALLBACK_SEGMENTATION_SOURCE_DUMP_IDS,
+        decisionTraceRef = FallbackSegmentationFixtureRef(
+            dumpId = "fallback-fixture",
+            fixtureId = spec.fallbackFixtureId,
+            section = "decisions",
+        ),
+        resolvedRunsRef = FallbackSegmentationFixtureRef(
+            dumpId = "fallback-fixture",
+            fixtureId = spec.fallbackFixtureId,
+            section = "runs",
+        ),
+        fixtureAssetRef = FallbackSegmentationFixtureRef(
+            dumpId = "fallback-fixture",
+            fixtureId = spec.fallbackFixtureId,
+        ),
+        hostDependent = false,
         invariant = invariant,
         diagnostics = diagnostics,
     )
@@ -246,8 +294,32 @@ private fun FallbackSegmentationCase.toCanonicalJson(): String = buildString {
     append(jsonPair("clusterFixtureName", clusterFixtureName)).append(", ")
     append(jsonPair("fallbackFixtureId", fallbackFixtureId)).append(", ")
     append(jsonString("sourceDumpIds")).append(": ").append(sourceDumpIds.toJsonStringArray()).append(", ")
+    append(jsonString("decisionTraceRef")).append(": ").append(decisionTraceRef.toCanonicalJson()).append(", ")
+    append(jsonString("resolvedRunsRef")).append(": ").append(resolvedRunsRef.toCanonicalJson()).append(", ")
+    append(jsonString("fixtureAssetRef")).append(": ").append(fixtureAssetRef.toCanonicalJson()).append(", ")
+    append(jsonString("hostDependent")).append(": ").append(hostDependent).append(", ")
     append(jsonString("invariant")).append(": ").append(invariant.toCanonicalJson()).append(", ")
     append(jsonString("diagnostics")).append(": ").append(diagnostics.toDiagnosticArrayJson())
+    append("}")
+}
+
+private fun FallbackSegmentationFixtureRef.toCanonicalJson(): String = buildString {
+    append("{")
+    append(jsonPair("dumpId", dumpId)).append(", ")
+    append(jsonPair("fixtureId", fixtureId))
+    if (section != null) {
+        append(", ")
+        append(jsonPair("section", section))
+    }
+    append("}")
+}
+
+private fun FallbackSegmentationHostDependentMarker.toCanonicalJson(): String = buildString {
+    append("{")
+    append(jsonPair("name", name)).append(", ")
+    append(jsonPair("normativeStatus", normativeStatus)).append(", ")
+    append(jsonString("hostDependent")).append(": ").append(hostDependent).append(", ")
+    append(jsonString("hostDependentSourceRef")).append(": ").append(hostDependentSourceRef.toCanonicalJson())
     append("}")
 }
 
@@ -297,6 +369,18 @@ private fun fallbackDiagnostic(code: String, textRange: IntRange): ShapingDiagno
             ShapingDiagnostic(
                 code = code,
                 message = "Fallback cluster case still routes through a missing-glyph shaping diagnostic.",
+                textRange = textRange,
+            )
+        "text.fallback.cluster-split-forbidden" ->
+            ShapingDiagnostic(
+                code = code,
+                message = "Fallback cluster case refuses the whole cluster rather than splitting grapheme coverage.",
+                textRange = textRange,
+            )
+        "text.fallback.emoji-fallback-unavailable" ->
+            ShapingDiagnostic(
+                code = code,
+                message = "Emoji fallback remains refused until the full cluster can be handled without partial fallback.",
                 textRange = textRange,
             )
         else ->

@@ -373,20 +373,31 @@
       },
       "currentEvidencePaths": [
         "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FallbackDecisionDumpTest.kt",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/FallbackSegmentationReport.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/FallbackSegmentationTest.kt",
         "reports/font/fixtures/expected/fallback/fallback-cluster-arabic-mark.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-arabic-mark.json",
         "reports/font/fixtures/expected/fallback/fallback-cluster-cjk-vs.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-cjk-vs.json",
         "reports/font/fixtures/expected/fallback/fallback-cluster-devanagari.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-devanagari.json",
         "reports/font/fixtures/expected/fallback/fallback-cluster-emoji-zwj.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-emoji-zwj.json",
         "reports/font/fixtures/expected/fallback/fallback-cluster-latin-mark.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-latin-mark.json",
         "reports/font/fixtures/expected/fallback/fallback-cluster-negative-split.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-negative-split.json",
         "reports/font/fixtures/expected/fallback/fallback-cluster-skin-tone.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-skin-tone.json",
         "reports/font/fixtures/expected/fallback/fallback-cluster-thai.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-thai.json",
         "reports/font/fixtures/expected/fallback/fallback-cluster-vs15-vs16.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-vs15-vs16.json",
         "reports/font/fixtures/expected/fallback/fallback-segmentation-report.json",
         "reports/font/fixtures/expected/fallback/fallback-decision-trace.json",
         "reports/font/fixtures/expected/fallback/resolved-font-runs.json",
+        "reports/font/fixtures/expected/fallback/system-font-scan-fallback-trace.json",
         "reports/font/fixtures/expected/shaping/shaped-glyph-run.json",
         "reports/font/fixtures/expected/unicode/cluster-safety-report.json",
         "reports/pure-kotlin-text/2026-06-17-kfont-m7-004-fallback-segmentation.md",
@@ -394,9 +405,7 @@
         "reports/pure-kotlin-text/dump-evidence-index.json"
       ],
       "requiredEvidenceGates": [
-        "KFONT-M7-004 now proves bounded whole-cluster fallback alignment for reviewed positive fixtures only; it does not promote complete fallback, emoji rendering, or host-dependent behavior.",
-        "Convert the negative emoji row from reviewed split-hazard evidence to an actual whole-cluster refusal path before moving beyond fixture-gated review.",
-        "Promote dedicated per-fixture fallback trace and resolved-run assets before broad fallback support claims."
+        "This family remains fixture-gated and non-claiming: the checked-in cluster fixtures do not by themselves promote complete cluster-safe fallback, emoji rendering, host-dependent fallback, or platform fallback support."
       ],
       "validationCommands": [
         "rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecision*'",
@@ -428,6 +437,7 @@
       "currentEvidencePaths": [
         "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
         "font/core/src/test/kotlin/org/graphiks/kanvas/font/FallbackDecisionDumpTest.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt",
         "font/core/src/test/kotlin/org/graphiks/kanvas/font/VariableFallbackEvidenceTest.kt",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/FallbackShapingEvidence.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/FallbackShapingEvidenceTest.kt",
@@ -441,6 +451,8 @@
         "reports/font/fixtures/expected/fallback/fallback-locale-serbian.json",
         "reports/font/fixtures/expected/fallback/fallback-metrics-variation-missing.json",
         "reports/font/fixtures/expected/fallback/fallback-missing-glyph.json",
+        "reports/font/fixtures/expected/fallback/fallback-multi-axis.json",
+        "reports/font/fixtures/expected/fallback/fallback-named-instance.json",
         "reports/font/fixtures/expected/fallback/fallback-script-arabic.json",
         "reports/font/fixtures/expected/fallback/fallback-variable-cff2.json",
         "reports/font/fixtures/expected/fallback/resolved-font-runs.json",
@@ -451,8 +463,8 @@
         "reports/pure-kotlin-text/dump-evidence-index.json"
       ],
       "requiredEvidenceGates": [
-        "Add named-instance, multi-axis, and cluster-safe fallback evidence before claiming complete fallback behavior.",
-        "Keep host-dependent system scan facts non-normative until deterministic scan inputs and host markers land."
+        "Complete fallback support still requires the broader deterministic bundled catalog breadth requested by KFONT-M7-001; the current trace family remains bounded to the checked-in fixture set.",
+        "Keep host-dependent system scan facts non-normative; host-scanned examples must stay outside the bundled catalog and shared fallback goldens."
       ],
       "validationCommands": [
         "rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecisionDump*'",

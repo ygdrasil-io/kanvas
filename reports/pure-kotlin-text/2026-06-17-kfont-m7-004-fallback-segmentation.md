@@ -1,6 +1,6 @@
 # 2026-06-17 KFONT-M7-004 Fallback Segmentation
 
-Status: review with bounded fixture evidence only.
+Status: done with bounded fixture evidence only.
 
 ## Scope
 
@@ -15,8 +15,8 @@ Status: review with bounded fixture evidence only.
 
 - `defaultFallbackClusterEvidenceCases()` adds bounded fallback cases for
   Arabic mark, CJK variation-selector context, Devanagari conjunct, emoji ZWJ,
-  emoji skin tone, VS15/VS16, Thai tone, Latin combining mark, and a reviewed
-  negative split case.
+  emoji skin tone, VS15/VS16, Thai tone, Latin combining mark, and a bounded
+  whole-cluster refusal case for the negative emoji fixture.
 - `FallbackSegmentationReport` links checked-in SHA-256 hashes for
   `cluster-safety-report.json`, `fallback-decision-trace.json`,
   `resolved-font-runs.json`, and `shaped-glyph-run.json`.
@@ -24,9 +24,14 @@ Status: review with bounded fixture evidence only.
   clusters.
 - `fallback-cluster-negative-split.txt` keeps the `scaledemoji` legacy gate
   open and records:
-  `text.shaping.cluster-invariant-failed`,
-  `font.fallback-glyph-unavailable`,
-  `text.shaping.emoji-sequence-unsupported`.
+  `text.fallback.cluster-split-forbidden`,
+  `text.fallback.emoji-fallback-unavailable`,
+  `text.shaping.emoji-sequence-unsupported`, and
+  `text.shaping.fallback-missing`.
+- Every `fallback-cluster-*` case now carries dedicated `fallback-fixture`
+  refs for `decisions`, `runs`, and the combined per-fixture asset, while a
+  checked non-normative host-dependent marker row points to
+  `host-dependent-system-fallback` without broadening fallback support claims.
 
 ## Validation
 
@@ -48,9 +53,7 @@ rtk git diff --check
 
 ## Remaining Gates
 
-- The negative emoji case is still a reviewed split-hazard report, not yet a
-  complete whole-cluster refusal path.
-- Dedicated per-fixture fallback trace and resolved-run assets still need to
-  be promoted into checked-in fallback dumps before `done`.
-- Host-dependent fallback participation is still unproved and remains
-  non-normative.
+No ticket-local gate remains for `KFONT-M7-004`. This stays bounded done
+evidence only: no complete cluster-safe fallback support claim, no emoji
+rendering claim, no platform fallback support claim, and no `scaledemoji`
+retirement.
