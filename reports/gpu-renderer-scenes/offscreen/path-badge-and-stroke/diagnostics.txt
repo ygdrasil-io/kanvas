@@ -1,4 +1,1 @@
-rendered path-badge-and-stroke via WebGPU offscreen
-adapter=Apple M2 Max
-fillRectCommands=1
-fillRRectCommands=1
+rect-only offscreen render supports only clear, fill-rect, and clip command families: fill-rrect

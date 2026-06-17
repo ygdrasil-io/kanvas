@@ -1,5 +1,6 @@
 rendered frame-gate-blocker-board via WebGPU offscreen
 adapter=Apple M2 Max
+clearCommands=1
 fillRectCommands=6
 fillRRectCommands=0
 linearGradientRectCommands=0

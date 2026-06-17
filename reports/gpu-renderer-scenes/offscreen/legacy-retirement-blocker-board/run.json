@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "sceneId": "legacy-retirement-blocker-board",
-  "status": "rendered",
+  "status": "not-yet-rendered",
   "productRefusal": false,
   "backend": "webgpu-offscreen",
-  "imagePath": "render.png",
-  "width": 320,
-  "height": 200,
-  "byteCount": 256000,
-  "nonTransparentPixels": 64000,
-  "diagnostics": ["rendered legacy-retirement-blocker-board via WebGPU offscreen","adapter=Apple M2 Max","fillRectCommands=7","fillRRectCommands=1","linearGradientRectCommands=0","clipCommands=1","bitmapRectCommands=0","legacyRetirementRow=gpu-renderer.legacy-retirement","legacyRetirementClassification=PolicyGated","legacyRouteRetired=false","legacyDefaultActive=true","productRouteActivated=false","acceptedReplacementLinked=false","activationDecisionLinked=false","rollbackEvidenceLinked=false","pmEvidenceLinked=false","oldPathUsageEvidenceLinked=false","archivedEvidencePreserved=true","genericMigrationRetirement=false","missingGate=KGPU-M10-002","replacementGate=route-specific-accepted-replacement-required"]
+  "imagePath": null,
+  "width": null,
+  "height": null,
+  "byteCount": null,
+  "nonTransparentPixels": null,
+  "diagnostics": ["rect-only offscreen render supports only clear, fill-rect, and clip command families: fill-rrect"]
 }

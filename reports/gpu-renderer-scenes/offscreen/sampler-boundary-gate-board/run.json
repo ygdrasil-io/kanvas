@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "sceneId": "sampler-boundary-gate-board",
-  "status": "rendered",
+  "status": "not-yet-rendered",
   "productRefusal": false,
   "backend": "webgpu-offscreen",
-  "imagePath": "render.png",
-  "width": 320,
-  "height": 200,
-  "byteCount": 256000,
-  "nonTransparentPixels": 64000,
-  "diagnostics": ["rendered sampler-boundary-gate-board via WebGPU offscreen","adapter=Apple M2 Max","fillRectCommands=4","fillRRectCommands=1","linearGradientRectCommands=0","clipCommands=1","bitmapRectCommands=2"]
+  "imagePath": null,
+  "width": null,
+  "height": null,
+  "byteCount": null,
+  "nonTransparentPixels": null,
+  "diagnostics": ["rect-only offscreen render supports only clear, fill-rect, and clip command families: fill-rrect, bitmap-rect"]
 }

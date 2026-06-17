@@ -1,5 +1,6 @@
 rendered filter-dag-refusal-board via WebGPU offscreen
 adapter=Apple M2 Max
+clearCommands=1
 fillRectCommands=5
 fillRRectCommands=0
 linearGradientRectCommands=0
