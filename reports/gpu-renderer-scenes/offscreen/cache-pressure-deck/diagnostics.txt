@@ -1,3 +1,8 @@
 rendered cache-pressure-deck via WebGPU offscreen
 adapter=Apple M2 Max
+clearCommands=0
 fillRectCommands=2
+fillRRectCommands=0
+linearGradientRectCommands=0
+clipCommands=0
+bitmapRectCommands=0

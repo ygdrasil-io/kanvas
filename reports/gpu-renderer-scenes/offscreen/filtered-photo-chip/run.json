@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "sceneId": "filtered-photo-chip",
-  "status": "rendered",
+  "status": "not-yet-rendered",
   "productRefusal": false,
   "backend": "webgpu-offscreen",
-  "imagePath": "render.png",
-  "width": 320,
-  "height": 200,
-  "byteCount": 256000,
-  "nonTransparentPixels": 29568,
-  "diagnostics": ["rendered filtered-photo-chip via WebGPU offscreen","adapter=Apple M2 Max","fillRectCommands=0","fillRRectCommands=0","linearGradientRectCommands=0","clipCommands=0","bitmapRectCommands=1","filterNodeCommands=1","filterKinds=luma-tint","filterInputs=photo"]
+  "imagePath": null,
+  "width": null,
+  "height": null,
+  "byteCount": null,
+  "nonTransparentPixels": null,
+  "diagnostics": ["rect-only offscreen render supports only clear, fill-rect, and clip command families: bitmap-rect, filter-node"]
 }

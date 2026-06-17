@@ -1,7 +1,1 @@
-rendered release-gate-progress-board via WebGPU offscreen
-adapter=Apple M2 Max
-fillRectCommands=1
-fillRRectCommands=1
-linearGradientRectCommands=1
-clipCommands=1
-bitmapRectCommands=0
+rect-only offscreen render supports only clear, fill-rect, and clip command families: fill-rrect, linear-gradient-rect

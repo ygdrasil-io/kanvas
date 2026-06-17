@@ -1,5 +1,6 @@
 rendered first-route-rollback-panel via WebGPU offscreen
 adapter=Apple M2 Max
+clearCommands=1
 fillRectCommands=4
 fillRRectCommands=0
 linearGradientRectCommands=0
