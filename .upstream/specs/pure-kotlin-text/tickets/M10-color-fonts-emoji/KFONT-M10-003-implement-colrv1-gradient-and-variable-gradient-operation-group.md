@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M10-003"
 title: "Implement COLRv1 gradient and variable-gradient operation group"
-status: "proposed"
+status: "done"
 milestone: "M10"
 priority: "P1"
 owner_area: "color"
@@ -65,11 +65,11 @@ data class ResolvedGradientStop(
 
 ## Acceptance Criteria
 
-- [ ] Fixtures cover linear, radial, and sweep gradients with stable stop order and resolved colors.
-- [ ] Variable gradient stops include variation coordinates and deltas in the dump when supported.
-- [ ] Missing or malformed variation data emits `text.color.COLRv1-paint-unsupported` or a narrower variable-gradient diagnostic.
-- [ ] Gradient stop budget overflow emits `text.color.COLRv1-budget-exceeded`.
-- [ ] The color glyph plan remains renderer-neutral and does not create WGSL, material keys, or GPU resources.
+- [x] Fixtures cover linear, radial, and sweep gradients with stable stop order and resolved colors.
+- [x] Variable gradient stops include variation coordinates and deltas in the dump when supported.
+- [x] Missing or malformed variation data emits `text.color.COLRv1-paint-unsupported` or a narrower variable-gradient diagnostic.
+- [x] Gradient stop budget overflow emits `text.color.COLRv1-budget-exceeded`.
+- [x] The color glyph plan remains renderer-neutral and does not create WGSL, material keys, or GPU resources.
 
 ## Required Evidence
 
@@ -98,8 +98,8 @@ rtk ./gradlew --no-daemon :font:glyph:test --tests '*COLRv1*Gradient*'
 
 ## Status Notes
 
-- `proposed`: Depends on the base COLRv1 graph traversal and color glyph plan shape.
-- Move to `ready` only after variable-gradient dump fields and budget diagnostics are reviewed.
+- `done`: `COLRV1ColorGlyphPlanner` now records linear/radial/sweep geometry, resolved gradient stops, variation coordinates for supported variable stops, and stable refusal diagnostics for missing variation data, malformed coordinates, and gradient-stop budget overflow.
+- Remaining non-claims stay explicit: this ticket does not claim `PaintVarLinearGradient` / `PaintVarRadialGradient` / `PaintVarSweepGradient` geometry support, transform/composite/clip execution, bitmap/SVG routing, emoji planning, WGSL generation, or GPU material execution.
 
 ## Linear Labels
 

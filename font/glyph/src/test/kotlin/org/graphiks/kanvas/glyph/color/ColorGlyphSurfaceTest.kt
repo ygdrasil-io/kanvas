@@ -736,48 +736,22 @@ class ColorGlyphSurfaceTest {
 
         val graphDump = graph.toCanonicalJson()
         assertEquals(
-            readProjectFile("reports/font/fixtures/expected/color/colrv1-paint-graph.json").trim(),
+            extractGraphCaseJson(
+                readProjectFile("reports/font/fixtures/expected/color/colrv1-paint-graph.json"),
+                "colrv1-solid-glyph-colr-glyph",
+            ).trim(),
             graphDump.trim(),
         )
-
-        val bundleDump = colorGlyphPlanBundleJson(
-            cases = listOf(
-                ColorGlyphPlanFixtureCase(
-                    caseId = "colrv0-layered-palette-override",
-                    route = "colr",
-                    planJson = readProjectFile("reports/font/fixtures/expected/color/color-glyph-plan.json")
-                        .let { existing -> extractPlanCaseJson(existing, "colrv0-layered-palette-override") },
-                    diagnostics = emptyList(),
-                ),
-                ColorGlyphPlanFixtureCase(
-                    caseId = "colrv1-solid-glyph-colr-glyph",
-                    route = "colr",
-                    planJson = plan.toCanonicalJson(),
-                    diagnostics = emptyList(),
-                ),
-                ColorGlyphPlanFixtureCase(
-                    caseId = "colrv1-var-solid-outline-fallback",
-                    route = "outline",
-                    planJson = null,
-                    diagnostics = listOf(
-                        ColorGlyphDiagnostic(
-                            glyphId = 230,
-                            route = "colr",
-                            code = ColorGlyphDiagnosticCodes.COLRV1PaintUnsupported,
-                            severity = "warning",
-                            detail = "glyphId=230;nodeId=2;paintKind=colrv1-paint-var-solid;reason=variable-color-data-unsupported;varIndexBase=7",
-                            message = "COLRv1 paint colrv1-paint-var-solid is unsupported for glyph 230 node 2.",
-                        ),
-                    ),
-                ),
-            ),
-        )
+        val planDump = plan.toCanonicalJson()
         assertEquals(
-            readProjectFile("reports/font/fixtures/expected/color/color-glyph-plan.json").trim(),
-            bundleDump.trim(),
+            extractPlanCaseJson(
+                readProjectFile("reports/font/fixtures/expected/color/color-glyph-plan.json"),
+                "colrv1-solid-glyph-colr-glyph",
+            ).trim(),
+            planDump.trim(),
         )
         assertEvidenceDumpClean(graphDump)
-        assertEvidenceDumpClean(bundleDump)
+        assertEvidenceDumpClean(planDump)
     }
 
     @Test
@@ -815,6 +789,389 @@ class ColorGlyphSurfaceTest {
         assertEquals(ColorGlyphDiagnosticCodes.COLRV1PaintUnsupported, decision.diagnostics.single().code)
         assertTrue(decision.diagnostics.single().detail.contains("varIndexBase=7"))
         assertTrue(decision.diagnostics.single().detail.contains("nodeId=2"))
+    }
+
+    @Test
+    fun buildsCOLRV1GradientPlansAndDeterministicPaintGraphDumps() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440413"))
+        val cpal = assertNotNull(CPALV0Parser.parse(syntheticCpalV0()))
+        val table = COLRV1Table(
+            baseGlyphPaintRecords = listOf(
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 240,
+                    paint = COLRV1Paint.Glyph(
+                        glyphId = 241,
+                        paint = COLRV1Paint.LinearGradient(
+                            colorLine = plannerLinearGradientColorLine(),
+                            x0 = 1,
+                            y0 = 2,
+                            x1 = 9,
+                            y1 = 10,
+                            x2 = 4,
+                            y2 = 5,
+                        ),
+                    ),
+                ),
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 242,
+                    paint = COLRV1Paint.Glyph(
+                        glyphId = 243,
+                        paint = COLRV1Paint.RadialGradient(
+                            colorLine = plannerRadialGradientColorLine(),
+                            x0 = -2,
+                            y0 = -1,
+                            radius0 = 3,
+                            x1 = 8,
+                            y1 = 7,
+                            radius1 = 11,
+                        ),
+                    ),
+                ),
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 244,
+                    paint = COLRV1Paint.Glyph(
+                        glyphId = 245,
+                        paint = COLRV1Paint.SweepGradient(
+                            colorLine = plannerSweepGradientColorLine(),
+                            centerX = 12,
+                            centerY = 14,
+                            startAngle = 0.125f,
+                            endAngle = 0.875f,
+                        ),
+                    ),
+                ),
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 246,
+                    paint = COLRV1Paint.Glyph(
+                        glyphId = 247,
+                        paint = COLRV1Paint.LinearGradient(
+                            colorLine = plannerVariableGradientColorLine(),
+                            x0 = 0,
+                            y0 = 0,
+                            x1 = 6,
+                            y1 = 8,
+                            x2 = 2,
+                            y2 = 3,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val planner = COLRV1ColorGlyphPlanner(
+            colr = table,
+            cpal = cpal,
+            glyphBounds = mapOf(
+                241 to ColorGlyphBounds(xMin = 1, yMin = -2, xMax = 9, yMax = 7),
+                243 to ColorGlyphBounds(xMin = -3, yMin = -4, xMax = 8, yMax = 10),
+                245 to ColorGlyphBounds(xMin = 0, yMin = -1, xMax = 11, yMax = 12),
+                247 to ColorGlyphBounds(xMin = 2, yMin = -3, xMax = 13, yMax = 9),
+            ),
+            variationAlphaDeltas = mapOf(17L to 0.25f),
+        )
+        val strikeKey = strikeKey(
+            typefaceId = typefaceId,
+            paletteIdentity = "brand-gradient",
+            variationCoordinates = mapOf(
+                "wght" to 0.25f,
+                "opsz" to 0.75f,
+            ),
+        )
+        val graphFixture = readProjectFile("reports/font/fixtures/expected/color/colrv1-paint-graph.json")
+        val planFixture = readProjectFile("reports/font/fixtures/expected/color/color-glyph-plan.json")
+
+        val linearDecision = planner.plan(
+            glyphId = 240,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey,
+            paletteSelection = CPALPaletteSelection(index = 1),
+        )
+        val linearPlan = assertNotNull(linearDecision.plan)
+        val linearGraph = assertNotNull(linearPlan.paintGraph)
+        val linearGradient = assertNotNull(linearGraph.nodes[1].gradient)
+        assertEquals("gradient-glyph", linearGraph.supportedOperationGroup)
+        assertEquals("colrv1-paint-linear-gradient", linearGraph.nodes[1].kind)
+        assertEquals(ColorGlyphBounds(xMin = 1, yMin = -2, xMax = 9, yMax = 7), linearGraph.nodes[1].bounds)
+        assertEquals("repeat", linearGradient.extendMode)
+        assertEquals(
+            listOf("#CC99AABB", "#7FDDEE10"),
+            linearGradient.stops.map { stop -> stop.resolvedColorArgb },
+        )
+        assertEquals(
+            COLRV1LinearGradientGeometry(x0 = 1, y0 = 2, x1 = 9, y1 = 10, x2 = 4, y2 = 5),
+            linearGradient.linearGeometry,
+        )
+        assertEquals(
+            extractGraphCaseJson(graphFixture, "colrv1-linear-gradient").trim(),
+            linearGraph.toCanonicalJson().trim(),
+        )
+        assertEquals(
+            extractPlanCaseJson(planFixture, "colrv1-linear-gradient").trim(),
+            linearPlan.toCanonicalJson().trim(),
+        )
+        val radialDecision = planner.plan(
+            glyphId = 242,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey,
+            paletteSelection = CPALPaletteSelection(index = 1),
+        )
+        val radialPlan = assertNotNull(radialDecision.plan)
+        val radialGraph = assertNotNull(radialPlan.paintGraph)
+        val radialGradient = assertNotNull(radialGraph.nodes[1].gradient)
+        assertEquals("colrv1-paint-radial-gradient", radialGraph.nodes[1].kind)
+        assertEquals("pad", radialGradient.extendMode)
+        assertEquals(
+            COLRV1RadialGradientGeometry(x0 = -2, y0 = -1, radius0 = 3, x1 = 8, y1 = 7, radius1 = 11),
+            radialGradient.radialGeometry,
+        )
+        assertEquals(
+            extractGraphCaseJson(graphFixture, "colrv1-radial-gradient").trim(),
+            radialGraph.toCanonicalJson().trim(),
+        )
+        assertEquals(
+            extractPlanCaseJson(planFixture, "colrv1-radial-gradient").trim(),
+            radialPlan.toCanonicalJson().trim(),
+        )
+        val sweepDecision = planner.plan(
+            glyphId = 244,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey,
+            paletteSelection = CPALPaletteSelection(index = 1),
+        )
+        val sweepPlan = assertNotNull(sweepDecision.plan)
+        val sweepGraph = assertNotNull(sweepPlan.paintGraph)
+        val sweepGradient = assertNotNull(sweepGraph.nodes[1].gradient)
+        assertEquals("colrv1-paint-sweep-gradient", sweepGraph.nodes[1].kind)
+        assertEquals("reflect", sweepGradient.extendMode)
+        assertEquals(
+            COLRV1SweepGradientGeometry(centerX = 12, centerY = 14, startAngle = 0.125f, endAngle = 0.875f),
+            sweepGradient.sweepGeometry,
+        )
+        assertEquals(
+            extractGraphCaseJson(graphFixture, "colrv1-sweep-gradient").trim(),
+            sweepGraph.toCanonicalJson().trim(),
+        )
+        assertEquals(
+            extractPlanCaseJson(planFixture, "colrv1-sweep-gradient").trim(),
+            sweepPlan.toCanonicalJson().trim(),
+        )
+        val variableDecision = planner.plan(
+            glyphId = 246,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey,
+            paletteSelection = CPALPaletteSelection(index = 1),
+        )
+        val variablePlan = assertNotNull(variableDecision.plan)
+        val variableGraph = assertNotNull(variablePlan.paintGraph)
+        val variableGradient = assertNotNull(variableGraph.nodes[1].gradient)
+        assertEquals("colrv1-paint-linear-gradient", variableGraph.nodes[1].kind)
+        assertEquals(mapOf("opsz" to 0.75f, "wght" to 0.25f), variableGradient.variationCoordinates)
+        assertEquals(17L, variableGradient.stops[1].varIndexBase)
+        assertEquals(0.25f, variableGradient.stops[1].appliedAlphaDelta)
+        assertEquals(0.75f, variableGradient.stops[1].alpha)
+        assertEquals("#BFDDEE10", variableGradient.stops[1].resolvedColorArgb)
+        assertEquals(
+            extractGraphCaseJson(graphFixture, "colrv1-var-linear-gradient").trim(),
+            variableGraph.toCanonicalJson().trim(),
+        )
+        assertEquals(
+            extractPlanCaseJson(planFixture, "colrv1-var-linear-gradient").trim(),
+            variablePlan.toCanonicalJson().trim(),
+        )
+        assertEvidenceDumpClean(linearGraph.toCanonicalJson())
+        assertEvidenceDumpClean(linearPlan.toCanonicalJson())
+        assertEvidenceDumpClean(radialGraph.toCanonicalJson())
+        assertEvidenceDumpClean(radialPlan.toCanonicalJson())
+        assertEvidenceDumpClean(sweepGraph.toCanonicalJson())
+        assertEvidenceDumpClean(sweepPlan.toCanonicalJson())
+        assertEvidenceDumpClean(variableGraph.toCanonicalJson())
+        assertEvidenceDumpClean(variablePlan.toCanonicalJson())
+    }
+
+    @Test
+    fun refusesCOLRV1VariableGradientStopWithoutVariationSupportAndFallsBackToOutlineWhenAllowed() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440414"))
+        val table = COLRV1Table(
+            baseGlyphPaintRecords = listOf(
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 246,
+                    paint = COLRV1Paint.Glyph(
+                        glyphId = 247,
+                        paint = COLRV1Paint.LinearGradient(
+                            colorLine = plannerVariableGradientColorLine(),
+                            x0 = 0,
+                            y0 = 0,
+                            x1 = 6,
+                            y1 = 8,
+                            x2 = 2,
+                            y2 = 3,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val planner = COLRV1ColorGlyphPlanner(
+            colr = table,
+            cpal = assertNotNull(CPALV0Parser.parse(syntheticCpalV0())),
+            glyphBounds = mapOf(
+                247 to ColorGlyphBounds(xMin = 2, yMin = -3, xMax = 13, yMax = 9),
+            ),
+        )
+
+        val decision = planner.plan(
+            glyphId = 246,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey(
+                typefaceId = typefaceId,
+                paletteIdentity = "brand-gradient",
+                variationCoordinates = mapOf("wght" to 0.25f),
+            ),
+            paletteSelection = CPALPaletteSelection(index = 1),
+            allowMonochromeFallback = true,
+            outlineFallback = OutlineGlyphRepresentation(glyphId = 246, pathCommands = listOf("M 0 0", "L 5 7")),
+        )
+
+        assertNull(decision.plan)
+        assertEquals("outline", decision.selectedRoute?.route)
+        assertEquals(1, decision.diagnostics.size)
+        assertEquals(ColorGlyphDiagnosticCodes.COLRV1PaintUnsupported, decision.diagnostics.single().code)
+        assertTrue(decision.diagnostics.single().detail.contains("reason=variable-color-data-unsupported"))
+        assertTrue(decision.diagnostics.single().detail.contains("stopIndex=1"))
+        assertTrue(decision.diagnostics.single().detail.contains("varIndexBase=17"))
+        assertEquals(
+            extractDiagnosticsCaseJson(
+                readProjectFile("reports/font/fixtures/expected/color/color-glyph-plan.json"),
+                "colrv1-var-linear-gradient-outline-fallback",
+            ).trim(),
+            normalizeEmbeddedJson(diagnosticsJson(decision.diagnostics, indent = "      ")).trim(),
+        )
+        assertEquals(
+            extractDiagnosticsCaseJson(
+                readProjectFile("reports/font/fixtures/expected/color/colrv1-paint-graph.json"),
+                "colrv1-var-linear-gradient-outline-fallback",
+            ).trim(),
+            normalizeEmbeddedJson(diagnosticsJson(decision.diagnostics, indent = "      ")).trim(),
+        )
+    }
+
+    @Test
+    fun refusesCOLRV1GradientStopBudgetOverflowAndFallsBackToOutlineWhenAllowed() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440415"))
+        val table = COLRV1Table(
+            baseGlyphPaintRecords = listOf(
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 250,
+                    paint = COLRV1Paint.Glyph(
+                        glyphId = 251,
+                        paint = COLRV1Paint.LinearGradient(
+                            colorLine = plannerBudgetOverflowGradientColorLine(),
+                            x0 = 1,
+                            y0 = 1,
+                            x1 = 7,
+                            y1 = 5,
+                            x2 = 2,
+                            y2 = 3,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val planner = COLRV1ColorGlyphPlanner(
+            colr = table,
+            cpal = assertNotNull(CPALV0Parser.parse(syntheticCpalV0())),
+            glyphBounds = mapOf(
+                251 to ColorGlyphBounds(xMin = 0, yMin = -2, xMax = 8, yMax = 8),
+            ),
+            maxGradientStopCount = 2,
+        )
+
+        val decision = planner.plan(
+            glyphId = 250,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey(typefaceId = typefaceId, paletteIdentity = "brand-gradient"),
+            paletteSelection = CPALPaletteSelection(index = 1),
+            allowMonochromeFallback = true,
+            outlineFallback = OutlineGlyphRepresentation(glyphId = 250, pathCommands = listOf("M 0 0", "L 4 6")),
+        )
+
+        assertNull(decision.plan)
+        assertEquals("outline", decision.selectedRoute?.route)
+        assertEquals(ColorGlyphDiagnosticCodes.COLRV1BudgetExceeded, decision.diagnostics.single().code)
+        assertTrue(decision.diagnostics.single().detail.contains("limitName=gradientStops"))
+        assertTrue(decision.diagnostics.single().detail.contains("observed=3"))
+        assertEquals(
+            extractDiagnosticsCaseJson(
+                readProjectFile("reports/font/fixtures/expected/color/color-glyph-plan.json"),
+                "colrv1-linear-gradient-stop-budget-outline-fallback",
+            ).trim(),
+            normalizeEmbeddedJson(diagnosticsJson(decision.diagnostics, indent = "      ")).trim(),
+        )
+        assertEquals(
+            extractDiagnosticsCaseJson(
+                readProjectFile("reports/font/fixtures/expected/color/colrv1-paint-graph.json"),
+                "colrv1-linear-gradient-stop-budget-outline-fallback",
+            ).trim(),
+            normalizeEmbeddedJson(diagnosticsJson(decision.diagnostics, indent = "      ")).trim(),
+        )
+    }
+
+    @Test
+    fun refusesCOLRV1MalformedGradientCoordinatesAndFallsBackToOutlineWhenAllowed() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440416"))
+        val table = COLRV1Table(
+            baseGlyphPaintRecords = listOf(
+                COLRV1BaseGlyphPaintRecord(
+                    glyphId = 260,
+                    paint = COLRV1Paint.Glyph(
+                        glyphId = 261,
+                        paint = COLRV1Paint.LinearGradient(
+                            colorLine = plannerLinearGradientColorLine(),
+                            x0 = 4,
+                            y0 = 4,
+                            x1 = 4,
+                            y1 = 4,
+                            x2 = 9,
+                            y2 = 9,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val planner = COLRV1ColorGlyphPlanner(
+            colr = table,
+            cpal = assertNotNull(CPALV0Parser.parse(syntheticCpalV0())),
+            glyphBounds = mapOf(
+                261 to ColorGlyphBounds(xMin = 1, yMin = -1, xMax = 10, yMax = 10),
+            ),
+        )
+
+        val decision = planner.plan(
+            glyphId = 260,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey(typefaceId = typefaceId, paletteIdentity = "brand-gradient"),
+            paletteSelection = CPALPaletteSelection(index = 1),
+            allowMonochromeFallback = true,
+            outlineFallback = OutlineGlyphRepresentation(glyphId = 260, pathCommands = listOf("M 0 0", "L 6 6")),
+        )
+
+        assertNull(decision.plan)
+        assertEquals("outline", decision.selectedRoute?.route)
+        assertEquals(ColorGlyphDiagnosticCodes.COLRMalformed, decision.diagnostics.single().code)
+        assertTrue(decision.diagnostics.single().detail.contains("reason=malformed-gradient-coordinates"))
+        assertTrue(decision.diagnostics.single().detail.contains("paintKind=colrv1-paint-linear-gradient"))
+        assertEquals(
+            extractDiagnosticsCaseJson(
+                readProjectFile("reports/font/fixtures/expected/color/color-glyph-plan.json"),
+                "colrv1-linear-gradient-malformed-coordinates-outline-fallback",
+            ).trim(),
+            normalizeEmbeddedJson(diagnosticsJson(decision.diagnostics, indent = "      ")).trim(),
+        )
+        assertEquals(
+            extractDiagnosticsCaseJson(
+                readProjectFile("reports/font/fixtures/expected/color/colrv1-paint-graph.json"),
+                "colrv1-linear-gradient-malformed-coordinates-outline-fallback",
+            ).trim(),
+            normalizeEmbeddedJson(diagnosticsJson(decision.diagnostics, indent = "      ")).trim(),
+        )
     }
 
     @Test
@@ -1577,6 +1934,52 @@ class ColorGlyphSurfaceTest {
             ),
         )
 
+    private fun plannerLinearGradientColorLine(): COLRV1ColorLine =
+        COLRV1ColorLine(
+            extend = COLRV1ColorLineExtend.REPEAT,
+            stops = listOf(
+                COLRV1ColorStop(offset = 0f, paletteIndex = 0, alpha = 1f),
+                COLRV1ColorStop(offset = 1f, paletteIndex = 1, alpha = 0.5f),
+            ),
+        )
+
+    private fun plannerRadialGradientColorLine(): COLRV1ColorLine =
+        COLRV1ColorLine(
+            extend = COLRV1ColorLineExtend.PAD,
+            stops = listOf(
+                COLRV1ColorStop(offset = 0f, paletteIndex = 1, alpha = 1f),
+                COLRV1ColorStop(offset = 1f, paletteIndex = 0, alpha = 0.5f),
+            ),
+        )
+
+    private fun plannerSweepGradientColorLine(): COLRV1ColorLine =
+        COLRV1ColorLine(
+            extend = COLRV1ColorLineExtend.REFLECT,
+            stops = listOf(
+                COLRV1ColorStop(offset = 0f, paletteIndex = 0, alpha = 0.75f),
+                COLRV1ColorStop(offset = 1f, paletteIndex = 1, alpha = 1f),
+            ),
+        )
+
+    private fun plannerVariableGradientColorLine(): COLRV1ColorLine =
+        COLRV1ColorLine(
+            extend = COLRV1ColorLineExtend.REPEAT,
+            stops = listOf(
+                COLRV1ColorStop(offset = 0f, paletteIndex = 0, alpha = 1f),
+                COLRV1ColorStop(offset = 1f, paletteIndex = 1, alpha = 0.5f, varIndexBase = 17L),
+            ),
+        )
+
+    private fun plannerBudgetOverflowGradientColorLine(): COLRV1ColorLine =
+        COLRV1ColorLine(
+            extend = COLRV1ColorLineExtend.PAD,
+            stops = listOf(
+                COLRV1ColorStop(offset = 0f, paletteIndex = 0, alpha = 1f),
+                COLRV1ColorStop(offset = 0.5f, paletteIndex = 1, alpha = 0.75f),
+                COLRV1ColorStop(offset = 1f, paletteIndex = 0, alpha = 0.5f),
+            ),
+        )
+
     private fun writeColorLine(bytes: ByteArray, offset: Int) {
         bytes[offset] = 1
         writeU16(bytes, offset + 1, 2)
@@ -1713,11 +2116,13 @@ class ColorGlyphSurfaceTest {
     private fun strikeKey(
         typefaceId: TypefaceID = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655441201")),
         paletteIdentity: String? = null,
+        variationCoordinates: Map<String, Float> = emptyMap(),
     ): GlyphStrikeKey =
         GlyphStrikeKey(
             typefaceId = typefaceId,
             sizePx = 16f,
             paletteIdentity = paletteIdentity,
+            variationCoordinates = variationCoordinates,
         )
 
     private fun canonicalDumpBodySha256(dump: String): String {
@@ -1792,19 +2197,33 @@ class ColorGlyphSurfaceTest {
     }
 
     private fun extractPlanCaseJson(bundleJson: String, caseId: String): String {
+        return extractFixtureCaseFieldJson(bundleJson = bundleJson, caseId = caseId, fieldName = "plan")
+    }
+
+    private fun extractGraphCaseJson(bundleJson: String, caseId: String): String {
+        return extractFixtureCaseFieldJson(bundleJson = bundleJson, caseId = caseId, fieldName = "graph")
+    }
+
+    private fun extractDiagnosticsCaseJson(bundleJson: String, caseId: String): String {
+        return extractFixtureCaseFieldJson(bundleJson = bundleJson, caseId = caseId, fieldName = "diagnostics")
+    }
+
+    private fun extractFixtureCaseFieldJson(bundleJson: String, caseId: String, fieldName: String): String {
         val caseMarker = "\"caseId\": ${jsonString(caseId)}"
         val caseIndex = bundleJson.indexOf(caseMarker)
-        check(caseIndex >= 0) { "Missing color glyph plan case $caseId" }
-        val planIndex = bundleJson.indexOf("\"plan\":", startIndex = caseIndex)
-        check(planIndex >= 0) { "Missing plan field for color glyph plan case $caseId" }
-        var valueIndex = planIndex + "\"plan\":".length
+        check(caseIndex >= 0) { "Missing fixture case $caseId" }
+        val fieldMarker = "\"$fieldName\":"
+        val fieldIndex = bundleJson.indexOf(fieldMarker, startIndex = caseIndex)
+        check(fieldIndex >= 0) { "Missing $fieldName field for fixture case $caseId" }
+        var valueIndex = fieldIndex + fieldMarker.length
         while (valueIndex < bundleJson.length && bundleJson[valueIndex].isWhitespace()) {
             valueIndex += 1
         }
         return when {
             bundleJson.startsWith("null", startIndex = valueIndex) -> "null"
             bundleJson.getOrNull(valueIndex) == '{' -> normalizeEmbeddedJson(extractJsonObject(bundleJson, valueIndex))
-            else -> error("Unsupported plan payload for color glyph plan case $caseId")
+            bundleJson.getOrNull(valueIndex) == '[' -> normalizeEmbeddedJson(extractJsonArray(bundleJson, valueIndex))
+            else -> error("Unsupported $fieldName payload for fixture case $caseId")
         }
     }
 
@@ -1830,6 +2249,30 @@ class ColorGlyphSurfaceTest {
             index += 1
         }
         error("Unterminated JSON object starting at $startIndex")
+    }
+
+    private fun extractJsonArray(text: String, startIndex: Int): String {
+        var index = startIndex
+        var depth = 0
+        var inString = false
+        var escaping = false
+        while (index < text.length) {
+            val character = text[index]
+            when {
+                escaping -> escaping = false
+                character == '\\' && inString -> escaping = true
+                character == '"' -> inString = !inString
+                !inString && character == '[' -> depth += 1
+                !inString && character == ']' -> {
+                    depth -= 1
+                    if (depth == 0) {
+                        return text.substring(startIndex, index + 1)
+                    }
+                }
+            }
+            index += 1
+        }
+        error("Unterminated JSON array starting at $startIndex")
     }
 
     private fun normalizeEmbeddedJson(json: String): String {

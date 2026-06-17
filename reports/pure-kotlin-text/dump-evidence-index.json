@@ -571,7 +571,7 @@
     },
     {
       "dumpId": "color-glyph-plan",
-      "ownerTicket": "KFONT-M10-002",
+      "ownerTicket": "KFONT-M10-003",
       "classification": "golden-gated",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
@@ -595,7 +595,7 @@
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "Color glyph plan bundle changes require reviewed COLRv0/COLRv1 case diffs, refusal review, bounds/artifact-key verification, and explicit non-claims without COLRv1 gradient/transform/composite, bitmap, SVG, emoji, GPU, or platform fallback support promotion.",
+      "updatePolicy": "Color glyph plan bundle changes require reviewed COLRv0/COLRv1 case diffs, gradient geometry/variable-stop/refusal review, bounds/artifact-key verification, and explicit non-claims without COLRv1 transform/composite/clip, bitmap, SVG, emoji, GPU, or platform fallback support promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-target-support-claim",
@@ -648,7 +648,7 @@
     },
     {
       "dumpId": "colrv1-paint-graph",
-      "ownerTicket": "KFONT-M10-002",
+      "ownerTicket": "KFONT-M10-003",
       "classification": "golden-gated",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
@@ -660,24 +660,19 @@
         "reports/font/fixtures/expected/color/colrv1-paint-graph.json"
       ],
       "expectedFields": [
-        "bounds",
-        "diagnostics",
-        "dumpSha256",
-        "glyphId",
-        "nodes",
-        "paletteIdentity",
-        "rootNodeId",
-        "schema",
-        "supportedOperationGroup",
-        "typefaceId"
+        "cases",
+        "dumpId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsCOLRV1SolidGlyphColrGlyphPlanAndDeterministicPaintGraphDump --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.refusesCOLRV1VarSolidWithoutVariationSupportAndFallsBackToOutlineWhenAllowed --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsCOLRV1BudgetExceededRefusalDiagnostic --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.detectsCOLRV1PaintColrGlyphCyclesWithStableDiagnostic",
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsCOLRV1SolidGlyphColrGlyphPlanAndDeterministicPaintGraphDump --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsCOLRV1GradientPlansAndDeterministicPaintGraphDumps --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.refusesCOLRV1VarSolidWithoutVariationSupportAndFallsBackToOutlineWhenAllowed --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.refusesCOLRV1VariableGradientStopWithoutVariationSupportAndFallsBackToOutlineWhenAllowed --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.refusesCOLRV1GradientStopBudgetOverflowAndFallsBackToOutlineWhenAllowed --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.refusesCOLRV1MalformedGradientCoordinatesAndFallsBackToOutlineWhenAllowed --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsCOLRV1BudgetExceededRefusalDiagnostic --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.detectsCOLRV1PaintColrGlyphCyclesWithStableDiagnostic",
         "rtk python3 scripts/validate_font_fixture_assets.py",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "COLRv1 paint-graph golden changes require reviewed node-order, bounds propagation, palette-resolution, artifact-key, and refusal-policy diffs without claiming gradient/transform/composite/clip, bitmap, SVG, emoji, GPU, or platform fallback support.",
+      "updatePolicy": "COLRv1 paint-graph bundle changes require reviewed node-order, bounds propagation, palette-resolution, gradient geometry/variable-stop/refusal diffs, and explicit non-claims without COLRv1 transform/composite/clip, bitmap, SVG, emoji, GPU, or platform fallback support.",
       "nonClaims": [
         "producer-only",
         "no-complete-target-support-claim",
