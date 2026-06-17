@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M10-007"
 title: "Implement bounded SVG glyph renderer primitives"
-status: "proposed"
+status: "done"
 milestone: "M10"
 priority: "P1"
 owner_area: "color"
@@ -66,11 +66,11 @@ sealed interface SVGGlyphPrimitive {
 
 ## Acceptance Criteria
 
-- [ ] Fixtures cover static path, basic shape, transform, fill, stroke, opacity, linear/radial gradient, clip path, `defs`/`symbol`, and bounded `use`.
-- [ ] `svg-glyph-plan.json` records document hash, viewBox, bounds, primitive count, limit decisions, and diagnostics.
-- [ ] Unsupported dynamic features refuse with `text.SVG.feature-unsupported` or a narrower SVG diagnostic.
-- [ ] `use` recursion is bounded and deterministic.
-- [ ] The plan is glyph-scoped and contains no network, native renderer, or GPU handle references.
+- [x] Fixtures cover static path, basic shape, transform, fill, stroke, opacity, linear/radial gradient, clip path, `defs`/`symbol`, and bounded `use`.
+- [x] `svg-glyph-plan.json` records document hash, viewBox, bounds, primitive count, limit decisions, and diagnostics.
+- [x] Unsupported dynamic features refuse with `text.SVG.feature-unsupported` or a narrower SVG diagnostic.
+- [x] `use` recursion is bounded and deterministic.
+- [x] The plan is glyph-scoped and contains no network, native renderer, or GPU handle references.
 
 ## Required Evidence
 
@@ -94,13 +94,19 @@ sealed interface SVGGlyphPrimitive {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test --tests '*SVGGlyph*'
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.svgGlyphPlanBundleCapturesSupportedPrimitivesAndRefusalsDeterministically
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
 ```
 
 ## Status Notes
 
-- `proposed`: Establishes the accepted pure Kotlin SVG glyph subset before SVG refusal fixtures are finalized.
-- Move to `ready` only after primitive list, resource limits, and plan schema are reviewed.
+- `done`: `SVGGlyphPlan` now ships checked-in `svg-glyph-plan.json` evidence for static path/basic-shape, gradient/transform/clip, defs/symbol/bounded-use, and SVG budget or feature refusals with fresh validation.
+- Remaining gate: this is CPU-side SVG plan evidence only. KFONT-M10-008 still owns expanded refusal/bounds fixture corpus, and M11 still owns any GPU SVG route claim.
 
 ## Linear Labels
 

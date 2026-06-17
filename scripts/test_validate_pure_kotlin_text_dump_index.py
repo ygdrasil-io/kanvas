@@ -102,6 +102,7 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
                 "shaped-glyph-run",
                 "shaping-plan",
                 "svg-glyph-document",
+                "svg-glyph-plan",
                 "system-font-scan",
                 "truetype-composite-glyphs",
                 "truetype-gvar-iup",
