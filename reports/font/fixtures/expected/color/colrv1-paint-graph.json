@@ -1,0 +1,16 @@
+{
+  "schema": "org.graphiks.kanvas.glyph.color.COLRV1PaintGraph.v1",
+  "glyphId": 220,
+  "typefaceId": "550e8400-e29b-41d4-a716-446655440411",
+  "paletteIdentity": "brand-colrv1",
+  "rootNodeId": 0,
+  "supportedOperationGroup": "solid-glyph-colr-glyph",
+  "nodes": [
+    {"nodeId": 1, "kind": "colrv1-paint-colr-glyph", "childNodeIds": [2], "glyphId": null, "referencedColrGlyphId": 221, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": null, "bounds": {"xMin": 2, "yMin": -3, "xMax": 12, "yMax": 9}},
+    {"nodeId": 2, "kind": "colrv1-paint-glyph", "childNodeIds": [3], "glyphId": 222, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": {"glyphId": 222, "route": "text.glyph.outline", "strikeKeySha256": "7b864e1ee529a6fb14d65e92f1c0d22bb2cfb4e4aaa8ab1c491cf7d7cb456ce3"}, "bounds": {"xMin": 2, "yMin": -3, "xMax": 12, "yMax": 9}},
+    {"nodeId": 3, "kind": "colrv1-paint-solid", "childNodeIds": [], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": 1, "resolvedColorArgb": "#7FDDEE10", "alpha": 0.5, "varIndexBase": null, "outlineArtifactKey": null, "bounds": null}
+  ],
+  "bounds": {"xMin": 2, "yMin": -3, "xMax": 12, "yMax": 9},
+  "diagnostics": [],
+  "dumpSha256": "afa55d007f63390516a60386d05e21133b8f3f17412ed163e0e3f24207d82c24"
+}

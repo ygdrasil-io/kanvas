@@ -1,15 +1,72 @@
 {
-  "schema": "org.graphiks.kanvas.glyph.color.ColorGlyphPlan.v1",
-  "glyphId": 100,
-  "typefaceId": "550e8400-e29b-41d4-a716-446655440401",
-  "artifactKey": {"glyphId": 100, "route": "text.glyph.color.COLR", "strikeKeySha256": "5839cf383058d1e999f929c96a12c9cb0ded2f32b2c247db0735c82cf07b64ec"},
-  "palette": {"identity": "brand-alt", "selectionIndex": 1, "resolvedIndex": 1, "overrideCount": 1, "colorCount": 2},
-  "layers": [
-    {"layerIndex": 0, "glyphId": 11, "paletteIndex": 0, "resolvedColorArgb": "#CC99AABB", "usesForegroundColor": false, "outlineArtifactKey": {"glyphId": 11, "route": "text.glyph.outline", "strikeKeySha256": "6635ce8aace1d8da5644518db335a74f6183a59fdb194d3059f26e03d21efd45"}, "bounds": {"xMin": 0, "yMin": -2, "xMax": 6, "yMax": 8}},
-    {"layerIndex": 1, "glyphId": 12, "paletteIndex": 1, "resolvedColorArgb": "#FFFF0000", "usesForegroundColor": false, "outlineArtifactKey": {"glyphId": 12, "route": "text.glyph.outline", "strikeKeySha256": "abc5d141e5acd23a17b6eeba24b4c67fd5dd86bce39f000c1b94166cd11b57a8"}, "bounds": {"xMin": 4, "yMin": -1, "xMax": 10, "yMax": 9}}
+  "schemaVersion": 1,
+  "dumpId": "color-glyph-plan",
+  "ownerTickets": ["KFONT-M10-001", "KFONT-M10-002"],
+  "cases": [
+    {
+      "caseId": "colrv0-layered-palette-override",
+      "route": "colr",
+      "plan": {
+        "schema": "org.graphiks.kanvas.glyph.color.ColorGlyphPlan.v1",
+        "glyphId": 100,
+        "typefaceId": "550e8400-e29b-41d4-a716-446655440401",
+        "routeKind": "colrv0",
+        "artifactKey": {"glyphId": 100, "route": "text.glyph.color.COLR", "strikeKeySha256": "5839cf383058d1e999f929c96a12c9cb0ded2f32b2c247db0735c82cf07b64ec"},
+        "palette": {"identity": "brand-alt", "selectionIndex": 1, "resolvedIndex": 1, "overrideCount": 1, "colorCount": 2},
+        "layers": [
+          {"layerIndex": 0, "glyphId": 11, "paletteIndex": 0, "resolvedColorArgb": "#CC99AABB", "usesForegroundColor": false, "outlineArtifactKey": {"glyphId": 11, "route": "text.glyph.outline", "strikeKeySha256": "6635ce8aace1d8da5644518db335a74f6183a59fdb194d3059f26e03d21efd45"}, "bounds": {"xMin": 0, "yMin": -2, "xMax": 6, "yMax": 8}},
+          {"layerIndex": 1, "glyphId": 12, "paletteIndex": 1, "resolvedColorArgb": "#FFFF0000", "usesForegroundColor": false, "outlineArtifactKey": {"glyphId": 12, "route": "text.glyph.outline", "strikeKeySha256": "abc5d141e5acd23a17b6eeba24b4c67fd5dd86bce39f000c1b94166cd11b57a8"}, "bounds": {"xMin": 4, "yMin": -1, "xMax": 10, "yMax": 9}}
+        ],
+        "paintGraph": null,
+        "bounds": {"xMin": 0, "yMin": -2, "xMax": 10, "yMax": 9},
+        "fallbackPolicy": "allow-monochrome-outline-fallback",
+        "diagnostics": [],
+        "dumpSha256": "ec96b21b42173ef5040427417a82803c9db37408c0b2adf979c1f2bfa43fb16f"
+      },
+      "diagnostics": []
+    },
+    {
+      "caseId": "colrv1-solid-glyph-colr-glyph",
+      "route": "colr",
+      "plan": {
+        "schema": "org.graphiks.kanvas.glyph.color.ColorGlyphPlan.v1",
+        "glyphId": 220,
+        "typefaceId": "550e8400-e29b-41d4-a716-446655440411",
+        "routeKind": "colrv1",
+        "artifactKey": {"glyphId": 220, "route": "text.glyph.color.COLR", "strikeKeySha256": "538aae6051f6a927c2227aeaad84980b7e8b3b971524eb0356ae80a53e2baeef"},
+        "palette": {"identity": "brand-colrv1", "selectionIndex": 1, "resolvedIndex": 1, "overrideCount": 0, "colorCount": 2},
+        "layers": [],
+        "paintGraph": {
+          "schema": "org.graphiks.kanvas.glyph.color.COLRV1PaintGraph.v1",
+          "glyphId": 220,
+          "typefaceId": "550e8400-e29b-41d4-a716-446655440411",
+          "paletteIdentity": "brand-colrv1",
+          "rootNodeId": 0,
+          "supportedOperationGroup": "solid-glyph-colr-glyph",
+          "nodes": [
+            {"nodeId": 1, "kind": "colrv1-paint-colr-glyph", "childNodeIds": [2], "glyphId": null, "referencedColrGlyphId": 221, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": null, "bounds": {"xMin": 2, "yMin": -3, "xMax": 12, "yMax": 9}},
+            {"nodeId": 2, "kind": "colrv1-paint-glyph", "childNodeIds": [3], "glyphId": 222, "referencedColrGlyphId": null, "paletteIndex": null, "resolvedColorArgb": null, "alpha": null, "varIndexBase": null, "outlineArtifactKey": {"glyphId": 222, "route": "text.glyph.outline", "strikeKeySha256": "7b864e1ee529a6fb14d65e92f1c0d22bb2cfb4e4aaa8ab1c491cf7d7cb456ce3"}, "bounds": {"xMin": 2, "yMin": -3, "xMax": 12, "yMax": 9}},
+            {"nodeId": 3, "kind": "colrv1-paint-solid", "childNodeIds": [], "glyphId": null, "referencedColrGlyphId": null, "paletteIndex": 1, "resolvedColorArgb": "#7FDDEE10", "alpha": 0.5, "varIndexBase": null, "outlineArtifactKey": null, "bounds": null}
+          ],
+          "bounds": {"xMin": 2, "yMin": -3, "xMax": 12, "yMax": 9},
+          "diagnostics": [],
+          "dumpSha256": "afa55d007f63390516a60386d05e21133b8f3f17412ed163e0e3f24207d82c24"
+        },
+        "bounds": {"xMin": 2, "yMin": -3, "xMax": 12, "yMax": 9},
+        "fallbackPolicy": "allow-monochrome-outline-fallback",
+        "diagnostics": [],
+        "dumpSha256": "4c41eda0b7121babdf67582296b6615d8d7127e9d779859452c5ea7911e3e3e6"
+      },
+      "diagnostics": []
+    },
+    {
+      "caseId": "colrv1-var-solid-outline-fallback",
+      "route": "outline",
+      "plan": null,
+      "diagnostics": [
+        {"glyphId": 230, "route": "colr", "code": "text.color.COLRv1-paint-unsupported", "detail": "glyphId=230;nodeId=2;paintKind=colrv1-paint-var-solid;reason=variable-color-data-unsupported;varIndexBase=7", "severity": "warning", "message": "COLRv1 paint colrv1-paint-var-solid is unsupported for glyph 230 node 2."}
+      ]
+    }
   ],
-  "bounds": {"xMin": 0, "yMin": -2, "xMax": 10, "yMax": 9},
-  "fallbackPolicy": "allow-monochrome-outline-fallback",
-  "diagnostics": [],
-  "dumpSha256": "e85e5accfa8dde5905e8a836537d7ec3a00c860ec057b3a6004825212e714004"
+  "nonClaims": ["no-complete-target-support-claim", "no-complete-colrv1-rendering-claim", "no-complete-png-bitmap-glyph-routing-claim", "no-complete-svg-in-opentype-rendering-claim", "no-emoji-sequence-shaping-claim", "no-gpu-color-glyph-support-claim", "no-platform-color-font-fallback-claim"]
 }
