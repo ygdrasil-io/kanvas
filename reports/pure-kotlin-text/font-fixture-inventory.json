@@ -998,13 +998,38 @@
       },
       "fixtures": [
         {
+          "fixtureId": "svg-glyphs-svg-defs-symbol-use-radial-gradient",
+          "targetGate": "svg-defs-symbol-use-radial-gradient",
+          "status": "current-positive-evidence",
+          "fixtureKind": "generated-test-data",
+          "generationPolicy": "Use one glyph-scoped SVG document with defs, symbol, bounded use, radial gradient, and opacity to assert stable primitive summaries.",
+          "evidencePaths": [
+            "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/svg-glyph-plan.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "SVG document text",
+            "svg glyph plan dump",
+            "defs/symbol/use/radial gradient summaries"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-svg-in-opentype-rendering-claim",
+            "no-gpu-svg-glyph-route-claim"
+          ]
+        },
+        {
           "fixtureId": "svg-glyphs-svg-external-resource-refusal",
           "targetGate": "svg-external-resource-refusal",
           "status": "current-refusal-evidence",
           "fixtureKind": "route-diagnostic",
           "generationPolicy": "Use an SVG image/link reference and assert stable external-resource refusal with hashed reference facts.",
           "evidencePaths": [
+            "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/svg-glyph-plan.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -1019,6 +1044,29 @@
           ]
         },
         {
+          "fixtureId": "svg-glyphs-svg-gradient-stop-budget-refusal",
+          "targetGate": "svg-gradient-stop-budget-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use a gradient stop count over the accepted budget and assert stable budget-exceeded diagnostics.",
+          "evidencePaths": [
+            "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/svg-glyph-plan.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.SVG.budget-exceeded diagnostic",
+            "budget name gradientStops",
+            "observed and max counts"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-svg-in-opentype-rendering-claim",
+            "no-gpu-svg-glyph-route-claim"
+          ]
+        },
+        {
           "fixtureId": "svg-glyphs-svg-gradient-transform-clip",
           "targetGate": "svg-gradient-transform-clip",
           "status": "current-positive-evidence",
@@ -1027,6 +1075,7 @@
           "evidencePaths": [
             "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/svg-glyph-plan.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -1041,13 +1090,38 @@
           ]
         },
         {
+          "fixtureId": "svg-glyphs-svg-path-command-budget-refusal",
+          "targetGate": "svg-path-command-budget-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use a path-command count over the accepted budget and assert stable budget-exceeded diagnostics.",
+          "evidencePaths": [
+            "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/svg-glyph-plan.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.SVG.budget-exceeded diagnostic",
+            "budget name pathCommands",
+            "observed and max counts"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-svg-in-opentype-rendering-claim",
+            "no-gpu-svg-glyph-route-claim"
+          ]
+        },
+        {
           "fixtureId": "svg-glyphs-svg-static-path",
           "targetGate": "svg-static-path",
           "status": "current-positive-evidence",
           "fixtureKind": "generated-test-data",
           "generationPolicy": "Use a small SVG document with one path, fixed viewBox, and deterministic element summary.",
           "evidencePaths": [
+            "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/svg-glyph-plan.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -1068,7 +1142,9 @@
           "fixtureKind": "route-diagnostic",
           "generationPolicy": "Use an unsupported glyph-scoped SVG feature and assert stable feature refusal.",
           "evidencePaths": [
+            "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/svg-glyph-plan.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
@@ -1089,7 +1165,9 @@
           "fixtureKind": "route-diagnostic",
           "generationPolicy": "Use a bounded use-reference loop and assert recursion budget diagnostics.",
           "evidencePaths": [
+            "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/svg-glyph-plan.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [

@@ -3591,6 +3591,52 @@ rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.col
 Remaining gate: this is SVG fixture-summary evidence only. It does not claim a
 complete SVG renderer, `use` expansion support, external resource support,
 filter support, text layout inside SVG glyphs, or GPU SVG glyph support.
+
+### KFONT-M10-007: Implement bounded SVG glyph renderer primitives
+
+Status: done; freshly validated.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/color/svg-glyph-plan.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m10-007-bounded-svg-glyph-primitives.md`
+
+Evidence:
+
+- `SVGGlyphPlan.fromDocument(...)` promotes bounded SVG parser output into a
+  checked-in plan contract with source document SHA-256, viewBox, glyph
+  bounds, primitive list, resource-limit facts, diagnostics, and dump hash.
+- The parser summary subset now records `defs`, `g`, `symbol`,
+  `linearGradient`, `radialGradient`, `clipPath`, and bounded `use` summaries
+  in addition to existing path/basic-shape facts, all without invoking a
+  native SVG engine.
+- `svg-glyph-plan.json` covers static path/basic-shape, gradient/transform/
+  clip, defs/symbol/bounded-use/radial-gradient, plus external-resource,
+  unsupported-feature, path-command-budget, gradient-stop-budget, and
+  use-recursion refusal cases.
+- Dump index, fixture manifest, and font fixture inventory now classify the SVG
+  glyph family as `tracked-gap` CPU-side plan evidence only; KFONT-M10-008 and
+  M11 remain the next gates for expanded refusal corpus and GPU route proof.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.svgGlyphPlanBundleCapturesSupportedPrimitivesAndRefusalsDeterministically
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk git diff --check
+```
+
+Remaining gate: this is pure Kotlin SVG glyph plan evidence only. It does not
+claim dynamic SVG support, native/platform SVG fallback behavior, actual `use`
+graph expansion rendering, GPU SVG route support, or retirement of any legacy
+renderer gate.
 ### PKT-11L: Emoji VS Skin-Tone ZWJ Fixture Evidence
 
 Status: implemented; independent review pending because the current tool policy

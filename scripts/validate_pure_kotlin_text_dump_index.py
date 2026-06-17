@@ -40,6 +40,7 @@ REQUIRED_DUMPS = {
     "sfnt-cmap-format14-readiness",
     "sfnt-table-facts",
     "svg-glyph-document",
+    "svg-glyph-plan",
     "truetype-variation-readiness",
     "unicode-data-seed",
 }

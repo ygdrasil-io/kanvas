@@ -101,7 +101,10 @@ REQUIRED_FONT_FAMILY_GATES = {
         "non-png-payload-refusal",
     ],
     "svg-glyphs": [
+        "svg-defs-symbol-use-radial-gradient",
         "svg-static-path",
+        "svg-path-command-budget-refusal",
+        "svg-gradient-stop-budget-refusal",
         "svg-gradient-transform-clip",
         "svg-use-recursion-refusal",
         "svg-external-resource-refusal",
