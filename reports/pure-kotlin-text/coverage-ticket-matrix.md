@@ -3081,6 +3081,44 @@ Remaining gate: this is non-PNG bitmap payload refusal diagnostics only. It does
 not claim CBDT/CBLC or sbix table parsing, complete bitmap strike selection,
 malformed PNG diagnostic wrapping, decoded pixel oracle coverage, GPU upload or
 sampling, emoji sequence routing, or complete bitmap fixture coverage.
+### KFONT-M10-001: Complete COLRv0 Plan To Artifact Path
+
+Status: implemented with fresh deterministic dump evidence and validation.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/M10-color-fonts-emoji/KFONT-M10-001-complete-colrv0-plan-to-artifact-path.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M10-color-fonts-emoji/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/color/color-glyph-plan.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m10-001-colrv0-artifact-path.md`
+
+Evidence:
+
+- `ColorGlyphSurface.kt` now promotes parsed COLRv0/CPAL facts into a typed `ColorGlyphPlan` carrying M9-derived artifact-key hashes, palette identity/override facts, ordered layer plans, aggregate bounds, fallback policy, and stable `text.color.CPAL-malformed` / `text.color.COLR-malformed` diagnostics.
+- `ColorGlyphSurfaceTest` proves deterministic COLRv0 parsing, paint-graph ordering, typed plan serialization, and outline fallback on refused palette selection without claiming COLRv1, bitmap, SVG, emoji, or GPU support.
+- `color-glyph-plan.json` checks in the reviewed deterministic dump for a multi-layer COLRv0 base glyph with a non-default palette and an explicit override.
+- The dump evidence index and fixture manifest now record `color-glyph-plan` as golden-gated planning evidence and keep the remaining color/emoji support gates explicit.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.parsesCOLRV0BaseGlyphsFromRawTableBytes --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsCOLRV0PaintGraphWithPaletteIndexes --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.buildsCOLRV0ColorGlyphPlanWithPaletteOverridesArtifactKeysAndDeterministicDump --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.fallsBackToOutlineWhenCOLRPaletteResolutionFailsAndFallbackIsAllowed
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this ticket completes the COLRv0 typed plan slice only. It does
+not claim COLRv1 paint-graph rendering, bitmap/SVG route support, emoji
+sequence shaping, GPU artifact registration, GPU composite execution, or
+platform/native color fallback behavior.
 ### PKT-11D: Color Glyph Fixture Family Split
 
 Status: implemented; independent review pending.

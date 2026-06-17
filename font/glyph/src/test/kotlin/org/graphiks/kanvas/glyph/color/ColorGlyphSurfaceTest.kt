@@ -191,6 +191,94 @@ class ColorGlyphSurfaceTest {
     }
 
     @Test
+    fun buildsCOLRV0ColorGlyphPlanWithPaletteOverridesArtifactKeysAndDeterministicDump() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440401"))
+        val strikeKey = strikeKey(
+            typefaceId = typefaceId,
+            paletteIdentity = "brand-alt",
+        )
+        val planner = COLRV0ColorGlyphPlanner(
+            colr = assertNotNull(COLRV0Parser.parse(syntheticColrV0())),
+            cpal = assertNotNull(CPALV0Parser.parse(syntheticCpalV0())),
+            layerBounds = mapOf(
+                11 to ColorGlyphBounds(xMin = 0, yMin = -2, xMax = 6, yMax = 8),
+                12 to ColorGlyphBounds(xMin = 4, yMin = -1, xMax = 10, yMax = 9),
+            ),
+        )
+
+        val decision = planner.plan(
+            glyphId = 100,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey,
+            paletteSelection = CPALPaletteSelection(
+                index = 1,
+                overrides = listOf(
+                    CPALPaletteOverride(index = 1, color = argb(alpha = 0xFF, red = 0xFF, green = 0x00, blue = 0x00)),
+                ),
+            ),
+        )
+
+        val plan = assertNotNull(decision.plan)
+        assertEquals("colr", decision.selectedRoute?.route)
+        assertEquals(100, plan.glyphId)
+        assertEquals(typefaceId, plan.typefaceId)
+        assertEquals("text.glyph.color.COLR", plan.artifactKey.route)
+        assertEquals("brand-alt", plan.palette.identity)
+        assertEquals(1, plan.palette.selectionIndex)
+        assertEquals(1, plan.palette.resolvedIndex)
+        assertEquals(1, plan.palette.overrideCount)
+        assertEquals(ColorGlyphBounds(xMin = 0, yMin = -2, xMax = 10, yMax = 9), plan.bounds)
+        assertEquals(2, plan.layers.size)
+        assertEquals(0, plan.layers[0].layerIndex)
+        assertEquals(11, plan.layers[0].glyphId)
+        assertEquals(0, plan.layers[0].paletteIndex)
+        assertEquals(argb(alpha = 0xCC, red = 0x99, green = 0xAA, blue = 0xBB), plan.layers[0].resolvedColor)
+        assertEquals("text.glyph.outline", plan.layers[0].outlineArtifactKey.route)
+        assertEquals(1, plan.layers[1].layerIndex)
+        assertEquals(12, plan.layers[1].glyphId)
+        assertEquals(1, plan.layers[1].paletteIndex)
+        assertEquals(argb(alpha = 0xFF, red = 0xFF, green = 0x00, blue = 0x00), plan.layers[1].resolvedColor)
+        assertEquals("allow-monochrome-outline-fallback", plan.fallbackPolicy)
+        assertTrue(decision.diagnostics.isEmpty())
+
+        val dump = plan.toCanonicalJson()
+        val expectedGolden = readProjectFile("reports/font/fixtures/expected/color/color-glyph-plan.json")
+        assertEquals(expectedGolden, dump)
+        assertEquals(canonicalDumpBodySha256(dump), plan.dumpSha256)
+        assertEvidenceDumpClean(dump)
+    }
+
+    @Test
+    fun fallsBackToOutlineWhenCOLRPaletteResolutionFailsAndFallbackIsAllowed() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440402"))
+        val planner = COLRV0ColorGlyphPlanner(
+            colr = assertNotNull(COLRV0Parser.parse(syntheticColrV0())),
+            cpal = assertNotNull(CPALV0Parser.parse(syntheticCpalV0())),
+            layerBounds = mapOf(
+                11 to ColorGlyphBounds(xMin = 0, yMin = -2, xMax = 6, yMax = 8),
+                12 to ColorGlyphBounds(xMin = 4, yMin = -1, xMax = 10, yMax = 9),
+            ),
+        )
+
+        val decision = planner.plan(
+            glyphId = 100,
+            typefaceId = typefaceId,
+            strikeKey = strikeKey(typefaceId = typefaceId),
+            paletteSelection = CPALPaletteSelection(index = 9),
+            allowMonochromeFallback = true,
+            outlineFallback = OutlineGlyphRepresentation(glyphId = 100, pathCommands = listOf("M 0 0", "L 4 4")),
+        )
+
+        assertNull(decision.plan)
+        assertEquals("outline", decision.selectedRoute?.route)
+        assertTrue(decision.selectedRoute?.outline?.pathCommands?.isNotEmpty() == true)
+        assertEquals(1, decision.diagnostics.size)
+        assertEquals(ColorGlyphDiagnosticCodes.CPALMalformed, decision.diagnostics.single().code)
+        assertTrue(decision.diagnostics.single().detail.contains("requestedPaletteIndex=9"))
+        assertTrue(decision.diagnostics.single().message.contains("COLRv0 palette selection"))
+    }
+
+    @Test
     fun parsesCOLRV1BaseGlyphPaintGlyphSolidGraph() {
         val table = assertNotNull(
             COLRV1Parser.parse(
@@ -1450,10 +1538,14 @@ class ColorGlyphSurfaceTest {
             glyphIDs = glyphIds,
         )
 
-    private fun strikeKey(): GlyphStrikeKey =
+    private fun strikeKey(
+        typefaceId: TypefaceID = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655441201")),
+        paletteIdentity: String? = null,
+    ): GlyphStrikeKey =
         GlyphStrikeKey(
-            typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655441201")),
+            typefaceId = typefaceId,
             sizePx = 16f,
+            paletteIdentity = paletteIdentity,
         )
 
     private fun canonicalDumpBodySha256(dump: String): String {
