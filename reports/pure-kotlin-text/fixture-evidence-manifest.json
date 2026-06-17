@@ -348,6 +348,60 @@
       ]
     },
     {
+      "familyId": "fallback-segmentation",
+      "familyName": "Fallback segmentation",
+      "classification": "fixture-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Font Fallback Runs"
+      },
+      "currentEvidencePaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/FallbackSegmentationReport.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/FallbackSegmentationTest.kt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-arabic-mark.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-cjk-vs.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-devanagari.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-emoji-zwj.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-latin-mark.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-negative-split.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-skin-tone.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-thai.txt",
+        "reports/font/fixtures/expected/fallback/fallback-cluster-vs15-vs16.txt",
+        "reports/font/fixtures/expected/fallback/fallback-segmentation-report.json",
+        "reports/font/fixtures/expected/fallback/fallback-decision-trace.json",
+        "reports/font/fixtures/expected/fallback/resolved-font-runs.json",
+        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json",
+        "reports/font/fixtures/expected/unicode/cluster-safety-report.json",
+        "reports/pure-kotlin-text/2026-06-17-kfont-m7-004-fallback-segmentation.md",
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "reports/pure-kotlin-text/dump-evidence-index.json"
+      ],
+      "requiredEvidenceGates": [
+        "KFONT-M7-004 now proves bounded whole-cluster fallback alignment for reviewed positive fixtures only; it does not promote complete fallback, emoji rendering, or host-dependent behavior.",
+        "Convert the negative emoji row from reviewed split-hazard evidence to an actual whole-cluster refusal path before moving beyond fixture-gated review.",
+        "Promote dedicated per-fixture fallback trace and resolved-run assets before broad fallback support claims."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecision*'",
+        "rtk ./gradlew --no-daemon :font:text:test --tests '*FallbackSegmentation*' --tests '*ClusterSafety*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "fixtureCommands": [
+        "KFONT-M7-004 fallback cluster fixtures are checked in under reports/font/fixtures/expected/fallback and asserted by FallbackSegmentationTest against fallback-segmentation-report.json."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-cluster-safe-fallback-support-claim",
+        "no-emoji-rendering-claim",
+        "no-platform-font-fallback-claim",
+        "no-gpu-text-route-claim",
+        "no-scaledemoji-retirement"
+      ]
+    },
+    {
       "familyId": "font-fallback-trace",
       "familyName": "Font fallback trace",
       "classification": "tracked-gap",

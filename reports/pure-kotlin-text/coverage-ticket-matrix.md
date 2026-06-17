@@ -706,6 +706,71 @@ owned by `KFONT-M7-003`, `KFONT-M7-004`, and `KFONT-M7-005`; this slice stays
 bounded fallback-trace evidence only and does not add CPU oracle promotion,
 cluster-safe segmentation, platform fallback claims, or any GPU text-route
 claim.
+
+### KFONT-M7-004: Add cluster-safe fallback segmentation tests
+
+Status: review with bounded fixture evidence.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/FallbackSegmentationReport.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ClusterSafetyReport.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/FallbackSegmentationTest.kt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-arabic-mark.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-cjk-vs.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-devanagari.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-emoji-zwj.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-latin-mark.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-negative-split.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-skin-tone.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-thai.txt`
+- `reports/font/fixtures/expected/fallback/fallback-cluster-vs15-vs16.txt`
+- `reports/font/fixtures/expected/fallback/fallback-segmentation-report.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m7-004-fallback-segmentation.md`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/KFONT-M7-004-add-cluster-safe-fallback-segmentation-tests.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `defaultFallbackClusterEvidenceCases()` adds nine bounded fallback cluster
+  cases that reuse the M5 cluster texts while keeping all behavior pure Kotlin
+  and deterministic.
+- `FallbackSegmentationReport` links checked-in SHA-256 refs for
+  `cluster-safety-report.json`, `fallback-decision-trace.json`,
+  `resolved-font-runs.json`, and `shaped-glyph-run.json`.
+- Positive Arabic, CJK variation-selector, Devanagari, emoji ZWJ, skin-tone,
+  VS15/VS16, Thai, and Latin-mark rows preserve whole-cluster fallback run
+  boundaries.
+- `fallback-cluster-negative-split.txt` keeps `scaledemoji` explicit and
+  records a reviewed split hazard with
+  `text.shaping.cluster-invariant-failed`,
+  `font.fallback-glyph-unavailable`, and
+  `text.shaping.emoji-sequence-unsupported`.
+- `FallbackSegmentationTest` asserts the checked-in golden byte for byte and
+  verifies that every `fallback-cluster-*` fixture is checked in and non-empty.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*FallbackDecision*'
+rtk ./gradlew --no-daemon :font:text:test --tests '*FallbackSegmentation*' --tests '*ClusterSafety*'
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: this bounded M7-004 slice is in `review`, not `done`. The
+negative emoji case still reports a reviewed split hazard instead of a final
+whole-cluster refusal path, dedicated per-fixture fallback trace/resolved-run
+assets remain open, host-dependent fallback markers remain non-normative, and
+`scaledemoji` stays explicitly unretired.
 ### PKT-03A: SFNT/OpenType Face Evidence Dumps
 
 Status: implemented and independently reviewed.

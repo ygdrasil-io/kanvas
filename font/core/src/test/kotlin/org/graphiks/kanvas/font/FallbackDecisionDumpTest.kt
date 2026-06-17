@@ -101,7 +101,7 @@ class FallbackDecisionDumpTest {
             milestoneReadme,
             "| [KFONT-M7-002 - Add fallback decision trace](KFONT-M7-002-add-fallback-decision-trace.md) | `done` |",
         )
-        assertContains(statusSummary, "| M7 | 3 | 0 | 0 | 0 | 1 | 1 |")
+        assertContains(statusSummary, "| M7 | 2 | 0 | 0 | 0 | 2 | 1 |")
         assertContains(ticketReport, "No ticket-local gate remains")
         assertContains(ticketReport, "KFONT-M7-003")
         assertContains(ticketReport, "KFONT-M7-005")

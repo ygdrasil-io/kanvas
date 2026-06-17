@@ -235,11 +235,14 @@ public class ClusterSafetySuite(
     }
 }
 
-public fun defaultClusterSafetyReportJson(): String =
+public fun defaultClusterSafetyReport(): ClusterSafetyReport =
     ClusterSafetySuite().evaluate(
         fixtures = defaultClusterSafetyFixtures(),
         sourceDumpRefs = defaultClusterSafetyDumpRefs(),
-    ).toCanonicalJson()
+    )
+
+public fun defaultClusterSafetyReportJson(): String =
+    defaultClusterSafetyReport().toCanonicalJson()
 
 private fun defaultClusterSafetyFixtures(): List<ClusterSafetyFixture> = listOf(
     ClusterSafetyFixture(

@@ -4425,6 +4425,19 @@ fun defaultFallbackEvidenceCases(): List<FallbackEvidenceCase> =
         fallbackFamilyUnavailableEvidenceCase(),
     )
 
+fun defaultFallbackClusterEvidenceCases(): List<FallbackEvidenceCase> =
+    listOf(
+        fallbackClusterArabicMarkEvidenceCase(),
+        fallbackClusterCjkVariationSelectorEvidenceCase(),
+        fallbackClusterDevanagariEvidenceCase(),
+        fallbackClusterEmojiZwjEvidenceCase(),
+        fallbackClusterLatinMarkEvidenceCase(),
+        fallbackClusterNegativeSplitEvidenceCase(),
+        fallbackClusterSkinToneEvidenceCase(),
+        fallbackClusterThaiEvidenceCase(),
+        fallbackClusterVs15Vs16EvidenceCase(),
+    ).sortedBy { case -> case.fixtureId }
+
 fun defaultFallbackEvidenceBundle(): FallbackEvidenceBundle =
     FallbackEvidenceWriter.writeBundle(cases = defaultFallbackEvidenceCases())
 
@@ -4701,6 +4714,277 @@ private fun fallbackFamilyGenericEvidenceCase(): FallbackEvidenceCase {
     return resolver.evidenceCase(
         fixtureId = "fallback-family-generic",
         request = FallbackRequest(text = "x", preferredFamilies = listOf("serif")),
+    )
+}
+
+private fun fallbackClusterArabicMarkEvidenceCase(): FallbackEvidenceCase {
+    val latin = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440910",
+        familyName = "Alpha Sans",
+    )
+    val arabic = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440911",
+        familyName = "Arabic Naskh",
+    )
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(
+            families = mapOf(
+                "Alpha Sans" to FontCollection(listOf(latin)),
+                "Arabic Naskh" to FontCollection(listOf(arabic)),
+            ),
+        ),
+        policy = FontFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf("sans-serif" to listOf("Alpha Sans", "Arabic Naskh")),
+            scriptFallbackChains = mapOf("arabic" to listOf("Arabic Naskh")),
+            localeFallbackChains = emptyMap(),
+            emojiPreferredFamilies = emptyList(),
+        ),
+        coverage = fallbackTestCoverage(arabic.typeface.id to setOf(0x0627, 0x0651)),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-cluster-arabic-mark",
+        request = FallbackRequest(text = "\u0627\u0651", preferredFamilies = listOf("Alpha Sans")),
+    )
+}
+
+private fun fallbackClusterCjkVariationSelectorEvidenceCase(): FallbackEvidenceCase {
+    val latin = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440912",
+        familyName = "Alpha Sans",
+    )
+    val cjk = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440913",
+        familyName = "CJK Sans",
+    )
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(
+            families = mapOf(
+                "Alpha Sans" to FontCollection(listOf(latin)),
+                "CJK Sans" to FontCollection(listOf(cjk)),
+            ),
+        ),
+        policy = FontFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf("sans-serif" to listOf("Alpha Sans", "CJK Sans")),
+            scriptFallbackChains = mapOf("cjk" to listOf("CJK Sans")),
+            localeFallbackChains = emptyMap(),
+            emojiPreferredFamilies = emptyList(),
+        ),
+        coverage = fallbackTestCoverage(cjk.typeface.id to setOf(0x4E00, 0x3003, 0xFE0F)),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-cluster-cjk-vs",
+        request = FallbackRequest(text = "\u4E00\u3003\uFE0F", preferredFamilies = listOf("Alpha Sans")),
+    )
+}
+
+private fun fallbackClusterDevanagariEvidenceCase(): FallbackEvidenceCase {
+    val latin = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440914",
+        familyName = "Alpha Sans",
+    )
+    val devanagari = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440915",
+        familyName = "Devanagari Sans",
+    )
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(
+            families = mapOf(
+                "Alpha Sans" to FontCollection(listOf(latin)),
+                "Devanagari Sans" to FontCollection(listOf(devanagari)),
+            ),
+        ),
+        policy = FontFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf("sans-serif" to listOf("Alpha Sans", "Devanagari Sans")),
+            scriptFallbackChains = mapOf("devanagari" to listOf("Devanagari Sans")),
+            localeFallbackChains = emptyMap(),
+            emojiPreferredFamilies = emptyList(),
+        ),
+        coverage = fallbackTestCoverage(devanagari.typeface.id to setOf(0x0915, 0x094D, 0x0937, 0x093E)),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-cluster-devanagari",
+        request = FallbackRequest(text = "\u0915\u094D\u0937\u093E", preferredFamilies = listOf("Alpha Sans")),
+    )
+}
+
+private fun fallbackClusterEmojiZwjEvidenceCase(): FallbackEvidenceCase {
+    val latin = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440916",
+        familyName = "Alpha Sans",
+    )
+    val emoji = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440917",
+        familyName = "Noto Color Emoji",
+    )
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(
+            families = mapOf(
+                "Alpha Sans" to FontCollection(listOf(latin)),
+                "Noto Color Emoji" to FontCollection(listOf(emoji)),
+            ),
+        ),
+        policy = FontFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf("sans-serif" to listOf("Alpha Sans", "Noto Color Emoji")),
+            scriptFallbackChains = emptyMap(),
+            localeFallbackChains = emptyMap(),
+            emojiPreferredFamilies = listOf("Noto Color Emoji"),
+        ),
+        coverage = fallbackTestCoverage(emoji.typeface.id to setOf(0x1F466, 0x1F3FB, 0x200D)),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-cluster-emoji-zwj",
+        request = FallbackRequest(text = "\uD83D\uDC66\uD83C\uDFFB\u200D\uD83D\uDC66", preferredFamilies = listOf("Alpha Sans")),
+    )
+}
+
+private fun fallbackClusterLatinMarkEvidenceCase(): FallbackEvidenceCase {
+    val latin = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440918",
+        familyName = "Alpha Sans",
+    )
+    val accent = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440919",
+        familyName = "Accent Sans",
+    )
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(
+            families = mapOf(
+                "Alpha Sans" to FontCollection(listOf(latin)),
+                "Accent Sans" to FontCollection(listOf(accent)),
+            ),
+        ),
+        policy = FontFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf("sans-serif" to listOf("Alpha Sans", "Accent Sans")),
+            scriptFallbackChains = emptyMap(),
+            localeFallbackChains = emptyMap(),
+            emojiPreferredFamilies = emptyList(),
+        ),
+        coverage = fallbackTestCoverage(accent.typeface.id to setOf('A'.code, 0x0301)),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-cluster-latin-mark",
+        request = FallbackRequest(text = "A\u0301", preferredFamilies = listOf("Alpha Sans")),
+    )
+}
+
+private fun fallbackClusterNegativeSplitEvidenceCase(): FallbackEvidenceCase {
+    val latin = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440920",
+        familyName = "Alpha Sans",
+    )
+    val emoji = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440921",
+        familyName = "Noto Color Emoji",
+    )
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(
+            families = mapOf(
+                "Alpha Sans" to FontCollection(listOf(latin)),
+                "Noto Color Emoji" to FontCollection(listOf(emoji)),
+            ),
+        ),
+        policy = FontFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf("sans-serif" to listOf("Alpha Sans", "Noto Color Emoji")),
+            scriptFallbackChains = emptyMap(),
+            localeFallbackChains = emptyMap(),
+            emojiPreferredFamilies = listOf("Noto Color Emoji"),
+        ),
+        coverage = fallbackTestCoverage(emoji.typeface.id to setOf(0x1F466, 0x1F3FB)),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-cluster-negative-split",
+        request = FallbackRequest(text = "\uD83D\uDC66\uD83C\uDFFB\u200D\uD83D\uDC66", preferredFamilies = listOf("Alpha Sans")),
+        additionalDiagnostics = listOf("text.shaping.emoji-sequence-unsupported"),
+    )
+}
+
+private fun fallbackClusterSkinToneEvidenceCase(): FallbackEvidenceCase {
+    val latin = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440922",
+        familyName = "Alpha Sans",
+    )
+    val emoji = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440923",
+        familyName = "Noto Color Emoji",
+    )
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(
+            families = mapOf(
+                "Alpha Sans" to FontCollection(listOf(latin)),
+                "Noto Color Emoji" to FontCollection(listOf(emoji)),
+            ),
+        ),
+        policy = FontFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf("sans-serif" to listOf("Alpha Sans", "Noto Color Emoji")),
+            scriptFallbackChains = emptyMap(),
+            localeFallbackChains = emptyMap(),
+            emojiPreferredFamilies = listOf("Noto Color Emoji"),
+        ),
+        coverage = fallbackTestCoverage(emoji.typeface.id to setOf(0x1F466, 0x1F3FB)),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-cluster-skin-tone",
+        request = FallbackRequest(text = "\uD83D\uDC66\uD83C\uDFFB", preferredFamilies = listOf("Alpha Sans")),
+    )
+}
+
+private fun fallbackClusterThaiEvidenceCase(): FallbackEvidenceCase {
+    val latin = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440924",
+        familyName = "Alpha Sans",
+    )
+    val thai = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440925",
+        familyName = "Thai Sans",
+    )
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(
+            families = mapOf(
+                "Alpha Sans" to FontCollection(listOf(latin)),
+                "Thai Sans" to FontCollection(listOf(thai)),
+            ),
+        ),
+        policy = FontFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf("sans-serif" to listOf("Alpha Sans", "Thai Sans")),
+            scriptFallbackChains = mapOf("thai" to listOf("Thai Sans")),
+            localeFallbackChains = emptyMap(),
+            emojiPreferredFamilies = emptyList(),
+        ),
+        coverage = fallbackTestCoverage(thai.typeface.id to setOf(0x0E01, 0x0E49)),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-cluster-thai",
+        request = FallbackRequest(text = "\u0E01\u0E49", preferredFamilies = listOf("Alpha Sans")),
+    )
+}
+
+private fun fallbackClusterVs15Vs16EvidenceCase(): FallbackEvidenceCase {
+    val latin = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440926",
+        familyName = "Alpha Sans",
+    )
+    val emoji = fallbackFixtureFace(
+        uuid = "550e8400-e29b-41d4-a716-446655440927",
+        familyName = "Noto Color Emoji",
+    )
+    val resolver = CatalogFontResolver(
+        catalog = FallbackCatalog(
+            families = mapOf(
+                "Alpha Sans" to FontCollection(listOf(latin)),
+                "Noto Color Emoji" to FontCollection(listOf(emoji)),
+            ),
+        ),
+        policy = FontFallbackPolicy.Default.copy(
+            genericFallbackChains = mapOf("sans-serif" to listOf("Alpha Sans", "Noto Color Emoji")),
+            scriptFallbackChains = emptyMap(),
+            localeFallbackChains = emptyMap(),
+            emojiPreferredFamilies = listOf("Noto Color Emoji"),
+        ),
+        coverage = fallbackTestCoverage(emoji.typeface.id to setOf(0x2764, 0xFE0E, 0xFE0F)),
+    )
+    return resolver.evidenceCase(
+        fixtureId = "fallback-cluster-vs15-vs16",
+        request = FallbackRequest(text = "\u2764\uFE0E\u2764\uFE0F", preferredFamilies = listOf("Alpha Sans")),
     )
 }
 
