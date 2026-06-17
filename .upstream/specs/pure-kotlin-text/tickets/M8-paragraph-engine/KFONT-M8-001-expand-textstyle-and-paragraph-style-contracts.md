@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M8-001"
 title: "Expand `TextStyle` and paragraph style contracts"
-status: "proposed"
+status: "done"
 milestone: "M8"
 priority: "P0"
 owner_area: "paragraph"
@@ -76,11 +76,11 @@ data class ParagraphInput(
 
 ## Acceptance Criteria
 
-- [ ] `ParagraphBuilder` produces an immutable `ParagraphInput` snapshot; mutating the builder after snapshot creation cannot change the dump.
-- [ ] `TextStyle` carries all shaping-affecting and layout-affecting fields listed in scope, and each field appears in the dump preimage.
-- [ ] Style and placeholder ranges are stable, ordered, non-overlapping where required, and validated against UTF-16 text bounds.
-- [ ] Invalid numeric constraints return `text.paragraph.invalid-constraint` or a narrower diagnostic with the field name and offending range.
-- [ ] `paragraph-input.json` is deterministic for repeated runs with the same text, style values, and Unicode data version.
+- [x] `ParagraphBuilder` produces an immutable `ParagraphInput` snapshot; mutating the builder after snapshot creation cannot change the dump.
+- [x] `TextStyle` carries all shaping-affecting and layout-affecting fields listed in scope, and each field appears in the dump preimage.
+- [x] Style and placeholder ranges are stable, ordered, non-overlapping where required, and validated against UTF-16 text bounds.
+- [x] Invalid numeric constraints return `text.paragraph.invalid-constraint` or a narrower diagnostic with the field name and offending range.
+- [x] `paragraph-input.json` is deterministic for repeated runs with the same text, style values, and Unicode data version.
 
 ## Required Evidence
 
@@ -104,13 +104,17 @@ data class ParagraphInput(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test --tests '*ParagraphStyle*'
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphInputGoldenPinsSchemaCasesAndNonClaims
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 ```
 
 ## Status Notes
 
-- `proposed`: Contract ticket is ready for review against the paragraph API target before implementation starts.
-- Move to `ready` only after the field list, diagnostic names, and dump schema are accepted.
+- `done`: `ParagraphTypes.kt` now captures expanded style, paragraph, and placeholder contracts; `ParagraphBuilder` emits immutable input snapshots with deterministic `unicodeVersion`/`inputHash`; and invalid constraints refuse before shaping through stable `text.paragraph.invalid-constraint`, `text.paragraph.invalid-style-range`, and `text.paragraph.unsupported-policy` diagnostics.
+- Fresh evidence is checked in at `reports/font/fixtures/expected/paragraph/paragraph-input.json` and `reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json`, with focused validation in `ParagraphStyleContractTest` plus the existing paragraph dump/golden assertions in `TextStackSurfaceTest`.
+- Remaining non-claims stay downstream by design: this ticket does not claim multi-style shaping segmentation, bidi visual line ordering, line breaking, ellipsis insertion, selection/hit testing, glyph artifact planning, CPU oracle parity, or GPU text support.
 
 ## Linear Labels
 

@@ -1577,16 +1577,54 @@
       ]
     },
     {
+      "dumpId": "paragraph-input",
+      "ownerTicket": "KFONT-M8-001",
+      "classification": "producer-only",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Builder Contract"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphStyleContractTest.kt",
+        "reports/font/fixtures/expected/paragraph/paragraph-input.json"
+      ],
+      "expectedFields": [
+        "diagnostics",
+        "inputHash",
+        "paragraphStyle",
+        "placeholders",
+        "schema",
+        "styleRuns",
+        "text",
+        "textLength",
+        "unicodeVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphStyleContractTest",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Paragraph input dump changes require deterministic inputHash review, range/diagnostic review, and explicit non-claim preservation without promoting downstream paragraph support.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-paragraph-layout-claim",
+        "no-skia-paragraph-parity-claim"
+      ]
+    },
+    {
       "dumpId": "paragraph-input-goldens",
-      "ownerTicket": "PKT-09C",
+      "ownerTicket": "KFONT-M8-001",
       "classification": "golden-gated",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
         "section": "Builder Contract"
       },
       "producerPaths": [
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphStyleContractTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
-        "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json"
+        "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json",
+        "reports/font/fixtures/expected/paragraph/paragraph-input.json"
       ],
       "expectedFields": [
         "cases",
@@ -1594,14 +1632,16 @@
         "negativeCases",
         "nonClaims",
         "ownerTickets",
+        "requiredDumpFields",
         "schemaVersion"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphInputGoldenPinsSchemaCasesAndNonClaims",
         "rtk python3 scripts/validate_font_fixture_assets.py",
-        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "Paragraph input golden changes require style-range, placeholder, diagnostic, and shaping/fallback blocker review without complete paragraph support promotion.",
+      "updatePolicy": "Paragraph input golden changes require style-range, placeholder, diagnostic, and downstream shaping/fallback blocker review without complete paragraph support promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-paragraph-layout-claim",

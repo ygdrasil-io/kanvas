@@ -56,6 +56,7 @@ import org.graphiks.kanvas.text.paragraph.PlaceholderStyle
 import org.graphiks.kanvas.text.paragraph.SelectionRange
 import org.graphiks.kanvas.text.paragraph.SimpleLineBreaker
 import org.graphiks.kanvas.text.paragraph.TextBox
+import org.graphiks.kanvas.text.paragraph.TextDirection
 import org.graphiks.kanvas.text.paragraph.TextPosition
 import org.graphiks.kanvas.text.paragraph.TextStyle
 import org.graphiks.kanvas.text.shaping.BasicBidiResolver
@@ -205,7 +206,7 @@ class TextStackSurfaceTest {
     @Test
     fun paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically() {
         val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
-        val paragraph = ParagraphBuilder(ParagraphStyle(textDirection = 1))
+        val paragraph = ParagraphBuilder(ParagraphStyle(textDirection = TextDirection.LEFT_TO_RIGHT))
             .append("aa bb c", TextStyle(fontSize = 10f, locale = "en-US"))
             .build()
 
@@ -216,13 +217,17 @@ class TextStackSurfaceTest {
             {
               "schema": "kanvas.paragraph.layout.v1",
               "input": {
+                "schema": "kanvas.paragraph.input.v1",
+                "unicodeVersion": "16.0.0",
+                "inputHash": "7f497d3e3f7e110e11f6cb7efd28419214a6aa44d93eb24ae7e04713a95e8a11",
                 "text": "aa bb c",
                 "textLength": 7,
-                "paragraphStyle": {"textAlign": "start", "textDirection": 1, "maxLines": null, "ellipsis": null, "lineHeight": null},
-                "textStyles": [
-                  {"range": "0..6", "typefaceId": null, "fontSize": 10.0, "locale": "en-US", "features": []}
+                "paragraphStyle": {"textAlign": "start", "textDirection": "ltr", "maxLines": null, "ellipsis": null, "ellipsisPolicy": "none", "lineHeight": null, "textHeightBehavior": "font-metrics", "defaultLocale": null},
+                "styleRuns": [
+                  {"range": "0..6", "fontFamilies": [], "fallbackPreference": "system-default", "typefaceId": null, "fontSize": 10.0, "fontWeight": 400, "fontWidth": 5, "fontSlant": "upright", "syntheticStylePolicy": "allow", "locale": "en-US", "scriptHint": null, "features": [], "variationCoordinates": [], "palette": null, "colorRgba": "000000ff", "decoration": null, "letterSpacing": 0.0, "wordSpacing": 0.0, "heightMultiplier": null}
                 ],
-                "placeholders": []
+                "placeholders": [],
+                "diagnostics": []
               },
               "layout": {"maxWidth": 50.0, "width": 50.0, "height": 20.0, "didOverflowWidth": false, "didOverflowHeight": false, "layoutRefused": false},
               "lines": [
@@ -517,18 +522,32 @@ class TextStackSurfaceTest {
         val cases = dump.requiredObjectList("cases")
         val styleRuns = cases.single().requiredObjectList("styleRuns")
 
-        assertEquals(1L, dump["schemaVersion"])
+        assertEquals(2L, dump["schemaVersion"])
         assertEquals("paragraph-input-goldens", dump.requiredString("dumpId"))
-        assertEquals(listOf("PKT-09C"), dump.requiredStringList("ownerTickets"))
-        assertEquals("multi-style-with-placeholder", cases.single().requiredString("caseId"))
+        assertEquals(listOf("PKT-09C", "KFONT-M8-001"), dump.requiredStringList("ownerTickets"))
+        assertEquals("rich-style-with-placeholder", cases.single().requiredString("caseId"))
         assertEquals("hello [box] world", cases.single().requiredString("text"))
+        assertEquals(
+            listOf("inputHash", "unicodeVersion", "paragraphStyle", "styleRuns", "placeholders", "diagnostics"),
+            cases.single().requiredStringList("requiredDumpFields"),
+        )
         assertEquals(listOf(0L, 5L), styleRuns[0].requiredLongList("range"))
         assertEquals("Liberation Sans", styleRuns[0].requiredString("family"))
+        assertEquals("prefer-declared-families", styleRuns[0].requiredString("fallbackPreference"))
+        assertEquals(listOf("wdth", "wght"), styleRuns[0].requiredStringList("variationAxes"))
         assertEquals(listOf(12L, 17L), styleRuns[1].requiredLongList("range"))
         assertEquals("Liberation Serif", styleRuns[1].requiredString("family"))
+        assertEquals(listOf("kern"), styleRuns[1].requiredStringList("features"))
         assertEquals(listOf(listOf(6L, 11L)), cases.single().requiredLongLists("placeholderRanges"))
         assertEquals(
-            listOf("invalid-range", "non-finite-placeholder-metric", "unsupported-baseline"),
+            listOf(
+                "invalid-range",
+                "invalid-font-size",
+                "invalid-variation-coordinate",
+                "non-finite-placeholder-metric",
+                "unsupported-baseline",
+                "unsupported-strut-policy",
+            ),
             dump.requiredStringList("negativeCases"),
         )
         assertEquals(
