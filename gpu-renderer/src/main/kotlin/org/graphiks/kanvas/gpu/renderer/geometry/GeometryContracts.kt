@@ -1,5 +1,9 @@
 package org.graphiks.kanvas.gpu.renderer.geometry
 
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceReference
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationPreimagePlan
+
 /** Shape descriptor captured before geometry lowering. */
 data class GPUShapeDescriptor(
     val shapeKind: String,
@@ -684,6 +688,54 @@ fun GPUGeometryPlan.dumpLines(): List<String> =
         )
     }
 
+/**
+ * Derives stencil-cover pass materialization preimage from geometry gate evidence.
+ *
+ * The result names the pass resource and depth/stencil evidence labels only.
+ * It does not allocate pass attachments, encode commands, perform readback, or
+ * promote stencil-cover product routing.
+ */
+fun GPUGeometryPlan.toStencilCoverPassMaterializationPreimage(): GPUResourceMaterializationPreimagePlan {
+    val pathDescriptor = path
+    val planLabel = "stencil-cover:${pathDescriptor?.pathKey?.toMaterializationPreimageLabel() ?: "unknown"}"
+    val selectedRoute = route
+    if (selectedRoute is GPUGeometryRoute.StencilCover) {
+        val stencilPlan = selectedRoute.stencilPlan
+        return GPUResourceMaterializationPreimagePlan(
+            planLabel = planLabel,
+            sourceGate = "gpu-renderer.path.stencil-cover",
+            accepted = true,
+            resources = listOf(
+                GPUMaterializedResourceReference(
+                    label = stencilPlan.passResourceEvidenceLabel ?: stencilPlan.atomicGroupLabel,
+                    role = GPUMaterializedResourceRole.StencilAttachment,
+                    descriptorHash = stencilPlan.depthStencilEvidenceLabel ?: stencilPlan.depthStencilFormat,
+                    generation = 0,
+                    lifetimeClass = "pass-local",
+                    usageLabels = listOf("render_attachment", "stencil_attachment"),
+                    evidenceFacts = mapOf(
+                        "clip" to stencilPlan.clipStateLabel,
+                        "readback" to (stencilPlan.readbackEvidenceLabel ?: "missing"),
+                        "sampleCount" to stencilPlan.sampleCount.toString(),
+                        "state" to stencilPlan.stencilStateLabel,
+                        "target" to (stencilPlan.targetEvidenceLabel ?: "missing"),
+                    ),
+                ),
+            ),
+        )
+    }
+
+    val refusal = (selectedRoute as? GPUGeometryRoute.Refused)?.diagnostic?.code
+        ?: "unsupported.geometry.stencil_cover_preimage_route"
+    return GPUResourceMaterializationPreimagePlan(
+        planLabel = planLabel,
+        sourceGate = "gpu-renderer.path.stencil-cover",
+        accepted = false,
+        resources = emptyList(),
+        refusalCode = refusal,
+    )
+}
+
 private fun GPUShapeDescriptor.refusalCode(): String? =
     when {
         shapeKind != "path-fill" -> "unsupported.geometry.shape_kind"
@@ -724,6 +776,9 @@ private fun String.sanitizeForArtifactKey(): String =
         }
     }.joinToString("")
         .trim('_')
+
+private fun String.toMaterializationPreimageLabel(): String =
+    replace(Regex("[^A-Za-z0-9]+"), "-").trim('-').ifBlank { "unknown" }
 
 private const val pathFillNonClaimLine =
     "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback no-broad-path-aa"

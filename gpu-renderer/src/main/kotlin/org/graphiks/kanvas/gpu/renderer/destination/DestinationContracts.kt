@@ -1,6 +1,9 @@
 package org.graphiks.kanvas.gpu.renderer.destination
 
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceReference
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationPreimagePlan
 
 /** Destination read token. */
 @JvmInline
@@ -264,6 +267,83 @@ data class GPUDestinationReadStrategyGatePlan(
             ?: ""
 }
 
+/**
+ * Derives live-route resource materialization preimage from destination-read gate evidence.
+ *
+ * The result names either the planned target copy texture or the validated
+ * intermediate texture. It remains backend-neutral and does not split passes,
+ * copy targets, bind handles, or activate destination-read product routing.
+ */
+fun GPUDestinationReadStrategyGatePlan.toDestinationReadMaterializationPreimage(): GPUResourceMaterializationPreimagePlan {
+    val planLabel = "destination-read:${plan.bounds.commandLabel().toStableLabel()}"
+    val refusal = diagnostics.firstOrNull { diagnostic -> diagnostic.terminal }?.code
+    if (refusal != null || routeKind == "RefuseDiagnostic") {
+        return GPUResourceMaterializationPreimagePlan(
+            planLabel = planLabel,
+            sourceGate = DESTINATION_READ_EVIDENCE_ROW,
+            accepted = false,
+            resources = emptyList(),
+            refusalCode = refusal ?: "unsupported.destination_read.materialization_preimage",
+        )
+    }
+
+    val binding = requireNotNull(plan.binding) {
+        "accepted destination-read materialization preimage requires a binding"
+    }
+    val sourceLabel = when (plan.strategy) {
+        GPUDestinationReadStrategy.BindIntermediate -> plan.sourceFactValue("intermediate")
+        else -> plan.sourceFactValue("source")
+    }
+    val resource = when (plan.strategy) {
+        GPUDestinationReadStrategy.CopyTarget -> {
+            val descriptor = requireNotNull(copyDescriptor) {
+                "target-copy destination-read preimage requires a copy descriptor"
+            }
+            GPUMaterializedResourceReference(
+                label = descriptor.label,
+                role = GPUMaterializedResourceRole.DestinationCopyTexture,
+                descriptorHash = descriptor.descriptorHash,
+                generation = descriptor.targetGeneration,
+                lifetimeClass = descriptor.lifetimeClass,
+                usageLabels = descriptor.usageLabels,
+                evidenceFacts = mapOf(
+                    "action" to action.name,
+                    "source" to sourceLabel,
+                ),
+            )
+        }
+        GPUDestinationReadStrategy.BindIntermediate -> GPUMaterializedResourceReference(
+            label = sourceLabel,
+            role = GPUMaterializedResourceRole.IntermediateTexture,
+            descriptorHash = copyDescriptorHash,
+            generation = binding.generation,
+            lifetimeClass = "layer-local",
+            usageLabels = listOf("texture_binding"),
+            evidenceFacts = mapOf(
+                "action" to action.name,
+                "source" to sourceLabel,
+            ),
+        )
+        else -> {
+            return GPUResourceMaterializationPreimagePlan(
+                planLabel = planLabel,
+                sourceGate = DESTINATION_READ_EVIDENCE_ROW,
+                accepted = false,
+                resources = emptyList(),
+                refusalCode = "unsupported.destination_read.materialization_preimage_strategy",
+            )
+        }
+    }
+
+    return GPUResourceMaterializationPreimagePlan(
+        planLabel = planLabel,
+        sourceGate = DESTINATION_READ_EVIDENCE_ROW,
+        accepted = true,
+        resources = listOf(resource),
+        bindingLabels = listOf(binding.bindingLabel),
+    )
+}
+
 /** Planner for contract-only destination-read strategy evidence. */
 class GPUDestinationReadStrategyPlanner {
     /** Plans a destination-read copy/intermediate strategy or a stable refusal. */
@@ -488,6 +568,9 @@ private fun GPUDestinationReadStrategyRequest.sourceFacts(
     }
     return sourceFacts
 }
+
+private fun GPUDestinationReadPlan.sourceFactValue(name: String): String =
+    sourceTargetFacts.first { fact -> fact.startsWith("$name=") }.removePrefix("$name=")
 
 private fun destinationCopyDescriptorHash(
     request: GPUDestinationReadStrategyRequest,
