@@ -525,15 +525,22 @@
           "targetGate": "colrv1-composite-clip",
           "status": "current-positive-evidence",
           "fixtureKind": "synthetic-table-bytes",
-          "generationPolicy": "Generate COLRv1 paint data with composite paint, PaintColrGlyph reference, and a clip box.",
+          "generationPolicy": "Generate bounded COLRv1 transform/composite/clip planning fixtures that cover accepted translate, generic transform, classified scale/rotate/skew, and composite-plus-clip cases, then assert explicit singular-transform, unsupported-composite-mode, and clip-budget-overflow outline-fallback refusals without claiming dedicated transform parse-format support.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
-            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+            "reports/font/fixtures/expected/color/color-glyph-plan.json",
+            "reports/font/fixtures/expected/color/colrv1-paint-graph.json",
+            "reports/font/fixtures/expected/color/color-glyph-composite-plan.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+            "reports/pure-kotlin-text/2026-06-17-kfont-m10-004-colrv1-transform-composite-clip.md"
           ],
           "expectedArtifacts": [
-            "COLRv1 table bytes",
-            "clip box dump",
-            "paint graph dump"
+            "transform/composite/clip paint-graph bundle cases",
+            "ColorGlyphPlan bundle cases",
+            "composite-plan dump",
+            "singular-transform refusal diagnostic",
+            "unsupported-composite-mode refusal diagnostic",
+            "clip-budget-overflow refusal diagnostic"
           ],
           "nonClaims": [
             "no-complete-target-support-claim",
