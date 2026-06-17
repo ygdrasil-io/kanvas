@@ -313,6 +313,150 @@ data class GPUVerticesBufferPlanGatePlan(
     }
 }
 
+/** One DrawVertices invocation considered by the contract-only batching evidence planner. */
+data class GPUVerticesBatchInvocation(
+    val invocationId: String,
+    val routeDecision: GPUVerticesRouteDecisionGatePlan,
+    val bufferPlan: GPUVerticesBufferPlanGatePlan,
+    val paintOrder: Int,
+    val materialKeyHash: String,
+    val pipelineKeyHash: String,
+    val layoutHash: String,
+    val renderStepLabel: String,
+    val topology: String,
+    val blendClass: String,
+    val layerId: String,
+    val orderBand: String,
+    val clipKey: String,
+    val destinationReadClass: String,
+    val barrierGeneration: Long,
+    val uploadGeneration: Long,
+    val overlapClass: String,
+    val sortWindowId: String,
+) {
+    init {
+        require(invocationId.isNotBlank()) { "GPUVerticesBatchInvocation.invocationId must not be blank" }
+        require(paintOrder >= 0) { "GPUVerticesBatchInvocation.paintOrder must not be negative" }
+        require(materialKeyHash.isNotBlank()) { "GPUVerticesBatchInvocation.materialKeyHash must not be blank" }
+        require(pipelineKeyHash.isNotBlank()) { "GPUVerticesBatchInvocation.pipelineKeyHash must not be blank" }
+        require(layoutHash.isNotBlank()) { "GPUVerticesBatchInvocation.layoutHash must not be blank" }
+        require(renderStepLabel.isNotBlank()) { "GPUVerticesBatchInvocation.renderStepLabel must not be blank" }
+        require(topology.isNotBlank()) { "GPUVerticesBatchInvocation.topology must not be blank" }
+        require(blendClass.isNotBlank()) { "GPUVerticesBatchInvocation.blendClass must not be blank" }
+        require(layerId.isNotBlank()) { "GPUVerticesBatchInvocation.layerId must not be blank" }
+        require(orderBand.isNotBlank()) { "GPUVerticesBatchInvocation.orderBand must not be blank" }
+        require(clipKey.isNotBlank()) { "GPUVerticesBatchInvocation.clipKey must not be blank" }
+        require(destinationReadClass.isNotBlank()) {
+            "GPUVerticesBatchInvocation.destinationReadClass must not be blank"
+        }
+        require(barrierGeneration >= 0L) { "GPUVerticesBatchInvocation.barrierGeneration must not be negative" }
+        require(uploadGeneration >= 0L) { "GPUVerticesBatchInvocation.uploadGeneration must not be negative" }
+        require(overlapClass.isNotBlank()) { "GPUVerticesBatchInvocation.overlapClass must not be blank" }
+        require(sortWindowId.isNotBlank()) { "GPUVerticesBatchInvocation.sortWindowId must not be blank" }
+    }
+}
+
+/** Request for KGPU-M8-003 vertices batching, sort, and split/refusal evidence. */
+data class GPUVerticesBatchingRequest(
+    val scopeId: String,
+    val invocations: List<GPUVerticesBatchInvocation>,
+) {
+    init {
+        require(scopeId.isNotBlank()) { "GPUVerticesBatchingRequest.scopeId must not be blank" }
+    }
+}
+
+/** Deterministic batch key evidence for adjacent compatible DrawVertices invocations. */
+data class GPUVerticesBatch(
+    val batchKeyHash: String,
+    val invocationIds: List<String>,
+    val layerId: String,
+    val orderBand: String,
+    val sortWindowId: String,
+    val pipelineKeyHash: String,
+    val materialKeyHash: String,
+    val layoutHash: String,
+    val clipKey: String,
+    val destinationReadClass: String,
+    val barrierGeneration: Long,
+    val uploadGeneration: Long,
+) {
+    init {
+        require(invocationIds.isNotEmpty()) { "GPUVerticesBatch.invocationIds must not be empty" }
+        require(sortWindowId.isNotBlank()) { "GPUVerticesBatch.sortWindowId must not be blank" }
+    }
+}
+
+/** Split reason between adjacent vertices invocations. */
+data class GPUVerticesBatchSplitReason(
+    val reasonCode: String,
+    val beforeInvocationId: String,
+    val afterInvocationId: String,
+)
+
+/** Non-promoted KGPU-M8-003 batching, sort, and refusal evidence. */
+data class GPUVerticesBatchingGatePlan(
+    val scopeId: String,
+    val evidenceRow: String,
+    val routeKind: String,
+    val classification: String,
+    val promoted: Boolean,
+    val productActivation: Boolean,
+    val materialized: Boolean,
+    val batches: List<GPUVerticesBatch>,
+    val splitReasons: List<GPUVerticesBatchSplitReason>,
+    val sortKeyHash: String,
+    val sortWindowId: String,
+    val sortOrder: List<String>,
+    val adjacentCandidates: Int,
+    val acceptedAdjacent: Int,
+    val refusalFacts: Map<String, String>,
+    val diagnostics: List<GPUVerticesDiagnostic>,
+) {
+    /** Returns deterministic PM/review lines without claiming executable batching. */
+    fun dumpLines(): List<String> {
+        val terminal = diagnostics.singleOrNull { diagnostic -> diagnostic.terminal }
+        if (terminal != null) {
+            return listOf(
+                "vertices:batch.refused row=$evidenceRow routeKind=$routeKind classification=$classification " +
+                    "promoted=$promoted productActivation=$productActivation materialized=$materialized " +
+                    "scope=$scopeId reason=${terminal.code}",
+                "vertices:refusal facts=${refusalFacts.dumpVerticesFacts()}",
+                VERTICES_BATCH_NONCLAIM_LINE,
+            )
+        }
+
+        val diagnostic = diagnostics.single()
+        return listOf(
+            "vertices:batch row=$evidenceRow routeKind=$routeKind classification=$classification " +
+                "promoted=$promoted productActivation=$productActivation materialized=$materialized " +
+                "scope=$scopeId batches=${batches.size} splits=${splitReasons.size}",
+        ) + batches.map { batch ->
+            "vertices:batch-key hash=${batch.batchKeyHash} invocations=${batch.invocationIds.joinToString(",")} " +
+                "axes=layer=${batch.layerId},orderBand=${batch.orderBand},sortWindow=${batch.sortWindowId}," +
+                "pipeline=${batch.pipelineKeyHash}," +
+                "material=${batch.materialKeyHash},layout=${batch.layoutHash},clip=${batch.clipKey}," +
+                "destinationRead=${batch.destinationReadClass},barrier=${batch.barrierGeneration}," +
+                "uploadGeneration=${batch.uploadGeneration}"
+        } + listOf(
+            "vertices:sort window=$sortWindowId " +
+                "compact=$sortKeyHash order=${sortOrder.joinToString(",")} " +
+                "overlap=CompatibleOverlap insertion=original-order",
+        ) + if (splitReasons.isEmpty()) {
+            listOf("vertices:split none")
+        } else {
+            splitReasons.map { split ->
+                "vertices:split reason=${split.reasonCode} before=${split.beforeInvocationId} after=${split.afterInvocationId}"
+            }
+        } + listOf(
+            "vertices:telemetry adjacentCandidates=$adjacentCandidates acceptedAdjacent=$acceptedAdjacent " +
+                "splitCount=${splitReasons.size} refused=false performanceReady=false",
+            "vertices:diagnostic code=${diagnostic.code} terminal=${diagnostic.terminal}",
+            VERTICES_BATCH_NONCLAIM_LINE,
+        )
+    }
+}
+
 /** Request for KGPU-M8-001 descriptor and route decision evidence. */
 data class GPUVerticesRouteDecisionRequest(
     val commandId: String,
@@ -733,10 +877,119 @@ class GPUVerticesBufferPlanPlanner {
         )
 }
 
+/** Planner for non-promoted adjacent DrawVertices batching and split evidence. */
+class GPUVerticesBatchingPlanner {
+    /** Plans deterministic batch keys, sort preimages, and split/refusal diagnostics. */
+    fun plan(request: GPUVerticesBatchingRequest): GPUVerticesBatchingGatePlan {
+        val refusal = request.refusalCodeAndFacts()
+        if (refusal != null) {
+            val (code, facts) = refusal
+            return gatePlan(
+                request = request,
+                batches = emptyList(),
+                splitReasons = emptyList(),
+                sortKeyHash = verticesStableHash(listOf("vertices-batch-refused-v1", request.scopeId, code)),
+                routeKind = "RefuseDiagnostic",
+                diagnostics = listOf(
+                    GPUVerticesDiagnostic(
+                        code = code,
+                        verticesLabel = request.scopeId,
+                        message = "vertices batching refused: $code",
+                        terminal = true,
+                    ),
+                ),
+                refusalFacts = facts,
+            )
+        }
+
+        val splitReasons = mutableListOf<GPUVerticesBatchSplitReason>()
+        val batches = mutableListOf<GPUVerticesBatch>()
+        var current = mutableListOf(request.invocations.first())
+
+        request.invocations.zipWithNext().forEach { (previous, next) ->
+            val reason = previous.splitReason(next)
+            if (reason == null) {
+                current += next
+            } else {
+                batches += current.toVerticesBatch()
+                splitReasons += GPUVerticesBatchSplitReason(
+                    reasonCode = reason,
+                    beforeInvocationId = previous.invocationId,
+                    afterInvocationId = next.invocationId,
+                )
+                current = mutableListOf(next)
+            }
+        }
+        batches += current.toVerticesBatch()
+
+        val sortKeyHash = verticesStableHash(
+            listOf(
+                "vertices-batch-sort-v1",
+                request.scopeId,
+                request.invocations.joinToString(",") { invocation ->
+                    "${invocation.invocationId}:${invocation.paintOrder}:${invocation.sortWindowId}"
+                },
+                batches.joinToString(",") { batch -> batch.batchKeyHash },
+                splitReasons.joinToString(",") { split -> split.reasonCode },
+            ),
+        )
+
+        return gatePlan(
+            request = request,
+            batches = batches,
+            splitReasons = splitReasons,
+            sortKeyHash = sortKeyHash,
+            routeKind = "GPUNative",
+            diagnostics = listOf(
+                GPUVerticesDiagnostic(
+                    code = VERTICES_BATCH_ACCEPTED_CODE,
+                    verticesLabel = request.scopeId,
+                    message = "vertices batching keys and sort evidence accepted without product activation",
+                    terminal = false,
+                ),
+            ),
+            refusalFacts = emptyMap(),
+        )
+    }
+
+    private fun gatePlan(
+        request: GPUVerticesBatchingRequest,
+        batches: List<GPUVerticesBatch>,
+        splitReasons: List<GPUVerticesBatchSplitReason>,
+        sortKeyHash: String,
+        routeKind: String,
+        diagnostics: List<GPUVerticesDiagnostic>,
+        refusalFacts: Map<String, String>,
+    ): GPUVerticesBatchingGatePlan =
+        GPUVerticesBatchingGatePlan(
+            scopeId = request.scopeId,
+            evidenceRow = VERTICES_BATCH_EVIDENCE_ROW,
+            routeKind = routeKind,
+            classification = "ImplementationCandidate",
+            promoted = false,
+            productActivation = false,
+            materialized = false,
+            batches = batches,
+            splitReasons = splitReasons,
+            sortKeyHash = sortKeyHash,
+            sortWindowId = request.invocations.map { invocation -> invocation.sortWindowId }
+                .distinct()
+                .joinToString("|")
+                .ifEmpty { "none" },
+            sortOrder = request.invocations.map { invocation -> "${invocation.invocationId}@${invocation.paintOrder}" },
+            adjacentCandidates = (request.invocations.size - 1).coerceAtLeast(0),
+            acceptedAdjacent = (request.invocations.size - 1 - splitReasons.size).coerceAtLeast(0),
+            refusalFacts = refusalFacts,
+            diagnostics = diagnostics,
+        )
+}
+
 private const val VERTICES_ROUTE_EVIDENCE_ROW = "gpu-renderer.vertices.descriptor"
 private const val VERTICES_ROUTE_ACCEPTED_CODE = "accepted.vertices.route_decision"
 private const val VERTICES_BUFFER_EVIDENCE_ROW = "gpu-renderer.vertices.buffers"
 private const val VERTICES_BUFFER_ACCEPTED_CODE = "accepted.vertices.buffer_plan"
+private const val VERTICES_BATCH_EVIDENCE_ROW = "gpu-renderer.vertices-batching"
+private const val VERTICES_BATCH_ACCEPTED_CODE = "accepted.vertices.batching_plan"
 private const val DEFAULT_VERTICES_BUFFER_MAX_BYTES = 1_048_576L
 private const val VERTICES_BUFFER_ALIGNMENT = 4
 private const val VERTICES_ROUTE_NONCLAIM_LINE =
@@ -748,6 +1001,10 @@ private const val VERTICES_BUFFER_NONCLAIM_LINE =
     "vertices:nonclaim drawVerticesSupport=false adapterBacked=false " +
         "vertexBufferUpload=false indexBufferUpload=false meshSupport=false batchingSupport=false " +
         "productActivation=false cpuRenderedTextureFallback=false liveHandles=false"
+private const val VERTICES_BATCH_NONCLAIM_LINE =
+    "vertices:nonclaim batchingSupport=false drawVerticesSupport=false adapterBacked=false " +
+        "productActivation=false performanceReady=false crossLayerBatching=false " +
+        "destinationReadBatching=false cpuRenderedTextureFallback=false"
 
 private fun GPUVerticesRouteDecisionRequest.refusalCode(): String? =
     when {
@@ -846,6 +1103,105 @@ private fun GPUVerticesBufferPlanRequest.refusalFacts(
         "liveResourceHandleExposed" to liveResourceHandleExposed.toString(),
         "budgetPolicy" to budgetPolicyId,
     )
+
+private fun GPUVerticesBatchingRequest.refusalCodeAndFacts(): Pair<String, Map<String, String>>? {
+    if (invocations.isEmpty()) {
+        return "unsupported.vertices.batch_empty" to linkedMapOf(
+            "reason" to "unsupported.vertices.batch_empty",
+            "scope" to scopeId,
+            "invocationCount" to "0",
+        )
+    }
+
+    invocations.forEach { invocation ->
+        if (invocation.routeDecision.routeKind != "GPUNative" ||
+            invocation.routeDecision.diagnostics.any { diagnostic -> diagnostic.terminal }
+        ) {
+            return "unsupported.vertices.batch_route_required" to linkedMapOf(
+                "reason" to "unsupported.vertices.batch_route_required",
+                "invocation" to invocation.invocationId,
+                "routeKind" to invocation.routeDecision.routeKind,
+            )
+        }
+        if (invocation.bufferPlan.routeKind != "CPUPreparedGPU" ||
+            invocation.bufferPlan.diagnostics.any { diagnostic -> diagnostic.terminal }
+        ) {
+            return "unsupported.vertices.batch_buffer_plan_required" to linkedMapOf(
+                "reason" to "unsupported.vertices.batch_buffer_plan_required",
+                "invocation" to invocation.invocationId,
+                "bufferRouteKind" to invocation.bufferPlan.routeKind,
+            )
+        }
+    }
+
+    invocations.zipWithNext().forEach { (previous, next) ->
+        if (next.paintOrder < previous.paintOrder) {
+            return "unsupported.vertices.batch_order_ambiguous" to linkedMapOf(
+                "reason" to "unsupported.vertices.batch_order_ambiguous",
+                "previousInvocation" to previous.invocationId,
+                "nextInvocation" to next.invocationId,
+                "previousPaintOrder" to previous.paintOrder.toString(),
+                "nextPaintOrder" to next.paintOrder.toString(),
+            )
+        }
+    }
+
+    return null
+}
+
+private fun GPUVerticesBatchInvocation.splitReason(next: GPUVerticesBatchInvocation): String? =
+    when {
+        sortWindowId != next.sortWindowId -> "planner.stop.sort_window"
+        topology != next.topology -> "planner.stop.topology"
+        renderStepLabel != next.renderStepLabel -> "planner.stop.render_step"
+        pipelineKeyHash != next.pipelineKeyHash || layoutHash != next.layoutHash -> "planner.stop.pipeline_key"
+        materialKeyHash != next.materialKeyHash -> "planner.stop.material_key"
+        blendClass != next.blendClass -> "planner.stop.blend_class"
+        clipKey != next.clipKey -> "planner.stop.clip_boundary"
+        layerId != next.layerId || orderBand != next.orderBand -> "planner.stop.layer_boundary"
+        barrierGeneration != next.barrierGeneration -> "planner.stop.barrier"
+        uploadGeneration != next.uploadGeneration -> "planner.stop.upload_generation"
+        destinationReadClass != next.destinationReadClass || next.destinationReadClass != "none" ->
+            "planner.stop.destination_read"
+        overlapClass != "CompatibleOverlap" || next.overlapClass != "CompatibleOverlap" ->
+            "planner.stop.incompatible_overlap"
+        else -> null
+    }
+
+private fun List<GPUVerticesBatchInvocation>.toVerticesBatch(): GPUVerticesBatch {
+    val first = first()
+    return GPUVerticesBatch(
+        batchKeyHash = verticesStableHash(
+            listOf(
+                "vertices-batch-key-v1",
+                first.topology,
+                first.renderStepLabel,
+                first.layerId,
+                first.orderBand,
+                first.sortWindowId,
+                first.pipelineKeyHash,
+                first.materialKeyHash,
+                first.layoutHash,
+                first.clipKey,
+                first.blendClass,
+                first.destinationReadClass,
+                first.barrierGeneration.toString(),
+                first.uploadGeneration.toString(),
+            ),
+        ),
+        invocationIds = map { invocation -> invocation.invocationId },
+        layerId = first.layerId,
+        orderBand = first.orderBand,
+        sortWindowId = first.sortWindowId,
+        pipelineKeyHash = first.pipelineKeyHash,
+        materialKeyHash = first.materialKeyHash,
+        layoutHash = first.layoutHash,
+        clipKey = first.clipKey,
+        destinationReadClass = first.destinationReadClass,
+        barrierGeneration = first.barrierGeneration,
+        uploadGeneration = first.uploadGeneration,
+    )
+}
 
 private fun verticesBufferArtifactKey(
     request: GPUVerticesBufferPlanRequest,
