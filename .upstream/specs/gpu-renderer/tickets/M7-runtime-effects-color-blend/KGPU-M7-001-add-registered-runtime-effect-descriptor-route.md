@@ -1,7 +1,7 @@
 ---
 id: KGPU-M7-001
 title: "Add registered runtime-effect descriptor route"
-status: blocked
+status: review
 milestone: M7
 priority: P0
 owner_area: runtime-effects
@@ -56,9 +56,9 @@ data class RuntimeEffectRouteEvidence(val descriptorId: String, val wgslPlan: St
 
 ## Acceptance Criteria
 
-- [ ] Descriptor ID/version and uniform schema are dumpable.
-- [ ] CPU oracle and WGSL evidence are linked.
-- [ ] Unregistered descriptors refuse.
+- [x] Descriptor ID/version and uniform schema are dumpable.
+- [x] CPU oracle and WGSL evidence are linked.
+- [x] Unregistered descriptors refuse.
 
 ## Required Evidence
 
@@ -83,19 +83,25 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: Descriptor-backed only. Remaining gate is a registered descriptor
-  with Kotlin/CPU oracle, complete parser-validated WGSL/reflection through
-  `wgsl4k`, route integration, adapter-backed execution/readback evidence, and
-  explicit unregistered-descriptor refusals.
+- `review`: Descriptor-backed only. This branch adds contract-gate evidence for
+  a registered `runtime.simple.color` material descriptor with descriptor
+  ID/version, uniform schema and packing, canonical 64-hex `sha256:` CPU oracle
+  hash, parser-validated wgsl4k reflection linkage, material route dump,
+  material-key boundary proof, and stable refusals for unregistered descriptors,
+  descriptor collisions, dynamic SkSL source, wrong placement, missing explicit
+  placement opt-in, WGSL reflection/schema/descriptor mismatch, and missing or
+  non-canonical CPU oracle evidence. The ticket remains in review pending
+  independent acceptance; adapter-backed execution, readback evidence, product
+  activation, arbitrary SkSL/WGSL input, children, blenders, filters, and live
+  editing remain unpromoted.
 - wgsl4k dependency evolution is tracked by `.upstream/specs/wgsl4k-evolution/`.
 - 2026-06-15 re-evaluation: merged wgsl4k SHA
   `72a35b58758f241756d984a84768ae77308730da` produced Kanvas dependency
   fixtures under `reports/wgsl4k-evolution/generated/`, including
   `runtime-effect-wgsl-reflection.json` and
-  `runtime-effect-wgsl-validation-report.json`. The ticket remains `blocked`
-  because descriptor route integration, Kotlin/CPU oracle linkage,
-  adapter-backed execution/readback evidence, and unregistered-descriptor route
-  refusals are still not complete.
+  `runtime-effect-wgsl-validation-report.json`. This branch consumes that
+  evidence in the descriptor route gate while preserving non-promotion for
+  adapter-backed execution/readback and product support.
 
 ## Linear Labels
 
