@@ -27,6 +27,7 @@
           "callTrace": [],
           "variationPosition": [],
           "cff2VsIndex": 0,
+          "blendVectors": [],
           "diagnostics": []
         }
     },
@@ -44,6 +45,7 @@
           "callTrace": [],
           "variationPosition": [],
           "cff2VsIndex": 0,
+          "blendVectors": [],
           "diagnostics": []
         }
     },
@@ -61,6 +63,7 @@
           "callTrace": [{"depth": 0, "scope": "local", "encodedIndex": -107, "resolvedIndex": 0, "bias": 107, "callerByteOffset": 4, "returnByteOffset": 3, "instructionBudgetRemaining": 1016, "expandedByteBudgetRemaining": 4088}, {"depth": 0, "scope": "global", "encodedIndex": -107, "resolvedIndex": 0, "bias": 107, "callerByteOffset": 6, "returnByteOffset": 3, "instructionBudgetRemaining": 1010, "expandedByteBudgetRemaining": 4082}],
           "variationPosition": [],
           "cff2VsIndex": 0,
+          "blendVectors": [],
           "diagnostics": []
         }
     }

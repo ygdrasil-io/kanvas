@@ -18,7 +18,7 @@ Subsystem contracts from M1 through M11.
 
 | Ticket | Status | Priority | Claim Impact | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|
-| [KFONT-M12-001 - Define font telemetry schema](KFONT-M12-001-define-font-telemetry-schema.md) | `review` | `P0` | `tracked-gap` | `telemetry` | `KFONT-M0-004` | - |
+| [KFONT-M12-001 - Define font telemetry schema](KFONT-M12-001-define-font-telemetry-schema.md) | `done` | `P0` | `tracked-gap` | `telemetry` | `KFONT-M0-004` | - |
 | [KFONT-M12-002 - Add parser and scaler metrics](KFONT-M12-002-add-parser-and-scaler-metrics.md) | `proposed` | `P1` | `tracked-gap` | `telemetry` | `KFONT-M12-001`, `KFONT-M2-004`, `KFONT-M3-005`, `KFONT-M4-004` | - |
 | [KFONT-M12-003 - Add shaping and paragraph metrics](KFONT-M12-003-add-shaping-and-paragraph-metrics.md) | `proposed` | `P1` | `tracked-gap` | `telemetry` | `KFONT-M12-001`, `KFONT-M6-001`, `KFONT-M8-002` | `scaledemoji` |
 | [KFONT-M12-004 - Add glyph artifact and cache metrics](KFONT-M12-004-add-glyph-artifact-and-cache-metrics.md) | `proposed` | `P1` | `tracked-gap` | `telemetry` | `KFONT-M12-001`, `KFONT-M9-006`, `KFONT-M10-010` | `dftext` |

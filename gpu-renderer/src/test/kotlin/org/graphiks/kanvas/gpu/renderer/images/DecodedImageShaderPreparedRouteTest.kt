@@ -116,8 +116,24 @@ class DecodedImageShaderPreparedRouteTest {
                 sampling = linearClampSampling.copy(mipmapMode = "linear"),
             ),
             RefusalCase(
-                "unsupported.image.sampling_filter",
+                "unsupported.image.sampling_cubic",
                 sampling = linearClampSampling.copy(filterMode = "cubic"),
+            ),
+            RefusalCase(
+                "unsupported.image.sampler_anisotropy",
+                sampling = linearClampSampling.copy(anisotropy = 0),
+            ),
+            RefusalCase(
+                "unsupported.image.sampling_anisotropic",
+                sampling = linearClampSampling.copy(anisotropy = 8),
+            ),
+            RefusalCase(
+                "unsupported.image.sampler_lod_clamp",
+                sampling = linearClampSampling.copy(lodMaxClamp = "handle:0xdeadbeef"),
+            ),
+            RefusalCase(
+                "unsupported.image.perspective_sampling",
+                sampling = linearClampSampling.copy(coordinateTransformClass = "perspective"),
             ),
         )
 
