@@ -1,7 +1,7 @@
 ---
 id: KGPU-M5-001
 title: "Add saveLayer isolated target route"
-status: review
+status: done
 milestone: M5
 priority: P0
 owner_area: layers-resources
@@ -72,7 +72,7 @@ Unsupported layers refuse; no CPU-rendered full-layer texture.
 
 - Expected row: `gpu-renderer.savelayer.isolated-target`
 - Expected classification: `TargetNative`
-- Claim promotion allowed: no until reviewed.
+- Claim promotion allowed: no; this ticket closes contract-gate evidence only.
 
 ## Validation
 
@@ -83,7 +83,9 @@ rtk git diff --check
 
 ## Status Notes
 
-- `review`: `GPUSaveLayerIsolatedTargetPlanner` adds contract-gate evidence for
+- `done`: Independent review accepted the contract-gate evidence after mandatory
+  target-usage enforcement and refusal-matrix coverage were completed.
+  `GPUSaveLayerIsolatedTargetPlanner` adds contract-gate evidence for
   the `gpu-renderer.savelayer.isolated-target` row with dumpable target
   descriptor, bounds, clear/load/store, resource ownership, task ordering,
   restore composite, and unsupported-variant refusals. The gate records
