@@ -8785,6 +8785,31 @@ tasks.register<Exec>("injectGpuRendererR6FirstRoutePmEvidenceIntoPmBundle") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("injectGpuRendererM9ReadinessPmEvidenceIntoPmBundle") {
+    group = "verification"
+    description = "Injects the :gpu-renderer KGPU-M9-003 readiness PM evidence bundle into the generated pipelinePmBundle manifest."
+    dependsOn(":gpu-renderer:gpuRendererM9ReadinessPmEvidenceBundle")
+    mustRunAfter("pipelinePmBundle")
+    mustRunAfter("injectGpuRendererR6FirstRoutePmEvidenceIntoPmBundle")
+
+    val outputDir = layout.projectDirectory.dir("gpu-renderer/build/reports/gpu-renderer-m9-readiness-pm-evidence")
+    val bundleDir = layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle")
+    commandLine(
+        "python3",
+        "scripts/validate_gpu_renderer_m9_readiness_pm_evidence_bundle.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+        "--inject-pm-bundle",
+        bundleDir.get().asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_gpu_renderer_m9_readiness_pm_evidence_bundle.py"))
+    inputs.dir(outputDir)
+    inputs.file(bundleDir.map { it.file("manifest.json") })
+    outputs.file(bundleDir.map { it.file("manifest.json") })
+    outputs.dir(bundleDir.map { it.dir("release/gpu-renderer-m9-readiness-pm-evidence") })
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateGpuRendererR6AdapterBackedPromotionReadinessBoundary") {
     group = "verification"
     description = "Validates the opt-in adapter-backed GPU renderer R6 promotion boundary without product route activation."
@@ -8822,5 +8847,7 @@ tasks.register<Exec>("validateGpuRendererR6AdapterBackedPromotionReadinessBounda
 
 tasks.named("pipelinePmBundle") {
     dependsOn(":gpu-renderer:gpuRendererR6FirstRoutePmEvidenceBundle")
+    dependsOn(":gpu-renderer:gpuRendererM9ReadinessPmEvidenceBundle")
     finalizedBy("injectGpuRendererR6FirstRoutePmEvidenceIntoPmBundle")
+    finalizedBy("injectGpuRendererM9ReadinessPmEvidenceIntoPmBundle")
 }

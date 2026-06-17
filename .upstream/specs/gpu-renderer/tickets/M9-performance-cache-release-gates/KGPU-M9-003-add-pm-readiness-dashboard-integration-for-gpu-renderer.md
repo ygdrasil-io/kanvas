@@ -1,7 +1,7 @@
 ---
 id: KGPU-M9-003
 title: "Add PM readiness dashboard integration for GPU renderer"
-status: blocked
+status: done
 milestone: M9
 priority: P1
 owner_area: pm-evidence
@@ -56,9 +56,9 @@ data class GPURendererReadinessRow(val area: String, val readinessDelta: Double)
 
 ## Acceptance Criteria
 
-- [ ] Dashboard rows separate activation and performance readiness.
-- [ ] Release-blocking state is explicit.
-- [ ] Non-claims are preserved.
+- [x] Dashboard rows separate activation and performance readiness.
+- [x] Release-blocking state is explicit.
+- [x] Non-claims are preserved.
 
 ## Required Evidence
 
@@ -83,10 +83,23 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: KGPU-M9-002 is now accepted, but this ticket still needs a PM
-  manifest/dashboard diff that keeps correctness support, activation,
-  performance, cache, and release readiness separate. Missing gates must keep
-  `readinessDelta=0.0`, `releaseBlocking=false`, and reporting-only status.
+- `done`: Adds `GPURendererReadinessDashboardIntegrator` and
+  `gpuRendererM9ReadinessPmEvidenceBundle` evidence for the
+  `gpu-renderer.readiness` PM row. The dashboard separates correctness,
+  activation, performance, cache, and release rows; injects
+  `gpuRendererM9ReadinessPmEvidence` into `pipelinePmBundle`; and keeps
+  `readinessDelta=0.0`, `releaseBlocking=false`, `productRouteActivated=false`,
+  `webGpuAdapterRequired=false`, and `nativeKadreCiRequired=false`. The M9
+  scene diagnostics now report `missingGate=none`, `pipelinePmBundleUpdated=true`,
+  and `pmManifestKey=gpuRendererM9ReadinessPmEvidence`. The first independent
+  review found P2 gaps in dashboard-line token validation and root manifest
+  ordering; the validator now rejects any dashboard-line readiness/release/product
+  movement token, preserves R6-before-M9 manifest order, and reinserts stale M9
+  manifest entries after R6. No release-blocking gate, product activation,
+  correctness-from-performance, derived-cache-as-observed, or dashboard promotion
+  claim is made. Independent review
+  `019ed60a-90f1-73c3-8ecd-59666e982a64` found no remaining P0/P1/P2 blockers
+  after the P2 fixes.
 
 ## Linear Labels
 

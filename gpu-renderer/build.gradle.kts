@@ -40,6 +40,22 @@ tasks.register<JavaExec>("gpuRendererR6FirstRoutePmEvidenceBundle") {
     }
 }
 
+tasks.register<JavaExec>("gpuRendererM9ReadinessPmEvidenceBundle") {
+    group = "verification"
+    description = "Writes the KGPU-M9-003 GPU renderer readiness PM evidence bundle without moving readiness."
+
+    val outputDir = layout.buildDirectory.dir("reports/gpu-renderer-m9-readiness-pm-evidence")
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.gpu.renderer.telemetry.ReadinessDashboardPMEvidenceExportKt")
+    outputs.dir(outputDir)
+    args(outputDir.get().asFile.absolutePath)
+
+    doFirst {
+        outputDir.get().asFile.deleteRecursively()
+    }
+}
+
 tasks.register<JavaExec>("gpuRendererWgsl4kEvolutionReportFixtures") {
     group = "verification"
     description = "Writes WGSL4K-EVO-004 reflection and validation report fixtures without route promotion."
