@@ -590,7 +590,7 @@ support.
 
 ### KFONT-M7-001: Add bundled deterministic font catalog
 
-Status: implemented, independently reviewed, and freshly revalidated.
+Status: implemented and freshly revalidated.
 
 Files:
 
