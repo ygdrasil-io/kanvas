@@ -1378,14 +1378,44 @@ public data class GDEFData(
  * zero or more ZWJ plus base emoji parts with their own optional variation
  * selectors. Non-emoji text is skipped.
  */
+public enum class EmojiSequenceKind {
+    Base,
+    VariationSelector,
+    SkinTone,
+    ZWJ,
+    Keycap,
+    Flag,
+    Unsupported,
+}
+
+public data class EmojiSequenceFact(
+    public val textRange: IntRange,
+    public val kind: EmojiSequenceKind,
+    public val codePoints: List<Int>,
+)
+
 public class EmojiSequenceShaper {
     /**
      * Shapes emoji sequences in [request].
      */
     public fun shapeEmoji(request: ShapingRequest): List<GlyphCluster> {
+        val facts = sequenceFacts(request)
+        return facts.mapIndexed { index, fact ->
+            GlyphCluster(
+                textRange = fact.textRange,
+                glyphRange = index..index,
+                advanceX = request.fontSize,
+            )
+        }
+    }
+
+    /**
+     * Extracts typed emoji sequence facts for [request].
+     */
+    public fun sequenceFacts(request: ShapingRequest): List<EmojiSequenceFact> {
         val textRange = codePointSafeTextRange(request.text, request.textRange) ?: return emptyList()
         val codePoints = codePointRanges(request.text, textRange)
-        val clusters = mutableListOf<GlyphCluster>()
+        val facts = mutableListOf<EmojiSequenceFact>()
         var index = 0
 
         while (index < codePoints.size) {
@@ -1395,33 +1425,78 @@ public class EmojiSequenceShaper {
                 continue
             }
 
-            clusters += GlyphCluster(
+            facts += EmojiSequenceFact(
                 textRange = sequence.textRange,
-                glyphRange = clusters.size..clusters.size,
-                advanceX = request.fontSize,
+                kind = sequence.kind,
+                codePoints = sequence.codePoints,
             )
             index = sequence.nextIndex
         }
 
-        return clusters
+        return facts
     }
 
     private fun emojiSequenceAt(codePoints: List<CodePointRange>, startIndex: Int): EmojiSequence? {
         val first = codePoints.getOrNull(startIndex) ?: return null
+        flagSequenceAt(codePoints, startIndex)?.let { return it }
+        keycapSequenceAt(codePoints, startIndex)?.let { return it }
         if (!isBaseEmoji(first.codePoint)) return null
 
         var index = consumeEmojiComponent(codePoints, startIndex) ?: return null
         var last = codePoints[index - 1].textRange.last
+        var hasJoiner = false
 
         while (index + 1 < codePoints.size && codePoints[index].codePoint == ZERO_WIDTH_JOINER) {
             val nextComponentEnd = consumeEmojiComponent(codePoints, index + 1) ?: break
             last = codePoints[nextComponentEnd - 1].textRange.last
             index = nextComponentEnd
+            hasJoiner = true
         }
 
+        val codePointSlice = codePoints.subList(startIndex, index).map { it.codePoint }
+        val kind = when {
+            hasJoiner && isExplicitUnsupportedEmojiSequence(codePointSlice) -> EmojiSequenceKind.Unsupported
+            hasJoiner -> EmojiSequenceKind.ZWJ
+            codePointSlice.any(::isEmojiModifier) -> EmojiSequenceKind.SkinTone
+            codePointSlice.any(::isVariationSelector) -> EmojiSequenceKind.VariationSelector
+            else -> EmojiSequenceKind.Base
+        }
         return EmojiSequence(
             textRange = first.textRange.first..last,
+            kind = kind,
+            codePoints = codePointSlice,
             nextIndex = index,
+        )
+    }
+
+    private fun flagSequenceAt(codePoints: List<CodePointRange>, startIndex: Int): EmojiSequence? {
+        val first = codePoints.getOrNull(startIndex) ?: return null
+        val second = codePoints.getOrNull(startIndex + 1) ?: return null
+        if (!isRegionalIndicator(first.codePoint) || !isRegionalIndicator(second.codePoint)) return null
+        return EmojiSequence(
+            textRange = first.textRange.first..second.textRange.last,
+            kind = EmojiSequenceKind.Flag,
+            codePoints = listOf(first.codePoint, second.codePoint),
+            nextIndex = startIndex + 2,
+        )
+    }
+
+    private fun keycapSequenceAt(codePoints: List<CodePointRange>, startIndex: Int): EmojiSequence? {
+        val first = codePoints.getOrNull(startIndex) ?: return null
+        if (!isKeycapBase(first.codePoint)) return null
+
+        var index = startIndex + 1
+        if (codePoints.getOrNull(index)?.codePoint == VARIATION_SELECTOR_16) {
+            index += 1
+        }
+        val combiningKeycap = codePoints.getOrNull(index) ?: return null
+        if (combiningKeycap.codePoint != COMBINING_ENCLOSING_KEYCAP) return null
+
+        return EmojiSequence(
+            textRange = first.textRange.first..combiningKeycap.textRange.last,
+            kind = EmojiSequenceKind.Keycap,
+            codePoints = codePoints.subList(startIndex, index + 1).map { it.codePoint },
+            nextIndex = index + 1,
         )
     }
 
@@ -1438,6 +1513,16 @@ public class EmojiSequenceShaper {
             index += 1
         }
         return index
+    }
+
+    // Keep unsupported-sequence refusals fixture-bounded until broader Unicode
+    // sequence coverage lands with pinned denominator evidence.
+    private fun isExplicitUnsupportedEmojiSequence(codePoints: List<Int>): Boolean =
+        codePoints == EXPLICIT_UNSUPPORTED_EMOJI_SEQUENCE
+
+    private companion object {
+        val EXPLICIT_UNSUPPORTED_EMOJI_SEQUENCE: List<Int> =
+            listOf(0x270C, 0xFE0F, 0x1F3FF, 0x200D, 0x1F4BB)
     }
 }
 
@@ -1498,6 +1583,8 @@ private const val SCRIPT_COMMON = "Zyyy"
 private const val SCRIPT_INHERITED = "Zinh"
 private const val SCRIPT_EMOJI = "Zsye"
 private const val ZERO_WIDTH_JOINER = 0x200D
+private const val VARIATION_SELECTOR_16 = 0xFE0F
+private const val COMBINING_ENCLOSING_KEYCAP = 0x20E3
 private const val LATIN_SMALL_F_CODE_POINT = 0x0066
 private const val LATIN_SMALL_I_CODE_POINT = 0x0069
 private const val LATIN_SMALL_FI_LIGATURE_CODE_POINT = 0xFB01
@@ -1566,6 +1653,8 @@ private data class ShapingGlyphUnit(
 
 private data class EmojiSequence(
     val textRange: IntRange,
+    val kind: EmojiSequenceKind,
+    val codePoints: List<Int>,
     val nextIndex: Int,
 )
 
@@ -1712,6 +1801,12 @@ private fun isVariationSelector(codePoint: Int): Boolean =
 
 private fun isEmojiModifier(codePoint: Int): Boolean =
     codePoint in 0x1F3FB..0x1F3FF
+
+private fun isRegionalIndicator(codePoint: Int): Boolean =
+    codePoint in 0x1F1E6..0x1F1FF
+
+private fun isKeycapBase(codePoint: Int): Boolean =
+    codePoint in 0x0030..0x0039 || codePoint == 0x0023 || codePoint == 0x002A
 
 private fun isBaseEmoji(codePoint: Int): Boolean =
     !isEmojiModifier(codePoint) && codePoint in 0x1F000..0x1FAFF ||

@@ -5,6 +5,8 @@ import org.graphiks.kanvas.glyph.GlyphRouteDiagnostic
 import org.graphiks.kanvas.glyph.GlyphStrikeKey
 import org.graphiks.kanvas.glyph.OutlineGlyphRepresentation
 import org.graphiks.kanvas.glyph.gpu.GPUGlyphRunDescriptor
+import org.graphiks.kanvas.text.shaping.EmojiSequenceFact
+import org.graphiks.kanvas.text.shaping.EmojiSequenceKind
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import java.util.zip.CRC32
@@ -4093,6 +4095,224 @@ data class EmojiGlyphDispatch(
          */
         const val EmojiDispatchSchema: String = "org.graphiks.kanvas.glyph.color.EmojiGlyphDispatch.v1"
     }
+}
+
+data class EmojiFallbackAttempt(
+    val familyName: String,
+    val typefaceId: TypefaceID?,
+    val covered: Boolean,
+    val reason: String,
+    val selected: Boolean = false,
+    val diagnosticCode: String? = null,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("familyName")).append(": ").append(colorGlyphJsonString(familyName)).append(", ")
+        append(colorGlyphJsonString("typefaceId")).append(": ")
+        append(typefaceId?.let { colorGlyphJsonString(it.value.toString()) } ?: "null").append(", ")
+        append(colorGlyphJsonString("covered")).append(": ").append(covered).append(", ")
+        append(colorGlyphJsonString("reason")).append(": ").append(colorGlyphJsonString(reason)).append(", ")
+        append(colorGlyphJsonString("selected")).append(": ").append(selected).append(", ")
+        append(colorGlyphJsonString("diagnosticCode")).append(": ")
+        append(diagnosticCode?.let(::colorGlyphJsonString) ?: "null")
+        append("}")
+    }
+}
+
+data class EmojiRoutePlanReference(
+    val dumpId: String,
+    val caseId: String,
+) {
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        append(colorGlyphJsonString("dumpId")).append(": ").append(colorGlyphJsonString(dumpId)).append(", ")
+        append(colorGlyphJsonString("caseId")).append(": ").append(colorGlyphJsonString(caseId))
+        append("}")
+    }
+}
+
+data class EmojiRouteRequest(
+    val sequenceFact: EmojiSequenceFact,
+    val unicodeVersion: String,
+    val glyphId: Int?,
+    val strikeKey: GlyphStrikeKey,
+    val fallbackAttempts: List<EmojiFallbackAttempt> = emptyList(),
+    val availability: EmojiGlyphRouteAvailability = EmojiGlyphRouteAvailability(),
+    val evidenceRef: EmojiRoutePlanReference? = null,
+    val allowMonochromeFallback: Boolean = true,
+)
+
+data class EmojiRouteTrace(
+    val textRange: IntRange,
+    val sequenceKind: EmojiSequenceKind,
+    val codePoints: List<Int>,
+    val unicodeVersion: String,
+    val glyphId: Int?,
+    val fallbackAttempts: List<EmojiFallbackAttempt> = emptyList(),
+    val selectedTypefaceId: TypefaceID? = null,
+    val selectedFamilyName: String? = null,
+    val selectedRoute: String,
+    val monochromeFallback: Boolean,
+    val evidenceRef: EmojiRoutePlanReference? = null,
+    val diagnostics: List<ColorGlyphDiagnostic> = emptyList(),
+) {
+    val dumpSha256: String
+        get() = colorGlyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    fun toCanonicalJson(): String = canonicalJson(includeDumpSha256 = true)
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendColorGlyphJsonField("schema", EmojiRouteTraceSchema, comma = true)
+        append("  ").append(colorGlyphJsonString("textRange")).append(": ")
+            .append(colorGlyphJsonString("${textRange.first}..${textRange.last}")).append(",\n")
+        appendColorGlyphJsonField("sequenceKind", sequenceKind.name, comma = true)
+        append("  ").append(colorGlyphJsonString("codePoints")).append(": ")
+            .append(codePoints.joinToString(prefix = "[", postfix = "]") { codePoint ->
+                colorGlyphJsonString("U+${codePoint.toString(16).uppercase().padStart(4, '0')}")
+            }).append(",\n")
+        appendColorGlyphJsonField("unicodeVersion", unicodeVersion, comma = true)
+        append("  ").append(colorGlyphJsonString("glyphId")).append(": ").append(glyphId ?: "null").append(",\n")
+        append("  ").append(colorGlyphJsonString("selectedTypefaceId")).append(": ")
+            .append(selectedTypefaceId?.let { colorGlyphJsonString(it.value.toString()) } ?: "null").append(",\n")
+        append("  ").append(colorGlyphJsonString("selectedFamilyName")).append(": ")
+            .append(selectedFamilyName?.let(::colorGlyphJsonString) ?: "null").append(",\n")
+        appendColorGlyphJsonField("selectedRoute", selectedRoute, comma = true)
+        append("  ").append(colorGlyphJsonString("monochromeFallback")).append(": ").append(monochromeFallback).append(",\n")
+        append("  ").append(colorGlyphJsonString("fallbackAttempts")).append(": ")
+            .append(fallbackAttempts.joinToString(prefix = "[", postfix = "]") { it.toCanonicalJson() }).append(",\n")
+        append("  ").append(colorGlyphJsonString("evidenceRef")).append(": ")
+            .append(evidenceRef?.toCanonicalJson() ?: "null").append(",\n")
+        append("  ").append(colorGlyphJsonString("diagnostics")).append(": ")
+        appendColorGlyphDiagnosticsJson(diagnostics, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendColorGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+
+    companion object {
+        const val EmojiRouteTraceSchema: String = "org.graphiks.kanvas.glyph.color.EmojiRouteTrace.v1"
+    }
+}
+
+class SimpleEmojiSequencePlanner {
+    fun plan(request: EmojiRouteRequest): EmojiRouteTrace {
+        if (request.sequenceFact.kind == EmojiSequenceKind.Unsupported) {
+            return EmojiRouteTrace(
+                textRange = request.sequenceFact.textRange,
+                sequenceKind = request.sequenceFact.kind,
+                codePoints = request.sequenceFact.codePoints,
+                unicodeVersion = request.unicodeVersion,
+                glyphId = request.glyphId,
+                selectedRoute = "missing",
+                monochromeFallback = false,
+                diagnostics = listOf(
+                    ColorGlyphDiagnostic(
+                        glyphId = request.glyphId,
+                        route = "missing",
+                        message = "Emoji sequence is unsupported for the entire cluster.",
+                        severity = "warning",
+                        code = ColorGlyphDiagnosticCodes.EmojiSequenceUnsupported,
+                        detail = unsupportedSequenceDetail(request.sequenceFact),
+                    ),
+                ),
+            )
+        }
+
+        val selectedAttempt = request.fallbackAttempts.firstOrNull { it.selected }
+        if (selectedAttempt == null) {
+            return EmojiRouteTrace(
+                textRange = request.sequenceFact.textRange,
+                sequenceKind = request.sequenceFact.kind,
+                codePoints = request.sequenceFact.codePoints,
+                unicodeVersion = request.unicodeVersion,
+                glyphId = request.glyphId,
+                fallbackAttempts = request.fallbackAttempts,
+                selectedRoute = "missing",
+                monochromeFallback = false,
+                diagnostics = listOf(
+                    ColorGlyphDiagnostic(
+                        glyphId = request.glyphId,
+                        route = "missing",
+                        message = "No emoji-capable fallback family is available for the sequence cluster.",
+                        severity = "warning",
+                        code = ColorGlyphDiagnosticCodes.EmojiFallbackUnavailable,
+                        detail = "textRange=${request.sequenceFact.textRange.first}..${request.sequenceFact.textRange.last};kind=${request.sequenceFact.kind.name};availableFallbacks=none",
+                    ),
+                ),
+            )
+        }
+
+        val effectiveAvailability = if (request.allowMonochromeFallback) {
+            request.availability
+        } else {
+            request.availability.copy(outlineGlyphs = emptySet())
+        }
+        val routeDiagnostics = colorRouteDiagnostics(
+            glyphId = request.glyphId,
+            strikeKey = request.strikeKey,
+            availability = effectiveAvailability,
+        )
+        val selectedRoute = selectedRouteFor(glyphId = request.glyphId, availability = effectiveAvailability)
+        return EmojiRouteTrace(
+            textRange = request.sequenceFact.textRange,
+            sequenceKind = request.sequenceFact.kind,
+            codePoints = request.sequenceFact.codePoints,
+            unicodeVersion = request.unicodeVersion,
+            glyphId = request.glyphId,
+            fallbackAttempts = request.fallbackAttempts,
+            selectedTypefaceId = selectedAttempt.typefaceId,
+            selectedFamilyName = selectedAttempt.familyName,
+            selectedRoute = selectedRoute,
+            monochromeFallback = selectedRoute == "outline",
+            evidenceRef = request.evidenceRef,
+            diagnostics = routeDiagnostics,
+        )
+    }
+
+    private fun colorRouteDiagnostics(
+        glyphId: Int?,
+        strikeKey: GlyphStrikeKey,
+        availability: EmojiGlyphRouteAvailability,
+    ): List<ColorGlyphDiagnostic> {
+        val resolvedGlyphId = glyphId ?: return emptyList()
+        val dispatcher = SimpleEmojiGlyphDispatcher(availability)
+        val dispatch = dispatcher.dispatch(glyphId = resolvedGlyphId, strikeKey = strikeKey)
+        return if (dispatch.route != "missing") {
+            dispatch.diagnostics
+        } else {
+            dispatch.diagnostics.dropLast(1) + ColorGlyphDiagnostic(
+                glyphId = resolvedGlyphId,
+                route = "missing",
+                message = "No supported color glyph route is available for the selected emoji typeface.",
+                severity = "warning",
+                code = ColorGlyphDiagnosticCodes.ColorGlyphUnavailable,
+                detail = "glyphId=$resolvedGlyphId;sizePx=${strikeKey.sizePx};supportedRoutes=none",
+            )
+        }
+    }
+
+    private fun selectedRouteFor(glyphId: Int?, availability: EmojiGlyphRouteAvailability): String {
+        val resolvedGlyphId = glyphId ?: return "missing"
+        return when {
+            resolvedGlyphId in availability.colrGlyphs -> "colr"
+            resolvedGlyphId in availability.bitmapGlyphs -> "bitmap"
+            resolvedGlyphId in availability.pngGlyphs -> "png"
+            resolvedGlyphId in availability.svgGlyphs -> "svg"
+            resolvedGlyphId in availability.outlineGlyphs -> "outline"
+            else -> "missing"
+        }
+    }
+
+    private fun unsupportedSequenceDetail(sequenceFact: EmojiSequenceFact): String =
+        "textRange=${sequenceFact.textRange.first}..${sequenceFact.textRange.last};codePoints=" +
+            sequenceFact.codePoints.joinToString(",") { codePoint ->
+                "U+${codePoint.toString(16).uppercase().padStart(4, '0')}"
+            }
 }
 
 /**
