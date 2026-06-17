@@ -467,6 +467,90 @@ sealed interface GPUPassCommand {
         }
     }
 
+    /** Materializes or reuses an offscreen layer target before rendering children. */
+    data class PrepareLayerTarget(
+        val targetLabel: String,
+        val descriptorHash: String,
+        val usageLabel: String,
+        val byteEstimate: Long,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "prepareLayerTarget"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(targetLabel.isNotBlank()) { "PrepareLayerTarget.targetLabel must not be blank" }
+            require(descriptorHash.isNotBlank()) { "PrepareLayerTarget.descriptorHash must not be blank" }
+            require(usageLabel.isNotBlank()) { "PrepareLayerTarget.usageLabel must not be blank" }
+            require(byteEstimate >= 0L) { "PrepareLayerTarget.byteEstimate must be non-negative" }
+        }
+    }
+
+    /** Clears an isolated layer target before child rendering. */
+    data class ClearLayerTarget(
+        val targetLabel: String,
+        val clearPolicy: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "clearLayerTarget"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(targetLabel.isNotBlank()) { "ClearLayerTarget.targetLabel must not be blank" }
+            require(clearPolicy.isNotBlank()) { "ClearLayerTarget.clearPolicy must not be blank" }
+        }
+    }
+
+    /** Renders layer children into the isolated target scope. */
+    data class RenderLayerChildren(
+        val scopeLabel: String,
+        val targetLabel: String,
+        val childrenLabel: String,
+        val tokenLabel: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "renderLayerChildren"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(scopeLabel.isNotBlank()) { "RenderLayerChildren.scopeLabel must not be blank" }
+            require(targetLabel.isNotBlank()) { "RenderLayerChildren.targetLabel must not be blank" }
+            require(childrenLabel.isNotBlank()) { "RenderLayerChildren.childrenLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "RenderLayerChildren.tokenLabel must not be blank" }
+        }
+    }
+
+    /** Composites an isolated layer source back into its parent target. */
+    data class CompositeLayer(
+        val sourceLabel: String,
+        val parentTargetLabel: String,
+        val blendModeLabel: String,
+        val routeLabel: String,
+        val tokenLabel: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "compositeLayer"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(sourceLabel.isNotBlank()) { "CompositeLayer.sourceLabel must not be blank" }
+            require(parentTargetLabel.isNotBlank()) { "CompositeLayer.parentTargetLabel must not be blank" }
+            require(blendModeLabel.isNotBlank()) { "CompositeLayer.blendModeLabel must not be blank" }
+            require(routeLabel.isNotBlank()) { "CompositeLayer.routeLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "CompositeLayer.tokenLabel must not be blank" }
+        }
+    }
+
+    /** Records a stable layer materialization refusal in command-stream evidence. */
+    data class RefuseLayer(
+        val scopeLabel: String,
+        val reasonCode: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "refuseLayer"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(scopeLabel.isNotBlank()) { "RefuseLayer.scopeLabel must not be blank" }
+            require(reasonCode.isNotBlank()) { "RefuseLayer.reasonCode must not be blank" }
+        }
+    }
+
     /** Ends a render pass after all packet commands have been emitted. */
     data class EndRenderPass(val passId: String) : GPUPassCommand {
         override val commandLabel: String get() = "endRenderPass"
@@ -816,6 +900,19 @@ private fun GPUPassCommand.dumpLine(): String =
         is GPUPassCommand.CopyTexture ->
             "passes.command copyTexture source=$sourceLabel destination=$destinationLabel " +
                 "bounds=$boundsLabel token=$tokenLabel"
+        is GPUPassCommand.PrepareLayerTarget ->
+            "passes.command prepareLayerTarget target=$targetLabel descriptor=$descriptorHash " +
+                "usage=$usageLabel bytes=$byteEstimate"
+        is GPUPassCommand.ClearLayerTarget ->
+            "passes.command clearLayerTarget target=$targetLabel clear=$clearPolicy"
+        is GPUPassCommand.RenderLayerChildren ->
+            "passes.command renderLayerChildren scope=$scopeLabel target=$targetLabel " +
+                "children=$childrenLabel token=$tokenLabel"
+        is GPUPassCommand.CompositeLayer ->
+            "passes.command compositeLayer source=$sourceLabel parent=$parentTargetLabel " +
+                "blend=$blendModeLabel route=$routeLabel token=$tokenLabel"
+        is GPUPassCommand.RefuseLayer ->
+            "passes.command refuseLayer scope=$scopeLabel reason=$reasonCode"
         is GPUPassCommand.EndRenderPass ->
             "passes.command endRenderPass pass=$passId"
     }
@@ -832,6 +929,14 @@ private fun GPUPassCommandOperandBridge.matchesCommandOperandKind(): Boolean =
                 GPUMaterializedCommandOperandKind.TextureView,
             )
         "copyTexture" -> operand.kind == GPUMaterializedCommandOperandKind.DestinationCopyTexture
+        "prepareLayerTarget" -> operand.kind == GPUMaterializedCommandOperandKind.Texture
+        "clearLayerTarget", "renderLayerChildren" ->
+            operand.kind == GPUMaterializedCommandOperandKind.RenderTarget
+        "compositeLayer" ->
+            operand.kind in setOf(
+                GPUMaterializedCommandOperandKind.TextureView,
+                GPUMaterializedCommandOperandKind.Sampler,
+            )
         "setRenderPipeline" -> operand.kind == GPUMaterializedCommandOperandKind.RenderPipeline
         "setBindGroup" ->
             operand.kind in setOf(
