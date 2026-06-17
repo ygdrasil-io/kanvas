@@ -382,6 +382,84 @@
       ]
     },
     {
+      "surfaceId": "font-parser-metrics",
+      "label": "Font parser metrics",
+      "classification": "tracked-gap",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/parser-metrics.json",
+          "reports/pure-kotlin-text/dump-evidence-index.json"
+        ],
+        "cpuOracle": [],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/pure-kotlin-text/parser-metrics.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/parser-metrics.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own shaping/paragraph/glyph/GPU producer emission; keep parser/scaler rows advisory-only until the remaining telemetry domains land.",
+        "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
+      ],
+      "legacyGates": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim"
+      ]
+    },
+    {
+      "surfaceId": "font-scaler-metrics",
+      "label": "Font scaler metrics",
+      "classification": "tracked-gap",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/scaler-metrics.json",
+          "reports/pure-kotlin-text/dump-evidence-index.json"
+        ],
+        "cpuOracle": [],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/pure-kotlin-text/scaler-metrics.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/scaler-metrics.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own shaping/paragraph/glyph/GPU producer emission; keep parser/scaler rows advisory-only until the remaining telemetry domains land.",
+        "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
+      ],
+      "legacyGates": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim"
+      ]
+    },
+    {
       "surfaceId": "font-telemetry-schema",
       "label": "font telemetry schema",
       "classification": "tracked-gap",
@@ -412,7 +490,7 @@
         ]
       },
       "requiredEvidenceGates": [
-        "KFONT-M12-002, KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own parser/scaler/shaping/paragraph/glyph/GPU producer emission into the shared schema; keep this row schema-only advisory evidence until those subsystem tickets land.",
+        "KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own shaping/paragraph/glyph/GPU producer emission into the shared schema; parser/scaler producer emission is now attached separately and this row stays schema-only advisory evidence until those subsystem tickets land.",
         "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
       ],
       "legacyGates": [],

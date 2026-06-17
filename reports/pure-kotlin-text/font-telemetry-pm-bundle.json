@@ -12,6 +12,8 @@
     "reports/pure-kotlin-text/font-claim-dashboard.json",
     "reports/pure-kotlin-text/font-telemetry-schema.json",
     "reports/pure-kotlin-text/font-telemetry-schema-fixture.json",
+    "reports/pure-kotlin-text/parser-metrics.json",
+    "reports/pure-kotlin-text/scaler-metrics.json",
     "reports/pure-kotlin-text/font-telemetry-pm-bundle.json",
     "reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"
   ],
@@ -66,7 +68,7 @@
     }
   ],
   "remainingGates": [
-    "KFONT-M12-002, KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own parser/scaler/shaping/paragraph/glyph/GPU producer emission into the shared schema; keep this pack advisory and schema-only until those subsystem tickets land.",
+    "KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own shaping/paragraph/glyph/GPU producer emission into the shared schema; parser/scaler producer evidence is now attached separately and this pack remains advisory and schema-only until those subsystem tickets land.",
     "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
   ],
   "nonClaims": [

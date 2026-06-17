@@ -5128,9 +5128,74 @@ rtk git diff --check
 ```
 
 Remaining gate: no schema-local gate remains. Downstream producer emission into
-the shared schema is owned by `KFONT-M12-002`, `KFONT-M12-003`,
-`KFONT-M12-004`, and `KFONT-M12-005`; this slice does not promote any
-performance budget, GPU route, or release-gate claim.
+the shared schema is now limited to `KFONT-M12-003`, `KFONT-M12-004`, and
+`KFONT-M12-005`; parser/scaler producer evidence is attached separately under
+`KFONT-M12-002`, and this slice still does not promote any performance budget,
+GPU route, or release-gate claim.
+
+### KFONT-M12-002: Add parser and scaler metrics
+
+Status: done; implemented and freshly validated as advisory parser/scaler producer evidence.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt`
+- `reports/pure-kotlin-text/parser-metrics.json`
+- `reports/pure-kotlin-text/scaler-metrics.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m12-002-parser-scaler-metrics.md`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `reports/pure-kotlin-text/font-telemetry-pm-bundle.json`
+- `reports/pure-kotlin-text/font-telemetry-schema.json`
+- `reports/pure-kotlin-text/font-telemetry-schema-fixture.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m12-001-font-telemetry-schema.md`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-002-add-parser-and-scaler-metrics.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `parser-metrics.json` now records deterministic repeated cold/warm parser
+  samples for single-face TTF, TTC, CFF-selected, variable-axis, malformed
+  optional-table, and missing-required-table fixture IDs with stable
+  `font.parser.scan.time` and `font.parser.parse.time` trend series.
+- Parser samples attach parsed table tags, bytes-read counters, table cache
+  hit/miss counters, malformed table counts, bounds-failure counts, and stable
+  semantic diagnostics without using native parser timings as substitute
+  evidence.
+- `scaler-metrics.json` now records deterministic repeated scaler samples for
+  simple `glyf`, composite `glyf`, variable `glyf`, CFF, CFF2 variation-store,
+  and malformed CFF refusal fixtures with stable `font.scaler.outline.time`,
+  `font.scaler.metrics.time`, `font.scaler.variation.time`, and
+  `font.scaler.charstring.time` trend series.
+- Scaler samples attach glyph counts, outline command counts, cache hit/miss
+  counters, `.notdef` fallback counters, and stable refusal diagnostics such as
+  `font.metrics-variation-unavailable`, `font.cff-table-malformed`, and
+  `font.telemetry.scaler-domain-missing`.
+- `font-claim-dashboard.json` now exposes separate `Font parser metrics` and
+  `Font scaler metrics` advisory rows, while the older schema/PM-bundle
+  artifacts now point remaining downstream producer work only at
+  `KFONT-M12-003`, `KFONT-M12-004`, and `KFONT-M12-005`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
+rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
+rtk ./gradlew --no-daemon pipelinePmBundle
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: no ticket-local gate remains. Shaping/paragraph, glyph/cache,
+and GPU handoff producer emission remain with `KFONT-M12-003`,
+`KFONT-M12-004`, and `KFONT-M12-005`; this slice keeps all budgets advisory
+and does not promote any release-gate, GPU-route, or complete subsystem claim.
 ### KFONT-M1-004: Bundled Source Fixture Manifest
 
 Status: done; merged, independently reviewed, and freshly revalidated for closeout.
