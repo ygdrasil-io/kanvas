@@ -70,11 +70,12 @@ REQUIRED_FONT_FAMILY_GATES = {
     ],
     "color-glyphs": [
         "colrv0-layer",
-        "colrv1-solid-glyph-colr-glyph",
-        "colrv1-solid-gradient-transform",
+        "colrv1-budget-refusal",
         "colrv1-composite-clip",
         "colrv1-cycle-refusal",
-        "colrv1-budget-refusal",
+        "colrv1-gradient-operation-group",
+        "colrv1-solid-glyph-colr-glyph",
+        "colrv1-solid-gradient-transform",
     ],
     "emoji": [
         "emoji-vs15-vs16",
