@@ -36,14 +36,14 @@ class RenderGpuRendererSceneOffscreenMainTest {
     @Test
     fun `candidate scenes are not accepted by WebGPU offscreen runner`() {
         val candidate = GPURendererSceneHumanDocs.candidateScenes.single {
-            it.sceneId.value == "gradient-tile-mode-boundary"
+            it.sceneId.value == "simple-latin-glyph-atlas-strip"
         }
         val root = Files.createTempDirectory("gpu-renderer-scenes-candidate-offscreen")
         val failure = assertFailsWith<IllegalStateException> {
             renderGpuRendererSceneOffscreen(arrayOf(candidate.sceneId.value, root.toString()))
         }
 
-        assertContains(failure.message.orEmpty(), "Unknown GPU renderer scene: gradient-tile-mode-boundary")
+        assertContains(failure.message.orEmpty(), "Unknown GPU renderer scene: simple-latin-glyph-atlas-strip")
     }
 
     @Test
@@ -77,8 +77,11 @@ class RenderGpuRendererSceneOffscreenMainTest {
         val rectOnlyScenes = listOf(
             RenderedShapeExpectation("activation-candidate-boundary-board", fillRectCount = 6),
             RenderedShapeExpectation("first-route-rollback-panel", fillRectCount = 4),
+            RenderedShapeExpectation("gradient-tile-mode-boundary", fillRectCount = 6),
+            RenderedShapeExpectation("path-aa-stroke-join-board", fillRectCount = 6),
             RenderedShapeExpectation("blend-mode-strip", fillRectCount = 1),
             RenderedShapeExpectation("translucent-card-overlap", fillRectCount = 3),
+            RenderedShapeExpectation("layer-filter-chain-board", fillRectCount = 6),
             RenderedShapeExpectation("cache-pressure-deck", fillRectCount = 2),
             RenderedShapeExpectation("cache-frame-budget-strip", fillRectCount = 5),
             RenderedShapeExpectation("cache-source-ledger-board", fillRectCount = 5),

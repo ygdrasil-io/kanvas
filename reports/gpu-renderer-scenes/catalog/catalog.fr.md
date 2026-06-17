@@ -58,6 +58,14 @@ Valide: Valide rrect, scissor simple, degrade de progression et marqueur ordonne
 Ne revendique pas: Ne revendique pas une gate release bloquante ni une mesure de performance.
 Preuve: Preuve WebGPU offscreen et Kadre windowed.
 
+### Gradient Tile Mode Boundary (`gradient-tile-mode-boundary`)
+M2 - Rect, Gradient, Clip - `ShouldRender`
+
+Intention: Rendre visible les variations tile mode et transform autour des gradients.
+Valide: Valide des lanes de refus repeat, mirror, decal et matrice locale.
+Ne revendique pas: Ne revendique pas repeat, mirror, decal ou matrices locales completes.
+Preuve: Preuve WebGPU offscreen avec refus gradient visibles.
+
 ### Path Badge And Stroke (`path-badge-and-stroke`)
 M3 - RRect, Rect - `ShouldRender`
 
@@ -81,6 +89,14 @@ Intention: Rendre visible la gate stencil-cover path natif cloturee sans promoti
 Valide: Valide le contrat candidate, les diagnostics de refus et les raisons skipped-lane.
 Ne revendique pas: Ne revendique pas la route native stencil-cover ni activation produit.
 Preuve: Preuve WebGPU offscreen avec statut de gate contractuelle.
+
+### Path AA Stroke Join Board (`path-aa-stroke-join-board`)
+M3 - Rect, Clip, Path, Stroke - `ShouldRender`
+
+Intention: Preparer une revue des joins, caps et AA path avant support natif.
+Valide: Valide des lanes de refus AA pour joins, caps, coverage et stencil-cover.
+Ne revendique pas: Ne revendique pas couverture AA, joins/caps reels ou stencil-cover natif.
+Preuve: Preuve WebGPU offscreen avec refus path/stroke visibles.
 
 ### Clipped Avatar Grid (`clipped-avatar-grid`)
 M3,M5 - Clip, Image - `ShouldRender`
@@ -153,6 +169,14 @@ Intention: Rendre visible la strategie destination-read avant blending avance.
 Valide: Valide lanes de politique dst-read et blend sans lecture destination active.
 Ne revendique pas: Ne revendique pas framebuffer fetch, dst texture ou blend compose general.
 Preuve: Preuve WebGPU offscreen avec refus destination-read.
+
+### Layer Filter Chain Board (`layer-filter-chain-board`)
+M5 - Rect, Clip, Layer, Filter - `ShouldRender`
+
+Intention: Preparer une scene de chainage layer/filter plus ambitieuse.
+Valide: Valide des lanes de refus pour DAG, texture intermediaire et destination-read.
+Ne revendique pas: Ne revendique pas saveLayer general, destination-read, intermediate textures ou DAG arbitraire.
+Preuve: Preuve WebGPU offscreen avec refus layer/filter visibles.
 
 ### Layered Shadow Card (`layered-shadow-card`)
 M5 - Layer, Filter - `ShouldRender`
@@ -395,33 +419,6 @@ Ne revendique pas: Ne revendique pas remplacement accepte ni retrait effectif de
 Preuve: Preuve WebGPU offscreen et Kadre windowed.
 
 ## Candidates amont
-
-### Gradient Tile Mode Boundary (`gradient-tile-mode-boundary`)
-M2 - RRect, Gradient, Clip
-
-Statut: `runner-gap`
-Intention: Rendre visible les variations tile mode et transform autour des gradients.
-Validation visee: Verifier que les tile modes non supportes refusent avec raison stable.
-Ne revendique pas: Ne revendique pas repeat, mirror, decal ou matrices locales completes.
-Raison: Complete les scenes M2 actuelles qui couvrent surtout le degrade lineaire simple.
-
-### Path AA Stroke Join Board (`path-aa-stroke-join-board`)
-M3 - Path, Stroke, Clip
-
-Statut: `runner-gap`
-Intention: Preparer une revue des joins, caps et AA path avant support natif.
-Validation visee: Montrer les routes path/stroke attendues et les refus coverage manquants.
-Ne revendique pas: Ne revendique pas couverture AA, joins/caps reels ou stencil-cover natif.
-Raison: Couvre un trou M3 entre proxy rectangulaire et vraie couverture path.
-
-### Layer Filter Chain Board (`layer-filter-chain-board`)
-M5 - Layer, Filter
-
-Statut: `runner-gap`
-Intention: Preparer une scene de chainage layer/filter plus ambitieuse.
-Validation visee: Distinguer bounded fixtures supportees et DAG image-filter non supporte.
-Ne revendique pas: Ne revendique pas saveLayer general, intermediate textures ou DAG arbitraire.
-Raison: Couvre les limites M5 autour de SaveLayer, FilterNode et destination-read.
 
 ### Simple Latin Glyph Atlas Strip (`simple-latin-glyph-atlas-strip`)
 M6 - Text, Cache
