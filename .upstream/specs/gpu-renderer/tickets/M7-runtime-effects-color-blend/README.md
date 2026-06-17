@@ -27,7 +27,7 @@ blend modes that require destination access. Runtime effects must follow
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M7-001 - Add registered runtime-effect descriptor route](KGPU-M7-001-add-registered-runtime-effect-descriptor-route.md) | `done` | `P0` | `DependencyGated` | `GPUNative` | `false` | `true` | `runtime-effects` | `KGPU-M2-002` | `runtime-effect legacy` |
-| [KGPU-M7-002 - Add runtime-effect child and source refusal gates](KGPU-M7-002-add-runtime-effect-child-and-source-refusal-gates.md) | `blocked` | `P0` | `RefuseRequired` | `RefuseDiagnostic` | `false` | `false` | `runtime-effects-validation` | `KGPU-M7-001` | - |
+| [KGPU-M7-002 - Add runtime-effect child and source refusal gates](KGPU-M7-002-add-runtime-effect-child-and-source-refusal-gates.md) | `done` | `P0` | `RefuseRequired` | `RefuseDiagnostic` | `false` | `false` | `runtime-effects-validation` | `KGPU-M7-001` | - |
 | [KGPU-M7-003 - Add blend mode allowlist and destination-read refusals](KGPU-M7-003-add-blend-mode-allowlist-and-destination-read-refusals.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `blend-destination-read` | `KGPU-M5-002` | `blend legacy` |
 | [KGPU-M7-004 - Add SDR color plan and HDR profile refusal gates](KGPU-M7-004-add-sdr-color-plan-and-hdr-profile-refusal-gates.md) | `done` | `P1` | `DependencyGated` | `GPUNative` | `false` | `false` | `color` | `KGPU-M2-002` | `color legacy` |
 
@@ -59,8 +59,21 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*Runtime*' --tests '*Blend*'
   blenders, filters, or live editing is claimed.
   Evidence report:
   `reports/gpu-renderer/2026-06-17-m7-001-runtime-effect-descriptor-gate.md`.
-- KGPU-M7-002 is `blocked` pending child/source refusal implementation; it can
-  now anchor its rows to the accepted KGPU-M7-001 descriptor route boundary.
+- KGPU-M7-002 is `done` with refusal-only evidence for runtime-effect
+  source, child, and unsupported placement shapes. The
+  `GPURuntimeEffectRefusalMatrix` emits `RefuseRequired` rows for arbitrary
+  SkSL source, arbitrary WGSL source, unknown compatibility keys, child slots,
+  and unsupported placements, and keeps descriptor-anchor failure visible as
+  `unsupported.runtime_effect.unregistered_descriptor` and
+  `unsupported.runtime_effect.descriptor_collision`. PM/review dumps include
+  stable facts for compatibility keys, child slot/source/sample usage,
+  requested and accepted placements, and descriptor match counts. It remains
+  non-promoted: no arbitrary SkSL/WGSL input, child runtime effects,
+  unsupported placement support, or product activation is claimed. Independent
+  re-review `019ed5b8-bffe-7f52-a451-39c6a61f5ed4` found no remaining
+  P0/P1/P2 blockers.
+  Evidence report:
+  `reports/gpu-renderer/2026-06-17-m7-002-runtime-effect-refusal-matrix.md`.
 - KGPU-M7-003 is `done` with fixed-function allowlist evidence for `Src`,
   `SrcOver`, and `DstOver`; deterministic alpha-plan/state/key dumps; terminal
   refusals for unsupported and destination-read blend modes; destination-read

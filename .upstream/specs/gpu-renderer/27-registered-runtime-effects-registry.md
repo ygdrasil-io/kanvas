@@ -661,6 +661,7 @@ Stable reason-code examples:
 - `unsupported.runtime_effect.live_update_out_of_range`
 - `unsupported.runtime_effect.budget_exceeded`
 - `unsupported.runtime_effect.dynamic_sksl_forbidden`
+- `unsupported.runtime_effect.dynamic_wgsl_forbidden`
 
 Existing migration/evidence reason codes such as
 `runtime-effect.arbitrary-sksl-unsupported` and
