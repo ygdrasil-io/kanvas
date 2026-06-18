@@ -16,7 +16,8 @@ promoting Arabic shaping support:
   diagnostic row.
 - `reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json` now
   checks in ticket-local glyph/cluster evidence for the bounded Arabic rows
-  already proven by the runtime tests.
+  already proven by the runtime tests, including the run-level `bidiLevel`
+  facts preserved from the M5 bidi path.
 - `reports/font/fixtures/expected/shaping/arabic-shaping-plan.json` now checks
   in ticket-local feature-policy evidence for the same bounded Arabic rows,
   including required defaults and refusal-on-missing expectations.
@@ -36,8 +37,8 @@ promoting Arabic shaping support:
   positioned-or-zero-advance check to the mark cluster itself on the vendored
   font.
 - `arabic-shaped-glyph-run.json` now pins the shaped glyph ids, cluster ranges,
-  and cluster metrics for vendored joining forms, vendored marks, bounded
-  `lam-alef` runtime divergence, and the reviewed generic
+  cluster metrics, and run-level `bidiLevel` facts for vendored joining forms,
+  vendored marks, bounded `lam-alef` runtime divergence, and the reviewed generic
   `text.shaping.gdef-required` refusal row.
 - `arabic-shaping-plan.json` now pins the `Arab`/`arab` script-policy
   selection, RTL bidi level, required Arabic default features
@@ -48,15 +49,23 @@ promoting Arabic shaping support:
   `gpos-missing-gdef.otf` emits the stable generic
   `text.shaping.gdef-required` refusal for Arabic base+mark input instead of
   approximating mark attachment without GDEF glyph classes.
+- `arabic-gsub-trace.json` now records the actual runtime `init`/`fina` lookup
+  chain that changes vendored joining-form and bounded `lam-alef` glyph IDs,
+  while pinning the full required Arabic runtime feature order for those rows.
+- `arabic-gpos-trace.json` now records the actual runtime `mark` lookup and
+  attachment vector for the vendored base-plus-mark row, plus the empty-lookup
+  generic `text.shaping.gdef-required` refusal row on
+  `gpos-missing-gdef.otf`, and its `before` metrics now come from runtime
+  pre-GPOS clusters instead of synthetic placeholders.
 - `arabic-mixed-bidi.txt` plus `ArabicShapingFixtureTest` prove the stable
   `text.shaping.paragraph-bidi-required` diagnostic for mixed Arabic/LTR text
   shaped without paragraph context while still returning shaped output.
 - `arabic-shaping-report.json` records these bounded rows against fixture
   `single-ttf-noto-naskh-arabic`, attaches the ticket-local shaped-glyph-run
-  and shaping-plan goldens plus the reviewed generic missing-mark refusal row,
-  and keeps explicit `lam-alef`, vendored positive cursive attachment,
-  Arabic-specific refusal fixtures/codes, and ticket-local `gsub-trace` /
-  `gpos-trace` dumps as explicit remaining gates.
+  shaping-plan, GSUB trace, and GPOS trace goldens plus the reviewed generic
+  missing-mark refusal row, and keeps explicit `lam-alef`, vendored positive
+  cursive attachment, and Arabic-specific refusal fixtures/codes as remaining
+  gates.
 
 ## Validation
 
@@ -83,6 +92,5 @@ rtk git diff --check
 - Positive vendored-font `cursive attachment` evidence remains separate from
   the bounded M6-005 reviewed cursive fixtures.
 - Dedicated `arabic-missing-cursive.otf` / `arabic-missing-mark.otf` fixtures,
-  narrower `text.shaping.arabic-*` refusals, and ticket-local
-  `gsub-trace.json` / `gpos-trace.json` families remain open gates before
+  and narrower `text.shaping.arabic-*` refusals remain open gates before
   `done`.

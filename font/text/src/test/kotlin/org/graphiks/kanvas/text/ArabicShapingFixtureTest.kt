@@ -28,6 +28,8 @@ import org.graphiks.kanvas.text.shaping.CMapGlyphMapper
 import org.graphiks.kanvas.text.shaping.PinnedUnicodeDataGenerator
 import org.graphiks.kanvas.text.shaping.PinnedUnicodeDataSetResources
 import org.graphiks.kanvas.text.shaping.RequiredScriptFeaturePolicies
+import org.graphiks.kanvas.text.shaping.RuntimeGposLookupTrace
+import org.graphiks.kanvas.text.shaping.RuntimeGsubLookupTrace
 import org.graphiks.kanvas.text.shaping.ScriptExtensionsItemizer
 import org.graphiks.kanvas.text.shaping.ShapingRequest
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE
@@ -221,6 +223,7 @@ class ArabicShapingFixtureTest {
         assertContains(actual, """"dumpId": "arabic-shaped-glyph-run"""")
         assertContains(actual, """"fixtureFamilyId": "arabic-shaping-fixtures"""")
         assertContains(actual, """"caseId": "lam-alef-bounded-runtime-divergence"""")
+        assertContains(actual, """"bidiLevel": 1""")
         assertContains(actual, TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE)
     }
 
@@ -234,6 +237,28 @@ class ArabicShapingFixtureTest {
         assertContains(actual, """"fixtureFamilyId": "arabic-shaping-fixtures"""")
         assertContains(actual, """"requiredDefaults": ["init", "medi", "fina", "isol", "rlig", "liga", "calt", "mark", "mkmk", "curs"]""")
         assertContains(actual, """"requiredRefusals": ["mark", "mkmk", "cursive-attachment"]""")
+    }
+
+    @Test
+    fun arabicGsubTraceGoldenMatchesRepoGolden() {
+        val actual = arabicGsubTraceEvidenceJson()
+        val expected = readProjectFile("reports/font/fixtures/expected/shaping/arabic-gsub-trace.json")
+
+        assertEquals(expected.trimEnd(), actual.trimEnd())
+        assertContains(actual, """"dumpId": "arabic-gsub-trace"""")
+        assertContains(actual, """"caseId": "joining-forms"""")
+        assertContains(actual, """"caseId": "lam-alef-bounded-runtime-divergence"""")
+    }
+
+    @Test
+    fun arabicGposTraceGoldenMatchesRepoGolden() {
+        val actual = arabicGposTraceEvidenceJson()
+        val expected = readProjectFile("reports/font/fixtures/expected/shaping/arabic-gpos-trace.json")
+
+        assertEquals(expected.trimEnd(), actual.trimEnd())
+        assertContains(actual, """"dumpId": "arabic-gpos-trace"""")
+        assertContains(actual, """"caseId": "marks"""")
+        assertContains(actual, TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE)
     }
 
     private fun engineFor(face: ParsedFixtureFace): BasicOpenTypeShapingEngine =
@@ -362,6 +387,80 @@ class ArabicShapingFixtureTest {
         }
     }
 
+    private fun arabicGsubTraceEvidenceJson(): String {
+        val cases = listOf(
+            buildArabicGsubTraceCase(
+                caseId = "joining-forms",
+                status = "positive",
+                reportRef = "arabic-shaping-report#joining-forms",
+                uuid = "550e8400-e29b-41d4-a716-446655440703",
+                relativePath = "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
+                inputText = "\u0633\u0644\u0627\u0645",
+            ),
+            buildArabicGsubTraceCase(
+                caseId = "lam-alef-bounded-runtime-divergence",
+                status = "bounded",
+                reportRef = "arabic-shaping-report#lam-alef-positive-evidence",
+                uuid = "550e8400-e29b-41d4-a716-446655440705",
+                relativePath = "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
+                inputText = "\u0644\u0627",
+            ),
+        )
+        return buildString {
+            append("{\n")
+            append("  \"schemaVersion\": 1,\n")
+            append("  \"dumpId\": \"arabic-gsub-trace\",\n")
+            append("  \"ownerTickets\": [\"KFONT-M6-007\"],\n")
+            append("  \"fixtureFamilyId\": \"arabic-shaping-fixtures\",\n")
+            append("  \"cases\": [\n")
+            append(cases.joinToString(",\n") { it.toCanonicalJson().prependIndent("    ") })
+            append("\n  ],\n")
+            append(
+                "  \"nonClaims\": [\"producer-only\", \"no-arabic-shaping-support-claim\", " +
+                    "\"no-complex-shaping-support-claim\", \"no-native-shaper-oracle-claim\", " +
+                    "\"no-cpu-or-gpu-rendering-claim\"]\n",
+            )
+            append("}\n")
+        }
+    }
+
+    private fun arabicGposTraceEvidenceJson(): String {
+        val cases = listOf(
+            buildArabicGposTraceCase(
+                caseId = "marks",
+                status = "positive",
+                reportRef = "arabic-shaping-report#marks",
+                uuid = "550e8400-e29b-41d4-a716-446655440704",
+                relativePath = "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
+                inputText = "\u0627\u064E",
+            ),
+            buildArabicGposTraceCase(
+                caseId = "missing-mark-gdef-required",
+                status = "diagnostic",
+                reportRef = "arabic-shaping-report#missing-mark-gdef-required",
+                uuid = "550e8400-e29b-41d4-a716-446655440706",
+                relativePath = "reports/font/fixtures/fonts/shaping/gpos-missing-gdef.otf",
+                inputText = "\u0627\u064E",
+            ),
+        )
+        return buildString {
+            append("{\n")
+            append("  \"schemaVersion\": 1,\n")
+            append("  \"dumpId\": \"arabic-gpos-trace\",\n")
+            append("  \"ownerTickets\": [\"KFONT-M6-007\"],\n")
+            append("  \"fixtureFamilyId\": \"arabic-shaping-fixtures\",\n")
+            append("  \"cases\": [\n")
+            append(cases.joinToString(",\n") { it.toCanonicalJson().prependIndent("    ") })
+            append("\n  ],\n")
+            append(
+                "  \"nonClaims\": [\"producer-only\", \"no-arabic-shaping-support-claim\", " +
+                    "\"no-complex-shaping-support-claim\", \"no-native-shaper-oracle-claim\", " +
+                    "\"no-cpu-or-gpu-rendering-claim\"]\n",
+            )
+            append("}\n")
+        }
+    }
+
     private fun parsedFixtureFace(
         uuid: String,
         relativePath: String,
@@ -411,6 +510,7 @@ class ArabicShapingFixtureTest {
         val inputText: String,
         val typefaceId: TypefaceID,
         val glyphRun: org.graphiks.kanvas.text.shaping.ShapedGlyphRun,
+        val bidiLevel: Int,
         val diagnostics: List<org.graphiks.kanvas.text.shaping.ShapingDiagnostic>,
     )
 
@@ -433,6 +533,35 @@ class ArabicShapingFixtureTest {
         val hasGdef: Boolean,
         val hasGsub: Boolean,
         val hasGpos: Boolean,
+    )
+
+    private data class ArabicGsubTraceCase(
+        val caseId: String,
+        val status: String,
+        val reportRef: String,
+        val fixtureFont: String,
+        val inputText: String,
+        val typefaceId: TypefaceID,
+        val featureOrder: List<String>,
+        val inputGlyphIds: List<Int>,
+        val outputGlyphIds: List<Int>,
+        val lookups: List<RuntimeGsubLookupTrace>,
+        val diagnostics: List<org.graphiks.kanvas.text.shaping.ShapingDiagnostic>,
+    )
+
+    private data class ArabicGposTraceCase(
+        val caseId: String,
+        val status: String,
+        val reportRef: String,
+        val fixtureFont: String,
+        val inputText: String,
+        val typefaceId: TypefaceID,
+        val featureOrder: List<String>,
+        val glyphIds: List<Int>,
+        val before: List<List<Long>>,
+        val after: List<List<Long>>,
+        val lookups: List<RuntimeGposLookupTrace>,
+        val diagnostics: List<org.graphiks.kanvas.text.shaping.ShapingDiagnostic>,
     )
 
     private fun buildArabicShapedGlyphRunCase(
@@ -460,6 +589,7 @@ class ArabicShapingFixtureTest {
             inputText = inputText,
             typefaceId = face.typefaceId,
             glyphRun = result.glyphRuns.single(),
+            bidiLevel = result.glyphRuns.single().bidiLevel,
             diagnostics = result.diagnostics,
         )
     }
@@ -507,6 +637,78 @@ class ArabicShapingFixtureTest {
         )
     }
 
+    private fun buildArabicGsubTraceCase(
+        caseId: String,
+        status: String,
+        reportRef: String,
+        uuid: String,
+        relativePath: String,
+        inputText: String,
+    ): ArabicGsubTraceCase {
+        val face = parsedFixtureFace(uuid = uuid, relativePath = relativePath)
+        val trace = engineFor(face).shapeWithRuntimeTrace(
+            ShapingRequest(
+                text = inputText,
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        assertEquals(1, trace.result.glyphRuns.size, caseId)
+        val traceRun = trace.runs.single()
+        return ArabicGsubTraceCase(
+            caseId = caseId,
+            status = status,
+            reportRef = reportRef,
+            fixtureFont = relativePath,
+            inputText = inputText,
+            typefaceId = face.typefaceId,
+            featureOrder = traceRun.featureOrder,
+            inputGlyphIds = traceRun.inputGlyphIds,
+            outputGlyphIds = trace.result.glyphRuns.single().glyphIds,
+            lookups = trace.gsubLookups,
+            diagnostics = trace.result.diagnostics,
+        )
+    }
+
+    private fun buildArabicGposTraceCase(
+        caseId: String,
+        status: String,
+        reportRef: String,
+        uuid: String,
+        relativePath: String,
+        inputText: String,
+    ): ArabicGposTraceCase {
+        val face = parsedFixtureFace(uuid = uuid, relativePath = relativePath)
+        val trace = engineFor(face).shapeWithRuntimeTrace(
+            ShapingRequest(
+                text = inputText,
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        assertEquals(1, trace.result.glyphRuns.size, caseId)
+        val traceRun = trace.runs.single()
+        val glyphRun = trace.result.glyphRuns.single()
+        return ArabicGposTraceCase(
+            caseId = caseId,
+            status = status,
+            reportRef = reportRef,
+            fixtureFont = relativePath,
+            inputText = inputText,
+            typefaceId = face.typefaceId,
+            featureOrder = traceRun.featureOrder,
+            glyphIds = glyphRun.glyphIds,
+            before = traceRun.preGposClusterMetrics.map { metric ->
+                listOf(metric.advanceX.toTenthsJson().toLong(), metric.offsetX.toTenthsJson().toLong(), metric.offsetY.toTenthsJson().toLong())
+            },
+            after = glyphRun.clusters.map { cluster ->
+                listOf(cluster.advanceX.toTenthsJson().toLong(), cluster.offsetX.toTenthsJson().toLong(), cluster.offsetY.toTenthsJson().toLong())
+            },
+            lookups = trace.gposLookups,
+            diagnostics = trace.result.diagnostics,
+        )
+    }
+
     private fun ArabicShapedGlyphRunCase.toCanonicalJson(): String = buildString {
         append("{\n")
         append("  \"caseId\": ").append(jsonString(caseId)).append(",\n")
@@ -516,6 +718,7 @@ class ArabicShapingFixtureTest {
         append("  \"fixtureFont\": ").append(jsonString(fixtureFont)).append(",\n")
         append("  \"inputText\": ").append(jsonString(inputText)).append(",\n")
         append("  \"typefaceId\": ").append(jsonString(typefaceId.value.toString())).append(",\n")
+        append("  \"bidiLevel\": ").append(bidiLevel).append(",\n")
         append("  \"glyphIds\": ").append(glyphRun.glyphIds.toCanonicalIntArrayJson()).append(",\n")
         append("  \"clusters\": ").append(glyphRun.clusters.toCanonicalClusterArrayJson()).append(",\n")
         append("  \"clusterMetrics\": ").append(glyphRun.clusters.toCanonicalClusterMetricsJson()).append(",\n")
@@ -552,11 +755,55 @@ class ArabicShapingFixtureTest {
         append("\n}")
     }
 
+    private fun ArabicGsubTraceCase.toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  \"caseId\": ").append(jsonString(caseId)).append(",\n")
+        append("  \"ticketId\": \"KFONT-M6-007\",\n")
+        append("  \"status\": ").append(jsonString(status)).append(",\n")
+        append("  \"reportRef\": ").append(jsonString(reportRef)).append(",\n")
+        append("  \"fixtureFont\": ").append(jsonString(fixtureFont)).append(",\n")
+        append("  \"inputText\": ").append(jsonString(inputText)).append(",\n")
+        append("  \"typefaceId\": ").append(jsonString(typefaceId.value.toString())).append(",\n")
+        append("  \"featureOrder\": ").append(featureOrder.toCanonicalStringArrayJson()).append(",\n")
+        append("  \"inputGlyphIds\": ").append(inputGlyphIds.toCanonicalIntArrayJson()).append(",\n")
+        append("  \"outputGlyphIds\": ").append(outputGlyphIds.toCanonicalIntArrayJson()).append(",\n")
+        append("  \"lookups\": ").append(lookups.toCanonicalGsubLookupArrayJson())
+        if (diagnostics.isNotEmpty()) {
+            append(",\n")
+            append("  \"diagnostics\": ").append(diagnostics.toCanonicalDiagnosticsJson())
+        }
+        append("\n}")
+    }
+
+    private fun ArabicGposTraceCase.toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  \"caseId\": ").append(jsonString(caseId)).append(",\n")
+        append("  \"ticketId\": \"KFONT-M6-007\",\n")
+        append("  \"status\": ").append(jsonString(status)).append(",\n")
+        append("  \"reportRef\": ").append(jsonString(reportRef)).append(",\n")
+        append("  \"fixtureFont\": ").append(jsonString(fixtureFont)).append(",\n")
+        append("  \"inputText\": ").append(jsonString(inputText)).append(",\n")
+        append("  \"typefaceId\": ").append(jsonString(typefaceId.value.toString())).append(",\n")
+        append("  \"featureOrder\": ").append(featureOrder.toCanonicalStringArrayJson()).append(",\n")
+        append("  \"glyphIds\": ").append(glyphIds.toCanonicalIntArrayJson()).append(",\n")
+        append("  \"before\": ").append(before.toCanonicalLongMatrixJson()).append(",\n")
+        append("  \"after\": ").append(after.toCanonicalLongMatrixJson()).append(",\n")
+        append("  \"lookups\": ").append(lookups.toCanonicalGposLookupArrayJson())
+        if (diagnostics.isNotEmpty()) {
+            append(",\n")
+            append("  \"diagnostics\": ").append(diagnostics.toCanonicalDiagnosticsJson())
+        }
+        append("\n}")
+    }
+
     private fun List<Int>.toCanonicalIntArrayJson(): String =
         joinToString(prefix = "[", postfix = "]")
 
     private fun List<String>.toCanonicalStringArrayJson(): String =
         joinToString(prefix = "[", postfix = "]") { value -> jsonString(value) }
+
+    private fun List<List<Long>>.toCanonicalLongMatrixJson(): String =
+        joinToString(prefix = "[", postfix = "]") { row -> row.joinToString(prefix = "[", postfix = "]") }
 
     private fun List<org.graphiks.kanvas.text.shaping.GlyphCluster>.toCanonicalClusterArrayJson(): String =
         joinToString(prefix = "[", postfix = "]") { cluster ->
@@ -583,6 +830,53 @@ class ArabicShapingFixtureTest {
 
     private fun Float.toTenthsJson(): String =
         (this * 10f).roundToLong().toString()
+
+    private fun List<RuntimeGsubLookupTrace>.toCanonicalGsubLookupArrayJson(): String =
+        joinToString(prefix = "[", postfix = "]") { lookup ->
+            buildString {
+                append("{")
+                append(""""lookupIndex": ${lookup.lookupIndex}""")
+                append(", ").append(""""lookupType": ${lookup.lookupType}""")
+                append(", ").append(""""featureTag": """).append(jsonString(lookup.featureTag))
+                append(", ").append(""""inputGlyphIds": """).append(lookup.inputGlyphIds.toCanonicalIntArrayJson())
+                append(", ").append(""""outputGlyphIds": """).append(lookup.outputGlyphIds.toCanonicalIntArrayJson())
+                lookup.contextFormat?.let { contextFormat ->
+                    append(", ").append(""""contextFormat": """).append(contextFormat)
+                }
+                append(", ").append(""""clusterAction": """).append(jsonString(lookup.clusterAction))
+                append("}")
+            }
+        }
+
+    private fun List<RuntimeGposLookupTrace>.toCanonicalGposLookupArrayJson(): String =
+        joinToString(prefix = "[", postfix = "]") { lookup ->
+            buildString {
+                append("{")
+                append(""""lookupIndex": ${lookup.lookupIndex}""")
+                append(", ").append(""""lookupType": ${lookup.lookupType}""")
+                append(", ").append(""""featureTag": """).append(jsonString(lookup.featureTag))
+                append(", ").append(""""matchedGlyphIds": """).append(lookup.matchedGlyphIds.toCanonicalIntArrayJson())
+                if (lookup.glyphClasses.isNotEmpty()) {
+                    append(", ").append(""""glyphClasses": """).append(lookup.glyphClasses.toCanonicalIntArrayJson())
+                }
+                lookup.markClass?.let { markClass ->
+                    append(", ").append(""""markClass": """).append(markClass)
+                }
+                if (lookup.anchorFormats.isNotEmpty()) {
+                    append(", ").append(""""anchorFormats": """).append(lookup.anchorFormats.toCanonicalIntArrayJson())
+                }
+                if (lookup.attachmentVector.isNotEmpty()) {
+                    append(", ").append(""""attachmentVector": """).append(lookup.attachmentVector.toCanonicalIntArrayJson())
+                }
+                if (lookup.cursiveChain.isNotEmpty()) {
+                    append(", ").append(""""cursiveChain": """).append(lookup.cursiveChain.toCanonicalIntMatrixJson())
+                }
+                append("}")
+            }
+        }
+
+    private fun List<List<Int>>.toCanonicalIntMatrixJson(): String =
+        joinToString(prefix = "[", postfix = "]") { row -> row.joinToString(prefix = "[", postfix = "]") }
 
     private fun org.graphiks.kanvas.text.shaping.ScriptItemizationRun.toCanonicalJson(): String = buildString {
         append("{")

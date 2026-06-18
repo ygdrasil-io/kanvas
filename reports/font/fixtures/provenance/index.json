@@ -138,6 +138,8 @@
         }
       ],
       "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/arabic-gsub-trace.json",
+        "reports/font/fixtures/expected/shaping/arabic-gpos-trace.json",
         "reports/font/fixtures/expected/shaping/arabic-shaping-report.json"
       ],
       "nonClaims": [

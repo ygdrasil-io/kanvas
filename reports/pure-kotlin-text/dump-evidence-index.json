@@ -134,6 +134,74 @@
       ]
     },
     {
+      "dumpId": "arabic-gpos-trace",
+      "ownerTicket": "KFONT-M6-007",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "GPOS Target"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
+        "reports/font/fixtures/expected/shaping/arabic-gpos-trace.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "fixtureFamilyId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.arabicGposTraceGoldenMatchesRepoGolden --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.basicOpenTypeShapingEngineAppliesVendoredArabicMarkPositioning --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.basicOpenTypeShapingEngineEmitsReviewedGenericGdefRequiredDiagnosticForArabicBasePlusMarkFixture",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Arabic GPOS trace golden changes require reviewed vendored mark-attachment evidence, reviewed generic gdef-required refusal evidence, deterministic runtime lookup facts, and explicit non-promotion of Arabic or complex-shaping support.",
+      "nonClaims": [
+        "producer-only",
+        "no-arabic-shaping-support-claim",
+        "no-complex-shaping-support-claim",
+        "no-native-shaper-oracle-claim",
+        "no-cpu-or-gpu-rendering-claim"
+      ]
+    },
+    {
+      "dumpId": "arabic-gsub-trace",
+      "ownerTicket": "KFONT-M6-007",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "GSUB Target"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
+        "reports/font/fixtures/expected/shaping/arabic-gsub-trace.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "fixtureFamilyId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.arabicGsubTraceGoldenMatchesRepoGolden --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.basicOpenTypeShapingEngineAppliesVendoredArabicJoiningForms --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.basicOpenTypeShapingEngineChangesVendoredArabicLamAlefSequenceWithoutClosingLigatureGate",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Arabic GSUB trace golden changes require reviewed vendored joining-form evidence, bounded lam-alef runtime-divergence review, deterministic runtime lookup facts, and explicit non-promotion of Arabic or complex-shaping support.",
+      "nonClaims": [
+        "producer-only",
+        "no-arabic-shaping-support-claim",
+        "no-complex-shaping-support-claim",
+        "no-native-shaper-oracle-claim",
+        "no-cpu-or-gpu-rendering-claim"
+      ]
+    },
+    {
       "dumpId": "arabic-seed-readiness",
       "ownerTicket": "PKT-08B",
       "classification": "golden-gated",

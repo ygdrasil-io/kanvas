@@ -23,7 +23,7 @@ Arabic support cannot be inferred from generic GSUB/GPOS lookup coverage. The re
 ## Scope
 
 - Add Arabic fixture fonts and text inputs for isolated, initial, medial, and final forms; lam-alef; required ligatures; mark attachment; cursive attachment; and mixed LTR/RTL runs.
-- Record shaping plans, GSUB traces, GPOS traces, shaped glyph runs, bidi run links, feature policy choices, and refusal diagnostics.
+- Record shaping plans, GSUB traces, GPOS traces, shaped glyph runs, run-level bidi facts derived from the M5 bidi path, feature policy choices, and refusal diagnostics.
 - Assert cluster preservation through Arabic joining substitutions and mark positioning.
 - Include negative fixtures for missing cursive attachment, missing mark data, unsupported lookup, malformed GDEF, and single-run request that needs paragraph bidi context.
 - Label external HarfBuzz comparisons as drift-only if they are generated for review.
@@ -64,15 +64,15 @@ data class ArabicFixtureEvidence(
 ## Acceptance Criteria
 
 - [ ] Fixtures cover isolated, initial, medial, final, lam-alef, mark attachment, cursive attachment, and mixed bidi Arabic cases.
-- [ ] `shaping-plan.json` enables required Arabic defaults: `init`, `medi`, `fina`, `isol`, `rlig`, `liga`, `calt`, `mark`, `mkmk`, and cursive attachment where tables exist.
-- [ ] `gsub-trace.json` and `gpos-trace.json` show the specific lookups that changed forms, ligatures, marks, and cursive attachment.
+- [x] `shaping-plan.json` enables required Arabic defaults: `init`, `medi`, `fina`, `isol`, `rlig`, `liga`, `calt`, `mark`, `mkmk`, and cursive attachment where tables exist.
+- [x] `gsub-trace.json` and `gpos-trace.json` show the specific lookups that changed forms and marks for the bounded ticket-local Arabic rows; positive cursive attachment remains a separate open gate.
 - [ ] Missing cursive or required mark positioning refuses the affected run instead of claiming approximate support.
-- [ ] Bidi run references from M5 are preserved in the shaped output.
+- [x] Run-level bidi facts from the M5 bidi path are preserved in the shaped output (`bidiLevel` in `arabic-shaped-glyph-run.json` and shaping-plan rows).
 
 ## Required Evidence
 
 - `arabic-shaping-report.json` summarizing fixture provenance, expected feature set, dump hashes, positive/refusal status, and drift-only comparison links if present.
-- `shaping-plan.json`, `gsub-trace.json`, `gpos-trace.json`, `shaped-glyph-run.json`, and `bidi-runs.json` for each Arabic fixture.
+- `arabic-shaping-plan.json`, `arabic-gsub-trace.json`, `arabic-gpos-trace.json`, and `arabic-shaped-glyph-run.json` for each ticket-local Arabic row, plus the shared M5 `bidi-runs.json` evidence referenced by the bidi facts.
 - Fixtures: `arabic-joining-forms.otf`, `arabic-lam-alef.otf`, `arabic-marks-cursive.otf`, `arabic-mixed-bidi.txt`, `arabic-missing-cursive.otf`, `arabic-missing-mark.otf`.
 - Diagnostics asserted in tests: `text.shaping.cursive-attachment-unavailable`, `text.shaping.mark-positioning-unavailable`, `text.shaping.gdef-required`, `text.shaping.paragraph-bidi-required`.
 
@@ -102,8 +102,8 @@ rtk git diff --check
 ## Status Notes
 
 - `proposed`: Arabic fixture ticket depends on contextual GSUB, mark/cursive GPOS, feature policy, and bidi runs.
-- `review`: `ArabicShapingFixtureTest`, `arabic-shaped-glyph-run.json`, `arabic-shaping-plan.json`, and the checked-in `arabic-shaping-report.json` now prove bounded vendored-font evidence for joining-form behavior beyond pure RTL reordering, pin the Arabic shaped glyph/cluster facts for joining and mark rows, record the required Arabic default feature set (`init`, `medi`, `fina`, `isol`, `rlig`, `liga`, `calt`, `mark`, `mkmk`, `curs`) plus refusal-on-missing expectations for the ticket-local rows, capture a bounded `lam-alef` runtime-divergence row without promoting it to positive feature-local evidence, prove a reviewed generic `text.shaping.gdef-required` refusal row on `gpos-missing-gdef.otf` for Arabic base+mark input, and keep the single-run `text.shaping.paragraph-bidi-required` diagnostic on `arabic-mixed-bidi.txt`.
-- `review`: This wave intentionally keeps explicit `lam-alef` positive evidence, vendored-font positive cursive-attachment evidence, dedicated `arabic-missing-cursive` / `arabic-missing-mark` refusal fixtures, narrower `text.shaping.arabic-*` diagnostics, and ticket-local `gsub-trace.json` / `gpos-trace.json` dump families as explicit remaining gates.
+- `review`: `ArabicShapingFixtureTest`, `arabic-gsub-trace.json`, `arabic-gpos-trace.json`, `arabic-shaped-glyph-run.json`, `arabic-shaping-plan.json`, and the checked-in `arabic-shaping-report.json` now prove bounded vendored-font evidence for joining-form behavior beyond pure RTL reordering, pin bounded runtime GSUB/GPOS lookup evidence for the current joining and mark rows, record the required Arabic default feature set (`init`, `medi`, `fina`, `isol`, `rlig`, `liga`, `calt`, `mark`, `mkmk`, `curs`) as run-level runtime feature order plus refusal-on-missing expectations for the ticket-local rows, preserve run-level bidi facts from the M5 bidi path in the shaping-plan and shaped-glyph-run evidence, capture a bounded `lam-alef` runtime-divergence row without promoting it to positive feature-local evidence, prove a reviewed generic `text.shaping.gdef-required` refusal row on `gpos-missing-gdef.otf` for Arabic base+mark input, and keep the single-run `text.shaping.paragraph-bidi-required` diagnostic on `arabic-mixed-bidi.txt`.
+- `review`: This wave intentionally keeps explicit `lam-alef` positive evidence, vendored-font positive cursive-attachment evidence, dedicated `arabic-missing-cursive` / `arabic-missing-mark` refusal fixtures, and narrower `text.shaping.arabic-*` diagnostics as explicit remaining gates.
 - Move to `ready` only after fixture fonts and expected dump names are reviewed.
 
 ## Linear Labels

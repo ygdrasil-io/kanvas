@@ -2865,12 +2865,15 @@ Files:
 
 - `font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt`
 - `reports/font/fixtures/expected/shaping/arabic-mixed-bidi.txt`
+- `reports/font/fixtures/expected/shaping/arabic-gsub-trace.json`
+- `reports/font/fixtures/expected/shaping/arabic-gpos-trace.json`
 - `reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json`
 - `reports/font/fixtures/expected/shaping/arabic-shaping-plan.json`
 - `reports/font/fixtures/expected/shaping/arabic-shaping-report.json`
 - `reports/pure-kotlin-text/dump-evidence-index.json`
 - `reports/pure-kotlin-text/fixture-evidence-manifest.json`
 - `reports/pure-kotlin-text/2026-06-18-kfont-m6-007-arabic-shaping-fixtures.md`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m6-007-arabic-runtime-traces.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-007-add-arabic-shaping-fixtures.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/README.md`
 - `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
@@ -2893,21 +2896,30 @@ Evidence:
   emits the stable generic `text.shaping.gdef-required` refusal for Arabic
   base+mark input instead of approximating mark attachment without GDEF glyph
   classes.
-- `arabic-shaped-glyph-run.json` now pins ticket-local glyph/cluster facts for
-  vendored joining forms, vendored marks, bounded `lam-alef` runtime
-  divergence, and the reviewed generic `gdef-required` refusal row without
-  claiming ticket-ready positive `lam-alef` evidence.
+- `arabic-shaped-glyph-run.json` now pins ticket-local glyph/cluster facts and
+  run-level `bidiLevel` evidence for vendored joining forms, vendored marks,
+  bounded `lam-alef` runtime divergence, and the reviewed generic
+  `gdef-required` refusal row without claiming ticket-ready positive
+  `lam-alef` evidence.
 - `arabic-shaping-plan.json` now pins the required Arabic default feature set
   (`init`, `medi`, `fina`, `isol`, `rlig`, `liga`, `calt`, `mark`, `mkmk`,
   `curs`), the `Arab`/`arab` script-policy selection, RTL bidi level facts for
   the ticket-local rows, and the refusal-on-missing expectations carried by the
-  Arabic policy row, without claiming ticket-local GSUB/GPOS trace coverage.
+  Arabic policy row.
+- `arabic-gsub-trace.json` now records the bounded runtime `init`/`fina`
+  lookup chain observed on the vendored joining-form and bounded `lam-alef`
+  rows, while pinning the full required Arabic runtime feature order for those
+  runs.
+- `arabic-gpos-trace.json` now records the bounded runtime `mark` lookup and
+  attachment vector observed on the vendored base-plus-mark row, plus the
+  empty-lookup generic `text.shaping.gdef-required` refusal row on
+  `gpos-missing-gdef.otf`, and uses runtime pre-GPOS cluster metrics for the
+  `before` state.
 - `arabic-shaping-report.json` summarizes the fresh positive/diagnostic rows and
-  now references the ticket-local shaped-glyph-run and shaping-plan goldens while keeping
-  explicit `lam-alef`, vendored positive cursive attachment, Arabic-specific
-  missing-mark/missing-cursive fixtures, narrower `text.shaping.arabic-*`
-  refusals, and ticket-local `gsub-trace.json` / `gpos-trace.json` families as
-  explicit remaining gates.
+  now references the ticket-local shaped-glyph-run, shaping-plan, GSUB trace,
+  and GPOS trace goldens while keeping explicit `lam-alef`, vendored positive
+  cursive attachment, Arabic-specific missing-mark/missing-cursive fixtures,
+  and narrower `text.shaping.arabic-*` refusals as explicit remaining gates.
 - This wave intentionally keeps `arabic-seed-readiness.json` as the broader
   seed matrix while attaching reviewed ticket-local evidence only for the
   bounded rows above.
@@ -2925,8 +2937,7 @@ rtk git diff --check
 
 Remaining gate: `KFONT-M6-007` is still not `done`. Explicit `lam-alef`
 positive evidence, ticket-local positive cursive attachment, Arabic-specific
-refusal fixtures and diagnostic codes, and ticket-local `gsub-trace.json` /
-`gpos-trace.json` dump families remain explicit Arabic shaping gates.
+refusal fixtures and diagnostic codes remain explicit Arabic shaping gates.
 ### PKT-09A: Paragraph Semantic Layout Dumps And Refusals
 
 Status: implemented and independently reviewed.
