@@ -2025,6 +2025,7 @@
       },
       "producerPaths": [
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphPlaceholderLayoutTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt"
       ],
       "expectedFields": [
@@ -2033,13 +2034,14 @@
         "layout",
         "lines",
         "paragraphShapingRequests",
+        "placeholderBoxes",
         "schema"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineShapesPerParagraphSegmentsAndRecordsSegmentRefs",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphPlaceholderLayoutTest.paragraphLayoutDumpIncludesResolvedPlaceholderBoxes --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineShapesPerParagraphSegmentsAndRecordsSegmentRefs",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "Paragraph layout dump changes require reviewed segment references, merged shaping/fallback diagnostics, and explicit non-claims without bidi visual ordering, hit testing, or GPU text promotion.",
+      "updatePolicy": "Paragraph layout dump changes require reviewed segment references, placeholder-box geometry review, merged shaping/fallback diagnostics, and explicit non-claims without bidi visual ordering, hit testing, or GPU text promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-paragraph-layout-claim",
@@ -2108,6 +2110,38 @@
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
       "updatePolicy": "Paragraph shaping request golden changes require mixed-script, variation-axis, fallback, placeholder, and cluster-boundary case review without complete paragraph support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-paragraph-layout-claim",
+        "no-skia-paragraph-parity-claim"
+      ]
+    },
+    {
+      "dumpId": "placeholder-layout",
+      "ownerTicket": "KFONT-M8-006",
+      "classification": "producer-only",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Placeholders"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphPlaceholderLayoutTest.kt",
+        "reports/font/fixtures/expected/paragraph/placeholder-layout.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphPlaceholderLayoutTest",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Placeholder layout dump changes require baseline/alignment geometry review, deterministic inputHash review, and explicit non-claims without selection, hit-testing, ellipsis, or GPU text promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-paragraph-layout-claim",

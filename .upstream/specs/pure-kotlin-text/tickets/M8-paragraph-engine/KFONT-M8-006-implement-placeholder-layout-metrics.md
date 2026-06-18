@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M8-006"
 title: "Implement placeholder layout metrics"
-status: "proposed"
+status: "review"
 milestone: "M8"
 priority: "P1"
 owner_area: "paragraph"
@@ -68,11 +68,11 @@ interface PlaceholderLayoutResolver {
 
 ## Acceptance Criteria
 
-- [ ] Placeholder dimensions are finite, non-negative, and validated before line fitting.
-- [ ] Placeholder ranges map to exactly one placeholder token and are excluded from shaping requests.
-- [ ] Baseline, above-baseline, below-baseline, and centered alignments affect line ascent/descent deterministically.
+- [x] Placeholder dimensions are finite, non-negative, and validated before line fitting.
+- [x] Placeholder ranges map to exactly one placeholder token and are excluded from shaping requests.
+- [x] Baseline, above-baseline, below-baseline, and centered alignments affect line ascent/descent deterministically.
 - [ ] Selection and hit-test dumps reference placeholder IDs and geometry.
-- [ ] Invalid placeholder ranges or metrics emit `text.paragraph.invalid-placeholder` or a narrower accepted diagnostic.
+- [x] Invalid placeholder ranges or metrics emit `text.paragraph.invalid-placeholder` or a narrower accepted diagnostic.
 
 ## Required Evidence
 
@@ -101,8 +101,8 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*Placeholder*'
 
 ## Status Notes
 
-- `proposed`: Depends on the paragraph style contract and the line-breaking/fitting path.
-- Move to `ready` only after placeholder metric fields and hit-test integration are reviewed.
+- `review`: `PlaceholderStyle` now serializes `baseline` as nullable plus `participatesInLineHeight`, input validation refuses missing required baselines and non-finite/negative placeholder constraints, and `BasicParagraphLayoutEngine` emits deterministic `placeholderBoxes` plus line metrics for baseline, above-baseline, below-baseline, and centered cases in `placeholder-layout.json`.
+- Remaining gate before `done`: `KFONT-M8-005` must consume placeholder IDs and geometry in selection/hit-test dumps, and the ellipsis/max-lines path must attach the placeholder conflict evidence called out by this ticket without broadening paragraph support claims.
 
 ## Linear Labels
 
