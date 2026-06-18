@@ -245,6 +245,55 @@ class SFNTSurfaceTest {
     }
 
     @Test
+    fun m6SimpleLayoutFixturesAreCheckedInWithSyntheticProvenance() {
+        val fixturePaths = listOf(
+            "reports/font/fixtures/fonts/shaping/gsub-single-substitution.otf",
+            "reports/font/fixtures/fonts/shaping/gsub-multiple-substitution.otf",
+            "reports/font/fixtures/fonts/shaping/gsub-ligature-fi.otf",
+            "reports/font/fixtures/fonts/shaping/gsub-coverage-malformed.otf",
+            "reports/font/fixtures/fonts/shaping/gsub-ligature-bad-component.otf",
+            "reports/font/fixtures/fonts/shaping/gpos-single-adjustment.otf",
+            "reports/font/fixtures/fonts/shaping/gpos-pair-format1-kerning.otf",
+            "reports/font/fixtures/fonts/shaping/gpos-pair-format2-class.otf",
+            "reports/font/fixtures/fonts/shaping/gpos-valueformat-malformed.otf",
+            "reports/font/fixtures/fonts/shaping/gpos-pair-out-of-range.otf",
+        )
+        val provenanceIndex = Files.readString(fixturePath("reports/font/fixtures/provenance/index.json"))
+
+        fixturePaths.forEach { relativePath ->
+            assertTrue(
+                actual = Files.isRegularFile(fixturePath(relativePath)),
+                message = "Expected checked-in M6 shaping fixture $relativePath",
+            )
+            assertTrue(
+                actual = provenanceIndex.contains(relativePath),
+                message = "Fixture provenance index should reference $relativePath",
+            )
+        }
+
+        listOf(
+            "gsub-single-substitution",
+            "gsub-multiple-substitution",
+            "gsub-ligature-fi",
+            "gsub-coverage-malformed",
+            "gsub-ligature-bad-component",
+            "gpos-single-adjustment",
+            "gpos-pair-format1-kerning",
+            "gpos-pair-format2-class",
+            "gpos-valueformat-malformed",
+            "gpos-pair-out-of-range",
+            "\"kind\": \"synthetic-kanvas\"",
+            "\"ownerTickets\": [\n        \"KFONT-M6-002\"",
+            "\"ownerTickets\": [\n        \"KFONT-M6-004\"",
+        ).forEach { requiredSnippet ->
+            assertTrue(
+                actual = provenanceIndex.contains(requiredSnippet),
+                message = "Fixture provenance index is missing $requiredSnippet",
+            )
+        }
+    }
+
+    @Test
     fun defaultOpenTypeFaceParserParsesSvgTableAndLooksUpDocumentsByGlyphId() {
         val svgBytes = "<svg><path id=\"glyph-eight\"/></svg>".toByteArray(Charsets.UTF_8)
         val svg = svgTable(
