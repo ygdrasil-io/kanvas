@@ -3,6 +3,7 @@ package org.graphiks.kanvas.text
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.security.MessageDigest
 import kotlin.math.roundToLong
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -21,8 +22,13 @@ import org.graphiks.kanvas.font.sfnt.OpenTypeGposPairTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposSingleTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubTable
+import org.graphiks.kanvas.text.shaping.BasicBidiResolver
 import org.graphiks.kanvas.text.shaping.BasicOpenTypeShapingEngine
 import org.graphiks.kanvas.text.shaping.CMapGlyphMapper
+import org.graphiks.kanvas.text.shaping.PinnedUnicodeDataGenerator
+import org.graphiks.kanvas.text.shaping.PinnedUnicodeDataSetResources
+import org.graphiks.kanvas.text.shaping.RequiredScriptFeaturePolicies
+import org.graphiks.kanvas.text.shaping.ScriptExtensionsItemizer
 import org.graphiks.kanvas.text.shaping.ShapingRequest
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_PARAGRAPH_BIDI_REQUIRED_DIAGNOSTIC_CODE
@@ -218,6 +224,18 @@ class ArabicShapingFixtureTest {
         assertContains(actual, TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE)
     }
 
+    @Test
+    fun arabicShapingPlanGoldenMatchesRepoGolden() {
+        val actual = arabicShapingPlanEvidenceJson()
+        val expected = readProjectFile("reports/font/fixtures/expected/shaping/arabic-shaping-plan.json")
+
+        assertEquals(expected.trimEnd(), actual.trimEnd())
+        assertContains(actual, """"dumpId": "arabic-shaping-plan"""")
+        assertContains(actual, """"fixtureFamilyId": "arabic-shaping-fixtures"""")
+        assertContains(actual, """"requiredDefaults": ["init", "medi", "fina", "isol", "rlig", "liga", "calt", "mark", "mkmk", "curs"]""")
+        assertContains(actual, """"requiredRefusals": ["mark", "mkmk", "cursive-attachment"]""")
+    }
+
     private fun engineFor(face: ParsedFixtureFace): BasicOpenTypeShapingEngine =
         BasicOpenTypeShapingEngine(
             glyphMapper = CMapGlyphMapper(cmapsByTypefaceId = mapOf(face.typefaceId to face.cmap)),
@@ -288,6 +306,62 @@ class ArabicShapingFixtureTest {
         }
     }
 
+    private fun arabicShapingPlanEvidenceJson(): String {
+        val cases = listOf(
+            buildArabicShapingPlanCase(
+                caseId = "joining-forms",
+                status = "positive",
+                reportRef = "arabic-shaping-report#joining-forms",
+                uuid = "550e8400-e29b-41d4-a716-446655440703",
+                relativePath = "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
+                inputText = "\u0633\u0644\u0627\u0645",
+            ),
+            buildArabicShapingPlanCase(
+                caseId = "marks",
+                status = "positive",
+                reportRef = "arabic-shaping-report#marks",
+                uuid = "550e8400-e29b-41d4-a716-446655440704",
+                relativePath = "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
+                inputText = "\u0627\u064E",
+            ),
+            buildArabicShapingPlanCase(
+                caseId = "lam-alef-bounded-runtime-divergence",
+                status = "bounded",
+                reportRef = "arabic-shaping-report#lam-alef-positive-evidence",
+                uuid = "550e8400-e29b-41d4-a716-446655440705",
+                relativePath = "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
+                inputText = "\u0644\u0627",
+            ),
+            buildArabicShapingPlanCase(
+                caseId = "missing-mark-gdef-required",
+                status = "diagnostic",
+                reportRef = "arabic-shaping-report#missing-mark-gdef-required",
+                uuid = "550e8400-e29b-41d4-a716-446655440706",
+                relativePath = "reports/font/fixtures/fonts/shaping/gpos-missing-gdef.otf",
+                inputText = "\u0627\u064E",
+                expectedDiagnostics = listOf(TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE),
+            ),
+        )
+        return buildString {
+            append("{\n")
+            append("  \"schemaVersion\": 1,\n")
+            append("  \"dumpId\": \"arabic-shaping-plan\",\n")
+            append("  \"ownerTickets\": [\"KFONT-M6-007\"],\n")
+            append("  \"fixtureFamilyId\": \"arabic-shaping-fixtures\",\n")
+            append("  \"unicodeVersion\": ").append(jsonString(PinnedUnicodeDataGenerator.PinnedUnicodeVersion)).append(",\n")
+            append("  \"sourceTextHashAlgorithm\": \"SHA-256-UTF-8\",\n")
+            append("  \"cases\": [\n")
+            append(cases.joinToString(",\n") { it.toCanonicalJson().prependIndent("    ") })
+            append("\n  ],\n")
+            append(
+                "  \"nonClaims\": [\"producer-only\", \"no-arabic-shaping-support-claim\", " +
+                    "\"no-complex-shaping-support-claim\", \"no-native-shaper-oracle-claim\", " +
+                    "\"no-cpu-or-gpu-rendering-claim\"]\n",
+            )
+            append("}\n")
+        }
+    }
+
     private fun parsedFixtureFace(
         uuid: String,
         relativePath: String,
@@ -340,6 +414,27 @@ class ArabicShapingFixtureTest {
         val diagnostics: List<org.graphiks.kanvas.text.shaping.ShapingDiagnostic>,
     )
 
+    private data class ArabicShapingPlanCase(
+        val caseId: String,
+        val status: String,
+        val reportRef: String,
+        val fixtureFont: String,
+        val inputText: String,
+        val sourceTextHash: String,
+        val typefaceId: TypefaceID,
+        val scriptRun: org.graphiks.kanvas.text.shaping.ScriptItemizationRun,
+        val bidiLevel: Int,
+        val bidiDirection: String,
+        val languageSystem: String,
+        val enabledFeatures: List<String>,
+        val defaultedFeatures: List<String>,
+        val requiredRefusals: List<String>,
+        val expectedDiagnostics: List<String>,
+        val hasGdef: Boolean,
+        val hasGsub: Boolean,
+        val hasGpos: Boolean,
+    )
+
     private fun buildArabicShapedGlyphRunCase(
         caseId: String,
         status: String,
@@ -369,6 +464,49 @@ class ArabicShapingFixtureTest {
         )
     }
 
+    private fun buildArabicShapingPlanCase(
+        caseId: String,
+        status: String,
+        reportRef: String,
+        uuid: String,
+        relativePath: String,
+        inputText: String,
+        expectedDiagnostics: List<String> = emptyList(),
+    ): ArabicShapingPlanCase {
+        val face = parsedFixtureFace(uuid = uuid, relativePath = relativePath)
+        val unicodeData = PinnedUnicodeDataSetResources.load()
+        val scriptRun = ScriptExtensionsItemizer(unicodeData).itemize(inputText).runs.single()
+        val featureSet = RequiredScriptFeaturePolicies.resolve(scriptRun = scriptRun, requested = emptyList())
+        val bidiRun = BasicBidiResolver().resolve(
+            ShapingRequest(
+                text = inputText,
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        ).single()
+        val arabicPolicy = RequiredScriptFeaturePolicies.rows.first { row -> row.scriptFamily == "Arabic" }
+        return ArabicShapingPlanCase(
+            caseId = caseId,
+            status = status,
+            reportRef = reportRef,
+            fixtureFont = relativePath,
+            inputText = inputText,
+            sourceTextHash = sha256Utf8(inputText),
+            typefaceId = face.typefaceId,
+            scriptRun = scriptRun,
+            bidiLevel = bidiRun.level,
+            bidiDirection = if (bidiRun.isRightToLeft) "RTL" else "LTR",
+            languageSystem = featureSet.languageSystem ?: "dflt",
+            enabledFeatures = featureSet.enabled.map { feature -> feature.tag },
+            defaultedFeatures = featureSet.defaulted.map { feature -> feature.tag },
+            requiredRefusals = arabicPolicy.refusalWhenMissing,
+            expectedDiagnostics = expectedDiagnostics,
+            hasGdef = face.gdef != null,
+            hasGsub = face.gsub != null,
+            hasGpos = face.gpos != null,
+        )
+    }
+
     private fun ArabicShapedGlyphRunCase.toCanonicalJson(): String = buildString {
         append("{\n")
         append("  \"caseId\": ").append(jsonString(caseId)).append(",\n")
@@ -389,8 +527,36 @@ class ArabicShapingFixtureTest {
         append("\n}")
     }
 
+    private fun ArabicShapingPlanCase.toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  \"caseId\": ").append(jsonString(caseId)).append(",\n")
+        append("  \"ticketId\": \"KFONT-M6-007\",\n")
+        append("  \"status\": ").append(jsonString(status)).append(",\n")
+        append("  \"reportRef\": ").append(jsonString(reportRef)).append(",\n")
+        append("  \"fixtureFont\": ").append(jsonString(fixtureFont)).append(",\n")
+        append("  \"inputText\": ").append(jsonString(inputText)).append(",\n")
+        append("  \"sourceTextHash\": ").append(jsonString(sourceTextHash)).append(",\n")
+        append("  \"textRange\": ").append(jsonString(scriptRun.utf16Range.toRangeLabel())).append(",\n")
+        append("  \"typefaceId\": ").append(jsonString(typefaceId.value.toString())).append(",\n")
+        append("  \"scriptRun\": ").append(scriptRun.toCanonicalJson()).append(",\n")
+        append("  \"bidi\": {\"level\": ").append(bidiLevel).append(", \"direction\": ").append(jsonString(bidiDirection)).append("},\n")
+        append("  \"languageSystem\": ").append(jsonString(languageSystem)).append(",\n")
+        append("  \"requiredDefaults\": ").append(enabledFeatures.toCanonicalStringArrayJson()).append(",\n")
+        append("  \"defaultedFeatures\": ").append(defaultedFeatures.toCanonicalStringArrayJson()).append(",\n")
+        append("  \"requiredRefusals\": ").append(requiredRefusals.toCanonicalStringArrayJson()).append(",\n")
+        append("  \"tableAvailability\": {\"gdef\": ").append(hasGdef).append(", \"gsub\": ").append(hasGsub).append(", \"gpos\": ").append(hasGpos).append("}")
+        if (expectedDiagnostics.isNotEmpty()) {
+            append(",\n")
+            append("  \"expectedDiagnostics\": ").append(expectedDiagnostics.toCanonicalStringArrayJson())
+        }
+        append("\n}")
+    }
+
     private fun List<Int>.toCanonicalIntArrayJson(): String =
         joinToString(prefix = "[", postfix = "]")
+
+    private fun List<String>.toCanonicalStringArrayJson(): String =
+        joinToString(prefix = "[", postfix = "]") { value -> jsonString(value) }
 
     private fun List<org.graphiks.kanvas.text.shaping.GlyphCluster>.toCanonicalClusterArrayJson(): String =
         joinToString(prefix = "[", postfix = "]") { cluster ->
@@ -418,8 +584,26 @@ class ArabicShapingFixtureTest {
     private fun Float.toTenthsJson(): String =
         (this * 10f).roundToLong().toString()
 
+    private fun org.graphiks.kanvas.text.shaping.ScriptItemizationRun.toCanonicalJson(): String = buildString {
+        append("{")
+        append(""""clusterRange": """).append(jsonString(clusterRange.toRangeLabel()))
+        append(", ").append(""""utf16Range": """).append(jsonString(utf16Range.toRangeLabel()))
+        append(", ").append(""""codePointRange": """).append(jsonString(codePointRange.toRangeLabel()))
+        append(", ").append(""""selectedScript": """).append(jsonString(selectedScript))
+        append(", ").append(""""openTypeScriptTags": """).append(openTypeScriptTags.toCanonicalStringArrayJson())
+        append(", ").append(""""extensionCandidates": """).append(extensionCandidates.toCanonicalStringArrayJson())
+        append(", ").append(""""languageHint": """).append(languageHint?.let(::jsonString) ?: "null")
+        append(", ").append(""""reason": """).append(jsonString(reason))
+        append("}")
+    }
+
     private fun IntRange.toRangeLabel(): String =
         if (isEmpty()) "" else "$first..$last"
+
+    private fun sha256Utf8(text: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(text.toByteArray(Charsets.UTF_8))
+            .joinToString(separator = "") { byte -> "%02x".format(byte) }
 
     private fun jsonString(value: String): String =
         "\"" + jsonStringContent(value) + "\""

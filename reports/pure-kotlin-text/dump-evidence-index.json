@@ -201,6 +201,58 @@
       ]
     },
     {
+      "dumpId": "arabic-shaping-plan",
+      "ownerTicket": "KFONT-M6-007",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Kanvas Required Script Matrix"
+      },
+      "producerPaths": [
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
+        "reports/font/fixtures/expected/shaping/arabic-shaping-plan.json"
+      ],
+      "expectedFields": [
+        "bidi",
+        "caseId",
+        "cases",
+        "defaultedFeatures",
+        "dumpId",
+        "expectedDiagnostics",
+        "fixtureFamilyId",
+        "fixtureFont",
+        "inputText",
+        "languageSystem",
+        "nonClaims",
+        "ownerTickets",
+        "reportRef",
+        "requiredDefaults",
+        "requiredRefusals",
+        "schemaVersion",
+        "scriptRun",
+        "sourceTextHash",
+        "sourceTextHashAlgorithm",
+        "status",
+        "tableAvailability",
+        "textRange",
+        "ticketId",
+        "typefaceId",
+        "unicodeVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.arabicShapingPlanGoldenMatchesRepoGolden",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Arabic shaping-plan golden changes require reviewed script-policy defaults, refusal-on-missing expectations, and explicit non-promotion of Arabic or complex-shaping support.",
+      "nonClaims": [
+        "producer-only",
+        "no-arabic-shaping-support-claim",
+        "no-complex-shaping-support-claim",
+        "no-native-shaper-oracle-claim",
+        "no-cpu-or-gpu-rendering-claim"
+      ]
+    },
+    {
       "dumpId": "arabic-shaping-report",
       "ownerTicket": "KFONT-M6-007",
       "classification": "golden-gated",

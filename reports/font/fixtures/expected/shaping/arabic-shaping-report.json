@@ -10,9 +10,10 @@
       "status": "positive",
       "evidence": [
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
-        "reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json"
+        "reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json",
+        "reports/font/fixtures/expected/shaping/arabic-shaping-plan.json"
       ],
-      "notes": "Vendored Noto Naskh Arabic changes the visual-order glyph sequence for \u0633\u0644\u0627\u0645 beyond pure RTL reordering of raw cmap glyph IDs, and the ticket-local arabic-shaped-glyph-run dump now pins the resulting RTL-ordered clusters without promoting full Arabic support."
+      "notes": "Vendored Noto Naskh Arabic changes the visual-order glyph sequence for \u0633\u0644\u0627\u0645 beyond pure RTL reordering of raw cmap glyph IDs, the ticket-local arabic-shaped-glyph-run dump now pins the resulting RTL-ordered clusters, and the ticket-local arabic-shaping-plan dump now records the required Arabic default feature set for that bounded row without promoting full Arabic support."
     },
     {
       "caseId": "marks",
@@ -20,9 +21,10 @@
       "evidence": [
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
         "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
-        "reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json"
+        "reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json",
+        "reports/font/fixtures/expected/shaping/arabic-shaping-plan.json"
       ],
-      "notes": "Vendored Noto Naskh Arabic proves a bounded base-plus-mark case by tying the positioning or zero-advance check to the mark cluster itself, and the ticket-local arabic-shaped-glyph-run dump now pins the shaped glyph/cluster facts for that row."
+      "notes": "Vendored Noto Naskh Arabic proves a bounded base-plus-mark case by tying the positioning or zero-advance check to the mark cluster itself, the ticket-local arabic-shaped-glyph-run dump now pins the shaped glyph/cluster facts for that row, and the ticket-local arabic-shaping-plan dump records the required Arabic default feature set and refusal-on-missing expectations for that bounded case."
     },
     {
       "caseId": "missing-mark-gdef-required",
@@ -46,7 +48,7 @@
   "remainingGates": [
     {
       "remainingGateId": "lam-alef-positive-evidence",
-      "detail": "Vendored Noto Naskh Arabic now has a ticket-local arabic-shaped-glyph-run row for logical text \\u0644\\u0627, but it still proves only bounded runtime divergence away from the raw visual-order cmap pair and does not yet close the feature-local lam-alef positive gate."
+      "detail": "Vendored Noto Naskh Arabic now has ticket-local arabic-shaping-plan and arabic-shaped-glyph-run rows for logical text \\u0644\\u0627, but they still prove only bounded runtime divergence away from the raw visual-order cmap pair and do not yet close the feature-local lam-alef positive gate."
     },
     {
       "remainingGateId": "cursive-positive-on-vendored-arabic",
@@ -54,7 +56,7 @@
     },
     {
       "remainingGateId": "arabic-specific-refusal-fixtures-and-codes",
-      "detail": "Dedicated arabic-missing-cursive/arabic-missing-mark fixtures and narrower text.shaping.arabic-* refusal codes remain absent; the reviewed generic gdef-required row is bounded evidence only, and ticket-local shaping-plan / gsub-trace / gpos-trace dump families remain separate Arabic gates."
+      "detail": "Dedicated arabic-missing-cursive/arabic-missing-mark fixtures and narrower text.shaping.arabic-* refusal codes remain absent; the reviewed generic gdef-required row is bounded evidence only, and ticket-local gsub-trace / gpos-trace dump families remain separate Arabic gates."
     }
   ],
   "nonClaims": [

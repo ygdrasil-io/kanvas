@@ -316,11 +316,12 @@
         "reports/font/fixtures/expected/shaping/arabic-seed-readiness.json",
         "reports/font/fixtures/expected/shaping/arabic-mixed-bidi.txt",
         "reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json",
+        "reports/font/fixtures/expected/shaping/arabic-shaping-plan.json",
         "reports/font/fixtures/expected/shaping/arabic-shaping-report.json",
         "reports/pure-kotlin-text/2026-06-18-kfont-m6-007-arabic-shaping-fixtures.md"
       ],
       "requiredEvidenceGates": [
-        "KFONT-M6-007 now lands bounded Arabic review evidence for joining-form behavior beyond pure RTL reordering, mark positioning tied to the mark cluster itself, a ticket-local arabic-shaped-glyph-run golden for joining/marks/bounded lam-alef/generic gdef-required rows, a reviewed generic text.shaping.gdef-required refusal on gpos-missing-gdef.otf for Arabic base+mark input, and mixed-bidi paragraph-required diagnostics on vendored Noto Naskh Arabic; lam-alef still lacks feature-local positive proof, and ticket-local positive cursive evidence, Arabic-specific missing-mark/missing-cursive refusal fixtures, narrower arabic-specific refusal codes, and ticket-local shaping-plan / gsub-trace / gpos-trace dumps remain explicit gates.",
+        "KFONT-M6-007 now lands bounded Arabic review evidence for joining-form behavior beyond pure RTL reordering, mark positioning tied to the mark cluster itself, a ticket-local arabic-shaped-glyph-run golden for joining/marks/bounded lam-alef/generic gdef-required rows, a ticket-local arabic-shaping-plan golden for required Arabic defaults plus refusal-on-missing expectations, a reviewed generic text.shaping.gdef-required refusal on gpos-missing-gdef.otf for Arabic base+mark input, and mixed-bidi paragraph-required diagnostics on vendored Noto Naskh Arabic; lam-alef still lacks feature-local positive proof, and ticket-local positive cursive evidence, Arabic-specific missing-mark/missing-cursive refusal fixtures, narrower arabic-specific refusal codes, and ticket-local gsub-trace / gpos-trace dumps remain explicit gates.",
         "Add Devanagari positive and refusal rows for syllable formation, reph, pre-base matra, below-base forms, and mark placement.",
         "Add Thai positive and refusal rows for base+mark clusters, tone marks, mixed Latin/Thai runs, and paragraph-owned dictionary diagnostics.",
         "Add CJK positive and refusal rows for Han, kana, vertical alternates, variation selectors, and paragraph-owned ruby/line-break diagnostics.",

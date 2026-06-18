@@ -2866,6 +2866,7 @@ Files:
 - `font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt`
 - `reports/font/fixtures/expected/shaping/arabic-mixed-bidi.txt`
 - `reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json`
+- `reports/font/fixtures/expected/shaping/arabic-shaping-plan.json`
 - `reports/font/fixtures/expected/shaping/arabic-shaping-report.json`
 - `reports/pure-kotlin-text/dump-evidence-index.json`
 - `reports/pure-kotlin-text/fixture-evidence-manifest.json`
@@ -2896,12 +2897,17 @@ Evidence:
   vendored joining forms, vendored marks, bounded `lam-alef` runtime
   divergence, and the reviewed generic `gdef-required` refusal row without
   claiming ticket-ready positive `lam-alef` evidence.
+- `arabic-shaping-plan.json` now pins the required Arabic default feature set
+  (`init`, `medi`, `fina`, `isol`, `rlig`, `liga`, `calt`, `mark`, `mkmk`,
+  `curs`), the `Arab`/`arab` script-policy selection, RTL bidi level facts for
+  the ticket-local rows, and the refusal-on-missing expectations carried by the
+  Arabic policy row, without claiming ticket-local GSUB/GPOS trace coverage.
 - `arabic-shaping-report.json` summarizes the fresh positive/diagnostic rows and
-  now references the ticket-local shaped-glyph-run golden while keeping
+  now references the ticket-local shaped-glyph-run and shaping-plan goldens while keeping
   explicit `lam-alef`, vendored positive cursive attachment, Arabic-specific
   missing-mark/missing-cursive fixtures, narrower `text.shaping.arabic-*`
-  refusals, and ticket-local `shaping-plan.json` / `gsub-trace.json` /
-  `gpos-trace.json` families as explicit remaining gates.
+  refusals, and ticket-local `gsub-trace.json` / `gpos-trace.json` families as
+  explicit remaining gates.
 - This wave intentionally keeps `arabic-seed-readiness.json` as the broader
   seed matrix while attaching reviewed ticket-local evidence only for the
   bounded rows above.
@@ -2919,9 +2925,8 @@ rtk git diff --check
 
 Remaining gate: `KFONT-M6-007` is still not `done`. Explicit `lam-alef`
 positive evidence, ticket-local positive cursive attachment, Arabic-specific
-refusal fixtures and diagnostic codes, and ticket-local `shaping-plan.json` /
-`gsub-trace.json` / `gpos-trace.json` dump families remain explicit Arabic
-shaping gates.
+refusal fixtures and diagnostic codes, and ticket-local `gsub-trace.json` /
+`gpos-trace.json` dump families remain explicit Arabic shaping gates.
 ### PKT-09A: Paragraph Semantic Layout Dumps And Refusals
 
 Status: implemented and independently reviewed.
