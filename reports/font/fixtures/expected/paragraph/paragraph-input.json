@@ -1,7 +1,7 @@
 {
   "schema": "kanvas.paragraph.input.v1",
   "unicodeVersion": "16.0.0",
-  "inputHash": "5695b41c4aca8459156d6cd6dfed70eb39dd4c1313caae8d4e5618f5c905398f",
+  "inputHash": "6529ef7fcf363460d6894f2d6ea49ecb0a03d7c5ec6e63a0ee96a75b5b5e5b22",
   "text": "hello\ufffcworld",
   "textLength": 11,
   "paragraphStyle": {"textAlign": "center", "textDirection": "rtl", "softWrap": true, "maxLines": 2, "ellipsis": "...", "ellipsisPolicy": "end", "lineHeight": 20.0, "textHeightBehavior": "font-metrics", "defaultLocale": "sr-Latn"},
@@ -10,7 +10,7 @@
     {"range": "6..10", "fontFamilies": ["Liberation Serif"], "fallbackPreference": "system-default", "typefaceId": null, "fontSize": 16.0, "fontWeight": 400, "fontWidth": 5, "fontSlant": "upright", "syntheticStylePolicy": "allow", "locale": "en-US", "scriptHint": null, "features": [{"tag": "kern", "value": 1}], "variationCoordinates": [], "palette": null, "colorRgba": "000000ff", "decoration": null, "letterSpacing": 0.0, "wordSpacing": 0.0, "heightMultiplier": null}
   ],
   "placeholders": [
-    {"range": "5..5", "width": 18.0, "height": 10.0, "baselineOffset": 8.0, "alignment": "baseline", "baseline": "alphabetic"}
+    {"range": "5..5", "width": 18.0, "height": 10.0, "baselineOffset": 8.0, "alignment": "baseline", "baseline": "alphabetic", "participatesInLineHeight": true}
   ],
   "diagnostics": []
 }
