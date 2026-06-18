@@ -793,6 +793,40 @@
       ]
     },
     {
+      "fixtureId": "paragraph-shaping-segmentation-synthetic",
+      "familyId": "paragraph",
+      "ownerTickets": [
+        "KFONT-M8-002"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M8 paragraph shaping segmentation",
+        "url": "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphShapingSegmentationTest.kt",
+        "version": "2026-06-18 synthetic paragraph shaping segmentation fixture v1"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/paragraph/paragraph-shaping-segmentation-fixture.txt",
+          "sha256": "ddb597d2ccc63b2e910b559d6768431d355520e5d9b040a9c4fd486eb6fad8d8",
+          "sizeBytes": 244,
+          "role": "synthetic-paragraph-input"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/paragraph/paragraph-shaping-requests-goldens.json",
+        "reports/font/fixtures/expected/paragraph/paragraph-shaping-requests.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-paragraph-layout-claim",
+        "no-skia-paragraph-parity-claim"
+      ]
+    },
+    {
       "fixtureId": "scaler-roboto-flex-variable",
       "familyId": "truetype-scaler",
       "ownerTickets": [

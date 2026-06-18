@@ -381,6 +381,7 @@ public interface ParagraphLayoutEngine {
 public class BasicParagraphLayoutEngine(
     private val shapingEngine: OpenTypeShapingEngine,
     private val lineBreaker: LineBreaker = SimpleLineBreaker(),
+    private val shapingSegmenter: ParagraphShapingSegmenter = DefaultParagraphShapingSegmenter(),
 ) : ParagraphLayoutEngine {
     /**
      * Lays out [paragraph] into shaped lines within finite, non-negative [maxWidth] logical pixels.
@@ -422,6 +423,8 @@ public class BasicParagraphLayoutEngine(
         val visibleRanges = if (maxLines == null) brokenRanges else brokenRanges.take(maxLines)
         val didOverflowHeight = maxLines != null && brokenRanges.size > visibleRanges.size
         val diagnostics = mutableListOf<ParagraphLayoutDiagnostic>()
+        val shapingPlan = shapingSegmenter.segment(paragraph)
+        diagnostics += shapingPlan.diagnostics
         if (didOverflowHeight && paragraph.paragraphStyle.ellipsis != null) {
             diagnostics += ParagraphLayoutDiagnostic(
                 code = PARAGRAPH_LAYOUT_MAX_LINES_ELLIPSIS_UNSUPPORTED_DIAGNOSTIC_CODE,
@@ -434,32 +437,49 @@ public class BasicParagraphLayoutEngine(
         var y = 0f
         var paragraphWidth = 0f
         val lines = visibleRanges.map { textRange ->
-            val style = paragraph.primaryStyleFor(textRange)
-            val shapingResult = shapingEngine.shape(
-                ShapingRequest(
-                    text = paragraph.text,
+            val lineRequests = shapingPlan.requests
+                .filter { request -> request.textRange.overlaps(textRange) }
+                .map { request -> request.intersect(textRange) }
+            val glyphRuns = mutableListOf<ShapedGlyphRun>()
+            val shapedCoverage = mutableListOf<IntRange>()
+            lineRequests.forEach { lineRequest ->
+                val shapingResult = shapingEngine.shape(
+                    ShapingRequest(
+                        text = paragraph.text,
+                        textRange = lineRequest.textRange,
+                        typefaceId = lineRequest.typefaceId,
+                        fontSize = lineRequest.style.fontSize,
+                        features = FeatureSet(lineRequest.style.features),
+                        locale = lineRequest.style.locale ?: paragraph.paragraphStyle.defaultLocale,
+                        paragraphDirection = paragraph.paragraphStyle.textDirection.legacyValue,
+                        preferredFamilies = lineRequest.style.fontFamilies,
+                    ),
+                )
+                glyphRuns += shapingResult.glyphRuns
+                if (shapingResult.glyphRuns.isNotEmpty()) {
+                    shapedCoverage += lineRequest.textRange
+                }
+                diagnostics += shapingResult.diagnostics.map { diagnostic -> diagnostic.toParagraphLayoutDiagnostic() }
+            }
+            val placeholderRanges = shapingPlan.placeholderRanges.filter { range -> range.overlaps(textRange) }
+            val lineWidth = glyphRuns.sumOf { it.advanceX.toDouble() }.toFloat() +
+                placeholderRanges.sumOf { range -> paragraph.placeholderWidth(range).toDouble() }.toFloat() +
+                paragraph.unshapedEstimatedWidth(
                     textRange = textRange,
-                    typefaceId = style.typefaceId,
-                    fontSize = style.fontSize,
-                    features = FeatureSet(style.features),
-                    locale = style.locale,
-                    paragraphDirection = paragraph.paragraphStyle.textDirection.legacyValue,
-                ),
-            )
-            val glyphRuns = shapingResult.glyphRuns
-            diagnostics += shapingResult.diagnostics.map { diagnostic -> diagnostic.toParagraphLayoutDiagnostic() }
-            val lineWidth = glyphRuns.sumOf { it.advanceX.toDouble() }.toFloat()
-            val lineHeight = paragraph.paragraphStyle.lineHeight ?: style.fontSize
-            val ascent = -style.fontSize * ASCENT_FRACTION
-            val descent = style.fontSize * DESCENT_FRACTION
+                    coveredRanges = shapedCoverage + placeholderRanges,
+                )
+            val lineFontSize = lineRequests.maxOfOrNull { request -> request.style.fontSize } ?: paragraph.primaryStyleFor(textRange).fontSize
+            val lineHeight = paragraph.paragraphStyle.lineHeight ?: lineFontSize
+            val ascent = -lineFontSize * ASCENT_FRACTION
+            val descent = lineFontSize * DESCENT_FRACTION
             val metrics = LineMetrics(
                 ascent = ascent,
                 descent = descent,
-                leading = lineHeight - style.fontSize,
+                leading = lineHeight - lineFontSize,
                 width = lineWidth,
                 baseline = y - ascent,
             )
-            val direction = if ((glyphRuns.firstOrNull()?.bidiLevel ?: 0) % 2 == 0) 1 else -1
+            val direction = if ((glyphRuns.firstOrNull()?.bidiLevel ?: lineRequests.firstOrNull()?.bidiLevel ?: 0) % 2 == 0) 1 else -1
             val boxes = if (lineWidth == 0f) {
                 emptyList()
             } else {
@@ -479,6 +499,7 @@ public class BasicParagraphLayoutEngine(
             paragraphWidth = maxOf(paragraphWidth, lineWidth)
             LineLayout(
                 textRange = textRange,
+                segmentIds = lineRequests.map { request -> request.segmentId }.distinct(),
                 glyphRuns = glyphRuns,
                 metrics = metrics,
                 boxes = boxes,
@@ -493,7 +514,8 @@ public class BasicParagraphLayoutEngine(
             height = y,
             didOverflowHeight = didOverflowHeight,
             didOverflowWidth = lines.any { it.metrics.width > maxWidth },
-            diagnostics = diagnostics,
+            paragraphShapingRequests = shapingPlan.requests,
+            diagnostics = diagnostics.sortedWith(paragraphDiagnosticOrdering()),
         )
     }
 }
@@ -518,6 +540,7 @@ public data class ParagraphLayoutResult(
     public val height: Float = 0f,
     public val didOverflowHeight: Boolean = false,
     public val didOverflowWidth: Boolean = false,
+    public val paragraphShapingRequests: List<ParagraphShapingRequest> = emptyList(),
     public val diagnostics: List<ParagraphLayoutDiagnostic> = emptyList(),
     public val layoutRefused: Boolean = false,
 ) {
@@ -548,6 +571,13 @@ public data class ParagraphLayoutResult(
             .append(", \"layoutRefused\": ")
             .append(layoutRefused)
             .append("},\n")
+        append("  \"paragraphShapingRequests\": ")
+        appendParagraphJsonArray(
+            values = paragraphShapingRequests,
+            entryIndent = "    ",
+            closingIndent = "  ",
+        ) { request -> request.toDumpJson() }
+        append(",\n")
         append("  \"lines\": ")
         appendParagraphJsonArray(
             values = lines.withIndex().toList(),
@@ -681,6 +711,7 @@ public class SimpleLineBreaker : LineBreaker {
  */
 public data class LineLayout(
     public val textRange: IntRange,
+    public val segmentIds: List<String> = emptyList(),
     public val glyphRuns: List<ShapedGlyphRun> = emptyList(),
     public val metrics: LineMetrics = LineMetrics(),
     public val boxes: List<TextBox> = emptyList(),
@@ -1061,6 +1092,8 @@ private fun LineLayout.toDumpJson(index: Int): String = buildString {
         .append(index)
         .append(", \"textRange\": ")
         .append(paragraphJsonString(textRange.toDumpLabel()))
+        .append(", \"segmentIds\": ")
+        .append(segmentIds.joinToString(prefix = "[", postfix = "]") { segmentId -> paragraphJsonString(segmentId) })
         .append(", \"metrics\": ")
         .append(metrics.toDumpJson())
         .append(", \"boxes\": ")
@@ -1097,6 +1130,26 @@ private fun TextBox.toDumpJson(): String = buildString {
         .append(paragraphJsonFloat(bottom))
         .append(", \"direction\": ")
         .append(direction)
+        .append("}")
+}
+
+private fun ParagraphShapingRequest.toDumpJson(): String = buildString {
+    append("{\"segmentId\": ")
+        .append(paragraphJsonString(segmentId))
+        .append(", \"textRange\": ")
+        .append(paragraphJsonString(textRange.toDumpLabel()))
+        .append(", \"fontSize\": ")
+        .append(paragraphJsonFloat(style.fontSize))
+        .append(", \"fontFamilies\": ")
+        .append(style.fontFamilies.toParagraphJsonStringArray())
+        .append(", \"typefaceId\": ")
+        .append(typefaceId?.value?.toString()?.let(::paragraphJsonString) ?: "null")
+        .append(", \"locale\": ")
+        .append(paragraphJsonNullableString(style.locale))
+        .append(", \"script\": ")
+        .append(paragraphJsonString(script))
+        .append(", \"bidiLevel\": ")
+        .append(bidiLevel)
         .append("}")
 }
 
@@ -1222,6 +1275,11 @@ private fun TextDecorationSpec.toParagraphJson(): String = buildString {
 private fun <V> Set<Map.Entry<IntRange, V>>.sortedByRange(): List<Map.Entry<IntRange, V>> =
     sortedWith(compareBy<Map.Entry<IntRange, V>> { it.key.first }.thenBy { it.key.last })
 
+private fun paragraphDiagnosticOrdering(): Comparator<ParagraphLayoutDiagnostic> =
+    compareBy<ParagraphLayoutDiagnostic> { it.textRange?.first ?: Int.MAX_VALUE }
+        .thenBy { it.textRange?.last ?: Int.MAX_VALUE }
+        .thenBy { it.code }
+
 private fun IntRange.isValidUtf16RangeFor(textLength: Int): Boolean =
     first >= 0 &&
         last >= first &&
@@ -1290,6 +1348,9 @@ private fun paragraphJsonString(value: String): String = buildString {
 
 private fun IntRange.toDumpLabel(): String = "$first..$last"
 
+private fun ParagraphShapingRequest.intersect(lineRange: IntRange): ParagraphShapingRequest =
+    copy(textRange = maxOf(textRange.first, lineRange.first)..minOf(textRange.last, lineRange.last))
+
 private fun String.isStableParagraphDiagnosticToken(): Boolean =
     isNotBlank() && all { char ->
         char in 'a'..'z' || char in '0'..'9' || char == '.' || char == '-' || char == '_'
@@ -1308,8 +1369,30 @@ private fun Paragraph.estimatedWidth(range: IntRange): Float =
     placeholders.entries.firstOrNull { (placeholderRange) -> placeholderRange.overlaps(range) }?.value?.width
         ?: styleAt(range.first).fontSize
 
+private fun Paragraph.placeholderWidth(range: IntRange): Float =
+    placeholders.entries.firstOrNull { (placeholderRange) -> placeholderRange.overlaps(range) }?.value?.width ?: 0f
+
+private fun Paragraph.unshapedEstimatedWidth(
+    textRange: IntRange,
+    coveredRanges: List<IntRange>,
+): Float {
+    var width = 0f
+    var index = textRange.first
+    while (index <= textRange.last) {
+        val cluster = text.clusterRangeAt(index).intersect(textRange)
+        if (coveredRanges.none { range -> range.overlaps(cluster) }) {
+            width += estimatedWidth(cluster)
+        }
+        index = cluster.last + 1
+    }
+    return width
+}
+
 private fun IntRange.overlaps(other: IntRange): Boolean =
     first <= other.last && other.first <= last
+
+private fun IntRange.intersect(other: IntRange): IntRange =
+    maxOf(first, other.first)..minOf(last, other.last)
 
 private fun String.clusterRangeAt(index: Int): IntRange {
     val firstCodePointEnd = codePointEndAt(index)

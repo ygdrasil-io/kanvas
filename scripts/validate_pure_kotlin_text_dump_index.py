@@ -35,6 +35,8 @@ REQUIRED_DUMPS = {
     "malformed-sfnt-fixtures",
     "paragraph-input-goldens",
     "paragraph-layout-result",
+    "paragraph-shaping-requests",
+    "paragraph-shaping-requests-goldens",
     "png-glyph-image",
     "sdf-atlas-build-result",
     "script-runs",

@@ -3024,6 +3024,65 @@ rtk git diff --check
 Remaining gate: downstream M8 tickets still own multi-style shaping
 segmentation, line breaking, ellipsis insertion, hit testing, selection boxes,
 placeholder geometry layout, CPU oracle evidence, and GPU text evidence.
+### KFONT-M8-002: Implement multi-style shaping segmentation
+
+Status: done; deterministic shaping segmentation evidence freshly validated.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/KFONT-M8-002-implement-multi-style-shaping-segmentation.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphShapingSegmentation.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphShapingSegmentationTest.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/font/fixtures/expected/paragraph/paragraph-shaping-requests.json`
+- `reports/font/fixtures/expected/paragraph/paragraph-shaping-requests-goldens.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m8-002-paragraph-shaping-segmentation.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+
+Evidence:
+
+- `DefaultParagraphShapingSegmenter` now converts paragraph input into
+  deterministic shaping requests split by cluster-safe style ranges, script,
+  bidi level, fallback-resolved typeface, variation coordinates, and
+  placeholder exclusion.
+- Cluster-boundary widening is explicit and stable: combining-mark splits emit
+  `text.paragraph.cluster-boundary-violation` and widen to the leading
+  cluster-safe range instead of splitting inside the grapheme cluster.
+- Missing fallback resolution now leaves the affected range unshaped and emits
+  `text.paragraph.fallback-unresolved` on the owning source text range.
+- `BasicParagraphLayoutEngine` now shapes per paragraph segment, records
+  `segmentIds` in line dumps, and merges paragraph plus shaping diagnostics by
+  source text range without claiming line breaking, hit testing, or GPU text
+  support.
+- Visible placeholders and other unshaped ranges now retain deterministic
+  estimated line width instead of collapsing to zero-width geometry when no
+  glyph run is emitted for that range.
+- `paragraph-shaping-requests.json` checks in mixed Latin/Arabic, variation
+  axis, placeholder, and fallback-range evidence, while
+  `paragraph-shaping-requests-goldens.json` pins the required schema and
+  negative-case coverage for cluster-boundary and fallback-unresolved cases.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.ParagraphShapingSegmentationTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineShapesPerParagraphSegmentsAndRecordsSegmentRefs --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphInputGoldenPinsSchemaCasesAndNonClaims --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphShapingRequestGoldenPinsMixedScriptFallbackAndClusterCases
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this ticket closes deterministic paragraph shaping segmentation
+only. UAX #14 line breaking, ellipsis insertion, bidi visual line ordering,
+selection geometry, hit testing, placeholder geometry layout, CPU oracle
+parity, and GPU text support remain gated on later M8/M11 work.
 ### PKT-10A: Glyph Strike-Key Preimage And Route Diagnostic Dumps
 
 Status: implemented and independently reviewed.
