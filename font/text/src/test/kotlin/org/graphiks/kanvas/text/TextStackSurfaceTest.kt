@@ -60,14 +60,19 @@ import org.graphiks.kanvas.font.sfnt.OpenTypeKernPair
 import org.graphiks.kanvas.font.sfnt.OpenTypeKernTable
 import org.graphiks.kanvas.text.paragraph.HitTestResult
 import org.graphiks.kanvas.text.paragraph.BasicParagraphLayoutEngine
+import org.graphiks.kanvas.text.paragraph.DefaultParagraphShapingSegmenter
 import org.graphiks.kanvas.text.paragraph.LineBreaker
 import org.graphiks.kanvas.text.paragraph.LineLayout
 import org.graphiks.kanvas.text.paragraph.LineMetrics
+import org.graphiks.kanvas.text.paragraph.PARAGRAPH_CLUSTER_BOUNDARY_VIOLATION_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LAYOUT_CONSTRAINT_NEGATIVE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LAYOUT_CONSTRAINT_NON_FINITE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LAYOUT_MAX_LINES_ELLIPSIS_UNSUPPORTED_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.Paragraph
 import org.graphiks.kanvas.text.paragraph.ParagraphBuilder
+import org.graphiks.kanvas.text.paragraph.ParagraphShapingPlan
+import org.graphiks.kanvas.text.paragraph.ParagraphShapingRequest
+import org.graphiks.kanvas.text.paragraph.ParagraphShapingSegmenter
 import org.graphiks.kanvas.text.paragraph.ParagraphLayoutDiagnostic
 import org.graphiks.kanvas.text.paragraph.ParagraphLayoutEngine
 import org.graphiks.kanvas.text.paragraph.ParagraphLayoutResult
@@ -154,6 +159,10 @@ class TextStackSurfaceTest {
             ParagraphStyle::class.simpleName,
             TextStyle::class.simpleName,
             PlaceholderStyle::class.simpleName,
+            ParagraphShapingRequest::class.simpleName,
+            ParagraphShapingPlan::class.simpleName,
+            ParagraphShapingSegmenter::class.simpleName,
+            DefaultParagraphShapingSegmenter::class.simpleName,
             ParagraphLayoutEngine::class.simpleName,
             ParagraphLayoutResult::class.simpleName,
             LineBreaker::class.simpleName,
@@ -167,7 +176,7 @@ class TextStackSurfaceTest {
         )
 
         assertEquals(25, shapingTypes.size)
-        assertEquals(15, paragraphTypes.size)
+        assertEquals(19, paragraphTypes.size)
     }
 
     @Test
@@ -257,9 +266,12 @@ class TextStackSurfaceTest {
                 "diagnostics": []
               },
               "layout": {"maxWidth": 50.0, "width": 50.0, "height": 20.0, "didOverflowWidth": false, "didOverflowHeight": false, "layoutRefused": false},
+              "paragraphShapingRequests": [
+                {"segmentId": "seg-000", "textRange": "0..6", "fontSize": 10.0, "fontFamilies": [], "typefaceId": null, "locale": "en-US", "script": "Latn", "bidiLevel": 0}
+              ],
               "lines": [
-                {"index": 0, "textRange": "0..4", "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 50.0, "baseline": 8.0}, "boxes": [{"textRange": "0..4", "left": 0.0, "top": 0.0, "right": 50.0, "bottom": 10.0, "direction": 1}], "glyphRunCount": 1},
-                {"index": 1, "textRange": "6..6", "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 10.0, "baseline": 18.0}, "boxes": [{"textRange": "6..6", "left": 0.0, "top": 10.0, "right": 10.0, "bottom": 20.0, "direction": 1}], "glyphRunCount": 1}
+                {"index": 0, "textRange": "0..4", "segmentIds": ["seg-000"], "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 50.0, "baseline": 8.0}, "boxes": [{"textRange": "0..4", "left": 0.0, "top": 0.0, "right": 50.0, "bottom": 10.0, "direction": 1}], "glyphRunCount": 1},
+                {"index": 1, "textRange": "6..6", "segmentIds": ["seg-000"], "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 10.0, "baseline": 18.0}, "boxes": [{"textRange": "6..6", "left": 0.0, "top": 10.0, "right": 10.0, "bottom": 20.0, "direction": 1}], "glyphRunCount": 1}
               ],
               "diagnostics": []
             }
@@ -323,6 +335,154 @@ class TextStackSurfaceTest {
         )
         assertTrue(result.dump().contains("\"code\": \"text.shaping.fallback-missing\""))
         assertTrue(result.dump().contains("\"textRange\": \"0..0\""))
+    }
+
+    @Test
+    fun basicParagraphLayoutEngineShapesPerParagraphSegmentsAndRecordsSegmentRefs() {
+        val requests = mutableListOf<ShapingRequest>()
+        val segmenter = object : ParagraphShapingSegmenter {
+            override fun segment(paragraph: Paragraph): ParagraphShapingPlan =
+                ParagraphShapingPlan(
+                    requests = listOf(
+                        ParagraphShapingRequest(
+                            segmentId = "seg-000",
+                            textRange = 0..1,
+                            typefaceId = null,
+                            style = TextStyle(fontSize = 10f, locale = "en-US"),
+                            script = "Latn",
+                            bidiLevel = 0,
+                        ),
+                        ParagraphShapingRequest(
+                            segmentId = "seg-001",
+                            textRange = 2..3,
+                            typefaceId = null,
+                            style = TextStyle(fontSize = 14f, locale = "en-US"),
+                            script = "Latn",
+                            bidiLevel = 0,
+                        ),
+                    ),
+                    placeholderRanges = emptyList(),
+                    diagnostics = listOf(
+                        ParagraphLayoutDiagnostic(
+                            code = PARAGRAPH_CLUSTER_BOUNDARY_VIOLATION_DIAGNOSTIC_CODE,
+                            message = "Style boundaries must align to grapheme cluster coverage; widening to the leading style range.",
+                            textRange = 1..2,
+                        ),
+                    ),
+                )
+        }
+        val shapingEngine = object : OpenTypeShapingEngine {
+            override fun shape(request: ShapingRequest): ShapingResult {
+                requests += request
+                val diagnostics = if (request.textRange == 2..3) {
+                    listOf(
+                        ShapingDiagnostic(
+                            code = MISSING_GLYPH_DIAGNOSTIC_CODE,
+                            message = "Missing glyph U+0044.",
+                            textRange = 2..2,
+                        ),
+                    )
+                } else {
+                    emptyList()
+                }
+                val clusters = request.textRange.mapIndexed { glyphIndex, textIndex ->
+                    GlyphCluster(
+                        textRange = textIndex..textIndex,
+                        glyphRange = glyphIndex..glyphIndex,
+                        advanceX = request.fontSize,
+                    )
+                }
+                return ShapingResult(
+                    glyphRuns = listOf(
+                        ShapedGlyphRun(
+                            glyphIds = clusters.indices.toList(),
+                            clusters = clusters,
+                            advanceX = clusters.sumOf { it.advanceX.toDouble() }.toFloat(),
+                            typefaceId = request.typefaceId,
+                            fontSize = request.fontSize,
+                        ),
+                    ),
+                    diagnostics = diagnostics,
+                )
+            }
+        }
+        val layoutEngine = BasicParagraphLayoutEngine(shapingEngine, shapingSegmenter = segmenter)
+        val paragraph = ParagraphBuilder()
+            .append("ab", TextStyle(fontSize = 10f, locale = "en-US"))
+            .append("CD", TextStyle(fontSize = 14f, locale = "en-US"))
+            .build()
+
+        val result = layoutEngine.layout(paragraph, maxWidth = 100f)
+
+        assertEquals(listOf(0..1, 2..3), requests.map { it.textRange })
+        assertEquals(listOf(10f, 14f), requests.map { it.fontSize })
+        assertEquals(listOf("seg-000", "seg-001"), result.lines.single().segmentIds)
+        assertEquals(2, result.lines.single().glyphRuns.size)
+        assertEquals(48f, result.lines.single().metrics.width)
+        assertEquals(
+            listOf(PARAGRAPH_CLUSTER_BOUNDARY_VIOLATION_DIAGNOSTIC_CODE, MISSING_GLYPH_DIAGNOSTIC_CODE),
+            result.diagnostics.map { it.code },
+        )
+        assertTrue(result.dump().contains("\"paragraphShapingRequests\": ["))
+        assertTrue(result.dump().contains("\"segmentIds\": [\"seg-000\", \"seg-001\"]"))
+        assertTrue(result.dump().contains("\"segmentId\": \"seg-001\""))
+    }
+
+    @Test
+    fun basicParagraphLayoutEnginePreservesPlaceholderWidthWithoutShapingRequests() {
+        val segmenter = object : ParagraphShapingSegmenter {
+            override fun segment(paragraph: Paragraph): ParagraphShapingPlan =
+                ParagraphShapingPlan(
+                    requests = emptyList(),
+                    placeholderRanges = listOf(0..0),
+                    diagnostics = emptyList(),
+                )
+        }
+        val paragraph = ParagraphBuilder()
+            .appendPlaceholder(PlaceholderStyle(width = 16f, height = 10f))
+            .build()
+
+        val result = BasicParagraphLayoutEngine(RecordingShapingEngine(), shapingSegmenter = segmenter).layout(
+            paragraph,
+            maxWidth = 50f,
+        )
+
+        assertEquals(16f, result.width)
+        assertEquals(16f, result.lines.single().metrics.width)
+        assertEquals(16f, result.lines.single().boxes.single().right)
+        assertEquals(emptyList(), result.lines.single().segmentIds)
+    }
+
+    @Test
+    fun basicParagraphLayoutEnginePreservesEstimatedWidthForVisibleUnshapedTextRanges() {
+        val segmenter = object : ParagraphShapingSegmenter {
+            override fun segment(paragraph: Paragraph): ParagraphShapingPlan =
+                ParagraphShapingPlan(
+                    requests = emptyList(),
+                    placeholderRanges = emptyList(),
+                    diagnostics = listOf(
+                        ParagraphLayoutDiagnostic(
+                            code = "text.paragraph.fallback-unresolved",
+                            message = "No fallback typeface resolved for paragraph segment 0..2.",
+                            textRange = 0..2,
+                            severity = "refusal",
+                        ),
+                    ),
+                )
+        }
+        val paragraph = ParagraphBuilder()
+            .append("abc", TextStyle(fontSize = 10f))
+            .build()
+
+        val result = BasicParagraphLayoutEngine(RecordingShapingEngine(), shapingSegmenter = segmenter).layout(
+            paragraph,
+            maxWidth = 50f,
+        )
+
+        assertEquals(30f, result.width)
+        assertEquals(30f, result.lines.single().metrics.width)
+        assertEquals(30f, result.lines.single().boxes.single().right)
+        assertEquals(listOf("text.paragraph.fallback-unresolved"), result.diagnostics.map { it.code })
     }
 
     @Test
@@ -762,6 +922,49 @@ class TextStackSurfaceTest {
                 "unsupported-baseline",
                 "unsupported-strut-policy",
             ),
+            dump.requiredStringList("negativeCases"),
+        )
+        assertEquals(
+            listOf("no-complete-paragraph-layout-claim", "no-skia-paragraph-parity-claim"),
+            dump.requiredStringList("nonClaims"),
+        )
+        assertNoSupportPromotionClaims(dump)
+    }
+
+    @Test
+    fun paragraphShapingRequestGoldenPinsMixedScriptFallbackAndClusterCases() {
+        val dump = readJsonProjectFile(
+            "reports/font/fixtures/expected/paragraph/paragraph-shaping-requests-goldens.json",
+        )
+        val cases = dump.requiredObjectList("cases")
+
+        assertEquals(1L, dump["schemaVersion"])
+        assertEquals("paragraph-shaping-requests-goldens", dump.requiredString("dumpId"))
+        assertEquals(listOf("KFONT-M8-002"), dump.requiredStringList("ownerTickets"))
+        assertEquals("mixed-script-style-fallback-placeholder", cases.single().requiredString("caseId"))
+        assertEquals(
+            listOf("diagnostics", "paragraphDirection", "placeholderRanges", "requests", "schema", "text"),
+            cases.single().requiredStringList("requiredDumpFields"),
+        )
+        assertEquals(
+            listOf(
+                "bidiLevel",
+                "fallbackPreference",
+                "features",
+                "fontFamilies",
+                "fontSize",
+                "locale",
+                "script",
+                "segmentId",
+                "text",
+                "textRange",
+                "typefaceId",
+                "variationCoordinates",
+            ),
+            cases.single().requiredStringList("requiredRequestFields"),
+        )
+        assertEquals(
+            listOf("cluster-boundary-combining-mark", "fallback-unresolved"),
             dump.requiredStringList("negativeCases"),
         )
         assertEquals(
