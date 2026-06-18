@@ -1692,6 +1692,38 @@
       ]
     },
     {
+      "dumpId": "hit-test-map",
+      "ownerTicket": "KFONT-M8-005",
+      "classification": "producer-only",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Metrics And Boxes"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphHitTestMapTest.kt",
+        "reports/font/fixtures/expected/paragraph/hit-test-map.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphHitTestMapTest",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Hit-test dump changes require reviewed caret affinity, placeholder ID routing, out-of-bounds clamp behavior, and explicit non-claims without bidi visual ordering, word-boundary completeness, ellipsis, or GPU text promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-paragraph-layout-claim",
+        "no-skia-paragraph-parity-claim"
+      ]
+    },
+    {
       "dumpId": "latin-gsub-gpos-goldens",
       "ownerTicket": "PKT-07B",
       "classification": "golden-gated",

@@ -304,6 +304,18 @@ public const val PARAGRAPH_INPUT_UNSUPPORTED_POLICY_DIAGNOSTIC_CODE: String =
     "text.paragraph.unsupported-policy"
 
 /**
+ * Stable diagnostic family emitted when a requested selection range is outside the paragraph bounds.
+ */
+public const val PARAGRAPH_INVALID_SELECTION_RANGE_DIAGNOSTIC_CODE: String =
+    "text.paragraph.invalid-selection-range"
+
+/**
+ * Stable diagnostic family emitted when a hit-test query point is non-finite.
+ */
+public const val PARAGRAPH_HIT_TEST_POINT_NON_FINITE_DIAGNOSTIC_CODE: String =
+    "text.paragraph.hit-test-point-non-finite"
+
+/**
  * Defines style applied to a logical range of text.
  *
  * @property typefaceId Stable typeface identifier requested for this style
@@ -665,6 +677,229 @@ public data class ParagraphLayoutResult(
         append("\n")
         append("}\n")
     }
+
+    /**
+     * Builds deterministic caret-stop facts from the current paragraph layout.
+     */
+    public fun hitTestMap(): HitTestMap {
+        if (layoutRefused) {
+            return HitTestMap(diagnostics = diagnostics)
+        }
+        val caretStops = mutableListOf<CaretStop>()
+        val seenStops = mutableSetOf<String>()
+        visualSpanBoxes().forEach { span ->
+            val start = CaretStop(
+                position = TextPosition(offset = span.sourceRange.first, affinity = "downstream"),
+                lineIndex = span.lineIndex,
+                x = span.left,
+                top = span.top,
+                bottom = span.bottom,
+                placeholderId = span.placeholderId,
+            )
+            val end = CaretStop(
+                position = TextPosition(offset = span.sourceRange.last + 1, affinity = "upstream"),
+                lineIndex = span.lineIndex,
+                x = span.right,
+                top = span.top,
+                bottom = span.bottom,
+                placeholderId = span.placeholderId,
+            )
+            listOf(start, end).forEach { stop ->
+                val key = "${stop.lineIndex}:${stop.position.offset}:${stop.position.affinity}:${stop.x}:${stop.placeholderId}"
+                if (seenStops.add(key)) {
+                    caretStops += stop
+                }
+            }
+        }
+        return HitTestMap(
+            caretStops = caretStops.sortedWith(
+                compareBy<CaretStop> { it.lineIndex }
+                    .thenBy { it.x }
+                    .thenBy { it.position.offset }
+                    .thenBy { it.position.affinity },
+            ),
+            diagnostics = diagnostics,
+        )
+    }
+
+    /**
+     * Resolves stable selection boxes for [selection].
+     */
+    public fun selectionBoxes(selection: SelectionRange): SelectionQueryResult {
+        if (layoutRefused) {
+            return SelectionQueryResult(
+                diagnostics = diagnostics,
+                refused = true,
+            )
+        }
+        val validatedRange = validateSelectionRange(selection) ?: return SelectionQueryResult(
+            diagnostics = listOf(
+                ParagraphLayoutDiagnostic(
+                    code = PARAGRAPH_INVALID_SELECTION_RANGE_DIAGNOSTIC_CODE,
+                    message = "selection range must stay within paragraph bounds and preserve start <= end.",
+                    severity = "refusal",
+                ),
+            ),
+            refused = true,
+        )
+        if (validatedRange.start == validatedRange.endExclusive) {
+            return SelectionQueryResult()
+        }
+        val selectedBoxes = visualSpanBoxes()
+            .filter { span -> span.sourceRange.overlapsSelection(validatedRange.start, validatedRange.endExclusive) }
+            .map { span ->
+                SelectionBox(
+                    sourceRange = span.sourceRange,
+                    lineIndex = span.lineIndex,
+                    left = span.left,
+                    top = span.top,
+                    right = span.right,
+                    bottom = span.bottom,
+                    direction = span.direction,
+                    placeholderId = span.placeholderId,
+                )
+            }
+            .sortedWith(compareBy<SelectionBox> { it.lineIndex }.thenBy { it.left })
+            .mergeAdjacentTextSelectionBoxes()
+        return SelectionQueryResult(boxes = selectedBoxes)
+    }
+
+    /**
+     * Maps a paragraph-space point back to a stable logical text position.
+     *
+     * Out-of-bounds finite points clamp to the nearest caret stop on the nearest
+     * visual line instead of refusing. Non-finite points return a stable refusal.
+     */
+    public fun hitTest(pointX: Float, pointY: Float): HitTestQueryResult {
+        if (!pointX.isFinite() || !pointY.isFinite()) {
+            return HitTestQueryResult(
+                diagnostics = listOf(
+                    ParagraphLayoutDiagnostic(
+                        code = PARAGRAPH_HIT_TEST_POINT_NON_FINITE_DIAGNOSTIC_CODE,
+                        message = "hit-test points must be finite.",
+                        severity = "refusal",
+                    ),
+                ),
+                refused = true,
+            )
+        }
+        if (layoutRefused) {
+            return HitTestQueryResult(
+                diagnostics = diagnostics,
+                refused = true,
+            )
+        }
+        if (lines.isEmpty()) {
+            return HitTestQueryResult(
+                entry = HitTestEntry(
+                    pointX = pointX,
+                    pointY = pointY,
+                    lineIndex = 0,
+                    position = TextPosition(offset = 0),
+                    isInsideText = false,
+                ),
+            )
+        }
+
+        val spans = visualSpanBoxes()
+        spans.containingSpan(pointX, pointY)?.let { span ->
+            return HitTestQueryResult(entry = span.toHitTestEntry(pointX, pointY, isInsideText = true))
+        }
+        val spansByLine = spans.groupBy { it.lineIndex }
+        val lineIndex = lineIndexFor(pointY)
+        val lineSpans = spansByLine[lineIndex].orEmpty().sortedBy { it.left }
+        if (lineSpans.isEmpty()) {
+            val fallbackOffset = lines[lineIndex].textRange.first
+            return HitTestQueryResult(
+                entry = HitTestEntry(
+                    pointX = pointX,
+                    pointY = pointY,
+                    lineIndex = lineIndex,
+                    position = TextPosition(offset = fallbackOffset),
+                    isInsideText = false,
+                ),
+            )
+        }
+
+        val firstSpan = lineSpans.first()
+        if (pointX <= firstSpan.left) {
+            return HitTestQueryResult(entry = firstSpan.toHitTestEntry(pointX, pointY, pointX >= firstSpan.left))
+        }
+
+        lineSpans.forEachIndexed { index, span ->
+            if (pointX <= span.right) {
+                return HitTestQueryResult(entry = span.toHitTestEntry(pointX, pointY, isInsideText = pointX >= span.left))
+            }
+            val next = lineSpans.getOrNull(index + 1) ?: return@forEachIndexed
+            if (pointX < next.left) {
+                val gapMidpoint = (span.right + next.left) / 2f
+                val chosenSpan = if (pointX < gapMidpoint) span else next
+                val chosenPosition = if (chosenSpan === span) {
+                    TextPosition(offset = span.sourceRange.last + 1, affinity = "upstream")
+                } else {
+                    TextPosition(offset = next.sourceRange.first, affinity = "downstream")
+                }
+                return HitTestQueryResult(
+                    entry = HitTestEntry(
+                        pointX = pointX,
+                        pointY = pointY,
+                        lineIndex = chosenSpan.lineIndex,
+                        position = chosenPosition,
+                        clusterRange = chosenSpan.sourceRange,
+                        placeholderId = chosenSpan.placeholderId,
+                        isInsideText = false,
+                    ),
+                )
+            }
+        }
+
+        val lastSpan = lineSpans.last()
+        return HitTestQueryResult(
+            entry = HitTestEntry(
+                pointX = pointX,
+                pointY = pointY,
+                lineIndex = lastSpan.lineIndex,
+                position = TextPosition(offset = lastSpan.sourceRange.last + 1, affinity = "upstream"),
+                clusterRange = lastSpan.sourceRange,
+                placeholderId = lastSpan.placeholderId,
+                isInsideText = false,
+            ),
+        )
+    }
+
+    private fun validateSelectionRange(selection: SelectionRange): SelectionBounds? {
+        val start = selection.start.offset
+        val end = selection.end.offset
+        if (start < 0 || end < 0 || start > end || end > paragraph.text.length) return null
+        return SelectionBounds(start = start, endExclusive = end)
+    }
+
+    private fun lineIndexFor(pointY: Float): Int {
+        val lineBounds = lines.mapIndexed { index, line ->
+            val bounds = line.verticalBounds()
+            IndexedLineBounds(index, bounds.first, bounds.second)
+        }
+        lineBounds.firstOrNull { bounds -> pointY >= bounds.top && pointY <= bounds.bottom }?.let { bounds ->
+            return bounds.lineIndex
+        }
+        if (pointY < lineBounds.first().top) return lineBounds.first().lineIndex
+        if (pointY > lineBounds.last().bottom) return lineBounds.last().lineIndex
+        return lineBounds.minByOrNull { bounds ->
+            minOf(
+                kotlin.math.abs(pointY - bounds.top),
+                kotlin.math.abs(pointY - bounds.bottom),
+            )
+        }?.lineIndex ?: 0
+    }
+
+    private fun visualSpanBoxes(): List<VisualSpanBox> =
+        lines.withIndex().flatMap { (lineIndex, line) ->
+            line.visualSpanBoxes(
+                paragraph = paragraph,
+                lineIndex = lineIndex,
+                placeholderBoxes = placeholderBoxes,
+            )
+        }
 }
 
 /**
@@ -789,6 +1024,75 @@ public data class PlaceholderBox(
     public val alignment: String,
     public val baseline: String?,
     public val participatesInLineHeight: Boolean,
+)
+
+/**
+ * Deterministic selection rectangle derived from laid-out text or placeholders.
+ *
+ * @property sourceRange Inclusive UTF-16 range covered by this selection box.
+ * @property lineIndex Zero-based visual line index.
+ * @property placeholderId Placeholder identifier when the box targets an inline placeholder.
+ */
+public data class SelectionBox(
+    public val sourceRange: IntRange,
+    public val lineIndex: Int,
+    public val left: Float,
+    public val top: Float,
+    public val right: Float,
+    public val bottom: Float,
+    public val direction: Int = 1,
+    public val placeholderId: String? = null,
+)
+
+/**
+ * Stable caret-stop location available for hit testing and selection snapping.
+ */
+public data class CaretStop(
+    public val position: TextPosition,
+    public val lineIndex: Int,
+    public val x: Float,
+    public val top: Float,
+    public val bottom: Float,
+    public val placeholderId: String? = null,
+)
+
+/**
+ * Stable point-to-text mapping fact built from paragraph layout spans.
+ */
+public data class HitTestEntry(
+    public val pointX: Float,
+    public val pointY: Float,
+    public val lineIndex: Int,
+    public val position: TextPosition,
+    public val clusterRange: IntRange? = null,
+    public val placeholderId: String? = null,
+    public val isInsideText: Boolean,
+)
+
+/**
+ * Deterministic caret-stop map for a laid-out paragraph.
+ */
+public data class HitTestMap(
+    public val caretStops: List<CaretStop> = emptyList(),
+    public val diagnostics: List<ParagraphLayoutDiagnostic> = emptyList(),
+)
+
+/**
+ * Result of resolving selection boxes for a logical text range.
+ */
+public data class SelectionQueryResult(
+    public val boxes: List<SelectionBox> = emptyList(),
+    public val diagnostics: List<ParagraphLayoutDiagnostic> = emptyList(),
+    public val refused: Boolean = false,
+)
+
+/**
+ * Result of hit testing a paragraph coordinate.
+ */
+public data class HitTestQueryResult(
+    public val entry: HitTestEntry? = null,
+    public val diagnostics: List<ParagraphLayoutDiagnostic> = emptyList(),
+    public val refused: Boolean = false,
 )
 
 /**
@@ -1507,6 +1811,102 @@ private fun PlaceholderStyle.resolveVerticalBounds(
         }
     }
 
+private fun LineLayout.verticalBounds(): Pair<Float, Float> {
+    val lineTop = boxes.firstOrNull()?.top ?: (metrics.baseline + metrics.ascent)
+    val lineBottom = boxes.firstOrNull()?.bottom ?: (metrics.baseline + metrics.descent + metrics.leading)
+    return lineTop to lineBottom
+}
+
+private fun LineLayout.visualSpanBoxes(
+    paragraph: Paragraph,
+    lineIndex: Int,
+    placeholderBoxes: List<PlaceholderBox>,
+): List<VisualSpanBox> {
+    if (textRange.isEmpty()) return emptyList()
+    val bounds = verticalBounds()
+    val shapedClusters = glyphRuns
+        .flatMap { run -> run.clusters }
+        .sortedBy { cluster -> cluster.textRange.first }
+    val lineDirection = boxes.firstOrNull()?.direction ?: 1
+    val placeholderByRange = placeholderBoxes
+        .filter { box -> box.lineIndex == lineIndex }
+        .associateBy { box -> box.sourceRange }
+    val spans = mutableListOf<VisualSpanBox>()
+    var x = 0f
+    var index = textRange.first
+    while (index <= textRange.last) {
+        val shapedCluster = shapedClusters.firstOrNull { cluster ->
+            cluster.textRange.first == index && cluster.textRange.overlaps(textRange)
+        }
+        val clusterRange = shapedCluster?.textRange?.intersect(textRange)
+            ?: paragraph.text.clusterRangeAt(index).intersect(textRange)
+        val placeholder = placeholderByRange[clusterRange]
+        if (placeholder != null) {
+            spans += VisualSpanBox(
+                sourceRange = placeholder.sourceRange,
+                lineIndex = lineIndex,
+                left = placeholder.left,
+                top = placeholder.top,
+                right = placeholder.right,
+                bottom = placeholder.bottom,
+                direction = lineDirection,
+                placeholderId = placeholder.placeholderId,
+            )
+            x = placeholder.right
+        } else {
+            val width = shapedCluster?.advanceX ?: paragraph.estimatedWidth(clusterRange)
+            spans += VisualSpanBox(
+                sourceRange = clusterRange,
+                lineIndex = lineIndex,
+                left = x,
+                top = bounds.first,
+                right = x + width,
+                bottom = bounds.second,
+                direction = lineDirection,
+            )
+            x += width
+        }
+        index = clusterRange.last + 1
+    }
+    return spans
+}
+
+private fun VisualSpanBox.toHitTestEntry(
+    pointX: Float,
+    pointY: Float,
+    isInsideText: Boolean,
+): HitTestEntry {
+    val midpoint = (left + right) / 2f
+    val position = if (pointX < midpoint) {
+        TextPosition(offset = sourceRange.first, affinity = "downstream")
+    } else {
+        TextPosition(offset = sourceRange.last + 1, affinity = "upstream")
+    }
+    return HitTestEntry(
+        pointX = pointX,
+        pointY = pointY,
+        lineIndex = lineIndex,
+        position = position,
+        clusterRange = sourceRange,
+        placeholderId = placeholderId,
+        isInsideText = isInsideText,
+    )
+}
+
+private fun List<VisualSpanBox>.containingSpan(
+    pointX: Float,
+    pointY: Float,
+): VisualSpanBox? =
+    filter { span ->
+        pointX >= span.left &&
+            pointX <= span.right &&
+            pointY >= span.top &&
+            pointY <= span.bottom
+    }.minWithOrNull(
+        compareBy<VisualSpanBox> { (it.right - it.left) * (it.bottom - it.top) }
+            .thenBy { it.lineIndex },
+    )
+
 private fun Paragraph.unshapedEstimatedWidth(
     textRange: IntRange,
     coveredRanges: List<IntRange>,
@@ -1528,6 +1928,37 @@ private fun IntRange.overlaps(other: IntRange): Boolean =
 
 private fun IntRange.intersect(other: IntRange): IntRange =
     maxOf(first, other.first)..minOf(last, other.last)
+
+private fun IntRange.overlapsSelection(
+    selectionStart: Int,
+    selectionEndExclusive: Int,
+): Boolean =
+    first < selectionEndExclusive && selectionStart <= last
+
+private fun List<SelectionBox>.mergeAdjacentTextSelectionBoxes(): List<SelectionBox> {
+    if (isEmpty()) return this
+    val merged = mutableListOf<SelectionBox>()
+    forEach { box ->
+        val previous = merged.lastOrNull()
+        if (previous != null &&
+            previous.placeholderId == null &&
+            box.placeholderId == null &&
+            previous.lineIndex == box.lineIndex &&
+            previous.direction == box.direction &&
+            previous.top == box.top &&
+            previous.bottom == box.bottom &&
+            previous.right == box.left
+        ) {
+            merged[merged.lastIndex] = previous.copy(
+                sourceRange = previous.sourceRange.first..box.sourceRange.last,
+                right = box.right,
+            )
+        } else {
+            merged += box
+        }
+    }
+    return merged
+}
 
 private fun resolvePlaceholderBoxes(
     paragraph: Paragraph,
@@ -1585,6 +2016,28 @@ private fun resolvePlaceholderBoxes(
 private data class PlaceholderBounds(
     val top: Float,
     val bottom: Float,
+)
+
+private data class VisualSpanBox(
+    val sourceRange: IntRange,
+    val lineIndex: Int,
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+    val direction: Int,
+    val placeholderId: String? = null,
+)
+
+private data class IndexedLineBounds(
+    val lineIndex: Int,
+    val top: Float,
+    val bottom: Float,
+)
+
+private data class SelectionBounds(
+    val start: Int,
+    val endExclusive: Int,
 )
 
 private fun String.clusterRangeAt(index: Int): IntRange {
