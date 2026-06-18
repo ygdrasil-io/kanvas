@@ -1180,6 +1180,63 @@ class TextStackSurfaceTest {
     }
 
     @Test
+    fun basicOpenTypeShapingEngineSkipsGposSingleAdjustmentsWhenFeatureIsUnsupportedForScriptPolicy() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440409"))
+        val engine = BasicOpenTypeShapingEngine(
+            scriptItemizer = object : ScriptItemizer {
+                override fun itemize(request: ShapingRequest): List<ScriptRun> =
+                    listOf(ScriptRun(request.textRange, "Arab"))
+            },
+            glyphMapper = mapGlyphs(
+                0x0628 to 7,
+                0x062A to 11,
+            ),
+            gposSingleTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGposSingleTable(
+                    adjustments = listOf(
+                        OpenTypeGposSingleAdjustment(
+                            glyphId = 7,
+                            valueRecord = OpenTypeGposValueRecord(
+                                xPlacement = 50,
+                                yPlacement = -25,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            kernUnitsPerEmByTypefaceId = mapOf(typefaceId to 1000),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "\u0628\u062A",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(emptyList(), result.diagnostics)
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(11, 7),
+                    clusters = listOf(
+                        GlyphCluster(textRange = 1..1, glyphRange = 0..0, advanceX = 20f),
+                        GlyphCluster(textRange = 0..0, glyphRange = 1..1, advanceX = 20f),
+                    ),
+                    advanceX = 40f,
+                    advanceY = 0f,
+                    script = "Arab",
+                    bidiLevel = 1,
+                    typefaceId = typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            result.glyphRuns,
+        )
+    }
+
+    @Test
     fun basicOpenTypeShapingEngineSkipsGposPairAdjustmentsWhenKernFeatureIsDisabled() {
         val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-44665544040a"))
         val engine = BasicOpenTypeShapingEngine(
