@@ -1,6 +1,6 @@
 # Pure Kotlin Text Coverage And Ticket Matrix
 
-Date: 2026-06-16
+Date: 2026-06-18
 Status: coordination evidence
 
 This report maps `.upstream/specs/pure-kotlin-text/` to implementation slices.
@@ -2257,13 +2257,15 @@ mapping, paragraph layout, emoji rendering, or GPU text route support.
 
 ### KFONT-M5-005: Add cluster safety regression suite
 
-Status: review with bounded fixture evidence; independent audit narrowed the remaining gate to CJK IVS breadth only.
+Status: done; independent review closed the remaining CJK IVS breadth gate without widening emoji or shaping claims.
 
 Files:
 
 - `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ClusterSafetyReport.kt`
 - `font/text/src/test/kotlin/org/graphiks/kanvas/text/ClusterSafetyTest.kt`
 - `reports/font/fixtures/expected/unicode/cluster-arabic-mark.txt`
+- `reports/font/fixtures/expected/unicode/cluster-cjk-ivs-mixed-kana.txt`
+- `reports/font/fixtures/expected/unicode/cluster-cjk-ivs-supplementary.txt`
 - `reports/font/fixtures/expected/unicode/cluster-cjk-variation-selector.txt`
 - `reports/font/fixtures/expected/unicode/cluster-devanagari-conjunct.txt`
 - `reports/font/fixtures/expected/unicode/cluster-emoji-family-zwj.txt`
@@ -2273,7 +2275,7 @@ Files:
 - `reports/font/fixtures/expected/unicode/cluster-safety-report.json`
 - `reports/font/fixtures/expected/unicode/cluster-thai-tone.txt`
 - `reports/font/fixtures/expected/unicode/cluster-vs15-vs16.txt`
-- `reports/pure-kotlin-text/2026-06-17-kfont-m5-005-cluster-safety.md`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m5-005-cluster-safety.md`
 - `reports/pure-kotlin-text/coverage-ticket-matrix.md`
 - `reports/pure-kotlin-text/dump-evidence-index.json`
 - `reports/pure-kotlin-text/fixture-evidence-manifest.json`
@@ -2293,7 +2295,8 @@ Evidence:
   boundary alignment.
 - The checked-in fixture matrix covers bounded emoji family ZWJ, emoji
   skin-tone, VS15/VS16, Arabic mark, Devanagari conjunct, Thai tone, CJK
-  variation-selector context, mixed bidi, and a synthetic negative split row.
+  variation-selector context, supplementary-plane IVS, mixed Han-plus-Kana
+  IVS, mixed bidi, and a synthetic negative split row.
 - `cluster-negative-split.txt` records a stable
   `text.shaping.cluster-invariant-failed` diagnostic without widening any
   shaping or emoji support claim.
@@ -2305,6 +2308,9 @@ Evidence:
   evidence for the shared emoji-adjacent cluster family.
 - Emoji-adjacent rows keep `scaledemoji` explicit as a legacy gate; this slice
   does not retire that gate or add color-glyph, route, or GPU evidence.
+- The expanded CJK IVS rows prove that the existing Kanvas grapheme, bidi, and
+  script-itemization outputs keep IVS code points cluster-safe both for a bare
+  supplementary selector pair and for a mixed Han-plus-Kana context.
 
 Validation:
 
@@ -2316,10 +2322,11 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 rtk git diff --check
 ```
 
-Remaining gate: this bounded M5-005 slice remains in `review`, not `done`.
-Broader reviewed CJK IVS coverage is still open before complete cluster-safety
-closeout; explicit emoji refusal and fallback-boundary evidence now live on
-the owning `KFONT-M7-004` slice.
+Remaining gate: none for bounded KFONT-M5-005 cluster-safety closeout.
+This remains cluster-boundary evidence only and does not claim emoji support,
+GSUB/GPOS shaping, fallback-run splitting, paragraph layout, color glyphs, or
+GPU text route support; `scaledemoji` stays gated on later emoji shaping,
+route, and rendering evidence.
 
 ### KFONT-M6-001: Define `OpenTypeLayoutEngine` Contract And Dumps
 
