@@ -997,6 +997,7 @@ public class BasicOpenTypeShapingEngine(
             glyphIds = glyphIds,
             clusters = clusters,
             glyphClusterIndexes = glyphClusterIndexes,
+            features = features,
             adjustmentContext = adjustmentContext,
             diagnostics = diagnostics,
         )
@@ -1303,10 +1304,12 @@ public class BasicOpenTypeShapingEngine(
         glyphIds: List<Int>,
         clusters: MutableList<GlyphCluster>,
         glyphClusterIndexes: IntArray,
+        features: RuntimeFeatureGateSet,
         adjustmentContext: BasicPositionAdjustmentContext,
         diagnostics: MutableList<ShapingDiagnostic>,
     ): Double {
         val gposSingleTable = adjustmentContext.gposSingleTable ?: return 0.0
+        if (!features.isRuntimeEnabled("kern")) return 0.0
         var totalAdvanceAdjustment = 0.0
         glyphIds.forEachIndexed { glyphIndex, glyphId ->
             val valueRecord =

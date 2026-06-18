@@ -89,8 +89,8 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 - 2026-06-16 KFONT M6 blocker audit is now historical coordination evidence:
   `KFONT-M6-002`, `KFONT-M6-004`, and `KFONT-M6-005` are since closed out on
   reviewed fixture evidence, while `KFONT-M6-006` remains in `review` pending
-  per-script fixture families, the GPOS single feature-routing gap, and
-  explicit OpenType-specific `drawString` non-enablement evidence.
+  per-script fixture families and explicit OpenType-specific `drawString`
+  non-enablement evidence.
 
 ### KFONT-M6 Remaining Blocker Audit
 
@@ -112,9 +112,8 @@ Evidence:
   reviewed fixture provenance and promoted dump evidence, so they no longer
   block resumption by merge/adopt status.
 - `KFONT-M6-006` remains the only M6 slice still in `review`; its remaining
-  gates are per-script shaping fixture families, the GPOS single
-  feature-routing gap, and explicit OpenType-specific `drawString`
-  non-enablement evidence.
+  gates are per-script shaping fixture families and explicit OpenType-specific
+  `drawString` non-enablement evidence.
 - The named fixture families for `KFONT-M6-003`, `KFONT-M6-007`,
   `KFONT-M6-008`, `KFONT-M6-009`, and `KFONT-M6-010` are still not present
   in-repo beyond ticket text references, so those tickets must not be advanced
@@ -2589,7 +2588,7 @@ Evidence:
   `defaulted`, and `unsupported` feature facts, and `shaping-plan.json` records
   a deterministic `languageSystem` value.
 - `BasicOpenTypeShapingEngine` now resolves per-run feature policy before GSUB,
-  GPOS anchor lookup, and pair-kerning gating, so unsupported discretionary
+  the bounded `kern`-routed GPOS single subset, GPOS anchor lookup, and pair-kerning gating, so unsupported discretionary
   requests no longer execute from a raw positive `FeatureSet` entry alone while
   scripts without a policy row keep their legacy enable-unless-disabled
   fallback.
@@ -2612,6 +2611,7 @@ Validation:
 
 ```bash
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineSkipsParsedGsubLookupWhenFeatureIsUnsupportedForScriptPolicy
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineSkipsGposSingleAdjustmentsWhenFeatureIsUnsupportedForScriptPolicy
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineSkipsUnsupportedCursiveLookupsForScriptPolicy
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEnginePreservesLegacyFeatureDefaultsForScriptsWithoutPolicy
 rtk ./gradlew --no-daemon :kanvas-skia:test --tests org.skia.foundation.SkFontTest.drawString\ forwards\ raw\ text\ to\ typeface\ path\ builder\ without\ implicit\ shaping
@@ -2622,13 +2622,15 @@ rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 ```
 
+- Independent review verdict: `ACCEPT`; follow-up narrowed wording from
+  broad “GPOS single adjustment” to the precise bounded `kern`-routed
+  GPOS single subset to avoid over-claiming parser/runtime coverage.
+
 Remaining gate: per-script shaping fixture families from `KFONT-M6-007`,
-`KFONT-M6-008`, and `KFONT-M6-009` are still absent, the remaining GPOS
-single feature-routing work is not yet covered by runtime evidence, and
-the OpenType-specific `drawString` compatibility path still lacks explicit
-complex-feature non-enablement evidence. Keep this ticket in `review` until
-those gates land beyond the current contract-level `shaping-plan.json`
-evidence.
+`KFONT-M6-008`, and `KFONT-M6-009` are still absent, and the OpenType-specific
+`drawString` compatibility path still lacks explicit complex-feature
+non-enablement evidence. Keep this ticket in `review` until those gates land
+beyond the current contract-level `shaping-plan.json` evidence.
 
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 
