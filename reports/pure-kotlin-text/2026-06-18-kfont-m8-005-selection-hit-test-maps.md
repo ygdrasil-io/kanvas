@@ -39,6 +39,10 @@
   inside an RTL run on an LTR paragraph and for an RTL paragraph with an LTR
   island, so bounded visual ordering is exercised beyond the original single
   mixed-direction golden row without broadening support claims.
+- `ParagraphHitTestMapTest.softWrappedLeadingPlaceholderKeepsParagraphWideVisualOrderBeforeRtlContinuation`
+  now pins the soft-wrapped continuation case where a leading placeholder starts
+  the next visual line before an RTL run, so paragraph-wide visual ordering is
+  explicitly covered without broadening the bidi support claim.
 - Finite out-of-bounds points now clamp to the nearest caret stop instead of
   refusing, while invalid selection ranges and non-finite hit-test points emit
   stable refusal diagnostics.

@@ -101,7 +101,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*HitTest*'
 ## Status Notes
 
 - `review`: `ParagraphLayoutResult` now exposes bounded `SelectionBox`, `CaretStop`, `HitTestEntry`, `HitTestMap`, `SelectionQueryResult`, and `HitTestQueryResult` contracts, with deterministic selection boxes, caret stops, placeholder IDs, and point hit testing backed by current line/placeholder geometry, including bounded mixed-direction visual ordering.
-- `review`: `hit-test-map.json` now checks in deterministic multi-line placeholder selection, non-participating placeholder overflow routing, combining-mark snapping, emoji cluster boundary snapping, mixed-bidi visual-order snapping, and finite out-of-bounds clamp behavior, while invalid selection ranges and non-finite hit-test points emit stable refusal diagnostics.
+- `review`: `hit-test-map.json` now checks in deterministic multi-line placeholder selection, non-participating placeholder overflow routing, combining-mark snapping, emoji cluster boundary snapping, mixed-bidi visual-order snapping including soft-wrapped leading-placeholder continuation and RTL-paragraph LTR-island cases, and finite out-of-bounds clamp behavior, while invalid selection ranges and non-finite hit-test points emit stable refusal diagnostics.
 - Remaining gate before `done`: explicit word/grapheme boundary query APIs still need dedicated evidence beyond the current line-indexed, cluster-safe hit-test surface.
 
 ## Linear Labels

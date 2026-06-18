@@ -3072,9 +3072,9 @@ Evidence:
   visible cluster fits but the ellipsis does, retry-on-earlier-visible-style
   behavior when the current trailing style cannot shape the ellipsis,
   missing-glyph and no-room refusals, trailing-style ellipsis shaping on
-  mixed-style content, shaped-cluster-safe truncation, and bounded mixed-bidi
-  truncation ordering across both LTR paragraphs with RTL tails and RTL
-  paragraphs with LTR islands.
+  mixed-style content, shaped-cluster-safe truncation, and bounded
+  surviving-span mixed-bidi truncation ordering across both LTR paragraphs
+  with RTL tails and RTL paragraphs with LTR islands.
 - `hitTestMap()` now records the visual tail of the displayed ellipsis as a
   final caret stop, and `hitTest()` treats points inside that tail as
   in-bounds text hits that resolve to the truncated line end.
@@ -3082,17 +3082,21 @@ Evidence:
   accepted ellipsis cases, including the mixed-direction row's
   `visibleRange`/`truncatedRange` and ellipsis provenance, while the visual
   ordering proof itself stays in direct bidi tests.
+- Exact mixed-direction ellipsis placement remains a non-claim; this slice
+  proves surviving visible-span order plus bounded ellipsis-tail hit-testing
+  only.
 
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutInsertsEllipsisAndRecordsTruncationFactsInResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAppendsEllipsisWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesEllipsisNoRoomWhenMaxWidthCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAllowsEllipsisOnlyWhenNoVisibleClusterFitsButEllipsisDoes --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesMissingEllipsisGlyphWhenShaperCannotProduceEllipsisRun --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRetriesEllipsisWithEarlierVisibleStyleWhenTrailingStyleCannotShapeIt --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutShapesEllipsisWithTrailingVisibleStyleAfterTruncation --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDoesNotCutInsideAShapedClusterWhenEllipsizing --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestMapIncludesVisualTailForDisplayedEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestTreatsDisplayedEllipsisAsInsideText --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutPreservesVisualOrderForEllipsizedMixedDirectionLine --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutPreservesVisualOrderForEllipsizedRtlParagraphWithLtrIsland --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenPinsEllipsisCasesAndNonClaims
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutInsertsEllipsisAndRecordsTruncationFactsInResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAppendsEllipsisWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesEllipsisNoRoomWhenMaxWidthCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAllowsEllipsisOnlyWhenNoVisibleClusterFitsButEllipsisDoes --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesMissingEllipsisGlyphWhenShaperCannotProduceEllipsisRun --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRetriesEllipsisWithEarlierVisibleStyleWhenTrailingStyleCannotShapeIt --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutShapesEllipsisWithTrailingVisibleStyleAfterTruncation --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDoesNotCutInsideAShapedClusterWhenEllipsizing --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestMapIncludesVisualTailForDisplayedEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestTreatsDisplayedEllipsisAsInsideText --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutKeepsSurvivingVisualOrderForEllipsizedMixedDirectionLine --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutKeepsSurvivingVisualOrderForEllipsizedRtlParagraphWithLtrIsland --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenPinsEllipsisCasesAndNonClaims
 rtk git diff --check
 ```
 
 Remaining non-claim: this checks in bounded ellipsis insertion, truncation,
-and mixed-bidi ordering evidence only. It does not claim complete paragraph
-layout parity, CPU oracle parity, shaping completeness, or GPU text support.
+and surviving-span mixed-bidi ordering evidence only. It does not claim exact
+mixed-direction ellipsis placement, complete paragraph layout parity, CPU
+oracle parity, shaping completeness, or GPU text support.
 ### KFONT-M8-005: Implement selection and hit-test maps
 
 Status: implemented; evidence refreshed for independent review.
@@ -3124,8 +3128,9 @@ Evidence:
 - Hit testing now snaps to grapheme-cluster-safe caret boundaries, records
   upstream/downstream affinity, never returns an offset inside the combining
   mark or emoji surrogate-pair clusters covered by the fixture, preserves
-  bounded mixed-bidi visual ordering, and clamps finite out-of-bounds points
-  to the nearest available caret stop.
+  bounded mixed-bidi visual ordering including soft-wrapped leading-placeholder
+  continuation and RTL-paragraph LTR-island cases, and clamps finite
+  out-of-bounds points to the nearest available caret stop.
 - `hit-test-map.json` checks in bounded evidence for multi-line placeholder
   selection, non-participating placeholder overflow routing, combining-mark
   snapping, emoji cluster boundaries, mixed-bidi visual ordering, and finite

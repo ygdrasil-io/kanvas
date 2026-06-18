@@ -448,6 +448,63 @@ class ParagraphHitTestMapTest {
     }
 
     @Test
+    fun softWrappedLeadingPlaceholderKeepsParagraphWideVisualOrderBeforeRtlContinuation() {
+        val paragraph = ParagraphBuilder()
+            .append("abc", TextStyle(fontSize = 10f))
+            .appendPlaceholder(
+                PlaceholderStyle(
+                    width = 12f,
+                    height = 14f,
+                    baselineOffset = 10f,
+                    alignment = PlaceholderAlignment.BASELINE,
+                ),
+            )
+            .append("\u05D0\u05D1", TextStyle(fontSize = 10f))
+            .build()
+
+        val result = BasicParagraphLayoutEngine(ClusterAwareShapingEngine()).layout(paragraph, maxWidth = 32f)
+        val secondLineBoxes = result.selectionBoxes(
+            SelectionRange(
+                start = TextPosition(offset = 3),
+                end = TextPosition(offset = 6),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                SelectionBox(
+                    sourceRange = 3..3,
+                    lineIndex = 1,
+                    left = 0f,
+                    top = 10f,
+                    right = 12f,
+                    bottom = 24f,
+                    placeholderId = "ph-000",
+                ),
+                SelectionBox(
+                    sourceRange = 4..5,
+                    lineIndex = 1,
+                    left = 12f,
+                    top = 10f,
+                    right = 32f,
+                    bottom = 24f,
+                    direction = -1,
+                ),
+            ),
+            secondLineBoxes.boxes,
+        )
+        assertEquals(
+            TextPosition(offset = 3, affinity = "downstream"),
+            result.hitTest(pointX = 2f, pointY = 15f).entry?.position,
+        )
+        assertEquals("ph-000", result.hitTest(pointX = 2f, pointY = 15f).entry?.placeholderId)
+        assertEquals(
+            TextPosition(offset = 6, affinity = "upstream"),
+            result.hitTest(pointX = 14f, pointY = 15f).entry?.position,
+        )
+    }
+
+    @Test
     fun leadingPlaceholderKeepsBaseDirectionBeforeRtlRun() {
         val paragraph = ParagraphBuilder()
             .appendPlaceholder(

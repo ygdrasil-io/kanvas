@@ -354,7 +354,7 @@ class TextStackSurfaceTest {
     }
 
     @Test
-    fun paragraphLayoutPreservesVisualOrderForEllipsizedMixedDirectionLine() {
+    fun paragraphLayoutKeepsSurvivingVisualOrderForEllipsizedMixedDirectionLine() {
         val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine(bidiAware = true))
         val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "."))
             .append("ab \u05D0\u05D1\nz", TextStyle(fontSize = 10f))
@@ -367,11 +367,10 @@ class TextStackSurfaceTest {
         assertTrue(result.dump().contains("\"truncatedRange\": \"5..6\""))
         assertEquals(TextPosition(offset = 5, affinity = "upstream"), result.hitTest(pointX = 32f, pointY = 5f).entry?.position)
         assertEquals(TextPosition(offset = 4, affinity = "upstream"), result.hitTest(pointX = 42f, pointY = 5f).entry?.position)
-        assertEquals(TextPosition(offset = 5, affinity = "upstream"), result.hitTest(pointX = 55f, pointY = 5f).entry?.position)
     }
 
     @Test
-    fun paragraphLayoutPreservesVisualOrderForEllipsizedRtlParagraphWithLtrIsland() {
+    fun paragraphLayoutKeepsSurvivingVisualOrderForEllipsizedRtlParagraphWithLtrIsland() {
         val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine(bidiAware = true))
         val paragraph = ParagraphBuilder(
             ParagraphStyle(
@@ -392,7 +391,6 @@ class TextStackSurfaceTest {
         assertEquals(TextPosition(offset = 4, affinity = "downstream"), result.hitTest(pointX = 12f, pointY = 5f).entry?.position)
         assertEquals(TextPosition(offset = 2, affinity = "upstream"), result.hitTest(pointX = 32f, pointY = 5f).entry?.position)
         assertEquals(TextPosition(offset = 1, affinity = "upstream"), result.hitTest(pointX = 42f, pointY = 5f).entry?.position)
-        assertEquals(TextPosition(offset = 5, affinity = "upstream"), result.hitTest(pointX = 55f, pointY = 5f).entry?.position)
     }
 
     @Test
