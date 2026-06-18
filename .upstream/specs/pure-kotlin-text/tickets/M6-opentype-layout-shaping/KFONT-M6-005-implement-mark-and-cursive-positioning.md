@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-005"
 title: "Implement mark and cursive positioning"
-status: "proposed"
+status: "done"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
