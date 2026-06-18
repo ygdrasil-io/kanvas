@@ -720,6 +720,7 @@ public class BasicOpenTypeShapingEngine(
         group: BasicShapingGroup,
         diagnostics: MutableList<ShapingDiagnostic>,
     ): ShapedGlyphRun {
+        val resolvedFeatures = resolveRuntimeFeatureSet(request, group)
         val glyphUnits = mutableListOf<ShapingGlyphUnit>()
         val clusterRanges = if (group.isRightToLeft) group.clusterRanges.asReversed() else group.clusterRanges
 
@@ -737,8 +738,8 @@ public class BasicOpenTypeShapingEngine(
             }
         }
 
-        applyStandardLigatures(request, glyphUnits)
-        applyGsubLookups(request, glyphUnits)
+        applyStandardLigatures(request, resolvedFeatures, glyphUnits)
+        applyGsubLookups(request, resolvedFeatures, glyphUnits)
         val glyphIds = glyphUnits.map { it.glyphId }
         val clusters = glyphClustersFor(
             glyphUnits = glyphUnits,
@@ -746,7 +747,14 @@ public class BasicOpenTypeShapingEngine(
             preservePerGlyphClusters = shouldPreservePerGlyphClusters(request.typefaceId, glyphIds),
         )
         val baseAdvanceX = clusters.sumOf { cluster -> cluster.advanceX.toDouble() }
-        val totalAdvanceAdjustment = applyPositionAdjustments(request, group, glyphIds, clusters, diagnostics)
+        val totalAdvanceAdjustment = applyPositionAdjustments(
+            request = request,
+            group = group,
+            features = resolvedFeatures,
+            glyphIds = glyphIds,
+            clusters = clusters,
+            diagnostics = diagnostics,
+        )
 
         return ShapedGlyphRun(
             glyphIds = glyphIds,
@@ -769,9 +777,10 @@ public class BasicOpenTypeShapingEngine(
 
     private fun applyStandardLigatures(
         request: ShapingRequest,
+        features: RuntimeFeatureGateSet,
         glyphUnits: MutableList<ShapingGlyphUnit>,
     ) {
-        if (request.features.values["liga"] == 0) return
+        if (!features.isRuntimeEnabled("liga")) return
         val ligatureGlyphId = glyphMapper.glyphIdFor(request.typefaceId, LATIN_SMALL_FI_LIGATURE_CODE_POINT)
             ?: return
 
@@ -802,13 +811,14 @@ public class BasicOpenTypeShapingEngine(
 
     private fun applyGsubLookups(
         request: ShapingRequest,
+        features: RuntimeFeatureGateSet,
         glyphUnits: MutableList<ShapingGlyphUnit>,
     ) {
         val typefaceId = request.typefaceId ?: return
         val gsubTable = gsubTablesByTypefaceId[typefaceId] ?: return
 
         gsubTable.lookups.forEach { lookup ->
-            if (request.features.values[lookup.featureTag] == 0) {
+            if (!features.isRuntimeEnabled(lookup.featureTag)) {
                 return@forEach
             }
             when (lookup) {
@@ -966,6 +976,7 @@ public class BasicOpenTypeShapingEngine(
     private fun applyPositionAdjustments(
         request: ShapingRequest,
         group: BasicShapingGroup,
+        features: RuntimeFeatureGateSet,
         glyphIds: List<Int>,
         clusters: MutableList<GlyphCluster>,
         diagnostics: MutableList<ShapingDiagnostic>,
@@ -997,7 +1008,7 @@ public class BasicOpenTypeShapingEngine(
             textRange = group.textRange(),
             diagnostics = diagnostics,
         )
-        if (request.features.values["kern"] == 0) {
+        if (!features.isRuntimeEnabled("kern")) {
             return totalAdvanceAdjustment
         }
         if (glyphIds.size < 2) {
@@ -1337,6 +1348,44 @@ public class BasicOpenTypeShapingEngine(
         return advanceAdjustment
     }
 
+    private fun resolveRuntimeFeatureSet(
+        request: ShapingRequest,
+        group: BasicShapingGroup,
+    ): RuntimeFeatureGateSet {
+        val requested = request.features.values.entries
+            .sortedBy { it.key }
+            .map { (tag, value) -> ShapingFeatureRequest(tag, value) }
+        val scriptRun = ScriptItemizationRun(
+            clusterRange = 0..0,
+            utf16Range = group.textRange(),
+            codePointRange = group.textRange(),
+            selectedScript = group.script,
+            openTypeScriptTags = emptyList(),
+            extensionCandidates = listOf(group.script),
+            languageHint = request.locale,
+            reason = "basic-open-type-runtime",
+        )
+        val hasPolicy = RequiredScriptFeaturePolicies.rows.any { policy ->
+            group.script in policy.selectedScripts
+        }
+        return if (hasPolicy) {
+            RuntimeFeatureGateSet(
+                resolved = RequiredScriptFeaturePolicies.resolve(scriptRun, requested),
+                defaultEnabledWhenUnspecified = false,
+            )
+        } else {
+            RuntimeFeatureGateSet(
+                resolved = ResolvedFeatureSet(
+                    requested = requested,
+                    enabled = requested.filter { it.value > 0 },
+                    disabled = requested.filter { it.value <= 0 },
+                    languageSystem = DEFAULT_OPEN_TYPE_LANGUAGE_SYSTEM,
+                ),
+                defaultEnabledWhenUnspecified = true,
+            )
+        }
+    }
+
     private fun adjustmentContextFor(
         request: ShapingRequest,
         textRange: IntRange,
@@ -1448,6 +1497,7 @@ public class BasicOpenTypeShapingEngine(
             )
             null
         }
+
 }
 
 /**
@@ -1677,6 +1727,7 @@ public class FallbackOpenTypeShapingEngine(
             textRange = textRange,
         )
     }
+
 }
 
 /**
@@ -1917,6 +1968,16 @@ private data class BasicShapingGroup(
 
 private fun BasicShapingGroup.textRange(): IntRange =
     clusterRanges.minOf { it.first }..clusterRanges.maxOf { it.last }
+
+private data class RuntimeFeatureGateSet(
+    val resolved: ResolvedFeatureSet,
+    val defaultEnabledWhenUnspecified: Boolean,
+) {
+    fun isRuntimeEnabled(tag: String): Boolean {
+        if (resolved.disabled.any { it.tag == tag }) return false
+        return defaultEnabledWhenUnspecified || resolved.enabled.any { it.tag == tag }
+    }
+}
 
 private data class ResolvedShapingFontRun(
     val textRange: IntRange,
