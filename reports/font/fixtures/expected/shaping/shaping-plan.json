@@ -14,7 +14,7 @@
       "bidi": {"level": 0, "direction": "LTR"},
       "languageSystem": "dflt",
       "features": {"requested": [{"tag": "liga", "value": 1}, {"tag": "kern", "value": 1}], "enabled": [{"tag": "ccmp", "value": 1}, {"tag": "locl", "value": 1}, {"tag": "liga", "value": 1}, {"tag": "rlig", "value": 1}, {"tag": "clig", "value": 1}, {"tag": "calt", "value": 1}, {"tag": "kern", "value": 1}, {"tag": "mark", "value": 1}, {"tag": "mkmk", "value": 1}], "disabled": [], "defaulted": [{"tag": "ccmp", "value": 1}, {"tag": "locl", "value": 1}, {"tag": "rlig", "value": 1}, {"tag": "clig", "value": 1}, {"tag": "calt", "value": 1}, {"tag": "mark", "value": 1}, {"tag": "mkmk", "value": 1}], "unsupported": []},
-      "traceRefs": {"gsub": "gsub-trace", "gpos": "gpos-trace"},
+      "traceRefs": {"gsub": "opentype-layout-contract-gsub-trace", "gpos": "opentype-layout-contract-gpos-trace"},
       "fallbackRun": "550e8400-e29b-41d4-a716-446655440601",
       "directGlyphInput": false,
       "diagnostics": []
@@ -28,7 +28,7 @@
       "bidi": {"level": 0, "direction": "LTR"},
       "languageSystem": "dflt",
       "features": {"requested": [{"tag": "liga", "value": 1}, {"tag": "kern", "value": 1}], "enabled": [{"tag": "ccmp", "value": 1}, {"tag": "locl", "value": 1}, {"tag": "liga", "value": 1}, {"tag": "rlig", "value": 1}, {"tag": "clig", "value": 1}, {"tag": "calt", "value": 1}, {"tag": "kern", "value": 1}, {"tag": "mark", "value": 1}, {"tag": "mkmk", "value": 1}], "disabled": [], "defaulted": [{"tag": "ccmp", "value": 1}, {"tag": "locl", "value": 1}, {"tag": "rlig", "value": 1}, {"tag": "clig", "value": 1}, {"tag": "calt", "value": 1}, {"tag": "mark", "value": 1}, {"tag": "mkmk", "value": 1}], "unsupported": []},
-      "traceRefs": {"gsub": "gsub-trace", "gpos": "gpos-trace"},
+      "traceRefs": {"gsub": "opentype-layout-contract-gsub-trace", "gpos": "opentype-layout-contract-gpos-trace"},
       "fallbackRun": "550e8400-e29b-41d4-a716-446655440601",
       "directGlyphInput": true,
       "diagnostics": []
@@ -42,7 +42,7 @@
       "bidi": {"level": 0, "direction": "LTR"},
       "languageSystem": "dflt",
       "features": {"requested": [{"tag": "liga", "value": 1}, {"tag": "kern", "value": 1}], "enabled": [], "disabled": [], "defaulted": [], "unsupported": []},
-      "traceRefs": {"gsub": "gsub-trace", "gpos": "gpos-trace"},
+      "traceRefs": {"gsub": "opentype-layout-contract-gsub-trace", "gpos": "opentype-layout-contract-gpos-trace"},
       "fallbackRun": "550e8400-e29b-41d4-a716-446655440601",
       "directGlyphInput": false,
       "diagnostics": [{"code": "text.shaping.script-unsupported", "severity": "refusal", "textRange": "0..0", "message": "Script Geor has no supported OpenType script tag in the contract."}]
@@ -56,7 +56,7 @@
       "bidi": {"level": 0, "direction": "LTR"},
       "languageSystem": "dflt",
       "features": {"requested": [{"tag": "liga", "value": 1}, {"tag": "kern", "value": 1}], "enabled": [{"tag": "ccmp", "value": 1}, {"tag": "locl", "value": 1}, {"tag": "liga", "value": 1}, {"tag": "rlig", "value": 1}, {"tag": "clig", "value": 1}, {"tag": "calt", "value": 1}, {"tag": "kern", "value": 1}, {"tag": "mark", "value": 1}, {"tag": "mkmk", "value": 1}], "disabled": [], "defaulted": [{"tag": "ccmp", "value": 1}, {"tag": "locl", "value": 1}, {"tag": "rlig", "value": 1}, {"tag": "clig", "value": 1}, {"tag": "calt", "value": 1}, {"tag": "mark", "value": 1}, {"tag": "mkmk", "value": 1}], "unsupported": []},
-      "traceRefs": {"gsub": "gsub-trace", "gpos": "gpos-trace"},
+      "traceRefs": {"gsub": "opentype-layout-contract-gsub-trace", "gpos": "opentype-layout-contract-gpos-trace"},
       "fallbackRun": "550e8400-e29b-41d4-a716-446655440601",
       "directGlyphInput": false,
       "diagnostics": [{"code": "text.shaping.engine-contract-missing", "severity": "refusal", "textRange": "0..1", "message": "GSUB table is missing for requested feature set calt,ccmp,clig,kern,liga,locl,mark,mkmk,rlig."}, {"code": "text.shaping.engine-contract-missing", "severity": "refusal", "textRange": "0..1", "message": "GPOS table is missing for requested feature set calt,ccmp,clig,kern,liga,locl,mark,mkmk,rlig."}, {"code": "text.shaping.engine-contract-missing", "severity": "refusal", "textRange": "0..1", "message": "GDEF table is missing for mark or ligature feature data."}]
@@ -70,7 +70,7 @@
       "bidi": {"level": 0, "direction": "LTR"},
       "languageSystem": "dflt",
       "features": {"requested": [{"tag": "salt", "value": 1}], "enabled": [{"tag": "ccmp", "value": 1}, {"tag": "locl", "value": 1}, {"tag": "liga", "value": 1}, {"tag": "rlig", "value": 1}, {"tag": "clig", "value": 1}, {"tag": "calt", "value": 1}, {"tag": "kern", "value": 1}, {"tag": "mark", "value": 1}, {"tag": "mkmk", "value": 1}], "disabled": [{"tag": "salt", "value": 1}], "defaulted": [{"tag": "ccmp", "value": 1}, {"tag": "locl", "value": 1}, {"tag": "liga", "value": 1}, {"tag": "rlig", "value": 1}, {"tag": "clig", "value": 1}, {"tag": "calt", "value": 1}, {"tag": "kern", "value": 1}, {"tag": "mark", "value": 1}, {"tag": "mkmk", "value": 1}], "unsupported": [{"tag": "salt", "value": 1}]},
-      "traceRefs": {"gsub": "gsub-trace", "gpos": "gpos-trace"},
+      "traceRefs": {"gsub": "opentype-layout-contract-gsub-trace", "gpos": "opentype-layout-contract-gpos-trace"},
       "fallbackRun": "550e8400-e29b-41d4-a716-446655440601",
       "directGlyphInput": false,
       "diagnostics": [{"code": "text.shaping.feature-unsupported", "severity": "refusal", "textRange": "0..1", "message": "Feature salt is requested but disabled by the no-op OpenType layout contract."}]

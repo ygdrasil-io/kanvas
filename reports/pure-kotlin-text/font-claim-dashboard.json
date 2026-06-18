@@ -254,11 +254,16 @@
         "section": "Required Script Matrix"
       },
       "evidence": {
-        "fixtureProvenance": [],
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
         "deterministicDumps": [
           "reports/pure-kotlin-text/dump-evidence-index.json",
           "reports/font/fixtures/expected/shaping/feature-policy-matrix.json",
           "reports/font/fixtures/expected/shaping/shaping-plan.json",
+          "reports/font/fixtures/expected/shaping/opentype-layout-contract-gsub-trace.json",
+          "reports/font/fixtures/expected/shaping/opentype-layout-contract-gpos-trace.json",
+          "reports/font/fixtures/expected/shaping/opentype-layout-contract-shaped-glyph-run.json",
           "reports/font/fixtures/expected/shaping/gsub-trace.json",
           "reports/font/fixtures/expected/shaping/gpos-trace.json",
           "reports/font/fixtures/expected/shaping/shaped-glyph-run.json"
@@ -273,8 +278,9 @@
         ]
       },
       "requiredEvidenceGates": [
-        "Deliver pure Kotlin script itemization, GSUB/GPOS/GDEF shaping, cluster dumps, and CPU oracle evidence before support promotion.",
-        "Keep complex shaping separate from simple drawString compatibility."
+        "Keep this row dependency-gated until contextual GSUB, mark/cursive GPOS, and required-script fixture rows land through KFONT-M6-003, KFONT-M6-005, KFONT-M6-007, KFONT-M6-008, KFONT-M6-009, and KFONT-M6-010.",
+        "Deliver CPU oracle evidence and reviewed per-script positive plus refusal fixtures before any complex-shaping support promotion.",
+        "Keep complex shaping separate from simple drawString compatibility and from any GPU text-route claim."
       ],
       "legacyGates": [],
       "nonClaims": [

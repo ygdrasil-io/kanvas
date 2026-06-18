@@ -483,6 +483,55 @@ class TextStackSurfaceTest {
     }
 
     @Test
+    fun m6PromotedShapingDumpsAreFixtureBackedRatherThanContractOnly() {
+        val gsubTrace = readJsonProjectFile("reports/font/fixtures/expected/shaping/gsub-trace.json")
+        val gposTrace = readJsonProjectFile("reports/font/fixtures/expected/shaping/gpos-trace.json")
+        val shapedRun = readJsonProjectFile("reports/font/fixtures/expected/shaping/shaped-glyph-run.json")
+        val gsubEvents = gsubTrace.requiredObjectList("events")
+        val gposEvents = gposTrace.requiredObjectList("events")
+        val shapedCases = shapedRun.requiredObjectList("cases")
+        val ligatureEvent = gsubEvents.single { it.requiredString("lookupId") == "gsub-ligature-fi" }
+        val noMatchEvent = gsubEvents.single { it.requiredString("decision") == "no-match" }
+        val pairKerningEvent = gposEvents.single { it.requiredString("lookupId") == "gpos-pair-format1-kerning" }
+        val gsubLigatureCase = shapedCases.single { it.requiredString("fixtureId") == "gsub-ligature-fi" }
+        val gposKerningCase = shapedCases.single { it.requiredString("fixtureId") == "gpos-pair-format1-kerning" }
+
+        assertEquals(listOf("KFONT-M6-002"), gsubTrace.requiredStringList("ownerTickets"))
+        assertEquals(listOf("KFONT-M6-004"), gposTrace.requiredStringList("ownerTickets"))
+        assertEquals(listOf("KFONT-M6-002", "KFONT-M6-004"), shapedRun.requiredStringList("ownerTickets"))
+
+        assertEquals(2L, ligatureEvent.requiredLong("lookupIndex"))
+        assertEquals(4L, ligatureEvent.requiredLong("lookupType"))
+        assertEquals(true, ligatureEvent.requiredBoolean("coverageMatched"))
+        assertEquals(listOf("liga"), ligatureEvent.requiredStringList("featureTags"))
+        assertEquals(listOf(17L, 18L), ligatureEvent.requiredLongList("inputGlyphIds"))
+        assertEquals(listOf(42L), ligatureEvent.requiredLongList("outputGlyphIds"))
+        assertEquals("merge", ligatureEvent.requiredString("clusterAction"))
+
+        assertEquals(5L, noMatchEvent.requiredLong("lookupIndex"))
+        assertEquals(false, noMatchEvent.requiredBoolean("coverageMatched"))
+        assertEquals(listOf(99L), noMatchEvent.requiredLongList("inputGlyphIds"))
+        assertEquals(listOf(99L), noMatchEvent.requiredLongList("outputGlyphIds"))
+        assertEquals("preserve", noMatchEvent.requiredString("clusterAction"))
+
+        assertEquals(1L, pairKerningEvent.requiredLong("lookupIndex"))
+        assertEquals(2L, pairKerningEvent.requiredLong("lookupType"))
+        assertEquals(listOf("kern"), pairKerningEvent.requiredStringList("featureTags"))
+        assertEquals(listOf(7L, 11L), pairKerningEvent.requiredLongList("matchedGlyphIds"))
+        assertEquals(listOf(1000L, 1000L), pairKerningEvent.requiredObject("beforePositions").requiredLongList("xAdvances"))
+        assertEquals(listOf(945L, 1000L), pairKerningEvent.requiredObject("afterPositions").requiredLongList("xAdvances"))
+        assertEquals(-55L, pairKerningEvent.requiredObject("valueRecords").requiredObject("first").requiredLong("xAdvance"))
+        assertEquals(0L, pairKerningEvent.requiredObject("valueRecords").requiredObject("second").requiredLong("xAdvance"))
+
+        assertEquals("gsub-trace", gsubLigatureCase.requiredObject("traceRefs").requiredString("gsub"))
+        assertEquals("gsub-ligature", gsubLigatureCase.requiredObjectList("glyphs").single().requiredString("source"))
+
+        assertEquals("gpos-trace", gposKerningCase.requiredObject("traceRefs").requiredString("gpos"))
+        assertEquals(945L, gposKerningCase.requiredObjectList("glyphs").first().requiredLong("xAdvance"))
+        assertEquals(945L, gposKerningCase.requiredObject("finalPositions").requiredLongList("xAdvances").first())
+    }
+
+    @Test
     fun arabicSeedReadinessGoldenPinsDiagnosticsWithoutSupportClaim() {
         val dump = readJsonProjectFile(
             "reports/font/fixtures/expected/shaping/arabic-seed-readiness.json",
@@ -1827,8 +1876,14 @@ class TextStackSurfaceTest {
     private fun Map<String, Any?>.requiredObject(key: String): Map<String, Any?> =
         jsonObject(this[key], key)
 
+    private fun Map<String, Any?>.requiredLong(key: String): Long =
+        this[key] as? Long ?: error("Expected $key to be a number")
+
     private fun Map<String, Any?>.requiredString(key: String): String =
         this[key] as? String ?: error("Expected $key to be a string")
+
+    private fun Map<String, Any?>.requiredBoolean(key: String): Boolean =
+        this[key] as? Boolean ?: error("Expected $key to be a boolean")
 
     private fun Map<String, Any?>.requiredObjectList(key: String): List<Map<String, Any?>> =
         requiredList(key).mapIndexed { index, value -> jsonObject(value, "$key[$index]") }

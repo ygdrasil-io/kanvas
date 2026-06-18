@@ -68,7 +68,7 @@
     {
       "familyId": "a8-sdf-artifacts",
       "familyName": "A8/SDF artifacts",
-      "classification": "current-supported",
+      "classification": "tracked-gap",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
         "section": "Glyph artifact tests"
@@ -255,7 +255,7 @@
     {
       "familyId": "color-glyphs",
       "familyName": "Color glyphs",
-      "classification": "current-supported",
+      "classification": "tracked-gap",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
         "section": "Color glyph tests"
@@ -736,32 +736,40 @@
     {
       "familyId": "latin-gsub-gpos-fixtures",
       "familyName": "Latin GSUB/GPOS fixture contract",
-      "classification": "fixture-gated",
+      "classification": "tracked-gap",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
         "section": "GSUB Target"
       },
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "reports/pure-kotlin-text/dump-evidence-index.json",
+        "reports/font/fixtures/provenance/index.json",
         "font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt",
         "font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
-        "reports/font/fixtures/expected/shaping/latin-gsub-gpos-goldens.json"
+        "reports/font/fixtures/expected/shaping/latin-gsub-gpos-goldens.json",
+        "reports/font/fixtures/expected/shaping/gsub-trace.json",
+        "reports/font/fixtures/expected/shaping/gpos-trace.json",
+        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json",
+        "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
+        "reports/pure-kotlin-text/2026-06-18-kfont-m6-002-004-latin-layout-fixtures.md"
       ],
       "requiredEvidenceGates": [
-        "Add Latin fixture provenance for cmap-backed glyph IDs, GSUB feature lookup order, and GPOS pair positioning data.",
-        "Add requested, enabled, disabled, and unsupported feature dump fields before enabling broader feature behavior.",
-        "Add expected glyph ID or fixture-local glyph-name dumps for liga, kern, requested-off, and unsupported-feature cases.",
-        "Add cluster range and fallback diagnostic expectations for every Latin fixture row.",
-        "Keep Greek, Cyrillic, Hebrew, and complex-script promotion out of this Latin contract slice."
+        "Keep this row bounded to reviewed Latin GSUB single/multiple/ligature plus GPOS single/pair fixtures; contextual GSUB, mark/cursive GPOS, and extension/chaining lookups remain separate gates on KFONT-M6-003, KFONT-M6-005, and KFONT-M6-010.",
+        "Keep Arabic, Devanagari, Thai, CJK, and emoji shaping promotion out of this Latin fixture slice; those remain owned by KFONT-M6-007 through KFONT-M6-009.",
+        "Do not claim native shaper parity, complete script coverage, or GPU text routing from these CPU-only fixture-backed dumps."
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test :font:sfnt:test",
+        "rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.m6SimpleLayoutFixturesAreCheckedInWithSyntheticProvenance",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.m6PromotedShapingDumpsAreFixtureBackedRatherThanContractOnly",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
       ],
       "fixtureCommands": [
-        "Generate deterministic Latin GSUB/GPOS fixtures and reviewed dump goldens before implementing wider shaping support."
+        "rtk kotlin scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts"
       ],
       "nonClaims": [
         "no-complete-target-support-claim",
@@ -785,9 +793,9 @@
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt",
         "reports/font/fixtures/expected/shaping/feature-policy-matrix.json",
         "reports/font/fixtures/expected/shaping/shaping-plan.json",
-        "reports/font/fixtures/expected/shaping/gsub-trace.json",
-        "reports/font/fixtures/expected/shaping/gpos-trace.json",
-        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json"
+        "reports/font/fixtures/expected/shaping/opentype-layout-contract-gsub-trace.json",
+        "reports/font/fixtures/expected/shaping/opentype-layout-contract-gpos-trace.json",
+        "reports/font/fixtures/expected/shaping/opentype-layout-contract-shaped-glyph-run.json"
       ],
       "requiredEvidenceGates": [
         "Implement bounded GSUB lookup behavior before claiming OpenType substitution support.",
