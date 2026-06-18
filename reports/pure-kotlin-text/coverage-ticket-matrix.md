@@ -3860,8 +3860,8 @@ Evidence:
   non-claims.
 - Dump index, fixture manifest, and font fixture inventory now point at the new
   bitmap plan dump as `tracked-gap` CPU-side evidence only; promotion remains
-  blocked on M11 GPU texture/upload/sampling proof and KFONT-M10-009 emoji
-  sequence planning.
+  blocked on M11 GPU texture/upload/sampling proof and the milestone-wide
+  color/emoji fixture convergence gate owned by `KFONT-M10-010`.
 
 Validation:
 
@@ -4181,6 +4181,62 @@ Remaining gate: this is CPU-side SVG fixture evidence only. It does not claim
 dynamic SVG support, native/platform SVG fallback behavior, complete SVG
 rendering support, GPU SVG route support, or retirement of the milestone-wide
 color/emoji fixture convergence gate owned by KFONT-M10-010.
+### KFONT-M10-009: Implement emoji sequence planner
+
+Status: done; freshly validated.
+
+Files:
+
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/color/emoji-route-trace.json`
+- `.upstream/specs/pure-kotlin-text/tickets/M10-color-fonts-emoji/KFONT-M10-009-implement-emoji-sequence-planner.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M10-color-fonts-emoji/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m10-009-emoji-sequence-planner.md`
+
+Evidence:
+
+- `EmojiSequenceShaper.sequenceFacts(...)` now classifies variation-selector,
+  skin-tone, ZWJ, keycap, flag, and unsupported sequence facts with
+  deterministic UTF-16 text ranges plus stable code-point lists.
+- `SimpleEmojiSequencePlanner.plan(...)` now emits `EmojiRouteTrace` with
+  fallback attempts, selected typeface/family facts, selected route,
+  monochrome-fallback visibility, optional plan refs, and stable refusal
+  diagnostics.
+- Checked-in `emoji-route-trace.json` covers variation-selector to COLR,
+  skin-tone to bitmap, represented skin-tone role ZWJ to COLR, ZWJ family to
+  outline fallback, keycap to PNG, flag to SVG, fallback-unavailable,
+  color-glyph-unavailable, and
+  unsupported-sequence cases.
+- Dump index, fixture manifest, and font fixture inventory now classify emoji
+  route tracing as `tracked-gap` CPU-side evidence only, keeping
+  `scaledemoji`, `KFONT-M10-010`, and M11 GPU route proof explicit.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperRecognizesKeycapAndFlagFixturesAsSingleClusters --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperExposesTypedFactsForPlannerSequenceKinds --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperDumpsVS15SkinToneAndZwjFamilyFixtures --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperKeepsRepresentedSkinToneRoleSequenceAsZwj
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.emojiSequencePlannerGoldenMatchesRepoFixture --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.exposesColorGlyphPipelineSurface
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_font_fixtures.py
+rtk git diff --check
+```
+
+Remaining gate: this is CPU-side emoji route-planning evidence only. It does
+not claim complete emoji shaping support, complete color-glyph fallback
+support, platform emoji-engine parity, GPU emoji route support, or retirement
+of `scaledemoji`. `KFONT-M10-010` still owns the milestone-wide color/emoji
+fixture-manifest convergence gate.
 ### PKT-11L: Emoji VS Skin-Tone ZWJ Fixture Evidence
 
 Status: implemented; independent review pending because the current tool policy
@@ -4200,11 +4256,14 @@ Evidence:
   of one emoji component and excludes those modifiers from standalone emoji
   bases.
 - Tests cover one fixture string containing VS15 text-style emoji, a base emoji
-  plus skin-tone modifier, and a ZWJ family sequence, with deterministic UTF-16
-  text ranges and glyph-cluster ranges.
+  plus skin-tone modifier, a represented skin-tone role ZWJ sequence, and a
+  ZWJ family sequence, with deterministic UTF-16 text ranges and glyph-cluster
+  ranges.
 - The font fixture inventory marks `emoji-vs15-vs16`, `emoji-skin-tone`, and
-  `emoji-zwj-family` as current positive evidence; existing fallback and color
-  glyph unavailable diagnostics continue to cover the refusal gates.
+  `emoji-zwj-family` as current positive evidence, with the represented
+  skin-tone role ZWJ case explicitly folded into the `emoji-skin-tone` and
+  `emoji-zwj-family` fixture rows; existing fallback and color glyph
+  unavailable diagnostics continue to cover the refusal gates.
 - The fixture manifest removes the remaining emoji fixture gates while keeping
   complete emoji shaping and color fallback non-claims.
 

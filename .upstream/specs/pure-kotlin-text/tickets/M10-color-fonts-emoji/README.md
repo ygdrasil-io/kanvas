@@ -28,7 +28,7 @@ M2 supplies color, bitmap, and SVG table facts. M5 supplies Unicode emoji data a
 | [KFONT-M10-006 - Promote PNG bitmap glyph artifacts](KFONT-M10-006-promote-png-bitmap-glyph-artifacts.md) | `done` | `P1` | `tracked-gap` | `color` | `KFONT-M2-001`, `KFONT-M9-002` | `scaledemoji_rendering` |
 | [KFONT-M10-007 - Implement bounded SVG glyph renderer primitives](KFONT-M10-007-implement-bounded-svg-glyph-renderer-primitives.md) | `done` | `P1` | `tracked-gap` | `color` | `KFONT-M2-001`, `KFONT-M9-002` | - |
 | [KFONT-M10-008 - Implement SVG glyph refusal classes and bounds fixtures](KFONT-M10-008-implement-svg-glyph-refusal-classes-and-bounds-fixtures.md) | `done` | `P1` | `fixture-gated` | `color` | `KFONT-M10-007` | - |
-| [KFONT-M10-009 - Implement emoji sequence planner](KFONT-M10-009-implement-emoji-sequence-planner.md) | `proposed` | `P0` | `tracked-gap` | `color` | `KFONT-M5-001`, `KFONT-M6-001`, `KFONT-M7-001`, `KFONT-M10-001`, `KFONT-M10-006` | `scaledemoji` |
+| [KFONT-M10-009 - Implement emoji sequence planner](KFONT-M10-009-implement-emoji-sequence-planner.md) | `done` | `P0` | `tracked-gap` | `color` | `KFONT-M5-001`, `KFONT-M6-001`, `KFONT-M7-001`, `KFONT-M10-001`, `KFONT-M10-006` | `scaledemoji` |
 | [KFONT-M10-010 - Add color/emoji fixture manifest](KFONT-M10-010-add-color-emoji-fixture-manifest.md) | `proposed` | `P0` | `fixture-gated` | `color` | `KFONT-M10-001`, `KFONT-M10-002`, `KFONT-M10-003`, `KFONT-M10-004`, `KFONT-M10-005`, `KFONT-M10-006`, `KFONT-M10-007`, `KFONT-M10-008`, `KFONT-M10-009` | `scaledemoji`, `scaledemoji_rendering`, `coloremoji_blendmodes` |
 
 ## Validation Bundle

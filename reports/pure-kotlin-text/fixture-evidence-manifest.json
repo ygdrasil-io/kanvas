@@ -336,7 +336,7 @@
     {
       "familyId": "emoji",
       "familyName": "Emoji",
-      "classification": "current-supported",
+      "classification": "tracked-gap",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
         "section": "Emoji dispatch"
@@ -344,23 +344,37 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/font-fixture-inventory.json",
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "reports/pure-kotlin-text/dump-evidence-index.json",
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
         "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
-        "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
+        "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json",
+        "reports/font/fixtures/expected/color/emoji-route-trace.json",
+        "reports/pure-kotlin-text/2026-06-17-kfont-m10-009-emoji-sequence-planner.md"
       ],
-      "requiredEvidenceGates": [],
+      "requiredEvidenceGates": [
+        "KFONT-M10-009 now checks in CPU-side emoji-route-trace.json evidence for variation-selector, skin-tone, represented skin-tone role ZWJ, ZWJ family, keycap, flag, fallback-unavailable, color-glyph-unavailable, and unsupported-sequence cases only; keep KFONT-M10-010 color/emoji fixture-manifest convergence and M11 GPU route proof as separate gates.",
+        "Do not claim complete emoji shaping support, complete color-glyph fallback support, platform emoji-engine parity, or retirement of scaledemoji from emoji-route-trace.json alone."
+      ],
       "validationCommands": [
-        "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
-        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest"
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperRecognizesKeycapAndFlagFixturesAsSingleClusters --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperExposesTypedFactsForPlannerSequenceKinds --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperDumpsVS15SkinToneAndZwjFamilyFixtures --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperKeepsRepresentedSkinToneRoleSequenceAsZwj",
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.emojiSequencePlannerGoldenMatchesRepoFixture --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.exposesColorGlyphPipelineSurface",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_font_fixtures.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
       ],
       "fixtureCommands": [
-        "Generate deterministic emoji sequence fixtures and expected dispatch dumps before support promotion."
+        "KFONT-M10-009 checks in reports/font/fixtures/expected/color/emoji-route-trace.json with deterministic route traces for variation-selector, skin-tone, represented skin-tone role ZWJ, ZWJ family, keycap, flag, fallback-unavailable, color-glyph-unavailable, and unsupported-sequence cases."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",
-        "no-emoji-zwj-shaping-claim",
+        "no-complete-emoji-sequence-shaping-claim",
         "no-platform-emoji-engine-claim",
-        "no-color-glyph-fallback-support-claim"
+        "no-complete-color-glyph-fallback-support-claim",
+        "no-gpu-color-glyph-support-claim",
+        "no-scaledemoji-retirement"
       ]
     },
     {
