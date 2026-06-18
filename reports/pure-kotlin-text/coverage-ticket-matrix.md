@@ -2479,8 +2479,11 @@ Status: review; independent audit confirmed this remains a bounded contract-laye
 
 Files:
 
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt`
 - `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/OpenTypeLayoutContract.kt`
 - `font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `kanvas-skia/src/test/kotlin/org/skia/foundation/SkFontTest.kt`
 - `reports/font/fixtures/expected/shaping/feature-policy-matrix.json`
 - `reports/font/fixtures/expected/shaping/shaping-plan.json`
 - `reports/font/fixtures/expected/shaping/gsub-trace.json`
@@ -2489,6 +2492,7 @@ Files:
 - `reports/pure-kotlin-text/fixture-evidence-manifest.json`
 - `reports/pure-kotlin-text/font-claim-dashboard.json`
 - `reports/pure-kotlin-text/2026-06-16-kfont-m6-006-feature-policy.md`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m6-006-runtime-adoption.md`
 
 Evidence:
 
@@ -2497,11 +2501,18 @@ Evidence:
 - `ResolvedFeatureSet` now serializes `requested`, `enabled`, `disabled`,
   `defaulted`, and `unsupported` feature facts, and `shaping-plan.json` records
   a deterministic `languageSystem` value.
+- `BasicOpenTypeShapingEngine` now resolves per-run feature policy before GSUB
+  and pair-kerning gating, so unsupported discretionary requests no longer
+  execute from a raw positive `FeatureSet` entry alone while scripts without a
+  policy row keep their legacy enable-unless-disabled fallback.
 - The checked-in `feature-policy-matrix.json` pins script-family to
   OpenType-tag mappings, required defaults, optional features, and refusal
   dependencies without promoting support claims.
 - Contract goldens now prove that unsupported discretionary requests can
   diagnose while leaving simple-script defaults explicit at the plan layer.
+- `SkFontTest` now adds a bounded compatibility-path guard that `drawString`
+  forwards raw text to the typeface path builder, but this does not yet promote
+  the OpenType-specific `drawString` gate beyond `review`.
 - `dump-evidence-index.json`, `fixture-evidence-manifest.json`, and
   `font-claim-dashboard.json` now track the policy matrix as deterministic
   evidence with `claimPromotionAllowed=false`.
@@ -2509,6 +2520,9 @@ Evidence:
 Validation:
 
 ```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineSkipsParsedGsubLookupWhenFeatureIsUnsupportedForScriptPolicy
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEnginePreservesLegacyFeatureDefaultsForScriptsWithoutPolicy
+rtk ./gradlew --no-daemon :kanvas-skia:test --tests org.skia.foundation.SkFontTest.drawString\ forwards\ raw\ text\ to\ typeface\ path\ builder\ without\ implicit\ shaping
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.OpenTypeLayoutEngineContractTest
 rtk ./gradlew --no-daemon :font:text:test
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
@@ -2517,11 +2531,12 @@ rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 ```
 
 Remaining gate: per-script shaping fixture families from `KFONT-M6-007`,
-`KFONT-M6-008`, and `KFONT-M6-009` are still absent, runtime GSUB/GPOS still
-consumes `FeatureSet` rather than `ResolvedFeatureSet`, and the `drawString`
-compatibility path still lacks explicit complex-feature non-enablement
-evidence. Keep this ticket in review until those gates land beyond the current
-contract-level `shaping-plan.json` evidence.
+`KFONT-M6-008`, and `KFONT-M6-009` are still absent, the remaining GPOS
+single/mark policy-routing work is not yet covered by runtime evidence, and
+the OpenType-specific `drawString` compatibility path still lacks explicit
+complex-feature non-enablement evidence. Keep this ticket in `review` until
+those gates land beyond the current contract-level `shaping-plan.json`
+evidence.
 
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 

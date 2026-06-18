@@ -1032,6 +1032,57 @@ class TextStackSurfaceTest {
     }
 
     @Test
+    fun basicOpenTypeShapingEnginePreservesLegacyFeatureDefaultsForScriptsWithoutPolicy() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-44665544040b"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                '1'.code to 3,
+                '2'.code to 4,
+            ),
+            gposPairTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGposPairTable(
+                    pairs = listOf(
+                        OpenTypeGposPairAdjustment(
+                            leftGlyphId = 3,
+                            rightGlyphId = 4,
+                            firstValueRecord = OpenTypeGposValueRecord(xAdvance = -60),
+                        ),
+                    ),
+                ),
+            ),
+            kernUnitsPerEmByTypefaceId = mapOf(typefaceId to 1000),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "12",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(emptyList(), result.diagnostics)
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(3, 4),
+                    clusters = listOf(
+                        GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 18.8f),
+                        GlyphCluster(textRange = 1..1, glyphRange = 1..1, advanceX = 20f),
+                    ),
+                    advanceX = 38.8f,
+                    advanceY = 0f,
+                    script = "Zyyy",
+                    bidiLevel = 0,
+                    typefaceId = typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            result.glyphRuns,
+        )
+    }
+
+    @Test
     fun basicOpenTypeShapingEngineAppliesParsedGsubSingleMultipleAndLigatureLookups() {
         val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440406"))
         val engine = BasicOpenTypeShapingEngine(
@@ -1095,6 +1146,56 @@ class TextStackSurfaceTest {
                         GlyphCluster(textRange = 2..3, glyphRange = 3..3, advanceX = 20f),
                     ),
                     advanceX = 60f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            result.glyphRuns,
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineSkipsParsedGsubLookupWhenFeatureIsUnsupportedForScriptPolicy() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-4466554404f6"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                'a'.code to 5,
+            ),
+            gsubTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubSingleSubstitutionLookup(
+                            featureTag = "vert",
+                            substitutions = listOf(
+                                OpenTypeGsubSingleSubstitution(
+                                    inputGlyphId = 5,
+                                    replacementGlyphId = 15,
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "a",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+                features = FeatureSet(mapOf("vert" to 1)),
+            ),
+        )
+
+        assertEquals(emptyList(), result.diagnostics)
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(5),
+                    clusters = listOf(GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 20f)),
+                    advanceX = 20f,
                     script = "Latn",
                     bidiLevel = 0,
                     typefaceId = typefaceId,

@@ -43,13 +43,13 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*' --tests '*De
 - 2026-06-17 independent audit: merged bounded slices for `KFONT-M6-002`, `KFONT-M6-004`, and `KFONT-M6-006` remain valid `review` slices. Their remaining work is fixture/dump evidence, not a revert to `blocked` or `proposed`.
 - `KFONT-M6-002` stays in `review` on reviewed GSUB fixture provenance plus promoted `gsub-trace.json` / `shaped-glyph-run.json` evidence beyond the current M6-001 contract goldens.
 - `KFONT-M6-004` stays in `review` on reviewed GPOS fixture provenance plus promoted `gpos-trace.json` / `shaped-glyph-run.json` evidence and layout-contract malformed/refusal diagnostics.
-- `KFONT-M6-006` stays in `review` on per-script shaping fixture families, runtime adoption of `ResolvedFeatureSet`, and explicit `drawString` non-enablement evidence.
+- `KFONT-M6-006` stays in `review` on per-script shaping fixture families, the remaining GPOS single/mark policy-routing work, and OpenType-specific `drawString` non-enablement evidence. The current bounded runtime tests cover GSUB plus pair-kerning gating only.
 
 ## Current Blockers
 
 - 2026-06-17 audit: `KFONT-M6-002` still depends on absent `gsub-single-substitution.otf`, `gsub-multiple-substitution.otf`, `gsub-ligature-fi.otf`, `gsub-coverage-malformed.otf`, and `gsub-ligature-bad-component.otf`, plus promoted `gsub-trace.json` / `shaped-glyph-run.json` evidence.
 - 2026-06-17 audit: `KFONT-M6-004` still depends on absent `gpos-single-adjustment.otf`, `gpos-pair-format1-kerning.otf`, `gpos-pair-format2-class.otf`, `gpos-valueformat-malformed.otf`, and `gpos-pair-out-of-range.otf`, plus promoted `gpos-trace.json` / `shaped-glyph-run.json` evidence.
-- 2026-06-17 audit: `KFONT-M6-006` still depends on absent per-script shaping fixture families from `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`, plus runtime adoption of `ResolvedFeatureSet`.
+- 2026-06-18 audit: `KFONT-M6-006` still depends on absent per-script shaping fixture families from `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`, plus the remaining GPOS single/mark policy-routing gap and OpenType-specific `drawString` evidence gap.
 - 2026-06-17 audit: `KFONT-M6-003`, `KFONT-M6-005`, `KFONT-M6-007`, `KFONT-M6-008`, `KFONT-M6-009`, and `KFONT-M6-010` remain gated by the review-state base slices above plus their own named fixture families.
 
 ## Non-Claims
