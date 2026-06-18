@@ -210,6 +210,8 @@
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ClusterSafetyReport.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ClusterSafetyTest.kt",
         "reports/font/fixtures/expected/unicode/cluster-arabic-mark.txt",
+        "reports/font/fixtures/expected/unicode/cluster-cjk-ivs-mixed-kana.txt",
+        "reports/font/fixtures/expected/unicode/cluster-cjk-ivs-supplementary.txt",
         "reports/font/fixtures/expected/unicode/cluster-cjk-variation-selector.txt",
         "reports/font/fixtures/expected/unicode/cluster-devanagari-conjunct.txt",
         "reports/font/fixtures/expected/unicode/cluster-emoji-family-zwj.txt",
@@ -222,14 +224,13 @@
         "reports/font/fixtures/expected/unicode/bidi-runs.json",
         "reports/font/fixtures/expected/unicode/script-runs.json",
         "reports/font/fixtures/expected/unicode/unicode-segments.json",
-        "reports/pure-kotlin-text/2026-06-17-kfont-m5-005-cluster-safety.md",
+        "reports/pure-kotlin-text/2026-06-18-kfont-m5-005-cluster-safety.md",
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "reports/pure-kotlin-text/dump-evidence-index.json"
       ],
       "requiredEvidenceGates": [
         "KFONT-M5-005 now proves bounded grapheme, bidi-run, and script-run boundary alignment only; GSUB/GPOS shaping, fallback run splitting, and paragraph ordering remain gated on later tickets.",
-        "Keep `scaledemoji` fixture-gated on color, route, and rendering evidence; the explicit emoji-sequence refusal and fallback-boundary proofs now live on the owning KFONT-M7-004 slice.",
-        "Broaden reviewed CJK IVS coverage before promoting complete cluster-safety coverage."
+        "Keep `scaledemoji` fixture-gated on color, route, and rendering evidence; the explicit emoji-sequence refusal and fallback-boundary proofs now live on the owning KFONT-M7-004 slice."
       ],
       "validationCommands": [
         "rtk ./gradlew --no-daemon :font:text:test --tests '*ClusterSafety*' --tests '*Grapheme*' --tests '*Bidi*' --tests '*ScriptItem*'",
