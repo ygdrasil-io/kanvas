@@ -2186,6 +2186,166 @@ class TextStackSurfaceTest {
     }
 
     @Test
+    fun basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo() {
+        val single = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440611",
+            relativePath = "reports/font/fixtures/fonts/shaping/gsub-single-substitution.otf",
+        )
+        val multiple = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440612",
+            relativePath = "reports/font/fixtures/fonts/shaping/gsub-multiple-substitution.otf",
+        )
+        val ligature = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440613",
+            relativePath = "reports/font/fixtures/fonts/shaping/gsub-ligature-fi.otf",
+        )
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = CMapGlyphMapper(
+                cmapsByTypefaceId = mapOf(
+                    single.typefaceId to single.cmap,
+                    multiple.typefaceId to multiple.cmap,
+                    ligature.typefaceId to ligature.cmap,
+                ),
+            ),
+            gsubTablesByTypefaceId = mapOf(
+                single.typefaceId to requireNotNull(single.gsub),
+                multiple.typefaceId to requireNotNull(multiple.gsub),
+                ligature.typefaceId to requireNotNull(ligature.gsub),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(101),
+                    clusters = listOf(GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 20f)),
+                    advanceX = 20f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = single.typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            engine.shape(
+                ShapingRequest(
+                    text = "a",
+                    typefaceId = single.typefaceId,
+                    fontSize = 20f,
+                ),
+            ).glyphRuns,
+        )
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(101, 102),
+                    clusters = listOf(GlyphCluster(textRange = 0..0, glyphRange = 0..1, advanceX = 20f)),
+                    advanceX = 20f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = multiple.typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            engine.shape(
+                ShapingRequest(
+                    text = "b",
+                    typefaceId = multiple.typefaceId,
+                    fontSize = 20f,
+                ),
+            ).glyphRuns,
+        )
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(103),
+                    clusters = listOf(GlyphCluster(textRange = 0..1, glyphRange = 0..0, advanceX = 20f)),
+                    advanceX = 20f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = ligature.typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            engine.shape(
+                ShapingRequest(
+                    text = "fi",
+                    typefaceId = ligature.typefaceId,
+                    fontSize = 20f,
+                ),
+            ).glyphRuns,
+        )
+    }
+
+    @Test
+    fun shapingKeepsReviewedGsubClustersWhenTypefaceHasUnmatchedMarkLookups() {
+        val multiple = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440614",
+            relativePath = "reports/font/fixtures/fonts/shaping/gsub-multiple-substitution.otf",
+        )
+        val typefaceId = multiple.typefaceId
+        val inputGlyphId = requireNotNull(multiple.cmap.lookupGlyphId('b'.code))
+        val replacementGlyphIds = requireNotNull(multiple.gsub)
+            .lookups
+            .filterIsInstance<OpenTypeGsubMultipleSubstitutionLookup>()
+            .flatMap(OpenTypeGsubMultipleSubstitutionLookup::substitutions)
+            .single { substitution -> substitution.inputGlyphId == inputGlyphId }
+            .replacementGlyphIds
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = CMapGlyphMapper(cmapsByTypefaceId = mapOf(typefaceId to multiple.cmap)),
+            gsubTablesByTypefaceId = mapOf(typefaceId to requireNotNull(multiple.gsub)),
+            gdefTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGdefTable(
+                    glyphClasses = mapOf(
+                        900 to 1,
+                        901 to 3,
+                    ),
+                ),
+            ),
+            gposTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGposTable(
+                    lookups = listOf(
+                        OpenTypeGposMarkToBaseLookup(
+                            featureTag = "mark",
+                            lookupIndex = 0,
+                            attachments = listOf(
+                                OpenTypeGposMarkToBaseAttachment(
+                                    markGlyphId = 901,
+                                    baseGlyphId = 900,
+                                    markClass = 0,
+                                    markAnchor = OpenTypeAnchor(format = 1, x = 0, y = 0),
+                                    baseAnchor = OpenTypeAnchor(format = 1, x = 40, y = 20),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            kernUnitsPerEmByTypefaceId = mapOf(typefaceId to multiple.unitsPerEm),
+        )
+
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = replacementGlyphIds,
+                    clusters = listOf(GlyphCluster(textRange = 0..0, glyphRange = 0..1, advanceX = 20f)),
+                    advanceX = 20f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            engine.shape(
+                ShapingRequest(
+                    text = "b",
+                    typefaceId = typefaceId,
+                    fontSize = 20f,
+                ),
+            ).glyphRuns,
+        )
+    }
+
+    @Test
     fun basicOpenTypeShapingEngineAppliesStandardFiLigatureWhenAvailable() {
         val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440406"))
         val engine = BasicOpenTypeShapingEngine(
