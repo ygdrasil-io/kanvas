@@ -31,13 +31,21 @@
   a below-baseline placeholder does not participate in line height, and never
   returns a position inside the combining-mark or emoji clusters covered by
   the checked-in fixture.
+- Hit testing and selection boxes now also preserve bounded mixed-direction
+  visual ordering, so the `mixed-bidi-visual-order` fixture proves caret
+  snapping and box geometry follow the displayed RTL/LTR order rather than the
+  raw logical order.
+- `ParagraphHitTestMapTest` now adds direct coverage for a placeholder embedded
+  inside an RTL run on an LTR paragraph and for an RTL paragraph with an LTR
+  island, so bounded visual ordering is exercised beyond the original single
+  mixed-direction golden row without broadening support claims.
 - Finite out-of-bounds points now clamp to the nearest caret stop instead of
   refusing, while invalid selection ranges and non-finite hit-test points emit
   stable refusal diagnostics.
 - `hit-test-map.json` checks in bounded evidence for multi-line placeholder
   selection, non-participating placeholder overflow routing, combining marks,
-  emoji cluster boundaries, and clamp behavior without promoting bidi visual
-  ordering, word-boundary completeness, or GPU text claims.
+  emoji cluster boundaries, mixed-bidi visual ordering, and clamp behavior
+  without promoting word-boundary completeness or GPU text claims.
 
 ## Validation
 
@@ -52,6 +60,6 @@ rtk git diff --check
 ## Remaining Gate
 
 This evidence closes bounded selection and hit-test behavior only. It does not
-yet claim paragraph-owned bidi visual ordering, explicit word-boundary query
-APIs, full grapheme/word boundary dumps beyond hit-test snapping, complete
-paragraph layout parity, CPU oracle parity, or GPU text support.
+yet claim explicit word-boundary query APIs, full grapheme/word boundary dumps
+beyond hit-test snapping, complete paragraph layout parity, CPU oracle parity,
+or GPU text support.

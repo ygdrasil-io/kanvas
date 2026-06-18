@@ -5,7 +5,10 @@ import org.graphiks.kanvas.font.FontSlant
 import org.graphiks.kanvas.font.FontStyle
 import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.kanvas.font.TypefacePaletteSelection
+import org.graphiks.kanvas.text.shaping.BasicBidiResolver
+import org.graphiks.kanvas.text.shaping.BidiRun
 import org.graphiks.kanvas.text.shaping.FeatureSet
+import org.graphiks.kanvas.text.shaping.GlyphCluster
 import org.graphiks.kanvas.text.shaping.OpenTypeShapingEngine
 import org.graphiks.kanvas.text.shaping.PinnedUnicodeDataGenerator
 import org.graphiks.kanvas.text.shaping.ShapedGlyphRun
@@ -728,7 +731,7 @@ public data class ParagraphLayoutResult(
             spans.flatMap { span ->
                 listOf(
                     CaretStop(
-                        position = TextPosition(offset = span.sourceRange.first, affinity = "downstream"),
+                        position = span.leftCaretPosition(),
                         lineIndex = span.lineIndex,
                         x = span.left,
                         top = span.top,
@@ -736,7 +739,7 @@ public data class ParagraphLayoutResult(
                         placeholderId = span.placeholderId,
                     ),
                     CaretStop(
-                        position = TextPosition(offset = span.sourceRange.last + 1, affinity = "upstream"),
+                        position = span.rightCaretPosition(),
                         lineIndex = span.lineIndex,
                         x = span.right,
                         top = span.top,
@@ -874,11 +877,7 @@ public data class ParagraphLayoutResult(
             if (pointX < next.left) {
                 val gapMidpoint = (span.right + next.left) / 2f
                 val chosenSpan = if (pointX < gapMidpoint) span else next
-                val chosenPosition = if (chosenSpan === span) {
-                    TextPosition(offset = span.sourceRange.last + 1, affinity = "upstream")
-                } else {
-                    TextPosition(offset = next.sourceRange.first, affinity = "downstream")
-                }
+                val chosenPosition = if (chosenSpan === span) span.rightCaretPosition() else next.leftCaretPosition()
                 return HitTestQueryResult(
                     entry = HitTestEntry(
                         pointX = pointX,
@@ -908,7 +907,7 @@ public data class ParagraphLayoutResult(
                 pointX = pointX,
                 pointY = pointY,
                 lineIndex = lastSpan.lineIndex,
-                position = TextPosition(offset = lastSpan.sourceRange.last + 1, affinity = "upstream"),
+                position = lastSpan.rightCaretPosition(),
                 clusterRange = lastSpan.sourceRange,
                 placeholderId = lastSpan.placeholderId,
                 isInsideText = false,
@@ -1999,6 +1998,32 @@ private fun Paragraph.truncatedRangeAfter(visibleRange: IntRange): IntRange? =
 private fun Paragraph.placeholderWidth(range: IntRange): Float =
     placeholders.entries.firstOrNull { (placeholderRange) -> placeholderRange.overlaps(range) }?.value?.width ?: 0f
 
+private fun Paragraph.bidiLevelForRange(
+    range: IntRange,
+    bidiRuns: List<BidiRun>,
+    defaultLevel: Int,
+): Int {
+    val directLevel = bidiRuns.firstOrNull { run -> run.textRange.overlaps(range) }?.level
+    if (placeholders.containsKey(range)) {
+        val previousLevel = bidiRuns.lastOrNull { run -> run.textRange.last < range.first }?.level
+        val nextLevel = bidiRuns.firstOrNull { run -> run.textRange.first > range.last }?.level
+        if (previousLevel != null && previousLevel == nextLevel) return previousLevel
+    }
+    return directLevel ?: defaultLevel
+}
+
+private fun Paragraph.resolvedBidiRuns(textRange: IntRange): List<BidiRun> {
+    if (text.isEmpty() || textRange.isEmpty()) return emptyList()
+    return BasicBidiResolver().resolve(
+        ShapingRequest(
+            text = text,
+            textRange = textRange,
+            fontSize = textStyles.values.firstOrNull()?.fontSize ?: 12f,
+            paragraphDirection = paragraphStyle.textDirection.legacyValue,
+        ),
+    )
+}
+
 private fun PlaceholderStyle.requiresBaseline(): Boolean =
     when (alignment) {
         PlaceholderAlignment.BASELINE,
@@ -2060,48 +2085,67 @@ private fun LineLayout.visualSpanBoxes(
     if (textRange.isEmpty()) return emptyList()
     val bounds = verticalBounds()
     val shapedClusters = glyphRuns
-        .flatMap { run -> run.clusters }
-        .sortedBy { cluster -> cluster.textRange.first }
+        .flatMap { run -> run.clusters.map { cluster -> cluster to run.bidiLevel } }
+        .sortedBy { (cluster) -> cluster.textRange.first }
+    val bidiRuns = paragraph.resolvedBidiRuns(textRange)
     val lineDirection = boxes.firstOrNull()?.direction ?: 1
     val placeholderByRange = placeholderBoxes
         .filter { box -> box.lineIndex == lineIndex }
         .associateBy { box -> box.sourceRange }
-    val spans = mutableListOf<VisualSpanBox>()
-    var x = 0f
+    val logicalSpans = mutableListOf<LogicalSpan>()
     var index = textRange.first
+    val defaultBidiLevel = if (lineDirection < 0) 1 else 0
     while (index <= textRange.last) {
-        val shapedCluster = shapedClusters.firstOrNull { cluster ->
+        val shapedCluster = shapedClusters.firstOrNull { (cluster) ->
             cluster.textRange.first == index && cluster.textRange.overlaps(textRange)
         }
-        val clusterRange = shapedCluster?.textRange?.intersect(textRange)
+        val clusterRange = shapedCluster?.first?.textRange?.intersect(textRange)
             ?: paragraph.text.clusterRangeAt(index).intersect(textRange)
         val placeholder = placeholderByRange[clusterRange]
         if (placeholder != null) {
-            spans += VisualSpanBox(
+            logicalSpans += LogicalSpan(
                 sourceRange = placeholder.sourceRange,
-                lineIndex = lineIndex,
-                left = placeholder.left,
+                width = placeholder.right - placeholder.left,
                 top = placeholder.top,
-                right = placeholder.right,
                 bottom = placeholder.bottom,
-                direction = lineDirection,
+                bidiLevel = paragraph.bidiLevelForRange(
+                    range = placeholder.sourceRange,
+                    bidiRuns = bidiRuns,
+                    defaultLevel = defaultBidiLevel,
+                ),
                 placeholderId = placeholder.placeholderId,
             )
-            x = placeholder.right
         } else {
-            val width = shapedCluster?.advanceX ?: paragraph.estimatedWidth(clusterRange)
-            spans += VisualSpanBox(
+            val width = shapedCluster?.first?.advanceX ?: paragraph.estimatedWidth(clusterRange)
+            logicalSpans += LogicalSpan(
                 sourceRange = clusterRange,
-                lineIndex = lineIndex,
-                left = x,
                 top = bounds.first,
-                right = x + width,
                 bottom = bounds.second,
-                direction = lineDirection,
+                width = width,
+                bidiLevel = paragraph.bidiLevelForRange(
+                    range = clusterRange,
+                    bidiRuns = bidiRuns,
+                    defaultLevel = shapedCluster?.second ?: defaultBidiLevel,
+                ),
             )
-            x += width
         }
         index = clusterRange.last + 1
+    }
+    val visualOrder = logicalSpans.reorderedByBidiLevel()
+    val spans = mutableListOf<VisualSpanBox>()
+    var visualX = 0f
+    visualOrder.forEach { span ->
+        spans += VisualSpanBox(
+            sourceRange = span.sourceRange,
+            lineIndex = lineIndex,
+            left = visualX,
+            top = span.top,
+            right = visualX + span.width,
+            bottom = span.bottom,
+            direction = if (span.bidiLevel % 2 == 0) 1 else -1,
+            placeholderId = span.placeholderId,
+        )
+        visualX += span.width
     }
     return spans
 }
@@ -2185,6 +2229,29 @@ private fun LineLayout.ellipsisBounds(lineSpans: List<VisualSpanBox>): Pair<Floa
     return visibleRight to visibleRight + ellipsisWidth
 }
 
+private fun List<LogicalSpan>.reorderedByBidiLevel(): List<LogicalSpan> {
+    if (size < 2) return this
+    val reordered = toMutableList()
+    val maxLevel = maxOf { span -> span.bidiLevel }
+    val minOddLevel = filter { span -> span.bidiLevel % 2 == 1 }.minOfOrNull { span -> span.bidiLevel } ?: return reordered
+    for (level in maxLevel downTo minOddLevel) {
+        var index = 0
+        while (index < reordered.size) {
+            while (index < reordered.size && reordered[index].bidiLevel < level) {
+                index += 1
+            }
+            val start = index
+            while (index < reordered.size && reordered[index].bidiLevel >= level) {
+                index += 1
+            }
+            if (start < index - 1) {
+                reordered.subList(start, index).reverse()
+            }
+        }
+    }
+    return reordered
+}
+
 private fun ShapedGlyphRun.trimToVisibleRange(visibleRange: IntRange): ShapedGlyphRun? {
     val retainedClusters = clusters.filter { cluster -> cluster.textRange.overlaps(visibleRange) }
     if (retainedClusters.isEmpty()) return null
@@ -2211,11 +2278,7 @@ private fun VisualSpanBox.toHitTestEntry(
     isInsideText: Boolean,
 ): HitTestEntry {
     val midpoint = (left + right) / 2f
-    val position = if (pointX < midpoint) {
-        TextPosition(offset = sourceRange.first, affinity = "downstream")
-    } else {
-        TextPosition(offset = sourceRange.last + 1, affinity = "upstream")
-    }
+    val position = if (pointX < midpoint) leftCaretPosition() else rightCaretPosition()
     return HitTestEntry(
         pointX = pointX,
         pointY = pointY,
@@ -2226,6 +2289,20 @@ private fun VisualSpanBox.toHitTestEntry(
         isInsideText = isInsideText,
     )
 }
+
+private fun VisualSpanBox.leftCaretPosition(): TextPosition =
+    if (direction < 0) {
+        TextPosition(offset = sourceRange.last + 1, affinity = "upstream")
+    } else {
+        TextPosition(offset = sourceRange.first, affinity = "downstream")
+    }
+
+private fun VisualSpanBox.rightCaretPosition(): TextPosition =
+    if (direction < 0) {
+        TextPosition(offset = sourceRange.first, affinity = "downstream")
+    } else {
+        TextPosition(offset = sourceRange.last + 1, affinity = "upstream")
+    }
 
 private fun List<VisualSpanBox>.containingSpan(
     pointX: Float,
@@ -2281,10 +2358,18 @@ private fun List<SelectionBox>.mergeAdjacentTextSelectionBoxes(): List<Selection
             previous.direction == box.direction &&
             previous.top == box.top &&
             previous.bottom == box.bottom &&
-            previous.right == box.left
+            previous.right == box.left &&
+            (
+                (previous.direction >= 0 && previous.sourceRange.last + 1 == box.sourceRange.first) ||
+                    (previous.direction < 0 && box.sourceRange.last + 1 == previous.sourceRange.first)
+            )
         ) {
             merged[merged.lastIndex] = previous.copy(
-                sourceRange = previous.sourceRange.first..box.sourceRange.last,
+                sourceRange = if (previous.direction >= 0) {
+                    previous.sourceRange.first..box.sourceRange.last
+                } else {
+                    box.sourceRange.first..previous.sourceRange.last
+                },
                 right = box.right,
             )
         } else {
@@ -2350,6 +2435,15 @@ private fun resolvePlaceholderBoxes(
 private data class PlaceholderBounds(
     val top: Float,
     val bottom: Float,
+)
+
+private data class LogicalSpan(
+    val sourceRange: IntRange,
+    val width: Float,
+    val top: Float,
+    val bottom: Float,
+    val bidiLevel: Int,
+    val placeholderId: String? = null,
 )
 
 private data class EllipsisRun(

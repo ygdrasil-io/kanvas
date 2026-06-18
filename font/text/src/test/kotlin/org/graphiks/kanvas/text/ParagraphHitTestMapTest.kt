@@ -7,12 +7,14 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import org.graphiks.kanvas.text.paragraph.BasicParagraphLayoutEngine
 import org.graphiks.kanvas.text.paragraph.ParagraphBuilder
+import org.graphiks.kanvas.text.paragraph.ParagraphStyle
 import org.graphiks.kanvas.text.paragraph.PlaceholderAlignment
 import org.graphiks.kanvas.text.paragraph.PlaceholderStyle
 import org.graphiks.kanvas.text.paragraph.SelectionBox
 import org.graphiks.kanvas.text.paragraph.SelectionQueryResult
 import org.graphiks.kanvas.text.paragraph.SelectionRange
 import org.graphiks.kanvas.text.paragraph.TextPosition
+import org.graphiks.kanvas.text.paragraph.TextDirection
 import org.graphiks.kanvas.text.paragraph.TextStyle
 import org.graphiks.kanvas.text.shaping.GlyphCluster
 import org.graphiks.kanvas.text.shaping.OpenTypeShapingEngine
@@ -200,6 +202,303 @@ class ParagraphHitTestMapTest {
     }
 
     @Test
+    fun hitTestRespectsVisualOrderForMixedDirectionLine() {
+        val paragraph = ParagraphBuilder()
+            .append("ab \u05D0\u05D1", TextStyle(fontSize = 10f))
+            .build()
+
+        val result = BasicParagraphLayoutEngine(ClusterAwareShapingEngine()).layout(paragraph, maxWidth = 200f)
+
+        assertEquals(
+            TextPosition(offset = 5, affinity = "upstream"),
+            result.hitTest(pointX = 32f, pointY = 5f).entry?.position,
+        )
+        assertEquals(
+            TextPosition(offset = 4, affinity = "downstream"),
+            result.hitTest(pointX = 38f, pointY = 5f).entry?.position,
+        )
+        assertEquals(
+            TextPosition(offset = 4, affinity = "upstream"),
+            result.hitTest(pointX = 42f, pointY = 5f).entry?.position,
+        )
+        assertEquals(
+            TextPosition(offset = 3, affinity = "downstream"),
+            result.hitTest(pointX = 48f, pointY = 5f).entry?.position,
+        )
+    }
+
+    @Test
+    fun selectionBoxesKeepPlaceholderInVisualOrderForMixedDirectionLine() {
+        val paragraph = ParagraphBuilder()
+            .append("ab \u05D0", TextStyle(fontSize = 10f))
+            .appendPlaceholder(
+                PlaceholderStyle(
+                    width = 12f,
+                    height = 14f,
+                    baselineOffset = 10f,
+                    alignment = PlaceholderAlignment.BASELINE,
+                ),
+            )
+            .append("\u05D1", TextStyle(fontSize = 10f))
+            .build()
+
+        val result = BasicParagraphLayoutEngine(ClusterAwareShapingEngine()).layout(paragraph, maxWidth = 200f)
+
+        assertEquals(
+            SelectionQueryResult(
+                boxes = listOf(
+                    SelectionBox(
+                        sourceRange = 0..2,
+                        lineIndex = 0,
+                        left = 0f,
+                        top = 0f,
+                        right = 30f,
+                        bottom = 14f,
+                    ),
+                    SelectionBox(
+                        sourceRange = 5..5,
+                        lineIndex = 0,
+                        left = 30f,
+                        top = 0f,
+                        right = 40f,
+                        bottom = 14f,
+                        direction = -1,
+                    ),
+                    SelectionBox(
+                        sourceRange = 4..4,
+                        lineIndex = 0,
+                        left = 40f,
+                        top = 0f,
+                        right = 52f,
+                        bottom = 14f,
+                        direction = -1,
+                        placeholderId = "ph-000",
+                    ),
+                    SelectionBox(
+                        sourceRange = 3..3,
+                        lineIndex = 0,
+                        left = 52f,
+                        top = 0f,
+                        right = 62f,
+                        bottom = 14f,
+                        direction = -1,
+                    ),
+                ),
+            ),
+            result.selectionBoxes(
+                SelectionRange(
+                    start = TextPosition(offset = 0),
+                    end = TextPosition(offset = 6),
+                ),
+            ),
+        )
+        assertEquals(TextPosition(offset = 6, affinity = "upstream"), result.hitTest(pointX = 32f, pointY = 5f).entry?.position)
+        assertEquals("ph-000", result.hitTest(pointX = 45f, pointY = 5f).entry?.placeholderId)
+        assertEquals(TextPosition(offset = 5, affinity = "upstream"), result.hitTest(pointX = 45f, pointY = 5f).entry?.position)
+        assertEquals(TextPosition(offset = 4, affinity = "upstream"), result.hitTest(pointX = 55f, pointY = 5f).entry?.position)
+    }
+
+    @Test
+    fun hitTestRespectsVisualOrderForRtlParagraphWithLtrIsland() {
+        val paragraph = ParagraphBuilder(
+            ParagraphStyle(textDirection = TextDirection.RIGHT_TO_LEFT),
+        )
+            .append("\u05D0\u05D1 ab", TextStyle(fontSize = 10f))
+            .build()
+
+        val result = BasicParagraphLayoutEngine(ClusterAwareShapingEngine()).layout(paragraph, maxWidth = 200f)
+
+        assertEquals(
+            TextPosition(offset = 3, affinity = "downstream"),
+            result.hitTest(pointX = 2f, pointY = 5f).entry?.position,
+        )
+        assertEquals(
+            TextPosition(offset = 4, affinity = "downstream"),
+            result.hitTest(pointX = 12f, pointY = 5f).entry?.position,
+        )
+        assertEquals(
+            TextPosition(offset = 2, affinity = "upstream"),
+            result.hitTest(pointX = 32f, pointY = 5f).entry?.position,
+        )
+        assertEquals(
+            TextPosition(offset = 1, affinity = "upstream"),
+            result.hitTest(pointX = 42f, pointY = 5f).entry?.position,
+        )
+    }
+
+    @Test
+    fun selectionBoxesKeepPlaceholderInsideRtlParagraphLtrIsland() {
+        val paragraph = ParagraphBuilder(
+            ParagraphStyle(textDirection = TextDirection.RIGHT_TO_LEFT),
+        )
+            .append("\u05D0 ", TextStyle(fontSize = 10f))
+            .append("a", TextStyle(fontSize = 10f))
+            .appendPlaceholder(
+                PlaceholderStyle(
+                    width = 12f,
+                    height = 14f,
+                    baselineOffset = 10f,
+                    alignment = PlaceholderAlignment.BASELINE,
+                ),
+            )
+            .append("b", TextStyle(fontSize = 10f))
+            .build()
+
+        val result = BasicParagraphLayoutEngine(ClusterAwareShapingEngine()).layout(paragraph, maxWidth = 200f)
+
+        assertEquals(
+            SelectionQueryResult(
+                boxes = listOf(
+                    SelectionBox(
+                        sourceRange = 2..2,
+                        lineIndex = 0,
+                        left = 0f,
+                        top = 0f,
+                        right = 10f,
+                        bottom = 14f,
+                    ),
+                    SelectionBox(
+                        sourceRange = 3..3,
+                        lineIndex = 0,
+                        left = 10f,
+                        top = 0f,
+                        right = 22f,
+                        bottom = 14f,
+                        placeholderId = "ph-000",
+                    ),
+                    SelectionBox(
+                        sourceRange = 4..4,
+                        lineIndex = 0,
+                        left = 22f,
+                        top = 0f,
+                        right = 32f,
+                        bottom = 14f,
+                    ),
+                    SelectionBox(
+                        sourceRange = 0..1,
+                        lineIndex = 0,
+                        left = 32f,
+                        top = 0f,
+                        right = 52f,
+                        bottom = 14f,
+                        direction = -1,
+                    ),
+                ),
+            ),
+            result.selectionBoxes(
+                SelectionRange(
+                    start = TextPosition(offset = 0),
+                    end = TextPosition(offset = 5),
+                ),
+            ),
+        )
+        assertEquals("ph-000", result.hitTest(pointX = 12f, pointY = 5f).entry?.placeholderId)
+        assertEquals(TextPosition(offset = 3, affinity = "downstream"), result.hitTest(pointX = 12f, pointY = 5f).entry?.position)
+        assertEquals(TextPosition(offset = 4, affinity = "downstream"), result.hitTest(pointX = 25f, pointY = 5f).entry?.position)
+        assertEquals(TextPosition(offset = 1, affinity = "upstream"), result.hitTest(pointX = 45f, pointY = 5f).entry?.position)
+    }
+
+    @Test
+    fun selectionBoxesDoNotLeakBidiDirectionAcrossHardBreaks() {
+        val paragraph = ParagraphBuilder()
+            .append("\u05D0\u05D1\n", TextStyle(fontSize = 10f))
+            .appendPlaceholder(
+                PlaceholderStyle(
+                    width = 12f,
+                    height = 14f,
+                    baselineOffset = 10f,
+                    alignment = PlaceholderAlignment.BASELINE,
+                ),
+            )
+            .append("c", TextStyle(fontSize = 10f))
+            .build()
+
+        val result = BasicParagraphLayoutEngine(ClusterAwareShapingEngine()).layout(paragraph, maxWidth = 200f)
+        val secondLineBoxes = result.selectionBoxes(
+            SelectionRange(
+                start = TextPosition(offset = 3),
+                end = TextPosition(offset = 5),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                SelectionBox(
+                    sourceRange = 3..3,
+                    lineIndex = 1,
+                    left = 0f,
+                    top = 10f,
+                    right = 12f,
+                    bottom = 24f,
+                    placeholderId = "ph-000",
+                ),
+                SelectionBox(
+                    sourceRange = 4..4,
+                    lineIndex = 1,
+                    left = 12f,
+                    top = 10f,
+                    right = 22f,
+                    bottom = 24f,
+                ),
+            ),
+            secondLineBoxes.boxes,
+        )
+        assertEquals("ph-000", result.hitTest(pointX = 2f, pointY = 15f).entry?.placeholderId)
+        assertEquals(TextPosition(offset = 3, affinity = "downstream"), result.hitTest(pointX = 2f, pointY = 15f).entry?.position)
+    }
+
+    @Test
+    fun leadingPlaceholderKeepsBaseDirectionBeforeRtlRun() {
+        val paragraph = ParagraphBuilder()
+            .appendPlaceholder(
+                PlaceholderStyle(
+                    width = 12f,
+                    height = 14f,
+                    baselineOffset = 10f,
+                    alignment = PlaceholderAlignment.BASELINE,
+                ),
+            )
+            .append("\u05D0\u05D1", TextStyle(fontSize = 10f))
+            .build()
+
+        val result = BasicParagraphLayoutEngine(ClusterAwareShapingEngine()).layout(paragraph, maxWidth = 200f)
+
+        assertEquals(
+            SelectionQueryResult(
+                boxes = listOf(
+                    SelectionBox(
+                        sourceRange = 0..0,
+                        lineIndex = 0,
+                        left = 0f,
+                        top = 0f,
+                        right = 12f,
+                        bottom = 14f,
+                        placeholderId = "ph-000",
+                    ),
+                    SelectionBox(
+                        sourceRange = 1..2,
+                        lineIndex = 0,
+                        left = 12f,
+                        top = 0f,
+                        right = 32f,
+                        bottom = 14f,
+                        direction = -1,
+                    ),
+                ),
+            ),
+            result.selectionBoxes(
+                SelectionRange(
+                    start = TextPosition(offset = 0),
+                    end = TextPosition(offset = 3),
+                ),
+            ),
+        )
+        assertEquals("ph-000", result.hitTest(pointX = 5f, pointY = 5f).entry?.placeholderId)
+        assertEquals(TextPosition(offset = 0, affinity = "downstream"), result.hitTest(pointX = 5f, pointY = 5f).entry?.position)
+        assertEquals(TextPosition(offset = 3, affinity = "upstream"), result.hitTest(pointX = 15f, pointY = 5f).entry?.position)
+    }
+
+    @Test
     fun selectionAndHitTestRejectInvalidInputsDeterministically() {
         val paragraph = ParagraphBuilder()
             .append("ab", TextStyle(fontSize = 10f))
@@ -272,6 +571,17 @@ class ParagraphHitTestMapTest {
                 end = TextPosition(offset = 3),
             ),
             probes = listOf(-5f to 5f, 12f to 5f, 18f to 5f, 25f to 5f),
+        ),
+        HitTestCase(
+            caseId = "mixed-bidi-visual-order",
+            paragraph = ParagraphBuilder()
+                .append("ab \u05D0\u05D1", TextStyle(fontSize = 10f))
+                .build(),
+            selection = SelectionRange(
+                start = TextPosition(offset = 0),
+                end = TextPosition(offset = 5),
+            ),
+            probes = listOf(32f to 5f, 42f to 5f, 48f to 5f),
         ),
         HitTestCase(
             caseId = "non-participating-placeholder-overflow",
@@ -374,6 +684,7 @@ private class ClusterAwareShapingEngine : OpenTypeShapingEngine {
                     glyphIds = clusters.indices.toList(),
                     clusters = clusters,
                     advanceX = clusters.sumOf { it.advanceX.toDouble() }.toFloat(),
+                    bidiLevel = request.textRange.bidiLevelIn(request.text),
                     typefaceId = request.typefaceId,
                     fontSize = request.fontSize,
                 ),
@@ -407,6 +718,22 @@ private fun String.codePointAt(index: Int): Int {
 
 private fun String.codePointEndAt(index: Int): Int =
     if (this[index].isHighSurrogate() && index + 1 < length && this[index + 1].isLowSurrogate()) index + 1 else index
+
+private fun IntRange.bidiLevelIn(text: String): Int {
+    var index = first
+    while (index <= last) {
+        val codePoint = text.codePointAt(index)
+        when (Character.getDirectionality(codePoint).toInt()) {
+            Character.DIRECTIONALITY_RIGHT_TO_LEFT.toInt(),
+            Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC.toInt(),
+            Character.DIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING.toInt(),
+            Character.DIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE.toInt(),
+            -> return 1
+        }
+        index = text.codePointEndAt(index) + 1
+    }
+    return 0
+}
 
 private fun Int.isCombiningMarkOrDefaultIgnorable(): Boolean =
     this in 0x0300..0x036F ||

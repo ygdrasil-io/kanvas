@@ -2980,7 +2980,7 @@ parity, CPU oracle evidence, or GPU text evidence.
 
 ### KFONT-M8-003: Implement UAX #14 line breaker
 
-Status: implemented; evidence refreshed for independent review.
+Status: done; freshly revalidated for closeout.
 
 Files:
 
@@ -3042,7 +3042,7 @@ placeholder geometry layout, Skia Paragraph parity, CPU oracle parity, or GPU
 text support.
 ### KFONT-M8-004: Implement ellipsis and max-lines policy
 
-Status: implemented; evidence refreshed for independent review.
+Status: done; independently reviewed and freshly revalidated for closeout.
 
 Files:
 
@@ -3072,25 +3072,27 @@ Evidence:
   visible cluster fits but the ellipsis does, retry-on-earlier-visible-style
   behavior when the current trailing style cannot shape the ellipsis,
   missing-glyph and no-room refusals, trailing-style ellipsis shaping on
-  mixed-style content, and shaped-cluster-safe truncation.
+  mixed-style content, shaped-cluster-safe truncation, and bounded mixed-bidi
+  truncation ordering across both LTR paragraphs with RTL tails and RTL
+  paragraphs with LTR islands.
 - `hitTestMap()` now records the visual tail of the displayed ellipsis as a
   final caret stop, and `hitTest()` treats points inside that tail as
   in-bounds text hits that resolve to the truncated line end.
 - `paragraph-layout.json` checks in deterministic golden coverage for the
-  accepted non-bidi ellipsis cases without promoting complete paragraph or GPU
-  support.
+  accepted ellipsis cases, including the mixed-direction row's
+  `visibleRange`/`truncatedRange` and ellipsis provenance, while the visual
+  ordering proof itself stays in direct bidi tests.
 
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutInsertsEllipsisAndRecordsTruncationFactsInResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAppendsEllipsisWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesEllipsisNoRoomWhenMaxWidthCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAllowsEllipsisOnlyWhenNoVisibleClusterFitsButEllipsisDoes --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesMissingEllipsisGlyphWhenShaperCannotProduceEllipsisRun --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRetriesEllipsisWithEarlierVisibleStyleWhenTrailingStyleCannotShapeIt --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutShapesEllipsisWithTrailingVisibleStyleAfterTruncation --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDoesNotCutInsideAShapedClusterWhenEllipsizing --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestMapIncludesVisualTailForDisplayedEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestTreatsDisplayedEllipsisAsInsideText --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenPinsEllipsisCasesAndNonClaims
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutInsertsEllipsisAndRecordsTruncationFactsInResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAppendsEllipsisWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesEllipsisNoRoomWhenMaxWidthCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAllowsEllipsisOnlyWhenNoVisibleClusterFitsButEllipsisDoes --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesMissingEllipsisGlyphWhenShaperCannotProduceEllipsisRun --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRetriesEllipsisWithEarlierVisibleStyleWhenTrailingStyleCannotShapeIt --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutShapesEllipsisWithTrailingVisibleStyleAfterTruncation --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDoesNotCutInsideAShapedClusterWhenEllipsizing --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestMapIncludesVisualTailForDisplayedEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestTreatsDisplayedEllipsisAsInsideText --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutPreservesVisualOrderForEllipsizedMixedDirectionLine --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutPreservesVisualOrderForEllipsizedRtlParagraphWithLtrIsland --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenPinsEllipsisCasesAndNonClaims
 rtk git diff --check
 ```
 
-Remaining gate: this checks in bounded ellipsis insertion and truncation
-evidence only. It does not yet claim bidi visual-order preservation under
-truncation, complete paragraph layout parity, CPU oracle parity, or GPU text
-support.
+Remaining non-claim: this checks in bounded ellipsis insertion, truncation,
+and mixed-bidi ordering evidence only. It does not claim complete paragraph
+layout parity, CPU oracle parity, shaping completeness, or GPU text support.
 ### KFONT-M8-005: Implement selection and hit-test maps
 
 Status: implemented; evidence refreshed for independent review.
@@ -3121,13 +3123,14 @@ Evidence:
   `KFONT-M8-006`.
 - Hit testing now snaps to grapheme-cluster-safe caret boundaries, records
   upstream/downstream affinity, never returns an offset inside the combining
-  mark or emoji surrogate-pair clusters covered by the fixture, and clamps
-  finite out-of-bounds points to the nearest available caret stop.
+  mark or emoji surrogate-pair clusters covered by the fixture, preserves
+  bounded mixed-bidi visual ordering, and clamps finite out-of-bounds points
+  to the nearest available caret stop.
 - `hit-test-map.json` checks in bounded evidence for multi-line placeholder
   selection, non-participating placeholder overflow routing, combining-mark
-  snapping, emoji cluster boundaries, and finite out-of-bounds clamp behavior,
-  while invalid selection ranges and non-finite hit-test points emit stable
-  refusal diagnostics.
+  snapping, emoji cluster boundaries, mixed-bidi visual ordering, and finite
+  out-of-bounds clamp behavior, while invalid selection ranges and non-finite
+  hit-test points emit stable refusal diagnostics.
 
 Validation:
 
@@ -3140,10 +3143,9 @@ rtk git diff --check
 ```
 
 Remaining gate: this checks in bounded selection and hit-test evidence only. It
-does not yet claim paragraph-owned bidi visual ordering, explicit word
-boundary query APIs, full grapheme/word boundary dumps beyond hit-test
-snapping, complete paragraph layout parity, CPU oracle parity, or GPU text
-support.
+does not yet claim explicit word boundary query APIs, full grapheme/word
+boundary dumps beyond hit-test snapping, complete paragraph layout parity, CPU
+oracle parity, or GPU text support.
 ### KFONT-M8-006: Implement placeholder layout metrics
 
 Status: done; freshly revalidated for closeout.

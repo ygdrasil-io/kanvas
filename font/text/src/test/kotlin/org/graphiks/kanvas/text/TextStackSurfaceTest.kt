@@ -354,6 +354,48 @@ class TextStackSurfaceTest {
     }
 
     @Test
+    fun paragraphLayoutPreservesVisualOrderForEllipsizedMixedDirectionLine() {
+        val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine(bidiAware = true))
+        val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "."))
+            .append("ab \u05D0\u05D1\nz", TextStyle(fontSize = 10f))
+            .build()
+
+        val result = layoutEngine.layout(paragraph, maxWidth = 80f)
+
+        assertEquals(emptyList(), result.diagnostics)
+        assertTrue(result.dump().contains("\"isEllipsized\": true"))
+        assertTrue(result.dump().contains("\"truncatedRange\": \"5..6\""))
+        assertEquals(TextPosition(offset = 5, affinity = "upstream"), result.hitTest(pointX = 32f, pointY = 5f).entry?.position)
+        assertEquals(TextPosition(offset = 4, affinity = "upstream"), result.hitTest(pointX = 42f, pointY = 5f).entry?.position)
+        assertEquals(TextPosition(offset = 5, affinity = "upstream"), result.hitTest(pointX = 55f, pointY = 5f).entry?.position)
+    }
+
+    @Test
+    fun paragraphLayoutPreservesVisualOrderForEllipsizedRtlParagraphWithLtrIsland() {
+        val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine(bidiAware = true))
+        val paragraph = ParagraphBuilder(
+            ParagraphStyle(
+                textDirection = TextDirection.RIGHT_TO_LEFT,
+                maxLines = 1,
+                ellipsis = ".",
+            ),
+        )
+            .append("\u05D0\u05D1 ab\nz", TextStyle(fontSize = 10f))
+            .build()
+
+        val result = layoutEngine.layout(paragraph, maxWidth = 80f)
+
+        assertEquals(emptyList(), result.diagnostics)
+        assertTrue(result.dump().contains("\"isEllipsized\": true"))
+        assertTrue(result.dump().contains("\"truncatedRange\": \"5..6\""))
+        assertEquals(TextPosition(offset = 3, affinity = "downstream"), result.hitTest(pointX = 2f, pointY = 5f).entry?.position)
+        assertEquals(TextPosition(offset = 4, affinity = "downstream"), result.hitTest(pointX = 12f, pointY = 5f).entry?.position)
+        assertEquals(TextPosition(offset = 2, affinity = "upstream"), result.hitTest(pointX = 32f, pointY = 5f).entry?.position)
+        assertEquals(TextPosition(offset = 1, affinity = "upstream"), result.hitTest(pointX = 42f, pointY = 5f).entry?.position)
+        assertEquals(TextPosition(offset = 5, affinity = "upstream"), result.hitTest(pointX = 55f, pointY = 5f).entry?.position)
+    }
+
+    @Test
     fun paragraphLayoutAppendsEllipsisWhenVisiblePlaceholderHasRoomForEllipsis() {
         val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
         val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "..."))
@@ -1340,12 +1382,13 @@ class TextStackSurfaceTest {
             dump.requiredStringList("requiredDumpFields"),
         )
         assertEquals(
-            listOf("single-line-overflow", "placeholder-tail-room", "mixed-style-trailing-style"),
+            listOf("single-line-overflow", "placeholder-tail-room", "mixed-style-trailing-style", "mixed-bidi-ellipsized"),
             cases.map { case -> case.requiredString("caseId") },
         )
         val firstLine = cases[0].requiredObjectList("lines").single()
         val secondLine = cases[1].requiredObjectList("lines").single()
         val thirdLine = cases[2].requiredObjectList("lines").single()
+        val fourthLine = cases[3].requiredObjectList("lines").single()
         assertEquals(true, firstLine.requiredBoolean("isEllipsized"))
         assertEquals("0..1", firstLine.requiredString("visibleRange"))
         assertEquals("2..6", firstLine.requiredString("truncatedRange"))
@@ -1356,6 +1399,10 @@ class TextStackSurfaceTest {
         assertEquals("seg-000", secondLine.requiredObjectList("ellipsisGlyphRuns").single().requiredString("segmentId"))
         assertEquals(true, thirdLine.requiredBoolean("isEllipsized"))
         assertEquals("seg-001", thirdLine.requiredObjectList("ellipsisGlyphRuns").single().requiredString("segmentId"))
+        assertEquals(true, fourthLine.requiredBoolean("isEllipsized"))
+        assertEquals("0..4", fourthLine.requiredString("visibleRange"))
+        assertEquals("5..6", fourthLine.requiredString("truncatedRange"))
+        assertEquals("seg-000", fourthLine.requiredObjectList("ellipsisGlyphRuns").single().requiredString("segmentId"))
         assertEquals(
             listOf("ellipsis-no-room", "ellipsis-glyph-missing", "placeholder-conflict"),
             dump.requiredStringList("negativeCases"),
@@ -4163,6 +4210,7 @@ class TextStackSurfaceTest {
     private class RecordingShapingEngine(
         private val diagnostics: List<ShapingDiagnostic> = emptyList(),
         private val ellipsisSupported: Boolean = true,
+        private val bidiAware: Boolean = false,
     ) : OpenTypeShapingEngine {
         val requests = mutableListOf<ShapingRequest>()
 
@@ -4184,6 +4232,7 @@ class TextStackSurfaceTest {
                         glyphIds = clusters.indices.toList(),
                         clusters = clusters,
                         advanceX = clusters.sumOf { it.advanceX.toDouble() }.toFloat(),
+                        bidiLevel = if (bidiAware && hasRightToLeftCodePoint(request.text, request.textRange)) 1 else 0,
                         typefaceId = request.typefaceId,
                         fontSize = request.fontSize,
                     ),
@@ -4493,4 +4542,20 @@ class TextStackSurfaceTest {
         val gposSingles: OpenTypeGposSingleTable?,
         val gposPairs: OpenTypeGposPairTable?,
     )
+}
+
+private fun hasRightToLeftCodePoint(text: String, range: IntRange): Boolean {
+    var index = range.first
+    while (index <= range.last) {
+        val codePoint = Character.codePointAt(text, index)
+        when (Character.getDirectionality(codePoint).toInt()) {
+            Character.DIRECTIONALITY_RIGHT_TO_LEFT.toInt(),
+            Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC.toInt(),
+            Character.DIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING.toInt(),
+            Character.DIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE.toInt(),
+            -> return true
+        }
+        index += Character.charCount(codePoint)
+    }
+    return false
 }

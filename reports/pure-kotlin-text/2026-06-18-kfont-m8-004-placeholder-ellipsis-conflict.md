@@ -1,4 +1,4 @@
-# 2026-06-18 - KFONT-M8-004 Ellipsis Insertion And Truncation
+# 2026-06-18 - KFONT-M8-004 Ellipsis, Truncation, And Bidi Ordering
 
 ## Scope
 
@@ -34,13 +34,23 @@
   when the current trailing style cannot shape the ellipsis, missing-glyph and
   no-room refusals, trailing-style ellipsis shaping on mixed-style content, and
   shaped-cluster safety for a multi-code-unit visible cluster.
+- `TextStackSurfaceTest.paragraphLayoutPreservesVisualOrderForEllipsizedMixedDirectionLine`
+  proves that truncating a mixed-direction first line preserves the visual
+  ordering of the surviving RTL cluster while still reporting the logical
+  `visibleRange` and `truncatedRange`.
+- `TextStackSurfaceTest.paragraphLayoutPreservesVisualOrderForEllipsizedRtlParagraphWithLtrIsland`
+  proves the bounded level-`2` case stays stable too: an RTL paragraph with an
+  LTR island keeps the island in visual order before the surviving RTL tail
+  and still resolves the displayed ellipsis tail at the truncated logical end.
 - `hitTestMap()` now records the visual tail of the displayed ellipsis as a
   final caret stop, and `hitTest()` treats points inside that tail as
   in-bounds text hits that resolve to the truncated line end instead of
   falling past the visible layout surface.
 - `reports/font/fixtures/expected/paragraph/paragraph-layout.json` checks in
-  deterministic golden coverage for the accepted non-bidi ellipsis cases and
-  names the negative refusal families without promoting full paragraph parity.
+  deterministic golden coverage for the accepted ellipsis cases, including the
+  bounded `mixed-bidi-ellipsized` row's `visibleRange`/`truncatedRange` and
+  ellipsis provenance, while the visual-order proof itself stays in the direct
+  bidi tests above.
 - The terminal placeholder conflict path remains attached, so this wave keeps
   the narrower `KFONT-M8-006` gate closed while broadening only the bounded
   ellipsis/max-lines behavior claimed by `KFONT-M8-004`.
@@ -48,12 +58,12 @@
 ## Validation
 
 ```bash
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutInsertsEllipsisAndRecordsTruncationFactsInResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAppendsEllipsisWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesEllipsisNoRoomWhenMaxWidthCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAllowsEllipsisOnlyWhenNoVisibleClusterFitsButEllipsisDoes --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesMissingEllipsisGlyphWhenShaperCannotProduceEllipsisRun --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRetriesEllipsisWithEarlierVisibleStyleWhenTrailingStyleCannotShapeIt --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutShapesEllipsisWithTrailingVisibleStyleAfterTruncation --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDoesNotCutInsideAShapedClusterWhenEllipsizing --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestMapIncludesVisualTailForDisplayedEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestTreatsDisplayedEllipsisAsInsideText --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenPinsEllipsisCasesAndNonClaims
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutInsertsEllipsisAndRecordsTruncationFactsInResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAppendsEllipsisWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesEllipsisNoRoomWhenMaxWidthCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAllowsEllipsisOnlyWhenNoVisibleClusterFitsButEllipsisDoes --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesMissingEllipsisGlyphWhenShaperCannotProduceEllipsisRun --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRetriesEllipsisWithEarlierVisibleStyleWhenTrailingStyleCannotShapeIt --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutShapesEllipsisWithTrailingVisibleStyleAfterTruncation --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDoesNotCutInsideAShapedClusterWhenEllipsizing --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestMapIncludesVisualTailForDisplayedEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestTreatsDisplayedEllipsisAsInsideText --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutPreservesVisualOrderForEllipsizedMixedDirectionLine --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutPreservesVisualOrderForEllipsizedRtlParagraphWithLtrIsland --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenPinsEllipsisCasesAndNonClaims
 rtk git diff --check
 ```
 
-## Remaining Gate
+## Remaining Non-Claims
 
-This wave adds bounded ellipsis insertion and truncation evidence only. It does
-not yet claim bidi visual-order preservation under truncation, complete
-paragraph layout parity, CPU oracle parity, or GPU text support.
+This wave adds bounded ellipsis insertion, truncation, and mixed-bidi ordering
+evidence only. It does not claim complete paragraph layout parity, CPU oracle
+parity, shaping completeness, or GPU text support.

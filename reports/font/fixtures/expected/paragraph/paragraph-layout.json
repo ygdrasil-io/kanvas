@@ -65,6 +65,26 @@
       ],
       "ellipsisFontSize": 20,
       "diagnostics": []
+    },
+    {
+      "caseId": "mixed-bidi-ellipsized",
+      "inputHash": "9818cf73803b619772825f162e9ae1c0352d3684f65e2ad831c4b2776e3f8dfc",
+      "visibleRange": "0..4",
+      "truncatedRange": "5..6",
+      "ellipsisSegmentId": "seg-000",
+      "lines": [
+        {
+          "isEllipsized": true,
+          "visibleRange": "0..4",
+          "truncatedRange": "5..6",
+          "ellipsisGlyphRuns": [
+            {
+              "segmentId": "seg-000"
+            }
+          ]
+        }
+      ],
+      "diagnostics": []
     }
   ],
   "negativeCases": [

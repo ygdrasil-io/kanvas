@@ -811,8 +811,8 @@
       "assets": [
         {
           "path": "reports/font/fixtures/fonts/paragraph/paragraph-ellipsis-fixture.txt",
-          "sha256": "fb59eaca7976b879fcb06e39345f6b7152043f09e23a8fc96182d75a60860f3a",
-          "sizeBytes": 379,
+          "sha256": "f1193bdfd5257ccb75a3731d71e6984d180b7d1042ffcb38d42a9e4d9c084924",
+          "sizeBytes": 521,
           "role": "synthetic-paragraph-input"
         }
       ],
