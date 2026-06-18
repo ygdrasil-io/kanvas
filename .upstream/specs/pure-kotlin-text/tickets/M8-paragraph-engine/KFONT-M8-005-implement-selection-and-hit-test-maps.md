@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M8-005"
 title: "Implement selection and hit-test maps"
-status: "review"
+status: "blocked"
 milestone: "M8"
 priority: "P1"
 owner_area: "paragraph"
@@ -100,9 +100,9 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*HitTest*'
 
 ## Status Notes
 
-- `review`: `ParagraphLayoutResult` now exposes bounded `SelectionBox`, `CaretStop`, `HitTestEntry`, `HitTestMap`, `SelectionQueryResult`, and `HitTestQueryResult` contracts, with deterministic selection boxes, caret stops, placeholder IDs, and point hit testing backed by current line/placeholder geometry.
-- `review`: `hit-test-map.json` now checks in deterministic multi-line placeholder selection, non-participating placeholder overflow routing, combining-mark snapping, emoji cluster boundary snapping, and finite out-of-bounds clamp behavior, while invalid selection ranges and non-finite hit-test points emit stable refusal diagnostics.
-- Remaining gate before `done`: paragraph-owned bidi visual ordering and explicit word/grapheme boundary query APIs still need dedicated evidence beyond the current line-indexed, cluster-safe hit-test surface.
+- `blocked`: `ParagraphLayoutResult` now exposes bounded `SelectionBox`, `CaretStop`, `HitTestEntry`, `HitTestMap`, `SelectionQueryResult`, and `HitTestQueryResult` contracts, with deterministic selection boxes, caret stops, placeholder IDs, and point hit testing backed by current line/placeholder geometry.
+- `blocked`: `hit-test-map.json` now checks in deterministic multi-line placeholder selection, non-participating placeholder overflow routing, combining-mark snapping, emoji cluster boundary snapping, and finite out-of-bounds clamp behavior, while invalid selection ranges and non-finite hit-test points emit stable refusal diagnostics.
+- Remaining gate before `done`: land reviewed paragraph-owned bidi visual-order evidence for mixed-direction lines, then supply authoritative word/grapheme boundary query evidence beyond current hit-test snapping. Current M5 evidence does not provide a reviewed word-boundary source yet, so this ticket stays blocked until that source or an explicit product split lands.
 
 ## Linear Labels
 

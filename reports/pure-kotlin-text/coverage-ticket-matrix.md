@@ -88,9 +88,8 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
   WGSL/binding evidence, and GPU evidence are promoted.
 - 2026-06-16 KFONT M6 blocker audit is now historical coordination evidence:
   `KFONT-M6-002`, `KFONT-M6-004`, and `KFONT-M6-005` are since closed out on
-  reviewed fixture evidence, while `KFONT-M6-006` remains in `review` pending
-  per-script fixture families and explicit OpenType-specific `drawString`
-  non-enablement evidence.
+  reviewed fixture evidence, while `KFONT-M6-006` is now `blocked` on the
+  remaining per-script fixture families.
 
 ### KFONT-M6 Remaining Blocker Audit
 
@@ -111,9 +110,9 @@ Evidence:
 - `KFONT-M6-002`, `KFONT-M6-004`, and `KFONT-M6-005` are now closed out on
   reviewed fixture provenance and promoted dump evidence, so they no longer
   block resumption by merge/adopt status.
-- `KFONT-M6-006` remains the only M6 slice still in `review`; its remaining
-  gates are per-script shaping fixture families and explicit OpenType-specific
-  `drawString` non-enablement evidence.
+- `KFONT-M6-006` is now blocked rather than lingering in `review`; its
+  remaining gate is the per-script shaping fixture families owned by
+  `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`.
 - The named fixture families for `KFONT-M6-003`, `KFONT-M6-007`,
   `KFONT-M6-008`, `KFONT-M6-009`, and `KFONT-M6-010` are still not present
   in-repo beyond ticket text references, so those tickets must not be advanced
@@ -2635,7 +2634,7 @@ claim Arabic shaping support, contextual GSUB/GPOS support, variation/device-tab
 support, native shaper parity, CPU oracle parity, or GPU evidence.
 ### KFONT-M6-006: Script-Specific Default Feature Policy Slice
 
-Status: review; independent audit confirmed this remains a bounded contract-layer slice with runtime/fixture gates still open.
+Status: blocked after independent audit; this remains a bounded contract-layer slice with external fixture gates still open.
 
 Files:
 
@@ -2705,8 +2704,8 @@ rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
   GPOS single subset to avoid over-claiming parser/runtime coverage.
 
 Remaining gate: per-script shaping fixture families from `KFONT-M6-007`,
-`KFONT-M6-008`, and `KFONT-M6-009` are still absent. Keep this ticket in
-`review` until those gates land beyond the current contract-level
+`KFONT-M6-008`, and `KFONT-M6-009` are still absent. Keep this ticket
+`blocked` until those gates land beyond the current contract-level
 `shaping-plan.json` evidence.
 
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
@@ -2980,7 +2979,7 @@ parity, CPU oracle evidence, or GPU text evidence.
 
 ### KFONT-M8-003: Implement UAX #14 line breaker
 
-Status: implemented; evidence refreshed for independent review.
+Status: blocked after independent review; bounded hit-test evidence is validated, but ticket-local closeout still depends on later gates.
 
 Files:
 
@@ -3142,9 +3141,9 @@ rtk git diff --check
 ```
 
 Remaining gate: this checks in bounded selection and hit-test evidence only. It
-does not yet claim paragraph-owned bidi visual ordering, explicit word
-boundary query APIs, full grapheme/word boundary dumps beyond hit-test
-snapping, complete paragraph layout parity, CPU oracle parity, or GPU text
+is now blocked on reviewed paragraph-owned bidi visual-order evidence and on an
+authoritative word/grapheme boundary query source beyond hit-test snapping. It
+does not claim complete paragraph layout parity, CPU oracle parity, or GPU text
 support.
 ### KFONT-M8-006: Implement placeholder layout metrics
 
