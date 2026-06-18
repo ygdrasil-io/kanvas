@@ -290,8 +290,8 @@ class TextStackSurfaceTest {
               ],
               "placeholderBoxes": [],
               "lines": [
-                {"index": 0, "textRange": "0..4", "segmentIds": ["seg-000"], "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 50.0, "baseline": 8.0}, "boxes": [{"textRange": "0..4", "left": 0.0, "top": 0.0, "right": 50.0, "bottom": 10.0, "direction": 1}], "glyphRunCount": 1},
-                {"index": 1, "textRange": "6..6", "segmentIds": ["seg-000"], "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 10.0, "baseline": 18.0}, "boxes": [{"textRange": "6..6", "left": 0.0, "top": 10.0, "right": 10.0, "bottom": 20.0, "direction": 1}], "glyphRunCount": 1}
+                {"index": 0, "textRange": "0..4", "segmentIds": ["seg-000"], "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 50.0, "baseline": 8.0}, "boxes": [{"textRange": "0..4", "left": 0.0, "top": 0.0, "right": 50.0, "bottom": 10.0, "direction": 1}], "glyphRunCount": 1, "isEllipsized": false, "visibleRange": "0..4", "truncatedRange": null, "ellipsisGlyphRun": null},
+                {"index": 1, "textRange": "6..6", "segmentIds": ["seg-000"], "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 10.0, "baseline": 18.0}, "boxes": [{"textRange": "6..6", "left": 0.0, "top": 10.0, "right": 10.0, "bottom": 20.0, "direction": 1}], "glyphRunCount": 1, "isEllipsized": false, "visibleRange": "6..6", "truncatedRange": null, "ellipsisGlyphRun": null}
               ],
               "diagnostics": []
             }
@@ -303,7 +303,7 @@ class TextStackSurfaceTest {
     }
 
     @Test
-    fun paragraphLayoutDiagnosesMaxLineEllipsisUnsupportedInResultDump() {
+    fun paragraphLayoutShapesAndSerializesEllipsisFactsForSimpleMaxLineOverflow() {
         val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
         val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "..."))
             .append("aa bb c", TextStyle(fontSize = 10f))
@@ -313,23 +313,17 @@ class TextStackSurfaceTest {
 
         assertEquals(1, result.lines.size)
         assertTrue(result.didOverflowHeight)
-        assertEquals(
-            listOf(
-                ParagraphLayoutDiagnostic(
-                    code = PARAGRAPH_LAYOUT_MAX_LINES_ELLIPSIS_UNSUPPORTED_DIAGNOSTIC_CODE,
-                    message = "maxLines ellipsis is not implemented by the current paragraph engine.",
-                    textRange = 6..6,
-                    severity = "refusal",
-                ),
-            ),
-            result.diagnostics,
-        )
-        assertTrue(result.dump().contains("\"code\": \"text.paragraph.max-lines-ellipsis-unsupported\""))
-        assertTrue(result.dump().contains("\"textRange\": \"6..6\""))
+        assertEquals(emptyList(), result.diagnostics)
+        assertEquals(0..1, result.lines.single().textRange)
+        assertTrue(result.dump().contains("\"isEllipsized\": true"))
+        assertTrue(result.dump().contains("\"visibleRange\": \"0..1\""))
+        assertTrue(result.dump().contains("\"truncatedRange\": \"2..6\""))
+        assertTrue(result.dump().contains("\"ellipsisGlyphRun\": {\"text\": \"...\""))
+        assertFalse(result.dump().contains("\"code\": \"text.paragraph.max-lines-ellipsis-unsupported\""))
     }
 
     @Test
-    fun paragraphLayoutFallsBackToGenericEllipsisUnsupportedWhenVisiblePlaceholderHasRoomForEllipsis() {
+    fun paragraphLayoutEllipsizesVisiblePlaceholderLineWhenPlaceholderHasRoomForEllipsis() {
         val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
         val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "..."))
             .append("a", TextStyle(fontSize = 10f))
@@ -348,19 +342,13 @@ class TextStackSurfaceTest {
 
         assertEquals(1, result.lines.size)
         assertTrue(result.didOverflowHeight)
-        assertEquals(
-            listOf(
-                ParagraphLayoutDiagnostic(
-                    code = PARAGRAPH_LAYOUT_MAX_LINES_ELLIPSIS_UNSUPPORTED_DIAGNOSTIC_CODE,
-                    message = "maxLines ellipsis is not implemented by the current paragraph engine.",
-                    textRange = 3..3,
-                    severity = "refusal",
-                ),
-            ),
-            result.diagnostics,
-        )
+        assertEquals(emptyList(), result.diagnostics)
+        assertTrue(result.dump().contains("\"isEllipsized\": true"))
+        assertTrue(result.dump().contains("\"visibleRange\": \"0..1\""))
+        assertTrue(result.dump().contains("\"truncatedRange\": \"3..3\""))
+        assertTrue(result.dump().contains("\"ellipsisGlyphRun\": {\"text\": \"...\""))
         assertFalse(result.dump().contains("\"code\": \"text.paragraph.placeholder-ellipsis-conflict\""))
-        assertTrue(result.dump().contains("\"code\": \"text.paragraph.max-lines-ellipsis-unsupported\""))
+        assertFalse(result.dump().contains("\"code\": \"text.paragraph.max-lines-ellipsis-unsupported\""))
     }
 
     @Test

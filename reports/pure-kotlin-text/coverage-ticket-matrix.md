@@ -3042,47 +3042,57 @@ placeholder geometry layout, Skia Paragraph parity, CPU oracle parity, or GPU
 text support.
 ### KFONT-M8-004: Implement ellipsis and max-lines policy
 
-Status: implemented; evidence refreshed for independent review.
+Status: done; freshly revalidated for closeout.
 
 Files:
 
 - `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/KFONT-M8-004-implement-ellipsis-and-max-lines-policy.md`
-- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/KFONT-M8-006-implement-placeholder-layout-metrics.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/README.md`
 - `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
 - `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphEllipsisLayoutTest.kt`
 - `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
-- `reports/pure-kotlin-text/2026-06-18-kfont-m8-004-placeholder-ellipsis-conflict.md`
+- `reports/font/fixtures/expected/paragraph/paragraph-layout.json`
+- `reports/pure-kotlin-text/2026-06-19-kfont-m8-004-ellipsis-layout.md`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
 - `reports/pure-kotlin-text/fixture-evidence-manifest.json`
 
 Evidence:
 
-- `BasicParagraphLayoutEngine` now emits the narrower
-  `text.paragraph.placeholder-ellipsis-conflict` refusal when `maxLines`
-  overflow reaches a last visible line that ends in a placeholder and does not
-  have enough remaining width to append the requested ellipsis without
-  touching that placeholder.
-- The placeholder-conflict path is asserted directly in
-  `TextStackSurfaceTest`, and companion coverage proves that the generic
-  `text.paragraph.max-lines-ellipsis-unsupported` refusal is not emitted for
-  that narrower case while visible placeholders with enough room still fall
-  back to the generic unsupported path.
-- Non-placeholder overflow still emits the generic unsupported ellipsis
-  diagnostic, so this wave closes only the bounded placeholder conflict gate
-  left by `KFONT-M8-006`.
+- `BasicParagraphLayoutEngine` now performs bounded end-ellipsis insertion for
+  `maxLines` overflow, replacing only cluster-safe trailing content on the
+  last visible line instead of routing every non-placeholder overflow through
+  `text.paragraph.max-lines-ellipsis-unsupported`.
+- `LineLayout` now records deterministic `isEllipsized`, `visibleRange`,
+  `truncatedRange`, and `ellipsisGlyphRun` facts, and
+  `ParagraphLayoutResult.dump()` serializes those fields as paragraph-owned
+  layout evidence without promoting complete paragraph, CPU-oracle, or GPU
+  text claims.
+- `paragraph-layout.json` checks in bounded one-line, multi-line,
+  mixed-style, RTL-direction, placeholder-conflict, no-room, and
+  missing-glyph evidence, including trailing-style ellipsis provenance and
+  stable refusal diagnostics.
+- `TextStackSurfaceTest` locks the public dump surface and the two core runtime
+  behaviors: simple max-line overflow now ellipsizes deterministically, while
+  placeholder-ended overflow still emits the narrower
+  `text.paragraph.placeholder-ellipsis-conflict` refusal when the ellipsis
+  cannot fit without truncating a visible placeholder.
 
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutFallsBackToGenericEllipsisUnsupportedWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesMaxLineEllipsisUnsupportedInResultDump
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphEllipsisLayoutTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutShapesAndSerializesEllipsisFactsForSimpleMaxLineOverflow --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutEllipsizesVisiblePlaceholderLineWhenPlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk git diff --check
 ```
 
-Remaining gate: this checks in bounded refusal evidence only. It does not yet
-claim actual ellipsis insertion, trailing-style ellipsis shaping, per-line
-`isEllipsized` / `visibleRange` / `truncatedRange` dump fields, mixed-style
-ellipsis evidence, bidi truncation ordering, complete paragraph layout parity,
-CPU oracle parity, or GPU text support.
+Remaining gate: none for bounded `KFONT-M8-004` closeout. This evidence still
+does not claim complete bidi visual ordering, explicit word/grapheme boundary
+query APIs, complete paragraph layout parity, CPU oracle parity, or GPU text
+support.
 ### KFONT-M8-005: Implement selection and hit-test maps
 
 Status: implemented; evidence refreshed for independent review.
