@@ -1737,8 +1737,10 @@ class DefaultOpenTypeFaceParser(
             }
         }
         val gposParseResult = rawTableBytes[GPOS_TABLE_TAG]?.let { table ->
+            var generalGposDiagnosticEmitted = false
             val generalGpos = runCatching { OpenTypeGposTableParser.parse(table).takeIf { it.lookups.isNotEmpty() } }
                 .getOrElse { error ->
+                    generalGposDiagnosticEmitted = true
                     diagnostics += tableDiagnostic(
                         source = source,
                         table = GPOS_TABLE_TAG,
@@ -1748,7 +1750,7 @@ class DefaultOpenTypeFaceParser(
                     )
                     null
                 }
-            val suppressPairSubsetFailure = generalGpos != null
+            val suppressPairSubsetFailure = generalGposDiagnosticEmitted
             val singles = runCatching { OpenTypeGposPairTableParser.parseSingles(table).takeIf { it.adjustments.isNotEmpty() } }
                 .getOrElse { error ->
                     if (!suppressPairSubsetFailure) {
