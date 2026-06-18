@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M8-006"
 title: "Implement placeholder layout metrics"
-status: "review"
+status: "done"
 milestone: "M8"
 priority: "P1"
 owner_area: "paragraph"
@@ -71,7 +71,7 @@ interface PlaceholderLayoutResolver {
 - [x] Placeholder dimensions are finite, non-negative, and validated before line fitting.
 - [x] Placeholder ranges map to exactly one placeholder token and are excluded from shaping requests.
 - [x] Baseline, above-baseline, below-baseline, and centered alignments affect line ascent/descent deterministically.
-- [ ] Selection and hit-test dumps reference placeholder IDs and geometry.
+- [x] Selection and hit-test dumps reference placeholder IDs and geometry.
 - [x] Invalid placeholder ranges or metrics emit `text.paragraph.invalid-placeholder` or a narrower accepted diagnostic.
 
 ## Required Evidence
@@ -101,9 +101,9 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*Placeholder*'
 
 ## Status Notes
 
-- `review`: `PlaceholderStyle` now serializes `baseline` as nullable plus `participatesInLineHeight`, input validation refuses missing required baselines and non-finite/negative placeholder constraints, and `BasicParagraphLayoutEngine` emits deterministic `placeholderBoxes` plus line metrics for baseline, above-baseline, below-baseline, and centered cases in `placeholder-layout.json`.
-- `review`: `KFONT-M8-005` now consumes placeholder IDs and geometry in deterministic selection/hit-test evidence, including a non-participating below-baseline overflow case, so placeholder layout facts are no longer isolated to line metrics and layout dumps.
-- Remaining gate before `done`: the ellipsis/max-lines path must still attach the placeholder conflict evidence called out by this ticket without broadening paragraph support claims.
+- `done`: `PlaceholderStyle` now serializes `baseline` as nullable plus `participatesInLineHeight`, input validation refuses missing required baselines and non-finite/negative placeholder constraints, and `BasicParagraphLayoutEngine` emits deterministic `placeholderBoxes` plus line metrics for baseline, above-baseline, below-baseline, and centered cases in `placeholder-layout.json`.
+- `done`: `KFONT-M8-005` now consumes placeholder IDs and geometry in deterministic selection/hit-test evidence, including a non-participating below-baseline overflow case, and `KFONT-M8-004` now attaches the bounded `text.paragraph.placeholder-ellipsis-conflict` refusal required by this ticket for the narrower case where the last visible line ends in a placeholder and cannot fit the requested ellipsis without touching it.
+- Remaining non-claim: this ticket still does not claim actual ellipsis insertion, complete paragraph layout parity, CPU oracle parity, or GPU text support.
 
 ## Linear Labels
 
