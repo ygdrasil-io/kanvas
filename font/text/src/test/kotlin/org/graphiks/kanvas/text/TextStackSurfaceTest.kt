@@ -68,6 +68,8 @@ import org.graphiks.kanvas.text.shaping.BidiResolver
 import org.graphiks.kanvas.text.shaping.BidiRun
 import org.graphiks.kanvas.text.shaping.CMapGlyphMapper
 import org.graphiks.kanvas.text.shaping.CONFLICTING_FONT_RUN_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.shaping.EmojiSequenceFact
+import org.graphiks.kanvas.text.shaping.EmojiSequenceKind
 import org.graphiks.kanvas.text.shaping.EmojiSequenceShaper
 import org.graphiks.kanvas.text.shaping.FeatureSet
 import org.graphiks.kanvas.text.shaping.FallbackOpenTypeShapingEngine
@@ -1651,6 +1653,83 @@ class TextStackSurfaceTest {
                 GlyphCluster(textRange = 11..18, glyphRange = 2..2, advanceX = 20f),
             ),
             clusters,
+        )
+    }
+
+    @Test
+    fun emojiSequenceShaperRecognizesKeycapAndFlagFixturesAsSingleClusters() {
+        val text = "a1\uFE0F\u20E3 b\uD83C\uDDEB\uD83C\uDDF7c"
+
+        val clusters = EmojiSequenceShaper().shapeEmoji(
+            ShapingRequest(
+                text = text,
+                textRange = 1..11,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                GlyphCluster(textRange = 1..3, glyphRange = 0..0, advanceX = 20f),
+                GlyphCluster(textRange = 6..9, glyphRange = 1..1, advanceX = 20f),
+            ),
+            clusters,
+        )
+    }
+
+    @Test
+    fun emojiSequenceShaperExposesTypedFactsForPlannerSequenceKinds() {
+        val text = "\u2764\uFE0F \uD83D\uDC4B\uD83C\uDFFD \uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67 1\uFE0F\u20E3 \uD83C\uDDEB\uD83C\uDDF7 \u270C\uFE0F\uD83C\uDFFF\u200D\uD83D\uDCBB"
+        val request = ShapingRequest(
+            text = text,
+            textRange = text.indices,
+            fontSize = 20f,
+        )
+
+        val method = EmojiSequenceShaper::class.java.getMethod("sequenceFacts", ShapingRequest::class.java)
+        val facts = method.invoke(EmojiSequenceShaper(), request) as List<*>
+
+        fun factField(fact: Any, name: String): Any? =
+            fact::class.java.methods.single { it.name == "get${name.replaceFirstChar(Char::uppercaseChar)}" }.invoke(fact)
+
+        assertEquals(6, facts.size)
+        assertEquals(listOf("0..1", "3..6", "8..15", "17..19", "21..24", "26..32"), facts.map { factField(it as Any, "textRange").toString() })
+        assertEquals(
+            listOf("VariationSelector", "SkinTone", "ZWJ", "Keycap", "Flag", "Unsupported"),
+            facts.map { factField(it as Any, "kind").toString() },
+        )
+        assertEquals(
+            listOf(
+                listOf(0x2764, 0xFE0F),
+                listOf(0x1F44B, 0x1F3FD),
+                listOf(0x1F468, 0x200D, 0x1F469, 0x200D, 0x1F467),
+                listOf(0x31, 0xFE0F, 0x20E3),
+                listOf(0x1F1EB, 0x1F1F7),
+                listOf(0x270C, 0xFE0F, 0x1F3FF, 0x200D, 0x1F4BB),
+            ),
+            facts.map { factField(it as Any, "codePoints") },
+        )
+    }
+
+    @Test
+    fun emojiSequenceShaperKeepsRepresentedSkinToneRoleSequenceAsZwj() {
+        val text = "\uD83D\uDC69\uD83C\uDFFD\u200D\uD83D\uDCBB"
+
+        assertEquals(
+            listOf(
+                EmojiSequenceFact(
+                    textRange = 0..6,
+                    kind = EmojiSequenceKind.ZWJ,
+                    codePoints = listOf(0x1F469, 0x1F3FD, 0x200D, 0x1F4BB),
+                ),
+            ),
+            EmojiSequenceShaper().sequenceFacts(
+                ShapingRequest(
+                    text = text,
+                    textRange = text.indices,
+                    fontSize = 20f,
+                ),
+            ),
         )
     }
 
