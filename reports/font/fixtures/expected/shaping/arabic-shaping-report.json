@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "dumpId": "arabic-shaping-report",
+  "ownerTickets": ["KFONT-M6-007"],
+  "fixtureId": "single-ttf-noto-naskh-arabic",
+  "fixtureFont": "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
+  "cases": [
+    {
+      "caseId": "joining-forms",
+      "status": "positive",
+      "evidence": [
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt"
+      ],
+      "notes": "Vendored Noto Naskh Arabic shapes contextual joining forms and diverges from raw cmap glyph IDs without promoting full Arabic support."
+    },
+    {
+      "caseId": "marks",
+      "status": "positive",
+      "evidence": [
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
+        "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf"
+      ],
+      "requiredDiagnostics": [
+        "text.shaping.gdef-required",
+        "text.shaping.mark-positioning-unavailable"
+      ],
+      "notes": "Vendored Noto Naskh Arabic proves a bounded base-plus-mark case with positioned or zero-advance mark clusters only."
+    },
+    {
+      "caseId": "mixed-bidi-paragraph-required",
+      "status": "refusal",
+      "fixtureText": "reports/font/fixtures/expected/shaping/arabic-mixed-bidi.txt",
+      "requiredDiagnostics": [
+        "text.shaping.paragraph-bidi-required"
+      ],
+      "notes": "Single-run shaping keeps paragraph-owned bidi ordering explicit instead of silently approximating mixed Arabic/LTR layout."
+    }
+  ],
+  "remainingGates": [
+    {
+      "remainingGateId": "lam-alef-positive-evidence",
+      "detail": "Vendored Noto Naskh Arabic does not yet supply a ticket-ready positive lam-alef shaping proof in Kanvas runtime evidence; keep this case explicit until a reviewed Arabic fixture or implementation proof lands."
+    },
+    {
+      "remainingGateId": "cursive-positive-on-vendored-arabic",
+      "detail": "Positive cursive-attachment evidence is still proven only on the bounded reviewed M6-005 fixture family, not yet on the vendored Noto Arabic ticket-local fixture wave."
+    },
+    {
+      "remainingGateId": "arabic-specific-refusal-fixtures-and-codes",
+      "detail": "Dedicated arabic-missing-cursive/arabic-missing-mark fixtures and narrower text.shaping.arabic-* refusal codes remain absent; generic gdef/mark/cursive diagnostics stay separate evidence for now."
+    }
+  ],
+  "nonClaims": [
+    "no-arabic-shaping-support-claim",
+    "no-complex-shaping-support-claim",
+    "no-native-shaper-oracle-claim",
+    "no-cpu-or-gpu-rendering-claim"
+  ]
+}

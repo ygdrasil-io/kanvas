@@ -311,11 +311,15 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
-        "reports/font/fixtures/expected/shaping/arabic-seed-readiness.json"
+        "reports/font/fixtures/expected/shaping/arabic-seed-readiness.json",
+        "reports/font/fixtures/expected/shaping/arabic-mixed-bidi.txt",
+        "reports/font/fixtures/expected/shaping/arabic-shaping-report.json",
+        "reports/pure-kotlin-text/2026-06-18-kfont-m6-007-arabic-shaping-fixtures.md"
       ],
       "requiredEvidenceGates": [
-        "Add Arabic positive and refusal rows for joining forms, lam-alef, marks, cursive attachment, and mixed bidi.",
+        "KFONT-M6-007 now lands bounded Arabic review evidence for joining forms, mark positioning, and mixed-bidi paragraph-required refusal on vendored Noto Naskh Arabic; lam-alef positive evidence, ticket-local positive cursive evidence, Arabic-specific missing-mark/missing-cursive refusal fixtures, and narrower arabic-specific refusal codes remain explicit gates.",
         "Add Devanagari positive and refusal rows for syllable formation, reph, pre-base matra, below-base forms, and mark placement.",
         "Add Thai positive and refusal rows for base+mark clusters, tone marks, mixed Latin/Thai runs, and paragraph-owned dictionary diagnostics.",
         "Add CJK positive and refusal rows for Han, kana, vertical alternates, variation selectors, and paragraph-owned ruby/line-break diagnostics.",
@@ -323,7 +327,8 @@
       ],
       "validationCommands": [
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
-        "rtk ./gradlew --no-daemon :font:text:test"
+        "rtk ./gradlew --no-daemon :font:text:test",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest"
       ],
       "fixtureCommands": [
         "Split complex-script fixtures by script family before any script promotion beyond Latin."

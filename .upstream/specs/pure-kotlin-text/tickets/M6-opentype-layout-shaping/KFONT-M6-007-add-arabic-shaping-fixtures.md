@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-007"
 title: "Add Arabic shaping fixtures"
-status: "proposed"
+status: "review"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
@@ -98,7 +98,8 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*'
 ## Status Notes
 
 - `proposed`: Arabic fixture ticket depends on contextual GSUB, mark/cursive GPOS, feature policy, and bidi runs.
-- Current blocker audit (2026-06-18): `KFONT-M6-006` remains in `review` on absent per-script fixture families, `KFONT-M6-003` remains gated by its own missing contextual fixture family, and the Arabic fixture set `arabic-joining-forms.otf`, `arabic-lam-alef.otf`, `arabic-marks-cursive.otf`, `arabic-mixed-bidi.txt`, `arabic-missing-cursive.otf`, and `arabic-missing-mark.otf` is not present in-repo. Remaining gate is close the contextual dependency, retain the bounded feature-policy slice, then add reviewed Arabic fixture provenance plus expected dumps.
+- `review`: `ArabicShapingFixtureTest` plus the checked-in `arabic-shaping-report.json` now prove bounded vendored-font evidence for contextual joining forms, base-plus-mark positioning, and the single-run `text.shaping.paragraph-bidi-required` refusal on `arabic-mixed-bidi.txt`, all without promoting Arabic or complex shaping support.
+- `review`: This wave intentionally keeps `lam-alef` positive evidence, vendored-font positive cursive-attachment evidence, dedicated `arabic-missing-cursive` / `arabic-missing-mark` refusal fixtures, narrower `text.shaping.arabic-*` diagnostics, and ticket-local `shaping-plan.json` / `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` dump families as explicit remaining gates.
 - Move to `ready` only after fixture fonts and expected dump names are reviewed.
 
 ## Linear Labels

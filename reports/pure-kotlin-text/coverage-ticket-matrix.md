@@ -2857,6 +2857,54 @@ Remaining gate: this is Arabic fixture-row seed evidence only. It does not
 claim Arabic shaping support, Indic/Thai/CJK/emoji shaping support, complete
 complex shaping, native shaper oracle status, CPU oracle evidence, or GPU text
 evidence.
+### KFONT-M6-007: Arabic Shaping Fixture Review Wave
+
+Status: implemented with bounded vendored-font evidence and independently reviewed.
+
+Files:
+
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt`
+- `reports/font/fixtures/expected/shaping/arabic-mixed-bidi.txt`
+- `reports/font/fixtures/expected/shaping/arabic-shaping-report.json`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m6-007-arabic-shaping-fixtures.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-007-add-arabic-shaping-fixtures.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `ArabicShapingFixtureTest` now proves bounded vendored-font evidence for
+  contextual joining forms on `NotoNaskhArabic-Regular.ttf` by asserting the
+  runtime diverges from raw cmap glyph IDs without promoting full Arabic
+  support.
+- The same test proves a bounded `اَ` mark-positioning case with positioned or
+  zero-advance mark clusters and a stable mixed Arabic/LTR
+  `text.shaping.paragraph-bidi-required` refusal sourced from
+  `arabic-mixed-bidi.txt`.
+- `arabic-shaping-report.json` summarizes the fresh positive/refusal rows and
+  keeps `lam-alef`, vendored positive cursive attachment, Arabic-specific
+  missing-mark/missing-cursive fixtures, narrower `text.shaping.arabic-*`
+  refusals, and ticket-local shaping/trace dump families as explicit remaining
+  gates.
+- This wave intentionally keeps `arabic-seed-readiness.json` as the broader
+  seed matrix while attaching reviewed ticket-local evidence only for the
+  bounded rows above.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: `KFONT-M6-007` is still not `done`. Positive `lam-alef`,
+ticket-local positive cursive attachment, Arabic-specific refusal fixtures and
+diagnostic codes, and ticket-local `shaping-plan.json` / `gsub-trace.json` /
+`gpos-trace.json` / `shaped-glyph-run.json` dump families remain explicit
+Arabic shaping gates.
 ### PKT-09A: Paragraph Semantic Layout Dumps And Refusals
 
 Status: implemented and independently reviewed.
