@@ -41,7 +41,7 @@
       "cacheMissCount": 3,
       "evictionCount": 1,
       "atlasCapacityPressureCount": 1,
-      "staleGenerationRefusalCount": 1,
+      "staleGenerationRefusalCount": 0,
       "invalidationTokenChangeCount": 1,
       "cacheMemoryBytes": 352,
       "uploadByteExpectation": 768,
@@ -87,7 +87,7 @@
       "cacheHitCount": 3,
       "cacheMissCount": 0,
       "evictionCount": 0,
-      "atlasCapacityPressureCount": 1,
+      "atlasCapacityPressureCount": 0,
       "staleGenerationRefusalCount": 1,
       "invalidationTokenChangeCount": 1,
       "cacheMemoryBytes": 352,
@@ -116,5 +116,5 @@
     "no-hidden-performance-gate",
     "no-dftext-retirement"
   ],
-  "dumpSha256": "c3cd0c19b2db2141b045300eb55593d9bab143e913c85ea0343b3fa0befd8f7f"
+  "dumpSha256": "8cfff51ee702e905705ae0a65ac6b6e5f7581a0bec6f5b7d0945f271a0dddb05"
 }

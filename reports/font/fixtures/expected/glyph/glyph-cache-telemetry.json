@@ -74,7 +74,7 @@
         {
           "diagnosticCode": "text.glyph.artifact-budget-exceeded",
           "cacheDomain": "glyph-cache-memory",
-          "keyPreimageSha256": "4542f81d0093ede77296070c98d7803cf93b3284bba44e278801ab7f17f9cb2d",
+          "keyPreimageSha256": "a0569c3c8330e5395459871ea90731d0c893889789e12cc26d0595ea09a6c609",
           "observedBytes": 544,
           "advisoryLimitBytes": 512
     
@@ -145,7 +145,7 @@
         {
           "diagnosticCode": "text.glyph.artifact-budget-exceeded",
           "cacheDomain": "atlas-upload-preparation",
-          "keyPreimageSha256": "2fbab17034028d6515931121cbf6a5e8f3b116778b2780fcdfc1e83616933211",
+          "keyPreimageSha256": "26872b4b6102bd9972c496976b9d25892a748d276e4d34511db2a1b2852a0298",
           "observedBytes": 1536,
           "advisoryLimitBytes": 1024
     
@@ -162,5 +162,5 @@
     "no-gpu-upload-execution-claim",
     "no-hidden-performance-gate"
   ],
-  "dumpSha256": "ee97b88f926f5beb34daa26fb1736764a01c7d560b7522653219316f87b83dc4"
+  "dumpSha256": "11e559b6558b921ca01d2fb7a84a0d11dd459366c18d86d6ab687990618dd2d1"
 }

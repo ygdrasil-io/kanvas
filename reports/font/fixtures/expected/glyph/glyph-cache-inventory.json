@@ -58,7 +58,8 @@
   "nonClaims": [
     "no-complete-target-support-claim",
     "no-gpu-text-route-claim",
+    "no-hidden-performance-gate",
     "no-dftext-retirement"
   ],
-  "dumpSha256": "607d93081399316c788f2cd60decc33b9256050d1fedfd848dd0911db7ef5dc2"
+  "dumpSha256": "14ff4313e05de5055a44dc49403156d50c874600da087e112f74bf45461f3a79"
 }

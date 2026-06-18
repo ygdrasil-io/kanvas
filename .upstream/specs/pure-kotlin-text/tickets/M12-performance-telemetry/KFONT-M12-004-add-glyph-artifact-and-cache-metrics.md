@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M12-004"
 title: "Add glyph artifact and cache metrics"
-status: "in-progress"
+status: "review"
 milestone: "M12"
 priority: "P1"
 owner_area: "telemetry"
@@ -118,7 +118,7 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_clai
 ## Status Notes
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- `in-progress`: bounded deterministic dump/data structures plus checked-in fixture evidence are validated and independently reviewed, but wiring a non-test glyph-pipeline producer for these metrics remains the remaining gate before the ticket can close.
+- `review`: bounded deterministic dump/data structures plus checked-in fixture evidence are freshly revalidated and independently re-reviewed, while wiring a non-test glyph-pipeline producer for these metrics remains the remaining gate before the ticket can close.
 
 ## Linear Labels
 

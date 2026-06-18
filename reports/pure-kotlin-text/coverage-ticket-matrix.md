@@ -5051,8 +5051,8 @@ or release-gate claim.
 
 ### KFONT-M12-004: Add glyph artifact and cache metrics
 
-Status: in-progress; bounded deterministic dump/data slice implemented,
-independently reviewed, and runtime producer emission remains open.
+Status: review; bounded deterministic dump/data slice freshly revalidated,
+independently re-reviewed, and runtime producer emission remains open.
 
 Files:
 
@@ -5060,7 +5060,9 @@ Files:
 - `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
 - `reports/font/fixtures/expected/glyph/glyph-artifact-metrics.json`
 - `reports/font/fixtures/expected/glyph/glyph-atlas-occupancy.json`
+- `reports/font/fixtures/expected/glyph/glyph-cache-inventory.json`
 - `reports/font/fixtures/expected/glyph/glyph-cache-metrics.json`
+- `reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json`
 - `reports/font/fixtures/provenance/index.json`
 - `reports/pure-kotlin-text/font-fixture-inventory.json`
 - `reports/pure-kotlin-text/fixture-evidence-manifest.json`
@@ -5074,13 +5076,18 @@ Files:
 Evidence:
 
 - `GlyphSurface.kt` now exposes deterministic `GlyphArtifactMetricsDump`,
-  `GlyphAtlasOccupancyDump`, and `GlyphCacheMetricsDump` data structures with
-  canonical JSON writers and fail-fast occupancy invariants for impossible
-  atlas/capacity states.
+  `GlyphAtlasOccupancyDump`, and `GlyphCacheMetricsDump` data structures plus
+  runtime-sample producers that validate decision-trace route/hash coherence
+  and sample-scoped atlas diagnostics before emitting canonical JSON.
 - `GlyphSurfaceTest.glyphArtifactAndCacheMetricDumpsMatchRepoFixtures()`
-  assembles deterministic cold/warm samples and asserts byte-identical
-  checked-in dumps for route counts, atlas occupancy, and advisory cache
-  metrics while keeping the evidence CPU-only and `dftext`-non-promoting.
+  now assembles deterministic decision traces plus sample-scoped cold/warm
+  atlas diagnostics and asserts byte-identical checked-in dumps for route
+  counts, atlas occupancy, and advisory cache metrics while keeping the
+  evidence CPU-only and `dftext`-non-promoting.
+- `glyph-cache-inventory.json`, `glyph-cache-telemetry.json`, and
+  `glyph-cache-metrics.json` were refreshed so the checked-in cache evidence
+  matches the current stable strike-key hashes, `nonClaims`, and scoped stale
+  generation / atlas-capacity counts.
 - `font-fixture-inventory.json`, `fixture-evidence-manifest.json`,
   `dump-evidence-index.json`, `font-claim-dashboard.json`, and the provenance
   index now register the new glyph metric/occupancy evidence, enforce
@@ -5090,19 +5097,20 @@ Evidence:
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.glyphArtifactAndCacheMetricDumpsMatchRepoFixtures
+rtk ./gradlew --no-daemon :font:glyph:test
 rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py scripts/test_validate_pure_kotlin_text_claim_dashboard.py scripts/test_validate_pure_kotlin_text_font_fixtures.py
 rtk git diff --check
 ```
 
-Review: independent re-review accepted after remediating overclaim wording,
-`nonClaims` coherence, occupancy invariants, and budget-refusal hash
-coherence.
+Review: independent re-review accepted after remediating decision-trace
+route/hash validation, sample-scoped atlas diagnostics, stale cache fixture
+drift, and earlier overclaim / `nonClaims` coherence issues.
 
 Remaining gate: wiring a non-test glyph-pipeline producer that emits these
 metrics remains open. This wave is still CPU-only advisory dump/data evidence;
