@@ -43,11 +43,11 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*' --tests '*De
 - 2026-06-18 bounded fixture closeout: `KFONT-M6-002` and `KFONT-M6-004` now land reviewed synthetic Latin fixtures, provenance, and promoted dumps while retaining separate M6-001 contract-only goldens.
 - `KFONT-M6-002` is `done` on reviewed GSUB fixture provenance plus promoted `gsub-trace.json` / `shaped-glyph-run.json` evidence beyond the current M6-001 contract goldens.
 - `KFONT-M6-004` is `done` on reviewed GPOS fixture provenance plus promoted `gpos-trace.json` / `shaped-glyph-run.json` evidence and layout-contract malformed/refusal diagnostics.
-- `KFONT-M6-006` stays in `review` on per-script shaping fixture families, runtime adoption of `ResolvedFeatureSet`, and explicit `drawString` non-enablement evidence.
+- `KFONT-M6-006` stays in `review` after the bounded runtime `ResolvedFeatureSet` adoption wave; remaining work is per-script shaping fixture families, the remaining GPOS single/mark policy-routing gap, and explicit OpenType-specific `drawString` non-enablement evidence.
 
 ## Current Blockers
 
-- 2026-06-17 audit: `KFONT-M6-006` still depends on absent per-script shaping fixture families from `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`, plus runtime adoption of `ResolvedFeatureSet`.
+- 2026-06-18 audit: `KFONT-M6-006` still depends on absent per-script shaping fixture families from `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`, plus the remaining GPOS single/mark policy-routing gap and OpenType-specific `drawString` evidence gap.
 - 2026-06-18 audit: `KFONT-M6-003`, `KFONT-M6-005`, `KFONT-M6-007`, `KFONT-M6-008`, `KFONT-M6-009`, and `KFONT-M6-010` remain gated by their own named fixture families, required-script rows, or advanced lookup dependencies even after the simple Latin GSUB/GPOS slices moved to `done`.
 
 ## Non-Claims
