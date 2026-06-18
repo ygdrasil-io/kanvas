@@ -32,6 +32,7 @@ REQUIRED_DUMPS = {
     "glyph-atlas-lifecycle",
     "glyph-strike-key",
     "latin-gsub-gpos-goldens",
+    "line-breaks",
     "malformed-sfnt-fixtures",
     "paragraph-input-goldens",
     "paragraph-layout-result",

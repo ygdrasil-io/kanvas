@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M8-003"
 title: "Implement UAX #14 line breaker"
-status: "proposed"
+status: "done"
 milestone: "M8"
 priority: "P0"
 owner_area: "paragraph"
@@ -66,11 +66,11 @@ interface Uax14LineBreaker {
 
 ## Acceptance Criteria
 
-- [ ] `line-breaks.json` records mandatory, allowed, and prohibited break positions for hard newlines, spaces, punctuation, CJK text, combining marks, and emoji clusters.
-- [ ] No line break is emitted inside a grapheme cluster.
-- [ ] Soft-wrap disabled mode still records hard breaks but suppresses optional wrapping opportunities for line fitting.
-- [ ] Unsupported locale-specific refinement emits `text.paragraph.locale-break-refinement-unavailable` with locale and range.
-- [ ] Repeated runs with the same Unicode data version and input produce identical break maps.
+- [x] `line-breaks.json` records mandatory, allowed, and prohibited break positions for hard newlines, spaces, punctuation, CJK text, combining marks, and emoji clusters.
+- [x] No line break is emitted inside a grapheme cluster.
+- [x] Soft-wrap disabled mode still records hard breaks but suppresses optional wrapping opportunities for line fitting.
+- [x] Unsupported locale-specific refinement emits `text.paragraph.locale-break-refinement-unavailable` with locale and range.
+- [x] Repeated runs with the same Unicode data version and input produce identical break maps.
 
 ## Required Evidence
 
@@ -94,13 +94,18 @@ interface Uax14LineBreaker {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test --tests '*LineBreak*'
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphLineBreakingTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.simpleLineBreakerFallsBackToCurrentClusterBoundaryWhenNoSoftBreakFits --tests org.graphiks.kanvas.text.TextStackSurfaceTest.simpleLineBreakerKeepsSurrogatePairRangesIntactWhenWidthIsZero --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineDoesNotDuplicateEmojiWhenLineBreakerOverflowsSingleCluster --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutMergesLineBreakDiagnosticsIntoResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenLineBreakUnicodeDataIsUnavailable
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 ```
 
 ## Status Notes
 
-- `proposed`: Blocks reliable wrapping, ellipsis, selection, and placeholder line placement.
-- Move to `ready` only after the dump schema and locale-refinement diagnostic names are accepted.
+- `done`: `DefaultUax14LineBreaker` now emits deterministic `LineBreakMap` evidence for hard breaks, spaces, punctuation, CJK no-space ranges, combining marks, emoji ZWJ clusters, mixed LTR/RTL text, and a locale-refinement-limited Thai case in `line-breaks.json`.
+- `done`: width-constrained fitting now falls back to the current grapheme-cluster boundary when no optional soft break fits, which keeps surrogate pairs and emoji clusters intact instead of swallowing or duplicating adjacent text.
+- `done`: `ParagraphStyle.softWrap` is now part of the paragraph input contract, `BasicParagraphLayoutEngine` propagates paragraph-owned line-break diagnostics into `ParagraphLayoutResult`, and missing Unicode line-break data refuses layout through `text.paragraph.line-break-data-unavailable` instead of silently falling back.
+- Remaining non-claims stay explicit by design: this ticket does not claim complete UAX #14 conformance, dictionary-based Thai/Lao/Khmer segmentation, bidi visual line ordering, ellipsis insertion, hit testing, selection geometry, placeholder layout, CPU oracle parity, or GPU text support.
 
 ## Linear Labels
 

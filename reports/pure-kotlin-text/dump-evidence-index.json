@@ -1725,6 +1725,40 @@
       ]
     },
     {
+      "dumpId": "line-breaks",
+      "ownerTicket": "KFONT-M8-003",
+      "classification": "producer-only",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Output Contracts"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphLineBreaking.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphLineBreakingTest.kt",
+        "reports/font/fixtures/expected/paragraph/line-breaks.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion",
+        "unicodeVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphLineBreakingTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutMergesLineBreakDiagnosticsIntoResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenLineBreakUnicodeDataIsUnavailable",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Line-break dump changes require reviewed break-opportunity diffs, locale-refinement diagnostic review, deterministic inputHash review, and explicit non-claim preservation without complete UAX #14 or paragraph support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-uax14-claim",
+        "no-complete-paragraph-layout-claim",
+        "no-skia-paragraph-parity-claim"
+      ]
+    },
+    {
       "dumpId": "malformed-sfnt-fixtures",
       "ownerTicket": "KFONT-M2-005",
       "classification": "producer-only",

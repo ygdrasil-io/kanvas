@@ -246,6 +246,7 @@ public enum class PlaceholderBaseline {
 public data class ParagraphStyle(
     public val textAlign: TextAlign = TextAlign.START,
     public val textDirection: TextDirection = TextDirection.AUTO,
+    public val softWrap: Boolean = true,
     public val maxLines: Int? = null,
     public val ellipsis: String? = null,
     public val ellipsisPolicy: EllipsisPolicy = if (ellipsis == null) EllipsisPolicy.NONE else EllipsisPolicy.END,
@@ -418,11 +419,26 @@ public class BasicParagraphLayoutEngine(
             )
         }
 
+        val lineBreakDiagnostics = mutableListOf<ParagraphLayoutDiagnostic>()
+        if (lineBreaker is Uax14LineBreaker) {
+            val lineBreakMap = lineBreaker.analyze(paragraph)
+            lineBreakDiagnostics += lineBreakMap.diagnostics
+            if (lineBreakMap.diagnostics.any { diagnostic -> diagnostic.severity == "refusal" }) {
+                return ParagraphLayoutResult(
+                    paragraph = paragraph,
+                    maxWidth = maxWidth,
+                    diagnostics = lineBreakMap.diagnostics.sortedWith(paragraphDiagnosticOrdering()),
+                    layoutRefused = true,
+                )
+            }
+        }
+
         val brokenRanges = lineBreaker.breakLines(paragraph, maxWidth)
         val maxLines = paragraph.paragraphStyle.maxLines
         val visibleRanges = if (maxLines == null) brokenRanges else brokenRanges.take(maxLines)
         val didOverflowHeight = maxLines != null && brokenRanges.size > visibleRanges.size
         val diagnostics = mutableListOf<ParagraphLayoutDiagnostic>()
+        diagnostics += lineBreakDiagnostics
         val shapingPlan = shapingSegmenter.segment(paragraph)
         diagnostics += shapingPlan.diagnostics
         if (didOverflowHeight && paragraph.paragraphStyle.ellipsis != null) {
@@ -630,74 +646,18 @@ public interface LineBreaker {
 }
 
 /**
- * Deterministic whitespace line breaker for early paragraph layout.
- *
- * This breaker is not a Unicode Line Breaking Algorithm (UAX #14)
- * implementation. It treats `\n` as a hard break, prefers soft breaks at ASCII
- * spaces, skips spaces consumed as break separators, and estimates character
- * width from the active [TextStyle.fontSize]. Inline placeholders use their
- * [PlaceholderStyle.width] when the current UTF-16 index is mapped as a
- * placeholder range. It walks UTF-16 text by basic clusters: surrogate pairs
- * are kept intact, combining marks and default-ignorable format/variation
- * characters attach to the preceding code point, and a single oversized cluster
- * is emitted whole. The breaker returns inclusive UTF-16 ranges and omits the
- * newline or separator space that caused a break.
+ * Default paragraph line-break surface backed by the bounded UAX #14 implementation.
  */
-public class SimpleLineBreaker : LineBreaker {
+public class SimpleLineBreaker : Uax14LineBreaker {
+    private val delegate: Uax14LineBreaker = DefaultUax14LineBreaker()
+
+    override fun analyze(paragraph: Paragraph): LineBreakMap = delegate.analyze(paragraph)
+
     /**
      * Breaks [paragraph] into greedy line ranges constrained by finite, non-negative [maxWidth].
      */
     override fun breakLines(paragraph: Paragraph, maxWidth: Float): List<IntRange> {
-        requireValidMaxWidth(maxWidth)
-        val text = paragraph.text
-        if (text.isEmpty()) return emptyList()
-
-        val ranges = mutableListOf<IntRange>()
-        var lineStart = 0
-        while (lineStart < text.length) {
-            while (lineStart < text.length && text[lineStart] == ' ') lineStart += 1
-            if (lineStart >= text.length) break
-            if (text[lineStart] == '\n') {
-                lineStart += 1
-                continue
-            }
-
-            var width = 0f
-            var index = lineStart
-            var lastSoftBreakEnd = -1
-            var emitted = false
-            while (index < text.length && !emitted) {
-                val cluster = text.clusterRangeAt(index)
-                val char = text[index]
-                if (char == '\n') {
-                    if (index > lineStart) ranges += lineStart until index
-                    lineStart = index + 1
-                    emitted = true
-                    continue
-                }
-
-                val nextWidth = width + paragraph.estimatedWidth(cluster)
-                if (nextWidth > maxWidth && index > lineStart) {
-                    val lineEnd = if (char == ' ') index - 1 else lastSoftBreakEnd.takeIf { it >= lineStart } ?: index - 1
-                    ranges += lineStart..lineEnd
-                    lineStart = lineEnd + 1
-                    while (lineStart < text.length && text[lineStart] == ' ') lineStart += 1
-                    emitted = true
-                    continue
-                }
-
-                width = nextWidth
-                if (char == ' ' && index > lineStart) lastSoftBreakEnd = index - 1
-                index = cluster.last + 1
-            }
-
-            if (!emitted) {
-                if (lineStart < text.length) ranges += lineStart until text.length
-                lineStart = text.length
-            }
-        }
-
-        return ranges
+        return delegate.breakLines(paragraph, maxWidth)
     }
 }
 
@@ -1014,6 +974,8 @@ private fun ParagraphStyle.toDumpJson(): String = buildString {
         .append(paragraphJsonString(textAlign.serializedName))
         .append(", \"textDirection\": ")
         .append(paragraphJsonString(textDirection.serializedName))
+        .append(", \"softWrap\": ")
+        .append(softWrap)
         .append(", \"maxLines\": ")
         .append(maxLines?.toString() ?: "null")
         .append(", \"ellipsis\": ")

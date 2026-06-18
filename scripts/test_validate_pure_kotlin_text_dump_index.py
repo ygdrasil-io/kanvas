@@ -88,6 +88,7 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
                 "gpos-trace",
                 "gsub-trace",
                 "latin-gsub-gpos-goldens",
+                "line-breaks",
                 "malformed-sfnt-fixtures",
                 "opentype-layout-contract-gpos-trace",
                 "opentype-layout-contract-gsub-trace",
