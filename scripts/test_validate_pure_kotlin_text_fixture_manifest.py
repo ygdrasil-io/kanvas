@@ -51,14 +51,20 @@ class PureKotlinTextFixtureManifestTest(unittest.TestCase):
         self.assertEqual(sorted(family_ids), family_ids)
         self.assertEqual(
             {
+                "a8-outline-rasterization",
                 "a8-sdf-artifacts",
                 "bidi-run-segmentation",
                 "cff-cff2-scaler",
+                "cluster-safety",
                 "color-glyphs",
                 "complex-script-fixture-matrix",
                 "emoji",
+                "fallback-segmentation",
+                "font-fallback-trace",
                 "font-source-sfnt",
                 "font-source-system-scan",
+                "font-telemetry-schema",
+                "glyph-artifact-plan",
                 "glyph-strike-key",
                 "gpu-handoff",
                 "latin-gsub-gpos-fixtures",

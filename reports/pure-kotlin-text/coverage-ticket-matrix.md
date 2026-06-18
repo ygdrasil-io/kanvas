@@ -50,7 +50,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | PKT-04 TrueType `glyf` and variation evidence | Implementable now | Simple/composite outlines, component transforms, variation metadata and metrics dumps. | `font/scaler/src/main`, `font/scaler/src/test`. | Path hashes, bounds, variation delta fixtures. |
 | PKT-05 CFF/CFF2 vertical | Tracked-gap; generated fixture parser/scaler/operator/table/variation-store slices implemented | CFF INDEX/dicts/Type 2 operators/CFF2 variation. | `font/scaler/src/main`, `font/scaler/src/test`. | Generated CFF/CFF2 tables now expose typed INDEX/DICT evidence, stable parse refusals, and minimal CFF2 VariationStore region lookup; complete support still needs broader real-font corpus coverage. |
 | PKT-06 Unicode data and script matrix seed | Implementable now | Pinned Unicode version surface, basic segmentation/bidi/script dumps. | `font/text/src/main/.../shaping`, `font/text/src/test`. | Script/bidi/grapheme tests and explicit unsupported-script diagnostics. |
-| PKT-07 GSUB/GPOS simple script shaping | Partially implementable; bounded GSUB/GPOS simple slices in review | Latin/Greek/Cyrillic/Hebrew defaults, features, clusters, fallback runs. | `font/text`, `font/sfnt`. | Requires parsed layout table fixtures and feature ordering evidence. |
+| PKT-07 GSUB/GPOS simple script shaping | Partially implementable; bounded GSUB/GPOS fixture slices are done and the script-policy slice remains in review | Latin/Greek/Cyrillic/Hebrew defaults, features, clusters, fallback runs. | `font/text`, `font/sfnt`. | Requires parsed layout table fixtures and feature ordering evidence. |
 | PKT-08 complex shaping rows | Dependency-gated | Arabic, Devanagari, Thai, CJK, emoji shaping support/refusals. | `font/text`. | Requires PKT-07 and per-row positive/refusal fixtures. |
 | PKT-09 paragraph semantic layout | Partially implementable; full claim gated | Rich styles, bidi visual lines, placeholders, ellipsis, selection, hit testing. | `font/text/src/main/.../paragraph`, `font/text/src/test`. | Layout dumps; full claim waits on shaping/fallback support. |
 | PKT-10 A8/SDF glyph artifact planner | Implementable now | Route policy, key preimage, A8/SDF generation, atlas capacity/stale diagnostics. | `font/glyph`, `font/gpu-api`. | Mask/SDF hashes, atlas dump tests, stable `text.glyph.*` refusals. |
@@ -86,15 +86,15 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
   `.upstream/specs/gpu-renderer/09-draw-family-support-matrix.md` until pure
   Kotlin text artifacts, route diagnostics, GPU renderer registry support,
   WGSL/binding evidence, and GPU evidence are promoted.
-- 2026-06-16 KFONT M6 blocker audit: after draft PRs `#1705`, `#1706`, and
-  `#1707`, the remaining M6 shaping tickets are not actionnable without the
-  missing contextual GSUB, mark/cursive GPOS, Arabic, Devanagari, Thai/CJK,
-  and advanced lookup fixture families named in their tickets. This audit is
-  coordination evidence only and does not promote any shaping support claim.
+- 2026-06-16 KFONT M6 blocker audit is now historical coordination evidence:
+  `KFONT-M6-002`, `KFONT-M6-004`, and `KFONT-M6-005` are since closed out on
+  reviewed fixture evidence, while `KFONT-M6-006` remains in `review` pending
+  per-script fixture families and explicit OpenType-specific `drawString`
+  non-enablement evidence.
 
 ### KFONT-M6 Remaining Blocker Audit
 
-Status: coordination-only blocker audit; no support promotion.
+Status: historical coordination-only blocker audit; superseded by later M6 fixture closeout and runtime-adoption waves.
 
 Files:
 
@@ -108,16 +108,16 @@ Files:
 
 Evidence:
 
-- Draft PR `#1706` is the current bounded GSUB simple prerequisite for
-  `KFONT-M6-003`.
-- Draft PR `#1705` is the current bounded GPOS prerequisite for
-  `KFONT-M6-005` and part of the gate for `KFONT-M6-009` and `KFONT-M6-010`.
-- Draft PR `#1707` is the current script-feature-policy prerequisite for
-  `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`.
-- The named fixture families for `KFONT-M6-003`, `KFONT-M6-005`,
-  `KFONT-M6-007`, `KFONT-M6-008`, `KFONT-M6-009`, and `KFONT-M6-010` are not
-  present in-repo beyond ticket text references, so those tickets must not be
-  advanced by synthetic-only substitutes.
+- `KFONT-M6-002`, `KFONT-M6-004`, and `KFONT-M6-005` are now closed out on
+  reviewed fixture provenance and promoted dump evidence, so they no longer
+  block resumption by merge/adopt status.
+- `KFONT-M6-006` remains the only M6 slice still in `review`; its remaining
+  gates are per-script shaping fixture families and explicit OpenType-specific
+  `drawString` non-enablement evidence.
+- The named fixture families for `KFONT-M6-003`, `KFONT-M6-007`,
+  `KFONT-M6-008`, `KFONT-M6-009`, and `KFONT-M6-010` are still not present
+  in-repo beyond ticket text references, so those tickets must not be advanced
+  by synthetic-only substitutes.
 - `KFONT-M6-010` also remains gated by `KFONT-M4-005`, which is still
   `proposed` in the current ticket catalog.
 
@@ -127,9 +127,9 @@ Validation:
 rtk git diff --check
 ```
 
-Remaining gate: merge or adopt the bounded prerequisite PRs, then add the
-reviewed fixture provenance and expected dumps named by each blocked ticket
-before resuming implementation work.
+Remaining gate: treat this audit as historical context only; current resumption
+work depends on the explicit fixture families and remaining ticket-local gates
+named in the active M6 tickets.
 
 ## Checkpoint Evidence
 
@@ -2439,8 +2439,10 @@ Validation:
 ```bash
 rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserExposesParsedGsubSingleMultipleAndLigatureLookupsInLayout
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesParsedGsubSingleMultipleAndLigatureLookups --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineRespectsDisabledParsedGsubLigatureFeature
-rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.m6SimpleLayoutFixturesAreCheckedInWithSyntheticProvenance
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.m6PromotedShapingDumpsAreFixtureBackedRatherThanContractOnly
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubFixtureFontsFromRepo
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gsubTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns
 rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
@@ -2558,9 +2560,12 @@ Evidence:
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.m6SimpleLayoutFixturesAreCheckedInWithSyntheticProvenance
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.m6PromotedShapingDumpsAreFixtureBackedRatherThanContractOnly
-rtk ./gradlew --no-daemon :font:text:test --tests '*GposPair*' --tests '*Kerning*'
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGposFixtureFontsFromRepo
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedMarkAndCursiveGposFixtureFontsFromRepo
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGposFixtureFontsFromRepo
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedMarkAndCursiveFixtureFontsFromRepo
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gposTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns
 rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
@@ -2570,6 +2575,64 @@ Remaining gate: no remaining ticket-local gate. Mark/cursive positioning,
 required-script rows, and any broader shaping support promotion remain separate
 tickets and non-claims.
 
+### KFONT-M6-005: Mark/Cursive GPOS Positioning
+
+Status: done with bounded fixture evidence and independent review corrections applied.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/font/fixtures/expected/shaping/gpos-trace.json`
+- `reports/font/fixtures/expected/shaping/shaped-glyph-run.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m6-005-mark-cursive-positioning.md`
+
+Evidence:
+
+- `font/sfnt` now parses bounded GDEF glyph classes plus GPOS LookupType 3/4/5/6
+  facts needed by the checked-in mark/cursive fixtures, including the
+  malformed-anchor refusal path and the missing-GDEF fixture facts.
+- `BasicOpenTypeShapingEngine` now applies bounded mark-to-base,
+  mark-to-mark, and cursive attachment offsets while keeping diagnostics
+  stable for missing GDEF and malformed lookup data; ambiguous
+  multi-component ligature matches now refuse explicitly instead of silently
+  selecting a component, the reviewed mono-codepoint ligature fixture remains
+  refusal-only until unique component-mapping evidence exists, and unrelated
+  GSUB runs keep their original cluster grouping even when the typeface
+  exposes mark/cursive lookups.
+- Reviewed fixture provenance is now checked in for
+  `gpos-mark-to-base.otf`, `gpos-mark-to-ligature.otf`,
+  `gpos-mark-to-mark.otf`, `gpos-cursive-attachment.otf`,
+  `gpos-missing-gdef.otf`, and `gpos-anchor-malformed.otf`.
+- `SFNTSurfaceTest` now asserts deterministic parser extraction for the checked-in
+  positive mark/cursive fonts, keeps the reviewed cursive fixture usable for
+  attachment evidence, and surfaces refusal evidence for missing GDEF,
+  malformed anchors, and the bounded `kern` pair-overflow diagnostic that the
+  same cursive fixture also carries.
+- `TextStackSurfaceTest` now asserts fixture-backed glyph IDs, bounded advances,
+  offsets, and stable refusal diagnostics for the new mark/cursive slice.
+- `gpos-trace.json` and the shared `shaped-glyph-run.json` now record bounded
+  mark/cursive evidence, glyph classes, cursive chain links, and refusal
+  diagnostics without broadening Arabic shaping claims or inventing a
+  ligature-component choice the reviewed fixture cannot prove.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedMarkAndCursiveGposFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserPreservesMissingGdefAndMalformedAnchorFixtureFacts
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedMarkAndCursiveFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineReportsReviewedMarkAndCursiveFixtureDiagnosticsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gposTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapingKeepsReviewedGsubClustersWhenTypefaceHasUnmatchedMarkLookups --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineRefusesAmbiguousLigatureComponentAttachments --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineRefusesAmbiguousSingleCodePointLigatureComponentAttachments --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineDoesNotReportUnavailableWhenCursiveMatchHasZeroAdvanceDelta --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineReportsRtlCursiveAttachmentFailuresWithLogicalTextRange
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+```
+
+Remaining gate: no remaining ticket-local gate. This bounded slice does not
+claim Arabic shaping support, contextual GSUB/GPOS support, variation/device-table
+support, native shaper parity, CPU oracle parity, or GPU evidence.
 ### KFONT-M6-006: Script-Specific Default Feature Policy Slice
 
 Status: review; independent audit confirmed this remains a bounded contract-layer slice with runtime/fixture gates still open.
@@ -2599,18 +2662,24 @@ Evidence:
 - `ResolvedFeatureSet` now serializes `requested`, `enabled`, `disabled`,
   `defaulted`, and `unsupported` feature facts, and `shaping-plan.json` records
   a deterministic `languageSystem` value.
-- `BasicOpenTypeShapingEngine` now resolves per-run feature policy before GSUB
-  and pair-kerning gating, so unsupported discretionary requests no longer
-  execute from a raw positive `FeatureSet` entry alone while scripts without a
-  policy row keep their legacy enable-unless-disabled fallback.
+- `BasicOpenTypeShapingEngine` now resolves per-run feature policy before GSUB,
+  the bounded `kern`-routed GPOS single subset, GPOS anchor lookup, and pair-kerning gating, so unsupported discretionary
+  requests no longer execute from a raw positive `FeatureSet` entry alone while
+  scripts without a policy row keep their legacy enable-unless-disabled
+  fallback.
+- The Arabic policy row now includes `curs`, so bounded cursive attachment
+  support no longer depends on the raw request-feature fallback that previously
+  bypassed the resolved policy.
 - The checked-in `feature-policy-matrix.json` pins script-family to
   OpenType-tag mappings, required defaults, optional features, and refusal
   dependencies without promoting support claims.
 - Contract goldens now prove that unsupported discretionary requests can
   diagnose while leaving simple-script defaults explicit at the plan layer.
-- `SkFontTest` now adds a bounded compatibility-path guard that `drawString`
-  forwards raw text to the typeface path builder, but this does not yet promote
-  the OpenType-specific `drawString` gate beyond `review`.
+- `SkFontTest` keeps a bounded compatibility-path guard that `drawString`
+  forwards raw text to the typeface path builder, and `OpenTypeFontTest` now
+  proves on a synthetic facade font embedding the reviewed `GSUB` ligature
+  bytes plus a matching `cmap` that portable OpenType `drawString("fi")`
+  remains distinct from the ligature target glyph path.
 - `dump-evidence-index.json`, `fixture-evidence-manifest.json`, and
   `font-claim-dashboard.json` now track the policy matrix as deterministic
   evidence with `claimPromotionAllowed=false`.
@@ -2619,8 +2688,11 @@ Validation:
 
 ```bash
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineSkipsParsedGsubLookupWhenFeatureIsUnsupportedForScriptPolicy
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineSkipsGposSingleAdjustmentsWhenFeatureIsUnsupportedForScriptPolicy
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineSkipsUnsupportedCursiveLookupsForScriptPolicy
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEnginePreservesLegacyFeatureDefaultsForScriptsWithoutPolicy
 rtk ./gradlew --no-daemon :kanvas-skia:test --tests org.skia.foundation.SkFontTest.drawString\ forwards\ raw\ text\ to\ typeface\ path\ builder\ without\ implicit\ shaping
+rtk ./gradlew --no-daemon :kanvas-skia:test --tests org.skia.foundation.opentype.OpenTypeFontTest.drawString\ keeps\ portable\ OpenType\ ligature\ codepoint\ distinct\ from\ raw\ fi\ text
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.OpenTypeLayoutEngineContractTest
 rtk ./gradlew --no-daemon :font:text:test
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
@@ -2628,13 +2700,14 @@ rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 ```
 
+- Independent review verdict: `ACCEPT`; follow-up narrowed wording from
+  broad “GPOS single adjustment” to the precise bounded `kern`-routed
+  GPOS single subset to avoid over-claiming parser/runtime coverage.
+
 Remaining gate: per-script shaping fixture families from `KFONT-M6-007`,
-`KFONT-M6-008`, and `KFONT-M6-009` are still absent, the remaining GPOS
-single/mark policy-routing work is not yet covered by runtime evidence, and
-the OpenType-specific `drawString` compatibility path still lacks explicit
-complex-feature non-enablement evidence. Keep this ticket in `review` until
-those gates land beyond the current contract-level `shaping-plan.json`
-evidence.
+`KFONT-M6-008`, and `KFONT-M6-009` are still absent. Keep this ticket in
+`review` until those gates land beyond the current contract-level
+`shaping-plan.json` evidence.
 
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 

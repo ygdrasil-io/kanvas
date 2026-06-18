@@ -78,8 +78,9 @@ data class ResolvedFeatureSet(
 - `RequiredScriptFeaturePolicies` now defines explicit policy rows for Latin, Greek, Cyrillic, Hebrew, Arabic, Devanagari, Thai, CJK, and Emoji.
 - The contract-level `ResolvedFeatureSet` now serializes `requested`, `enabled`, `disabled`, `defaulted`, `unsupported`, and a deterministic language-system choice through `shaping-plan.json`.
 - `feature-policy-matrix.json` is now checked in and tracked by the dump index, fixture manifest, and claim dashboard without support promotion.
-- The runtime `BasicOpenTypeShapingEngine` now resolves per-run script policy before GSUB and pair-kerning gating, while preserving legacy enable-unless-disabled behavior for scripts that still have no explicit policy row.
-- `SkFontTest` now adds a bounded compatibility-path guard that `drawString` forwards raw text to the typeface path builder, but this wave does not yet close the OpenType-specific `drawString` evidence gate.
+- The runtime `BasicOpenTypeShapingEngine` now resolves per-run script policy before GSUB, the bounded `kern`-routed GPOS single subset, GPOS anchor lookup, and pair-kerning gating, while preserving legacy enable-unless-disabled behavior for scripts that still have no explicit policy row.
+- The Arabic policy row now names `curs` explicitly so cursive attachment defaults no longer arrive only through a raw request-feature fallback.
+- `SkFontTest` keeps the bounded compatibility-path guard that `drawString` forwards raw text to the typeface path builder, and `OpenTypeFontTest` now adds explicit portable OpenType evidence on a synthetic facade font that embeds the reviewed `GSUB` ligature bytes plus a matching `cmap`, proving the `drawString` compatibility path keeps raw `"fi"` text distinct from the ligature target glyph.
 - This slice does not yet prove per-script positive/refusal shaping fixture families beyond the contract layer.
 
 ## Required Evidence
@@ -115,7 +116,7 @@ rtk ./gradlew --no-daemon :font:text:test
 ## Status Notes
 
 - `proposed`: Policy ticket depends on script itemization and the M6 shaping contract.
-- `review`: Contract-level feature policy rows, shaping-plan serialization, and bounded runtime GSUB/pair-kerning policy gating are implemented and freshly validated. Remaining gate: land the per-script shaping fixture families owned by `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`, finish the remaining GPOS single/mark policy-routing work, and attach OpenType-specific `drawString` non-enablement evidence before `done`.
+- `review`: Contract-level feature policy rows, shaping-plan serialization, bounded runtime GSUB/`kern`-routed-GPOS-single/GPOS-anchor/pair-kerning policy gating, and portable OpenType `drawString` non-enablement evidence are implemented and freshly validated. Remaining gate: land the per-script shaping fixture families owned by `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009` before `done`.
 - Move to `ready` only after the matrix row feature sets are reviewed.
 
 ## Linear Labels

@@ -457,7 +457,7 @@ fun gsubLigatureTable(): ByteArray {
     table.writeUInt16(subtableStart + 10, 4)
     table.writeUInt16(subtableStart + 12, 42)
     table.writeUInt16(subtableStart + 14, 2)
-    table.writeUInt16(subtableStart + 16, 8)
+    table.writeUInt16(subtableStart + 16, 10)
     table.writeUInt16(subtableStart + 18, 1)
     table.writeUInt16(subtableStart + 20, 1)
     table.writeUInt16(subtableStart + 22, 7)
@@ -686,7 +686,7 @@ val fixtures = linkedMapOf(
         cmapSegments = listOf(testFormat4Segment(startCode = 0x0066, endCode = 0x0069, startGlyphId = 7)),
         numGlyphs = 64,
         layoutTag = "GSUB",
-        layoutTable = gsubLigatureTable().also { it.writeUInt16(70, 3) },
+        layoutTable = gsubLigatureTable().also { it.writeUInt16(70, 1) },
     ),
     "gpos-single-adjustment.otf" to baseFont(
         family = "KFONT GPOS Single",
@@ -711,10 +711,11 @@ val fixtures = linkedMapOf(
     ),
     "gpos-valueformat-malformed.otf" to baseFont(
         family = "KFONT GPOS Bad Value",
-        cmapSegments = listOf(testFormat4Segment(startCode = 0x0041, endCode = 0x0041, startGlyphId = 7)),
+        cmapSegments = listOf(testFormat4Segment(startCode = 0x0041, endCode = 0x0056, startGlyphId = 7)),
         numGlyphs = 32,
         layoutTag = "GPOS",
-        layoutTable = gposSingleAdjustmentFormat1Table(glyphId = 7, xPlacement = 40, yPlacement = -20, xAdvance = -30, valueFormat = 0x0080),
+        layoutTable = gposPairAdjustmentFormat1Table(leftGlyphId = 7, rightGlyphId = 11, xAdvance = -55)
+            .also { it.writeUInt16(60, 0x03ff) },
     ),
     "gpos-pair-out-of-range.otf" to baseFont(
         family = "KFONT GPOS Pair OOR",
