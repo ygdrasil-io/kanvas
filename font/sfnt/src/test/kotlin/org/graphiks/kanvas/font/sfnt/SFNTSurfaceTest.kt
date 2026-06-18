@@ -2722,6 +2722,85 @@ class SFNTSurfaceTest {
     }
 
     @Test
+    fun defaultOpenTypeFaceParserLoadsReviewedGsubFixtureFontsFromRepo() {
+        val parser = DefaultOpenTypeFaceParser()
+        val cases = listOf(
+            ReviewedGsubFixtureCase(
+                relativePath = "reports/font/fixtures/fonts/shaping/gsub-single-substitution.otf",
+                expected = OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubSingleSubstitutionLookup(
+                            featureTag = "ccmp",
+                            substitutions = listOf(
+                                OpenTypeGsubSingleSubstitution(inputGlyphId = 5, replacementGlyphId = 15),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            ReviewedGsubFixtureCase(
+                relativePath = "reports/font/fixtures/fonts/shaping/gsub-multiple-substitution.otf",
+                expected = OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubMultipleSubstitutionLookup(
+                            featureTag = "ccmp",
+                            substitutions = listOf(
+                                OpenTypeGsubMultipleSubstitution(inputGlyphId = 6, replacementGlyphIds = listOf(16, 17)),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            ReviewedGsubFixtureCase(
+                relativePath = "reports/font/fixtures/fonts/shaping/gsub-ligature-fi.otf",
+                expected = OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubLigatureSubstitutionLookup(
+                            featureTag = "liga",
+                            substitutions = listOf(
+                                OpenTypeGsubLigatureSubstitution(inputGlyphIds = listOf(7, 10), replacementGlyphId = 42),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        cases.forEach { case ->
+            val parsed = parser.parse(fixtureFontSource(case.relativePath))
+
+            assertEquals(emptyList(), parsed.diagnostics, case.relativePath)
+            assertEquals(case.expected, parsed.layout.gsub, case.relativePath)
+            assertTrue(parsed.rawTables.containsKey(SFNTTableTag("GSUB")), case.relativePath)
+        }
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserReportsReviewedMalformedGsubFixtureFontsAsDiagnostics() {
+        val parser = DefaultOpenTypeFaceParser()
+
+        val malformedCoverage = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gsub-coverage-malformed.otf"),
+        )
+        val malformedLigature = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gsub-ligature-bad-component.otf"),
+        )
+
+        assertEquals("font.sfnt.optional-table-malformed", malformedCoverage.diagnostics.single().causeCode)
+        assertTrue(
+            malformedCoverage.diagnostics.single().causeMessage.orEmpty().contains("OpenType GSUB coverage format"),
+            malformedCoverage.diagnostics.single().toString(),
+        )
+        assertEquals(null, malformedCoverage.layout.gsub)
+        assertEquals("font.sfnt.optional-table-malformed", malformedLigature.diagnostics.single().causeCode)
+        assertTrue(
+            malformedLigature.diagnostics.single().causeMessage.orEmpty().contains("compCount"),
+            malformedLigature.diagnostics.single().toString(),
+        )
+        assertEquals(null, malformedLigature.layout.gsub)
+    }
+
+    @Test
     fun defaultOpenTypeFaceParserLoadsReviewedGsubContextFixtureFontsFromRepo() {
         val parser = DefaultOpenTypeFaceParser()
 
@@ -3284,6 +3363,31 @@ class SFNTSurfaceTest {
     }
 
     @Test
+    fun defaultOpenTypeFaceParserReportsReviewedMalformedGposFixtureFontsAsDiagnostics() {
+        val parser = DefaultOpenTypeFaceParser()
+
+        val malformedValueFormat = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-valueformat-malformed.otf"),
+        )
+        val malformedPairRecords = parser.parse(
+            fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-pair-out-of-range.otf"),
+        )
+
+        assertEquals("font.sfnt.optional-table-malformed", malformedValueFormat.diagnostics.single().causeCode)
+        assertTrue(
+            malformedValueFormat.diagnostics.single().causeMessage.orEmpty().contains("PairSet 0 records"),
+            malformedValueFormat.diagnostics.single().toString(),
+        )
+        assertEquals(null, malformedValueFormat.layout.gposSingles)
+        assertEquals("font.sfnt.optional-table-malformed", malformedPairRecords.diagnostics.single().causeCode)
+        assertTrue(
+            malformedPairRecords.diagnostics.single().causeMessage.orEmpty().contains("pairSetCount"),
+            malformedPairRecords.diagnostics.single().toString(),
+        )
+        assertEquals(null, malformedPairRecords.layout.gposPairs)
+    }
+
+    @Test
     fun defaultOpenTypeFaceParserReportsMalformedKernTablesAsDiagnostics() {
         val malformedKern = kernTable(
             kernFormat0Subtable(
@@ -3393,6 +3497,11 @@ class SFNTSurfaceTest {
         val languageId: Int,
         val nameId: Int,
         val bytes: ByteArray,
+    )
+
+    private data class ReviewedGsubFixtureCase(
+        val relativePath: String,
+        val expected: OpenTypeGsubTable,
     )
 
     private fun testNameRecord(

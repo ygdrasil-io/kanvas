@@ -2274,7 +2274,7 @@ class TextStackSurfaceTest {
         assertEquals(
             listOf(
                 ShapedGlyphRun(
-                    glyphIds = listOf(101),
+                    glyphIds = listOf(15),
                     clusters = listOf(GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 20f)),
                     advanceX = 20f,
                     script = "Latn",
@@ -2294,7 +2294,7 @@ class TextStackSurfaceTest {
         assertEquals(
             listOf(
                 ShapedGlyphRun(
-                    glyphIds = listOf(101, 102),
+                    glyphIds = listOf(16, 17),
                     clusters = listOf(GlyphCluster(textRange = 0..0, glyphRange = 0..1, advanceX = 20f)),
                     advanceX = 20f,
                     script = "Latn",
@@ -2314,7 +2314,7 @@ class TextStackSurfaceTest {
         assertEquals(
             listOf(
                 ShapedGlyphRun(
-                    glyphIds = listOf(103),
+                    glyphIds = listOf(42),
                     clusters = listOf(GlyphCluster(textRange = 0..1, glyphRange = 0..0, advanceX = 20f)),
                     advanceX = 20f,
                     script = "Latn",
