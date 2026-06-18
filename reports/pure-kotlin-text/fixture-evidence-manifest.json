@@ -207,13 +207,11 @@
         "section": "Clusters"
       },
       "currentEvidencePaths": [
-        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/GraphemeSegmentation.kt",
-        "font/text/src/test/kotlin/org/graphiks/kanvas/text/GraphemeSegmentationTest.kt",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ClusterSafetyReport.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ClusterSafetyTest.kt",
         "reports/font/fixtures/expected/unicode/cluster-arabic-mark.txt",
-        "reports/font/fixtures/expected/unicode/cluster-cjk-ideographic-variation-sequence.txt",
-        "reports/font/fixtures/expected/unicode/cluster-cjk-standardized-variant.txt",
+        "reports/font/fixtures/expected/unicode/cluster-cjk-ivs-mixed-kana.txt",
+        "reports/font/fixtures/expected/unicode/cluster-cjk-ivs-supplementary.txt",
         "reports/font/fixtures/expected/unicode/cluster-cjk-variation-selector.txt",
         "reports/font/fixtures/expected/unicode/cluster-devanagari-conjunct.txt",
         "reports/font/fixtures/expected/unicode/cluster-emoji-family-zwj.txt",
@@ -226,7 +224,7 @@
         "reports/font/fixtures/expected/unicode/bidi-runs.json",
         "reports/font/fixtures/expected/unicode/script-runs.json",
         "reports/font/fixtures/expected/unicode/unicode-segments.json",
-        "reports/pure-kotlin-text/2026-06-17-kfont-m5-005-cluster-safety.md",
+        "reports/pure-kotlin-text/2026-06-18-kfont-m5-005-cluster-safety.md",
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "reports/pure-kotlin-text/dump-evidence-index.json"
       ],

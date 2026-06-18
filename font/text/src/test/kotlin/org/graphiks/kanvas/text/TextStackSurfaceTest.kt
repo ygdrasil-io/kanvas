@@ -1441,6 +1441,13 @@ class TextStackSurfaceTest {
             relativePath = "reports/font/fixtures/fonts/shaping/gsub-multiple-substitution.otf",
         )
         val typefaceId = multiple.typefaceId
+        val inputGlyphId = requireNotNull(multiple.cmap.lookupGlyphId('b'.code))
+        val replacementGlyphIds = requireNotNull(multiple.gsub)
+            .lookups
+            .filterIsInstance<OpenTypeGsubMultipleSubstitutionLookup>()
+            .flatMap(OpenTypeGsubMultipleSubstitutionLookup::substitutions)
+            .single { substitution -> substitution.inputGlyphId == inputGlyphId }
+            .replacementGlyphIds
         val engine = BasicOpenTypeShapingEngine(
             glyphMapper = CMapGlyphMapper(cmapsByTypefaceId = mapOf(typefaceId to multiple.cmap)),
             gsubTablesByTypefaceId = mapOf(typefaceId to requireNotNull(multiple.gsub)),
@@ -1477,7 +1484,7 @@ class TextStackSurfaceTest {
         assertEquals(
             listOf(
                 ShapedGlyphRun(
-                    glyphIds = listOf(101, 102),
+                    glyphIds = replacementGlyphIds,
                     clusters = listOf(GlyphCluster(textRange = 0..0, glyphRange = 0..1, advanceX = 20f)),
                     advanceX = 20f,
                     script = "Latn",
@@ -1573,21 +1580,31 @@ class TextStackSurfaceTest {
 
     @Test
     fun basicOpenTypeShapingEngineRefusesAmbiguousLigatureComponentAttachments() {
-        val ligature = parsedFixtureFace(
-            uuid = "550e8400-e29b-41d4-a716-446655440630",
-            relativePath = "reports/font/fixtures/fonts/shaping/gsub-ligature-fi.otf",
-        )
-        val typefaceId = ligature.typefaceId
-        val fGlyphId = requireNotNull(ligature.cmap.lookupGlyphId('f'.code))
-        val iGlyphId = requireNotNull(ligature.cmap.lookupGlyphId('i'.code))
-        val ligatureGlyphId = 103
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440630"))
+        val fGlyphId = 71
+        val iGlyphId = 72
+        val ligatureGlyphId = 703
         val engine = BasicOpenTypeShapingEngine(
             glyphMapper = mapGlyphs(
                 'f'.code to fGlyphId,
                 'i'.code to iGlyphId,
                 'y'.code to 611,
             ),
-            gsubTablesByTypefaceId = mapOf(typefaceId to requireNotNull(ligature.gsub)),
+            gsubTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubLigatureSubstitutionLookup(
+                            featureTag = "liga",
+                            substitutions = listOf(
+                                OpenTypeGsubLigatureSubstitution(
+                                    inputGlyphIds = listOf(fGlyphId, iGlyphId),
+                                    replacementGlyphId = ligatureGlyphId,
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
             gdefTablesByTypefaceId = mapOf(
                 typefaceId to OpenTypeGdefTable(
                     glyphClasses = mapOf(
