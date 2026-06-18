@@ -206,6 +206,18 @@ class SkFontTest {
         assertTrue(b > a + 30, "translate must shift glyph by ~45 pixels (got $a → $b)")
     }
 
+    @Test
+    fun `drawString forwards raw text to typeface path builder without implicit shaping`() {
+        val typeface = RecordingTypeface()
+        val bm = SkBitmap(32, 16)
+        bm.eraseColor(0xFFFFFFFF.toInt())
+        val canvas = SkCanvas(bm)
+
+        canvas.drawString("fi", 2f, 10f, SkFont(typeface, 12f), SkPaint(0xFF000000.toInt()))
+
+        assertEquals(listOf("fi"), typeface.requestedTexts)
+    }
+
     // ---------- T1: ToolUtils helpers --------------------------------------
 
     @Test
@@ -335,5 +347,24 @@ class SkFontTest {
     @Test
     fun `DefaultPortableTypeface is OpenType backed`() {
         assertTrue(ToolUtils.DefaultPortableTypeface() is OpenTypeTypeface)
+    }
+
+    private class RecordingTypeface : SkTypeface() {
+        val requestedTexts = mutableListOf<String>()
+
+        override fun makeTextPath(
+            text: String,
+            x: Float,
+            y: Float,
+            size: Float,
+            scaleX: Float,
+            skewX: Float,
+            isSubpixel: Boolean,
+        ): SkPath? {
+            requestedTexts += text
+            return SkPathBuilder()
+                .addRect(SkRect.MakeLTRB(x, y - size, x + text.length * scaleX, y))
+                .detach()
+        }
     }
 }
