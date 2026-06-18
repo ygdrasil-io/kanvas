@@ -61,6 +61,9 @@ import org.graphiks.kanvas.font.sfnt.OpenTypeKernTable
 import org.graphiks.kanvas.text.paragraph.HitTestResult
 import org.graphiks.kanvas.text.paragraph.BasicParagraphLayoutEngine
 import org.graphiks.kanvas.text.paragraph.DefaultParagraphShapingSegmenter
+import org.graphiks.kanvas.text.paragraph.DefaultUax14LineBreaker
+import org.graphiks.kanvas.text.paragraph.LINE_BREAK_DATA_UNAVAILABLE_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.paragraph.LINE_BREAK_LOCALE_REFINEMENT_UNAVAILABLE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.LineBreaker
 import org.graphiks.kanvas.text.paragraph.LineLayout
 import org.graphiks.kanvas.text.paragraph.LineMetrics
@@ -255,10 +258,10 @@ class TextStackSurfaceTest {
               "input": {
                 "schema": "kanvas.paragraph.input.v1",
                 "unicodeVersion": "16.0.0",
-                "inputHash": "7f497d3e3f7e110e11f6cb7efd28419214a6aa44d93eb24ae7e04713a95e8a11",
+                "inputHash": "69c1a606071eb6233145666e603e36aa73beb26a2f737cd9a7542ad825e34b3f",
                 "text": "aa bb c",
                 "textLength": 7,
-                "paragraphStyle": {"textAlign": "start", "textDirection": "ltr", "maxLines": null, "ellipsis": null, "ellipsisPolicy": "none", "lineHeight": null, "textHeightBehavior": "font-metrics", "defaultLocale": null},
+                "paragraphStyle": {"textAlign": "start", "textDirection": "ltr", "softWrap": true, "maxLines": null, "ellipsis": null, "ellipsisPolicy": "none", "lineHeight": null, "textHeightBehavior": "font-metrics", "defaultLocale": null},
                 "styleRuns": [
                   {"range": "0..6", "fontFamilies": [], "fallbackPreference": "system-default", "typefaceId": null, "fontSize": 10.0, "fontWeight": 400, "fontWidth": 5, "fontSlant": "upright", "syntheticStylePolicy": "allow", "locale": "en-US", "scriptHint": null, "features": [], "variationCoordinates": [], "palette": null, "colorRgba": "000000ff", "decoration": null, "letterSpacing": 0.0, "wordSpacing": 0.0, "heightMultiplier": null}
                 ],
@@ -335,6 +338,42 @@ class TextStackSurfaceTest {
         )
         assertTrue(result.dump().contains("\"code\": \"text.shaping.fallback-missing\""))
         assertTrue(result.dump().contains("\"textRange\": \"0..0\""))
+    }
+
+    @Test
+    fun paragraphLayoutMergesLineBreakDiagnosticsIntoResultDump() {
+        val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
+        val paragraph = ParagraphBuilder(
+            ParagraphStyle(defaultLocale = "th"),
+        ).append("a\u0301 ไทย", TextStyle(fontSize = 10f, locale = "th")).build()
+
+        val result = layoutEngine.layout(paragraph, maxWidth = 80f)
+
+        assertFalse(result.layoutRefused)
+        assertTrue(result.diagnostics.any { it.code == LINE_BREAK_LOCALE_REFINEMENT_UNAVAILABLE_DIAGNOSTIC_CODE })
+        assertTrue(result.dump().contains("\"code\": \"$LINE_BREAK_LOCALE_REFINEMENT_UNAVAILABLE_DIAGNOSTIC_CODE\""))
+    }
+
+    @Test
+    fun paragraphLayoutRefusesWhenLineBreakUnicodeDataIsUnavailable() {
+        val shapingEngine = RecordingShapingEngine()
+        val layoutEngine = BasicParagraphLayoutEngine(
+            shapingEngine,
+            lineBreaker = DefaultUax14LineBreaker(unicodeDataSet = null),
+        )
+        val paragraph = ParagraphBuilder()
+            .append("alpha beta", TextStyle(fontSize = 10f))
+            .build()
+
+        val result = layoutEngine.layout(paragraph, maxWidth = 50f)
+
+        assertTrue(result.layoutRefused)
+        assertTrue(result.lines.isEmpty())
+        assertTrue(shapingEngine.requests.isEmpty())
+        assertEquals(
+            listOf(LINE_BREAK_DATA_UNAVAILABLE_DIAGNOSTIC_CODE),
+            result.diagnostics.map { it.code },
+        )
     }
 
     @Test
@@ -525,6 +564,17 @@ class TextStackSurfaceTest {
         val ranges = SimpleLineBreaker().breakLines(paragraph, maxWidth = 0f)
 
         assertEquals(listOf(0..0, 1..2, 3..3), ranges)
+    }
+
+    @Test
+    fun simpleLineBreakerFallsBackToCurrentClusterBoundaryWhenNoSoftBreakFits() {
+        val paragraph = ParagraphBuilder()
+            .append("ab", TextStyle(fontSize = 10f))
+            .build()
+
+        val ranges = SimpleLineBreaker().breakLines(paragraph, maxWidth = 15f)
+
+        assertEquals(listOf(0..0, 1..1), ranges)
     }
 
     @Test

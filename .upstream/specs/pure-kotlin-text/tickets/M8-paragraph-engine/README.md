@@ -21,7 +21,7 @@ M5 supplies Unicode grapheme, bidi, script, and line-break data. M6 supplies sha
 |---|---|---|---|---|---|---|
 | [KFONT-M8-001 - Expand `TextStyle` and paragraph style contracts](KFONT-M8-001-expand-textstyle-and-paragraph-style-contracts.md) | `done` | `P0` | `tracked-gap` | `paragraph` | `KFONT-M5-001`, `KFONT-M6-001` | - |
 | [KFONT-M8-002 - Implement multi-style shaping segmentation](KFONT-M8-002-implement-multi-style-shaping-segmentation.md) | `done` | `P0` | `tracked-gap` | `paragraph` | `KFONT-M8-001`, `KFONT-M6-001`, `KFONT-M7-003` | - |
-| [KFONT-M8-003 - Implement UAX #14 line breaker](KFONT-M8-003-implement-uax-14-line-breaker.md) | `proposed` | `P0` | `tracked-gap` | `paragraph` | `KFONT-M5-001`, `KFONT-M8-002` | - |
+| [KFONT-M8-003 - Implement UAX #14 line breaker](KFONT-M8-003-implement-uax-14-line-breaker.md) | `done` | `P0` | `tracked-gap` | `paragraph` | `KFONT-M5-001`, `KFONT-M8-002` | - |
 | [KFONT-M8-004 - Implement ellipsis and max-lines policy](KFONT-M8-004-implement-ellipsis-and-max-lines-policy.md) | `proposed` | `P1` | `tracked-gap` | `paragraph` | `KFONT-M8-002`, `KFONT-M8-003` | - |
 | [KFONT-M8-005 - Implement selection and hit-test maps](KFONT-M8-005-implement-selection-and-hit-test-maps.md) | `proposed` | `P1` | `tracked-gap` | `paragraph` | `KFONT-M8-002`, `KFONT-M8-003` | - |
 | [KFONT-M8-006 - Implement placeholder layout metrics](KFONT-M8-006-implement-placeholder-layout-metrics.md) | `proposed` | `P1` | `tracked-gap` | `paragraph` | `KFONT-M8-001`, `KFONT-M8-003` | - |
@@ -39,7 +39,8 @@ Required evidence for this milestone includes `paragraph-input.json`, `paragraph
 
 - `KFONT-M8-001` is `done` with deterministic paragraph input contract evidence only: rich style fields, placeholder metadata, input hashing, Unicode version pinning, and bounded refusal diagnostics are now checked in without promoting downstream layout or rendering claims.
 - `KFONT-M8-002` is `done` with deterministic `paragraph-shaping-requests.json` evidence, cluster-boundary widening diagnostics, fallback-unresolved refusals, and paragraph layout segment references only; line breaking, ellipsis policy, hit testing/selection, and placeholder layout metrics remain separate gates.
-- `KFONT-M8-003` through `KFONT-M8-006` remain the active gates for UAX #14 line breaking, ellipsis policy, hit testing/selection, and placeholder layout metrics.
+- `KFONT-M8-003` is `done` with deterministic `line-breaks.json` evidence, `softWrap` contract hashing, paragraph layout line-break diagnostics, and refusal-on-missing-Unicode-data behavior only; complete UAX #14 conformance and dictionary-based refinement remain explicit non-claims.
+- `KFONT-M8-004` through `KFONT-M8-006` remain the active gates for ellipsis policy, hit testing/selection, and placeholder layout metrics.
 
 ## Non-Claims
 
