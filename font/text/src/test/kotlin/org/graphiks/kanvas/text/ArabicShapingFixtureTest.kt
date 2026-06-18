@@ -23,6 +23,7 @@ import org.graphiks.kanvas.font.sfnt.OpenTypeGsubTable
 import org.graphiks.kanvas.text.shaping.BasicOpenTypeShapingEngine
 import org.graphiks.kanvas.text.shaping.CMapGlyphMapper
 import org.graphiks.kanvas.text.shaping.ShapingRequest
+import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_PARAGRAPH_BIDI_REQUIRED_DIAGNOSTIC_CODE
 
 class ArabicShapingFixtureTest {
@@ -103,9 +104,10 @@ class ArabicShapingFixtureTest {
 
         assertEquals(emptyList(), result.diagnostics)
         assertEquals(1, result.glyphRuns.size)
+        assertEquals(2, shapedRun.glyphIds.size)
         assertTrue(
-            shapedRun.glyphIds.size < rawVisualOrderGlyphIds.size || shapedRun.glyphIds != rawVisualOrderGlyphIds,
-            "Arabic lam-alef bounded runtime check should prove more than RTL reordering of the raw cmap glyph sequence.",
+            shapedRun.glyphIds.zip(rawVisualOrderGlyphIds).all { (shapedGlyphId, rawGlyphId) -> shapedGlyphId != rawGlyphId },
+            "Arabic lam-alef bounded runtime check should prove both visual-order component glyph IDs change beyond pure RTL reordering without closing the ticket-local ligature gate.",
         )
     }
 
@@ -132,6 +134,28 @@ class ArabicShapingFixtureTest {
     }
 
     @Test
+    fun basicOpenTypeShapingEngineEmitsReviewedGenericGdefRequiredDiagnosticForArabicBasePlusMarkFixture() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440706",
+            relativePath = "reports/font/fixtures/fonts/shaping/gpos-missing-gdef.otf",
+        )
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = "\u0627\u064E",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(1, result.glyphRuns.size)
+        assertEquals(
+            listOf(TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE),
+            result.diagnostics.map { it.code },
+        )
+        assertEquals(listOf(20f, 20f), result.glyphRuns.single().clusters.map { it.advanceX })
+    }
+
+    @Test
     fun arabicShapingReportGoldenExistsAndTracksFixtureWave() {
         val report = readJsonProjectFile("reports/font/fixtures/expected/shaping/arabic-shaping-report.json")
         val cases = report.requiredObjectList("cases")
@@ -141,16 +165,25 @@ class ArabicShapingFixtureTest {
         assertEquals(listOf("KFONT-M6-007"), report.requiredStringList("ownerTickets"))
         assertEquals("single-ttf-noto-naskh-arabic", report.requiredString("fixtureId"))
         assertEquals(
-            listOf("joining-forms", "marks", "mixed-bidi-paragraph-required"),
+            listOf("joining-forms", "marks", "missing-mark-gdef-required", "mixed-bidi-paragraph-required"),
             cases.map { it.requiredString("caseId") },
         )
         assertEquals("positive", cases[0].requiredString("status"))
         assertEquals("positive", cases[1].requiredString("status"))
         assertEquals("diagnostic", cases[2].requiredString("status"))
+        assertEquals("diagnostic", cases[3].requiredString("status"))
         assertEquals(null, cases[1]["requiredDiagnostics"])
         assertEquals(
-            listOf(TEXT_SHAPING_PARAGRAPH_BIDI_REQUIRED_DIAGNOSTIC_CODE),
+            listOf(TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE),
             cases[2].requiredStringList("requiredDiagnostics"),
+        )
+        assertEquals(
+            "reports/font/fixtures/fonts/shaping/gpos-missing-gdef.otf",
+            cases[2].requiredString("fixtureFont"),
+        )
+        assertEquals(
+            listOf(TEXT_SHAPING_PARAGRAPH_BIDI_REQUIRED_DIAGNOSTIC_CODE),
+            cases[3].requiredStringList("requiredDiagnostics"),
         )
         assertEquals(
             listOf(

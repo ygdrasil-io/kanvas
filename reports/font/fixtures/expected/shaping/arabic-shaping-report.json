@@ -23,6 +23,15 @@
       "notes": "Vendored Noto Naskh Arabic proves a bounded base-plus-mark case by tying the positioning or zero-advance check to the mark cluster itself."
     },
     {
+      "caseId": "missing-mark-gdef-required",
+      "status": "diagnostic",
+      "fixtureFont": "reports/font/fixtures/fonts/shaping/gpos-missing-gdef.otf",
+      "requiredDiagnostics": [
+        "text.shaping.gdef-required"
+      ],
+      "notes": "Reviewed repo fixture gpos-missing-gdef.otf keeps Arabic base-plus-mark input on the stable generic gdef-required refusal path instead of approximating mark attachment without glyph classification data."
+    },
+    {
       "caseId": "mixed-bidi-paragraph-required",
       "status": "diagnostic",
       "fixtureText": "reports/font/fixtures/expected/shaping/arabic-mixed-bidi.txt",
@@ -35,7 +44,7 @@
   "remainingGates": [
     {
       "remainingGateId": "lam-alef-positive-evidence",
-      "detail": "Vendored Noto Naskh Arabic now has a bounded runtime check for logical text \\u0644\\u0627 changing away from the raw visual-order cmap sequence, but this wave still does not prove a ticket-ready lam-alef ligature/feature-local positive row; keep the explicit lam-alef gate open until reviewed ligature evidence lands."
+      "detail": "Vendored Noto Naskh Arabic still has only a bounded runtime check for logical text \\u0644\\u0627 changing away from the raw visual-order cmap pair; this wave does not yet prove a feature-local lam-alef positive row."
     },
     {
       "remainingGateId": "cursive-positive-on-vendored-arabic",
@@ -43,7 +52,7 @@
     },
     {
       "remainingGateId": "arabic-specific-refusal-fixtures-and-codes",
-      "detail": "Dedicated arabic-missing-cursive/arabic-missing-mark fixtures and narrower text.shaping.arabic-* refusal codes remain absent; generic gdef/mark/cursive diagnostics stay separate evidence for now."
+      "detail": "Dedicated arabic-missing-cursive/arabic-missing-mark fixtures and narrower text.shaping.arabic-* refusal codes remain absent; the reviewed generic gdef-required row is bounded evidence only and does not replace those Arabic-specific refusal assets."
     }
   ],
   "nonClaims": [

@@ -102,8 +102,8 @@ rtk git diff --check
 ## Status Notes
 
 - `proposed`: Arabic fixture ticket depends on contextual GSUB, mark/cursive GPOS, feature policy, and bidi runs.
-- `review`: `ArabicShapingFixtureTest` plus the checked-in `arabic-shaping-report.json` now prove bounded vendored-font evidence for joining-form behavior beyond pure RTL reordering, base-plus-mark positioning on the mark cluster itself, and the single-run `text.shaping.paragraph-bidi-required` diagnostic on `arabic-mixed-bidi.txt`, while a bounded `lam-alef` runtime check only proves divergence from the raw visual-order `cmap` sequence and does not yet close the ticket-local ligature gate.
-- `review`: This wave intentionally keeps `lam-alef` positive evidence, vendored-font positive cursive-attachment evidence, dedicated `arabic-missing-cursive` / `arabic-missing-mark` refusal fixtures, narrower `text.shaping.arabic-*` diagnostics, and ticket-local `shaping-plan.json` / `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` dump families as explicit remaining gates.
+- `review`: `ArabicShapingFixtureTest` plus the checked-in `arabic-shaping-report.json` now prove bounded vendored-font evidence for joining-form behavior beyond pure RTL reordering, base-plus-mark positioning on the mark cluster itself, a reviewed generic `text.shaping.gdef-required` refusal row on `gpos-missing-gdef.otf` for Arabic base+mark input, and the single-run `text.shaping.paragraph-bidi-required` diagnostic on `arabic-mixed-bidi.txt`, while `lam-alef` still has only a bounded runtime divergence check.
+- `review`: This wave intentionally keeps explicit `lam-alef` positive evidence, vendored-font positive cursive-attachment evidence, dedicated `arabic-missing-cursive` / `arabic-missing-mark` refusal fixtures, narrower `text.shaping.arabic-*` diagnostics, and ticket-local `shaping-plan.json` / `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` dump families as explicit remaining gates.
 - Move to `ready` only after fixture fonts and expected dump names are reviewed.
 
 ## Linear Labels

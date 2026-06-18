@@ -22,20 +22,25 @@ promoting Arabic shaping support:
 - `ArabicShapingFixtureTest` proves that vendored `NotoNaskhArabic-Regular.ttf`
   no longer stays on the raw visual-order `cmap` glyph sequence for the `سلام`
   joining-forms case.
-- The same test now adds a bounded non-promotional `لا` lam-alef runtime
-  check by asserting that shaping does not stay on the raw visual-order
-  two-glyph `cmap` sequence, while keeping the ticket-local positive ligature
-  gate explicit.
+- The same test now keeps a bounded non-promotional `لا` lam-alef runtime check
+  by asserting that both visual-order component glyph IDs change away from the
+  raw `cmap` pair, without treating that divergence as ticket-local positive
+  lam-alef evidence.
 - The same test proves a bounded `اَ` mark-positioning case by tying the
   positioned-or-zero-advance check to the mark cluster itself on the vendored
   font.
+- The same test also proves that reviewed repo fixture
+  `gpos-missing-gdef.otf` emits the stable generic
+  `text.shaping.gdef-required` refusal for Arabic base+mark input instead of
+  approximating mark attachment without GDEF glyph classes.
 - `arabic-mixed-bidi.txt` plus `ArabicShapingFixtureTest` prove the stable
   `text.shaping.paragraph-bidi-required` diagnostic for mixed Arabic/LTR text
   shaped without paragraph context while still returning shaped output.
 - `arabic-shaping-report.json` records these bounded rows against fixture
-  `single-ttf-noto-naskh-arabic` and keeps `lam-alef`, vendored positive
-  cursive attachment, and Arabic-specific refusal fixtures/codes as explicit
-  remaining gates.
+  `single-ttf-noto-naskh-arabic`, attaches the reviewed generic missing-mark
+  refusal row, and keeps explicit `lam-alef`, vendored positive cursive
+  attachment, and Arabic-specific refusal fixtures/codes as explicit remaining
+  gates.
 
 ## Validation
 
@@ -57,10 +62,10 @@ rtk git diff --check
 
 ## Remaining Gate
 
+- Positive `lam-alef` evidence remains missing as a ticket-ready
+  feature-local/trace-backed proof on the current ticket-local evidence wave.
 - Positive vendored-font `cursive attachment` evidence remains separate from
   the bounded M6-005 reviewed cursive fixtures.
-- Positive `lam-alef` evidence remains missing as a ticket-ready ligature/trace
-  proof on the current ticket-local evidence wave.
 - Dedicated `arabic-missing-cursive.otf` / `arabic-missing-mark.otf` fixtures,
   narrower `text.shaping.arabic-*` refusals, and ticket-local
   `shaping-plan.json` / `gsub-trace.json` / `gpos-trace.json` /

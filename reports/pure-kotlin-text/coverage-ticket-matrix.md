@@ -2877,16 +2877,21 @@ Evidence:
   joining-form behavior on `NotoNaskhArabic-Regular.ttf` by asserting the
   runtime diverges from the raw visual-order cmap glyph sequence without
   promoting full Arabic support.
-- The same test now adds a bounded non-promotional `لا` lam-alef runtime check
-  by asserting that shaping does not stay on the raw visual-order cmap glyph
-  sequence, while keeping the ticket-local ligature gate explicit.
+- The same test now keeps a bounded non-promotional `لا` lam-alef runtime check
+  by asserting that both visual-order component glyph IDs change away from the
+  raw visual-order cmap pair without treating that divergence as ticket-local
+  positive lam-alef evidence.
 - The same test proves a bounded `اَ` mark-positioning case by tying the
   positioned-or-zero-advance check to the mark cluster itself, plus a stable
   mixed Arabic/LTR `text.shaping.paragraph-bidi-required` diagnostic sourced
   from `arabic-mixed-bidi.txt`.
+- The same test also proves that reviewed repo fixture `gpos-missing-gdef.otf`
+  emits the stable generic `text.shaping.gdef-required` refusal for Arabic
+  base+mark input instead of approximating mark attachment without GDEF glyph
+  classes.
 - `arabic-shaping-report.json` summarizes the fresh positive/diagnostic rows and
-  keeps `lam-alef`, vendored positive cursive attachment, Arabic-specific
-  missing-mark/missing-cursive fixtures, narrower `text.shaping.arabic-*`
+  keeps explicit `lam-alef`, vendored positive cursive attachment,
+  Arabic-specific missing-mark/missing-cursive fixtures, narrower `text.shaping.arabic-*`
   refusals, and ticket-local shaping/trace dump families as explicit
   remaining gates.
 - This wave intentionally keeps `arabic-seed-readiness.json` as the broader
@@ -2904,8 +2909,8 @@ rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk git diff --check
 ```
 
-Remaining gate: `KFONT-M6-007` is still not `done`. Positive `lam-alef`,
-ticket-local positive cursive attachment, Arabic-specific refusal fixtures and
+Remaining gate: `KFONT-M6-007` is still not `done`. Explicit `lam-alef`
+positive evidence, ticket-local positive cursive attachment, Arabic-specific refusal fixtures and
 diagnostic codes, and ticket-local `shaping-plan.json` / `gsub-trace.json` /
 `gpos-trace.json` / `shaped-glyph-run.json` dump families remain explicit
 Arabic shaping gates.
