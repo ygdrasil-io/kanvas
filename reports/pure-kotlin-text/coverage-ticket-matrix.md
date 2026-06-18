@@ -4321,9 +4321,10 @@ Evidence:
   refusal with explicit `expectedGpuHandoffArtifactType` and route-scoped
   non-claims.
 - Dump index, fixture manifest, and font fixture inventory now point at the new
-  bitmap plan dump as `tracked-gap` CPU-side evidence only; promotion remains
-  blocked on M11 GPU texture/upload/sampling proof and the milestone-wide
-  color/emoji fixture convergence gate owned by `KFONT-M10-010`.
+  bitmap plan dump as `tracked-gap` CPU-side evidence only; the later
+  `KFONT-M10-010` convergence manifest now links that dump to reviewed legacy
+  gates, while M11 GPU texture/upload/sampling proof remains the blocking
+  renderer-evidence gate.
 
 Validation:
 
@@ -4678,8 +4679,9 @@ Evidence:
   color-glyph-unavailable, and
   unsupported-sequence cases.
 - Dump index, fixture manifest, and font fixture inventory now classify emoji
-  route tracing as `tracked-gap` CPU-side evidence only, keeping
-  `scaledemoji`, `KFONT-M10-010`, and M11 GPU route proof explicit.
+  route tracing as `tracked-gap` CPU-side evidence only; the later
+  `KFONT-M10-010` convergence manifest links it to reviewed legacy-gate
+  coverage while `scaledemoji` and M11 GPU route proof remain explicit.
 
 Validation:
 
@@ -4697,8 +4699,64 @@ rtk git diff --check
 Remaining gate: this is CPU-side emoji route-planning evidence only. It does
 not claim complete emoji shaping support, complete color-glyph fallback
 support, platform emoji-engine parity, GPU emoji route support, or retirement
-of `scaledemoji`. `KFONT-M10-010` still owns the milestone-wide color/emoji
-fixture-manifest convergence gate.
+of `scaledemoji`. The convergence manifest now exists; remaining promotion
+work is CPU oracle plus M11 renderer-route/GPU evidence.
+
+### KFONT-M10-010: Add color/emoji fixture manifest
+
+Status: done; freshly validated.
+
+Files:
+
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m10-010-color-emoji-fixture-manifest.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M10-color-fonts-emoji/KFONT-M10-010-add-color-emoji-fixture-manifest.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M10-color-fonts-emoji/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `color-emoji-fixture-manifest.json` converges the checked-in `color-glyphs`,
+  `png-bitmap-glyphs`, `svg-glyphs`, and `emoji` fixture families into one
+  deterministic manifest with reviewed fixture IDs, expected dump files,
+  expected diagnostics, provenance notes, source hashes where applicable, and
+  explicit `gpuEvidenceRequired` policy.
+- The manifest records deterministic body SHA-256 facts for
+  `color-glyph-plan.json`, `color-glyph-composite-plan.json`,
+  `colrv1-paint-graph.json`, `colrv1-fixture-manifest.json`,
+  `bitmap-glyph-plan.json`, `svg-glyph-plan.json`,
+  `svg-glyph-fixture-manifest.json`, `emoji-route-trace.json`, and
+  `color-svg-emoji-goldens.json`.
+- Legacy gate coverage now maps `coloremoji_blendmodes` to
+  `color-glyphs`/`emoji`, `scaledemoji` to `emoji`, and
+  `scaledemoji_rendering` to `emoji`/`png-bitmap-glyphs`/`svg-glyphs`, while
+  keeping every row blocked on M11 renderer-route and GPU evidence.
+- Dump index, fixture manifest, claim dashboard, and provenance index now link
+  the convergence dump without promoting any GPU or platform fallback claim.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.colorEmojiFixtureManifestConvergesM10FamiliesLegacyGatesAndRemainingGpuEvidence
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk git diff --check
+```
+
+Remaining gate: this is fixture/evidence convergence only. It does not claim
+GPU color glyph, bitmap, SVG, or emoji route execution. Remaining promotion
+work is CPU oracle evidence plus M11 renderer-route/GPU proof for the legacy
+gates `coloremoji_blendmodes`, `scaledemoji`, and `scaledemoji_rendering`.
 ### PKT-11L: Emoji VS Skin-Tone ZWJ Fixture Evidence
 
 Status: implemented; independent review pending because the current tool policy

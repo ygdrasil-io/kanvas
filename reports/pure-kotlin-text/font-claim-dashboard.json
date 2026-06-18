@@ -302,7 +302,8 @@
       "evidence": {
         "fixtureProvenance": [],
         "deterministicDumps": [
-          "reports/pure-kotlin-text/dump-evidence-index.json"
+          "reports/pure-kotlin-text/dump-evidence-index.json",
+          "reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json"
         ],
         "cpuOracle": [],
         "gpuArtifacts": [],
@@ -314,8 +315,8 @@
         ]
       },
       "requiredEvidenceGates": [
-        "Deliver color glyph plans, emoji sequence route traces, fallback facts, CPU oracle evidence, and GPU artifact evidence when GPU is claimed.",
-        "Split COLR, bitmap, SVG, fallback, and shaping blockers instead of using emoji supported."
+        "KFONT-M10-010 now converges COLR, bitmap, SVG, and emoji fixture families into one reviewed manifest with provenance, expected diagnostics, and legacy-gate mapping; keep CPU oracle evidence and M11 renderer-route evidence separate before any support promotion.",
+        "Split remaining COLR, bitmap, SVG, fallback, shaping, CPU oracle, and GPU execution blockers instead of using emoji supported."
       ],
       "legacyGates": [
         "coloremoji_blendmodes",

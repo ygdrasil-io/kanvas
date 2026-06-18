@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M10-010"
 title: "Add color/emoji fixture manifest"
-status: "proposed"
+status: "done"
 milestone: "M10"
 priority: "P0"
 owner_area: "color"
@@ -61,17 +61,17 @@ data class ColorEmojiFixtureManifestEntry(
 
 ## Acceptance Criteria
 
-- [ ] The manifest covers every M10 ticket family and links each fixture to expected dump files.
-- [ ] Fixture provenance, license notes, source hashes, and generated recipes are present for every entry.
-- [ ] Legacy gates `scaledemoji`, `scaledemoji_rendering`, and `coloremoji_blendmodes` are mapped to specific fixtures and remaining evidence.
-- [ ] GPU-required rows remain blocked until M11 evidence is linked.
-- [ ] Rebaseline updates require reviewed old/new expectation diffs and cannot auto-overwrite goldens.
+- [x] The manifest covers every M10 ticket family and links each fixture to expected dump files.
+- [x] Fixture provenance, license notes, source hashes, and generated recipes are present for every entry.
+- [x] Legacy gates `scaledemoji`, `scaledemoji_rendering`, and `coloremoji_blendmodes` are mapped to specific fixtures and remaining evidence.
+- [x] GPU-required rows remain blocked until M11 evidence is linked.
+- [x] Rebaseline updates require reviewed old/new expectation diffs and cannot auto-overwrite goldens.
 
 ## Required Evidence
 
 - `color-emoji-fixture-manifest.json` with COLRv0, COLRv1, bitmap PNG, SVG, and emoji entries.
 - Cross-reference dump listing expected `color-glyph-plan.json`, `colrv1-paint-graph.json`, `bitmap-glyph-plan.json`, `svg-glyph-plan.json`, and `emoji-route-trace.json` files.
-- Dashboard snapshot keeping fixture-gated rows classified as `fixture-gated` until all required evidence is attached.
+- Dashboard snapshot keeping the `emoji/color` support surface non-promotable while the convergence manifest, CPU oracle gap, and M11 GPU route gate remain explicit.
 
 ## Fallback / Refusal Behavior
 
@@ -81,21 +81,20 @@ data class ColorEmojiFixtureManifestEntry(
 
 ## Dashboard Impact
 
-- Expected row: `Color and emoji fixture manifest`.
-- Expected classification: `fixture-gated`.
+- Expected row: `emoji/color`.
+- Expected classification: `DependencyGated`.
 - Claim promotion allowed: no, unless manifest provenance, expected diagnostics, and required evidence links are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test --tests '*ColorEmoji*Fixture*'
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.colorEmojiFixtureManifestConvergesM10FamiliesLegacyGatesAndRemainingGpuEvidence
 ```
 
 ## Status Notes
 
-- `proposed`: Manifest gate for all M10 evidence and legacy color/emoji gate traceability.
-- Move to `ready` only after fixture families, provenance fields, and legacy gate mappings are reviewed.
+- `done`: `color-emoji-fixture-manifest.json` now converges the M10 color/emoji fixture families, component dump hashes, legacy gate mapping, and explicit M11 remaining gates without widening support claims.
 
 ## Linear Labels
 
