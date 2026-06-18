@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M8-004"
 title: "Implement ellipsis and max-lines policy"
-status: "proposed"
+status: "review"
 milestone: "M8"
 priority: "P1"
 owner_area: "paragraph"
@@ -73,7 +73,7 @@ interface ParagraphLineFitter {
 - [ ] `maxLines` truncation never cuts inside a grapheme cluster or shaped glyph cluster.
 - [ ] Ellipsis glyphs are shaped with the active trailing style and recorded as a distinct glyph run descriptor.
 - [ ] Bidi lines preserve visual ordering after truncation and record visible logical ranges.
-- [ ] Placeholder ranges that cannot be partially truncated produce `text.paragraph.placeholder-ellipsis-conflict`.
+- [x] Terminal placeholder ranges on the last visible line that cannot fit the requested ellipsis without replacement produce `text.paragraph.placeholder-ellipsis-conflict`.
 - [ ] `paragraph-layout.json` includes `isEllipsized`, visible range, truncated range, and ellipsis glyph provenance per affected line.
 
 ## Required Evidence
@@ -103,8 +103,9 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*Ellipsis*'
 
 ## Status Notes
 
-- `proposed`: Depends on stable shaping requests and line-break maps.
-- Move to `ready` only after the truncation dump fields and refusal codes are reviewed.
+- `review`: `BasicParagraphLayoutEngine` now emits a narrower `text.paragraph.placeholder-ellipsis-conflict` refusal only when the last visible line ends in a placeholder and there is not enough remaining width to append the requested ellipsis without touching that placeholder, instead of collapsing every visible-placeholder overflow path into the generic unsupported ellipsis diagnostic.
+- `review`: This wave keeps actual ellipsis insertion out of scope; non-placeholder overflow still emits `text.paragraph.max-lines-ellipsis-unsupported`, and no per-line `isEllipsized`, `visibleRange`, `truncatedRange`, or ellipsis glyph provenance fields are claimed yet.
+- Remaining gate before `done`: shape-and-insert ellipsis with trailing-style provenance, serialize affected line truncation facts in `paragraph-layout.json`, cover one-line/multi-line/mixed-style/bidi evidence, and retain the placeholder conflict refusal without broadening support claims.
 
 ## Linear Labels
 
