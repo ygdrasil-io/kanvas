@@ -2663,6 +2663,65 @@ class SFNTSurfaceTest {
     }
 
     @Test
+    fun defaultOpenTypeFaceParserPreservesAllTopLevelFeatureTagsForSharedGsubLookup() {
+        val gsub = gsubSharedLookupAcrossFeaturesTable()
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0061,
+                                endCode = 0x0061,
+                                startGlyphId = 5,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 1,
+                ),
+                "maxp" to maxpTable(numGlyphs = 32),
+                "hmtx" to hmtxTable(
+                    metric(advanceWidth = 500, leftSideBearing = 0),
+                    *Array(31) { extraLeftSideBearing(leftSideBearing = 0) },
+                ),
+                "GSUB" to gsub,
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+
+        assertEquals(emptyList(), parsed.diagnostics)
+        assertEquals(
+            OpenTypeGsubTable(
+                lookups = listOf(
+                    OpenTypeGsubSingleSubstitutionLookup(
+                        featureTag = "ccmp",
+                        extraFeatureTags = setOf("liga"),
+                        lookupIndex = 0,
+                        substitutions = listOf(
+                            OpenTypeGsubSingleSubstitution(inputGlyphId = 5, replacementGlyphId = 15),
+                        ),
+                    ),
+                ),
+            ),
+            parsed.layout.gsub,
+        )
+    }
+
+    @Test
     fun defaultOpenTypeFaceParserLoadsReviewedGsubContextFixtureFontsFromRepo() {
         val parser = DefaultOpenTypeFaceParser()
 
@@ -3978,6 +4037,65 @@ class SFNTSurfaceTest {
         table.writeUInt16(ligatureLookupStart + 26, 1)
         table.writeUInt16(ligatureLookupStart + 28, 1)
         table.writeUInt16(ligatureLookupStart + 30, 7)
+
+        return table
+    }
+
+    private fun gsubSharedLookupAcrossFeaturesTable(): ByteArray {
+        val table = ByteArray(96)
+        val scriptListOffset = 10
+        val featureListOffset = 32
+        val lookupListOffset = 60
+        val scriptStart = scriptListOffset + 8
+        val langSysStart = scriptStart + 4
+        val firstFeatureStart = featureListOffset + 14
+        val secondFeatureStart = firstFeatureStart + 6
+        val lookupStart = lookupListOffset + 4
+
+        table.writeUInt16(0, 1)
+        table.writeUInt16(2, 0)
+        table.writeUInt16(4, scriptListOffset)
+        table.writeUInt16(6, featureListOffset)
+        table.writeUInt16(8, lookupListOffset)
+
+        table.writeUInt16(scriptListOffset, 1)
+        "latn".toByteArray(Charsets.ISO_8859_1).copyInto(table, scriptListOffset + 2)
+        table.writeUInt16(scriptListOffset + 6, 8)
+        table.writeUInt16(scriptStart, 4)
+        table.writeUInt16(scriptStart + 2, 0)
+        table.writeUInt16(langSysStart, 0)
+        table.writeUInt16(langSysStart + 2, 0xffff)
+        table.writeUInt16(langSysStart + 4, 2)
+        table.writeUInt16(langSysStart + 6, 0)
+        table.writeUInt16(langSysStart + 8, 1)
+
+        table.writeUInt16(featureListOffset, 2)
+        "ccmp".toByteArray(Charsets.ISO_8859_1).copyInto(table, featureListOffset + 2)
+        table.writeUInt16(featureListOffset + 6, 14)
+        "liga".toByteArray(Charsets.ISO_8859_1).copyInto(table, featureListOffset + 8)
+        table.writeUInt16(featureListOffset + 12, 20)
+
+        table.writeUInt16(firstFeatureStart, 0)
+        table.writeUInt16(firstFeatureStart + 2, 1)
+        table.writeUInt16(firstFeatureStart + 4, 0)
+        table.writeUInt16(secondFeatureStart, 0)
+        table.writeUInt16(secondFeatureStart + 2, 1)
+        table.writeUInt16(secondFeatureStart + 4, 0)
+
+        table.writeUInt16(lookupListOffset, 1)
+        table.writeUInt16(lookupListOffset + 2, 4)
+
+        table.writeUInt16(lookupStart, 1)
+        table.writeUInt16(lookupStart + 2, 0)
+        table.writeUInt16(lookupStart + 4, 1)
+        table.writeUInt16(lookupStart + 6, 8)
+        table.writeUInt16(lookupStart + 8, 2)
+        table.writeUInt16(lookupStart + 10, 8)
+        table.writeUInt16(lookupStart + 12, 1)
+        table.writeUInt16(lookupStart + 14, 15)
+        table.writeUInt16(lookupStart + 16, 1)
+        table.writeUInt16(lookupStart + 18, 1)
+        table.writeUInt16(lookupStart + 20, 5)
 
         return table
     }

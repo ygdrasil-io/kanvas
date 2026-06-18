@@ -1367,6 +1367,57 @@ class TextStackSurfaceTest {
     }
 
     @Test
+    fun basicOpenTypeShapingEngineAppliesSharedTopLevelGsubLookupWhenSecondaryFeatureIsEnabled() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-4466554404f7"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                'a'.code to 5,
+            ),
+            gsubTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubSingleSubstitutionLookup(
+                            featureTag = "ccmp",
+                            extraFeatureTags = setOf("liga"),
+                            substitutions = listOf(
+                                OpenTypeGsubSingleSubstitution(
+                                    inputGlyphId = 5,
+                                    replacementGlyphId = 15,
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "a",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+                features = FeatureSet(mapOf("ccmp" to 0, "liga" to 1)),
+            ),
+        )
+
+        assertEquals(emptyList(), result.diagnostics)
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(15),
+                    clusters = listOf(GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 20f)),
+                    advanceX = 20f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            result.glyphRuns,
+        )
+    }
+
+    @Test
     fun basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo() {
         val single = parsedFixtureFace(
             uuid = "550e8400-e29b-41d4-a716-446655440611",

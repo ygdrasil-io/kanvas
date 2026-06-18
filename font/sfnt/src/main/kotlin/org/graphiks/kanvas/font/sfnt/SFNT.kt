@@ -6086,8 +6086,15 @@ data class OpenTypeGsubTable(
  */
 sealed interface OpenTypeGsubLookup {
     val featureTag: String
+    val extraFeatureTags: Set<String>
     val lookupIndex: Int
     val lookupType: Int
+
+    val topLevelFeatureTags: Set<String>
+        get() = linkedSetOf<String>().apply {
+            if (featureTag.isNotBlank()) add(featureTag)
+            addAll(extraFeatureTags)
+        }
 }
 
 /**
@@ -6095,6 +6102,7 @@ sealed interface OpenTypeGsubLookup {
  */
 data class OpenTypeGsubSingleSubstitutionLookup(
     override val featureTag: String,
+    override val extraFeatureTags: Set<String> = emptySet(),
     override val lookupIndex: Int = 0,
     val substitutions: List<OpenTypeGsubSingleSubstitution> = emptyList(),
 ) : OpenTypeGsubLookup {
@@ -6123,6 +6131,7 @@ data class OpenTypeGsubSingleSubstitution(
  */
 data class OpenTypeGsubMultipleSubstitutionLookup(
     override val featureTag: String,
+    override val extraFeatureTags: Set<String> = emptySet(),
     override val lookupIndex: Int = 0,
     val substitutions: List<OpenTypeGsubMultipleSubstitution> = emptyList(),
 ) : OpenTypeGsubLookup {
@@ -6156,6 +6165,7 @@ data class OpenTypeGsubMultipleSubstitution(
  */
 data class OpenTypeGsubLigatureSubstitutionLookup(
     override val featureTag: String,
+    override val extraFeatureTags: Set<String> = emptySet(),
     override val lookupIndex: Int = 0,
     val substitutions: List<OpenTypeGsubLigatureSubstitution> = emptyList(),
 ) : OpenTypeGsubLookup {
@@ -6200,6 +6210,7 @@ data class OpenTypeGsubNestedLookupRecord(
 
 data class OpenTypeGsubContextGlyphLookup(
     override val featureTag: String,
+    override val extraFeatureTags: Set<String> = emptySet(),
     override val lookupIndex: Int = 0,
     val rules: List<OpenTypeGsubContextGlyphRule> = emptyList(),
 ) : OpenTypeGsubLookup {
@@ -6227,6 +6238,7 @@ data class OpenTypeGsubContextGlyphRule(
 
 data class OpenTypeGsubContextClassLookup(
     override val featureTag: String,
+    override val extraFeatureTags: Set<String> = emptySet(),
     override val lookupIndex: Int = 0,
     val firstGlyphCoverage: Set<Int> = emptySet(),
     val classDefinitions: Map<Int, Int> = emptyMap(),
@@ -6287,6 +6299,7 @@ data class OpenTypeGsubContextClassRule(
 
 data class OpenTypeGsubContextCoverageLookup(
     override val featureTag: String,
+    override val extraFeatureTags: Set<String> = emptySet(),
     override val lookupIndex: Int = 0,
     val rules: List<OpenTypeGsubContextCoverageRule> = emptyList(),
 ) : OpenTypeGsubLookup {
@@ -6363,12 +6376,12 @@ object OpenTypeGsubTableParser {
             label = "OpenType GSUB LookupList offsets",
         )
 
-        val topLevelFeatureTagsByLookupIndex = LinkedHashMap<Int, String>()
+        val topLevelFeatureTagsByLookupIndex = LinkedHashMap<Int, LinkedHashSet<String>>()
         featureLookups.forEach { featureLookup ->
             require(featureLookup.lookupIndex in 0 until lookupCount) {
                 "OpenType GSUB lookup index ${featureLookup.lookupIndex} is outside LookupList range 0 until $lookupCount."
             }
-            topLevelFeatureTagsByLookupIndex.putIfAbsent(featureLookup.lookupIndex, featureLookup.featureTag)
+            topLevelFeatureTagsByLookupIndex.getOrPut(featureLookup.lookupIndex) { LinkedHashSet() } += featureLookup.featureTag
         }
 
         val lookups = mutableListOf<OpenTypeGsubLookup>()
@@ -6385,7 +6398,7 @@ object OpenTypeGsubTableParser {
                     label = "OpenType GSUB lookup $lookupIndex",
                 ),
                 lookupIndex = lookupIndex,
-                featureTag = topLevelFeatureTagsByLookupIndex[lookupIndex].orEmpty(),
+                featureTags = topLevelFeatureTagsByLookupIndex[lookupIndex].orEmpty(),
             )?.let(lookups::add)
         }
 
@@ -6577,7 +6590,7 @@ object OpenTypeGsubTableParser {
         table: ByteArray,
         lookupStart: Int,
         lookupIndex: Int,
-        featureTag: String,
+        featureTags: Collection<String>,
     ): OpenTypeGsubLookup? {
         table.requireRange(lookupStart, GPOS_LOOKUP_HEADER_SIZE, "OpenType GSUB LookupTable header")
         val lookupType = table.readUInt16BE(lookupStart, "OpenType GSUB LookupTable lookupType")
@@ -6593,10 +6606,10 @@ object OpenTypeGsubTableParser {
         )
 
         return when (lookupType) {
-            GSUB_SINGLE_SUBSTITUTION_LOOKUP_TYPE -> parseSingleLookup(table, lookupStart, lookupIndex, subtableCount, featureTag)
-            GSUB_MULTIPLE_SUBSTITUTION_LOOKUP_TYPE -> parseMultipleLookup(table, lookupStart, lookupIndex, subtableCount, featureTag)
-            GSUB_LIGATURE_SUBSTITUTION_LOOKUP_TYPE -> parseLigatureLookup(table, lookupStart, lookupIndex, subtableCount, featureTag)
-            GSUB_CONTEXTUAL_SUBSTITUTION_LOOKUP_TYPE -> parseContextLookup(table, lookupStart, lookupIndex, subtableCount, featureTag)
+            GSUB_SINGLE_SUBSTITUTION_LOOKUP_TYPE -> parseSingleLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
+            GSUB_MULTIPLE_SUBSTITUTION_LOOKUP_TYPE -> parseMultipleLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
+            GSUB_LIGATURE_SUBSTITUTION_LOOKUP_TYPE -> parseLigatureLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
+            GSUB_CONTEXTUAL_SUBSTITUTION_LOOKUP_TYPE -> parseContextLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
             else -> null
         }
     }
@@ -6606,7 +6619,7 @@ object OpenTypeGsubTableParser {
         lookupStart: Int,
         lookupIndex: Int,
         subtableCount: Int,
-        featureTag: String,
+        featureTags: Collection<String>,
     ): OpenTypeGsubSingleSubstitutionLookup? {
         val substitutions = LinkedHashMap<Int, Int>()
         repeat(subtableCount) { subtableIndex ->
@@ -6625,8 +6638,10 @@ object OpenTypeGsubTableParser {
             )
         }
         return substitutions.takeUnless { it.isEmpty() }?.let { parsed ->
+            val orderedFeatureTags = featureTags.toList()
             OpenTypeGsubSingleSubstitutionLookup(
-                featureTag = featureTag,
+                featureTag = orderedFeatureTags.firstOrNull().orEmpty(),
+                extraFeatureTags = orderedFeatureTags.drop(1).toSet(),
                 lookupIndex = lookupIndex,
                 substitutions = parsed.map { (inputGlyphId, replacementGlyphId) ->
                     OpenTypeGsubSingleSubstitution(inputGlyphId = inputGlyphId, replacementGlyphId = replacementGlyphId)
@@ -6700,7 +6715,7 @@ object OpenTypeGsubTableParser {
         lookupStart: Int,
         lookupIndex: Int,
         subtableCount: Int,
-        featureTag: String,
+        featureTags: Collection<String>,
     ): OpenTypeGsubMultipleSubstitutionLookup? {
         val substitutions = LinkedHashMap<Int, List<Int>>()
         repeat(subtableCount) { subtableIndex ->
@@ -6719,8 +6734,10 @@ object OpenTypeGsubTableParser {
             )
         }
         return substitutions.takeUnless { it.isEmpty() }?.let { parsed ->
+            val orderedFeatureTags = featureTags.toList()
             OpenTypeGsubMultipleSubstitutionLookup(
-                featureTag = featureTag,
+                featureTag = orderedFeatureTags.firstOrNull().orEmpty(),
+                extraFeatureTags = orderedFeatureTags.drop(1).toSet(),
                 lookupIndex = lookupIndex,
                 substitutions = parsed.map { (inputGlyphId, replacementGlyphIds) ->
                     OpenTypeGsubMultipleSubstitution(inputGlyphId = inputGlyphId, replacementGlyphIds = replacementGlyphIds)
@@ -6812,7 +6829,7 @@ object OpenTypeGsubTableParser {
         lookupStart: Int,
         lookupIndex: Int,
         subtableCount: Int,
-        featureTag: String,
+        featureTags: Collection<String>,
     ): OpenTypeGsubLookup? {
         val glyphRules = mutableListOf<OpenTypeGsubContextGlyphRule>()
         val classSubtables = mutableListOf<OpenTypeGsubContextClassSubtable>()
@@ -6844,10 +6861,12 @@ object OpenTypeGsubTableParser {
                 else -> throw IllegalArgumentException("OpenType GSUB ContextSubst format $subtableFormat is not supported.")
             }
         }
+        val orderedFeatureTags = featureTags.toList()
         return when (format) {
             1 -> glyphRules.takeUnless { it.isEmpty() }?.let {
                 OpenTypeGsubContextGlyphLookup(
-                    featureTag = featureTag,
+                    featureTag = orderedFeatureTags.firstOrNull().orEmpty(),
+                    extraFeatureTags = orderedFeatureTags.drop(1).toSet(),
                     lookupIndex = lookupIndex,
                     rules = it,
                 )
@@ -6855,7 +6874,8 @@ object OpenTypeGsubTableParser {
             2 -> classSubtables.takeUnless { it.isEmpty() }?.let {
                 val singleSubtable = it.singleOrNull()
                 OpenTypeGsubContextClassLookup(
-                    featureTag = featureTag,
+                    featureTag = orderedFeatureTags.firstOrNull().orEmpty(),
+                    extraFeatureTags = orderedFeatureTags.drop(1).toSet(),
                     lookupIndex = lookupIndex,
                     firstGlyphCoverage = singleSubtable?.firstGlyphCoverage.orEmpty(),
                     classDefinitions = singleSubtable?.classDefinitions.orEmpty(),
@@ -6865,7 +6885,8 @@ object OpenTypeGsubTableParser {
             }
             3 -> coverageRules.takeUnless { it.isEmpty() }?.let {
                 OpenTypeGsubContextCoverageLookup(
-                    featureTag = featureTag,
+                    featureTag = orderedFeatureTags.firstOrNull().orEmpty(),
+                    extraFeatureTags = orderedFeatureTags.drop(1).toSet(),
                     lookupIndex = lookupIndex,
                     rules = it,
                 )
@@ -7337,7 +7358,7 @@ object OpenTypeGsubTableParser {
         lookupStart: Int,
         lookupIndex: Int,
         subtableCount: Int,
-        featureTag: String,
+        featureTags: Collection<String>,
     ): OpenTypeGsubLigatureSubstitutionLookup? {
         val substitutions = mutableListOf<OpenTypeGsubLigatureSubstitution>()
         repeat(subtableCount) { subtableIndex ->
@@ -7356,8 +7377,10 @@ object OpenTypeGsubTableParser {
             )
         }
         return substitutions.takeUnless { it.isEmpty() }?.let { parsed ->
+            val orderedFeatureTags = featureTags.toList()
             OpenTypeGsubLigatureSubstitutionLookup(
-                featureTag = featureTag,
+                featureTag = orderedFeatureTags.firstOrNull().orEmpty(),
+                extraFeatureTags = orderedFeatureTags.drop(1).toSet(),
                 lookupIndex = lookupIndex,
                 substitutions = parsed,
             )
