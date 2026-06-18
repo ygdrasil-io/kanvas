@@ -815,7 +815,7 @@ fun defaultFontFixtureManifest(): FontFixtureManifest = FontFixtureManifest(
             faceCount = 1,
             coverageTags = listOf("sfnt-source", "single-ttf", "table:cmap", "table:glyf", "table:head", "table:name"),
             normativeStatus = FontFixtureNormativeStatus.NORMATIVE,
-            remainingGate = "Fallback routing, glyph coverage, and shaping tickets must attach separate evidence before support promotion.",
+            remainingGate = "Devanagari review evidence now covers pinned Script_Extensions Deva script selection on the vendored pre-base matra case, consonant-cluster preservation, reph-like shaping, and mark placement only; syllable-plan evidence, the full required feature set, Devanagari-specific refusal fixtures/codes, and trace dumps remain separate shaping gates before support promotion.",
         ),
         BundledFontFixtureManifestEntry(
             fixtureId = "single-ttf-noto-sans-thai",

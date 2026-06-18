@@ -32,10 +32,14 @@ M2 parser facts and M5 Unicode segmentation foundations.
 ## Validation Bundle
 
 ```bash
-rtk git diff --check
+rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest
 rtk ./gradlew --no-daemon :font:text:test --tests '*OpenTypeLayoutEngine*' --tests '*GsubBasic*' --tests '*GsubContext*'
 rtk ./gradlew --no-daemon :font:text:test --tests '*GposPair*' --tests '*GposMark*' --tests '*FeaturePolicy*'
 rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*' --tests '*DevanagariShaping*' --tests '*ExtensionLookup*'
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
 ```
 
 ## Current Slice Notes
@@ -46,7 +50,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*' --tests '*De
 - `KFONT-M6-004` is `done` on reviewed GPOS fixture provenance plus promoted `gpos-trace.json` / `shaped-glyph-run.json` evidence and layout-contract malformed/refusal diagnostics.
 - `KFONT-M6-005` is `done` on bounded mark/cursive parser/runtime support, checked-in reviewed fixture provenance, refreshed `gpos-trace.json` / `shaped-glyph-run.json` evidence, refusal-only reviewed mono-codepoint ligature evidence, and post-review regressions for ambiguous ligature-component refusal, RTL cursive logical ranges, zero-advance cursive matches, GSUB cluster preservation under mark/cursive-capable typefaces, and the bounded `kern` pair-overflow diagnostic that the reviewed cursive fixture now surfaces instead of masking.
 - `KFONT-M6-006` stays in `review` after the bounded runtime `ResolvedFeatureSet` adoption wave; GSUB, the bounded `kern`-routed GPOS single subset, GPOS anchor, and pair-kerning paths now honor the resolved policy, Arabic defaults explicitly include `curs`, portable OpenType `drawString` non-enablement evidence is now attached, and the remaining work is the per-script shaping fixture families.
-- `KFONT-M6-008` is now in `review` on bounded vendored-font evidence only: the reviewed evidence path now injects the pinned Script_Extensions itemizer for Devanagari shaping, and `DevanagariShapingFixtureTest` plus `devanagari-shaping-report.json` prove pre-base matra shaping, consonant-cluster preservation, reph-like shaping, and mark placement on `NotoSansDevanagari-Regular.ttf`, while syllable-plan dumps, full required feature-set evidence, Devanagari-specific refusal fixtures/codes, and ticket-local trace dump families remain separate gates.
+- `KFONT-M6-008` is now in `review` on bounded vendored-font evidence only: `DevanagariShapingFixtureTest` locally injects the pinned Script_Extensions itemizer for Devanagari review coverage, and `DevanagariShapingFixtureTest` plus `devanagari-shaping-report.json` prove pre-base matra script selection, consonant-cluster preservation, reph-like shaping, and mark placement on `NotoSansDevanagari-Regular.ttf`, while syllable-plan dumps, full required feature-set evidence, Devanagari-specific refusal fixtures/codes, and ticket-local trace dump families remain separate gates.
 
 ## Current Blockers
 

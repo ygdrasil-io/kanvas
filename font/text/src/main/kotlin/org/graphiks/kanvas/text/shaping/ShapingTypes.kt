@@ -468,27 +468,6 @@ public interface ScriptItemizer {
 }
 
 /**
- * Adapts the pinned Script_Extensions itemizer to shaping-engine script runs.
- *
- * This keeps runtime shaping aligned with the reviewed Unicode itemization
- * surface instead of the legacy bounded script classifier.
- */
-public class PinnedScriptItemizer(
-    private val delegate: ScriptExtensionsItemizer = ScriptExtensionsItemizer(PinnedUnicodeDataSetResources.load()),
-) : ScriptItemizer {
-    override fun itemize(request: ShapingRequest): List<ScriptRun> {
-        val requestedTextRange = codePointSafeTextRange(request.text, request.textRange) ?: return emptyList()
-        val scopedText = request.text.substring(requestedTextRange.first, requestedTextRange.last + 1)
-        return delegate.itemize(scopedText).runs.map { run ->
-            ScriptRun(
-                textRange = (run.utf16Range.first + requestedTextRange.first)..(run.utf16Range.last + requestedTextRange.first),
-                script = run.selectedScript,
-            )
-        }
-    }
-}
-
-/**
  * Groups text into bounded script runs for early OpenType shaping.
  *
  * This itemizer is not a complete Unicode Script_Extensions implementation.

@@ -2863,7 +2863,6 @@ Status: implemented with bounded vendored-font evidence.
 
 Files:
 
-- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt`
 - `font/text/src/test/kotlin/org/graphiks/kanvas/text/DevanagariShapingFixtureTest.kt`
 - `reports/font/fixtures/expected/shaping/devanagari-shaping-report.json`
 - `reports/pure-kotlin-text/2026-06-18-kfont-m6-008-devanagari-shaping-fixtures.md`
@@ -2874,13 +2873,13 @@ Files:
 Evidence:
 
 - The reviewed Devanagari evidence path now injects the pinned
-  Script_Extensions itemizer instead of the bounded legacy `BasicUnicodeData`
-  classifier, so vendored `कि` exercises the reviewed `deva` / `dev2` policy
-  path as `Deva` without changing the default shaping behavior used by
-  existing tickets.
+  Script_Extensions itemizer locally in `DevanagariShapingFixtureTest`
+  instead of through a new runtime surface, so the vendored pre-base matra
+  case exercises the reviewed `deva` / `dev2` policy path as `Deva` without
+  changing the default shaping behavior used by existing tickets.
 - `DevanagariShapingFixtureTest` now proves bounded vendored-font evidence for
-  pre-base matra shaping, consonant-cluster preservation, reph-like shaping,
-  and mark placement on `NotoSansDevanagari-Regular.ttf` without promoting
+  pre-base matra script selection, consonant-cluster preservation, reph-like
+  shaping, and mark placement on `NotoSansDevanagari-Regular.ttf` without promoting
   complete Devanagari or Indic shaping support.
 - `devanagari-shaping-report.json` summarizes these bounded positive rows and
   keeps syllable-plan dumps, the full required feature set, Devanagari-specific
@@ -2890,6 +2889,7 @@ Evidence:
 Validation:
 
 ```bash
+rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.DevanagariShapingFixtureTest
 rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py

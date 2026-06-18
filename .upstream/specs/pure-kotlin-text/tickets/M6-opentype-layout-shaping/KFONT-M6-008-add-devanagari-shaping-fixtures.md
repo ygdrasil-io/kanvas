@@ -90,14 +90,18 @@ data class DevanagariFixtureCase(
 ## Validation
 
 ```bash
-rtk git diff --check
+rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest
 rtk ./gradlew --no-daemon :font:text:test --tests '*DevanagariShaping*'
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
 ```
 
 ## Status Notes
 
 - `proposed`: Devanagari evidence depends on M5 clusters/itemization, contextual GSUB, mark positioning, and feature policy.
-- `review`: `DevanagariShapingFixtureTest` plus `devanagari-shaping-report.json` now prove bounded vendored-font evidence for pinned-itemizer `Deva` script selection, pre-base matra shaping, consonant-cluster preservation, reph-like shaping, and mark placement on `NotoSansDevanagari-Regular.ttf` without promoting Devanagari or Indic shaping support.
+- `review`: `DevanagariShapingFixtureTest` plus `devanagari-shaping-report.json` now prove bounded vendored-font evidence for pinned Script_Extensions `Deva` script selection on the pre-base matra case, consonant-cluster preservation, reph-like shaping, and mark placement on `NotoSansDevanagari-Regular.ttf` without promoting Devanagari or Indic shaping support.
 - `review`: This wave intentionally keeps `indic-syllable-plan.json` or equivalent phase evidence, the full required `deva` / `dev2` feature set, dedicated unsupported-syllable and phase refusal fixtures/codes, and ticket-local `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` / `unicode-segments.json` families as explicit remaining gates.
 - Move to `ready` only after fixture coverage and syllable dump fields are reviewed.
 

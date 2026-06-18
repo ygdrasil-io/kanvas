@@ -6,13 +6,12 @@
   "fixtureFont": "reports/font/fixtures/fonts/fallback/NotoSansDevanagari-Regular.ttf",
   "cases": [
     {
-      "caseId": "prebase-matra",
+      "caseId": "prebase-matra-script-selection",
       "status": "positive",
       "evidence": [
-        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/DevanagariShapingFixtureTest.kt"
       ],
-      "notes": "Pinned script itemization now lets the reviewed shaping route classify the vendored कि case as Deva and shape the pre-base matra cluster without diagnostics."
+      "notes": "Pinned Script_Extensions itemization now lets the reviewed shaping route classify the vendored pre-base matra case as Deva without diagnostics; this row does not claim pre-base matra reordering or full phase evidence."
     },
     {
       "caseId": "consonant-cluster",

@@ -21,12 +21,15 @@ import org.graphiks.kanvas.font.sfnt.OpenTypeGposTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubTable
 import org.graphiks.kanvas.text.shaping.BasicOpenTypeShapingEngine
 import org.graphiks.kanvas.text.shaping.CMapGlyphMapper
-import org.graphiks.kanvas.text.shaping.PinnedScriptItemizer
+import org.graphiks.kanvas.text.shaping.PinnedUnicodeDataSetResources
+import org.graphiks.kanvas.text.shaping.ScriptExtensionsItemizer
+import org.graphiks.kanvas.text.shaping.ScriptItemizer
+import org.graphiks.kanvas.text.shaping.ScriptRun
 import org.graphiks.kanvas.text.shaping.ShapingRequest
 
 class DevanagariShapingFixtureTest {
     @Test
-    fun pinnedScriptItemizerShapesVendoredPrebaseMatraCaseAsDeva() {
+    fun pinnedScriptItemizerClassifiesVendoredPrebaseMatraCaseAsDeva() {
         val face = parsedFixtureFace(
             uuid = "550e8400-e29b-41d4-a716-446655440711",
             relativePath = "reports/font/fixtures/fonts/fallback/NotoSansDevanagari-Regular.ttf",
@@ -119,7 +122,7 @@ class DevanagariShapingFixtureTest {
         assertContains(report, """"dumpId": "devanagari-shaping-report"""")
         assertContains(report, """"ownerTickets": ["KFONT-M6-008"]""")
         assertContains(report, """"fixtureId": "single-ttf-noto-sans-devanagari"""")
-        assertContains(report, """"caseId": "prebase-matra"""")
+        assertContains(report, """"caseId": "prebase-matra-script-selection"""")
         assertContains(report, """"caseId": "consonant-cluster"""")
         assertContains(report, """"caseId": "reph-like"""")
         assertContains(report, """"caseId": "mark-placement"""")
@@ -140,8 +143,24 @@ class DevanagariShapingFixtureTest {
             gposSingleTablesByTypefaceId = face.gposSingles?.let { mapOf(face.typefaceId to it) }.orEmpty(),
             gposPairTablesByTypefaceId = face.gposPairs?.let { mapOf(face.typefaceId to it) }.orEmpty(),
             kernUnitsPerEmByTypefaceId = mapOf(face.typefaceId to face.unitsPerEm),
-            scriptItemizer = PinnedScriptItemizer(),
+            scriptItemizer = pinnedScriptItemizer(),
         )
+
+    private fun pinnedScriptItemizer(): ScriptItemizer {
+        val delegate = ScriptExtensionsItemizer(PinnedUnicodeDataSetResources.load())
+        return object : ScriptItemizer {
+            override fun itemize(request: ShapingRequest): List<ScriptRun> {
+                val requestedTextRange = codePointSafeTextRange(request.text, request.textRange) ?: return emptyList()
+                val scopedText = request.text.substring(requestedTextRange.first, requestedTextRange.last + 1)
+                return delegate.itemize(scopedText).runs.map { run ->
+                    ScriptRun(
+                        textRange = (run.utf16Range.first + requestedTextRange.first)..(run.utf16Range.last + requestedTextRange.first),
+                        script = run.selectedScript,
+                    )
+                }
+            }
+        }
+    }
 
     private fun parsedFixtureFace(
         uuid: String,
@@ -172,6 +191,26 @@ class DevanagariShapingFixtureTest {
     private fun projectRoot(): Path =
         generateSequence(Paths.get("").toAbsolutePath()) { it.parent }
             .first { Files.exists(it.resolve("settings.gradle.kts")) }
+
+    private fun codePointSafeTextRange(text: String, requestedRange: IntRange): IntRange? {
+        val normalizedRange = normalizedTextRange(text, requestedRange) ?: return null
+        var first = normalizedRange.first
+        var last = normalizedRange.last
+        if (first > 0 && text[first].isLowSurrogate() && text[first - 1].isHighSurrogate()) {
+            first -= 1
+        }
+        if (last < text.lastIndex && text[last].isHighSurrogate() && text[last + 1].isLowSurrogate()) {
+            last += 1
+        }
+        return first..last
+    }
+
+    private fun normalizedTextRange(text: String, requestedRange: IntRange): IntRange? {
+        if (text.isEmpty()) return null
+        val first = requestedRange.first.coerceAtLeast(0)
+        val last = requestedRange.last.coerceAtMost(text.lastIndex)
+        return if (first <= last) first..last else null
+    }
 
     private data class ParsedFixtureFace(
         val typefaceId: TypefaceID,
