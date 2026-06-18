@@ -80,13 +80,17 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
                 "font-telemetry-pm-bundle",
                 "font-telemetry-schema",
                 "font-telemetry-schema-fixture",
+                "glyph-artifact-metrics",
                 "glyph-atlas-eviction-trace",
                 "glyph-atlas-lifecycle",
+                "glyph-atlas-occupancy",
                 "glyph-cache-inventory",
+                "glyph-cache-metrics",
                 "glyph-cache-telemetry",
                 "glyph-strike-key",
                 "gpos-trace",
                 "gsub-trace",
+                "hit-test-map",
                 "latin-gsub-gpos-goldens",
                 "line-breaks",
                 "malformed-sfnt-fixtures",
@@ -98,6 +102,7 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
                 "paragraph-layout-result",
                 "paragraph-shaping-requests",
                 "paragraph-shaping-requests-goldens",
+                "placeholder-layout",
                 "png-glyph-image",
                 "resolved-font-runs",
                 "script-runs",
@@ -120,6 +125,7 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
                 "unicode-data-seed",
                 "unicode-data-version-mismatch-diagnostic",
                 "unicode-segments",
+                "color-emoji-fixture-manifest",
             },
             set(dump_ids),
         )
@@ -160,6 +166,23 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
         with self.assertRaises(validator.ValidationError) as external:
             validator.validate_index(PROJECT_ROOT, modified)
         self.assertIn("external engine", str(external.exception))
+
+    def test_validator_rejects_dump_row_non_claim_drift_from_dump_fixture(self) -> None:
+        validator = load_validator()
+        index = validator.load_index(PROJECT_ROOT)
+        rows = [dict(row) for row in index["dumpRows"]]
+        target = next(row for row in rows if row["dumpId"] == "glyph-cache-metrics")
+        target["nonClaims"] = [
+            claim
+            for claim in target["nonClaims"]
+            if claim != "no-hidden-performance-gate"
+        ]
+        modified = dict(index)
+        modified["dumpRows"] = rows
+
+        with self.assertRaises(validator.ValidationError) as drift:
+            validator.validate_index(PROJECT_ROOT, modified)
+        self.assertIn("must match dump nonClaims", str(drift.exception))
 
     def test_existing_path_guard_rejects_relative_traversal_outside_project_root(self) -> None:
         validator = load_validator()

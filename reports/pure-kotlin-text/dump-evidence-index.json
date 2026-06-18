@@ -1453,6 +1453,48 @@
       ]
     },
     {
+      "dumpId": "glyph-artifact-metrics",
+      "ownerTicket": "KFONT-M12-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Cache Budgets"
+      },
+      "producerPaths": [
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/glyph/glyph-artifact-metrics.json"
+      ],
+      "expectedFields": [
+        "dumpId",
+        "dumpSha256",
+        "fixtureIds",
+        "nonClaims",
+        "ownerTickets",
+        "requiredDiagnostics",
+        "sampleCount",
+        "samples",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.glyphArtifactAndCacheMetricDumpsMatchRepoFixtures",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py"
+      ],
+      "updatePolicy": "Glyph artifact metric golden changes require reviewed cold/warm route-count and timing diffs, stable strike-key preimage/hash review, refusal-count review, and explicit non-claim confirmation without GPU route or dftext promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-gpu-text-route-claim",
+        "no-hidden-performance-gate",
+        "no-dftext-retirement"
+      ]
+    },
+    {
       "dumpId": "glyph-atlas-eviction-trace",
       "ownerTicket": "KFONT-M9-005",
       "classification": "golden-gated",
@@ -1539,6 +1581,46 @@
       ]
     },
     {
+      "dumpId": "glyph-atlas-occupancy",
+      "ownerTicket": "KFONT-M12-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        "section": "Cache and invalidation"
+      },
+      "producerPaths": [
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/glyph/glyph-atlas-occupancy.json"
+      ],
+      "expectedFields": [
+        "atlasCount",
+        "atlases",
+        "dumpId",
+        "dumpSha256",
+        "fixtureIds",
+        "nonClaims",
+        "ownerTickets",
+        "requiredDiagnostics",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.glyphArtifactAndCacheMetricDumpsMatchRepoFixtures",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py"
+      ],
+      "updatePolicy": "Atlas occupancy golden changes require reviewed artifact-id, dimension, occupied-pixel, occupancy-ratio, and strike-key-hash diffs without introducing live-handle, GPU upload, or dftext support claims.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-gpu-text-route-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
       "dumpId": "glyph-cache-inventory",
       "ownerTicket": "KFONT-M9-006",
       "classification": "golden-gated",
@@ -1579,6 +1661,48 @@
         "producer-only",
         "no-complete-cache-lifecycle-claim",
         "no-gpu-text-route-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "dumpId": "glyph-cache-metrics",
+      "ownerTicket": "KFONT-M12-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Cache Budgets"
+      },
+      "producerPaths": [
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/glyph/glyph-cache-metrics.json"
+      ],
+      "expectedFields": [
+        "dumpId",
+        "dumpSha256",
+        "fixtureIds",
+        "nonClaims",
+        "ownerTickets",
+        "requiredDiagnostics",
+        "sampleCount",
+        "samples",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.glyphArtifactAndCacheMetricDumpsMatchRepoFixtures",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py"
+      ],
+      "updatePolicy": "Glyph cache metric golden changes require reviewed atlas-artifact ID, key-hash, occupancy, timing-counter, hit/miss/eviction, stale-generation, and advisory budget-refusal diffs without promoting a blocking budget gate, GPU upload execution, or dftext support.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-gpu-text-route-claim",
+        "no-hidden-performance-gate",
         "no-dftext-retirement"
       ]
     },

@@ -5028,8 +5028,9 @@ Evidence:
 - `validateKfontM12001TelemetryPmEvidence` and its Python validator assert that
   the PM bundle copies the telemetry schema/dashboard artifacts, preserves
   `warning-only` wording, and keeps downstream producer work explicit under
-  `KFONT-M12-002`, `KFONT-M12-003`, `KFONT-M12-004`, and `KFONT-M12-005`
-  without keeping the schema slice open.
+  `KFONT-M12-002`, `KFONT-M12-003`, and `KFONT-M12-005` while KFONT-M12-004
+  now owns checked-in glyph producer dumps without keeping the schema slice
+  open.
 
 Validation:
 
@@ -5043,9 +5044,70 @@ rtk git diff --check
 ```
 
 Remaining gate: no schema-local gate remains. Downstream producer emission into
-the shared schema is owned by `KFONT-M12-002`, `KFONT-M12-003`,
-`KFONT-M12-004`, and `KFONT-M12-005`; this slice does not promote any
-performance budget, GPU route, or release-gate claim.
+the shared schema is still owned by `KFONT-M12-002`, `KFONT-M12-003`, and
+`KFONT-M12-005`; KFONT-M12-004 currently lands only the deterministic glyph
+telemetry dump/data slice without promoting any performance budget, GPU route,
+or release-gate claim.
+
+### KFONT-M12-004: Add glyph artifact and cache metrics
+
+Status: in-progress; bounded deterministic dump/data slice implemented,
+independently reviewed, and runtime producer emission remains open.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/glyph/glyph-artifact-metrics.json`
+- `reports/font/fixtures/expected/glyph/glyph-atlas-occupancy.json`
+- `reports/font/fixtures/expected/glyph/glyph-cache-metrics.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m12-004-glyph-artifact-and-cache-metrics.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-004-add-glyph-artifact-and-cache-metrics.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `GlyphSurface.kt` now exposes deterministic `GlyphArtifactMetricsDump`,
+  `GlyphAtlasOccupancyDump`, and `GlyphCacheMetricsDump` data structures with
+  canonical JSON writers and fail-fast occupancy invariants for impossible
+  atlas/capacity states.
+- `GlyphSurfaceTest.glyphArtifactAndCacheMetricDumpsMatchRepoFixtures()`
+  assembles deterministic cold/warm samples and asserts byte-identical
+  checked-in dumps for route counts, atlas occupancy, and advisory cache
+  metrics while keeping the evidence CPU-only and `dftext`-non-promoting.
+- `font-fixture-inventory.json`, `fixture-evidence-manifest.json`,
+  `dump-evidence-index.json`, `font-claim-dashboard.json`, and the provenance
+  index now register the new glyph metric/occupancy evidence, enforce
+  `nonClaims` coherence against the checked-in dump artifacts, and preserve
+  `tracked-gap` wording without claiming a wired runtime producer.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.glyphArtifactAndCacheMetricDumpsMatchRepoFixtures
+rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk git diff --check
+```
+
+Review: independent re-review accepted after remediating overclaim wording,
+`nonClaims` coherence, occupancy invariants, and budget-refusal hash
+coherence.
+
+Remaining gate: wiring a non-test glyph-pipeline producer that emits these
+metrics remains open. This wave is still CPU-only advisory dump/data evidence;
+it does not claim GPU upload execution, GPU text route support, blocking
+performance gates, or `dftext` retirement.
 ### KFONT-M1-004: Bundled Source Fixture Manifest
 
 Status: done; merged, independently reviewed, and freshly revalidated for closeout.

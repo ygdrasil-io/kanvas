@@ -55,6 +55,12 @@ class GlyphSurfaceTest {
             GlyphCacheBudgetRefusal::class.simpleName,
             GlyphCacheTelemetrySample::class.simpleName,
             GlyphCacheTelemetryDump::class.simpleName,
+            GlyphArtifactMetricsSample::class.simpleName,
+            GlyphArtifactMetricsDump::class.simpleName,
+            GlyphCacheMetricsSample::class.simpleName,
+            GlyphCacheMetricsDump::class.simpleName,
+            GlyphAtlasOccupancyEntry::class.simpleName,
+            GlyphAtlasOccupancyDump::class.simpleName,
             GlyphMaskSummary::class.simpleName,
             GlyphRouteDiagnostic::class.simpleName,
             GlyphArtifactPlanDecision::class.simpleName,
@@ -102,6 +108,12 @@ class GlyphSurfaceTest {
                 "GlyphCacheBudgetRefusal",
                 "GlyphCacheTelemetrySample",
                 "GlyphCacheTelemetryDump",
+                "GlyphArtifactMetricsSample",
+                "GlyphArtifactMetricsDump",
+                "GlyphCacheMetricsSample",
+                "GlyphCacheMetricsDump",
+                "GlyphAtlasOccupancyEntry",
+                "GlyphAtlasOccupancyDump",
                 "GlyphMaskSummary",
                 "GlyphRouteDiagnostic",
                 "GlyphArtifactPlanDecision",
@@ -2325,6 +2337,7 @@ class GlyphSurfaceTest {
             nonClaims = listOf(
                 "no-complete-target-support-claim",
                 "no-gpu-text-route-claim",
+                "no-hidden-performance-gate",
                 "no-dftext-retirement",
             ),
         )
@@ -2476,6 +2489,468 @@ class GlyphSurfaceTest {
                 releaseGatePromoted = true,
             )
         }
+    }
+
+    @Test
+    fun glyphArtifactAndCacheMetricDumpsMatchRepoFixtures() {
+        val outlineStrikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441181").copy(
+            glyphId = 41,
+            representationRoute = "text.glyph.outline",
+        )
+        val a8StrikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441182").copy(
+            glyphId = 42,
+            representationRoute = "text.glyph.mask.A8",
+            maskFormat = "A8",
+        )
+        val sdfStrikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441183").copy(
+            glyphId = 43,
+            representationRoute = "text.glyph.mask.SDF",
+            maskFormat = "SDF",
+            sdfSpreadPx = 8f,
+            sdfSourceResolutionPx = 16f,
+        )
+        val bitmapStrikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441184").copy(
+            glyphId = 44,
+            representationRoute = "text.glyph.bitmap.png",
+            paletteIdentity = "emoji-palette-v1",
+        )
+        val colrStrikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441185").copy(
+            glyphId = 45,
+            representationRoute = "text.glyph.color.colr",
+            paletteIdentity = "emoji-palette-v1",
+        )
+        val svgStrikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441186").copy(
+            glyphId = 46,
+            representationRoute = "text.glyph.vector.svg",
+            rendererDescriptorVersion = "svg-descriptor-v1",
+        )
+        val unsupportedStrikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441187").copy(
+            glyphId = 47,
+            representationRoute = "text.glyph.unsupported",
+        )
+
+        val artifactDump = GlyphArtifactMetricsDump(
+            dumpId = "glyph-artifact-metrics",
+            ownerTickets = listOf("KFONT-M12-004"),
+            fixtureIds = listOf("outline-a8-sdf-routes", "color-bitmap-svg-gates"),
+            samples = listOf(
+                GlyphArtifactMetricsSample(
+                    metadata = GlyphCacheTelemetryMetadata(
+                        environmentLabel = "ci-macos-arm64",
+                        fontSourceSet = "font-source-liberation-core",
+                        unicodeVersion = "16.0.0",
+                        cacheState = "cold",
+                        sampleLabel = "artifact-cold",
+                        sampleCount = 5,
+                    ),
+                    routeCounts = listOf(
+                        GlyphCacheRouteCount("text.glyph.bitmap.png", 1),
+                        GlyphCacheRouteCount("text.glyph.color.colr", 1),
+                        GlyphCacheRouteCount("text.glyph.mask.A8", 1),
+                        GlyphCacheRouteCount("text.glyph.mask.SDF", 1),
+                        GlyphCacheRouteCount("text.glyph.outline", 1),
+                        GlyphCacheRouteCount("text.glyph.unsupported", 1),
+                        GlyphCacheRouteCount("text.glyph.vector.svg", 1),
+                    ),
+                    timings = listOf(
+                        GlyphCacheTimingStats("a8-generation", sampleCount = 5, median = 8, p90 = 10, max = 11),
+                        GlyphCacheTimingStats("bitmap-decode", sampleCount = 5, median = 21, p90 = 24, max = 27),
+                        GlyphCacheTimingStats("colr-plan", sampleCount = 5, median = 15, p90 = 18, max = 20),
+                        GlyphCacheTimingStats("sdf-generation", sampleCount = 5, median = 17, p90 = 20, max = 23),
+                        GlyphCacheTimingStats("svg-plan", sampleCount = 5, median = 19, p90 = 22, max = 26),
+                    ),
+                    sourceMaskHashCount = 3,
+                    refusalCounts = listOf(
+                        GlyphCacheRouteCount("text.glyph.SDF-transform-unsupported", 1),
+                        GlyphCacheRouteCount("text.glyph.atlas-capacity-exceeded", 1),
+                    ),
+                    routePreimages = listOf(
+                        outlineStrikeKey.toRoutePreimage(),
+                        a8StrikeKey.toRoutePreimage(),
+                        sdfStrikeKey.toRoutePreimage(),
+                        bitmapStrikeKey.toRoutePreimage(),
+                        colrStrikeKey.toRoutePreimage(),
+                        unsupportedStrikeKey.toRoutePreimage(),
+                        svgStrikeKey.toRoutePreimage(),
+                    ),
+                ),
+                GlyphArtifactMetricsSample(
+                    metadata = GlyphCacheTelemetryMetadata(
+                        environmentLabel = "ci-macos-arm64",
+                        fontSourceSet = "font-source-liberation-core",
+                        unicodeVersion = "16.0.0",
+                        cacheState = "warm",
+                        sampleLabel = "artifact-warm",
+                        sampleCount = 5,
+                    ),
+                    routeCounts = listOf(
+                        GlyphCacheRouteCount("text.glyph.bitmap.png", 1),
+                        GlyphCacheRouteCount("text.glyph.color.colr", 1),
+                        GlyphCacheRouteCount("text.glyph.mask.A8", 1),
+                        GlyphCacheRouteCount("text.glyph.mask.SDF", 1),
+                        GlyphCacheRouteCount("text.glyph.outline", 1),
+                        GlyphCacheRouteCount("text.glyph.unsupported", 1),
+                        GlyphCacheRouteCount("text.glyph.vector.svg", 1),
+                    ),
+                    timings = listOf(
+                        GlyphCacheTimingStats("a8-generation", sampleCount = 5, median = 2, p90 = 3, max = 4),
+                        GlyphCacheTimingStats("bitmap-decode", sampleCount = 5, median = 7, p90 = 9, max = 10),
+                        GlyphCacheTimingStats("colr-plan", sampleCount = 5, median = 5, p90 = 6, max = 8),
+                        GlyphCacheTimingStats("sdf-generation", sampleCount = 5, median = 4, p90 = 5, max = 7),
+                        GlyphCacheTimingStats("svg-plan", sampleCount = 5, median = 6, p90 = 8, max = 9),
+                    ),
+                    sourceMaskHashCount = 3,
+                    refusalCounts = listOf(
+                        GlyphCacheRouteCount("text.glyph.SDF-transform-unsupported", 1),
+                        GlyphCacheRouteCount("text.glyph.atlas-capacity-exceeded", 1),
+                    ),
+                    routePreimages = listOf(
+                        outlineStrikeKey.toRoutePreimage(),
+                        a8StrikeKey.toRoutePreimage(),
+                        sdfStrikeKey.toRoutePreimage(),
+                        bitmapStrikeKey.toRoutePreimage(),
+                        colrStrikeKey.toRoutePreimage(),
+                        unsupportedStrikeKey.toRoutePreimage(),
+                        svgStrikeKey.toRoutePreimage(),
+                    ),
+                ),
+            ),
+            requiredDiagnostics = listOf(
+                "text.glyph.SDF-transform-unsupported",
+                "text.glyph.atlas-capacity-exceeded",
+            ),
+            nonClaims = listOf(
+                "no-complete-target-support-claim",
+                "no-gpu-text-route-claim",
+                "no-hidden-performance-gate",
+                "no-dftext-retirement",
+            ),
+        )
+
+        val a8Mask = A8GlyphMask(
+            glyphId = 142,
+            width = 2,
+            height = 2,
+            left = 1,
+            top = 2,
+            rowBytes = 2,
+            pixels = listOf(10, 20, 30, 40),
+            sourceOutlineSha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        )
+        val sdfMask = SDFGlyphMask(
+            glyphId = 143,
+            width = 2,
+            height = 2,
+            left = -1,
+            top = 0,
+            distanceRange = 16f,
+            pixels = listOf(96, 128, 160, 192),
+            sourceOutlineSha256 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        )
+        val a8AtlasArtifact = GlyphAtlasArtifactEvidence.fromA8(
+            buildResult = KotlinGlyphAtlasArtifactBuilder().build(
+                masks = listOf(a8Mask),
+                placements = listOf(GlyphAtlasPlacement(glyphId = 142, x = 1, y = 1, width = 2, height = 2)),
+            ),
+            masks = listOf(a8Mask),
+            strikeKeysByGlyphId = mapOf(142 to a8StrikeKey.copy(glyphId = 142)),
+            generation = 9,
+            invalidationToken = "font-source-v9",
+            memoryBudgetClass = "atlas-budget.medium",
+            lifetimeClass = "glyph-run-frame",
+            paddingPx = 1,
+        )
+        val sdfAtlasArtifact = GlyphAtlasArtifactEvidence.fromSdf(
+            buildResult = KotlinSDFGlyphAtlasArtifactBuilder(atlasWidth = 5, padding = 1).build(listOf(sdfMask)),
+            masks = listOf(sdfMask),
+            strikeKeysByGlyphId = mapOf(143 to sdfStrikeKey.copy(glyphId = 143)),
+            generation = 10,
+            invalidationToken = "font-source-v10",
+            memoryBudgetClass = "atlas-budget.medium",
+            lifetimeClass = "glyph-run-frame",
+            paddingPx = 1,
+            diagnostics = listOf(
+                GlyphRouteDiagnostic.atlasGenerationStale(
+                    glyphId = 143,
+                    artifactGeneration = 9,
+                    currentGeneration = 10,
+                    invalidationToken = "font-source-v10",
+                ),
+            ),
+        )
+        val a8AtlasStrikeKey = a8StrikeKey.copy(glyphId = 142)
+        val sdfAtlasStrikeKey = sdfStrikeKey.copy(glyphId = 143)
+        val a8Occupancy = GlyphAtlasOccupancyEntry.fromArtifact(
+            artifact = a8AtlasArtifact,
+            keyPreimageSha256s = listOf(a8AtlasStrikeKey.preimageSha256()),
+        )
+        val sdfOccupancy = GlyphAtlasOccupancyEntry.fromArtifact(
+            artifact = sdfAtlasArtifact,
+            keyPreimageSha256s = listOf(sdfAtlasStrikeKey.preimageSha256()),
+        )
+        val occupancyDump = GlyphAtlasOccupancyDump(
+            dumpId = "glyph-atlas-occupancy",
+            ownerTickets = listOf("KFONT-M12-004"),
+            fixtureIds = listOf("a8-atlas-occupancy", "sdf-atlas-occupancy"),
+            atlases = listOf(a8Occupancy, sdfOccupancy),
+            requiredDiagnostics = listOf(
+                "text.glyph.atlas-capacity-exceeded",
+                "text.glyph.atlas-generation-stale",
+            ),
+            nonClaims = listOf(
+                "no-complete-target-support-claim",
+                "no-gpu-text-route-claim",
+                "no-dftext-retirement",
+            ),
+        )
+
+        val coldRefusal = GlyphCacheBudgetRefusal.fromStrikeKey(
+            strikeKey = a8AtlasStrikeKey,
+            cacheDomain = "glyph-cache-memory",
+            observedBytes = 544,
+            advisoryLimitBytes = 512,
+        )
+        val warmRefusal = GlyphCacheBudgetRefusal.fromStrikeKey(
+            strikeKey = sdfAtlasStrikeKey,
+            cacheDomain = "atlas-upload-preparation",
+            observedBytes = 1536,
+            advisoryLimitBytes = 1024,
+        )
+        val cacheDump = GlyphCacheMetricsDump(
+            dumpId = "glyph-cache-metrics",
+            ownerTickets = listOf("KFONT-M12-004"),
+            fixtureIds = listOf("cold-cache-metrics", "warm-cache-metrics"),
+            samples = listOf(
+                GlyphCacheMetricsSample(
+                    metadata = GlyphCacheTelemetryMetadata(
+                        environmentLabel = "ci-macos-arm64",
+                        fontSourceSet = "font-source-liberation-core",
+                        unicodeVersion = "16.0.0",
+                        cacheState = "cold",
+                        sampleLabel = "cache-cold",
+                        sampleCount = 5,
+                    ),
+                    atlasArtifactId = a8AtlasArtifact.artifactKeySha256,
+                    strikeKeyCount = 1,
+                    keyPreimageSha256s = listOf(
+                        a8AtlasStrikeKey.preimageSha256(),
+                    ),
+                    occupancyRatio = a8Occupancy.occupancyRatio,
+                    timings = listOf(
+                        GlyphCacheTimingStats("atlas-pack", sampleCount = 5, median = 6, p90 = 8, max = 9),
+                    ),
+                    cacheHitCount = 0,
+                    cacheMissCount = 3,
+                    evictionCount = 1,
+                    atlasCapacityPressureCount = 1,
+                    staleGenerationRefusalCount = 1,
+                    invalidationTokenChangeCount = 1,
+                    cacheMemoryBytes = 352,
+                    uploadByteExpectation = 768,
+                    artifactBudgetRefusalCount = 1,
+                    budgetRefusals = listOf(coldRefusal),
+                ),
+                GlyphCacheMetricsSample(
+                    metadata = GlyphCacheTelemetryMetadata(
+                        environmentLabel = "ci-macos-arm64",
+                        fontSourceSet = "font-source-liberation-core",
+                        unicodeVersion = "16.0.0",
+                        cacheState = "warm",
+                        sampleLabel = "cache-warm",
+                        sampleCount = 5,
+                    ),
+                    atlasArtifactId = sdfAtlasArtifact.artifactKeySha256,
+                    strikeKeyCount = 1,
+                    keyPreimageSha256s = listOf(
+                        sdfAtlasStrikeKey.preimageSha256(),
+                    ),
+                    occupancyRatio = sdfOccupancy.occupancyRatio,
+                    timings = listOf(
+                        GlyphCacheTimingStats("atlas-pack", sampleCount = 5, median = 1, p90 = 2, max = 2),
+                    ),
+                    cacheHitCount = 3,
+                    cacheMissCount = 0,
+                    evictionCount = 0,
+                    atlasCapacityPressureCount = 1,
+                    staleGenerationRefusalCount = 1,
+                    invalidationTokenChangeCount = 1,
+                    cacheMemoryBytes = 352,
+                    uploadByteExpectation = 256,
+                    artifactBudgetRefusalCount = 1,
+                    budgetRefusals = listOf(warmRefusal),
+                ),
+            ),
+            requiredDiagnostics = listOf(
+                "text.glyph.artifact-budget-exceeded",
+                "text.glyph.atlas-capacity-exceeded",
+                "text.glyph.atlas-generation-stale",
+            ),
+            nonClaims = listOf(
+                "no-complete-target-support-claim",
+                "no-gpu-text-route-claim",
+                "no-hidden-performance-gate",
+                "no-dftext-retirement",
+            ),
+        )
+
+        assertEquals(2, artifactDump.sampleCount)
+        assertEquals(2, occupancyDump.atlasCount)
+        assertEquals(2, cacheDump.sampleCount)
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/glyph/glyph-artifact-metrics.json"),
+            artifactDump.toCanonicalJson(),
+        )
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/glyph/glyph-atlas-occupancy.json"),
+            occupancyDump.toCanonicalJson(),
+        )
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/glyph/glyph-cache-metrics.json"),
+            cacheDump.toCanonicalJson(),
+        )
+    }
+
+    @Test
+    fun glyphAtlasOccupancyRejectsEntriesThatExceedAtlasCapacity() {
+        val strikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441188").copy(
+            glyphId = 48,
+            representationRoute = "text.glyph.mask.A8",
+            maskFormat = "A8",
+        )
+        val artifact = GlyphAtlasArtifactEvidence(
+            artifactType = "GlyphAtlasArtifact",
+            artifactKeySha256 = "a".repeat(64),
+            generation = 0,
+            textureFormat = "r8unorm",
+            width = 4,
+            height = 4,
+            rowStride = 4,
+            memoryBudgetClass = "glyph-cache-memory",
+            lifetimeClass = "resident",
+            invalidationToken = "atlas-generation-0",
+            entries = listOf(
+                GlyphAtlasArtifactEvidenceEntry(
+                    glyphId = checkNotNull(strikeKey.glyphId),
+                    strikeKeySha256 = strikeKey.toRoutePreimage().compactHash,
+                    x = 0,
+                    y = 0,
+                    width = 5,
+                    height = 5,
+                    sourceLeft = 0,
+                    sourceTop = 0,
+                    sourceWidth = 5,
+                    sourceHeight = 5,
+                    paddingPx = 0,
+                    sourceMaskSha256 = "b".repeat(64),
+                ),
+            ),
+            sourceMaskHashes = listOf("b".repeat(64)),
+            uploadByteSha256 = "c".repeat(64),
+        )
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            GlyphAtlasOccupancyEntry.fromArtifact(
+                artifact = artifact,
+                keyPreimageSha256s = listOf(strikeKey.preimageSha256()),
+            )
+        }
+
+        assertTrue(failure.message.orEmpty().contains("occupiedPixels"))
+    }
+
+    @Test
+    fun glyphCacheMetricsRejectOccupancyRatioAboveOne() {
+        val strikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441189").copy(
+            glyphId = 49,
+            representationRoute = "text.glyph.mask.SDF",
+            maskFormat = "SDF",
+            sdfSpreadPx = 8f,
+            sdfSourceResolutionPx = 16f,
+        )
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            GlyphCacheMetricsSample(
+                metadata = GlyphCacheTelemetryMetadata(
+                    environmentLabel = "ci-macos-arm64",
+                    fontSourceSet = "font-source-liberation-core",
+                    unicodeVersion = "16.0.0",
+                    cacheState = "cold",
+                    sampleLabel = "invalid-occupancy",
+                    sampleCount = 1,
+                ),
+                atlasArtifactId = "d".repeat(64),
+                strikeKeyCount = 1,
+                keyPreimageSha256s = listOf(strikeKey.preimageSha256()),
+                occupancyRatio = 1.1f,
+                timings = listOf(
+                    GlyphCacheTimingStats("atlas-pack", sampleCount = 1, median = 1, p90 = 1, max = 1),
+                ),
+                cacheHitCount = 0,
+                cacheMissCount = 1,
+                evictionCount = 0,
+                atlasCapacityPressureCount = 0,
+                staleGenerationRefusalCount = 0,
+                invalidationTokenChangeCount = 0,
+                cacheMemoryBytes = 128,
+                uploadByteExpectation = 64,
+                artifactBudgetRefusalCount = 0,
+                budgetRefusals = emptyList(),
+            )
+        }
+
+        assertTrue(failure.message.orEmpty().contains("occupancyRatio"))
+    }
+
+    @Test
+    fun glyphCacheMetricsRejectBudgetRefusalsOutsideSampleKeySet() {
+        val sampleStrikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441190").copy(
+            glyphId = 50,
+            representationRoute = "text.glyph.mask.A8",
+            maskFormat = "A8",
+        )
+        val refusalStrikeKey = strikeKey("550e8400-e29b-41d4-a716-446655441191").copy(
+            glyphId = 51,
+            representationRoute = "text.glyph.mask.A8",
+            maskFormat = "A8",
+        )
+        val refusal = GlyphCacheBudgetRefusal.fromStrikeKey(
+            strikeKey = refusalStrikeKey,
+            cacheDomain = "glyph-cache-memory",
+            observedBytes = 544,
+            advisoryLimitBytes = 512,
+        )
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            GlyphCacheMetricsSample(
+                metadata = GlyphCacheTelemetryMetadata(
+                    environmentLabel = "ci-macos-arm64",
+                    fontSourceSet = "font-source-liberation-core",
+                    unicodeVersion = "16.0.0",
+                    cacheState = "cold",
+                    sampleLabel = "invalid-budget-refusal-key",
+                    sampleCount = 1,
+                ),
+                atlasArtifactId = "e".repeat(64),
+                strikeKeyCount = 1,
+                keyPreimageSha256s = listOf(sampleStrikeKey.preimageSha256()),
+                occupancyRatio = 0.5f,
+                timings = listOf(
+                    GlyphCacheTimingStats("atlas-pack", sampleCount = 1, median = 1, p90 = 1, max = 1),
+                ),
+                cacheHitCount = 0,
+                cacheMissCount = 1,
+                evictionCount = 0,
+                atlasCapacityPressureCount = 0,
+                staleGenerationRefusalCount = 0,
+                invalidationTokenChangeCount = 0,
+                cacheMemoryBytes = 128,
+                uploadByteExpectation = 64,
+                artifactBudgetRefusalCount = 1,
+                budgetRefusals = listOf(refusal),
+            )
+        }
+
+        assertTrue(failure.message.orEmpty().contains("budgetRefusals"))
     }
 
     @Test

@@ -81,21 +81,26 @@
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt",
         "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
         "reports/font/fixtures/expected/glyph/a8-sdf-atlas-lifecycle.json",
+        "reports/font/fixtures/expected/glyph/glyph-artifact-metrics.json",
         "reports/font/fixtures/expected/glyph/glyph-cache-inventory.json",
+        "reports/font/fixtures/expected/glyph/glyph-cache-metrics.json",
         "reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json",
         "reports/font/fixtures/expected/glyph/glyph-atlas.json",
+        "reports/font/fixtures/expected/glyph/glyph-atlas-occupancy.json",
         "reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json",
         "reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json",
         "reports/pure-kotlin-text/2026-06-16-kfont-m9-004-sdf-generator-boundaries.md",
         "reports/pure-kotlin-text/2026-06-16-kfont-m9-005-atlas-lifecycle.md",
-        "reports/pure-kotlin-text/2026-06-16-kfont-m9-006-glyph-cache-telemetry.md"
+        "reports/pure-kotlin-text/2026-06-16-kfont-m9-006-glyph-cache-telemetry.md",
+        "reports/pure-kotlin-text/2026-06-18-kfont-m12-004-glyph-artifact-and-cache-metrics.md"
       ],
       "requiredEvidenceGates": [
-        "KFONT-M9-004 through KFONT-M9-006 now land checked-in CPU SDF, atlas lifecycle, and cache telemetry evidence; keep GPU text-route, upload-ordering, and renderer-ownership promotion gated on M11.",
+        "KFONT-M9-004 through KFONT-M9-006 plus KFONT-M12-004 now land checked-in CPU SDF, atlas lifecycle, occupancy, and advisory glyph/cache metric evidence; keep GPU text-route, upload-ordering, and renderer-ownership promotion gated on M11.",
         "Do not claim GPU text routes, LCD support, blocking perf gates, or dftext retirement from CPU-only SDF/atlas/cache evidence without M11 GPU handoff artifacts."
       ],
       "validationCommands": [
         "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
         "rtk ./gradlew --no-daemon :font:glyph:test"
       ],
       "fixtureCommands": [
@@ -588,7 +593,7 @@
         "reports/pure-kotlin-text/dump-evidence-index.json"
       ],
       "requiredEvidenceGates": [
-        "KFONT-M12-002, KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own parser/scaler/shaping/paragraph/glyph/GPU producer emission into the shared schema; keep this family schema-only advisory evidence until those subsystem tickets land.",
+        "KFONT-M12-002, KFONT-M12-003, and KFONT-M12-005 still own parser/scaler/shaping/paragraph/GPU producer emission into the shared schema; KFONT-M12-004 currently lands only the deterministic glyph telemetry dump/data slice while this schema row remains advisory-only.",
         "Keep performance budgets advisory until the dedicated promotion policy is updated."
       ],
       "validationCommands": [

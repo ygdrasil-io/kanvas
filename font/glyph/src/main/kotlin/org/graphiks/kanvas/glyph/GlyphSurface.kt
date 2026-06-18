@@ -2813,11 +2813,10 @@ data class GlyphCacheBudgetRefusal(
             advisoryLimitBytes: Long,
         ): GlyphCacheBudgetRefusal {
             require(strikeKey.glyphId != null) { "Glyph strike key must include glyphId for budget refusals." }
-            val keyPreimage = strikeKey.canonicalPreimage().trimEnd()
             return GlyphCacheBudgetRefusal(
                 diagnosticCode = GlyphArtifactBudgetExceededDiagnosticRoute,
                 cacheDomain = cacheDomain,
-                keyPreimageSha256 = glyphSha256(keyPreimage.toByteArray(Charsets.UTF_8)),
+                keyPreimageSha256 = strikeKey.preimageSha256(),
                 observedBytes = observedBytes,
                 advisoryLimitBytes = advisoryLimitBytes,
             )
@@ -2930,6 +2929,421 @@ class GlyphCacheTelemetryDump(
         appendGlyphJsonField("sampleCount", sampleCount, comma = true)
         append("  \"samples\": ")
         appendGlyphCacheTelemetrySamplesJson(samples)
+        append(",\n")
+        append("  \"requiredDiagnostics\": ")
+        appendGlyphStringArrayMultilineJson(requiredDiagnostics, indent = "  ")
+        append(",\n")
+        append("  \"nonClaims\": ")
+        appendGlyphStringArrayMultilineJson(nonClaims, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+}
+
+/**
+ * Advisory glyph artifact metrics sample for deterministic M12 fixture evidence.
+ */
+class GlyphArtifactMetricsSample(
+    val metadata: GlyphCacheTelemetryMetadata,
+    routeCounts: List<GlyphCacheRouteCount>,
+    timings: List<GlyphCacheTimingStats>,
+    val sourceMaskHashCount: Int,
+    refusalCounts: List<GlyphCacheRouteCount>,
+    routePreimages: List<GlyphStrikeKeyRoutePreimage>,
+) {
+    val routeCounts: List<GlyphCacheRouteCount> =
+        routeCounts.sortedWith(compareBy({ it.route }, { it.count }))
+    val timings: List<GlyphCacheTimingStats> =
+        timings.sortedWith(compareBy({ it.metricName }, { it.sampleCount }, { it.median }, { it.p90 }, { it.max }, { it.unit }))
+    val refusalCounts: List<GlyphCacheRouteCount> =
+        refusalCounts.sortedWith(compareBy({ it.route }, { it.count }))
+    val routePreimages: List<GlyphStrikeKeyRoutePreimage> =
+        routePreimages.sortedWith(compareBy({ it.route }, { it.glyphId }, { it.compactHash }))
+
+    init {
+        require(sourceMaskHashCount >= 0) { "sourceMaskHashCount must be non-negative." }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  \"metadata\": ")
+        append(metadata.toCanonicalJson().prependIndent("  ").trimStart())
+        append(",\n")
+        append("  \"routeCounts\": ")
+        appendGlyphCacheRouteCountsJson(routeCounts)
+        append(",\n")
+        append("  \"timings\": ")
+        appendGlyphCacheTimingStatsJson(timings)
+        append(",\n")
+        appendGlyphJsonField("sourceMaskHashCount", sourceMaskHashCount, comma = true)
+        append("  \"refusalCounts\": ")
+        appendGlyphCacheRouteCountsJson(refusalCounts)
+        append(",\n")
+        append("  \"routePreimages\": ")
+        appendGlyphRoutePreimagesJson(routePreimages)
+        append("\n}")
+    }
+}
+
+/**
+ * Deterministic advisory dump for `glyph-artifact-metrics.json`.
+ */
+class GlyphArtifactMetricsDump(
+    val dumpId: String,
+    ownerTickets: List<String>,
+    fixtureIds: List<String>,
+    samples: List<GlyphArtifactMetricsSample>,
+    requiredDiagnostics: List<String>,
+    nonClaims: List<String>,
+) {
+    val ownerTickets: List<String> = ownerTickets.toList()
+    val fixtureIds: List<String> = fixtureIds.toList()
+    val samples: List<GlyphArtifactMetricsSample> = samples.toList()
+    val requiredDiagnostics: List<String> = requiredDiagnostics.toList()
+    val nonClaims: List<String> = nonClaims.toList()
+
+    init {
+        require(dumpId.isNotBlank()) { "dumpId must not be blank." }
+        require(this.ownerTickets.isNotEmpty()) { "ownerTickets must be non-empty." }
+        require(this.fixtureIds.isNotEmpty()) { "fixtureIds must be non-empty." }
+        require(this.samples.isNotEmpty()) { "samples must be non-empty." }
+    }
+
+    val sampleCount: Int
+        get() = samples.size
+
+    val dumpSha256: String
+        get() = glyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    fun toCanonicalJson(): String = canonicalJson(includeDumpSha256 = true)
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("schemaVersion", 1, comma = true)
+        appendGlyphJsonField("dumpId", dumpId, comma = true)
+        append("  \"ownerTickets\": ")
+        appendGlyphStringArrayMultilineJson(ownerTickets, indent = "  ")
+        append(",\n")
+        append("  \"fixtureIds\": ")
+        appendGlyphStringArrayMultilineJson(fixtureIds, indent = "  ")
+        append(",\n")
+        appendGlyphJsonField("sampleCount", sampleCount, comma = true)
+        append("  \"samples\": ")
+        appendGlyphArtifactMetricsSamplesJson(samples)
+        append(",\n")
+        append("  \"requiredDiagnostics\": ")
+        appendGlyphStringArrayMultilineJson(requiredDiagnostics, indent = "  ")
+        append(",\n")
+        append("  \"nonClaims\": ")
+        appendGlyphStringArrayMultilineJson(nonClaims, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+}
+
+/**
+ * Stable atlas occupancy row derived from a deterministic atlas artifact dump.
+ */
+data class GlyphAtlasOccupancyEntry(
+    val artifactType: String,
+    val artifactId: String,
+    val generation: Long,
+    val invalidationToken: String,
+    val width: Int,
+    val height: Int,
+    val rowStride: Int,
+    val entryCount: Int,
+    val occupiedPixels: Int,
+    val totalPixels: Int,
+    val occupancyRatio: Float,
+    val keyPreimageSha256s: List<String>,
+    val distanceRange: Float? = null,
+) {
+    init {
+        require(artifactType.isNotBlank()) { "artifactType must not be blank." }
+        require(artifactId.matches(Regex("[0-9a-f]{64}"))) { "artifactId must be lowercase hexadecimal." }
+        require(generation >= 0L) { "generation must be non-negative." }
+        require(invalidationToken.isNotBlank()) { "invalidationToken must not be blank." }
+        require(width >= 0 && height >= 0 && rowStride >= 0) { "atlas dimensions must be non-negative." }
+        require(entryCount >= 0) { "entryCount must be non-negative." }
+        require(occupiedPixels >= 0) { "occupiedPixels must be non-negative." }
+        require(totalPixels >= 0) { "totalPixels must be non-negative." }
+        require(totalPixels == checkedAtlasPixelCount(width, height, "glyph-atlas-occupancy")) {
+            "totalPixels must match width * height."
+        }
+        require(occupiedPixels <= totalPixels) {
+            "occupiedPixels must not exceed totalPixels."
+        }
+        require(occupancyRatio.isFinite()) { "occupancyRatio must be finite." }
+        require(occupancyRatio >= 0f) { "occupancyRatio must be non-negative." }
+        if (totalPixels == 0) {
+            require(occupiedPixels == 0) { "occupiedPixels must be zero when totalPixels is zero." }
+            require(occupancyRatio == 0f) { "occupancyRatio must be zero when totalPixels is zero." }
+        } else {
+            require(occupancyRatio <= 1f) { "occupancyRatio must not exceed 1.0." }
+        }
+        require(keyPreimageSha256s.all { it.matches(Regex("[0-9a-f]{64}")) }) {
+            "keyPreimageSha256s must be lowercase hexadecimal."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("artifactType", artifactType, comma = true)
+        appendGlyphJsonField("artifactId", artifactId, comma = true)
+        appendGlyphJsonField("generation", generation, comma = true)
+        appendGlyphJsonField("invalidationToken", invalidationToken, comma = true)
+        appendGlyphJsonField("width", width, comma = true)
+        appendGlyphJsonField("height", height, comma = true)
+        appendGlyphJsonField("rowStride", rowStride, comma = true)
+        appendGlyphJsonField("entryCount", entryCount, comma = true)
+        appendGlyphJsonField("occupiedPixels", occupiedPixels, comma = true)
+        appendGlyphJsonField("totalPixels", totalPixels, comma = true)
+        appendGlyphJsonField("occupancyRatio", occupancyRatio, comma = true)
+        append("  \"keyPreimageSha256s\": ")
+        appendGlyphStringArrayInlineJson(keyPreimageSha256s)
+        if (distanceRange != null) {
+            append(",\n")
+            appendGlyphJsonField("distanceRange", distanceRange, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+
+    companion object {
+        fun fromArtifact(
+            artifact: GlyphAtlasArtifactEvidence,
+            keyPreimageSha256s: List<String>,
+        ): GlyphAtlasOccupancyEntry {
+            val occupiedPixels = artifact.entries.sumOf { entry ->
+                entry.width.nonNegativeProduct(other = entry.height, glyphId = entry.glyphId, label = "Glyph atlas occupancy entry")
+            }.toInt()
+            val totalPixels = checkedAtlasPixelCount(artifact.width, artifact.height, "atlas-occupancy")
+            val occupancyRatio = if (totalPixels == 0) 0f else occupiedPixels.toFloat() / totalPixels.toFloat()
+            return GlyphAtlasOccupancyEntry(
+                artifactType = artifact.artifactType,
+                artifactId = artifact.artifactKeySha256,
+                generation = artifact.generation,
+                invalidationToken = artifact.invalidationToken,
+                width = artifact.width,
+                height = artifact.height,
+                rowStride = artifact.rowStride,
+                entryCount = artifact.entryCount,
+                occupiedPixels = occupiedPixels,
+                totalPixels = totalPixels,
+                occupancyRatio = occupancyRatio,
+                keyPreimageSha256s = keyPreimageSha256s.sorted(),
+                distanceRange = artifact.distanceRange,
+            )
+        }
+    }
+}
+
+/**
+ * Deterministic occupancy dump for `glyph-atlas-occupancy.json`.
+ */
+class GlyphAtlasOccupancyDump(
+    val dumpId: String,
+    ownerTickets: List<String>,
+    fixtureIds: List<String>,
+    atlases: List<GlyphAtlasOccupancyEntry>,
+    requiredDiagnostics: List<String>,
+    nonClaims: List<String>,
+) {
+    val ownerTickets: List<String> = ownerTickets.toList()
+    val fixtureIds: List<String> = fixtureIds.toList()
+    val atlases: List<GlyphAtlasOccupancyEntry> =
+        atlases.sortedWith(compareBy({ it.artifactType }, { it.artifactId }))
+    val requiredDiagnostics: List<String> = requiredDiagnostics.toList()
+    val nonClaims: List<String> = nonClaims.toList()
+
+    init {
+        require(dumpId.isNotBlank()) { "dumpId must not be blank." }
+        require(this.ownerTickets.isNotEmpty()) { "ownerTickets must be non-empty." }
+        require(this.fixtureIds.isNotEmpty()) { "fixtureIds must be non-empty." }
+        require(this.atlases.isNotEmpty()) { "atlases must be non-empty." }
+    }
+
+    val atlasCount: Int
+        get() = atlases.size
+
+    val dumpSha256: String
+        get() = glyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    fun toCanonicalJson(): String = canonicalJson(includeDumpSha256 = true)
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("schemaVersion", 1, comma = true)
+        appendGlyphJsonField("dumpId", dumpId, comma = true)
+        append("  \"ownerTickets\": ")
+        appendGlyphStringArrayMultilineJson(ownerTickets, indent = "  ")
+        append(",\n")
+        append("  \"fixtureIds\": ")
+        appendGlyphStringArrayMultilineJson(fixtureIds, indent = "  ")
+        append(",\n")
+        appendGlyphJsonField("atlasCount", atlasCount, comma = true)
+        append("  \"atlases\": ")
+        appendGlyphAtlasOccupancyEntriesJson(atlases)
+        append(",\n")
+        append("  \"requiredDiagnostics\": ")
+        appendGlyphStringArrayMultilineJson(requiredDiagnostics, indent = "  ")
+        append(",\n")
+        append("  \"nonClaims\": ")
+        appendGlyphStringArrayMultilineJson(nonClaims, indent = "  ")
+        if (includeDumpSha256) {
+            append(",\n")
+            appendGlyphJsonField("dumpSha256", dumpSha256, comma = false)
+        } else {
+            append("\n")
+        }
+        append("}\n")
+    }
+}
+
+/**
+ * Advisory glyph cache metrics sample with stable atlas/key facts for M12 evidence.
+ */
+class GlyphCacheMetricsSample(
+    val metadata: GlyphCacheTelemetryMetadata,
+    val atlasArtifactId: String,
+    val strikeKeyCount: Int,
+    keyPreimageSha256s: List<String>,
+    val occupancyRatio: Float,
+    timings: List<GlyphCacheTimingStats>,
+    val cacheHitCount: Int,
+    val cacheMissCount: Int,
+    val evictionCount: Int,
+    val atlasCapacityPressureCount: Int,
+    val staleGenerationRefusalCount: Int,
+    val invalidationTokenChangeCount: Int,
+    val cacheMemoryBytes: Long,
+    val uploadByteExpectation: Long,
+    val artifactBudgetRefusalCount: Int,
+    budgetRefusals: List<GlyphCacheBudgetRefusal>,
+) {
+    val keyPreimageSha256s: List<String> = keyPreimageSha256s.sorted()
+    val timings: List<GlyphCacheTimingStats> =
+        timings.sortedWith(compareBy({ it.metricName }, { it.sampleCount }, { it.median }, { it.p90 }, { it.max }, { it.unit }))
+    val budgetRefusals: List<GlyphCacheBudgetRefusal> =
+        budgetRefusals.sortedWith(compareBy({ it.cacheDomain }, { it.keyPreimageSha256 }, { it.observedBytes }, { it.advisoryLimitBytes }))
+
+    init {
+        require(atlasArtifactId.matches(Regex("[0-9a-f]{64}"))) {
+            "atlasArtifactId must be lowercase hexadecimal."
+        }
+        require(strikeKeyCount >= 0) { "strikeKeyCount must be non-negative." }
+        require(this.keyPreimageSha256s.all { it.matches(Regex("[0-9a-f]{64}")) }) {
+            "keyPreimageSha256s must be lowercase hexadecimal."
+        }
+        require(strikeKeyCount == this.keyPreimageSha256s.size) {
+            "strikeKeyCount must match keyPreimageSha256s.size."
+        }
+        require(occupancyRatio.isFinite()) { "occupancyRatio must be finite." }
+        require(occupancyRatio >= 0f) { "occupancyRatio must be non-negative." }
+        require(occupancyRatio <= 1f) { "occupancyRatio must not exceed 1.0." }
+        require(cacheHitCount >= 0) { "cacheHitCount must be non-negative." }
+        require(cacheMissCount >= 0) { "cacheMissCount must be non-negative." }
+        require(evictionCount >= 0) { "evictionCount must be non-negative." }
+        require(atlasCapacityPressureCount >= 0) { "atlasCapacityPressureCount must be non-negative." }
+        require(staleGenerationRefusalCount >= 0) { "staleGenerationRefusalCount must be non-negative." }
+        require(invalidationTokenChangeCount >= 0) { "invalidationTokenChangeCount must be non-negative." }
+        require(cacheMemoryBytes >= 0L) { "cacheMemoryBytes must be non-negative." }
+        require(uploadByteExpectation >= 0L) { "uploadByteExpectation must be non-negative." }
+        require(artifactBudgetRefusalCount >= 0) { "artifactBudgetRefusalCount must be non-negative." }
+        require(artifactBudgetRefusalCount == this.budgetRefusals.size) {
+            "artifactBudgetRefusalCount must match budgetRefusals.size."
+        }
+        require(this.budgetRefusals.all { it.keyPreimageSha256 in this.keyPreimageSha256s }) {
+            "budgetRefusals keyPreimageSha256 values must belong to keyPreimageSha256s."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  \"metadata\": ")
+        append(metadata.toCanonicalJson().prependIndent("  ").trimStart())
+        append(",\n")
+        appendGlyphJsonField("atlasArtifactId", atlasArtifactId, comma = true)
+        appendGlyphJsonField("strikeKeyCount", strikeKeyCount, comma = true)
+        append("  \"keyPreimageSha256s\": ")
+        appendGlyphStringArrayInlineJson(keyPreimageSha256s)
+        append(",\n")
+        appendGlyphJsonField("occupancyRatio", occupancyRatio, comma = true)
+        append("  \"timings\": ")
+        appendGlyphCacheTimingStatsJson(timings)
+        append(",\n")
+        appendGlyphJsonField("cacheHitCount", cacheHitCount, comma = true)
+        appendGlyphJsonField("cacheMissCount", cacheMissCount, comma = true)
+        appendGlyphJsonField("evictionCount", evictionCount, comma = true)
+        appendGlyphJsonField("atlasCapacityPressureCount", atlasCapacityPressureCount, comma = true)
+        appendGlyphJsonField("staleGenerationRefusalCount", staleGenerationRefusalCount, comma = true)
+        appendGlyphJsonField("invalidationTokenChangeCount", invalidationTokenChangeCount, comma = true)
+        appendGlyphJsonField("cacheMemoryBytes", cacheMemoryBytes, comma = true)
+        appendGlyphJsonField("uploadByteExpectation", uploadByteExpectation, comma = true)
+        appendGlyphJsonField("artifactBudgetRefusalCount", artifactBudgetRefusalCount, comma = true)
+        append("  \"budgetRefusals\": ")
+        appendGlyphCacheBudgetRefusalsJson(budgetRefusals)
+        append("\n}")
+    }
+}
+
+/**
+ * Deterministic advisory dump for `glyph-cache-metrics.json`.
+ */
+class GlyphCacheMetricsDump(
+    val dumpId: String,
+    ownerTickets: List<String>,
+    fixtureIds: List<String>,
+    samples: List<GlyphCacheMetricsSample>,
+    requiredDiagnostics: List<String>,
+    nonClaims: List<String>,
+) {
+    val ownerTickets: List<String> = ownerTickets.toList()
+    val fixtureIds: List<String> = fixtureIds.toList()
+    val samples: List<GlyphCacheMetricsSample> = samples.toList()
+    val requiredDiagnostics: List<String> = requiredDiagnostics.toList()
+    val nonClaims: List<String> = nonClaims.toList()
+
+    init {
+        require(dumpId.isNotBlank()) { "dumpId must not be blank." }
+        require(this.ownerTickets.isNotEmpty()) { "ownerTickets must be non-empty." }
+        require(this.fixtureIds.isNotEmpty()) { "fixtureIds must be non-empty." }
+        require(this.samples.isNotEmpty()) { "samples must be non-empty." }
+    }
+
+    val sampleCount: Int
+        get() = samples.size
+
+    val dumpSha256: String
+        get() = glyphSha256(canonicalJson(includeDumpSha256 = false).toByteArray(Charsets.UTF_8))
+
+    fun toCanonicalJson(): String = canonicalJson(includeDumpSha256 = true)
+
+    private fun canonicalJson(includeDumpSha256: Boolean): String = buildString {
+        append("{\n")
+        appendGlyphJsonField("schemaVersion", 1, comma = true)
+        appendGlyphJsonField("dumpId", dumpId, comma = true)
+        append("  \"ownerTickets\": ")
+        appendGlyphStringArrayMultilineJson(ownerTickets, indent = "  ")
+        append(",\n")
+        append("  \"fixtureIds\": ")
+        appendGlyphStringArrayMultilineJson(fixtureIds, indent = "  ")
+        append(",\n")
+        appendGlyphJsonField("sampleCount", sampleCount, comma = true)
+        append("  \"samples\": ")
+        appendGlyphCacheMetricsSamplesJson(samples)
         append(",\n")
         append("  \"requiredDiagnostics\": ")
         appendGlyphStringArrayMultilineJson(requiredDiagnostics, indent = "  ")
@@ -4841,6 +5255,45 @@ private fun StringBuilder.appendGlyphCacheBudgetRefusalsJson(refusals: List<Glyp
  * Serializes glyph cache telemetry samples.
  */
 private fun StringBuilder.appendGlyphCacheTelemetrySamplesJson(samples: List<GlyphCacheTelemetrySample>) {
+    if (samples.isEmpty()) {
+        append("[]")
+        return
+    }
+    append("[\n")
+    append(samples.joinToString(",\n") { sample -> sample.toCanonicalJson().prependIndent("    ") })
+    append("\n  ]")
+}
+
+/**
+ * Serializes glyph artifact metric samples.
+ */
+private fun StringBuilder.appendGlyphArtifactMetricsSamplesJson(samples: List<GlyphArtifactMetricsSample>) {
+    if (samples.isEmpty()) {
+        append("[]")
+        return
+    }
+    append("[\n")
+    append(samples.joinToString(",\n") { sample -> sample.toCanonicalJson().prependIndent("    ") })
+    append("\n  ]")
+}
+
+/**
+ * Serializes glyph atlas occupancy rows.
+ */
+private fun StringBuilder.appendGlyphAtlasOccupancyEntriesJson(entries: List<GlyphAtlasOccupancyEntry>) {
+    if (entries.isEmpty()) {
+        append("[]")
+        return
+    }
+    append("[\n")
+    append(entries.joinToString(",\n") { entry -> entry.toCanonicalJson().prependIndent("    ").trimEnd() })
+    append("\n  ]")
+}
+
+/**
+ * Serializes glyph cache metric samples.
+ */
+private fun StringBuilder.appendGlyphCacheMetricsSamplesJson(samples: List<GlyphCacheMetricsSample>) {
     if (samples.isEmpty()) {
         append("[]")
         return

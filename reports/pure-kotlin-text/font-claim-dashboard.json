@@ -413,7 +413,7 @@
         ]
       },
       "requiredEvidenceGates": [
-        "KFONT-M12-002, KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own parser/scaler/shaping/paragraph/glyph/GPU producer emission into the shared schema; keep this row schema-only advisory evidence until those subsystem tickets land.",
+        "KFONT-M12-002, KFONT-M12-003, and KFONT-M12-005 still own parser/scaler/shaping/paragraph/GPU producer emission into the shared schema; KFONT-M12-004 currently lands only the deterministic glyph telemetry dump/data slice while this row remains schema-only advisory evidence.",
         "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
       ],
       "legacyGates": [],
@@ -422,6 +422,50 @@
         "no-performance-release-gate-claim",
         "no-gpu-route-support-claim",
         "no-native-engine-oracle-claim"
+      ]
+    },
+    {
+      "surfaceId": "glyph-artifact-metrics",
+      "label": "Glyph artifact metrics",
+      "classification": "tracked-gap",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Cache Budgets"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/dump-evidence-index.json",
+          "reports/font/fixtures/expected/glyph/glyph-artifact-metrics.json"
+        ],
+        "cpuOracle": [
+          "reports/font/fixtures/expected/glyph/glyph-artifact-metrics.json"
+        ],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/font/fixtures/expected/glyph/glyph-artifact-metrics.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/font/fixtures/expected/glyph/glyph-artifact-metrics.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "KFONT-M12-004 currently lands checked-in CPU-only advisory glyph artifact metric dump evidence for outline, A8, SDF, COLR, bitmap, and SVG routes; wiring a non-test glyph producer remains open, and GPU text-route or upload-execution claims stay gated on M11.",
+        "Legacy dftext remains open until SDF artifact, atlas/cache lifecycle, and M11 GPU route replacement evidence are linked."
+      ],
+      "legacyGates": [
+        "dftext"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-gpu-text-route-claim",
+        "no-hidden-performance-gate",
+        "no-dftext-retirement"
       ]
     },
     {
@@ -512,6 +556,93 @@
       "nonClaims": [
         "no-complete-target-support-claim",
         "no-gpu-text-route-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "surfaceId": "glyph-atlas-occupancy",
+      "label": "Glyph atlas occupancy",
+      "classification": "tracked-gap",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+        "section": "Cache and invalidation"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/dump-evidence-index.json",
+          "reports/font/fixtures/expected/glyph/glyph-atlas-occupancy.json"
+        ],
+        "cpuOracle": [
+          "reports/font/fixtures/expected/glyph/glyph-atlas-occupancy.json"
+        ],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/font/fixtures/expected/glyph/glyph-atlas-occupancy.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/font/fixtures/expected/glyph/glyph-atlas-occupancy.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "KFONT-M12-004 currently lands deterministic checked-in atlas occupancy dump evidence with stable artifact IDs and strike-key hashes; wiring a non-test glyph producer remains open, and any GPU atlas ownership or upload-order claim remains gated on M11.",
+        "Legacy dftext remains open until atlas/cache evidence and explicit M11 GPU replacement evidence are linked."
+      ],
+      "legacyGates": [
+        "dftext"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-gpu-text-route-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "surfaceId": "glyph-cache-metrics",
+      "label": "Glyph cache metrics",
+      "classification": "tracked-gap",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Cache Budgets"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/dump-evidence-index.json",
+          "reports/font/fixtures/expected/glyph/glyph-cache-metrics.json"
+        ],
+        "cpuOracle": [
+          "reports/font/fixtures/expected/glyph/glyph-cache-metrics.json"
+        ],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/font/fixtures/expected/glyph/glyph-cache-metrics.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/font/fixtures/expected/glyph/glyph-cache-metrics.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "KFONT-M12-004 currently lands checked-in CPU-only advisory glyph cache metric dump evidence for occupancy, pack timing, hit/miss/eviction, stale-generation, invalidation changes, and budget refusals; wiring a non-test glyph producer remains open, and GPU upload execution or route claims stay gated on M11.",
+        "Keep advisory cache budgets non-blocking; legacy dftext remains open until M11 GPU route replacement evidence is linked."
+      ],
+      "legacyGates": [
+        "dftext"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-gpu-text-route-claim",
+        "no-hidden-performance-gate",
         "no-dftext-retirement"
       ]
     },

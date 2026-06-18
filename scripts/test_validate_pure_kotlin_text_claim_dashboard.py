@@ -50,9 +50,18 @@ class PureKotlinTextClaimDashboardTest(unittest.TestCase):
         surface_rows = {row["surfaceId"]: row for row in dashboard["surfaceRows"]}
         self.assertEqual(
             {
+                "a8-outline-rasterization",
+                "cluster-safety",
+                "font-telemetry-schema",
                 "complex-shaping",
                 "emoji-color",
                 "fallback",
+                "glyph-artifact-metrics",
+                "glyph-artifact-plan-route-taxonomy",
+                "glyph-atlas-eviction-invalidation",
+                "glyph-atlas-occupancy",
+                "glyph-cache-metrics",
+                "glyph-cache-telemetry",
                 "glyph-strike-key-completeness",
                 "lcd",
                 "outline-path",
@@ -149,6 +158,21 @@ class PureKotlinTextClaimDashboardTest(unittest.TestCase):
         with self.assertRaises(validator.ValidationError) as legacy:
             validator.validate_dashboard(PROJECT_ROOT, modified)
         self.assertIn("missing legacy gates", str(legacy.exception))
+
+    def test_validator_rejects_surface_non_claim_drift_from_dump_fixture(self) -> None:
+        validator = load_validator()
+        dashboard = validator.load_dashboard(PROJECT_ROOT)
+        modified = copy.deepcopy(dashboard)
+        row = next(row for row in modified["surfaceRows"] if row["surfaceId"] == "glyph-cache-metrics")
+        row["nonClaims"] = [
+            claim
+            for claim in row["nonClaims"]
+            if claim != "no-hidden-performance-gate"
+        ]
+
+        with self.assertRaises(validator.ValidationError) as drift:
+            validator.validate_dashboard(PROJECT_ROOT, modified)
+        self.assertIn("must match dump nonClaims", str(drift.exception))
 
     def test_validator_rejects_missing_gradle_wiring(self) -> None:
         validator = load_validator()
