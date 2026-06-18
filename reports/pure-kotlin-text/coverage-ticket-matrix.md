@@ -2675,9 +2675,11 @@ Evidence:
   dependencies without promoting support claims.
 - Contract goldens now prove that unsupported discretionary requests can
   diagnose while leaving simple-script defaults explicit at the plan layer.
-- `SkFontTest` now adds a bounded compatibility-path guard that `drawString`
-  forwards raw text to the typeface path builder, but this does not yet promote
-  the OpenType-specific `drawString` gate beyond `review`.
+- `SkFontTest` keeps a bounded compatibility-path guard that `drawString`
+  forwards raw text to the typeface path builder, and `OpenTypeFontTest` now
+  proves on a synthetic facade font embedding the reviewed `GSUB` ligature
+  bytes plus a matching `cmap` that portable OpenType `drawString("fi")`
+  remains distinct from the ligature target glyph path.
 - `dump-evidence-index.json`, `fixture-evidence-manifest.json`, and
   `font-claim-dashboard.json` now track the policy matrix as deterministic
   evidence with `claimPromotionAllowed=false`.
@@ -2690,6 +2692,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextS
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineSkipsUnsupportedCursiveLookupsForScriptPolicy
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEnginePreservesLegacyFeatureDefaultsForScriptsWithoutPolicy
 rtk ./gradlew --no-daemon :kanvas-skia:test --tests org.skia.foundation.SkFontTest.drawString\ forwards\ raw\ text\ to\ typeface\ path\ builder\ without\ implicit\ shaping
+rtk ./gradlew --no-daemon :kanvas-skia:test --tests org.skia.foundation.opentype.OpenTypeFontTest.drawString\ keeps\ portable\ OpenType\ ligature\ codepoint\ distinct\ from\ raw\ fi\ text
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.OpenTypeLayoutEngineContractTest
 rtk ./gradlew --no-daemon :font:text:test
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
@@ -2702,10 +2705,9 @@ rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
   GPOS single subset to avoid over-claiming parser/runtime coverage.
 
 Remaining gate: per-script shaping fixture families from `KFONT-M6-007`,
-`KFONT-M6-008`, and `KFONT-M6-009` are still absent, and the OpenType-specific
-`drawString` compatibility path still lacks explicit complex-feature
-non-enablement evidence. Keep this ticket in `review` until those gates land
-beyond the current contract-level `shaping-plan.json` evidence.
+`KFONT-M6-008`, and `KFONT-M6-009` are still absent. Keep this ticket in
+`review` until those gates land beyond the current contract-level
+`shaping-plan.json` evidence.
 
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 
