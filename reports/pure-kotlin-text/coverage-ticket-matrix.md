@@ -32,7 +32,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | `00-architecture-and-module-boundaries.md` | Module ownership, dependency direction, boundary contracts, serializable diagnostics. | `font/core`, `font/sfnt`, `font/scaler`, `font/text`, `font/glyph`, `font/gpu-api`, `gpu-renderer/text`. | Boundary tests, no forbidden dependencies, dumps with no object identity. |
 | `01-font-source-sfnt-and-scalers.md` | Font sources, TTC/OTC, `cmap`, TrueType `glyf`, CFF/CFF2, variations, fallback catalog. | `font/core`, `font/sfnt`, `font/scaler`, current `kanvas-skia` OpenType backend. | TTF/TTC/malformed fixtures, path/metric dumps, variation fixtures, stable `font.*` diagnostics. |
 | `02-opentype-layout-shaping-engine.md` | Unicode data, bidi, script itemization, GSUB/GPOS/GDEF, clusters, fallback runs, script matrix. | `font/text` basic segmentation/bidi/script, bounded GSUB single/multiple/ligature plus bounded kerning and GPOS pair slices, plus contract-level script feature policy rows and shaping-plan defaults. | One positive and one refusal fixture per required script row, shaping dumps, `text.shaping.*` diagnostics. |
-| `03-paragraph-engine.md` | Paragraph builder, style runs, wrapping, bidi lines, ellipsis, placeholders, selection, hit testing. | `font/text` paragraph skeleton and deterministic simple line breaker. | Layout dumps, paragraph fixtures, hit-test/selection evidence. |
+| `03-paragraph-engine.md` | Paragraph builder, style runs, wrapping, bidi lines, ellipsis, placeholders, selection, hit testing. | `font/text` paragraph input contracts, shaping segmentation, and bounded UAX #14 line-break mapping with explicit locale-refinement diagnostics. | Layout dumps, paragraph fixtures, hit-test/selection evidence. |
 | `04-glyph-representation-and-artifacts.md` | Outline, A8, SDF, atlas, strike keys, cache, invalidation, CPUPreparedGPU artifacts. | `font/glyph`, `font/gpu-api`, current `SkCpuGlyphCache` prototype. | Mask/SDF hashes, atlas dumps, stale/capacity refusals, `text.glyph.*` diagnostics. |
 | `05-color-fonts-bitmap-svg-emoji.md` | COLR/CPAL, COLRv1 graph, PNG bitmap glyphs, SVG-in-OpenType, emoji dispatch. | `font/glyph/color`, `font/sfnt` metadata, current OpenType color metadata. | COLR/PNG/SVG/emoji fixtures, budget/security refusals, non-PNG refusal evidence. |
 | `06-gpu-renderer-handoff.md` | `DrawTextRun`, artifact refs, upload/generation facts, typed text artifacts, no `Sk*` payloads. | `font/gpu-api`, `gpu-renderer/commands`, `gpu-renderer/text`. | Handoff tests, artifact registry tests, unregistered/stale/upload refusals, no CPU-rendered text texture. |
@@ -2976,6 +2976,65 @@ Remaining gate: this is paragraph input golden-schema evidence only. It does
 not claim complete paragraph layout, full bidi visual ordering, rich text
 parity, complete selection/hit testing, ellipsis insertion, Skia Paragraph
 parity, CPU oracle evidence, or GPU text evidence.
+
+### KFONT-M8-003: Implement UAX #14 line breaker
+
+Status: implemented; evidence refreshed for independent review.
+
+Files:
+
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphLineBreaking.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphLineBreakingTest.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/font/fixtures/expected/paragraph/line-breaks.json`
+- `reports/font/fixtures/expected/paragraph/paragraph-input.json`
+- `reports/font/fixtures/fonts/paragraph/paragraph-line-breaking-fixture.txt`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m8-003-uax14-line-breaker.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+
+Evidence:
+
+- `DefaultUax14LineBreaker` now produces deterministic `LineBreakMap`
+  opportunities with explicit `mandatory`, `allowed`, and `prohibited`
+  boundaries, stable rule reasons, pinned Unicode version, and paragraph-owned
+  diagnostics.
+- `ParagraphStyle` now serializes `softWrap`, so paragraph input hashes and
+  downstream layout dumps explicitly preserve optional-wrap policy instead of
+  hiding it in runtime-only state.
+- `line-breaks.json` checks in bounded evidence for Latin UI text, Latin
+  punctuation, CJK no-space text, mixed LTR/RTL text, explicit newlines,
+  combining marks, emoji ZWJ sequences, and a Thai locale refinement gap.
+- No break is emitted inside the combining-mark or emoji ZWJ grapheme-cluster
+  cases, while `softWrap = false` suppresses optional wrap opportunities but
+  still preserves mandatory hard breaks.
+- The bounded CJK fallback uses explicit script-range heuristics only when the
+  pinned line-break classes remain insufficient for the checked Han/kana cases;
+  this is evidence for the named dump rows only and not a complete UAX #14 or
+  dictionary-segmenter claim.
+- Locale-specific dictionary refinement remains a diagnostic-only non-claim:
+  `text.paragraph.locale-break-refinement-unavailable` is checked in on the
+  Thai case rather than hidden behind any host fallback.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphLineBreakingTest --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutMergesLineBreakDiagnosticsIntoResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenLineBreakUnicodeDataIsUnavailable
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: this closes bounded line-break map evidence only. It does not
+claim full UAX #14 conformance, dictionary-based Thai/Lao/Khmer segmentation,
+bidi visual line ordering, ellipsis insertion, selection geometry, hit testing,
+placeholder geometry layout, Skia Paragraph parity, CPU oracle parity, or GPU
+text support.
 ### KFONT-M8-001: Expand TextStyle and paragraph style contracts
 
 Status: done; deterministic contract evidence freshly validated.

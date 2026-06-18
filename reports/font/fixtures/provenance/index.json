@@ -793,6 +793,40 @@
       ]
     },
     {
+      "fixtureId": "paragraph-line-breaking-synthetic",
+      "familyId": "paragraph",
+      "ownerTickets": [
+        "KFONT-M8-003"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M8 paragraph line breaking",
+        "url": "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphLineBreakingTest.kt",
+        "version": "2026-06-18 synthetic paragraph line breaking fixture v1"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/paragraph/paragraph-line-breaking-fixture.txt",
+          "sha256": "2a7297a73693bac378ed5b312c53b2e08e5a50b12b61600bd0d819c8335e8ed5",
+          "sizeBytes": 245,
+          "role": "synthetic-paragraph-input"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/paragraph/line-breaks.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-uax14-claim",
+        "no-complete-paragraph-layout-claim",
+        "no-skia-paragraph-parity-claim"
+      ]
+    },
+    {
       "fixtureId": "paragraph-shaping-segmentation-synthetic",
       "familyId": "paragraph",
       "ownerTickets": [
