@@ -169,7 +169,9 @@
           "role": "devanagari-ttf-font"
         }
       ],
-      "expectedDumps": [],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/devanagari-shaping-report.json"
+      ],
       "nonClaims": [
         "no-complete-target-support-claim",
         "no-fallback-support-claim",

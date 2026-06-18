@@ -111,9 +111,9 @@ Evidence:
 - `KFONT-M6-002`, `KFONT-M6-004`, and `KFONT-M6-005` are now closed out on
   reviewed fixture provenance and promoted dump evidence, so they no longer
   block resumption by merge/adopt status.
-- `KFONT-M6-006` remains the only M6 slice still in `review`; its remaining
-  gates are per-script shaping fixture families and explicit OpenType-specific
-  `drawString` non-enablement evidence.
+- This checkpoint is historical only; later waves kept `KFONT-M6-006` in
+  `review` and have since moved `KFONT-M6-008` into a separate bounded review
+  wave.
 - The named fixture families for `KFONT-M6-003`, `KFONT-M6-007`,
   `KFONT-M6-008`, `KFONT-M6-009`, and `KFONT-M6-010` are still not present
   in-repo beyond ticket text references, so those tickets must not be advanced
@@ -2857,6 +2857,50 @@ Remaining gate: this is Arabic fixture-row seed evidence only. It does not
 claim Arabic shaping support, Indic/Thai/CJK/emoji shaping support, complete
 complex shaping, native shaper oracle status, CPU oracle evidence, or GPU text
 evidence.
+### KFONT-M6-008: Devanagari Shaping Fixture Review Wave
+
+Status: implemented with bounded vendored-font evidence.
+
+Files:
+
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/DevanagariShapingFixtureTest.kt`
+- `reports/font/fixtures/expected/shaping/devanagari-shaping-report.json`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m6-008-devanagari-shaping-fixtures.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-008-add-devanagari-shaping-fixtures.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- The reviewed Devanagari evidence path now injects the pinned
+  Script_Extensions itemizer instead of the bounded legacy `BasicUnicodeData`
+  classifier, so vendored `कि` exercises the reviewed `deva` / `dev2` policy
+  path as `Deva` without changing the default shaping behavior used by
+  existing tickets.
+- `DevanagariShapingFixtureTest` now proves bounded vendored-font evidence for
+  pre-base matra shaping, consonant-cluster preservation, reph-like shaping,
+  and mark placement on `NotoSansDevanagari-Regular.ttf` without promoting
+  complete Devanagari or Indic shaping support.
+- `devanagari-shaping-report.json` summarizes these bounded positive rows and
+  keeps syllable-plan dumps, the full required feature set, Devanagari-specific
+  refusal fixtures/codes, and ticket-local trace dump families as explicit
+  remaining gates.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.DevanagariShapingFixtureTest
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: `KFONT-M6-008` is still not `done`. Syllable-plan or phase
+serialization, the full required Devanagari feature set, dedicated refusal
+fixtures/codes, and ticket-local `gsub-trace.json` / `gpos-trace.json` /
+`shaped-glyph-run.json` / `unicode-segments.json` dump families remain open.
 ### PKT-09A: Paragraph Semantic Layout Dumps And Refusals
 
 Status: implemented and independently reviewed.

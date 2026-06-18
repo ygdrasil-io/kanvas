@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-008"
 title: "Add Devanagari shaping fixtures"
-status: "proposed"
+status: "review"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
@@ -97,7 +97,8 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*DevanagariShaping*'
 ## Status Notes
 
 - `proposed`: Devanagari evidence depends on M5 clusters/itemization, contextual GSUB, mark positioning, and feature policy.
-- Current blocker audit (2026-06-18): `KFONT-M6-006` remains in `review` on absent per-script fixture families, `KFONT-M6-003` remains gated by its own missing contextual fixture family, and the Devanagari fixture set `devanagari-consonant-cluster.otf`, `devanagari-reph.otf`, `devanagari-prebase-matra.otf`, `devanagari-below-base.otf`, `devanagari-mark-placement.otf`, and `devanagari-unsupported-syllable.otf` is not present in-repo. Remaining gate is complete the contextual dependency, retain the bounded feature-policy slice, then add reviewed Indic fixture provenance and syllable-plan dumps.
+- `review`: `DevanagariShapingFixtureTest` plus `devanagari-shaping-report.json` now prove bounded vendored-font evidence for pinned-itemizer `Deva` script selection, pre-base matra shaping, consonant-cluster preservation, reph-like shaping, and mark placement on `NotoSansDevanagari-Regular.ttf` without promoting Devanagari or Indic shaping support.
+- `review`: This wave intentionally keeps `indic-syllable-plan.json` or equivalent phase evidence, the full required `deva` / `dev2` feature set, dedicated unsupported-syllable and phase refusal fixtures/codes, and ticket-local `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` / `unicode-segments.json` families as explicit remaining gates.
 - Move to `ready` only after fixture coverage and syllable dump fields are reviewed.
 
 ## Linear Labels

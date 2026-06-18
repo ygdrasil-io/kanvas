@@ -311,19 +311,23 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/DevanagariShapingFixtureTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
-        "reports/font/fixtures/expected/shaping/arabic-seed-readiness.json"
+        "reports/font/fixtures/expected/shaping/arabic-seed-readiness.json",
+        "reports/font/fixtures/expected/shaping/devanagari-shaping-report.json",
+        "reports/pure-kotlin-text/2026-06-18-kfont-m6-008-devanagari-shaping-fixtures.md"
       ],
       "requiredEvidenceGates": [
         "Add Arabic positive and refusal rows for joining forms, lam-alef, marks, cursive attachment, and mixed bidi.",
-        "Add Devanagari positive and refusal rows for syllable formation, reph, pre-base matra, below-base forms, and mark placement.",
+        "KFONT-M6-008 now lands bounded Devanagari review evidence for pinned-itemizer Deva script selection, pre-base matra shaping, consonant-cluster preservation, reph-like shaping, and mark placement on vendored Noto Sans Devanagari; syllable-plan evidence, the full required feature set, Devanagari-specific refusal fixtures/codes, and ticket-local trace dump families remain explicit gates.",
         "Add Thai positive and refusal rows for base+mark clusters, tone marks, mixed Latin/Thai runs, and paragraph-owned dictionary diagnostics.",
         "Add CJK positive and refusal rows for Han, kana, vertical alternates, variation selectors, and paragraph-owned ruby/line-break diagnostics.",
         "Add emoji shaping positive and refusal rows for VS15/VS16, skin tone, ZWJ sequence, fallback emoji font, and unsupported-sequence refusals."
       ],
       "validationCommands": [
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
-        "rtk ./gradlew --no-daemon :font:text:test"
+        "rtk ./gradlew --no-daemon :font:text:test",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.DevanagariShapingFixtureTest"
       ],
       "fixtureCommands": [
         "Split complex-script fixtures by script family before any script promotion beyond Latin."
