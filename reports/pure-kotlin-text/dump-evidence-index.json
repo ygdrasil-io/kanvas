@@ -168,6 +168,39 @@
       ]
     },
     {
+      "dumpId": "arabic-shaped-glyph-run",
+      "ownerTicket": "KFONT-M6-007",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Clusters"
+      },
+      "producerPaths": [
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
+        "reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "fixtureFamilyId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.arabicShapedGlyphRunGoldenMatchesRepoGolden --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.basicOpenTypeShapingEngineAppliesVendoredArabicJoiningForms --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.basicOpenTypeShapingEngineAppliesVendoredArabicMarkPositioning --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.basicOpenTypeShapingEngineChangesVendoredArabicLamAlefSequenceWithoutClosingLigatureGate --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.basicOpenTypeShapingEngineEmitsReviewedGenericGdefRequiredDiagnosticForArabicBasePlusMarkFixture",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Arabic shaped-glyph-run golden changes require reviewed vendored joining/mark rows, bounded lam-alef evidence, generic gdef-required refusal review, and explicit non-promotion of Arabic or complex-shaping support.",
+      "nonClaims": [
+        "producer-only",
+        "no-arabic-shaping-support-claim",
+        "no-complex-shaping-support-claim",
+        "no-native-shaper-oracle-claim",
+        "no-cpu-or-gpu-rendering-claim"
+      ]
+    },
+    {
       "dumpId": "arabic-shaping-report",
       "ownerTicket": "KFONT-M6-007",
       "classification": "golden-gated",

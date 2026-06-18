@@ -2865,7 +2865,10 @@ Files:
 
 - `font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt`
 - `reports/font/fixtures/expected/shaping/arabic-mixed-bidi.txt`
+- `reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json`
 - `reports/font/fixtures/expected/shaping/arabic-shaping-report.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
 - `reports/pure-kotlin-text/2026-06-18-kfont-m6-007-arabic-shaping-fixtures.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-007-add-arabic-shaping-fixtures.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/README.md`
@@ -2889,11 +2892,16 @@ Evidence:
   emits the stable generic `text.shaping.gdef-required` refusal for Arabic
   base+mark input instead of approximating mark attachment without GDEF glyph
   classes.
+- `arabic-shaped-glyph-run.json` now pins ticket-local glyph/cluster facts for
+  vendored joining forms, vendored marks, bounded `lam-alef` runtime
+  divergence, and the reviewed generic `gdef-required` refusal row without
+  claiming ticket-ready positive `lam-alef` evidence.
 - `arabic-shaping-report.json` summarizes the fresh positive/diagnostic rows and
-  keeps explicit `lam-alef`, vendored positive cursive attachment,
-  Arabic-specific missing-mark/missing-cursive fixtures, narrower `text.shaping.arabic-*`
-  refusals, and ticket-local shaping/trace dump families as explicit
-  remaining gates.
+  now references the ticket-local shaped-glyph-run golden while keeping
+  explicit `lam-alef`, vendored positive cursive attachment, Arabic-specific
+  missing-mark/missing-cursive fixtures, narrower `text.shaping.arabic-*`
+  refusals, and ticket-local `shaping-plan.json` / `gsub-trace.json` /
+  `gpos-trace.json` families as explicit remaining gates.
 - This wave intentionally keeps `arabic-seed-readiness.json` as the broader
   seed matrix while attaching reviewed ticket-local evidence only for the
   bounded rows above.
@@ -2910,10 +2918,10 @@ rtk git diff --check
 ```
 
 Remaining gate: `KFONT-M6-007` is still not `done`. Explicit `lam-alef`
-positive evidence, ticket-local positive cursive attachment, Arabic-specific refusal fixtures and
-diagnostic codes, and ticket-local `shaping-plan.json` / `gsub-trace.json` /
-`gpos-trace.json` / `shaped-glyph-run.json` dump families remain explicit
-Arabic shaping gates.
+positive evidence, ticket-local positive cursive attachment, Arabic-specific
+refusal fixtures and diagnostic codes, and ticket-local `shaping-plan.json` /
+`gsub-trace.json` / `gpos-trace.json` dump families remain explicit Arabic
+shaping gates.
 ### PKT-09A: Paragraph Semantic Layout Dumps And Refusals
 
 Status: implemented and independently reviewed.

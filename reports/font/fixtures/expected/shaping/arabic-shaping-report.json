@@ -9,18 +9,20 @@
       "caseId": "joining-forms",
       "status": "positive",
       "evidence": [
-        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt"
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
+        "reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json"
       ],
-      "notes": "Vendored Noto Naskh Arabic changes the visual-order glyph sequence for \u0633\u0644\u0627\u0645 beyond pure RTL reordering of raw cmap glyph IDs, giving bounded joining-form evidence without promoting full Arabic support."
+      "notes": "Vendored Noto Naskh Arabic changes the visual-order glyph sequence for \u0633\u0644\u0627\u0645 beyond pure RTL reordering of raw cmap glyph IDs, and the ticket-local arabic-shaped-glyph-run dump now pins the resulting RTL-ordered clusters without promoting full Arabic support."
     },
     {
       "caseId": "marks",
       "status": "positive",
       "evidence": [
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
-        "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf"
+        "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
+        "reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json"
       ],
-      "notes": "Vendored Noto Naskh Arabic proves a bounded base-plus-mark case by tying the positioning or zero-advance check to the mark cluster itself."
+      "notes": "Vendored Noto Naskh Arabic proves a bounded base-plus-mark case by tying the positioning or zero-advance check to the mark cluster itself, and the ticket-local arabic-shaped-glyph-run dump now pins the shaped glyph/cluster facts for that row."
     },
     {
       "caseId": "missing-mark-gdef-required",
@@ -44,7 +46,7 @@
   "remainingGates": [
     {
       "remainingGateId": "lam-alef-positive-evidence",
-      "detail": "Vendored Noto Naskh Arabic still has only a bounded runtime check for logical text \\u0644\\u0627 changing away from the raw visual-order cmap pair; this wave does not yet prove a feature-local lam-alef positive row."
+      "detail": "Vendored Noto Naskh Arabic now has a ticket-local arabic-shaped-glyph-run row for logical text \\u0644\\u0627, but it still proves only bounded runtime divergence away from the raw visual-order cmap pair and does not yet close the feature-local lam-alef positive gate."
     },
     {
       "remainingGateId": "cursive-positive-on-vendored-arabic",
@@ -52,7 +54,7 @@
     },
     {
       "remainingGateId": "arabic-specific-refusal-fixtures-and-codes",
-      "detail": "Dedicated arabic-missing-cursive/arabic-missing-mark fixtures and narrower text.shaping.arabic-* refusal codes remain absent; the reviewed generic gdef-required row is bounded evidence only and does not replace those Arabic-specific refusal assets."
+      "detail": "Dedicated arabic-missing-cursive/arabic-missing-mark fixtures and narrower text.shaping.arabic-* refusal codes remain absent; the reviewed generic gdef-required row is bounded evidence only, and ticket-local shaping-plan / gsub-trace / gpos-trace dump families remain separate Arabic gates."
     }
   ],
   "nonClaims": [

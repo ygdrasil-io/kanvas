@@ -3,6 +3,7 @@ package org.graphiks.kanvas.text
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import kotlin.math.roundToLong
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -205,6 +206,18 @@ class ArabicShapingFixtureTest {
         assertNoSupportPromotionClaims(report)
     }
 
+    @Test
+    fun arabicShapedGlyphRunGoldenMatchesRepoGolden() {
+        val actual = arabicShapedGlyphRunEvidenceJson()
+        val expected = readProjectFile("reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json")
+
+        assertEquals(expected.trimEnd(), actual.trimEnd())
+        assertContains(actual, """"dumpId": "arabic-shaped-glyph-run"""")
+        assertContains(actual, """"fixtureFamilyId": "arabic-shaping-fixtures"""")
+        assertContains(actual, """"caseId": "lam-alef-bounded-runtime-divergence"""")
+        assertContains(actual, TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE)
+    }
+
     private fun engineFor(face: ParsedFixtureFace): BasicOpenTypeShapingEngine =
         BasicOpenTypeShapingEngine(
             glyphMapper = CMapGlyphMapper(cmapsByTypefaceId = mapOf(face.typefaceId to face.cmap)),
@@ -221,6 +234,59 @@ class ArabicShapingFixtureTest {
 
     private fun readJsonProjectFile(relativePath: String): Map<String, Any?> =
         jsonObject(JsonParser(readProjectFile(relativePath)).parse(), relativePath)
+
+    private fun arabicShapedGlyphRunEvidenceJson(): String {
+        val cases = listOf(
+            buildArabicShapedGlyphRunCase(
+                caseId = "joining-forms",
+                status = "positive",
+                reportRef = "arabic-shaping-report#joining-forms",
+                uuid = "550e8400-e29b-41d4-a716-446655440703",
+                relativePath = "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
+                inputText = "\u0633\u0644\u0627\u0645",
+            ),
+            buildArabicShapedGlyphRunCase(
+                caseId = "marks",
+                status = "positive",
+                reportRef = "arabic-shaping-report#marks",
+                uuid = "550e8400-e29b-41d4-a716-446655440704",
+                relativePath = "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
+                inputText = "\u0627\u064E",
+            ),
+            buildArabicShapedGlyphRunCase(
+                caseId = "lam-alef-bounded-runtime-divergence",
+                status = "bounded",
+                reportRef = "arabic-shaping-report#lam-alef-positive-evidence",
+                uuid = "550e8400-e29b-41d4-a716-446655440705",
+                relativePath = "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
+                inputText = "\u0644\u0627",
+            ),
+            buildArabicShapedGlyphRunCase(
+                caseId = "missing-mark-gdef-required",
+                status = "diagnostic",
+                reportRef = "arabic-shaping-report#missing-mark-gdef-required",
+                uuid = "550e8400-e29b-41d4-a716-446655440706",
+                relativePath = "reports/font/fixtures/fonts/shaping/gpos-missing-gdef.otf",
+                inputText = "\u0627\u064E",
+            ),
+        )
+        return buildString {
+            append("{\n")
+            append("  \"schemaVersion\": 1,\n")
+            append("  \"dumpId\": \"arabic-shaped-glyph-run\",\n")
+            append("  \"ownerTickets\": [\"KFONT-M6-007\"],\n")
+            append("  \"fixtureFamilyId\": \"arabic-shaping-fixtures\",\n")
+            append("  \"cases\": [\n")
+            append(cases.joinToString(",\n") { it.toCanonicalJson().prependIndent("    ") })
+            append("\n  ],\n")
+            append(
+                "  \"nonClaims\": [\"producer-only\", \"no-arabic-shaping-support-claim\", " +
+                    "\"no-complex-shaping-support-claim\", \"no-native-shaper-oracle-claim\", " +
+                    "\"no-cpu-or-gpu-rendering-claim\"]\n",
+            )
+            append("}\n")
+        }
+    }
 
     private fun parsedFixtureFace(
         uuid: String,
@@ -262,6 +328,123 @@ class ArabicShapingFixtureTest {
         val gposSingles: OpenTypeGposSingleTable?,
         val gposPairs: OpenTypeGposPairTable?,
     )
+
+    private data class ArabicShapedGlyphRunCase(
+        val caseId: String,
+        val status: String,
+        val reportRef: String,
+        val fixtureFont: String,
+        val inputText: String,
+        val typefaceId: TypefaceID,
+        val glyphRun: org.graphiks.kanvas.text.shaping.ShapedGlyphRun,
+        val diagnostics: List<org.graphiks.kanvas.text.shaping.ShapingDiagnostic>,
+    )
+
+    private fun buildArabicShapedGlyphRunCase(
+        caseId: String,
+        status: String,
+        reportRef: String,
+        uuid: String,
+        relativePath: String,
+        inputText: String,
+    ): ArabicShapedGlyphRunCase {
+        val face = parsedFixtureFace(uuid = uuid, relativePath = relativePath)
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = inputText,
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        assertEquals(1, result.glyphRuns.size, caseId)
+        return ArabicShapedGlyphRunCase(
+            caseId = caseId,
+            status = status,
+            reportRef = reportRef,
+            fixtureFont = relativePath,
+            inputText = inputText,
+            typefaceId = face.typefaceId,
+            glyphRun = result.glyphRuns.single(),
+            diagnostics = result.diagnostics,
+        )
+    }
+
+    private fun ArabicShapedGlyphRunCase.toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  \"caseId\": ").append(jsonString(caseId)).append(",\n")
+        append("  \"ticketId\": \"KFONT-M6-007\",\n")
+        append("  \"status\": ").append(jsonString(status)).append(",\n")
+        append("  \"reportRef\": ").append(jsonString(reportRef)).append(",\n")
+        append("  \"fixtureFont\": ").append(jsonString(fixtureFont)).append(",\n")
+        append("  \"inputText\": ").append(jsonString(inputText)).append(",\n")
+        append("  \"typefaceId\": ").append(jsonString(typefaceId.value.toString())).append(",\n")
+        append("  \"glyphIds\": ").append(glyphRun.glyphIds.toCanonicalIntArrayJson()).append(",\n")
+        append("  \"clusters\": ").append(glyphRun.clusters.toCanonicalClusterArrayJson()).append(",\n")
+        append("  \"clusterMetrics\": ").append(glyphRun.clusters.toCanonicalClusterMetricsJson()).append(",\n")
+        append("  \"advanceX10\": ").append(glyphRun.advanceX.toTenthsJson())
+        if (diagnostics.isNotEmpty()) {
+            append(",\n")
+            append("  \"diagnostics\": ").append(diagnostics.toCanonicalDiagnosticsJson())
+        }
+        append("\n}")
+    }
+
+    private fun List<Int>.toCanonicalIntArrayJson(): String =
+        joinToString(prefix = "[", postfix = "]")
+
+    private fun List<org.graphiks.kanvas.text.shaping.GlyphCluster>.toCanonicalClusterArrayJson(): String =
+        joinToString(prefix = "[", postfix = "]") { cluster ->
+            """{"textRange":${jsonString(cluster.textRange.toRangeLabel())},"glyphRange":${jsonString(cluster.glyphRange.toRangeLabel())}}"""
+        }
+
+    private fun List<org.graphiks.kanvas.text.shaping.GlyphCluster>.toCanonicalClusterMetricsJson(): String =
+        joinToString(prefix = "[", postfix = "]") { cluster ->
+            "[${cluster.advanceX.toTenthsJson()}, ${cluster.offsetX.toTenthsJson()}, ${cluster.offsetY.toTenthsJson()}]"
+        }
+
+    private fun List<org.graphiks.kanvas.text.shaping.ShapingDiagnostic>.toCanonicalDiagnosticsJson(): String =
+        joinToString(prefix = "[", postfix = "]") { diagnostic ->
+            buildString {
+                append("{")
+                append(""""code": """).append(jsonString(diagnostic.code))
+                append(", ").append(""""message": """).append(jsonString(diagnostic.message))
+                diagnostic.textRange?.let { range ->
+                    append(", ").append(""""textRange": """).append(jsonString(range.toRangeLabel()))
+                }
+                append("}")
+            }
+        }
+
+    private fun Float.toTenthsJson(): String =
+        (this * 10f).roundToLong().toString()
+
+    private fun IntRange.toRangeLabel(): String =
+        if (isEmpty()) "" else "$first..$last"
+
+    private fun jsonString(value: String): String =
+        "\"" + jsonStringContent(value) + "\""
+
+    private fun jsonStringContent(value: String): String = buildString {
+        value.forEach { character ->
+            when (character) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\b' -> append("\\b")
+                '\u000C' -> append("\\f")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> {
+                    if (character.code < 0x20) {
+                        append("\\u")
+                        append(character.code.toString(16).padStart(4, '0'))
+                    } else {
+                        append(character)
+                    }
+                }
+            }
+        }
+    }
 
     private fun Map<String, Any?>.requiredLong(key: String): Long =
         this[key] as? Long ?: error("Expected $key to be a number")

@@ -14,6 +14,9 @@ promoting Arabic shaping support:
 - `reports/font/fixtures/expected/shaping/arabic-mixed-bidi.txt` now checks in
   the deterministic mixed-direction text input for the paragraph-owned bidi
   diagnostic row.
+- `reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json` now
+  checks in ticket-local glyph/cluster evidence for the bounded Arabic rows
+  already proven by the runtime tests.
 - `reports/font/fixtures/expected/shaping/arabic-shaping-report.json` now
   summarizes the bounded positive/diagnostic rows and the remaining Arabic gates.
 
@@ -29,6 +32,10 @@ promoting Arabic shaping support:
 - The same test proves a bounded `اَ` mark-positioning case by tying the
   positioned-or-zero-advance check to the mark cluster itself on the vendored
   font.
+- `arabic-shaped-glyph-run.json` now pins the shaped glyph ids, cluster ranges,
+  and cluster metrics for vendored joining forms, vendored marks, bounded
+  `lam-alef` runtime divergence, and the reviewed generic
+  `text.shaping.gdef-required` refusal row.
 - The same test also proves that reviewed repo fixture
   `gpos-missing-gdef.otf` emits the stable generic
   `text.shaping.gdef-required` refusal for Arabic base+mark input instead of
@@ -37,10 +44,11 @@ promoting Arabic shaping support:
   `text.shaping.paragraph-bidi-required` diagnostic for mixed Arabic/LTR text
   shaped without paragraph context while still returning shaped output.
 - `arabic-shaping-report.json` records these bounded rows against fixture
-  `single-ttf-noto-naskh-arabic`, attaches the reviewed generic missing-mark
-  refusal row, and keeps explicit `lam-alef`, vendored positive cursive
-  attachment, and Arabic-specific refusal fixtures/codes as explicit remaining
-  gates.
+  `single-ttf-noto-naskh-arabic`, attaches the ticket-local shaped-glyph-run
+  golden plus the reviewed generic missing-mark refusal row, and keeps explicit
+  `lam-alef`, vendored positive cursive attachment, Arabic-specific refusal
+  fixtures/codes, and ticket-local `shaping-plan` / `gsub-trace` /
+  `gpos-trace` dumps as explicit remaining gates.
 
 ## Validation
 
@@ -68,5 +76,5 @@ rtk git diff --check
   the bounded M6-005 reviewed cursive fixtures.
 - Dedicated `arabic-missing-cursive.otf` / `arabic-missing-mark.otf` fixtures,
   narrower `text.shaping.arabic-*` refusals, and ticket-local
-  `shaping-plan.json` / `gsub-trace.json` / `gpos-trace.json` /
-  `shaped-glyph-run.json` families remain open gates before `done`.
+  `shaping-plan.json` / `gsub-trace.json` / `gpos-trace.json` families remain
+  open gates before `done`.
