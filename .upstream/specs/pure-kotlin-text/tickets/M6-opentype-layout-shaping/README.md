@@ -19,9 +19,9 @@ M2 parser facts and M5 Unicode segmentation foundations.
 | Ticket | Status | Priority | Claim Impact | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|
 | [KFONT-M6-001 - Define `OpenTypeLayoutEngine` contract and dumps](KFONT-M6-001-define-opentypelayoutengine-contract-and-dumps.md) | `done` | `P0` | `tracked-gap` | `shaping` | `KFONT-M2-003`, `KFONT-M2-004`, `KFONT-M5-002`, `KFONT-M5-003`, `KFONT-M5-004` | - |
-| [KFONT-M6-002 - Implement GSUB single/multiple/ligature lookups](KFONT-M6-002-implement-gsub-single-multiple-ligature-lookups.md) | `review` | `P0` | `tracked-gap` | `shaping` | `KFONT-M6-001`, `KFONT-M2-003` | - |
+| [KFONT-M6-002 - Implement GSUB single/multiple/ligature lookups](KFONT-M6-002-implement-gsub-single-multiple-ligature-lookups.md) | `done` | `P0` | `tracked-gap` | `shaping` | `KFONT-M6-001`, `KFONT-M2-003` | - |
 | [KFONT-M6-003 - Implement GSUB contextual lookups](KFONT-M6-003-implement-gsub-contextual-lookups.md) | `proposed` | `P0` | `tracked-gap` | `shaping` | `KFONT-M6-002` | - |
-| [KFONT-M6-004 - Implement GPOS single/pair positioning](KFONT-M6-004-implement-gpos-single-pair-positioning.md) | `review` | `P0` | `tracked-gap` | `shaping` | `KFONT-M6-001`, `KFONT-M2-003` | - |
+| [KFONT-M6-004 - Implement GPOS single/pair positioning](KFONT-M6-004-implement-gpos-single-pair-positioning.md) | `done` | `P0` | `tracked-gap` | `shaping` | `KFONT-M6-001`, `KFONT-M2-003` | - |
 | [KFONT-M6-005 - Implement mark and cursive positioning](KFONT-M6-005-implement-mark-and-cursive-positioning.md) | `proposed` | `P0` | `tracked-gap` | `shaping` | `KFONT-M6-004`, `KFONT-M2-003` | - |
 | [KFONT-M6-006 - Add script-specific default feature policy](KFONT-M6-006-add-script-specific-default-feature-policy.md) | `review` | `P0` | `tracked-gap` | `shaping` | `KFONT-M6-001`, `KFONT-M5-004` | - |
 | [KFONT-M6-007 - Add Arabic shaping fixtures](KFONT-M6-007-add-arabic-shaping-fixtures.md) | `proposed` | `P0` | `fixture-gated` | `shaping` | `KFONT-M5-003`, `KFONT-M6-003`, `KFONT-M6-005`, `KFONT-M6-006` | - |
@@ -40,17 +40,15 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*' --tests '*De
 
 ## Current Slice Notes
 
-- 2026-06-17 independent audit: merged bounded slices for `KFONT-M6-002`, `KFONT-M6-004`, and `KFONT-M6-006` remain valid `review` slices. Their remaining work is fixture/dump evidence, not a revert to `blocked` or `proposed`.
-- `KFONT-M6-002` stays in `review` on reviewed GSUB fixture provenance plus promoted `gsub-trace.json` / `shaped-glyph-run.json` evidence beyond the current M6-001 contract goldens.
-- `KFONT-M6-004` stays in `review` on reviewed GPOS fixture provenance plus promoted `gpos-trace.json` / `shaped-glyph-run.json` evidence and layout-contract malformed/refusal diagnostics.
+- 2026-06-18 bounded fixture closeout: `KFONT-M6-002` and `KFONT-M6-004` now land reviewed synthetic Latin fixtures, provenance, and promoted dumps while retaining separate M6-001 contract-only goldens.
+- `KFONT-M6-002` is `done` on reviewed GSUB fixture provenance plus promoted `gsub-trace.json` / `shaped-glyph-run.json` evidence beyond the current M6-001 contract goldens.
+- `KFONT-M6-004` is `done` on reviewed GPOS fixture provenance plus promoted `gpos-trace.json` / `shaped-glyph-run.json` evidence and layout-contract malformed/refusal diagnostics.
 - `KFONT-M6-006` stays in `review` on per-script shaping fixture families, runtime adoption of `ResolvedFeatureSet`, and explicit `drawString` non-enablement evidence.
 
 ## Current Blockers
 
-- 2026-06-17 audit: `KFONT-M6-002` still depends on absent `gsub-single-substitution.otf`, `gsub-multiple-substitution.otf`, `gsub-ligature-fi.otf`, `gsub-coverage-malformed.otf`, and `gsub-ligature-bad-component.otf`, plus promoted `gsub-trace.json` / `shaped-glyph-run.json` evidence.
-- 2026-06-17 audit: `KFONT-M6-004` still depends on absent `gpos-single-adjustment.otf`, `gpos-pair-format1-kerning.otf`, `gpos-pair-format2-class.otf`, `gpos-valueformat-malformed.otf`, and `gpos-pair-out-of-range.otf`, plus promoted `gpos-trace.json` / `shaped-glyph-run.json` evidence.
 - 2026-06-17 audit: `KFONT-M6-006` still depends on absent per-script shaping fixture families from `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`, plus runtime adoption of `ResolvedFeatureSet`.
-- 2026-06-17 audit: `KFONT-M6-003`, `KFONT-M6-005`, `KFONT-M6-007`, `KFONT-M6-008`, `KFONT-M6-009`, and `KFONT-M6-010` remain gated by the review-state base slices above plus their own named fixture families.
+- 2026-06-18 audit: `KFONT-M6-003`, `KFONT-M6-005`, `KFONT-M6-007`, `KFONT-M6-008`, `KFONT-M6-009`, and `KFONT-M6-010` remain gated by their own named fixture families, required-script rows, or advanced lookup dependencies even after the simple Latin GSUB/GPOS slices moved to `done`.
 
 ## Non-Claims
 

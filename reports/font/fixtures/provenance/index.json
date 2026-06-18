@@ -296,6 +296,348 @@
       ]
     },
     {
+      "fixtureId": "gpos-pair-format1-kerning",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-004"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M6 GPOS Pair Format 1",
+        "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-pair-format1-kerning.otf",
+          "sha256": "30d29a4e1e9afdc372fb0ac587ef2ce358faeb4ae7c82ec7ab54e3445ec957c9",
+          "sizeBytes": 462,
+          "role": "synthetic-shaping-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/gpos-trace.json",
+        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gsub-gpos-support-claim",
+        "no-greek-cyrillic-hebrew-promotion-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "gpos-pair-format2-class",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-004"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M6 GPOS Pair Format 2",
+        "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-pair-format2-class.otf",
+          "sha256": "a90fae69d39019426e7ce692c6da065ad995a3362ded2a9b13db358c4f7062a7",
+          "sizeBytes": 930,
+          "role": "synthetic-shaping-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/gpos-trace.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gsub-gpos-support-claim",
+        "no-greek-cyrillic-hebrew-promotion-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "gpos-pair-out-of-range",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-004"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M6 GPOS Pair OOR",
+        "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-pair-out-of-range.otf",
+          "sha256": "eb533a8e56fce548e10770cd998d98bb48f72661df8beff6793f6fcc86c3eb5c",
+          "sizeBytes": 468,
+          "role": "synthetic-shaping-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/gpos-trace.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gsub-gpos-support-claim",
+        "no-greek-cyrillic-hebrew-promotion-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "gpos-single-adjustment",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-004"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M6 GPOS Single",
+        "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-single-adjustment.otf",
+          "sha256": "89a81bd7d5469a1f07df118feb3eb78a28233836be61a9ade6fc462bf72c8ffd",
+          "sizeBytes": 462,
+          "role": "synthetic-shaping-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/gpos-trace.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gsub-gpos-support-claim",
+        "no-greek-cyrillic-hebrew-promotion-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "gpos-valueformat-malformed",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-004"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M6 GPOS bad value format",
+        "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-valueformat-malformed.otf",
+          "sha256": "b14d7a73f0eaa450683f8ff6c3c7285f817758a00b48c728c6ca5c2785c587a4",
+          "sizeBytes": 468,
+          "role": "synthetic-shaping-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/gpos-trace.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gsub-gpos-support-claim",
+        "no-greek-cyrillic-hebrew-promotion-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "gsub-coverage-malformed",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-002"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M6 GSUB bad coverage",
+        "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-coverage-malformed.otf",
+          "sha256": "4514fea1f2f7237aae2c8c4892a3feb1364ff9ee18cf223bdfb2c17ed9b9637e",
+          "sizeBytes": 466,
+          "role": "synthetic-shaping-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/gsub-trace.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gsub-gpos-support-claim",
+        "no-greek-cyrillic-hebrew-promotion-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "gsub-ligature-bad-component",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-002"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M6 GSUB bad ligature component",
+        "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-ligature-bad-component.otf",
+          "sha256": "63258e6460e7c9216f86e68edb9f6d7f23e5bee09f13928cc32a6ad725304fe9",
+          "sizeBytes": 540,
+          "role": "synthetic-shaping-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/gsub-trace.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gsub-gpos-support-claim",
+        "no-greek-cyrillic-hebrew-promotion-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "gsub-ligature-fi",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-002"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M6 GSUB ligature",
+        "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-ligature-fi.otf",
+          "sha256": "f979ca82450852bea30762f71e7ac397a83bc59160e56ec88ecfe72340bf9240",
+          "sizeBytes": 532,
+          "role": "synthetic-shaping-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/gsub-trace.json",
+        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gsub-gpos-support-claim",
+        "no-greek-cyrillic-hebrew-promotion-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "gsub-multiple-substitution",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-002"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M6 GSUB multiple",
+        "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-multiple-substitution.otf",
+          "sha256": "98488f27b32d5dc084ec4525e96a0184c1981ec25a8471ad51791da78a42153e",
+          "sizeBytes": 464,
+          "role": "synthetic-shaping-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/gsub-trace.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gsub-gpos-support-claim",
+        "no-greek-cyrillic-hebrew-promotion-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "gsub-single-substitution",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-002"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M6 GSUB single",
+        "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-single-substitution.otf",
+          "sha256": "e21492882d0fb186ce64c10abd42268483c206462fd70942bf3d01d9d8b52ef6",
+          "sizeBytes": 454,
+          "role": "synthetic-shaping-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/gsub-trace.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gsub-gpos-support-claim",
+        "no-greek-cyrillic-hebrew-promotion-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
       "fixtureId": "scaler-roboto-flex-variable",
       "familyId": "truetype-scaler",
       "ownerTickets": [
