@@ -2637,18 +2637,21 @@ class SFNTSurfaceTest {
                 lookups = listOf(
                     OpenTypeGsubSingleSubstitutionLookup(
                         featureTag = "ccmp",
+                        lookupIndex = 0,
                         substitutions = listOf(
                             OpenTypeGsubSingleSubstitution(inputGlyphId = 5, replacementGlyphId = 15),
                         ),
                     ),
                     OpenTypeGsubMultipleSubstitutionLookup(
                         featureTag = "ccmp",
+                        lookupIndex = 1,
                         substitutions = listOf(
                             OpenTypeGsubMultipleSubstitution(inputGlyphId = 6, replacementGlyphIds = listOf(16, 17)),
                         ),
                     ),
                     OpenTypeGsubLigatureSubstitutionLookup(
                         featureTag = "liga",
+                        lookupIndex = 2,
                         substitutions = listOf(
                             OpenTypeGsubLigatureSubstitution(inputGlyphIds = listOf(7, 8), replacementGlyphId = 42),
                         ),
