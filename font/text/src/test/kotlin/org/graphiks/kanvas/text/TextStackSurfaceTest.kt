@@ -75,6 +75,7 @@ import org.graphiks.kanvas.text.paragraph.PARAGRAPH_CLUSTER_BOUNDARY_VIOLATION_D
 import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LAYOUT_CONSTRAINT_NEGATIVE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LAYOUT_CONSTRAINT_NON_FINITE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LAYOUT_MAX_LINES_ELLIPSIS_UNSUPPORTED_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.paragraph.PARAGRAPH_PLACEHOLDER_ELLIPSIS_CONFLICT_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.Paragraph
 import org.graphiks.kanvas.text.paragraph.ParagraphBuilder
 import org.graphiks.kanvas.text.paragraph.ParagraphShapingPlan
@@ -85,6 +86,7 @@ import org.graphiks.kanvas.text.paragraph.ParagraphLayoutEngine
 import org.graphiks.kanvas.text.paragraph.ParagraphLayoutResult
 import org.graphiks.kanvas.text.paragraph.ParagraphStyle
 import org.graphiks.kanvas.text.paragraph.PlaceholderBox
+import org.graphiks.kanvas.text.paragraph.PlaceholderAlignment
 import org.graphiks.kanvas.text.paragraph.PlaceholderStyle
 import org.graphiks.kanvas.text.paragraph.SelectionBox
 import org.graphiks.kanvas.text.paragraph.SelectionQueryResult
@@ -324,6 +326,76 @@ class TextStackSurfaceTest {
         )
         assertTrue(result.dump().contains("\"code\": \"text.paragraph.max-lines-ellipsis-unsupported\""))
         assertTrue(result.dump().contains("\"textRange\": \"6..6\""))
+    }
+
+    @Test
+    fun paragraphLayoutFallsBackToGenericEllipsisUnsupportedWhenVisiblePlaceholderHasRoomForEllipsis() {
+        val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
+        val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "..."))
+            .append("a", TextStyle(fontSize = 10f))
+            .appendPlaceholder(
+                PlaceholderStyle(
+                    width = 12f,
+                    height = 12f,
+                    baselineOffset = 10f,
+                    alignment = PlaceholderAlignment.BASELINE,
+                ),
+            )
+            .append("\nb", TextStyle(fontSize = 10f))
+            .build()
+
+        val result = layoutEngine.layout(paragraph, maxWidth = 200f)
+
+        assertEquals(1, result.lines.size)
+        assertTrue(result.didOverflowHeight)
+        assertEquals(
+            listOf(
+                ParagraphLayoutDiagnostic(
+                    code = PARAGRAPH_LAYOUT_MAX_LINES_ELLIPSIS_UNSUPPORTED_DIAGNOSTIC_CODE,
+                    message = "maxLines ellipsis is not implemented by the current paragraph engine.",
+                    textRange = 3..3,
+                    severity = "refusal",
+                ),
+            ),
+            result.diagnostics,
+        )
+        assertFalse(result.dump().contains("\"code\": \"text.paragraph.placeholder-ellipsis-conflict\""))
+        assertTrue(result.dump().contains("\"code\": \"text.paragraph.max-lines-ellipsis-unsupported\""))
+    }
+
+    @Test
+    fun paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis() {
+        val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
+        val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "..."))
+            .append("a", TextStyle(fontSize = 10f))
+            .appendPlaceholder(
+                PlaceholderStyle(
+                    width = 12f,
+                    height = 12f,
+                    baselineOffset = 10f,
+                    alignment = PlaceholderAlignment.BASELINE,
+                ),
+            )
+            .append("\nb", TextStyle(fontSize = 10f))
+            .build()
+
+        val result = layoutEngine.layout(paragraph, maxWidth = 24f)
+
+        assertEquals(1, result.lines.size)
+        assertTrue(result.didOverflowHeight)
+        assertEquals(
+            listOf(
+                ParagraphLayoutDiagnostic(
+                    code = PARAGRAPH_PLACEHOLDER_ELLIPSIS_CONFLICT_DIAGNOSTIC_CODE,
+                    message = "ellipsis cannot partially truncate a visible line containing a terminal placeholder in the bounded paragraph runtime.",
+                    textRange = 1..1,
+                    severity = "refusal",
+                ),
+            ),
+            result.diagnostics,
+        )
+        assertTrue(result.dump().contains("\"code\": \"text.paragraph.placeholder-ellipsis-conflict\""))
+        assertFalse(result.dump().contains("\"code\": \"text.paragraph.max-lines-ellipsis-unsupported\""))
     }
 
     @Test
