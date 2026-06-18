@@ -25,7 +25,7 @@ Paragraph layout is not useful for editors or selectable UI text unless it can m
 - Build selection boxes for arbitrary text ranges from `ParagraphLayoutResult`, including multi-line and bidi ranges.
 - Build point hit testing with caret affinity, grapheme boundary snapping, placeholder boxes, and visual line order.
 - Expose word and grapheme boundary query facts sourced from M5 segmentation data.
-- Dump `hit-test-map.json` with line IDs, glyph cluster boxes, caret stops, text positions, affinities, and diagnostics.
+- Dump `hit-test-map.json` with visual line indices, glyph cluster boxes, caret stops, text positions, affinities, and diagnostics.
 - Add diagnostics for coordinates outside finite layout bounds, invalid text ranges, and cluster invariant failures.
 
 ## Non-Goals
@@ -71,7 +71,7 @@ data class HitTestMap(
 - [x] Hit testing at glyph cluster boundaries records upstream/downstream affinity and never returns an offset inside a grapheme cluster.
 - [x] Placeholder boxes participate in selection and hit testing with explicit placeholder IDs.
 - [x] Out-of-bounds points clamp or refuse according to a documented policy and emit diagnostics for non-finite coordinates.
-- [x] `hit-test-map.json` is deterministic and references line IDs from `paragraph-layout.json`.
+- [x] `hit-test-map.json` is deterministic and references visual line indices from `paragraph-layout.json`.
 
 ## Required Evidence
 
