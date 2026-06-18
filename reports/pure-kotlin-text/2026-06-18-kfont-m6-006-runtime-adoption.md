@@ -17,9 +17,11 @@ feature policy:
   scripts whose policy does not enable them.
 - Scripts without a policy row keep the legacy enable-unless-disabled fallback
   instead of silently losing default GSUB/GPOS behavior.
-- `drawString` now has explicit regression evidence that it forwards raw text
-  to the typeface path builder on a bounded compatibility test, but this wave
-  does not yet close the OpenType-specific `drawString` evidence gate.
+- `drawString` now has explicit portable OpenType regression evidence on a
+  synthetic facade font that embeds the reviewed `GSUB` ligature bytes plus a
+  matching `cmap`; raw `"fi"` text stays distinct from the ligature target
+  glyph, closing the local OpenType-specific `drawString` non-enablement gate
+  without widening shaping support claims.
 
 ## Validation
 
@@ -31,6 +33,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextS
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineSkipsUnsupportedCursiveLookupsForScriptPolicy
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEnginePreservesLegacyFeatureDefaultsForScriptsWithoutPolicy
 rtk ./gradlew --no-daemon :kanvas-skia:test --tests org.skia.foundation.SkFontTest.drawString\ forwards\ raw\ text\ to\ typeface\ path\ builder\ without\ implicit\ shaping
+rtk ./gradlew --no-daemon :kanvas-skia:test --tests org.skia.foundation.opentype.OpenTypeFontTest.drawString\ keeps\ portable\ OpenType\ ligature\ codepoint\ distinct\ from\ raw\ fi\ text
 ```
 
 ## Remaining Gates
