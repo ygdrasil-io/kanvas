@@ -2450,6 +2450,75 @@ Remaining gate: no remaining ticket-local gate. Contextual GSUB, required-script
 rows, and any broader shaping support promotion remain separate tickets and
 non-claims.
 
+### KFONT-M6-003: GSUB Contextual Lookup Slice
+
+Status: done; fixture-backed GSUB contextual evidence is freshly validated after independent review remediations for the bounded Latin slice.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/font/fixtures/expected/shaping/gsub-trace.json`
+- `reports/font/fixtures/expected/shaping/shaped-glyph-run.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m6-003-gsub-contextual-lookups.md`
+
+Evidence:
+
+- `OpenTypeGsubTableParser` now parses bounded LookupType 5 contextual
+  substitution formats 1, 2, and 3 with deterministic nested lookup records
+  and `lookupIndex` tracking for the checked-in Latin fixtures.
+- `BasicOpenTypeShapingEngine` now applies the bounded contextual fixtures for
+  positive format 1/2/3 matches, preserves the negative no-match case, and
+  emits a stable `text.shaping.lookup-cycle-detected` refusal for recursive
+  nested lookup re-entry.
+- The runtime now enforces the format 2 first-glyph `Coverage` gate, keeps
+  multiple format 2 subtables isolated within one lookup, preserves later
+  nested `sequenceIndex` targets after earlier buffer expansion, and emits a
+  stable `text.shaping.lookup-malformed` refusal when a contextual nested
+  `sequenceIndex` falls outside the matched range.
+- Nested-only lookups that are reachable only through contextual
+  `SubstLookupRecord`s now remain in the parsed lookup list and are skipped at
+  top level unless a contextual rule references them.
+- Reviewed fixture provenance is now checked in for
+  `gsub-context-format1.otf`, `gsub-context-format2-class.otf`,
+  `gsub-context-format3-coverage.otf`,
+  `gsub-context-malformed-classdef.otf`, and
+  `gsub-context-nested-cycle.otf`.
+- `SFNTSurfaceTest` now asserts deterministic contextual GSUB extraction plus
+  parser-owned malformed `ClassDef` diagnostics from the checked-in fixtures.
+- `TextStackSurfaceTest` now asserts the fixture-backed contextual glyph IDs,
+  preserved cluster ranges, cycle refusal diagnostics, and shared
+  `gsub-trace.json` / `shaped-glyph-run.json` facts for the bounded Latin
+  cases.
+- Independent code review initially rejected the first draft for format 2
+  coverage/subtable handling and nested-index stability; a follow-up review
+  then caught nested-only lookup loss plus two scope-overclaim issues. The
+  remediating parser/runtime regression tests now pass, and the remaining
+  mixed-format same-lookup and acyclic deep re-entry gaps stay explicit
+  non-claims.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.m6SimpleLayoutFixturesAreCheckedInWithSyntheticProvenance --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubContextFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGsubContextFixturesAsDiagnostics --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserKeepsNestedOnlyGsubLookupsReachableFromContextRules
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubContextFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGposFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineReservesNestedOnlyLookupsForContextMatches --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gsubTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gposTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: mixed-format LookupType 5 subtables inside one lookup and any
+acyclic deep re-entry budget remain explicit non-claims on this bounded
+ticket. Mark/cursive positioning, script-default runtime adoption,
+extension/chaining lookups, and non-Latin promotion remain owned by later
+KFONT-M6 tickets.
+
 ### KFONT-M6-004: GPOS Single/Pair Positioning Slice
 
 Status: done with bounded fixture evidence and independent review corrections applied.
