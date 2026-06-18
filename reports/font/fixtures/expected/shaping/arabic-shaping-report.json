@@ -11,7 +11,7 @@
       "evidence": [
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt"
       ],
-      "notes": "Vendored Noto Naskh Arabic shapes contextual joining forms and diverges from raw cmap glyph IDs without promoting full Arabic support."
+      "notes": "Vendored Noto Naskh Arabic changes the visual-order glyph sequence for \u0633\u0644\u0627\u0645 beyond pure RTL reordering of raw cmap glyph IDs, giving bounded joining-form evidence without promoting full Arabic support."
     },
     {
       "caseId": "marks",
@@ -20,26 +20,22 @@
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
         "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf"
       ],
-      "requiredDiagnostics": [
-        "text.shaping.gdef-required",
-        "text.shaping.mark-positioning-unavailable"
-      ],
-      "notes": "Vendored Noto Naskh Arabic proves a bounded base-plus-mark case with positioned or zero-advance mark clusters only."
+      "notes": "Vendored Noto Naskh Arabic proves a bounded base-plus-mark case by tying the positioning or zero-advance check to the mark cluster itself."
     },
     {
       "caseId": "mixed-bidi-paragraph-required",
-      "status": "refusal",
+      "status": "diagnostic",
       "fixtureText": "reports/font/fixtures/expected/shaping/arabic-mixed-bidi.txt",
       "requiredDiagnostics": [
         "text.shaping.paragraph-bidi-required"
       ],
-      "notes": "Single-run shaping keeps paragraph-owned bidi ordering explicit instead of silently approximating mixed Arabic/LTR layout."
+      "notes": "Single-run shaping emits the paragraph-owned bidi diagnostic instead of silently approximating mixed Arabic/LTR layout, while still returning shaped output."
     }
   ],
   "remainingGates": [
     {
       "remainingGateId": "lam-alef-positive-evidence",
-      "detail": "Vendored Noto Naskh Arabic now has a bounded runtime check for logical text \\u0644\\u0627 changing away from the raw cmap sequence, but this wave still does not prove a ticket-ready lam-alef ligature/feature-local positive row; keep the explicit lam-alef gate open until reviewed ligature evidence lands."
+      "detail": "Vendored Noto Naskh Arabic now has a bounded runtime check for logical text \\u0644\\u0627 changing away from the raw visual-order cmap sequence, but this wave still does not prove a ticket-ready lam-alef ligature/feature-local positive row; keep the explicit lam-alef gate open until reviewed ligature evidence lands."
     },
     {
       "remainingGateId": "cursive-positive-on-vendored-arabic",

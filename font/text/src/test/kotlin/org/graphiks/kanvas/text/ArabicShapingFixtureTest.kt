@@ -6,6 +6,7 @@ import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 import org.graphiks.kanvas.font.FontSource
@@ -34,6 +35,7 @@ class ArabicShapingFixtureTest {
         val text = "\u0633\u0644\u0627\u0645"
         val rawGlyphIds = listOf('\u0633'.code, '\u0644'.code, '\u0627'.code, '\u0645'.code)
             .map { codePoint -> requireNotNull(face.cmap.lookupGlyphId(codePoint)) }
+        val rawVisualOrderGlyphIds = rawGlyphIds.reversed()
         val result = engineFor(face).shape(
             ShapingRequest(
                 text = text,
@@ -41,13 +43,15 @@ class ArabicShapingFixtureTest {
                 fontSize = 20f,
             ),
         )
+        val shapedRun = result.glyphRuns.single()
 
         assertEquals(emptyList(), result.diagnostics)
         assertEquals(1, result.glyphRuns.size)
-        assertEquals(4, result.glyphRuns.single().clusters.size)
-        assertTrue(
-            result.glyphRuns.single().glyphIds != rawGlyphIds,
-            "Arabic joining fixture should not stay on raw cmap glyph IDs when contextual forms are applied.",
+        assertEquals(4, shapedRun.clusters.size)
+        assertEquals(4, shapedRun.glyphIds.size)
+        assertFalse(
+            shapedRun.glyphIds == rawVisualOrderGlyphIds,
+            "Arabic joining fixture should prove more than RTL reordering of raw cmap glyph IDs.",
         )
     }
 
@@ -64,13 +68,17 @@ class ArabicShapingFixtureTest {
                 fontSize = 20f,
             ),
         )
+        val shapedRun = result.glyphRuns.single()
+        val baseCluster = shapedRun.clusters.first { cluster -> cluster.textRange == 0..0 }
+        val markCluster = shapedRun.clusters.first { cluster -> cluster.textRange == 1..1 }
 
         assertEquals(emptyList(), result.diagnostics)
         assertEquals(1, result.glyphRuns.size)
-        assertEquals(2, result.glyphRuns.single().clusters.size)
+        assertEquals(2, shapedRun.clusters.size)
+        assertTrue(baseCluster.advanceX > 0f, "Arabic base cluster should keep a positive advance.")
         assertTrue(
-            result.glyphRuns.single().clusters.any { it.offsetY != 0f || it.advanceX == 0f },
-            "Arabic mark fixture should carry a positioned or zero-advance mark cluster.",
+            markCluster.advanceX == 0f || markCluster.offsetX != 0f || markCluster.offsetY != 0f,
+            "Arabic mark fixture should prove positioning or zero-advance on the mark glyph cluster itself.",
         )
     }
 
@@ -90,18 +98,19 @@ class ArabicShapingFixtureTest {
                 fontSize = 20f,
             ),
         )
+        val rawVisualOrderGlyphIds = rawGlyphIds.reversed()
         val shapedRun = result.glyphRuns.single()
 
         assertEquals(emptyList(), result.diagnostics)
         assertEquals(1, result.glyphRuns.size)
         assertTrue(
-            shapedRun.glyphIds.size < rawGlyphIds.size || shapedRun.glyphIds != rawGlyphIds,
-            "Arabic lam-alef bounded runtime check should not stay on the raw cmap glyph sequence.",
+            shapedRun.glyphIds.size < rawVisualOrderGlyphIds.size || shapedRun.glyphIds != rawVisualOrderGlyphIds,
+            "Arabic lam-alef bounded runtime check should prove more than RTL reordering of the raw cmap glyph sequence.",
         )
     }
 
     @Test
-    fun basicOpenTypeShapingEngineRequiresParagraphBidiContextForVendoredArabicMixedFixture() {
+    fun basicOpenTypeShapingEngineEmitsParagraphBidiDiagnosticForVendoredArabicMixedFixture() {
         val face = parsedFixtureFace(
             uuid = "550e8400-e29b-41d4-a716-446655440702",
             relativePath = "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
@@ -115,6 +124,7 @@ class ArabicShapingFixtureTest {
             ),
         )
 
+        assertTrue(result.glyphRuns.isNotEmpty(), "Mixed bidi diagnostic should not be described as an empty-run refusal.")
         assertContains(
             result.diagnostics.map { it.code },
             TEXT_SHAPING_PARAGRAPH_BIDI_REQUIRED_DIAGNOSTIC_CODE,
@@ -123,16 +133,43 @@ class ArabicShapingFixtureTest {
 
     @Test
     fun arabicShapingReportGoldenExistsAndTracksFixtureWave() {
-        val report = readProjectFile("reports/font/fixtures/expected/shaping/arabic-shaping-report.json")
+        val report = readJsonProjectFile("reports/font/fixtures/expected/shaping/arabic-shaping-report.json")
+        val cases = report.requiredObjectList("cases")
 
-        assertContains(report, """"dumpId": "arabic-shaping-report"""")
-        assertContains(report, """"ownerTickets": ["KFONT-M6-007"]""")
-        assertContains(report, """"fixtureId": "single-ttf-noto-naskh-arabic"""")
-        assertContains(report, """"caseId": "joining-forms"""")
-        assertContains(report, """"remainingGateId": "lam-alef-positive-evidence"""")
-        assertContains(report, """"caseId": "mixed-bidi-paragraph-required"""")
-        assertContains(report, """"no-arabic-shaping-support-claim"""")
-        assertContains(report, """"no-native-shaper-oracle-claim"""")
+        assertEquals(1L, report.requiredLong("schemaVersion"))
+        assertEquals("arabic-shaping-report", report.requiredString("dumpId"))
+        assertEquals(listOf("KFONT-M6-007"), report.requiredStringList("ownerTickets"))
+        assertEquals("single-ttf-noto-naskh-arabic", report.requiredString("fixtureId"))
+        assertEquals(
+            listOf("joining-forms", "marks", "mixed-bidi-paragraph-required"),
+            cases.map { it.requiredString("caseId") },
+        )
+        assertEquals("positive", cases[0].requiredString("status"))
+        assertEquals("positive", cases[1].requiredString("status"))
+        assertEquals("diagnostic", cases[2].requiredString("status"))
+        assertEquals(null, cases[1]["requiredDiagnostics"])
+        assertEquals(
+            listOf(TEXT_SHAPING_PARAGRAPH_BIDI_REQUIRED_DIAGNOSTIC_CODE),
+            cases[2].requiredStringList("requiredDiagnostics"),
+        )
+        assertEquals(
+            listOf(
+                "lam-alef-positive-evidence",
+                "cursive-positive-on-vendored-arabic",
+                "arabic-specific-refusal-fixtures-and-codes",
+            ),
+            report.requiredObjectList("remainingGates").map { it.requiredString("remainingGateId") },
+        )
+        assertEquals(
+            listOf(
+                "no-arabic-shaping-support-claim",
+                "no-complex-shaping-support-claim",
+                "no-native-shaper-oracle-claim",
+                "no-cpu-or-gpu-rendering-claim",
+            ),
+            report.requiredStringList("nonClaims"),
+        )
+        assertNoSupportPromotionClaims(report)
     }
 
     private fun engineFor(face: ParsedFixtureFace): BasicOpenTypeShapingEngine =
@@ -148,6 +185,9 @@ class ArabicShapingFixtureTest {
 
     private fun readProjectFile(relativePath: String): String =
         Files.readString(projectRoot().resolve(relativePath))
+
+    private fun readJsonProjectFile(relativePath: String): Map<String, Any?> =
+        jsonObject(JsonParser(readProjectFile(relativePath)).parse(), relativePath)
 
     private fun parsedFixtureFace(
         uuid: String,
@@ -189,4 +229,172 @@ class ArabicShapingFixtureTest {
         val gposSingles: OpenTypeGposSingleTable?,
         val gposPairs: OpenTypeGposPairTable?,
     )
+
+    private fun Map<String, Any?>.requiredLong(key: String): Long =
+        this[key] as? Long ?: error("Expected $key to be a number")
+
+    private fun Map<String, Any?>.requiredString(key: String): String =
+        this[key] as? String ?: error("Expected $key to be a string")
+
+    private fun Map<String, Any?>.requiredObjectList(key: String): List<Map<String, Any?>> =
+        requiredList(key).mapIndexed { index, value -> jsonObject(value, "$key[$index]") }
+
+    private fun Map<String, Any?>.requiredStringList(key: String): List<String> =
+        requiredList(key).mapIndexed { index, value ->
+            value as? String ?: error("Expected $key[$index] to be a string")
+        }
+
+    private fun Map<String, Any?>.requiredList(key: String): List<Any?> =
+        jsonList(this[key], key)
+
+    @Suppress("UNCHECKED_CAST")
+    private fun jsonObject(value: Any?, path: String): Map<String, Any?> =
+        (value as? Map<String, Any?>) ?: error("Expected $path to be a JSON object")
+
+    @Suppress("UNCHECKED_CAST")
+    private fun jsonList(value: Any?, path: String): List<Any?> =
+        (value as? List<Any?>) ?: error("Expected $path to be a JSON array")
+
+    private fun assertNoSupportPromotionClaims(value: Any?, path: String = "$", insideNonClaims: Boolean = false) {
+        when (value) {
+            is Map<*, *> -> value.forEach { (key, child) ->
+                assertTrue(key is String, "Expected JSON object key at $path to be a string")
+                assertFalse(key == "supportClaim", "Unexpected supportClaim key at $path")
+                assertNoSupportPromotionClaims(child, "$path.$key", insideNonClaims = key == "nonClaims")
+            }
+            is List<*> -> value.forEachIndexed { index, child ->
+                assertNoSupportPromotionClaims(child, "$path[$index]", insideNonClaims)
+            }
+            is String -> if (!insideNonClaims) {
+                val normalized = value.lowercase()
+                assertFalse(normalized.contains("supportclaim"), "Unexpected support claim value at $path: $value")
+                assertFalse(
+                    normalized.contains("supported") &&
+                        !normalized.contains("unsupported") &&
+                        !normalized.contains("not supported"),
+                    "Unexpected support promotion value at $path: $value",
+                )
+            }
+        }
+    }
+
+    private class JsonParser(private val source: String) {
+        private var index = 0
+
+        fun parse(): Any? {
+            val value = parseValue()
+            skipWhitespace()
+            require(index == source.length) { "Unexpected trailing JSON content at offset $index" }
+            return value
+        }
+
+        private fun parseValue(): Any? {
+            skipWhitespace()
+            return when (peek()) {
+                '{' -> parseObject()
+                '[' -> parseArray()
+                '"' -> parseString()
+                't' -> parseLiteral("true", true)
+                'f' -> parseLiteral("false", false)
+                'n' -> parseLiteral("null", null)
+                else -> parseNumber()
+            }
+        }
+
+        private fun parseObject(): Map<String, Any?> {
+            expect('{')
+            skipWhitespace()
+            val result = linkedMapOf<String, Any?>()
+            if (consumeIf('}')) return result
+            while (true) {
+                skipWhitespace()
+                val key = parseString()
+                skipWhitespace()
+                expect(':')
+                result[key] = parseValue()
+                skipWhitespace()
+                if (consumeIf('}')) return result
+                expect(',')
+            }
+        }
+
+        private fun parseArray(): List<Any?> {
+            expect('[')
+            skipWhitespace()
+            val result = mutableListOf<Any?>()
+            if (consumeIf(']')) return result
+            while (true) {
+                result += parseValue()
+                skipWhitespace()
+                if (consumeIf(']')) return result
+                expect(',')
+            }
+        }
+
+        private fun parseString(): String {
+            expect('"')
+            val result = StringBuilder()
+            while (index < source.length) {
+                val ch = source[index++]
+                when (ch) {
+                    '"' -> return result.toString()
+                    '\\' -> result.append(parseEscape())
+                    else -> result.append(ch)
+                }
+            }
+            error("Unterminated JSON string")
+        }
+
+        private fun parseEscape(): Char =
+            when (val escaped = source.getOrNull(index++) ?: error("Unterminated JSON escape")) {
+                '"', '\\', '/' -> escaped
+                'b' -> '\b'
+                'f' -> '\u000C'
+                'n' -> '\n'
+                'r' -> '\r'
+                't' -> '\t'
+                'u' -> {
+                    val hex = source.substring(index, index + 4)
+                    index += 4
+                    hex.toInt(16).toChar()
+                }
+                else -> error("Unsupported JSON escape \\$escaped at offset ${index - 1}")
+            }
+
+        private fun parseNumber(): Long {
+            val start = index
+            if (peek() == '-') index += 1
+            while (peekOrNull()?.isDigit() == true) index += 1
+            require(start < index) { "Expected JSON value at offset $index" }
+            return source.substring(start, index).toLong()
+        }
+
+        private fun parseLiteral(token: String, value: Any?): Any? {
+            require(source.startsWith(token, index)) { "Expected $token at offset $index" }
+            index += token.length
+            return value
+        }
+
+        private fun skipWhitespace() {
+            while (peekOrNull()?.isWhitespace() == true) index += 1
+        }
+
+        private fun expect(expected: Char) {
+            require(consumeIf(expected)) { "Expected '$expected' at offset $index" }
+        }
+
+        private fun consumeIf(expected: Char): Boolean =
+            if (peekOrNull() == expected) {
+                index += 1
+                true
+            } else {
+                false
+            }
+
+        private fun peek(): Char =
+            peekOrNull() ?: error("Unexpected end of JSON input at offset $index")
+
+        private fun peekOrNull(): Char? =
+            source.getOrNull(index)
+    }
 }

@@ -2874,17 +2874,17 @@ Files:
 Evidence:
 
 - `ArabicShapingFixtureTest` now proves bounded vendored-font evidence for
-  contextual joining forms on `NotoNaskhArabic-Regular.ttf` by asserting the
-  runtime diverges from raw cmap glyph IDs without promoting full Arabic
-  support.
+  joining-form behavior on `NotoNaskhArabic-Regular.ttf` by asserting the
+  runtime diverges from the raw visual-order cmap glyph sequence without
+  promoting full Arabic support.
 - The same test now adds a bounded non-promotional `لا` lam-alef runtime check
-  by asserting that shaping does not stay on the raw cmap glyph sequence,
-  while keeping the ticket-local ligature gate explicit.
-- The same test proves a bounded `اَ` mark-positioning case with positioned or
-  zero-advance mark clusters and a stable mixed Arabic/LTR
-  `text.shaping.paragraph-bidi-required` refusal sourced from
-  `arabic-mixed-bidi.txt`.
-- `arabic-shaping-report.json` summarizes the fresh positive/refusal rows and
+  by asserting that shaping does not stay on the raw visual-order cmap glyph
+  sequence, while keeping the ticket-local ligature gate explicit.
+- The same test proves a bounded `اَ` mark-positioning case by tying the
+  positioned-or-zero-advance check to the mark cluster itself, plus a stable
+  mixed Arabic/LTR `text.shaping.paragraph-bidi-required` diagnostic sourced
+  from `arabic-mixed-bidi.txt`.
+- `arabic-shaping-report.json` summarizes the fresh positive/diagnostic rows and
   keeps `lam-alef`, vendored positive cursive attachment, Arabic-specific
   missing-mark/missing-cursive fixtures, narrower `text.shaping.arabic-*`
   refusals, and ticket-local shaping/trace dump families as explicit

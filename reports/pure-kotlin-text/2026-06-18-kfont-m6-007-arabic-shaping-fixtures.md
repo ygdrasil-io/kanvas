@@ -10,25 +10,28 @@ promoting Arabic shaping support:
 
 - `font/text` now has focused runtime coverage for vendored
   `NotoNaskhArabic-Regular.ttf` on contextual joining forms, base-plus-mark
-  positioning, and mixed-bidi single-run refusal.
+  positioning, and mixed-bidi single-run paragraph-owned diagnostics.
 - `reports/font/fixtures/expected/shaping/arabic-mixed-bidi.txt` now checks in
   the deterministic mixed-direction text input for the paragraph-owned bidi
-  refusal row.
+  diagnostic row.
 - `reports/font/fixtures/expected/shaping/arabic-shaping-report.json` now
-  summarizes the bounded positive/refusal rows and the remaining Arabic gates.
+  summarizes the bounded positive/diagnostic rows and the remaining Arabic gates.
 
 ## Evidence
 
 - `ArabicShapingFixtureTest` proves that vendored `NotoNaskhArabic-Regular.ttf`
-  no longer stays on raw cmap glyph IDs for the `سلام` joining-forms case.
+  no longer stays on the raw visual-order `cmap` glyph sequence for the `سلام`
+  joining-forms case.
 - The same test now adds a bounded non-promotional `لا` lam-alef runtime
-  check by asserting that shaping does not stay on the raw two-glyph `cmap`
-  sequence, while keeping the ticket-local positive ligature gate explicit.
-- The same test proves a bounded `اَ` mark-positioning case with positioned or
-  zero-advance mark clusters on the vendored font.
+  check by asserting that shaping does not stay on the raw visual-order
+  two-glyph `cmap` sequence, while keeping the ticket-local positive ligature
+  gate explicit.
+- The same test proves a bounded `اَ` mark-positioning case by tying the
+  positioned-or-zero-advance check to the mark cluster itself on the vendored
+  font.
 - `arabic-mixed-bidi.txt` plus `ArabicShapingFixtureTest` prove the stable
-  `text.shaping.paragraph-bidi-required` refusal for mixed Arabic/LTR text
-  shaped without paragraph context.
+  `text.shaping.paragraph-bidi-required` diagnostic for mixed Arabic/LTR text
+  shaped without paragraph context while still returning shaped output.
 - `arabic-shaping-report.json` records these bounded rows against fixture
   `single-ttf-noto-naskh-arabic` and keeps `lam-alef`, vendored positive
   cursive attachment, and Arabic-specific refusal fixtures/codes as explicit
