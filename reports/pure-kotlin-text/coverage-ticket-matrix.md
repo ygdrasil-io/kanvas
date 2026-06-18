@@ -3052,37 +3052,43 @@ Files:
 - `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
 - `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt`
 - `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/font/fixtures/expected/paragraph/paragraph-layout.json`
 - `reports/pure-kotlin-text/2026-06-18-kfont-m8-004-placeholder-ellipsis-conflict.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
 - `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/font/fixtures/provenance/index.json`
 
 Evidence:
 
-- `BasicParagraphLayoutEngine` now emits the narrower
-  `text.paragraph.placeholder-ellipsis-conflict` refusal when `maxLines`
-  overflow reaches a last visible line that ends in a placeholder and does not
-  have enough remaining width to append the requested ellipsis without
-  touching that placeholder.
-- The placeholder-conflict path is asserted directly in
-  `TextStackSurfaceTest`, and companion coverage proves that the generic
-  `text.paragraph.max-lines-ellipsis-unsupported` refusal is not emitted for
-  that narrower case while visible placeholders with enough room still fall
-  back to the generic unsupported path.
-- Non-placeholder overflow still emits the generic unsupported ellipsis
-  diagnostic, so this wave closes only the bounded placeholder conflict gate
-  left by `KFONT-M8-006`.
+- `BasicParagraphLayoutEngine` now inserts ellipsis for bounded `maxLines`
+  overflow, trims only cluster-safe surviving spans, records per-line
+  `isEllipsized` plus `visibleRange`/`truncatedRange`, and emits
+  `text.paragraph.placeholder-ellipsis-conflict`,
+  `text.paragraph.ellipsis-no-room`, and
+  `text.paragraph.ellipsis-glyph-missing` for the remaining bounded refusal
+  paths.
+- `TextStackSurfaceTest` now proves one-line overflow truncation facts,
+  placeholder-tail insertion when room remains, missing-glyph and no-room
+  refusals, trailing-style ellipsis shaping on mixed-style content, and
+  shaped-cluster-safe truncation.
+- `hitTestMap()` now records the visual tail of the displayed ellipsis as a
+  final caret stop, and `hitTest()` treats points inside that tail as
+  in-bounds text hits that resolve to the truncated line end.
+- `paragraph-layout.json` checks in deterministic golden coverage for the
+  accepted non-bidi ellipsis cases without promoting complete paragraph or GPU
+  support.
 
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutFallsBackToGenericEllipsisUnsupportedWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesMaxLineEllipsisUnsupportedInResultDump
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutInsertsEllipsisAndRecordsTruncationFactsInResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAppendsEllipsisWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesEllipsisNoRoomWhenMaxWidthCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesMissingEllipsisGlyphWhenShaperCannotProduceEllipsisRun --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutShapesEllipsisWithTrailingVisibleStyleAfterTruncation --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDoesNotCutInsideAShapedClusterWhenEllipsizing --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestMapIncludesVisualTailForDisplayedEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestTreatsDisplayedEllipsisAsInsideText --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenPinsEllipsisCasesAndNonClaims
 rtk git diff --check
 ```
 
-Remaining gate: this checks in bounded refusal evidence only. It does not yet
-claim actual ellipsis insertion, trailing-style ellipsis shaping, per-line
-`isEllipsized` / `visibleRange` / `truncatedRange` dump fields, mixed-style
-ellipsis evidence, bidi truncation ordering, complete paragraph layout parity,
-CPU oracle parity, or GPU text support.
+Remaining gate: this checks in bounded ellipsis insertion and truncation
+evidence only. It does not yet claim bidi visual-order preservation under
+truncation, complete paragraph layout parity, CPU oracle parity, or GPU text
+support.
 ### KFONT-M8-005: Implement selection and hit-test maps
 
 Status: implemented; evidence refreshed for independent review.
@@ -3176,14 +3182,14 @@ Evidence:
   and `ParagraphPlaceholderLayoutTest` locks that public dump surface without
   claiming selection maps, hit-testing maps, or ellipsis behavior.
 - `KFONT-M8-005` now consumes placeholder IDs and geometry in deterministic
-  selection/hit-test evidence, and `KFONT-M8-004` now contributes the bounded
-  `text.paragraph.placeholder-ellipsis-conflict` refusal needed to close the
-  last placeholder/ellipsis evidence gate.
+  selection/hit-test evidence, and `KFONT-M8-004` now contributes bounded
+  ellipsis insertion plus the narrower `text.paragraph.placeholder-ellipsis-conflict`
+  refusal needed to close the last placeholder/ellipsis evidence gate.
 
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphPlaceholderLayoutTest --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.ParagraphHitTestMapTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutFallsBackToGenericEllipsisUnsupportedWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphPlaceholderLayoutTest --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.ParagraphHitTestMapTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAppendsEllipsisWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis
 rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
@@ -3191,8 +3197,8 @@ rtk git diff --check
 ```
 
 Remaining non-claim: this checks in bounded placeholder geometry evidence only.
-It does not itself claim actual ellipsis insertion, complete paragraph layout
-parity, CPU oracle parity, or GPU text support.
+It does not itself claim bidi visual-order preservation under truncation,
+complete paragraph layout parity, CPU oracle parity, or GPU text support.
 ### KFONT-M8-001: Expand TextStyle and paragraph style contracts
 
 Status: done; deterministic contract evidence freshly validated.

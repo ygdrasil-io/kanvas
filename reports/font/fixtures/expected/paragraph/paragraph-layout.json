@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "dumpId": "paragraph-layout",
+  "ownerTickets": ["KFONT-M8-004"],
+  "requiredDumpFields": ["schema", "layout", "lines", "diagnostics"],
+  "cases": [
+    {
+      "caseId": "single-line-overflow",
+      "inputHash": "68dfd63d9d5df66dcf28e20ca16b4dcac21ed42977d76169c1cf3b8f2b80276a",
+      "visibleRange": "0..1",
+      "truncatedRange": "2..6",
+      "ellipsisSegmentId": "seg-000",
+      "lines": [
+        {
+          "isEllipsized": true,
+          "visibleRange": "0..1",
+          "truncatedRange": "2..6",
+          "ellipsisGlyphRuns": [
+            {
+              "segmentId": "seg-000"
+            }
+          ]
+        }
+      ],
+      "diagnostics": []
+    },
+    {
+      "caseId": "placeholder-tail-room",
+      "inputHash": "a1cf018dca415bd5950955e1c7b73cf476e7f4cfce13f1929b97899fe45a4b3f",
+      "visibleRange": "0..1",
+      "truncatedRange": "2..3",
+      "ellipsisSegmentId": "seg-000",
+      "lines": [
+        {
+          "isEllipsized": true,
+          "visibleRange": "0..1",
+          "truncatedRange": "2..3",
+          "ellipsisGlyphRuns": [
+            {
+              "segmentId": "seg-000"
+            }
+          ]
+        }
+      ],
+      "diagnostics": []
+    },
+    {
+      "caseId": "mixed-style-trailing-style",
+      "inputHash": "9e31e593b9ef0197321463037389b5bd32220f9d978b5c98a3994bb9723452b8",
+      "visibleRange": "0..2",
+      "truncatedRange": "3..5",
+      "ellipsisSegmentId": "seg-001",
+      "lines": [
+        {
+          "isEllipsized": true,
+          "visibleRange": "0..2",
+          "truncatedRange": "3..5",
+          "ellipsisGlyphRuns": [
+            {
+              "segmentId": "seg-001",
+              "fontSize": 20
+            }
+          ]
+        }
+      ],
+      "ellipsisFontSize": 20,
+      "diagnostics": []
+    }
+  ],
+  "negativeCases": [
+    "ellipsis-no-room",
+    "ellipsis-glyph-missing",
+    "placeholder-conflict"
+  ],
+  "nonClaims": [
+    "no-complete-target-support-claim",
+    "no-complete-bidi-visual-ordering-claim",
+    "no-skia-paragraph-parity-claim"
+  ]
+}

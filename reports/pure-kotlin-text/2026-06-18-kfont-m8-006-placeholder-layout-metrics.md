@@ -39,15 +39,16 @@
   above-baseline, below-baseline, and centered placeholder cases, and
   `ParagraphLayoutResult.dump()` now serializes `placeholderBoxes` explicitly.
 - `KFONT-M8-005` now consumes placeholder IDs and geometry in deterministic
-  selection/hit-test evidence, and `KFONT-M8-004` now contributes the bounded
+  selection/hit-test evidence, and `KFONT-M8-004` now contributes bounded
+  ellipsis insertion plus the narrower
   `text.paragraph.placeholder-ellipsis-conflict` refusal required by this
-  ticket for the narrower case where the last visible line ends in a
-  placeholder and cannot fit the requested ellipsis without touching it.
+  ticket for the case where the last visible line ends in a placeholder and
+  cannot fit the requested ellipsis without touching it.
 
 ## Validation
 
 ```bash
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphPlaceholderLayoutTest --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.ParagraphHitTestMapTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutFallsBackToGenericEllipsisUnsupportedWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphPlaceholderLayoutTest --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.ParagraphHitTestMapTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAppendsEllipsisWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis
 rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
@@ -57,5 +58,5 @@ rtk git diff --check
 ## Remaining Non-Claim
 
 This ticket is now closed on bounded placeholder metric evidence. It does not
-itself claim actual ellipsis insertion, complete paragraph layout parity, CPU
-oracle parity, or GPU text support.
+itself claim bidi visual-order preservation under truncation, complete
+paragraph layout parity, CPU oracle parity, or GPU text support.
