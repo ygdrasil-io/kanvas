@@ -497,40 +497,44 @@ class TextStackSurfaceTest {
     @Test
     fun gsubTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics() {
         val dump = readJsonProjectFile("reports/font/fixtures/expected/shaping/gsub-trace.json")
-        val cases = dump.requiredObjectList("cases")
+        val events = dump.requiredObjectList("events")
 
-        assertEquals(1L, dump.requiredLong("schemaVersion"))
+        assertEquals(2L, dump.requiredLong("schemaVersion"))
         assertEquals("gsub-trace", dump.requiredString("dumpId"))
         assertEquals(listOf("KFONT-M6-002"), dump.requiredStringList("ownerTickets"))
-        assertEquals("latin-gsub-gpos-fixtures", dump.requiredString("fixtureFamilyId"))
+        assertEquals("GSUB", dump.requiredString("stage"))
+        assertEquals("Latn", dump.requiredObject("scriptRun").requiredString("selectedScript"))
         assertEquals(
             listOf(
-                "single-substitution",
-                "multiple-substitution",
-                "ligature-fi",
-                "coverage-malformed",
-                "ligature-bad-component",
+                "gsub-single-substitution",
+                "gsub-multiple-substitution",
+                "gsub-ligature-fi",
+                "gsub-single-substitution-no-match",
+                "gsub-coverage-malformed",
+                "gsub-ligature-bad-component",
             ),
-            cases.map { it.requiredString("caseId") },
+            events.map { it.requiredString("lookupId") },
         )
-        assertEquals(listOf("ccmp"), cases[0].requiredStringList("featureOrder"))
-        assertEquals(listOf(552L), cases[0].requiredLongList("inputGlyphIds"))
-        assertEquals(listOf(101L), cases[0].requiredLongList("outputGlyphIds"))
-        assertEquals("preserved", cases[0].requiredObjectList("lookups").single().requiredString("clusterAction"))
-        assertEquals(listOf(553L), cases[1].requiredLongList("inputGlyphIds"))
-        assertEquals(listOf(101L, 102L), cases[1].requiredLongList("outputGlyphIds"))
-        assertEquals("expanded-single-cluster", cases[1].requiredObjectList("lookups").single().requiredString("clusterAction"))
-        assertEquals(listOf("liga"), cases[2].requiredStringList("featureOrder"))
-        assertEquals(listOf(557L, 560L), cases[2].requiredLongList("inputGlyphIds"))
-        assertEquals(listOf(103L), cases[2].requiredLongList("outputGlyphIds"))
-        assertEquals("merged-clusters", cases[2].requiredObjectList("lookups").single().requiredString("clusterAction"))
+        assertEquals(listOf(3L), events[0].requiredLongList("inputGlyphIds"))
+        assertEquals(listOf(9L), events[0].requiredLongList("outputGlyphIds"))
+        assertEquals("preserve", events[0].requiredString("clusterAction"))
+        assertEquals(listOf(12L), events[1].requiredLongList("inputGlyphIds"))
+        assertEquals(listOf(12L, 13L), events[1].requiredLongList("outputGlyphIds"))
+        assertEquals("expand", events[1].requiredString("clusterAction"))
+        assertEquals(listOf(17L, 18L), events[2].requiredLongList("inputGlyphIds"))
+        assertEquals(listOf(42L), events[2].requiredLongList("outputGlyphIds"))
+        assertEquals("merge", events[2].requiredString("clusterAction"))
         assertEquals(
-            "font.sfnt.optional-table-malformed",
-            cases[3].requiredObjectList("diagnostics").single().requiredString("code"),
+            "text.shaping.lookup-malformed",
+            dump.requiredObjectList("diagnostics").single().requiredString("code"),
         )
         assertEquals(
-            "font.sfnt.optional-table-malformed",
-            cases[4].requiredObjectList("diagnostics").single().requiredString("code"),
+            "text.shaping.lookup-malformed",
+            events[4].requiredString("diagnosticCode"),
+        )
+        assertEquals(
+            "text.shaping.lookup-malformed",
+            events[5].requiredString("diagnosticCode"),
         )
         assertNoSupportPromotionClaims(dump)
     }
@@ -1533,7 +1537,7 @@ class TextStackSurfaceTest {
         assertEquals(
             listOf(
                 ShapedGlyphRun(
-                    glyphIds = listOf(101),
+                    glyphIds = listOf(15),
                     clusters = listOf(GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 20f)),
                     advanceX = 20f,
                     script = "Latn",
@@ -1553,7 +1557,7 @@ class TextStackSurfaceTest {
         assertEquals(
             listOf(
                 ShapedGlyphRun(
-                    glyphIds = listOf(101, 102),
+                    glyphIds = listOf(16, 17),
                     clusters = listOf(GlyphCluster(textRange = 0..0, glyphRange = 0..1, advanceX = 20f)),
                     advanceX = 20f,
                     script = "Latn",
@@ -1573,7 +1577,7 @@ class TextStackSurfaceTest {
         assertEquals(
             listOf(
                 ShapedGlyphRun(
-                    glyphIds = listOf(103),
+                    glyphIds = listOf(42),
                     clusters = listOf(GlyphCluster(textRange = 0..1, glyphRange = 0..0, advanceX = 20f)),
                     advanceX = 20f,
                     script = "Latn",
@@ -1926,16 +1930,17 @@ class TextStackSurfaceTest {
         assertEquals(
             listOf(
                 ShapedGlyphRun(
-                    glyphIds = listOf(520),
+                    glyphIds = listOf(7),
                     clusters = listOf(
                         GlyphCluster(
                             textRange = 0..0,
                             glyphRange = 0..0,
-                            advanceX = 19.2f,
-                            offsetX = 1f,
+                            advanceX = 19.4f,
+                            offsetX = 0.8f,
+                            offsetY = -0.4f,
                         ),
                     ),
-                    advanceX = 19.2f,
+                    advanceX = 19.4f,
                     advanceY = 0f,
                     script = "Latn",
                     bidiLevel = 0,
@@ -1954,12 +1959,12 @@ class TextStackSurfaceTest {
         assertEquals(
             listOf(
                 ShapedGlyphRun(
-                    glyphIds = listOf(520, 541),
+                    glyphIds = listOf(7, 28),
                     clusters = listOf(
-                        GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 18.9f),
+                        GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 20f),
                         GlyphCluster(textRange = 1..1, glyphRange = 1..1, advanceX = 20f),
                     ),
-                    advanceX = 38.9f,
+                    advanceX = 40f,
                     advanceY = 0f,
                     script = "Latn",
                     bidiLevel = 0,
@@ -1978,12 +1983,12 @@ class TextStackSurfaceTest {
         assertEquals(
             listOf(
                 ShapedGlyphRun(
-                    glyphIds = listOf(520, 541),
+                    glyphIds = listOf(7, 28),
                     clusters = listOf(
-                        GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 18.8f),
+                        GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 20f),
                         GlyphCluster(textRange = 1..1, glyphRange = 1..1, advanceX = 20f),
                     ),
-                    advanceX = 38.8f,
+                    advanceX = 40f,
                     advanceY = 0f,
                     script = "Latn",
                     bidiLevel = 0,

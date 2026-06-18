@@ -2623,7 +2623,7 @@ class SFNTSurfaceTest {
                         OpenTypeGsubSingleSubstitutionLookup(
                             featureTag = "ccmp",
                             substitutions = listOf(
-                                OpenTypeGsubSingleSubstitution(inputGlyphId = 552, replacementGlyphId = 101),
+                                OpenTypeGsubSingleSubstitution(inputGlyphId = 5, replacementGlyphId = 15),
                             ),
                         ),
                     ),
@@ -2636,7 +2636,7 @@ class SFNTSurfaceTest {
                         OpenTypeGsubMultipleSubstitutionLookup(
                             featureTag = "ccmp",
                             substitutions = listOf(
-                                OpenTypeGsubMultipleSubstitution(inputGlyphId = 553, replacementGlyphIds = listOf(101, 102)),
+                                OpenTypeGsubMultipleSubstitution(inputGlyphId = 6, replacementGlyphIds = listOf(16, 17)),
                             ),
                         ),
                     ),
@@ -2649,7 +2649,7 @@ class SFNTSurfaceTest {
                         OpenTypeGsubLigatureSubstitutionLookup(
                             featureTag = "liga",
                             substitutions = listOf(
-                                OpenTypeGsubLigatureSubstitution(inputGlyphIds = listOf(557, 560), replacementGlyphId = 103),
+                                OpenTypeGsubLigatureSubstitution(inputGlyphIds = listOf(7, 10), replacementGlyphId = 42),
                             ),
                         ),
                     ),
@@ -2729,8 +2729,8 @@ class SFNTSurfaceTest {
             OpenTypeGposSingleTable(
                 adjustments = listOf(
                     OpenTypeGposSingleAdjustment(
-                        glyphId = 520,
-                        valueRecord = OpenTypeGposValueRecord(xPlacement = 50, xAdvance = -40),
+                        glyphId = 7,
+                        valueRecord = OpenTypeGposValueRecord(xPlacement = 40, yPlacement = -20, xAdvance = -30),
                     ),
                 ),
             ),
@@ -2745,8 +2745,8 @@ class SFNTSurfaceTest {
             OpenTypeGposPairTable(
                 pairs = listOf(
                     OpenTypeGposPairAdjustment(
-                        leftGlyphId = 520,
-                        rightGlyphId = 541,
+                        leftGlyphId = 7,
+                        rightGlyphId = 11,
                         firstValueRecord = OpenTypeGposValueRecord(xAdvance = -55),
                     ),
                 ),
@@ -2758,17 +2758,23 @@ class SFNTSurfaceTest {
             fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-pair-format2-class.otf"),
         )
         assertEquals(emptyList(), pairFormat2.diagnostics)
+        val pairFormat2Pairs = requireNotNull(pairFormat2.layout.gposPairs).pairs
+        assertEquals(520, pairFormat2Pairs.size)
         assertEquals(
-            OpenTypeGposPairTable(
-                pairs = listOf(
-                    OpenTypeGposPairAdjustment(
-                        leftGlyphId = 520,
-                        rightGlyphId = 541,
-                        firstValueRecord = OpenTypeGposValueRecord(xAdvance = -60),
-                    ),
-                ),
+            OpenTypeGposPairAdjustment(
+                leftGlyphId = 0,
+                rightGlyphId = 0,
+                firstValueRecord = OpenTypeGposValueRecord(xAdvance = -40),
             ),
-            pairFormat2.layout.gposPairs,
+            pairFormat2Pairs.first(),
+        )
+        assertEquals(
+            OpenTypeGposPairAdjustment(
+                leftGlyphId = 1,
+                rightGlyphId = 259,
+                firstValueRecord = OpenTypeGposValueRecord(xAdvance = -40),
+            ),
+            pairFormat2Pairs.last(),
         )
     }
 
@@ -2983,7 +2989,7 @@ class SFNTSurfaceTest {
         assertEquals(null, malformedValueFormat.layout.gposSingles)
         assertEquals("font.sfnt.optional-table-malformed", malformedPairRecords.diagnostics.single().causeCode)
         assertTrue(
-            malformedPairRecords.diagnostics.single().causeMessage.orEmpty().contains("PairSet"),
+            malformedPairRecords.diagnostics.single().causeMessage.orEmpty().contains("pairSetCount"),
             malformedPairRecords.diagnostics.single().toString(),
         )
         assertEquals(null, malformedPairRecords.layout.gposPairs)

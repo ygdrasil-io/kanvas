@@ -305,7 +305,7 @@
         "kind": "synthetic-kanvas",
         "project": "KFONT synthetic M6 GPOS Pair Format 1",
         "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
-        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v2"
       },
       "license": {
         "id": "Apache-2.0",
@@ -340,7 +340,7 @@
         "kind": "synthetic-kanvas",
         "project": "KFONT synthetic M6 GPOS Pair Format 2",
         "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
-        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v2"
       },
       "license": {
         "id": "Apache-2.0",
@@ -374,7 +374,7 @@
         "kind": "synthetic-kanvas",
         "project": "KFONT synthetic M6 GPOS Pair OOR",
         "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
-        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v2"
       },
       "license": {
         "id": "Apache-2.0",
@@ -408,7 +408,7 @@
         "kind": "synthetic-kanvas",
         "project": "KFONT synthetic M6 GPOS Single",
         "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
-        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v2"
       },
       "license": {
         "id": "Apache-2.0",
@@ -442,7 +442,7 @@
         "kind": "synthetic-kanvas",
         "project": "KFONT synthetic M6 GPOS bad value format",
         "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
-        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v2"
       },
       "license": {
         "id": "Apache-2.0",
@@ -451,8 +451,8 @@
       "assets": [
         {
           "path": "reports/font/fixtures/fonts/shaping/gpos-valueformat-malformed.otf",
-          "sha256": "b14d7a73f0eaa450683f8ff6c3c7285f817758a00b48c728c6ca5c2785c587a4",
-          "sizeBytes": 468,
+          "sha256": "333331c81f6b142c99bdbd393a1e47c8f956d667e9f3b7c581544dfb545df284",
+          "sizeBytes": 470,
           "role": "synthetic-shaping-font"
         }
       ],
@@ -476,7 +476,7 @@
         "kind": "synthetic-kanvas",
         "project": "KFONT synthetic M6 GSUB bad coverage",
         "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
-        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v2"
       },
       "license": {
         "id": "Apache-2.0",
@@ -510,7 +510,7 @@
         "kind": "synthetic-kanvas",
         "project": "KFONT synthetic M6 GSUB bad ligature component",
         "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
-        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v2"
       },
       "license": {
         "id": "Apache-2.0",
@@ -519,7 +519,7 @@
       "assets": [
         {
           "path": "reports/font/fixtures/fonts/shaping/gsub-ligature-bad-component.otf",
-          "sha256": "63258e6460e7c9216f86e68edb9f6d7f23e5bee09f13928cc32a6ad725304fe9",
+          "sha256": "69170940d9937f43e68b47b684fb0c51e1cf28639573671333443929b514abb0",
           "sizeBytes": 540,
           "role": "synthetic-shaping-font"
         }
@@ -544,7 +544,7 @@
         "kind": "synthetic-kanvas",
         "project": "KFONT synthetic M6 GSUB ligature",
         "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
-        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v2"
       },
       "license": {
         "id": "Apache-2.0",
@@ -553,7 +553,7 @@
       "assets": [
         {
           "path": "reports/font/fixtures/fonts/shaping/gsub-ligature-fi.otf",
-          "sha256": "f979ca82450852bea30762f71e7ac397a83bc59160e56ec88ecfe72340bf9240",
+          "sha256": "b7e0dc97a67d5f5cb5dc58c4feb9db3ba57e3baa94173224bb8d56b692d41d2f",
           "sizeBytes": 532,
           "role": "synthetic-shaping-font"
         }
@@ -579,7 +579,7 @@
         "kind": "synthetic-kanvas",
         "project": "KFONT synthetic M6 GSUB multiple",
         "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
-        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v2"
       },
       "license": {
         "id": "Apache-2.0",
@@ -613,7 +613,7 @@
         "kind": "synthetic-kanvas",
         "project": "KFONT synthetic M6 GSUB single",
         "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
-        "version": "2026-06-18 synthetic M6 shaping fixture generator v1"
+        "version": "2026-06-18 synthetic M6 shaping fixture generator v2"
       },
       "license": {
         "id": "Apache-2.0",
