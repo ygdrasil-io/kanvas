@@ -799,7 +799,7 @@ fun defaultFontFixtureManifest(): FontFixtureManifest = FontFixtureManifest(
             faceCount = 1,
             coverageTags = listOf("sfnt-source", "single-ttf", "table:cmap", "table:glyf", "table:head", "table:name"),
             normativeStatus = FontFixtureNormativeStatus.NORMATIVE,
-            remainingGate = "Fallback routing, glyph coverage, and shaping tickets must attach separate evidence before support promotion.",
+            remainingGate = "Arabic shaping review evidence now covers joining forms, marks, and mixed-bidi refusal only; lam-alef still has only a bounded non-promotional runtime check, vendored positive cursive, Arabic-specific refusal fixtures, and ticket-local shaping/trace dump families remain separate shaping gates before support promotion.",
         ),
         BundledFontFixtureManifestEntry(
             fixtureId = "single-ttf-noto-sans-devanagari",

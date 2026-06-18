@@ -39,7 +39,7 @@
   "remainingGates": [
     {
       "remainingGateId": "lam-alef-positive-evidence",
-      "detail": "Vendored Noto Naskh Arabic does not yet supply a ticket-ready positive lam-alef shaping proof in Kanvas runtime evidence; keep this case explicit until a reviewed Arabic fixture or implementation proof lands."
+      "detail": "Vendored Noto Naskh Arabic now has a bounded runtime check for logical text \\u0644\\u0627 changing away from the raw cmap sequence, but this wave still does not prove a ticket-ready lam-alef ligature/feature-local positive row; keep the explicit lam-alef gate open until reviewed ligature evidence lands."
     },
     {
       "remainingGateId": "cursive-positive-on-vendored-arabic",

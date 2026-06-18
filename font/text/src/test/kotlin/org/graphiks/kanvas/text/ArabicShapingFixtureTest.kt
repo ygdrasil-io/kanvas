@@ -75,6 +75,32 @@ class ArabicShapingFixtureTest {
     }
 
     @Test
+    fun basicOpenTypeShapingEngineChangesVendoredArabicLamAlefSequenceWithoutClosingLigatureGate() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440705",
+            relativePath = "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
+        )
+        val text = "\u0644\u0627"
+        val rawGlyphIds = listOf('\u0644'.code, '\u0627'.code)
+            .map { codePoint -> requireNotNull(face.cmap.lookupGlyphId(codePoint)) }
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = text,
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        val shapedRun = result.glyphRuns.single()
+
+        assertEquals(emptyList(), result.diagnostics)
+        assertEquals(1, result.glyphRuns.size)
+        assertTrue(
+            shapedRun.glyphIds.size < rawGlyphIds.size || shapedRun.glyphIds != rawGlyphIds,
+            "Arabic lam-alef bounded runtime check should not stay on the raw cmap glyph sequence.",
+        )
+    }
+
+    @Test
     fun basicOpenTypeShapingEngineRequiresParagraphBidiContextForVendoredArabicMixedFixture() {
         val face = parsedFixtureFace(
             uuid = "550e8400-e29b-41d4-a716-446655440702",

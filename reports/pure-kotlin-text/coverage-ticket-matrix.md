@@ -2877,6 +2877,9 @@ Evidence:
   contextual joining forms on `NotoNaskhArabic-Regular.ttf` by asserting the
   runtime diverges from raw cmap glyph IDs without promoting full Arabic
   support.
+- The same test now adds a bounded non-promotional `لا` lam-alef runtime check
+  by asserting that shaping does not stay on the raw cmap glyph sequence,
+  while keeping the ticket-local ligature gate explicit.
 - The same test proves a bounded `اَ` mark-positioning case with positioned or
   zero-advance mark clusters and a stable mixed Arabic/LTR
   `text.shaping.paragraph-bidi-required` refusal sourced from
@@ -2884,8 +2887,8 @@ Evidence:
 - `arabic-shaping-report.json` summarizes the fresh positive/refusal rows and
   keeps `lam-alef`, vendored positive cursive attachment, Arabic-specific
   missing-mark/missing-cursive fixtures, narrower `text.shaping.arabic-*`
-  refusals, and ticket-local shaping/trace dump families as explicit remaining
-  gates.
+  refusals, and ticket-local shaping/trace dump families as explicit
+  remaining gates.
 - This wave intentionally keeps `arabic-seed-readiness.json` as the broader
   seed matrix while attaching reviewed ticket-local evidence only for the
   bounded rows above.
@@ -2894,6 +2897,7 @@ Validation:
 
 ```bash
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest
+rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest
 rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py

@@ -319,7 +319,7 @@
         "reports/pure-kotlin-text/2026-06-18-kfont-m6-007-arabic-shaping-fixtures.md"
       ],
       "requiredEvidenceGates": [
-        "KFONT-M6-007 now lands bounded Arabic review evidence for joining forms, mark positioning, and mixed-bidi paragraph-required refusal on vendored Noto Naskh Arabic; lam-alef positive evidence, ticket-local positive cursive evidence, Arabic-specific missing-mark/missing-cursive refusal fixtures, and narrower arabic-specific refusal codes remain explicit gates.",
+        "KFONT-M6-007 now lands bounded Arabic review evidence for joining forms, mark positioning, and mixed-bidi paragraph-required refusal on vendored Noto Naskh Arabic; lam-alef still has only a bounded non-promotional runtime check, and ticket-local positive cursive evidence, Arabic-specific missing-mark/missing-cursive refusal fixtures, and narrower arabic-specific refusal codes remain explicit gates.",
         "Add Devanagari positive and refusal rows for syllable formation, reph, pre-base matra, below-base forms, and mark placement.",
         "Add Thai positive and refusal rows for base+mark clusters, tone marks, mixed Latin/Thai runs, and paragraph-owned dictionary diagnostics.",
         "Add CJK positive and refusal rows for Han, kana, vertical alternates, variation selectors, and paragraph-owned ruby/line-break diagnostics.",

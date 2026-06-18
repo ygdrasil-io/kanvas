@@ -91,14 +91,18 @@ data class ArabicFixtureEvidence(
 ## Validation
 
 ```bash
-rtk git diff --check
+rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest
 rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*'
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
 ```
 
 ## Status Notes
 
 - `proposed`: Arabic fixture ticket depends on contextual GSUB, mark/cursive GPOS, feature policy, and bidi runs.
-- `review`: `ArabicShapingFixtureTest` plus the checked-in `arabic-shaping-report.json` now prove bounded vendored-font evidence for contextual joining forms, base-plus-mark positioning, and the single-run `text.shaping.paragraph-bidi-required` refusal on `arabic-mixed-bidi.txt`, all without promoting Arabic or complex shaping support.
+- `review`: `ArabicShapingFixtureTest` plus the checked-in `arabic-shaping-report.json` now prove bounded vendored-font evidence for contextual joining forms, base-plus-mark positioning, and the single-run `text.shaping.paragraph-bidi-required` refusal on `arabic-mixed-bidi.txt`, while a bounded `lam-alef` runtime check only proves divergence from the raw `cmap` sequence and does not yet close the ticket-local ligature gate.
 - `review`: This wave intentionally keeps `lam-alef` positive evidence, vendored-font positive cursive-attachment evidence, dedicated `arabic-missing-cursive` / `arabic-missing-mark` refusal fixtures, narrower `text.shaping.arabic-*` diagnostics, and ticket-local `shaping-plan.json` / `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` dump families as explicit remaining gates.
 - Move to `ready` only after fixture fonts and expected dump names are reviewed.
 
