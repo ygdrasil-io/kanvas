@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M8-005"
 title: "Implement selection and hit-test maps"
-status: "proposed"
+status: "review"
 milestone: "M8"
 priority: "P1"
 owner_area: "paragraph"
@@ -68,10 +68,10 @@ data class HitTestMap(
 ## Acceptance Criteria
 
 - [ ] Selection boxes are stable for single-line, multi-line, bidi, and mixed-style ranges.
-- [ ] Hit testing at glyph cluster boundaries records upstream/downstream affinity and never returns an offset inside a grapheme cluster.
-- [ ] Placeholder boxes participate in selection and hit testing with explicit placeholder IDs.
-- [ ] Out-of-bounds points clamp or refuse according to a documented policy and emit diagnostics for non-finite coordinates.
-- [ ] `hit-test-map.json` is deterministic and references line IDs from `paragraph-layout.json`.
+- [x] Hit testing at glyph cluster boundaries records upstream/downstream affinity and never returns an offset inside a grapheme cluster.
+- [x] Placeholder boxes participate in selection and hit testing with explicit placeholder IDs.
+- [x] Out-of-bounds points clamp or refuse according to a documented policy and emit diagnostics for non-finite coordinates.
+- [x] `hit-test-map.json` is deterministic and references line IDs from `paragraph-layout.json`.
 
 ## Required Evidence
 
@@ -100,8 +100,9 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*HitTest*'
 
 ## Status Notes
 
-- `proposed`: Depends on shaped run segmentation and line-break facts; placeholder cases depend on M8-006 for full geometry.
-- Move to `ready` only after caret affinity and out-of-bounds policies are accepted.
+- `review`: `ParagraphLayoutResult` now exposes bounded `SelectionBox`, `CaretStop`, `HitTestEntry`, `HitTestMap`, `SelectionQueryResult`, and `HitTestQueryResult` contracts, with deterministic selection boxes, caret stops, placeholder IDs, and point hit testing backed by current line/placeholder geometry.
+- `review`: `hit-test-map.json` now checks in deterministic multi-line placeholder selection, non-participating placeholder overflow routing, combining-mark snapping, emoji cluster boundary snapping, and finite out-of-bounds clamp behavior, while invalid selection ranges and non-finite hit-test points emit stable refusal diagnostics.
+- Remaining gate before `done`: paragraph-owned bidi visual ordering and explicit word/grapheme boundary query APIs still need dedicated evidence beyond the current line-indexed, cluster-safe hit-test surface.
 
 ## Linear Labels
 

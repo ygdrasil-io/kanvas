@@ -62,8 +62,12 @@ import org.graphiks.kanvas.text.paragraph.HitTestResult
 import org.graphiks.kanvas.text.paragraph.BasicParagraphLayoutEngine
 import org.graphiks.kanvas.text.paragraph.DefaultParagraphShapingSegmenter
 import org.graphiks.kanvas.text.paragraph.DefaultUax14LineBreaker
+import org.graphiks.kanvas.text.paragraph.CaretStop
 import org.graphiks.kanvas.text.paragraph.LINE_BREAK_DATA_UNAVAILABLE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.LINE_BREAK_LOCALE_REFINEMENT_UNAVAILABLE_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.paragraph.HitTestEntry
+import org.graphiks.kanvas.text.paragraph.HitTestMap
+import org.graphiks.kanvas.text.paragraph.HitTestQueryResult
 import org.graphiks.kanvas.text.paragraph.LineBreaker
 import org.graphiks.kanvas.text.paragraph.LineLayout
 import org.graphiks.kanvas.text.paragraph.LineMetrics
@@ -82,6 +86,8 @@ import org.graphiks.kanvas.text.paragraph.ParagraphLayoutResult
 import org.graphiks.kanvas.text.paragraph.ParagraphStyle
 import org.graphiks.kanvas.text.paragraph.PlaceholderBox
 import org.graphiks.kanvas.text.paragraph.PlaceholderStyle
+import org.graphiks.kanvas.text.paragraph.SelectionBox
+import org.graphiks.kanvas.text.paragraph.SelectionQueryResult
 import org.graphiks.kanvas.text.paragraph.SelectionRange
 import org.graphiks.kanvas.text.paragraph.SimpleLineBreaker
 import org.graphiks.kanvas.text.paragraph.TextBox
@@ -175,13 +181,19 @@ class TextStackSurfaceTest {
             PlaceholderBox::class.simpleName,
             TextBox::class.simpleName,
             ParagraphLayoutDiagnostic::class.simpleName,
+            SelectionBox::class.simpleName,
+            SelectionQueryResult::class.simpleName,
+            CaretStop::class.simpleName,
+            HitTestEntry::class.simpleName,
+            HitTestMap::class.simpleName,
+            HitTestQueryResult::class.simpleName,
             HitTestResult::class.simpleName,
             SelectionRange::class.simpleName,
             TextPosition::class.simpleName,
         )
 
         assertEquals(25, shapingTypes.size)
-        assertEquals(20, paragraphTypes.size)
+        assertEquals(26, paragraphTypes.size)
     }
 
     @Test
