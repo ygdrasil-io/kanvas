@@ -80,6 +80,7 @@ import org.graphiks.kanvas.text.paragraph.ParagraphLayoutDiagnostic
 import org.graphiks.kanvas.text.paragraph.ParagraphLayoutEngine
 import org.graphiks.kanvas.text.paragraph.ParagraphLayoutResult
 import org.graphiks.kanvas.text.paragraph.ParagraphStyle
+import org.graphiks.kanvas.text.paragraph.PlaceholderBox
 import org.graphiks.kanvas.text.paragraph.PlaceholderStyle
 import org.graphiks.kanvas.text.paragraph.SelectionRange
 import org.graphiks.kanvas.text.paragraph.SimpleLineBreaker
@@ -171,6 +172,7 @@ class TextStackSurfaceTest {
             LineBreaker::class.simpleName,
             LineLayout::class.simpleName,
             LineMetrics::class.simpleName,
+            PlaceholderBox::class.simpleName,
             TextBox::class.simpleName,
             ParagraphLayoutDiagnostic::class.simpleName,
             HitTestResult::class.simpleName,
@@ -179,7 +181,7 @@ class TextStackSurfaceTest {
         )
 
         assertEquals(25, shapingTypes.size)
-        assertEquals(19, paragraphTypes.size)
+        assertEquals(20, paragraphTypes.size)
     }
 
     @Test
@@ -272,6 +274,7 @@ class TextStackSurfaceTest {
               "paragraphShapingRequests": [
                 {"segmentId": "seg-000", "textRange": "0..6", "fontSize": 10.0, "fontFamilies": [], "typefaceId": null, "locale": "en-US", "script": "Latn", "bidiLevel": 0}
               ],
+              "placeholderBoxes": [],
               "lines": [
                 {"index": 0, "textRange": "0..4", "segmentIds": ["seg-000"], "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 50.0, "baseline": 8.0}, "boxes": [{"textRange": "0..4", "left": 0.0, "top": 0.0, "right": 50.0, "bottom": 10.0, "direction": 1}], "glyphRunCount": 1},
                 {"index": 1, "textRange": "6..6", "segmentIds": ["seg-000"], "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 10.0, "baseline": 18.0}, "boxes": [{"textRange": "6..6", "left": 0.0, "top": 10.0, "right": 10.0, "bottom": 20.0, "direction": 1}], "glyphRunCount": 1}
@@ -564,6 +567,17 @@ class TextStackSurfaceTest {
         val ranges = SimpleLineBreaker().breakLines(paragraph, maxWidth = 0f)
 
         assertEquals(listOf(0..0, 1..2, 3..3), ranges)
+    }
+
+    @Test
+    fun simpleLineBreakerFallsBackToCurrentClusterBoundaryWhenNoSoftBreakFits() {
+        val paragraph = ParagraphBuilder()
+            .append("ab", TextStyle(fontSize = 10f))
+            .build()
+
+        val ranges = SimpleLineBreaker().breakLines(paragraph, maxWidth = 15f)
+
+        assertEquals(listOf(0..0, 1..1), ranges)
     }
 
     @Test

@@ -134,7 +134,7 @@ public class DefaultUax14LineBreaker(
                 if (boundaryAfter?.kind == LineBreakKind.ALLOWED) {
                     lastAllowedOffset = boundaryAfter.offset
                 }
-                if (nextWidth > maxWidth && clusterIndex > lineStartCluster && lastAllowedOffset != null) {
+                if (paragraph.paragraphStyle.softWrap && nextWidth > maxWidth && clusterIndex > lineStartCluster && lastAllowedOffset != null) {
                     val breakOffset = lastAllowedOffset
                     val lineStart = clusters[lineStartCluster].first
                     val lineEndExclusive = breakOffset
@@ -143,6 +143,21 @@ public class DefaultUax14LineBreaker(
                     while (lineStartCluster < clusters.size && text.substring(clusters[lineStartCluster].first, clusters[lineStartCluster].last + 1).isLineBreakSkippablePrefix()) {
                         lineStartCluster += 1
                     }
+                    emitted = true
+                    continue
+                }
+                if (paragraph.paragraphStyle.softWrap && nextWidth > maxWidth && clusterIndex == lineStartCluster) {
+                    ranges += lineRange(text, cluster.first, cluster.last + 1)
+                    lineStartCluster = clusterIndex + 1
+                    while (lineStartCluster < clusters.size && text.substring(clusters[lineStartCluster].first, clusters[lineStartCluster].last + 1).isLineBreakSkippablePrefix()) {
+                        lineStartCluster += 1
+                    }
+                    emitted = true
+                    continue
+                }
+                if (paragraph.paragraphStyle.softWrap && nextWidth > maxWidth && clusterIndex > lineStartCluster) {
+                    ranges += lineRange(text, clusters[lineStartCluster].first, cluster.first)
+                    lineStartCluster = clusterIndex
                     emitted = true
                     continue
                 }

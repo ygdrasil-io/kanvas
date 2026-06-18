@@ -2952,7 +2952,8 @@ Evidence:
   unsupported-strut-policy negative cases.
 - `paragraph-input.json` now pins the bounded `ParagraphBuilder` input contract
   with deterministic `unicodeVersion`, `inputHash`, rich style runs, placeholder
-  metadata, and stable input diagnostics.
+  metadata including placeholder line-height participation, and stable input
+  diagnostics.
 - The fixture manifest points both `paragraph` and
   `paragraph-fixture-goldens` at the checked-in paragraph expected dump.
 - The dump evidence index records `paragraph-input-goldens` as `golden-gated`
@@ -3035,6 +3036,60 @@ claim full UAX #14 conformance, dictionary-based Thai/Lao/Khmer segmentation,
 bidi visual line ordering, ellipsis insertion, selection geometry, hit testing,
 placeholder geometry layout, Skia Paragraph parity, CPU oracle parity, or GPU
 text support.
+### KFONT-M8-006: Implement placeholder layout metrics
+
+Status: implemented; evidence refreshed for independent review.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/KFONT-M8-006-implement-placeholder-layout-metrics.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphPlaceholderLayoutTest.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphStyleContractTest.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/font/fixtures/expected/paragraph/paragraph-input.json`
+- `reports/font/fixtures/expected/paragraph/placeholder-layout.json`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m8-006-placeholder-layout-metrics.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+
+Evidence:
+
+- `PlaceholderStyle` now records nullable `baseline` plus
+  `participatesInLineHeight`, and the paragraph input dump/hash fixture updates
+  keep those facts reviewable instead of hiding them in runtime-only state.
+- Paragraph input validation now refuses non-finite placeholder metrics,
+  negative placeholder dimensions or baseline offsets, and missing required
+  baselines for `baseline`, `above-baseline`, and `below-baseline` alignment
+  modes before layout reaches shaping.
+- `BasicParagraphLayoutEngine` now computes deterministic `placeholderBoxes`
+  with stable IDs, source ranges, line indices, baseline offsets, visual
+  bounds, and line-height participation flags while excluding placeholders from
+  shaping requests.
+- `placeholder-layout.json` checks in bounded evidence for baseline,
+  above-baseline, below-baseline, and centered placeholder cases, including the
+  effect of participating placeholders on line ascent, descent, baseline, and
+  width.
+- `ParagraphLayoutResult.dump()` now serializes `placeholderBoxes` explicitly,
+  and `ParagraphPlaceholderLayoutTest` locks that public dump surface without
+  claiming selection maps, hit-testing maps, or ellipsis behavior.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphPlaceholderLayoutTest --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: this checks in bounded placeholder geometry evidence only. It
+does not yet claim selection-map or hit-test-map placeholder consumers, full
+ellipsis/max-lines placeholder conflict evidence, complete paragraph layout
+parity, CPU oracle parity, or GPU text support.
 ### KFONT-M8-001: Expand TextStyle and paragraph style contracts
 
 Status: done; deterministic contract evidence freshly validated.
