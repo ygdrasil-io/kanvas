@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-009"
 title: "Add Thai and CJK shaping boundaries"
-status: "proposed"
+status: "review"
 milestone: "M6"
 priority: "P1"
 owner_area: "shaping"
@@ -90,14 +90,19 @@ data class CjkVariationSelectorCase(
 ## Validation
 
 ```bash
+rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ThaiCjkBoundaryFixtureTest
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test --tests '*Thai*' --tests '*Cjk*'
 ```
 
 ## Status Notes
 
 - `proposed`: Boundary fixtures depend on script itemization, feature policy, and positioning support.
-- Current blocker audit (2026-06-18): `KFONT-M6-004` and `KFONT-M6-005` are `done`, while `KFONT-M6-006` remains in `review` on absent per-script fixture families; the Thai/CJK boundary fixture set `thai-base-marks.otf`, `thai-tone-marks.otf`, `thai-latin-mixed.txt`, `cjk-han-variation-selector.otf`, `cjk-kana-vertical.otf`, `cjk-hangul-direct.otf`, and `cjk-missing-vertical-alt.otf` is not present in-repo. Remaining gate is retain the bounded positioning and policy slices, then add reviewed Thai/CJK fixture provenance with paragraph-owned non-claim diagnostics.
+- `review`: `ThaiCjkBoundaryFixtureTest` plus `thai-cjk-boundary-report.json` now prove bounded vendored-font evidence for Thai tone-mark positioning, mixed Latin/Thai script boundaries, and CJK kana `vert` alternates on `NotoSansThai-Regular.ttf` and `NotoSansSC-Regular.otf` without promoting Thai or CJK shaping support.
+- `review`: This wave intentionally keeps Thai paragraph-owned dictionary diagnostics, Thai refusal fixtures/codes, CJK `cmap` format 14 variation-selector evidence, Han/Hangul boundary rows, paragraph-owned ruby/line-break diagnostics, and ticket-local `shaping-plan.json` / `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` / `cmap-map.json` / `unicode-segments.json` families as explicit remaining gates.
 - Move to `ready` only after paragraph-owned diagnostics and fixture scope are reviewed.
 
 ## Linear Labels

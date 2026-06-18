@@ -26,16 +26,21 @@ M2 parser facts and M5 Unicode segmentation foundations.
 | [KFONT-M6-006 - Add script-specific default feature policy](KFONT-M6-006-add-script-specific-default-feature-policy.md) | `review` | `P0` | `tracked-gap` | `shaping` | `KFONT-M6-001`, `KFONT-M5-004` | - |
 | [KFONT-M6-007 - Add Arabic shaping fixtures](KFONT-M6-007-add-arabic-shaping-fixtures.md) | `proposed` | `P0` | `fixture-gated` | `shaping` | `KFONT-M5-003`, `KFONT-M6-003`, `KFONT-M6-005`, `KFONT-M6-006` | - |
 | [KFONT-M6-008 - Add Devanagari shaping fixtures](KFONT-M6-008-add-devanagari-shaping-fixtures.md) | `proposed` | `P0` | `fixture-gated` | `shaping` | `KFONT-M5-002`, `KFONT-M5-004`, `KFONT-M6-003`, `KFONT-M6-005`, `KFONT-M6-006` | - |
-| [KFONT-M6-009 - Add Thai and CJK shaping boundaries](KFONT-M6-009-add-thai-and-cjk-shaping-boundaries.md) | `proposed` | `P1` | `fixture-gated` | `shaping` | `KFONT-M5-004`, `KFONT-M6-004`, `KFONT-M6-005`, `KFONT-M6-006` | - |
+| [KFONT-M6-009 - Add Thai and CJK shaping boundaries](KFONT-M6-009-add-thai-and-cjk-shaping-boundaries.md) | `review` | `P1` | `fixture-gated` | `shaping` | `KFONT-M5-004`, `KFONT-M6-004`, `KFONT-M6-005`, `KFONT-M6-006` | - |
 | [KFONT-M6-010 - Implement GSUB/GPOS extension, chaining and variation-adjustment lookups](KFONT-M6-010-implement-gsub-gpos-extension-chaining-and-variation-adjustment-lookups.md) | `proposed` | `P1` | `tracked-gap` | `shaping` | `KFONT-M6-003`, `KFONT-M6-004`, `KFONT-M6-005`, `KFONT-M4-005` | - |
 
 ## Validation Bundle
 
 ```bash
-rtk git diff --check
+rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest
 rtk ./gradlew --no-daemon :font:text:test --tests '*OpenTypeLayoutEngine*' --tests '*GsubBasic*' --tests '*GsubContext*'
 rtk ./gradlew --no-daemon :font:text:test --tests '*GposPair*' --tests '*GposMark*' --tests '*FeaturePolicy*'
 rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*' --tests '*DevanagariShaping*' --tests '*ExtensionLookup*'
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ThaiCjkBoundaryFixtureTest
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
 ```
 
 ## Current Slice Notes
@@ -46,11 +51,12 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*' --tests '*De
 - `KFONT-M6-004` is `done` on reviewed GPOS fixture provenance plus promoted `gpos-trace.json` / `shaped-glyph-run.json` evidence and layout-contract malformed/refusal diagnostics.
 - `KFONT-M6-005` is `done` on bounded mark/cursive parser/runtime support, checked-in reviewed fixture provenance, refreshed `gpos-trace.json` / `shaped-glyph-run.json` evidence, refusal-only reviewed mono-codepoint ligature evidence, and post-review regressions for ambiguous ligature-component refusal, RTL cursive logical ranges, zero-advance cursive matches, GSUB cluster preservation under mark/cursive-capable typefaces, and the bounded `kern` pair-overflow diagnostic that the reviewed cursive fixture now surfaces instead of masking.
 - `KFONT-M6-006` stays in `review` after the bounded runtime `ResolvedFeatureSet` adoption wave; GSUB, the bounded `kern`-routed GPOS single subset, GPOS anchor, and pair-kerning paths now honor the resolved policy, Arabic defaults explicitly include `curs`, portable OpenType `drawString` non-enablement evidence is now attached, and the remaining work is the per-script shaping fixture families.
+- `KFONT-M6-009` is now in `review` on bounded vendored-font evidence only: `ThaiCjkBoundaryFixtureTest` locally injects the pinned Script_Extensions itemizer for Thai boundary coverage, and `ThaiCjkBoundaryFixtureTest` plus `thai-cjk-boundary-report.json` prove Thai tone-mark positioning, mixed Latin/Thai script boundaries, and CJK kana `vert` alternates on vendored Noto Sans Thai / Noto Sans SC, while dictionary diagnostics, variation-selector evidence, Han/Hangul rows, paragraph-owned ruby/line-break diagnostics, and ticket-local trace dump families remain separate gates.
 
 ## Current Blockers
 
-- 2026-06-18 audit: `KFONT-M6-006` still depends on absent per-script shaping fixture families from `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`.
-- 2026-06-18 audit: `KFONT-M6-007`, `KFONT-M6-008`, `KFONT-M6-009`, and `KFONT-M6-010` remain gated by their own named fixture families, required-script rows, or advanced lookup dependencies even after the simple Latin GSUB/GPOS/mark-cursive slices moved to `done`.
+- 2026-06-18 audit: `KFONT-M6-006` still depends on remaining per-script shaping fixture-family gates from `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`.
+- 2026-06-18 audit: `KFONT-M6-007` and `KFONT-M6-008` still await their own Arabic and Devanagari fixture-family evidence waves; `KFONT-M6-009` still needs dictionary diagnostics, variation-selector evidence, Han/Hangul rows, paragraph-owned ruby/line-break diagnostics, and ticket-local trace dump families; `KFONT-M6-010` remains gated by its own named fixture families, required-script rows, or advanced lookup dependencies even after the simple Latin GSUB/GPOS/mark-cursive slices moved to `done`.
 
 ## Non-Claims
 

@@ -312,18 +312,23 @@
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
-        "reports/font/fixtures/expected/shaping/arabic-seed-readiness.json"
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ThaiCjkBoundaryFixtureTest.kt",
+        "reports/font/fixtures/expected/shaping/arabic-seed-readiness.json",
+        "reports/font/fixtures/expected/shaping/thai-cjk-boundary-report.json",
+        "reports/pure-kotlin-text/2026-06-18-kfont-m6-009-thai-cjk-boundaries.md"
       ],
       "requiredEvidenceGates": [
         "Add Arabic positive and refusal rows for joining forms, lam-alef, marks, cursive attachment, and mixed bidi.",
         "Add Devanagari positive and refusal rows for syllable formation, reph, pre-base matra, below-base forms, and mark placement.",
-        "Add Thai positive and refusal rows for base+mark clusters, tone marks, mixed Latin/Thai runs, and paragraph-owned dictionary diagnostics.",
-        "Add CJK positive and refusal rows for Han, kana, vertical alternates, variation selectors, and paragraph-owned ruby/line-break diagnostics.",
+        "KFONT-M6-009 now lands bounded Thai/CJK review evidence for Thai tone-mark positioning, mixed Latin/Thai script boundaries, and CJK kana vert alternates on vendored Noto fonts; paragraph-owned dictionary diagnostics, Thai refusal fixtures/codes, cmap format 14 variation selectors, Han/Hangul rows, paragraph-owned ruby/line-break diagnostics, and ticket-local trace dump families remain explicit gates.",
         "Add emoji shaping positive and refusal rows for VS15/VS16, skin tone, ZWJ sequence, fallback emoji font, and unsupported-sequence refusals."
       ],
       "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ThaiCjkBoundaryFixtureTest",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
-        "rtk ./gradlew --no-daemon :font:text:test"
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
       "fixtureCommands": [
         "Split complex-script fixtures by script family before any script promotion beyond Latin."
