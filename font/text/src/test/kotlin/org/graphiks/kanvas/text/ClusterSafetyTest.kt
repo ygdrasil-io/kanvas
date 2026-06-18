@@ -8,11 +8,15 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.text.shaping.ClusterSafetyFixture
 import org.graphiks.kanvas.text.shaping.ClusterSafetySuite
+import org.graphiks.kanvas.text.shaping.defaultClusterSafetyReport
 import org.graphiks.kanvas.text.shaping.defaultClusterSafetyReportJson
 
 class ClusterSafetyTest {
     private val clusterFixtureNames = listOf(
         "cluster-arabic-mark.txt",
+        "cluster-cjk-ivs-han.txt",
+        "cluster-cjk-ivs-isolated.txt",
+        "cluster-cjk-ivs-mixed-script.txt",
         "cluster-cjk-variation-selector.txt",
         "cluster-devanagari-conjunct.txt",
         "cluster-emoji-family-zwj.txt",
@@ -25,7 +29,9 @@ class ClusterSafetyTest {
 
     @Test
     fun clusterSafetyReportGoldenPinsFixtureMatrixAndLegacyGate() {
+        val report = defaultClusterSafetyReport()
         val json = defaultClusterSafetyReportJson()
+        val casesByFixture = report.cases.associateBy { it.fixtureName }
 
         assertEquals(
             readProjectFile("reports/font/fixtures/expected/unicode/cluster-safety-report.json"),
@@ -39,7 +45,18 @@ class ClusterSafetyTest {
         assertTrue(json.contains("\"dumpId\": \"unicode-segments\""))
         assertTrue(json.contains("\"dumpId\": \"bidi-runs\""))
         assertTrue(json.contains("\"dumpId\": \"script-runs\""))
+        assertTrue(json.contains("\"fixtureName\": \"cluster-cjk-ivs-han.txt\""))
+        assertTrue(json.contains("\"fixtureName\": \"cluster-cjk-ivs-isolated.txt\""))
+        assertTrue(json.contains("\"fixtureName\": \"cluster-cjk-ivs-mixed-script.txt\""))
         assertTrue(json.contains("\"code\": \"text.shaping.cluster-invariant-failed\""))
+        assertEquals(
+            listOf("text.shaping.script-run-ambiguous"),
+            casesByFixture.getValue("cluster-cjk-ivs-isolated.txt").diagnostics.map { it.code }.distinct(),
+        )
+        assertEquals(
+            listOf("text.shaping.script-run-ambiguous"),
+            casesByFixture.getValue("cluster-cjk-ivs-mixed-script.txt").diagnostics.map { it.code }.distinct(),
+        )
     }
 
     @Test

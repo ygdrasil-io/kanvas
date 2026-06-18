@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M5-005"
 title: "Add cluster safety regression suite"
-status: "review"
+status: "done"
 milestone: "M5"
 priority: "P0"
 owner_area: "unicode"
@@ -68,16 +68,16 @@ class ClusterSafetySuite {
 
 ## Acceptance Criteria
 
-- [ ] Combined segmentation/bidi/script fixtures prove that cluster ranges are not split by downstream run boundaries.
-- [ ] Emoji ZWJ, emoji modifier, VS15/VS16, Arabic mark, Devanagari conjunct, Thai tone mark, CJK variation selector, and mixed RTL/LTR fixtures are present.
-- [ ] At least one negative fixture intentionally splits a cluster and emits `text.shaping.cluster-invariant-failed`.
-- [ ] `cluster-safety-report.json` records source dump hashes, invariant names, pass/fail status, affected ranges, and legacy gate references.
-- [ ] `scaledemoji` remains fixture-gated until later emoji shaping/fallback tickets add route evidence beyond cluster safety.
+- [x] Combined segmentation/bidi/script fixtures prove that cluster ranges are not split by downstream run boundaries.
+- [x] Emoji ZWJ, emoji modifier, VS15/VS16, Arabic mark, Devanagari conjunct, Thai tone mark, CJK variation selector, and mixed RTL/LTR fixtures are present.
+- [x] At least one negative fixture intentionally splits a cluster and emits `text.shaping.cluster-invariant-failed`.
+- [x] `cluster-safety-report.json` records source dump hashes, invariant names, pass/fail status, affected ranges, and legacy gate references.
+- [x] `scaledemoji` remains fixture-gated until later emoji shaping/fallback tickets add route evidence beyond cluster safety.
 
 ## Required Evidence
 
 - `cluster-safety-report.json` linked to `unicode-segments.json`, `bidi-runs.json`, and `script-runs.json` by content hash.
-- Fixtures: `cluster-emoji-family-zwj.txt`, `cluster-emoji-skin-tone.txt`, `cluster-vs15-vs16.txt`, `cluster-arabic-mark.txt`, `cluster-devanagari-conjunct.txt`, `cluster-thai-tone.txt`, `cluster-cjk-variation-selector.txt`, `cluster-mixed-bidi.txt`, `cluster-negative-split.txt`.
+- Fixtures: `cluster-emoji-family-zwj.txt`, `cluster-emoji-skin-tone.txt`, `cluster-vs15-vs16.txt`, `cluster-arabic-mark.txt`, `cluster-devanagari-conjunct.txt`, `cluster-thai-tone.txt`, `cluster-cjk-variation-selector.txt`, `cluster-cjk-ivs-han.txt`, `cluster-cjk-ivs-mixed-script.txt`, `cluster-cjk-ivs-isolated.txt`, `cluster-mixed-bidi.txt`, `cluster-negative-split.txt`.
 - Diagnostics asserted in tests: `text.shaping.cluster-invariant-failed`, `text.shaping.emoji-sequence-unsupported`, `text.shaping.unicode-data-version-mismatch`.
 - Dashboard note showing `scaledemoji` is still blocked on emoji shaping/fallback/rendering evidence, not merely segmentation.
 
@@ -108,7 +108,7 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 
 - `proposed`: Regression suite depends on the concrete M5 segmentation, bidi, and itemization outputs.
 - Move to `ready` only after fixture list and legacy gate wording are reviewed.
-- `review`: `cluster-safety-report.json` now links checked-in `unicode-segments`, `bidi-runs`, and `script-runs` dumps by content hash, covers bounded Arabic/Devanagari/Thai/CJK-context/emoji/bidi cluster cases plus a synthetic negative split, and keeps `scaledemoji` explicitly visible as a legacy gate. `KFONT-M7-004` now supplies the explicit `text.shaping.emoji-sequence-unsupported` refusal row and fallback-boundary evidence, so the remaining gate before `done` is broader reviewed CJK IVS coverage beyond the current bounded context fixture family.
+- `done` (2026-06-18): merged PR `#1730` now closes with checked-in broader CJK IVS review coverage via `cluster-cjk-ivs-han.txt`, `cluster-cjk-ivs-mixed-script.txt`, and `cluster-cjk-ivs-isolated.txt`, while keeping the bounded context row `cluster-cjk-variation-selector.txt`. `cluster-safety-report.json` links checked-in `unicode-segments`, `bidi-runs`, and `script-runs` dumps by content hash, proves stable grapheme/bidi/script boundary handling across Arabic/Devanagari/Thai/CJK/emoji/bidi cases plus a synthetic negative split, and records stable `text.shaping.script-run-ambiguous` refusals for the supplementary-IVS rows instead of implying mixed-script or full CJK shaping support. `KFONT-M7-004` supplies the explicit `text.shaping.emoji-sequence-unsupported` refusal row and fallback-boundary evidence; no remaining gate remains on `KFONT-M5-005` itself.
 
 ## Linear Labels
 

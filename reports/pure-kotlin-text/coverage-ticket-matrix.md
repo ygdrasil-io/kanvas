@@ -2257,7 +2257,7 @@ mapping, paragraph layout, emoji rendering, or GPU text route support.
 
 ### KFONT-M5-005: Add cluster safety regression suite
 
-Status: review with bounded fixture evidence; independent audit narrowed the remaining gate to CJK IVS breadth only.
+Status: done with merged bounded fixture evidence and expanded real CJK IVS coverage.
 
 Files:
 
@@ -2292,8 +2292,10 @@ Evidence:
   grapheme-cluster integrity, bidi-run boundary alignment, and script-run
   boundary alignment.
 - The checked-in fixture matrix covers bounded emoji family ZWJ, emoji
-  skin-tone, VS15/VS16, Arabic mark, Devanagari conjunct, Thai tone, CJK
-  variation-selector context, mixed bidi, and a synthetic negative split row.
+  skin-tone, VS15/VS16, Arabic mark, Devanagari conjunct, Thai tone, the
+  bounded CJK variation-selector context row, reviewed supplementary-IVS rows
+  with stable `text.shaping.script-run-ambiguous` refusals, mixed bidi, and a
+  synthetic negative split row.
 - `cluster-negative-split.txt` records a stable
   `text.shaping.cluster-invariant-failed` diagnostic without widening any
   shaping or emoji support claim.
@@ -2316,10 +2318,9 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 rtk git diff --check
 ```
 
-Remaining gate: this bounded M5-005 slice remains in `review`, not `done`.
-Broader reviewed CJK IVS coverage is still open before complete cluster-safety
-closeout; explicit emoji refusal and fallback-boundary evidence now live on
-the owning `KFONT-M7-004` slice.
+Remaining gate: none for `KFONT-M5-005`; explicit emoji refusal and
+fallback-boundary evidence live on the owning `KFONT-M7-004` slice, and later
+shaping/fallback/paragraph claims remain gated on their own tickets.
 
 ### KFONT-M6-001: Define `OpenTypeLayoutEngine` Contract And Dumps
 
