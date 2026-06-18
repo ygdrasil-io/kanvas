@@ -98,7 +98,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*'
 ## Status Notes
 
 - `proposed`: Arabic fixture ticket depends on contextual GSUB, mark/cursive GPOS, feature policy, and bidi runs.
-- Current blocker audit (2026-06-16): draft PR `#1707` (`KFONT-M6-006`) is still open, `KFONT-M6-003` and `KFONT-M6-005` are not actionnable without their own missing fixture families, and the Arabic fixture set `arabic-joining-forms.otf`, `arabic-lam-alef.otf`, `arabic-marks-cursive.otf`, `arabic-mixed-bidi.txt`, `arabic-missing-cursive.otf`, and `arabic-missing-mark.otf` is not present in-repo. Remaining gate is merge/adopt the feature-policy slice, land the contextual and mark/cursive shaping dependencies, then add reviewed Arabic fixture provenance plus expected dumps.
+- Current blocker audit (2026-06-18): `KFONT-M6-006` remains in `review` with per-script fixture, GPOS single feature-routing, and `drawString` evidence gates still open; `KFONT-M6-003` remains gated by its own missing contextual fixture family; and the Arabic fixture set `arabic-joining-forms.otf`, `arabic-lam-alef.otf`, `arabic-marks-cursive.otf`, `arabic-mixed-bidi.txt`, `arabic-missing-cursive.otf`, and `arabic-missing-mark.otf` is not present in-repo. Remaining gate is close the contextual dependency, retain the bounded feature-policy slice, then add reviewed Arabic fixture provenance plus expected dumps.
 - Move to `ready` only after fixture fonts and expected dump names are reviewed.
 
 ## Linear Labels
