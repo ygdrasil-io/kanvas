@@ -3009,6 +3009,10 @@ Evidence:
 - `line-breaks.json` checks in bounded evidence for Latin UI text, Latin
   punctuation, CJK no-space text, mixed LTR/RTL text, explicit newlines,
   combining marks, emoji ZWJ sequences, and a Thai locale refinement gap.
+- Width-constrained fitting now falls back to the current grapheme-cluster
+  boundary when no optional soft break fits, which keeps surrogate pairs and
+  emoji clusters intact and prevents adjacent-text duplication during paragraph
+  layout.
 - No break is emitted inside the combining-mark or emoji ZWJ grapheme-cluster
   cases, while `softWrap = false` suppresses optional wrap opportunities but
   still preserves mandatory hard breaks.
@@ -3023,7 +3027,7 @@ Evidence:
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphLineBreakingTest --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutMergesLineBreakDiagnosticsIntoResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenLineBreakUnicodeDataIsUnavailable
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphLineBreakingTest --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.simpleLineBreakerFallsBackToCurrentClusterBoundaryWhenNoSoftBreakFits --tests org.graphiks.kanvas.text.TextStackSurfaceTest.simpleLineBreakerKeepsSurrogatePairRangesIntactWhenWidthIsZero --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineDoesNotDuplicateEmojiWhenLineBreakerOverflowsSingleCluster --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutMergesLineBreakDiagnosticsIntoResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenLineBreakUnicodeDataIsUnavailable
 rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py

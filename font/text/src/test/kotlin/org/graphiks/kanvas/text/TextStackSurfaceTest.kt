@@ -567,6 +567,17 @@ class TextStackSurfaceTest {
     }
 
     @Test
+    fun simpleLineBreakerFallsBackToCurrentClusterBoundaryWhenNoSoftBreakFits() {
+        val paragraph = ParagraphBuilder()
+            .append("ab", TextStyle(fontSize = 10f))
+            .build()
+
+        val ranges = SimpleLineBreaker().breakLines(paragraph, maxWidth = 15f)
+
+        assertEquals(listOf(0..0, 1..1), ranges)
+    }
+
+    @Test
     fun basicParagraphLayoutEngineDoesNotDuplicateEmojiWhenLineBreakerOverflowsSingleCluster() {
         val engine = BasicOpenTypeShapingEngine(
             glyphMapper = mapGlyphs(
