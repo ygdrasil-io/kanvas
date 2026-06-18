@@ -2852,7 +2852,13 @@ class SFNTSurfaceTest {
         val cursive = parser.parse(
             fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-cursive-attachment.otf"),
         )
-        assertEquals(emptyList(), cursive.diagnostics)
+        val cursiveDiagnostic = assertNotNull(cursive.diagnostics.singleOrNull())
+        assertEquals(SFNTTableTag("GPOS"), cursiveDiagnostic.table)
+        assertEquals("font.sfnt.optional-table-malformed", cursiveDiagnostic.causeCode)
+        assertTrue(
+            cursiveDiagnostic.causeMessage.orEmpty().contains("expanded glyph pair count 102762 exceeds supported limit 65536"),
+            cursiveDiagnostic.toString(),
+        )
         val cursiveGdef = assertNotNull(cursive.layout.gdef)
         val cursiveGpos = assertNotNull(cursive.layout.gpos)
         val leftCursiveGlyphId = assertNotNull(cursive.cmap.lookupGlyphId(0xE001))
@@ -2899,6 +2905,83 @@ class SFNTSurfaceTest {
         assertTrue(
             malformedLookup.message.contains("anchor format 9"),
             malformedLookup.message,
+        )
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserStillReportsMalformedKernSubsetWhenGeneralGposSucceeds() {
+        val gpos = gposCursiveAndMalformedKernTable()
+        assertEquals(
+            listOf(
+                OpenTypeGposMalformedLookup(
+                    featureTag = "curs",
+                    lookupIndex = 1,
+                    lookupType = 3,
+                    message = "OpenType GPOS cursive posFormat 9 is not supported.",
+                ),
+            ),
+            OpenTypeGposTableParser.parse(gpos).lookups,
+        )
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0041,
+                                endCode = 0x0041,
+                                startGlyphId = 7,
+                            ),
+                            testFormat4Segment(
+                                startCode = 0x0042,
+                                endCode = 0x0042,
+                                startGlyphId = 11,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 1,
+                ),
+                "maxp" to maxpTable(numGlyphs = 16),
+                "hmtx" to hmtxTable(
+                    metric(advanceWidth = 500, leftSideBearing = 0),
+                    *Array(15) { extraLeftSideBearing(leftSideBearing = 0) },
+                ),
+                "GPOS" to gpos,
+            ),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+
+        val diagnostic = parsed.diagnostics.single()
+        assertEquals(SFNTTableTag("GPOS"), diagnostic.table)
+        assertEquals("font.sfnt.optional-table-malformed", diagnostic.causeCode)
+        assertTrue(
+            diagnostic.causeMessage.orEmpty().contains("pairSetCount"),
+            "Unexpected diagnostic: $diagnostic",
+        )
+        assertEquals(null, parsed.layout.gposPairs)
+        val malformedGeneralLookup = assertNotNull(
+            parsed.layout.gpos
+                ?.lookups
+                ?.filterIsInstance<OpenTypeGposMalformedLookup>()
+                ?.firstOrNull { it.featureTag == "curs" && it.lookupType == 3 },
+        )
+        assertTrue(
+            malformedGeneralLookup.message.contains("cursive posFormat 9"),
+            malformedGeneralLookup.message,
         )
     }
 
@@ -3926,6 +4009,81 @@ class SFNTSurfaceTest {
         table.writeUInt16(subtableStart + coverageOffset, 1)
         table.writeUInt16(subtableStart + coverageOffset + 2, 1)
         table.writeUInt16(subtableStart + coverageOffset + 4, glyphId)
+
+        return table
+    }
+
+    private fun gposCursiveAndMalformedKernTable(): ByteArray {
+        val table = ByteArray(140)
+        val scriptListOffset = 10
+        val featureListOffset = 32
+        val lookupListOffset = 60
+        val scriptStart = scriptListOffset + 8
+        val langSysStart = scriptStart + 4
+        val firstFeatureStart = featureListOffset + 14
+        val secondFeatureStart = firstFeatureStart + 6
+        val firstLookupStart = lookupListOffset + 6
+        val firstSubtableStart = firstLookupStart + 8
+        val secondLookupStart = firstLookupStart + 32
+        val secondSubtableStart = secondLookupStart + 8
+
+        table.writeUInt16(0, 1)
+        table.writeUInt16(2, 0)
+        table.writeUInt16(4, scriptListOffset)
+        table.writeUInt16(6, featureListOffset)
+        table.writeUInt16(8, lookupListOffset)
+
+        table.writeUInt16(scriptListOffset, 1)
+        "latn".toByteArray(Charsets.ISO_8859_1).copyInto(table, scriptListOffset + 2)
+        table.writeUInt16(scriptListOffset + 6, 8)
+        table.writeUInt16(scriptStart, 4)
+        table.writeUInt16(scriptStart + 2, 0)
+        table.writeUInt16(langSysStart, 0)
+        table.writeUInt16(langSysStart + 2, 0xffff)
+        table.writeUInt16(langSysStart + 4, 2)
+        table.writeUInt16(langSysStart + 6, 0)
+        table.writeUInt16(langSysStart + 8, 1)
+
+        table.writeUInt16(featureListOffset, 2)
+        "kern".toByteArray(Charsets.ISO_8859_1).copyInto(table, featureListOffset + 2)
+        table.writeUInt16(featureListOffset + 6, 14)
+        "curs".toByteArray(Charsets.ISO_8859_1).copyInto(table, featureListOffset + 8)
+        table.writeUInt16(featureListOffset + 12, 20)
+        table.writeUInt16(firstFeatureStart, 0)
+        table.writeUInt16(firstFeatureStart + 2, 1)
+        table.writeUInt16(firstFeatureStart + 4, 0)
+        table.writeUInt16(secondFeatureStart, 0)
+        table.writeUInt16(secondFeatureStart + 2, 1)
+        table.writeUInt16(secondFeatureStart + 4, 1)
+
+        table.writeUInt16(lookupListOffset, 2)
+        table.writeUInt16(lookupListOffset + 2, 6)
+        table.writeUInt16(lookupListOffset + 4, 38)
+
+        table.writeUInt16(firstLookupStart, 2)
+        table.writeUInt16(firstLookupStart + 2, 0)
+        table.writeUInt16(firstLookupStart + 4, 1)
+        table.writeUInt16(firstLookupStart + 6, 8)
+        table.writeUInt16(firstSubtableStart, 1)
+        table.writeUInt16(firstSubtableStart + 2, 12)
+        table.writeUInt16(firstSubtableStart + 4, 0x0004)
+        table.writeUInt16(firstSubtableStart + 6, 0)
+        table.writeUInt16(firstSubtableStart + 8, 2)
+        table.writeUInt16(firstSubtableStart + 10, 18)
+        table.writeUInt16(firstSubtableStart + 12, 1)
+        table.writeUInt16(firstSubtableStart + 14, 1)
+        table.writeUInt16(firstSubtableStart + 16, 7)
+        table.writeUInt16(firstSubtableStart + 18, 1)
+        table.writeUInt16(firstSubtableStart + 20, 11)
+        table.writeInt16(firstSubtableStart + 22, -55)
+
+        table.writeUInt16(secondLookupStart, 3)
+        table.writeUInt16(secondLookupStart + 2, 0)
+        table.writeUInt16(secondLookupStart + 4, 1)
+        table.writeUInt16(secondLookupStart + 6, 8)
+        table.writeUInt16(secondSubtableStart, 9)
+        table.writeUInt16(secondSubtableStart + 2, 0)
+        table.writeUInt16(secondSubtableStart + 4, 0)
 
         return table
     }

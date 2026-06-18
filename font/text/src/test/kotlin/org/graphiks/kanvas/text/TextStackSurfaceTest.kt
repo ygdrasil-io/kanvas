@@ -2020,6 +2020,7 @@ class TextStackSurfaceTest {
         val cursive = parsedFixtureFace(
             uuid = "550e8400-e29b-41d4-a716-446655440627",
             relativePath = "reports/font/fixtures/fonts/shaping/gpos-cursive-attachment.otf",
+            expectedDiagnosticSubstring = "expanded glyph pair count 102762 exceeds supported limit 65536",
         )
         val engine = BasicOpenTypeShapingEngine(
             scriptItemizer = object : ScriptItemizer {
@@ -2891,7 +2892,11 @@ class TextStackSurfaceTest {
     private fun readProjectFile(relativePath: String): String =
         Files.readString(projectRoot().resolve(relativePath))
 
-    private fun parsedFixtureFace(uuid: String, relativePath: String): ParsedFixtureFace {
+    private fun parsedFixtureFace(
+        uuid: String,
+        relativePath: String,
+        expectedDiagnosticSubstring: String? = null,
+    ): ParsedFixtureFace {
         val typefaceId = TypefaceID(Uuid.parse(uuid))
         val path = projectRoot().resolve(relativePath)
         val source = FontSource(
@@ -2901,7 +2906,16 @@ class TextStackSurfaceTest {
             bytes = Files.readAllBytes(path),
         )
         val parsed = DefaultOpenTypeFaceParser().parse(source)
-        assertEquals(emptyList(), parsed.diagnostics, relativePath)
+        if (expectedDiagnosticSubstring == null) {
+            assertEquals(emptyList(), parsed.diagnostics, relativePath)
+        } else {
+            val diagnostic = requireNotNull(parsed.diagnostics.singleOrNull()) { relativePath }
+            assertEquals("font.sfnt.optional-table-malformed", diagnostic.causeCode)
+            assertTrue(
+                diagnostic.causeMessage.orEmpty().contains(expectedDiagnosticSubstring),
+                "$relativePath -> $diagnostic",
+            )
+        }
         return ParsedFixtureFace(
             typefaceId = typefaceId,
             cmap = parsed.cmap,
