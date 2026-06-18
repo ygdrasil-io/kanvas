@@ -810,6 +810,9 @@ public class BasicOpenTypeShapingEngine(
         val lookupsByIndex = gsubTable.lookups.associateBy { it.lookupIndex }
 
         gsubTable.lookups.forEach { lookup ->
+            if (lookup.featureTag.isBlank()) {
+                return@forEach
+            }
             if (!features.isRuntimeEnabled(lookup.featureTag)) {
                 return@forEach
             }

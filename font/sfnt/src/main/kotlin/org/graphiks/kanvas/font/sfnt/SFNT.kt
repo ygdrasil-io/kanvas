@@ -6363,24 +6363,29 @@ object OpenTypeGsubTableParser {
             label = "OpenType GSUB LookupList offsets",
         )
 
-        val lookups = mutableListOf<OpenTypeGsubLookup>()
+        val topLevelFeatureTagsByLookupIndex = LinkedHashMap<Int, String>()
         featureLookups.forEach { featureLookup ->
             require(featureLookup.lookupIndex in 0 until lookupCount) {
                 "OpenType GSUB lookup index ${featureLookup.lookupIndex} is outside LookupList range 0 until $lookupCount."
             }
+            topLevelFeatureTagsByLookupIndex.putIfAbsent(featureLookup.lookupIndex, featureLookup.featureTag)
+        }
+
+        val lookups = mutableListOf<OpenTypeGsubLookup>()
+        repeat(lookupCount) { lookupIndex ->
             val lookupOffset = table.readUInt16BE(
-                lookupListStart + UINT16_BYTE_LENGTH + featureLookup.lookupIndex * UINT16_BYTE_LENGTH,
-                "OpenType GSUB LookupList offset[${featureLookup.lookupIndex}]",
+                lookupListStart + UINT16_BYTE_LENGTH + lookupIndex * UINT16_BYTE_LENGTH,
+                "OpenType GSUB LookupList offset[$lookupIndex]",
             )
             parseLookup(
                 table = table,
                 lookupStart = table.checkedOffset(
                     base = lookupListStart,
                     offset = lookupOffset,
-                    label = "OpenType GSUB lookup ${featureLookup.lookupIndex}",
+                    label = "OpenType GSUB lookup $lookupIndex",
                 ),
-                lookupIndex = featureLookup.lookupIndex,
-                featureTag = featureLookup.featureTag,
+                lookupIndex = lookupIndex,
+                featureTag = topLevelFeatureTagsByLookupIndex[lookupIndex].orEmpty(),
             )?.let(lookups::add)
         }
 

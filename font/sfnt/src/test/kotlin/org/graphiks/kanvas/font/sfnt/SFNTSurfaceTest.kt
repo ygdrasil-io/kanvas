@@ -2768,6 +2768,77 @@ class SFNTSurfaceTest {
     }
 
     @Test
+    fun defaultOpenTypeFaceParserKeepsNestedOnlyGsubLookupsReachableFromContextRules() {
+        val parser = DefaultOpenTypeFaceParser()
+        val source = memoryFontSource(
+            sfntFont(
+                "name" to nameTable(),
+                "cmap" to cmapTable(
+                    testCMapRecord(
+                        platformId = 3,
+                        encodingId = 1,
+                        subtable = format4Subtable(
+                            testFormat4Segment(
+                                startCode = 0x0061,
+                                endCode = 0x0063,
+                                startGlyphId = 5,
+                            ),
+                        ),
+                    ),
+                ),
+                "head" to headTable(
+                    unitsPerEm = 1000,
+                    bounds = OpenTypeFontBounds(xMin = 0, yMin = 0, xMax = 1000, yMax = 1000),
+                    indexToLocFormat = 0,
+                ),
+                "hhea" to hheaTable(
+                    ascender = 800,
+                    descender = -200,
+                    lineGap = 0,
+                    numberOfHMetrics = 2,
+                ),
+                "maxp" to maxpTable(numGlyphs = 32),
+                "hmtx" to hmtxTable(
+                    metric(advanceWidth = 500, leftSideBearing = 0),
+                    metric(advanceWidth = 450, leftSideBearing = 0),
+                    *Array(30) { extraLeftSideBearing(leftSideBearing = 0) },
+                ),
+                "GSUB" to gsubContextLookupWithNestedOnlySingleLookupTable(),
+            ),
+        )
+
+        val parsed = parser.parse(source)
+
+        assertEquals(emptyList(), parsed.diagnostics)
+        assertEquals(
+            OpenTypeGsubTable(
+                lookups = listOf(
+                    OpenTypeGsubSingleSubstitutionLookup(
+                        featureTag = "",
+                        lookupIndex = 0,
+                        substitutions = listOf(
+                            OpenTypeGsubSingleSubstitution(inputGlyphId = 5, replacementGlyphId = 15),
+                        ),
+                    ),
+                    OpenTypeGsubContextGlyphLookup(
+                        featureTag = "calt",
+                        lookupIndex = 1,
+                        rules = listOf(
+                            OpenTypeGsubContextGlyphRule(
+                                inputGlyphIds = listOf(5, 6),
+                                nestedLookups = listOf(
+                                    OpenTypeGsubNestedLookupRecord(sequenceIndex = 0, lookupIndex = 0),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            parsed.layout.gsub,
+        )
+    }
+
+    @Test
     fun defaultOpenTypeFaceParserReportsReviewedMalformedGsubContextFixturesAsDiagnostics() {
         val parser = DefaultOpenTypeFaceParser()
 
@@ -3904,6 +3975,87 @@ class SFNTSurfaceTest {
         table.writeUInt16(ligatureLookupStart + 26, 1)
         table.writeUInt16(ligatureLookupStart + 28, 1)
         table.writeUInt16(ligatureLookupStart + 30, 7)
+
+        return table
+    }
+
+    private fun gsubContextLookupWithNestedOnlySingleLookupTable(): ByteArray {
+        val table = ByteArray(110)
+        val scriptListOffset = 10
+        val featureListOffset = 32
+        val lookupListOffset = 46
+        val scriptStart = scriptListOffset + 8
+        val langSysStart = scriptStart + 4
+        val featureStart = featureListOffset + 8
+        val lookupStart = lookupListOffset + 6
+        val singleLookupStart = lookupStart
+        val contextLookupStart = singleLookupStart + 22
+        val contextSubtableStart = contextLookupStart + 8
+        val coverageStart = contextSubtableStart + 8
+        val subRuleSetStart = coverageStart + 6
+        val subRuleStart = subRuleSetStart + 4
+
+        table.writeUInt16(0, 1)
+        table.writeUInt16(2, 0)
+        table.writeUInt16(4, scriptListOffset)
+        table.writeUInt16(6, featureListOffset)
+        table.writeUInt16(8, lookupListOffset)
+
+        table.writeUInt16(scriptListOffset, 1)
+        "latn".toByteArray(Charsets.ISO_8859_1).copyInto(table, scriptListOffset + 2)
+        table.writeUInt16(scriptListOffset + 6, 8)
+        table.writeUInt16(scriptStart, 4)
+        table.writeUInt16(scriptStart + 2, 0)
+        table.writeUInt16(langSysStart, 0)
+        table.writeUInt16(langSysStart + 2, 0xffff)
+        table.writeUInt16(langSysStart + 4, 1)
+        table.writeUInt16(langSysStart + 6, 0)
+
+        table.writeUInt16(featureListOffset, 1)
+        "calt".toByteArray(Charsets.ISO_8859_1).copyInto(table, featureListOffset + 2)
+        table.writeUInt16(featureListOffset + 6, 8)
+        table.writeUInt16(featureStart, 0)
+        table.writeUInt16(featureStart + 2, 1)
+        table.writeUInt16(featureStart + 4, 1)
+
+        table.writeUInt16(lookupListOffset, 2)
+        table.writeUInt16(lookupListOffset + 2, 6)
+        table.writeUInt16(lookupListOffset + 4, 28)
+
+        table.writeUInt16(singleLookupStart, 1)
+        table.writeUInt16(singleLookupStart + 2, 0)
+        table.writeUInt16(singleLookupStart + 4, 1)
+        table.writeUInt16(singleLookupStart + 6, 8)
+        table.writeUInt16(singleLookupStart + 8, 2)
+        table.writeUInt16(singleLookupStart + 10, 8)
+        table.writeUInt16(singleLookupStart + 12, 1)
+        table.writeUInt16(singleLookupStart + 14, 15)
+        table.writeUInt16(singleLookupStart + 16, 1)
+        table.writeUInt16(singleLookupStart + 18, 1)
+        table.writeUInt16(singleLookupStart + 20, 5)
+
+        table.writeUInt16(contextLookupStart, 5)
+        table.writeUInt16(contextLookupStart + 2, 0)
+        table.writeUInt16(contextLookupStart + 4, 1)
+        table.writeUInt16(contextLookupStart + 6, 8)
+
+        table.writeUInt16(contextSubtableStart, 1)
+        table.writeUInt16(contextSubtableStart + 2, 8)
+        table.writeUInt16(contextSubtableStart + 4, 1)
+        table.writeUInt16(contextSubtableStart + 6, 14)
+
+        table.writeUInt16(coverageStart, 1)
+        table.writeUInt16(coverageStart + 2, 1)
+        table.writeUInt16(coverageStart + 4, 5)
+
+        table.writeUInt16(subRuleSetStart, 1)
+        table.writeUInt16(subRuleSetStart + 2, 4)
+
+        table.writeUInt16(subRuleStart, 2)
+        table.writeUInt16(subRuleStart + 2, 1)
+        table.writeUInt16(subRuleStart + 4, 6)
+        table.writeUInt16(subRuleStart + 6, 0)
+        table.writeUInt16(subRuleStart + 8, 0)
 
         return table
     }
