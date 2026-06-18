@@ -13,6 +13,8 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 
@@ -3161,12 +3163,21 @@ class SFNTSurfaceTest {
         val cursive = parser.parse(
             fixtureFontSource("reports/font/fixtures/fonts/shaping/gpos-cursive-attachment.otf"),
         )
-        val cursiveDiagnostic = assertNotNull(cursive.diagnostics.singleOrNull())
-        assertEquals(SFNTTableTag("GPOS"), cursiveDiagnostic.table)
-        assertEquals("font.sfnt.optional-table-malformed", cursiveDiagnostic.causeCode)
+        assertEquals(
+            listOf(SFNTTableTag("GSUB"), SFNTTableTag("GPOS")),
+            cursive.diagnostics.map(OpenTypeParseDiagnostic::table),
+        )
+        assertEquals(
+            listOf("font.sfnt.optional-table-malformed", "font.sfnt.optional-table-malformed"),
+            cursive.diagnostics.map(OpenTypeParseDiagnostic::causeCode),
+        )
         assertTrue(
-            cursiveDiagnostic.causeMessage.orEmpty().contains("expanded glyph pair count 102762 exceeds supported limit 65536"),
-            cursiveDiagnostic.toString(),
+            cursive.diagnostics[0].causeMessage.orEmpty().contains("OpenType GSUB ContextSubst format 3 glyphCount 1 must be at least 2."),
+            cursive.diagnostics[0].toString(),
+        )
+        assertTrue(
+            cursive.diagnostics[1].causeMessage.orEmpty().contains("expanded glyph pair count 102762 exceeds supported limit 65536"),
+            cursive.diagnostics[1].toString(),
         )
         val cursiveGdef = assertNotNull(cursive.layout.gdef)
         val cursiveGpos = assertNotNull(cursive.layout.gpos)

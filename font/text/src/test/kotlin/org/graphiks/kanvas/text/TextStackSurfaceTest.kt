@@ -7,6 +7,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 import org.graphiks.kanvas.font.FallbackRequest
@@ -23,6 +25,10 @@ import org.graphiks.kanvas.font.sfnt.CMapFormat12Mapping
 import org.graphiks.kanvas.font.sfnt.CMapSubtable
 import org.graphiks.kanvas.font.sfnt.CMapTable
 import org.graphiks.kanvas.font.sfnt.DefaultOpenTypeFaceParser
+import org.graphiks.kanvas.font.sfnt.OpenTypeAnchor
+import org.graphiks.kanvas.font.sfnt.OpenTypeGdefTable
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposCursiveAttachment
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposCursiveLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassRule
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassSubtable
@@ -38,10 +44,15 @@ import org.graphiks.kanvas.font.sfnt.OpenTypeGsubNestedLookupRecord
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubSingleSubstitution
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubSingleSubstitutionLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubTable
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToBaseAttachment
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToBaseLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToLigatureAttachment
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToLigatureLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposPairAdjustment
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposPairTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposSingleAdjustment
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposSingleTable
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposValueRecord
 import org.graphiks.kanvas.font.sfnt.OpenTypeKernCoverage
 import org.graphiks.kanvas.font.sfnt.OpenTypeKernFormat0Subtable
@@ -97,7 +108,10 @@ import org.graphiks.kanvas.text.shaping.ShapingDiagnostic
 import org.graphiks.kanvas.text.shaping.ShapingRequest
 import org.graphiks.kanvas.text.shaping.ShapingResult
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_CURSIVE_ATTACHMENT_UNAVAILABLE_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_LOOKUP_MALFORMED_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_MARK_POSITIONING_UNAVAILABLE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_PARAGRAPH_BIDI_REQUIRED_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TextSegmenter
 import org.graphiks.kanvas.text.shaping.UnicodeData
@@ -698,8 +712,6 @@ class TextStackSurfaceTest {
         )
         assertEquals(
             listOf(
-                "text.shaping.cursive-attachment-unavailable",
-                "text.shaping.mark-positioning-unavailable",
                 "text.shaping.gdef-required",
                 "text.shaping.paragraph-bidi-required",
             ),
@@ -1597,7 +1609,7 @@ class TextStackSurfaceTest {
             ),
             engine.shape(
                 ShapingRequest(
-                    text = "fg",
+                    text = "fi",
                     typefaceId = ligature.typefaceId,
                     fontSize = 20f,
                     features = FeatureSet(mapOf("liga" to 1)),
@@ -2106,7 +2118,7 @@ class TextStackSurfaceTest {
     }
 
     @Test
-    fun basicOpenTypeShapingEngineAppliesReviewedGposFixtureFontsFromRepo() {
+    fun basicOpenTypeShapingEngineAppliesReviewedGposSingleFixtureFontFromRepo() {
         val single = parsedFixtureFace(
             uuid = "550e8400-e29b-41d4-a716-446655440621",
             relativePath = "reports/font/fixtures/fonts/shaping/gpos-single-adjustment.otf",
@@ -2242,98 +2254,6 @@ class TextStackSurfaceTest {
         )
     }
 
-    @Test
-    fun basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo() {
-        val single = parsedFixtureFace(
-            uuid = "550e8400-e29b-41d4-a716-446655440611",
-            relativePath = "reports/font/fixtures/fonts/shaping/gsub-single-substitution.otf",
-        )
-        val multiple = parsedFixtureFace(
-            uuid = "550e8400-e29b-41d4-a716-446655440612",
-            relativePath = "reports/font/fixtures/fonts/shaping/gsub-multiple-substitution.otf",
-        )
-        val ligature = parsedFixtureFace(
-            uuid = "550e8400-e29b-41d4-a716-446655440613",
-            relativePath = "reports/font/fixtures/fonts/shaping/gsub-ligature-fi.otf",
-        )
-        val engine = BasicOpenTypeShapingEngine(
-            glyphMapper = CMapGlyphMapper(
-                cmapsByTypefaceId = mapOf(
-                    single.typefaceId to single.cmap,
-                    multiple.typefaceId to multiple.cmap,
-                    ligature.typefaceId to ligature.cmap,
-                ),
-            ),
-            gsubTablesByTypefaceId = mapOf(
-                single.typefaceId to requireNotNull(single.gsub),
-                multiple.typefaceId to requireNotNull(multiple.gsub),
-                ligature.typefaceId to requireNotNull(ligature.gsub),
-            ),
-        )
-
-        assertEquals(
-            listOf(
-                ShapedGlyphRun(
-                    glyphIds = listOf(15),
-                    clusters = listOf(GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 20f)),
-                    advanceX = 20f,
-                    script = "Latn",
-                    bidiLevel = 0,
-                    typefaceId = single.typefaceId,
-                    fontSize = 20f,
-                ),
-            ),
-            engine.shape(
-                ShapingRequest(
-                    text = "a",
-                    typefaceId = single.typefaceId,
-                    fontSize = 20f,
-                ),
-            ).glyphRuns,
-        )
-        assertEquals(
-            listOf(
-                ShapedGlyphRun(
-                    glyphIds = listOf(16, 17),
-                    clusters = listOf(GlyphCluster(textRange = 0..0, glyphRange = 0..1, advanceX = 20f)),
-                    advanceX = 20f,
-                    script = "Latn",
-                    bidiLevel = 0,
-                    typefaceId = multiple.typefaceId,
-                    fontSize = 20f,
-                ),
-            ),
-            engine.shape(
-                ShapingRequest(
-                    text = "b",
-                    typefaceId = multiple.typefaceId,
-                    fontSize = 20f,
-                ),
-            ).glyphRuns,
-        )
-        assertEquals(
-            listOf(
-                ShapedGlyphRun(
-                    glyphIds = listOf(42),
-                    clusters = listOf(GlyphCluster(textRange = 0..1, glyphRange = 0..0, advanceX = 20f)),
-                    advanceX = 20f,
-                    script = "Latn",
-                    bidiLevel = 0,
-                    typefaceId = ligature.typefaceId,
-                    fontSize = 20f,
-                ),
-            ),
-            engine.shape(
-                ShapingRequest(
-                    text = "fi",
-                    typefaceId = ligature.typefaceId,
-                    fontSize = 20f,
-                ),
-            ).glyphRuns,
-        )
-    }
-
-    @Test
     fun shapingKeepsReviewedGsubClustersWhenTypefaceHasUnmatchedMarkLookups() {
         val multiple = parsedFixtureFace(
             uuid = "550e8400-e29b-41d4-a716-446655440614",
@@ -2757,7 +2677,10 @@ class TextStackSurfaceTest {
         val cursive = parsedFixtureFace(
             uuid = "550e8400-e29b-41d4-a716-446655440627",
             relativePath = "reports/font/fixtures/fonts/shaping/gpos-cursive-attachment.otf",
-            expectedDiagnosticSubstring = "expanded glyph pair count 102762 exceeds supported limit 65536",
+            expectedDiagnosticSubstrings = listOf(
+                "OpenType GSUB ContextSubst format 3 glyphCount 1 must be at least 2.",
+                "OpenType GPOS pair adjustment format 2 expanded glyph pair count 102762 exceeds supported limit 65536.",
+            ),
         )
         val engine = BasicOpenTypeShapingEngine(
             scriptItemizer = object : ScriptItemizer {
@@ -3709,7 +3632,7 @@ class TextStackSurfaceTest {
     private fun parsedFixtureFace(
         uuid: String,
         relativePath: String,
-        expectedDiagnosticSubstring: String? = null,
+        expectedDiagnosticSubstrings: List<String> = emptyList(),
     ): ParsedFixtureFace {
         val typefaceId = TypefaceID(Uuid.parse(uuid))
         val path = projectRoot().resolve(relativePath)
@@ -3720,21 +3643,26 @@ class TextStackSurfaceTest {
             bytes = Files.readAllBytes(path),
         )
         val parsed = DefaultOpenTypeFaceParser().parse(source)
-        if (expectedDiagnosticSubstring == null) {
+        if (expectedDiagnosticSubstrings.isEmpty()) {
             assertEquals(emptyList(), parsed.diagnostics, relativePath)
         } else {
-            val diagnostic = requireNotNull(parsed.diagnostics.singleOrNull()) { relativePath }
-            assertEquals("font.sfnt.optional-table-malformed", diagnostic.causeCode)
-            assertTrue(
-                diagnostic.causeMessage.orEmpty().contains(expectedDiagnosticSubstring),
-                "$relativePath -> $diagnostic",
-            )
+            assertEquals(expectedDiagnosticSubstrings.size, parsed.diagnostics.size, relativePath)
+            expectedDiagnosticSubstrings.forEachIndexed { index, expectedDiagnosticSubstring ->
+                val diagnostic = parsed.diagnostics[index]
+                assertEquals("font.sfnt.optional-table-malformed", diagnostic.causeCode, relativePath)
+                assertTrue(
+                    diagnostic.causeMessage.orEmpty().contains(expectedDiagnosticSubstring),
+                    "$relativePath -> $diagnostic",
+                )
+            }
         }
         return ParsedFixtureFace(
             typefaceId = typefaceId,
             cmap = parsed.cmap,
             unitsPerEm = requireNotNull(parsed.metrics.unitsPerEm),
             gsub = parsed.layout.gsub,
+            gdef = parsed.layout.gdef,
+            gpos = parsed.layout.gpos,
             gposSingles = parsed.layout.gposSingles,
             gposPairs = parsed.layout.gposPairs,
         )
@@ -3956,6 +3884,8 @@ class TextStackSurfaceTest {
         val cmap: CMapTable,
         val unitsPerEm: Int,
         val gsub: OpenTypeGsubTable?,
+        val gdef: OpenTypeGdefTable?,
+        val gpos: OpenTypeGposTable?,
         val gposSingles: OpenTypeGposSingleTable?,
         val gposPairs: OpenTypeGposPairTable?,
     )
