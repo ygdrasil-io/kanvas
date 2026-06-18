@@ -3068,9 +3068,11 @@ Evidence:
   `text.paragraph.ellipsis-glyph-missing` for the remaining bounded refusal
   paths.
 - `TextStackSurfaceTest` now proves one-line overflow truncation facts,
-  placeholder-tail insertion when room remains, missing-glyph and no-room
-  refusals, trailing-style ellipsis shaping on mixed-style content, and
-  shaped-cluster-safe truncation.
+  placeholder-tail insertion when room remains, ellipsis-only fallback when no
+  visible cluster fits but the ellipsis does, retry-on-earlier-visible-style
+  behavior when the current trailing style cannot shape the ellipsis,
+  missing-glyph and no-room refusals, trailing-style ellipsis shaping on
+  mixed-style content, and shaped-cluster-safe truncation.
 - `hitTestMap()` now records the visual tail of the displayed ellipsis as a
   final caret stop, and `hitTest()` treats points inside that tail as
   in-bounds text hits that resolve to the truncated line end.
@@ -3081,7 +3083,7 @@ Evidence:
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutInsertsEllipsisAndRecordsTruncationFactsInResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAppendsEllipsisWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesEllipsisNoRoomWhenMaxWidthCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesMissingEllipsisGlyphWhenShaperCannotProduceEllipsisRun --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutShapesEllipsisWithTrailingVisibleStyleAfterTruncation --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDoesNotCutInsideAShapedClusterWhenEllipsizing --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestMapIncludesVisualTailForDisplayedEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestTreatsDisplayedEllipsisAsInsideText --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenPinsEllipsisCasesAndNonClaims
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutInsertsEllipsisAndRecordsTruncationFactsInResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAppendsEllipsisWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesEllipsisNoRoomWhenMaxWidthCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAllowsEllipsisOnlyWhenNoVisibleClusterFitsButEllipsisDoes --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesMissingEllipsisGlyphWhenShaperCannotProduceEllipsisRun --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRetriesEllipsisWithEarlierVisibleStyleWhenTrailingStyleCannotShapeIt --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutShapesEllipsisWithTrailingVisibleStyleAfterTruncation --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDoesNotCutInsideAShapedClusterWhenEllipsizing --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestMapIncludesVisualTailForDisplayedEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestTreatsDisplayedEllipsisAsInsideText --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenPinsEllipsisCasesAndNonClaims
 rtk git diff --check
 ```
 

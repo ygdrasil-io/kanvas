@@ -104,7 +104,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*Ellipsis*'
 ## Status Notes
 
 - `review`: `BasicParagraphLayoutEngine` now inserts ellipsis for bounded `maxLines` overflow paths, trims only cluster-safe trailing spans, records `isEllipsized` plus `visibleRange`/`truncatedRange`, and keeps `text.paragraph.placeholder-ellipsis-conflict` for terminal placeholder lines that cannot fit the requested ellipsis without touching that placeholder.
-- `review`: `TextStackSurfaceTest` now proves one-line overflow truncation facts, placeholder-tail insertion, `text.paragraph.ellipsis-no-room`, `text.paragraph.ellipsis-glyph-missing`, mixed-style trailing-style shaping provenance, and shaped-cluster-safe truncation, while `paragraph-layout.json` checks in bounded golden evidence for the accepted non-bidi cases.
+- `review`: `TextStackSurfaceTest` now proves one-line overflow truncation facts, ellipsis-only fallback when no visible cluster fits but the ellipsis does, retry-on-earlier-visible-style behavior when the current trailing style cannot shape the ellipsis, placeholder-tail insertion, `text.paragraph.ellipsis-no-room`, `text.paragraph.ellipsis-glyph-missing`, mixed-style trailing-style shaping provenance, and shaped-cluster-safe truncation, while `paragraph-layout.json` checks in bounded golden evidence for the accepted non-bidi cases.
 - Remaining gate before `done`: add bidi truncation ordering evidence that proves visual-order preservation without broadening shaping support claims beyond the current bounded paragraph runtime.
 
 ## Linear Labels

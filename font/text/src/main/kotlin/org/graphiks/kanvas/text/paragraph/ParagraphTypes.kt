@@ -1445,24 +1445,34 @@ private fun resolveEllipsizedLastLine(
         )
     }
     var keepCount = spans.size
-    while (keepCount > 0) {
+    var glyphMissingRange: IntRange? = null
+    while (keepCount >= 0) {
         val keptSpans = spans.take(keepCount)
-        val visibleRange = keptSpans.first().sourceRange.first..keptSpans.last().sourceRange.last
-        val truncatedRange = paragraph.truncatedRangeAfter(visibleRange)
+        val visibleRange = if (keptSpans.isEmpty()) {
+            line.textRange.first..(line.textRange.first - 1)
+        } else {
+            keptSpans.first().sourceRange.first..keptSpans.last().sourceRange.last
+        }
+        val truncatedRange = if (keptSpans.isEmpty()) {
+            line.textRange.first..paragraph.text.lastIndex
+        } else {
+            paragraph.truncatedRangeAfter(visibleRange)
+        }
+        val styleReferenceRange = keptSpans.lastOrNull()?.sourceRange ?: spans.first().sourceRange
         val ellipsisRun = shapeEllipsisRun(
             paragraph = paragraph,
             ellipsis = ellipsis,
             visibleRange = visibleRange,
+            styleReferenceRange = styleReferenceRange,
             paragraphShapingRequests = paragraphShapingRequests,
             shapingEngine = shapingEngine,
-        ) ?: return EllipsisResolution(
-            diagnostic = ParagraphLayoutDiagnostic(
-                code = PARAGRAPH_ELLIPSIS_GLYPH_MISSING_DIAGNOSTIC_CODE,
-                message = "ellipsis shaping produced no glyph run for the active trailing style.",
-                textRange = truncatedRange ?: visibleRange,
-                severity = "refusal",
-            ),
-        )
+        ) ?: run {
+            if (glyphMissingRange == null) {
+                glyphMissingRange = truncatedRange ?: styleReferenceRange
+            }
+            keepCount--
+            continue
+        }
         val keptWidth = keptSpans.sumOf { span -> (span.right - span.left).toDouble() }.toFloat()
         val totalWidth = keptWidth + ellipsisRun.width
         val terminalPlaceholder = keptSpans.lastOrNull()?.takeIf { span -> span.placeholderId != null }
@@ -1494,6 +1504,16 @@ private fun resolveEllipsizedLastLine(
         }
         keepCount--
     }
+    if (glyphMissingRange != null) {
+        return EllipsisResolution(
+            diagnostic = ParagraphLayoutDiagnostic(
+                code = PARAGRAPH_ELLIPSIS_GLYPH_MISSING_DIAGNOSTIC_CODE,
+                message = "ellipsis shaping produced no glyph run for the active trailing style.",
+                textRange = glyphMissingRange,
+                severity = "refusal",
+            ),
+        )
+    }
     return EllipsisResolution(
         diagnostic = ParagraphLayoutDiagnostic(
             code = PARAGRAPH_ELLIPSIS_NO_ROOM_DIAGNOSTIC_CODE,
@@ -1508,13 +1528,18 @@ private fun shapeEllipsisRun(
     paragraph: Paragraph,
     ellipsis: String,
     visibleRange: IntRange,
+    styleReferenceRange: IntRange,
     paragraphShapingRequests: List<ParagraphShapingRequest>,
     shapingEngine: OpenTypeShapingEngine,
 ): EllipsisRun? {
+    val requestReferenceRange = visibleRange.takeUnless { it.isEmpty() } ?: styleReferenceRange
     val referenceRequest = paragraphShapingRequests
-        .filter { request -> request.textRange.overlaps(visibleRange) }
-        .maxWithOrNull(compareBy<ParagraphShapingRequest> { minOf(it.textRange.last, visibleRange.last) }.thenBy { it.textRange.first })
-    val referenceStyle = referenceRequest?.style ?: paragraph.primaryStyleFor(visibleRange)
+        .filter { request -> request.textRange.overlaps(requestReferenceRange) }
+        .maxWithOrNull(
+            compareBy<ParagraphShapingRequest> { minOf(it.textRange.last, requestReferenceRange.last) }
+                .thenBy { it.textRange.first },
+        )
+    val referenceStyle = referenceRequest?.style ?: paragraph.primaryStyleFor(styleReferenceRange)
     if (ellipsis.isEmpty()) {
         return EllipsisRun(
             segmentId = referenceRequest?.segmentId ?: "seg-ellipsis",
