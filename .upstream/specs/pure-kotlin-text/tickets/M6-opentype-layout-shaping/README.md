@@ -44,11 +44,11 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ArabicShaping*' --tests '*De
 - `KFONT-M6-002` is `done` on reviewed GSUB fixture provenance plus promoted `gsub-trace.json` / `shaped-glyph-run.json` evidence beyond the current M6-001 contract goldens.
 - `KFONT-M6-004` is `done` on reviewed GPOS fixture provenance plus promoted `gpos-trace.json` / `shaped-glyph-run.json` evidence and layout-contract malformed/refusal diagnostics.
 - `KFONT-M6-005` is `done` on bounded mark/cursive parser/runtime support, checked-in reviewed fixture provenance, refreshed `gpos-trace.json` / `shaped-glyph-run.json` evidence, refusal-only reviewed mono-codepoint ligature evidence, and post-review regressions for ambiguous ligature-component refusal, RTL cursive logical ranges, zero-advance cursive matches, and GSUB cluster preservation under mark/cursive-capable typefaces.
-- `KFONT-M6-006` stays in `review` after the bounded runtime `ResolvedFeatureSet` adoption wave; remaining work is per-script shaping fixture families, the remaining GPOS single/mark policy-routing gap, and explicit OpenType-specific `drawString` non-enablement evidence.
+- `KFONT-M6-006` stays in `review` after the bounded runtime `ResolvedFeatureSet` adoption wave; GSUB, pair-kerning, and GPOS anchor lookups now honor the resolved policy, Arabic defaults explicitly include `curs`, and the remaining work is per-script shaping fixture families, the GPOS single feature-routing gap, and explicit OpenType-specific `drawString` non-enablement evidence.
 
 ## Current Blockers
 
-- 2026-06-18 audit: `KFONT-M6-006` still depends on absent per-script shaping fixture families from `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`, plus the remaining GPOS single/mark policy-routing gap and OpenType-specific `drawString` evidence gap.
+- 2026-06-18 audit: `KFONT-M6-006` still depends on absent per-script shaping fixture families from `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`, plus the remaining GPOS single feature-routing gap and OpenType-specific `drawString` evidence gap.
 - 2026-06-18 audit: `KFONT-M6-003`, `KFONT-M6-007`, `KFONT-M6-008`, `KFONT-M6-009`, and `KFONT-M6-010` remain gated by their own named fixture families, required-script rows, or advanced lookup dependencies even after the simple Latin GSUB/GPOS/mark-cursive slices moved to `done`.
 
 ## Non-Claims

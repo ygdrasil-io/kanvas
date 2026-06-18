@@ -1004,6 +1004,7 @@ public class BasicOpenTypeShapingEngine(
             glyphIds = glyphIds,
             clusters = clusters,
             glyphClusterIndexes = glyphClusterIndexes,
+            features = features,
             adjustmentContext = adjustmentContext,
             textRange = group.textRange(),
             diagnostics = diagnostics,
@@ -1046,13 +1047,14 @@ public class BasicOpenTypeShapingEngine(
         glyphIds: List<Int>,
         clusters: MutableList<GlyphCluster>,
         glyphClusterIndexes: IntArray,
+        features: RuntimeFeatureGateSet,
         adjustmentContext: BasicPositionAdjustmentContext,
         textRange: IntRange,
         diagnostics: MutableList<ShapingDiagnostic>,
     ): Double {
         val gposTable = adjustmentContext.gposTable ?: return 0.0
         val enabledLookups = gposTable.lookups.filter { lookup ->
-            adjustmentContext.featureValue(lookup.featureTag) != 0
+            features.isRuntimeEnabled(lookup.featureTag)
         }
         if (enabledLookups.isEmpty()) return 0.0
 
@@ -1434,7 +1436,6 @@ public class BasicOpenTypeShapingEngine(
 
         return BasicPositionAdjustmentContext(
             typefaceId = typefaceId,
-            featureValues = request.features.values,
             gdefTable = gdefTable,
             gposTable = gposAnchorTable,
             gposSingleTable = gposSingleTable,
@@ -1987,7 +1988,6 @@ private data class ResolvedShapingFontRun(
 
 private data class BasicPositionAdjustmentContext(
     val typefaceId: TypefaceID,
-    val featureValues: Map<String, Int>,
     val gdefTable: OpenTypeGdefTable?,
     val gposTable: OpenTypeGposTable?,
     val gposSingleTable: OpenTypeGposSingleTable?,
@@ -1995,9 +1995,7 @@ private data class BasicPositionAdjustmentContext(
     val gposPairTable: OpenTypeGposPairTable?,
     val tableLabel: String,
     val fontUnitsToFontSizeUnitsScale: Double,
-) {
-    fun featureValue(tag: String): Int = featureValues[tag] ?: 1
-}
+)
 
 private data class ShapingGlyphUnit(
     val glyphId: Int,

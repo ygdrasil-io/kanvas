@@ -73,7 +73,7 @@ public object RequiredScriptFeaturePolicies {
             scriptFamily = "Arabic",
             selectedScripts = listOf("Arab"),
             openTypeScriptTags = listOf("arab"),
-            requiredDefaults = listOf("init", "medi", "fina", "isol", "rlig", "liga", "calt", "mark", "mkmk"),
+            requiredDefaults = listOf("init", "medi", "fina", "isol", "rlig", "liga", "calt", "mark", "mkmk", "curs"),
             refusalWhenMissing = listOf("mark", "mkmk", "cursive-attachment"),
         ),
         ScriptFeaturePolicy(

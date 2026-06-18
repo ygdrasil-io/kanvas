@@ -2090,6 +2090,10 @@ class TextStackSurfaceTest {
     fun basicOpenTypeShapingEngineDoesNotReportUnavailableWhenCursiveMatchHasZeroAdvanceDelta() {
         val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440631"))
         val engine = BasicOpenTypeShapingEngine(
+            scriptItemizer = object : ScriptItemizer {
+                override fun itemize(request: ShapingRequest): List<ScriptRun> =
+                    listOf(ScriptRun(request.textRange, "Arab"))
+            },
             glyphMapper = mapGlyphs(
                 'a'.code to 710,
                 'b'.code to 711,
@@ -2140,6 +2144,63 @@ class TextStackSurfaceTest {
         assertEquals(listOf(710, 711), run.glyphIds)
         assertEquals(20f, run.clusters.first().advanceX, 0.0001f)
         assertEquals(1.4f, run.clusters.last().offsetY, 0.0001f)
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineSkipsUnsupportedCursiveLookupsForScriptPolicy() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440632"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                'a'.code to 710,
+                'b'.code to 711,
+            ),
+            gdefTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGdefTable(
+                    glyphClasses = mapOf(
+                        710 to 1,
+                        711 to 1,
+                    ),
+                ),
+            ),
+            gposTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGposTable(
+                    lookups = listOf(
+                        OpenTypeGposCursiveLookup(
+                            featureTag = "curs",
+                            lookupIndex = 0,
+                            attachments = listOf(
+                                OpenTypeGposCursiveAttachment(
+                                    glyphId = 710,
+                                    entryAnchor = null,
+                                    exitAnchor = OpenTypeAnchor(format = 1, x = 120, y = 500),
+                                ),
+                                OpenTypeGposCursiveAttachment(
+                                    glyphId = 711,
+                                    entryAnchor = OpenTypeAnchor(format = 1, x = 60, y = 430),
+                                    exitAnchor = null,
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            kernUnitsPerEmByTypefaceId = mapOf(typefaceId to 1000),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "ab",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(emptyList(), result.diagnostics)
+        val run = result.glyphRuns.single()
+        assertEquals(listOf(710, 711), run.glyphIds)
+        assertEquals(20f, run.clusters.first().advanceX, 0.0001f)
+        assertEquals(0f, run.clusters.last().offsetY, 0.0001f)
+        assertEquals(40f, run.advanceX, 0.0001f)
     }
 
     @Test

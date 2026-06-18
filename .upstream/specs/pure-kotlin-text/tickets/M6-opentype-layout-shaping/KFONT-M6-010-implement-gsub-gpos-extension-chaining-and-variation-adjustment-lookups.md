@@ -105,7 +105,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ExtensionLookup*' --tests '*
 ## Status Notes
 
 - `proposed`: Advanced lookup work depends on basic GSUB/GPOS, mark/cursive positioning, and variation path foundations.
-- Current blocker audit (2026-06-16): draft PR `#1705` (`KFONT-M6-004`) is still open, `KFONT-M6-003` and `KFONT-M6-005` remain gated by absent fixture families, `KFONT-M4-005` is still `proposed`, and the advanced-lookup fixture set `gsub-chaining-context.otf`, `gsub-extension-substitution.otf`, `gsub-reverse-chaining.otf`, `gpos-contextual-positioning.otf`, `gpos-chaining-positioning.otf`, `gpos-extension-positioning.otf`, `gpos-variation-device.otf`, and `layout-extension-cycle.otf` is not present in-repo. Remaining gate is merge/adopt the bounded GSUB/GPOS base slices, implement the mark/cursive and CFF2 variation prerequisites, then add reviewed fixture provenance and variation-adjustment evidence.
+- Current blocker audit (2026-06-18): `KFONT-M6-004` and `KFONT-M6-005` are `done`, `KFONT-M6-003` remains gated by its missing contextual fixture family, `KFONT-M4-005` is still `proposed`, and the advanced-lookup fixture set `gsub-chaining-context.otf`, `gsub-extension-substitution.otf`, `gsub-reverse-chaining.otf`, `gpos-contextual-positioning.otf`, `gpos-chaining-positioning.otf`, `gpos-extension-positioning.otf`, `gpos-variation-device.otf`, and `layout-extension-cycle.otf` is not present in-repo. Remaining gate is keep the bounded GSUB/GPOS base slices in place, implement the contextual, variation, and advanced-lookup prerequisites, then add reviewed fixture provenance and variation-adjustment evidence.
 - Move to `ready` only after lookup-type coverage and variation diagnostics are reviewed.
 
 ## Linear Labels
