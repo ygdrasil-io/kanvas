@@ -97,7 +97,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*Thai*' --tests '*Cjk*'
 ## Status Notes
 
 - `proposed`: Boundary fixtures depend on script itemization, feature policy, and positioning support.
-- Current blocker audit (2026-06-16): draft PRs `#1705` (`KFONT-M6-004`) and `#1707` (`KFONT-M6-006`) are still open, `KFONT-M6-005` remains gated by absent mark/cursive fixtures, and the Thai/CJK boundary fixture set `thai-base-marks.otf`, `thai-tone-marks.otf`, `thai-latin-mixed.txt`, `cjk-han-variation-selector.otf`, `cjk-kana-vertical.otf`, `cjk-hangul-direct.otf`, and `cjk-missing-vertical-alt.otf` is not present in-repo. Remaining gate is merge/adopt the positioning and policy slices, complete mark positioning, then add reviewed Thai/CJK fixture provenance with paragraph-owned non-claim diagnostics.
+- Current blocker audit (2026-06-18): `KFONT-M6-004` and `KFONT-M6-005` are `done`, while `KFONT-M6-006` remains in `review` on absent per-script fixture families; the Thai/CJK boundary fixture set `thai-base-marks.otf`, `thai-tone-marks.otf`, `thai-latin-mixed.txt`, `cjk-han-variation-selector.otf`, `cjk-kana-vertical.otf`, `cjk-hangul-direct.otf`, and `cjk-missing-vertical-alt.otf` is not present in-repo. Remaining gate is retain the bounded positioning and policy slices, then add reviewed Thai/CJK fixture provenance with paragraph-owned non-claim diagnostics.
 - Move to `ready` only after paragraph-owned diagnostics and fixture scope are reviewed.
 
 ## Linear Labels

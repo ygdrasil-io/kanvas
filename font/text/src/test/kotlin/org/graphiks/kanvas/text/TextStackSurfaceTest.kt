@@ -7,6 +7,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 import org.graphiks.kanvas.font.FallbackRequest
@@ -23,6 +25,10 @@ import org.graphiks.kanvas.font.sfnt.CMapFormat12Mapping
 import org.graphiks.kanvas.font.sfnt.CMapSubtable
 import org.graphiks.kanvas.font.sfnt.CMapTable
 import org.graphiks.kanvas.font.sfnt.DefaultOpenTypeFaceParser
+import org.graphiks.kanvas.font.sfnt.OpenTypeAnchor
+import org.graphiks.kanvas.font.sfnt.OpenTypeGdefTable
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposCursiveAttachment
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposCursiveLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassRule
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassSubtable
@@ -38,10 +44,15 @@ import org.graphiks.kanvas.font.sfnt.OpenTypeGsubNestedLookupRecord
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubSingleSubstitution
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubSingleSubstitutionLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubTable
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToBaseAttachment
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToBaseLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToLigatureAttachment
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToLigatureLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposPairAdjustment
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposPairTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposSingleAdjustment
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposSingleTable
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposValueRecord
 import org.graphiks.kanvas.font.sfnt.OpenTypeKernCoverage
 import org.graphiks.kanvas.font.sfnt.OpenTypeKernFormat0Subtable
@@ -97,7 +108,10 @@ import org.graphiks.kanvas.text.shaping.ShapingDiagnostic
 import org.graphiks.kanvas.text.shaping.ShapingRequest
 import org.graphiks.kanvas.text.shaping.ShapingResult
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_CURSIVE_ATTACHMENT_UNAVAILABLE_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_LOOKUP_MALFORMED_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_MARK_POSITIONING_UNAVAILABLE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_PARAGRAPH_BIDI_REQUIRED_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TextSegmenter
 import org.graphiks.kanvas.text.shaping.UnicodeData
@@ -558,41 +572,65 @@ class TextStackSurfaceTest {
     @Test
     fun gposTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics() {
         val dump = readJsonProjectFile("reports/font/fixtures/expected/shaping/gpos-trace.json")
-        val events = dump.requiredObjectList("events")
-        val singleAdjustment = events.single { it.requiredString("lookupId") == "gpos-single-adjustment" }
-        val pairKerningEvent = events.single { it.requiredString("lookupId") == "gpos-pair-format1-kerning" }
-        val pairClassEvent = events.single { it.requiredString("lookupId") == "gpos-pair-format2-class" }
-        val malformedValueFormat = events.single { it.requiredString("lookupId") == "gpos-valueformat-malformed" }
-        val malformedPairRange = events.single { it.requiredString("lookupId") == "gpos-pair-out-of-range" }
+        val cases = dump.requiredObjectList("cases")
 
-        assertEquals(2L, dump.requiredLong("schemaVersion"))
+        assertEquals(1L, dump.requiredLong("schemaVersion"))
         assertEquals("gpos-trace", dump.requiredString("dumpId"))
-        assertEquals(listOf("KFONT-M6-004"), dump.requiredStringList("ownerTickets"))
-
-        assertEquals(0L, singleAdjustment.requiredLong("lookupIndex"))
-        assertEquals(1L, singleAdjustment.requiredLong("lookupType"))
-        assertEquals(listOf("kern"), singleAdjustment.requiredStringList("featureTags"))
-        assertEquals(listOf(7L), singleAdjustment.requiredLongList("matchedGlyphIds"))
-        assertEquals(listOf(1000L), singleAdjustment.requiredObject("beforePositions").requiredLongList("xAdvances"))
-
-        assertEquals(1L, pairKerningEvent.requiredLong("lookupIndex"))
-        assertEquals(2L, pairKerningEvent.requiredLong("lookupType"))
-        assertEquals(listOf("kern"), pairKerningEvent.requiredStringList("featureTags"))
-        assertEquals(listOf(7L, 11L), pairKerningEvent.requiredLongList("matchedGlyphIds"))
-        assertEquals(listOf(1000L, 1000L), pairKerningEvent.requiredObject("beforePositions").requiredLongList("xAdvances"))
-        assertEquals(listOf(945L, 1000L), pairKerningEvent.requiredObject("afterPositions").requiredLongList("xAdvances"))
-        assertEquals(-55L, pairKerningEvent.requiredObject("valueRecords").requiredObject("first").requiredLong("xAdvance"))
-        assertEquals(0L, pairKerningEvent.requiredObject("valueRecords").requiredObject("second").requiredLong("xAdvance"))
-
-        assertEquals(2L, pairClassEvent.requiredLong("lookupIndex"))
-        assertEquals(2L, pairClassEvent.requiredLong("lookupType"))
-        assertEquals(listOf("kern"), pairClassEvent.requiredStringList("featureTags"))
-        assertEquals(listOf(7L, 11L), pairClassEvent.requiredLongList("matchedGlyphIds"))
-        assertEquals(listOf(1L, 2L), pairClassEvent.requiredLongList("matchedClassIds"))
-        assertEquals(listOf(960L, 1010L), pairClassEvent.requiredObject("afterPositions").requiredLongList("xAdvances"))
-
-        assertEquals("text.shaping.lookup-malformed", malformedValueFormat.requiredString("diagnosticCode"))
-        assertEquals("text.shaping.lookup-malformed", malformedPairRange.requiredString("diagnosticCode"))
+        assertEquals(listOf("KFONT-M6-004", "KFONT-M6-005"), dump.requiredStringList("ownerTickets"))
+        assertEquals("latin-gsub-gpos-fixtures", dump.requiredString("fixtureFamilyId"))
+        assertEquals(
+            listOf(
+                "single-adjustment",
+                "pair-format1-kerning",
+                "pair-format2-class",
+                "mark-to-base",
+                "mark-to-ligature",
+                "mark-to-mark",
+                "cursive-attachment",
+                "valueformat-malformed",
+                "pair-out-of-range",
+                "missing-gdef",
+                "anchor-malformed",
+            ),
+            cases.map { it.requiredString("caseId") },
+        )
+        assertEquals(listOf("kern"), cases[0].requiredStringList("featureOrder"))
+        assertEquals(listOf(520L), cases[0].requiredLongList("glyphIds"))
+        assertEquals(listOf(200L, 0L, 0L), cases[0].requiredLongLists("before")[0])
+        assertEquals(listOf(192L, 10L, 0L), cases[0].requiredLongLists("after")[0])
+        assertEquals(listOf(520L, 541L), cases[1].requiredLongList("glyphIds"))
+        assertEquals(listOf(189L, 0L, 0L), cases[1].requiredLongLists("after")[0])
+        assertEquals(listOf(188L, 0L, 0L), cases[2].requiredLongLists("after")[0])
+        assertEquals(listOf(0L, 1L), cases[2].requiredObjectList("lookups").single().requiredLongList("classIds"))
+        assertEquals(listOf("mark"), cases[3].requiredStringList("featureOrder"))
+        assertEquals(listOf(380L, 8L), cases[3].requiredLongList("glyphIds"))
+        assertEquals(listOf(21L, -37L), cases[3].requiredObjectList("lookups").single().requiredLongList("attachmentVector"))
+        assertEquals(listOf(200L, 0L, 0L), cases[4].requiredLongLists("after")[0])
+        assertEquals(emptyList<Map<String, Any?>>(), cases[4].requiredObjectList("lookups"))
+        assertEquals(
+            TEXT_SHAPING_MARK_POSITIONING_UNAVAILABLE_DIAGNOSTIC_CODE,
+            cases[4].requiredObjectList("diagnostics").single().requiredString("code"),
+        )
+        assertEquals(listOf("mkmk"), cases[5].requiredStringList("featureOrder"))
+        assertEquals(listOf(0L, -7L, 36L), cases[5].requiredLongLists("after")[0])
+        assertEquals(listOf("curs"), cases[6].requiredStringList("featureOrder"))
+        assertEquals(listOf(155L, 0L, 0L), cases[6].requiredLongLists("after")[0])
+        assertEquals(
+            "font.sfnt.optional-table-malformed",
+            cases[7].requiredObjectList("diagnostics").single().requiredString("code"),
+        )
+        assertEquals(
+            "font.sfnt.optional-table-malformed",
+            cases[8].requiredObjectList("diagnostics").single().requiredString("code"),
+        )
+        assertEquals(
+            "text.shaping.gdef-required",
+            cases[9].requiredObjectList("diagnostics").single().requiredString("code"),
+        )
+        assertEquals(
+            "text.shaping.lookup-malformed",
+            cases[10].requiredObjectList("diagnostics").single().requiredString("code"),
+        )
         assertNoSupportPromotionClaims(dump)
     }
 
@@ -603,7 +641,7 @@ class TextStackSurfaceTest {
 
         assertEquals(1L, dump.requiredLong("schemaVersion"))
         assertEquals("shaped-glyph-run", dump.requiredString("dumpId"))
-        assertEquals(listOf("KFONT-M6-002", "KFONT-M6-003", "KFONT-M6-004"), dump.requiredStringList("ownerTickets"))
+        assertEquals(listOf("KFONT-M6-002", "KFONT-M6-003", "KFONT-M6-004", "KFONT-M6-005"), dump.requiredStringList("ownerTickets"))
         assertEquals("latin-gsub-gpos-fixtures", dump.requiredString("fixtureFamilyId"))
         assertEquals(
             listOf(
@@ -618,6 +656,10 @@ class TextStackSurfaceTest {
                 "gpos-single-adjustment",
                 "gpos-pair-format1-kerning",
                 "gpos-pair-format2-class",
+                "gpos-mark-to-base",
+                "gpos-mark-to-ligature",
+                "gpos-mark-to-mark",
+                "gpos-cursive-attachment",
             ),
             cases.map { it.requiredString("caseId") },
         )
@@ -639,6 +681,18 @@ class TextStackSurfaceTest {
         assertEquals(listOf(192L, 10L, 0L), cases[8].requiredLongLists("clusterMetrics")[0])
         assertEquals(listOf(189L, 0L, 0L), cases[9].requiredLongLists("clusterMetrics")[0])
         assertEquals(listOf(188L, 0L, 0L), cases[10].requiredLongLists("clusterMetrics")[0])
+        assertEquals("gpos-trace#mark-to-base", cases[11].requiredString("traceRef"))
+        assertEquals(listOf(0L, 4L, -7L), cases[11].requiredLongLists("clusterMetrics")[0])
+        assertEquals("gpos-trace#mark-to-ligature", cases[12].requiredString("traceRef"))
+        assertEquals(listOf(200L, 0L, 0L), cases[12].requiredLongLists("clusterMetrics")[0])
+        assertEquals(
+            TEXT_SHAPING_MARK_POSITIONING_UNAVAILABLE_DIAGNOSTIC_CODE,
+            cases[12].requiredObjectList("diagnostics").single().requiredString("code"),
+        )
+        assertEquals("gpos-trace#mark-to-mark", cases[13].requiredString("traceRef"))
+        assertEquals(listOf(0L, -7L, 36L), cases[13].requiredLongLists("clusterMetrics")[0])
+        assertEquals("gpos-trace#cursive-attachment", cases[14].requiredString("traceRef"))
+        assertEquals(listOf(155L, 0L, 0L), cases[14].requiredLongLists("clusterMetrics")[0])
         assertNoSupportPromotionClaims(dump)
     }
 
@@ -658,8 +712,6 @@ class TextStackSurfaceTest {
         )
         assertEquals(
             listOf(
-                "text.shaping.cursive-attachment-unavailable",
-                "text.shaping.mark-positioning-unavailable",
                 "text.shaping.gdef-required",
                 "text.shaping.paragraph-bidi-required",
             ),
@@ -1140,6 +1192,63 @@ class TextStackSurfaceTest {
     }
 
     @Test
+    fun basicOpenTypeShapingEngineSkipsGposSingleAdjustmentsWhenFeatureIsUnsupportedForScriptPolicy() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440409"))
+        val engine = BasicOpenTypeShapingEngine(
+            scriptItemizer = object : ScriptItemizer {
+                override fun itemize(request: ShapingRequest): List<ScriptRun> =
+                    listOf(ScriptRun(request.textRange, "Arab"))
+            },
+            glyphMapper = mapGlyphs(
+                0x0628 to 7,
+                0x062A to 11,
+            ),
+            gposSingleTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGposSingleTable(
+                    adjustments = listOf(
+                        OpenTypeGposSingleAdjustment(
+                            glyphId = 7,
+                            valueRecord = OpenTypeGposValueRecord(
+                                xPlacement = 50,
+                                yPlacement = -25,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            kernUnitsPerEmByTypefaceId = mapOf(typefaceId to 1000),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "\u0628\u062A",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(emptyList(), result.diagnostics)
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(11, 7),
+                    clusters = listOf(
+                        GlyphCluster(textRange = 1..1, glyphRange = 0..0, advanceX = 20f),
+                        GlyphCluster(textRange = 0..0, glyphRange = 1..1, advanceX = 20f),
+                    ),
+                    advanceX = 40f,
+                    advanceY = 0f,
+                    script = "Arab",
+                    bidiLevel = 1,
+                    typefaceId = typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            result.glyphRuns,
+        )
+    }
+
+    @Test
     fun basicOpenTypeShapingEngineSkipsGposPairAdjustmentsWhenKernFeatureIsDisabled() {
         val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-44665544040a"))
         val engine = BasicOpenTypeShapingEngine(
@@ -1500,7 +1609,7 @@ class TextStackSurfaceTest {
             ),
             engine.shape(
                 ShapingRequest(
-                    text = "fg",
+                    text = "fi",
                     typefaceId = ligature.typefaceId,
                     fontSize = 20f,
                     features = FeatureSet(mapOf("liga" to 1)),
@@ -2009,7 +2118,7 @@ class TextStackSurfaceTest {
     }
 
     @Test
-    fun basicOpenTypeShapingEngineAppliesReviewedGposFixtureFontsFromRepo() {
+    fun basicOpenTypeShapingEngineAppliesReviewedGposSingleFixtureFontFromRepo() {
         val single = parsedFixtureFace(
             uuid = "550e8400-e29b-41d4-a716-446655440621",
             relativePath = "reports/font/fixtures/fonts/shaping/gpos-single-adjustment.otf",
@@ -2145,6 +2254,74 @@ class TextStackSurfaceTest {
         )
     }
 
+    fun shapingKeepsReviewedGsubClustersWhenTypefaceHasUnmatchedMarkLookups() {
+        val multiple = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440614",
+            relativePath = "reports/font/fixtures/fonts/shaping/gsub-multiple-substitution.otf",
+        )
+        val typefaceId = multiple.typefaceId
+        val inputGlyphId = requireNotNull(multiple.cmap.lookupGlyphId('b'.code))
+        val replacementGlyphIds = requireNotNull(multiple.gsub)
+            .lookups
+            .filterIsInstance<OpenTypeGsubMultipleSubstitutionLookup>()
+            .flatMap(OpenTypeGsubMultipleSubstitutionLookup::substitutions)
+            .single { substitution -> substitution.inputGlyphId == inputGlyphId }
+            .replacementGlyphIds
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = CMapGlyphMapper(cmapsByTypefaceId = mapOf(typefaceId to multiple.cmap)),
+            gsubTablesByTypefaceId = mapOf(typefaceId to requireNotNull(multiple.gsub)),
+            gdefTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGdefTable(
+                    glyphClasses = mapOf(
+                        900 to 1,
+                        901 to 3,
+                    ),
+                ),
+            ),
+            gposTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGposTable(
+                    lookups = listOf(
+                        OpenTypeGposMarkToBaseLookup(
+                            featureTag = "mark",
+                            lookupIndex = 0,
+                            attachments = listOf(
+                                OpenTypeGposMarkToBaseAttachment(
+                                    markGlyphId = 901,
+                                    baseGlyphId = 900,
+                                    markClass = 0,
+                                    markAnchor = OpenTypeAnchor(format = 1, x = 0, y = 0),
+                                    baseAnchor = OpenTypeAnchor(format = 1, x = 40, y = 20),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            kernUnitsPerEmByTypefaceId = mapOf(typefaceId to multiple.unitsPerEm),
+        )
+
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = replacementGlyphIds,
+                    clusters = listOf(GlyphCluster(textRange = 0..0, glyphRange = 0..1, advanceX = 20f)),
+                    advanceX = 20f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            engine.shape(
+                ShapingRequest(
+                    text = "b",
+                    typefaceId = typefaceId,
+                    fontSize = 20f,
+                ),
+            ).glyphRuns,
+        )
+    }
+
     @Test
     fun basicOpenTypeShapingEngineAppliesStandardFiLigatureWhenAvailable() {
         val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440406"))
@@ -2218,6 +2395,672 @@ class TextStackSurfaceTest {
             ),
             result.glyphRuns,
         )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineRefusesAmbiguousLigatureComponentAttachments() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440630"))
+        val fGlyphId = 71
+        val iGlyphId = 72
+        val ligatureGlyphId = 703
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                'f'.code to fGlyphId,
+                'i'.code to iGlyphId,
+                'y'.code to 611,
+            ),
+            gsubTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubLigatureSubstitutionLookup(
+                            featureTag = "liga",
+                            substitutions = listOf(
+                                OpenTypeGsubLigatureSubstitution(
+                                    inputGlyphIds = listOf(fGlyphId, iGlyphId),
+                                    replacementGlyphId = ligatureGlyphId,
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            gdefTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGdefTable(
+                    glyphClasses = mapOf(
+                        ligatureGlyphId to 2,
+                        611 to 3,
+                    ),
+                ),
+            ),
+            gposTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGposTable(
+                    lookups = listOf(
+                        OpenTypeGposMarkToLigatureLookup(
+                            featureTag = "mark",
+                            lookupIndex = 0,
+                            attachments = listOf(
+                                OpenTypeGposMarkToLigatureAttachment(
+                                    markGlyphId = 611,
+                                    ligatureGlyphId = ligatureGlyphId,
+                                    componentIndex = 0,
+                                    markClass = 0,
+                                    markAnchor = OpenTypeAnchor(format = 1, x = 10, y = 30),
+                                    ligatureAnchor = OpenTypeAnchor(format = 1, x = 60, y = 50),
+                                ),
+                                OpenTypeGposMarkToLigatureAttachment(
+                                    markGlyphId = 611,
+                                    ligatureGlyphId = ligatureGlyphId,
+                                    componentIndex = 1,
+                                    markClass = 0,
+                                    markAnchor = OpenTypeAnchor(format = 1, x = 10, y = 30),
+                                    ligatureAnchor = OpenTypeAnchor(format = 1, x = 140, y = 80),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            kernUnitsPerEmByTypefaceId = mapOf(typefaceId to 1000),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "fiy",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(
+            listOf(TEXT_SHAPING_MARK_POSITIONING_UNAVAILABLE_DIAGNOSTIC_CODE),
+            result.diagnostics.map(ShapingDiagnostic::code),
+        )
+        val run = result.glyphRuns.single()
+        assertEquals(listOf(ligatureGlyphId, 611), run.glyphIds)
+        assertEquals(0f, run.clusters.last().offsetX, 0.0001f)
+        assertEquals(0f, run.clusters.last().offsetY, 0.0001f)
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineRefusesAmbiguousSingleCodePointLigatureComponentAttachments() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440637"))
+        val ligatureGlyphId = 103
+        val markGlyphId = 611
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                0xFB01 to ligatureGlyphId,
+                'y'.code to markGlyphId,
+            ),
+            gdefTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGdefTable(
+                    glyphClasses = mapOf(
+                        ligatureGlyphId to 2,
+                        markGlyphId to 3,
+                    ),
+                ),
+            ),
+            gposTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGposTable(
+                    lookups = listOf(
+                        OpenTypeGposMarkToLigatureLookup(
+                            featureTag = "mark",
+                            lookupIndex = 0,
+                            attachments = listOf(
+                                OpenTypeGposMarkToLigatureAttachment(
+                                    markGlyphId = markGlyphId,
+                                    ligatureGlyphId = ligatureGlyphId,
+                                    componentIndex = 0,
+                                    markClass = 0,
+                                    markAnchor = OpenTypeAnchor(format = 1, x = 10, y = 30),
+                                    ligatureAnchor = OpenTypeAnchor(format = 1, x = 60, y = 50),
+                                ),
+                                OpenTypeGposMarkToLigatureAttachment(
+                                    markGlyphId = markGlyphId,
+                                    ligatureGlyphId = ligatureGlyphId,
+                                    componentIndex = 1,
+                                    markClass = 0,
+                                    markAnchor = OpenTypeAnchor(format = 1, x = 10, y = 30),
+                                    ligatureAnchor = OpenTypeAnchor(format = 1, x = 140, y = 80),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            kernUnitsPerEmByTypefaceId = mapOf(typefaceId to 1000),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "\uFB01y",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(
+            listOf(TEXT_SHAPING_MARK_POSITIONING_UNAVAILABLE_DIAGNOSTIC_CODE),
+            result.diagnostics.map(ShapingDiagnostic::code),
+        )
+        val run = result.glyphRuns.single()
+        assertEquals(listOf(ligatureGlyphId, markGlyphId), run.glyphIds)
+        assertEquals(0f, run.clusters.last().offsetX, 0.0001f)
+        assertEquals(0f, run.clusters.last().offsetY, 0.0001f)
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineAppliesReviewedGposFixtureFontsFromRepo() {
+        val single = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440621",
+            relativePath = "reports/font/fixtures/fonts/shaping/gpos-single-adjustment.otf",
+        )
+        val pairFormat1 = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440622",
+            relativePath = "reports/font/fixtures/fonts/shaping/gpos-pair-format1-kerning.otf",
+        )
+        val pairFormat2 = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440623",
+            relativePath = "reports/font/fixtures/fonts/shaping/gpos-pair-format2-class.otf",
+        )
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = CMapGlyphMapper(
+                cmapsByTypefaceId = mapOf(
+                    single.typefaceId to single.cmap,
+                    pairFormat1.typefaceId to pairFormat1.cmap,
+                    pairFormat2.typefaceId to pairFormat2.cmap,
+                ),
+            ),
+            gposSingleTablesByTypefaceId = mapOf(
+                single.typefaceId to requireNotNull(single.gposSingles),
+            ),
+            gposPairTablesByTypefaceId = mapOf(
+                pairFormat1.typefaceId to requireNotNull(pairFormat1.gposPairs),
+                pairFormat2.typefaceId to requireNotNull(pairFormat2.gposPairs),
+            ),
+            kernUnitsPerEmByTypefaceId = mapOf(
+                single.typefaceId to single.unitsPerEm,
+                pairFormat1.typefaceId to pairFormat1.unitsPerEm,
+                pairFormat2.typefaceId to pairFormat2.unitsPerEm,
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(7),
+                    clusters = listOf(
+                        GlyphCluster(
+                            textRange = 0..0,
+                            glyphRange = 0..0,
+                            advanceX = 19.4f,
+                            offsetX = 0.8f,
+                            offsetY = -0.4f,
+                        ),
+                    ),
+                    advanceX = 19.4f,
+                    advanceY = 0f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = single.typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            engine.shape(
+                ShapingRequest(
+                    text = "A",
+                    typefaceId = single.typefaceId,
+                    fontSize = 20f,
+                ),
+            ).glyphRuns,
+        )
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(7, 28),
+                    clusters = listOf(
+                        GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 20f),
+                        GlyphCluster(textRange = 1..1, glyphRange = 1..1, advanceX = 20f),
+                    ),
+                    advanceX = 40f,
+                    advanceY = 0f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = pairFormat1.typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            engine.shape(
+                ShapingRequest(
+                    text = "AV",
+                    typefaceId = pairFormat1.typefaceId,
+                    fontSize = 20f,
+                ),
+            ).glyphRuns,
+        )
+        assertEquals(
+            listOf(
+                ShapedGlyphRun(
+                    glyphIds = listOf(7, 28),
+                    clusters = listOf(
+                        GlyphCluster(textRange = 0..0, glyphRange = 0..0, advanceX = 20f),
+                        GlyphCluster(textRange = 1..1, glyphRange = 1..1, advanceX = 20f),
+                    ),
+                    advanceX = 40f,
+                    advanceY = 0f,
+                    script = "Latn",
+                    bidiLevel = 0,
+                    typefaceId = pairFormat2.typefaceId,
+                    fontSize = 20f,
+                ),
+            ),
+            engine.shape(
+                ShapingRequest(
+                    text = "AV",
+                    typefaceId = pairFormat2.typefaceId,
+                    fontSize = 20f,
+                ),
+            ).glyphRuns,
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineAppliesReviewedMarkAndCursiveFixtureFontsFromRepo() {
+        val fontSize = 20f
+        val markToBase = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440624",
+            relativePath = "reports/font/fixtures/fonts/shaping/gpos-mark-to-base.otf",
+        )
+        val markToMark = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440626",
+            relativePath = "reports/font/fixtures/fonts/shaping/gpos-mark-to-mark.otf",
+        )
+        val cursive = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440627",
+            relativePath = "reports/font/fixtures/fonts/shaping/gpos-cursive-attachment.otf",
+            expectedDiagnosticSubstrings = listOf(
+                "OpenType GSUB ContextSubst format 3 glyphCount 1 must be at least 2.",
+                "OpenType GPOS pair adjustment format 2 expanded glyph pair count 102762 exceeds supported limit 65536.",
+            ),
+        )
+        val engine = BasicOpenTypeShapingEngine(
+            scriptItemizer = object : ScriptItemizer {
+                override fun itemize(request: ShapingRequest): List<ScriptRun> =
+                    listOf(ScriptRun(request.textRange, "Arab"))
+            },
+            bidiResolver = object : BidiResolver {
+                override fun resolve(request: ShapingRequest): List<BidiRun> =
+                    listOf(
+                        if (request.text.contains('\uE001') || request.text.contains('\uE002')) {
+                            BidiRun(request.textRange, level = 0, isRightToLeft = false)
+                        } else {
+                            BidiRun(request.textRange, level = 1, isRightToLeft = true)
+                        },
+                    )
+            },
+            glyphMapper = CMapGlyphMapper(
+                cmapsByTypefaceId = mapOf(
+                    markToBase.typefaceId to markToBase.cmap,
+                    markToMark.typefaceId to markToMark.cmap,
+                    cursive.typefaceId to cursive.cmap,
+                ),
+            ),
+            gdefTablesByTypefaceId = mapOf(
+                markToBase.typefaceId to requireNotNull(markToBase.gdef),
+                markToMark.typefaceId to requireNotNull(markToMark.gdef),
+                cursive.typefaceId to requireNotNull(cursive.gdef),
+            ),
+            gposTablesByTypefaceId = mapOf(
+                markToBase.typefaceId to requireNotNull(markToBase.gpos),
+                markToMark.typefaceId to requireNotNull(markToMark.gpos),
+                cursive.typefaceId to requireNotNull(cursive.gpos),
+            ),
+            kernUnitsPerEmByTypefaceId = mapOf(
+                markToBase.typefaceId to markToBase.unitsPerEm,
+                markToMark.typefaceId to markToMark.unitsPerEm,
+                cursive.typefaceId to cursive.unitsPerEm,
+            ),
+        )
+
+        val markToBaseResult = engine.shape(
+            ShapingRequest(
+                text = "\u0627\u064E",
+                typefaceId = markToBase.typefaceId,
+                fontSize = fontSize,
+            ),
+        )
+        assertEquals(emptyList(), markToBaseResult.diagnostics)
+        val markToBaseRun = markToBaseResult.glyphRuns.single()
+        val alefGlyphId = requireNotNull(markToBase.cmap.lookupGlyphId(0x0627))
+        val fathaGlyphId = requireNotNull(markToBase.cmap.lookupGlyphId(0x064E))
+        val markToBaseScale = fontSize / markToBase.unitsPerEm.toFloat()
+        assertEquals(setOf(alefGlyphId, fathaGlyphId), markToBaseRun.glyphIds.toSet())
+        val markToBaseBaseCluster = markToBaseRun.clusters.first { cluster ->
+            markToBaseRun.glyphIds[cluster.glyphRange.first] == alefGlyphId
+        }
+        val markToBaseMarkCluster = markToBaseRun.clusters.first { cluster ->
+            markToBaseRun.glyphIds[cluster.glyphRange.first] == fathaGlyphId
+        }
+        val markToBaseRelativeOriginShift =
+            if (markToBaseRun.clusters.indexOf(markToBaseMarkCluster) > markToBaseRun.clusters.indexOf(markToBaseBaseCluster)) {
+                -fontSize
+            } else {
+                0f
+            }
+        assertEquals(fontSize, markToBaseBaseCluster.advanceX, 0.0001f)
+        assertEquals(0f, markToBaseMarkCluster.advanceX, 0.0001f)
+        assertEquals((120 - 99) * markToBaseScale + markToBaseRelativeOriginShift, markToBaseMarkCluster.offsetX, 0.0001f)
+        assertEquals((711 - 748) * markToBaseScale, markToBaseMarkCluster.offsetY, 0.0001f)
+        assertEquals(fontSize, markToBaseRun.advanceX, 0.0001f)
+
+        val markToMarkResult = engine.shape(
+            ShapingRequest(
+                text = "\uE003\u064E",
+                typefaceId = markToMark.typefaceId,
+                fontSize = fontSize,
+                paragraphDirection = -1,
+            ),
+        )
+        assertEquals(emptyList(), markToMarkResult.diagnostics)
+        val markToMarkRun = markToMarkResult.glyphRuns.single()
+        val dotAboveGlyphId = requireNotNull(markToMark.cmap.lookupGlyphId(0xE003))
+        val markToMarkGlyphId = requireNotNull(markToMark.cmap.lookupGlyphId(0x064E))
+        val markToMarkScale = fontSize / markToMark.unitsPerEm.toFloat()
+        assertEquals(setOf(dotAboveGlyphId, markToMarkGlyphId), markToMarkRun.glyphIds.toSet())
+        val markToMarkBaseCluster = markToMarkRun.clusters.first { cluster ->
+            markToMarkRun.glyphIds[cluster.glyphRange.first] == dotAboveGlyphId
+        }
+        val markToMarkMarkCluster = markToMarkRun.clusters.first { cluster ->
+            markToMarkRun.glyphIds[cluster.glyphRange.first] == markToMarkGlyphId
+        }
+        val markToMarkRelativeOriginShift =
+            if (markToMarkRun.clusters.indexOf(markToMarkMarkCluster) > markToMarkRun.clusters.indexOf(markToMarkBaseCluster)) {
+                -fontSize
+            } else {
+                0f
+            }
+        assertEquals(fontSize, markToMarkBaseCluster.advanceX, 0.0001f)
+        assertEquals(0f, markToMarkMarkCluster.advanceX, 0.0001f)
+        assertEquals((66 - 99) * markToMarkScale + markToMarkRelativeOriginShift, markToMarkMarkCluster.offsetX, 0.0001f)
+        assertEquals((929 - 748) * markToMarkScale, markToMarkMarkCluster.offsetY, 0.0001f)
+        assertEquals(fontSize, markToMarkRun.advanceX, 0.0001f)
+
+        val cursiveResult = engine.shape(
+            ShapingRequest(
+                text = "\uE001\uE002",
+                typefaceId = cursive.typefaceId,
+                fontSize = fontSize,
+            ),
+        )
+        assertEquals(emptyList(), cursiveResult.diagnostics)
+        val cursiveRun = cursiveResult.glyphRuns.single()
+        val leftCursiveGlyphId = requireNotNull(cursive.cmap.lookupGlyphId(0xE001))
+        val rightCursiveGlyphId = requireNotNull(cursive.cmap.lookupGlyphId(0xE002))
+        val cursiveScale = fontSize / cursive.unitsPerEm.toFloat()
+        assertEquals(listOf(leftCursiveGlyphId, rightCursiveGlyphId), cursiveRun.glyphIds)
+        val leftCursiveCluster = cursiveRun.clusters.first { cluster ->
+            cursiveRun.glyphIds[cluster.glyphRange.first] == leftCursiveGlyphId
+        }
+        val rightCursiveCluster = cursiveRun.clusters.first { cluster ->
+            cursiveRun.glyphIds[cluster.glyphRange.first] == rightCursiveGlyphId
+        }
+        assertEquals(fontSize + (0 - 226) * cursiveScale, leftCursiveCluster.advanceX, 0.0001f)
+        assertEquals(0f, rightCursiveCluster.offsetX, 0.0001f)
+        assertEquals((106 - 106) * cursiveScale, rightCursiveCluster.offsetY, 0.0001f)
+        assertEquals(fontSize * 2 + (0 - 226) * cursiveScale, cursiveRun.advanceX, 0.0001f)
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineDoesNotReportUnavailableWhenCursiveMatchHasZeroAdvanceDelta() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440631"))
+        val engine = BasicOpenTypeShapingEngine(
+            scriptItemizer = object : ScriptItemizer {
+                override fun itemize(request: ShapingRequest): List<ScriptRun> =
+                    listOf(ScriptRun(request.textRange, "Arab"))
+            },
+            glyphMapper = mapGlyphs(
+                'a'.code to 710,
+                'b'.code to 711,
+            ),
+            gdefTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGdefTable(
+                    glyphClasses = mapOf(
+                        710 to 1,
+                        711 to 1,
+                    ),
+                ),
+            ),
+            gposTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGposTable(
+                    lookups = listOf(
+                        OpenTypeGposCursiveLookup(
+                            featureTag = "curs",
+                            lookupIndex = 0,
+                            attachments = listOf(
+                                OpenTypeGposCursiveAttachment(
+                                    glyphId = 710,
+                                    entryAnchor = null,
+                                    exitAnchor = OpenTypeAnchor(format = 1, x = 120, y = 500),
+                                ),
+                                OpenTypeGposCursiveAttachment(
+                                    glyphId = 711,
+                                    entryAnchor = OpenTypeAnchor(format = 1, x = 120, y = 430),
+                                    exitAnchor = null,
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            kernUnitsPerEmByTypefaceId = mapOf(typefaceId to 1000),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "ab",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(emptyList(), result.diagnostics)
+        val run = result.glyphRuns.single()
+        assertEquals(listOf(710, 711), run.glyphIds)
+        assertEquals(20f, run.clusters.first().advanceX, 0.0001f)
+        assertEquals(1.4f, run.clusters.last().offsetY, 0.0001f)
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineSkipsUnsupportedCursiveLookupsForScriptPolicy() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440632"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                'a'.code to 710,
+                'b'.code to 711,
+            ),
+            gdefTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGdefTable(
+                    glyphClasses = mapOf(
+                        710 to 1,
+                        711 to 1,
+                    ),
+                ),
+            ),
+            gposTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGposTable(
+                    lookups = listOf(
+                        OpenTypeGposCursiveLookup(
+                            featureTag = "curs",
+                            lookupIndex = 0,
+                            attachments = listOf(
+                                OpenTypeGposCursiveAttachment(
+                                    glyphId = 710,
+                                    entryAnchor = null,
+                                    exitAnchor = OpenTypeAnchor(format = 1, x = 120, y = 500),
+                                ),
+                                OpenTypeGposCursiveAttachment(
+                                    glyphId = 711,
+                                    entryAnchor = OpenTypeAnchor(format = 1, x = 60, y = 430),
+                                    exitAnchor = null,
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            kernUnitsPerEmByTypefaceId = mapOf(typefaceId to 1000),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "ab",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(emptyList(), result.diagnostics)
+        val run = result.glyphRuns.single()
+        assertEquals(listOf(710, 711), run.glyphIds)
+        assertEquals(20f, run.clusters.first().advanceX, 0.0001f)
+        assertEquals(0f, run.clusters.last().offsetY, 0.0001f)
+        assertEquals(40f, run.advanceX, 0.0001f)
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineReportsRtlCursiveAttachmentFailuresWithLogicalTextRange() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440638"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                0x0628 to 801,
+                0x062A to 802,
+            ),
+            gdefTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGdefTable(
+                    glyphClasses = mapOf(
+                        801 to 1,
+                        802 to 1,
+                    ),
+                ),
+            ),
+            gposTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGposTable(
+                    lookups = listOf(
+                        OpenTypeGposCursiveLookup(
+                            featureTag = "curs",
+                            lookupIndex = 0,
+                            attachments = listOf(
+                                OpenTypeGposCursiveAttachment(
+                                    glyphId = 999,
+                                    entryAnchor = null,
+                                    exitAnchor = OpenTypeAnchor(format = 1, x = 50, y = 100),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            kernUnitsPerEmByTypefaceId = mapOf(typefaceId to 1000),
+        )
+
+        val result = engine.shape(
+            ShapingRequest(
+                text = "\u0628\u062A",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                ShapingDiagnostic(
+                    code = TEXT_SHAPING_CURSIVE_ATTACHMENT_UNAVAILABLE_DIAGNOSTIC_CODE,
+                    message = "No cursive attachment chain matched the shaped glyph sequence on typeface ${typefaceId.value}.",
+                    textRange = 0..1,
+                ),
+            ),
+            result.diagnostics,
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineReportsReviewedMarkAndCursiveFixtureDiagnosticsFromRepo() {
+        val fontSize = 20f
+        val markToLigature = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440625",
+            relativePath = "reports/font/fixtures/fonts/shaping/gpos-mark-to-ligature.otf",
+        )
+        val missingGdef = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440628",
+            relativePath = "reports/font/fixtures/fonts/shaping/gpos-missing-gdef.otf",
+        )
+        val malformedAnchor = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440629",
+            relativePath = "reports/font/fixtures/fonts/shaping/gpos-anchor-malformed.otf",
+        )
+
+        val markToLigatureEngine = BasicOpenTypeShapingEngine(
+            scriptItemizer = object : ScriptItemizer {
+                override fun itemize(request: ShapingRequest): List<ScriptRun> =
+                    listOf(ScriptRun(request.textRange, "Arab"))
+            },
+            bidiResolver = object : BidiResolver {
+                override fun resolve(request: ShapingRequest): List<BidiRun> =
+                    listOf(BidiRun(request.textRange, level = 1, isRightToLeft = true))
+            },
+            glyphMapper = CMapGlyphMapper(cmapsByTypefaceId = mapOf(markToLigature.typefaceId to markToLigature.cmap)),
+            gdefTablesByTypefaceId = mapOf(markToLigature.typefaceId to requireNotNull(markToLigature.gdef)),
+            gposTablesByTypefaceId = mapOf(markToLigature.typefaceId to requireNotNull(markToLigature.gpos)),
+            kernUnitsPerEmByTypefaceId = mapOf(markToLigature.typefaceId to markToLigature.unitsPerEm),
+        )
+        val markToLigatureResult = markToLigatureEngine.shape(
+            ShapingRequest(
+                text = "\uFDF2\u064E",
+                typefaceId = markToLigature.typefaceId,
+                fontSize = fontSize,
+            ),
+        )
+        assertTrue(markToLigatureResult.diagnostics.map { it.code }.contains(TEXT_SHAPING_MARK_POSITIONING_UNAVAILABLE_DIAGNOSTIC_CODE))
+        assertTrue(markToLigatureResult.diagnostics.single().message.contains("Ambiguous ligature component indexes [0, 1, 2, 3]"))
+        val markToLigatureRun = markToLigatureResult.glyphRuns.single()
+        markToLigatureRun.clusters.forEach { cluster ->
+            assertEquals(fontSize, cluster.advanceX, 0.0001f)
+            assertEquals(0f, cluster.offsetX, 0.0001f)
+            assertEquals(0f, cluster.offsetY, 0.0001f)
+        }
+        assertEquals(fontSize * 2, markToLigatureRun.advanceX, 0.0001f)
+
+        val missingGdefEngine = BasicOpenTypeShapingEngine(
+            glyphMapper = CMapGlyphMapper(cmapsByTypefaceId = mapOf(missingGdef.typefaceId to missingGdef.cmap)),
+            gposTablesByTypefaceId = mapOf(missingGdef.typefaceId to requireNotNull(missingGdef.gpos)),
+            kernUnitsPerEmByTypefaceId = mapOf(missingGdef.typefaceId to missingGdef.unitsPerEm),
+        )
+        val missingGdefResult = missingGdefEngine.shape(
+            ShapingRequest(
+                text = "\u0627\u064E",
+                typefaceId = missingGdef.typefaceId,
+                fontSize = fontSize,
+            ),
+        )
+        assertTrue(missingGdefResult.diagnostics.map { it.code }.contains(TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE))
+        assertTrue(missingGdefResult.diagnostics.none { it.code == TEXT_SHAPING_MARK_POSITIONING_UNAVAILABLE_DIAGNOSTIC_CODE })
+        assertEquals(listOf(20f, 20f), missingGdefResult.glyphRuns.single().clusters.map { it.advanceX })
+
+        val malformedAnchorEngine = BasicOpenTypeShapingEngine(
+            glyphMapper = CMapGlyphMapper(cmapsByTypefaceId = mapOf(malformedAnchor.typefaceId to malformedAnchor.cmap)),
+            gdefTablesByTypefaceId = mapOf(malformedAnchor.typefaceId to requireNotNull(malformedAnchor.gdef)),
+            gposTablesByTypefaceId = mapOf(malformedAnchor.typefaceId to requireNotNull(malformedAnchor.gpos)),
+            kernUnitsPerEmByTypefaceId = mapOf(malformedAnchor.typefaceId to malformedAnchor.unitsPerEm),
+        )
+        val malformedAnchorResult = malformedAnchorEngine.shape(
+            ShapingRequest(
+                text = "\u0627\u064E",
+                typefaceId = malformedAnchor.typefaceId,
+                fontSize = fontSize,
+            ),
+        )
+        assertTrue(malformedAnchorResult.diagnostics.map { it.code }.contains(TEXT_SHAPING_LOOKUP_MALFORMED_DIAGNOSTIC_CODE))
+        assertTrue(malformedAnchorResult.diagnostics.none { it.code == TEXT_SHAPING_CURSIVE_ATTACHMENT_UNAVAILABLE_DIAGNOSTIC_CODE })
+        assertEquals(listOf(20f, 20f), malformedAnchorResult.glyphRuns.single().clusters.map { it.advanceX })
     }
 
     @Test
@@ -2786,7 +3629,11 @@ class TextStackSurfaceTest {
     private fun readProjectFile(relativePath: String): String =
         Files.readString(projectRoot().resolve(relativePath))
 
-    private fun parsedFixtureFace(uuid: String, relativePath: String): ParsedFixtureFace {
+    private fun parsedFixtureFace(
+        uuid: String,
+        relativePath: String,
+        expectedDiagnosticSubstrings: List<String> = emptyList(),
+    ): ParsedFixtureFace {
         val typefaceId = TypefaceID(Uuid.parse(uuid))
         val path = projectRoot().resolve(relativePath)
         val source = FontSource(
@@ -2796,12 +3643,26 @@ class TextStackSurfaceTest {
             bytes = Files.readAllBytes(path),
         )
         val parsed = DefaultOpenTypeFaceParser().parse(source)
-        assertEquals(emptyList(), parsed.diagnostics, relativePath)
+        if (expectedDiagnosticSubstrings.isEmpty()) {
+            assertEquals(emptyList(), parsed.diagnostics, relativePath)
+        } else {
+            assertEquals(expectedDiagnosticSubstrings.size, parsed.diagnostics.size, relativePath)
+            expectedDiagnosticSubstrings.forEachIndexed { index, expectedDiagnosticSubstring ->
+                val diagnostic = parsed.diagnostics[index]
+                assertEquals("font.sfnt.optional-table-malformed", diagnostic.causeCode, relativePath)
+                assertTrue(
+                    diagnostic.causeMessage.orEmpty().contains(expectedDiagnosticSubstring),
+                    "$relativePath -> $diagnostic",
+                )
+            }
+        }
         return ParsedFixtureFace(
             typefaceId = typefaceId,
             cmap = parsed.cmap,
             unitsPerEm = requireNotNull(parsed.metrics.unitsPerEm),
             gsub = parsed.layout.gsub,
+            gdef = parsed.layout.gdef,
+            gpos = parsed.layout.gpos,
             gposSingles = parsed.layout.gposSingles,
             gposPairs = parsed.layout.gposPairs,
         )
@@ -3023,6 +3884,8 @@ class TextStackSurfaceTest {
         val cmap: CMapTable,
         val unitsPerEm: Int,
         val gsub: OpenTypeGsubTable?,
+        val gdef: OpenTypeGdefTable?,
+        val gpos: OpenTypeGposTable?,
         val gposSingles: OpenTypeGposSingleTable?,
         val gposPairs: OpenTypeGposPairTable?,
     )

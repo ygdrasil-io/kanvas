@@ -97,7 +97,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*DevanagariShaping*'
 ## Status Notes
 
 - `proposed`: Devanagari evidence depends on M5 clusters/itemization, contextual GSUB, mark positioning, and feature policy.
-- Current blocker audit (2026-06-16): draft PR `#1707` (`KFONT-M6-006`) is still open, `KFONT-M6-003` and `KFONT-M6-005` remain gated by absent fixture families, and the Devanagari fixture set `devanagari-consonant-cluster.otf`, `devanagari-reph.otf`, `devanagari-prebase-matra.otf`, `devanagari-below-base.otf`, `devanagari-mark-placement.otf`, and `devanagari-unsupported-syllable.otf` is not present in-repo. Remaining gate is merge/adopt the policy slice, complete the contextual and mark-positioning dependencies, then add reviewed Indic fixture provenance and syllable-plan dumps.
+- Current blocker audit (2026-06-18): `KFONT-M6-006` remains in `review` on absent per-script fixture families, `KFONT-M6-003` remains gated by its own missing contextual fixture family, and the Devanagari fixture set `devanagari-consonant-cluster.otf`, `devanagari-reph.otf`, `devanagari-prebase-matra.otf`, `devanagari-below-base.otf`, `devanagari-mark-placement.otf`, and `devanagari-unsupported-syllable.otf` is not present in-repo. Remaining gate is complete the contextual dependency, retain the bounded feature-policy slice, then add reviewed Indic fixture provenance and syllable-plan dumps.
 - Move to `ready` only after fixture coverage and syllable dump fields are reviewed.
 
 ## Linear Labels

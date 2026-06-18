@@ -17,11 +17,15 @@ import org.skia.foundation.SkData
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkFontArguments
 import org.skia.foundation.SkFontMetrics
+import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkFontVariation
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkTextEncoding
 import org.skia.foundation.SkTypeface
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 import kotlin.random.Random
 
 class OpenTypeFontTest {
@@ -37,6 +41,18 @@ class OpenTypeFontTest {
         val stream = OpenTypeFontTest::class.java.getResourceAsStream(resource)
             ?: error("Missing bundled resource: $resource")
         return stream.use { it.readBytes() }
+    }
+
+    private fun projectRoot(): Path =
+        generateSequence(Paths.get("").toAbsolutePath()) { it.parent }
+            .first { Files.exists(it.resolve("settings.gradle.kts")) }
+
+    private fun reviewedFixtureTable(relativePath: String, tag: String): ByteArray {
+        val bytes = Files.readAllBytes(projectRoot().resolve(relativePath))
+        val record = bytes.tableDirectoryRecord(tag)
+        val offset = readU32(bytes, record + 8)
+        val length = readU32(bytes, record + 12)
+        return bytes.copyOfRange(offset, offset + length)
     }
 
     private fun singletonTtcBytes(fontBytes: ByteArray): ByteArray {
@@ -1015,6 +1031,42 @@ class OpenTypeFontTest {
     }
 
     @Test
+    fun `drawString keeps portable OpenType ligature codepoint distinct from raw fi text`() {
+        val reviewedGsub = reviewedFixtureTable("reports/font/fixtures/fonts/shaping/gsub-ligature-fi.otf", "GSUB")
+        val typeface = OpenTypeTypeface.MakeFromBytes(
+            liberationSansBytes().withTableContent(
+                "kern",
+                "GSUB",
+                reviewedGsub,
+            ).withTableContent(
+                "cmap",
+                "cmap",
+                syntheticCmapFormat4Mappings(
+                    mapOf(
+                        'f'.code to 557,
+                        'i'.code to 560,
+                        0xFB01 to 103,
+                    ),
+                ),
+            ),
+        )!!
+        val font = SkFont(typeface, 48f)
+        val rawGlyphs = font.textToGlyphs("fi")
+        val ligatureGlyphs = font.textToGlyphs("\uFB01")
+        val drawStringPixels = renderTextBitmap(font, text = "fi", path = null)
+        val rawPath = requireNotNull(buildTextPath(font, glyphIds = rawGlyphs, x = 4f, y = 52f))
+        val ligaturePath = requireNotNull(buildTextPath(font, glyphIds = ligatureGlyphs, x = 4f, y = 52f))
+        val rawPixels = renderTextBitmap(font, text = null, path = rawPath)
+        val ligaturePixels = renderTextBitmap(font, text = null, path = ligaturePath)
+
+        assertArrayEquals(reviewedGsub, requireNotNull(typeface.copyTableData(sfntTag("GSUB"))))
+        assertArrayEquals(intArrayOf(557, 560), rawGlyphs)
+        assertArrayEquals(intArrayOf(103), ligatureGlyphs)
+        assertTrue(drawStringPixels.contentEquals(rawPixels))
+        assertFalse(drawStringPixels.contentEquals(ligaturePixels))
+    }
+
+    @Test
     fun `getKerningPairAdjustments returns null when font has no kerning tables`() {
         val bytes = liberationSansBytes().withoutKerningTables()
         val typeface = OpenTypeTypeface.MakeFromBytes(bytes)!!
@@ -1041,6 +1093,30 @@ class OpenTypeFontTest {
         val glyphs = SkFont(typeface, 12f).textToGlyphs("AV").toShortArray()
 
         assertNull(typeface.getKerningPairAdjustments(glyphs))
+    }
+
+    private fun renderTextBitmap(font: SkFont, text: String?, path: SkPath?): IntArray {
+        val bitmap = SkBitmap(96, 64)
+        bitmap.eraseColor(0xFFFFFFFF.toInt())
+        val canvas = SkCanvas(bitmap)
+        val paint = SkPaint(0xFF000000.toInt()).also { it.isAntiAlias = false }
+        if (text != null) {
+            canvas.drawString(text, 4f, 52f, font, paint)
+        } else {
+            canvas.drawPath(requireNotNull(path), paint)
+        }
+        return bitmap.pixels.copyOf()
+    }
+
+    private fun buildTextPath(font: SkFont, glyphIds: IntArray, x: Float, y: Float): SkPath? {
+        val builder = SkPathBuilder()
+        var penX = x
+        glyphIds.forEach { glyphId ->
+            font.getPath(glyphId)?.let { builder.addPathOffset(it, penX, y) }
+            penX += font.getWidth(glyphId)
+        }
+        val path = builder.detach()
+        return if (path.isEmpty()) null else path
     }
 
     @Test
@@ -2047,6 +2123,11 @@ class OpenTypeFontTest {
         writeU16(bytes, off, value and 0xFFFF)
     }
 
+    private fun sfntTag(tag: String): Int {
+        require(tag.length == 4)
+        return tag.fold(0) { acc, char -> (acc shl 8) or (char.code and 0xFF) }
+    }
+
     private fun writeU32(bytes: ByteArray, off: Int, value: Int) {
         bytes[off] = (value ushr 24).toByte()
         bytes[off + 1] = (value ushr 16).toByte()
@@ -2130,6 +2211,49 @@ class OpenTypeFontTest {
         writeU32(bytes, 16, format6Offset)
         writeCmapFormat4SingleGlyph(bytes, format4Offset, 'A'.code, format4Glyph)
         writeCmapFormat6Subtable(bytes, format6Offset, 'A'.code, intArrayOf(format6Glyph))
+        return bytes
+    }
+
+    private fun syntheticCmapFormat4Mappings(mappings: Map<Int, Int>): ByteArray {
+        val sortedMappings = mappings.toSortedMap()
+        val segmentCount = sortedMappings.size + 1
+        val glyphArrayCount = sortedMappings.size
+        val subtableOffset = 12
+        val subtableLength = 16 + 8 * segmentCount + 2 * glyphArrayCount
+        val length = subtableOffset + subtableLength
+        val bytes = ByteArray(length)
+        val searchRange = Integer.highestOneBit(segmentCount) * 2
+        val entrySelector = Integer.numberOfTrailingZeros(Integer.highestOneBit(segmentCount))
+        val rangeShift = segmentCount * 2 - searchRange
+        val endCountOffset = subtableOffset + 14
+        val startCountOffset = endCountOffset + segmentCount * 2 + 2
+        val idDeltaOffset = startCountOffset + segmentCount * 2
+        val idRangeOffsetOffset = idDeltaOffset + segmentCount * 2
+        val glyphIdArrayOffset = idRangeOffsetOffset + segmentCount * 2
+
+        writeU16(bytes, 2, 1) // numTables
+        writeU16(bytes, 4, 3) // platform: Windows
+        writeU16(bytes, 6, 1) // encoding: Unicode BMP
+        writeU32(bytes, 8, subtableOffset)
+        writeU16(bytes, subtableOffset, 4) // format
+        writeU16(bytes, subtableOffset + 2, subtableLength)
+        writeU16(bytes, subtableOffset + 6, segmentCount * 2)
+        writeU16(bytes, subtableOffset + 8, searchRange)
+        writeU16(bytes, subtableOffset + 10, entrySelector)
+        writeU16(bytes, subtableOffset + 12, rangeShift)
+
+        sortedMappings.entries.forEachIndexed { index, (codepoint, glyphId) ->
+            writeU16(bytes, endCountOffset + index * 2, codepoint)
+            writeU16(bytes, startCountOffset + index * 2, codepoint)
+            writeI16(bytes, idDeltaOffset + index * 2, 0)
+            writeU16(bytes, idRangeOffsetOffset + index * 2, segmentCount * 2)
+            writeU16(bytes, glyphIdArrayOffset + index * 2, glyphId)
+        }
+        writeU16(bytes, endCountOffset + sortedMappings.size * 2, 0xFFFF)
+        writeU16(bytes, startCountOffset + sortedMappings.size * 2, 0xFFFF)
+        writeI16(bytes, idDeltaOffset + sortedMappings.size * 2, 1)
+        writeU16(bytes, idRangeOffsetOffset + sortedMappings.size * 2, 0)
+
         return bytes
     }
 
