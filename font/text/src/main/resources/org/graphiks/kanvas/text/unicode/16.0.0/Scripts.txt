@@ -18,7 +18,9 @@
 10A0 ; Georgian
 200D ; Inherited
 3003 ; Common
+30A2 ; Kana
 4E00 ; Han
 1F1E6..1F1FF ; Common
 1F600 ; Common
 FE0E..FE0F ; Inherited
+E0100..E01EF ; Inherited
