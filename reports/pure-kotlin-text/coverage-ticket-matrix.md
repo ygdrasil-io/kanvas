@@ -3040,6 +3040,59 @@ claim full UAX #14 conformance, dictionary-based Thai/Lao/Khmer segmentation,
 bidi visual line ordering, ellipsis insertion, selection geometry, hit testing,
 placeholder geometry layout, Skia Paragraph parity, CPU oracle parity, or GPU
 text support.
+### KFONT-M8-005: Implement selection and hit-test maps
+
+Status: implemented; evidence refreshed for independent review.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/KFONT-M8-005-implement-selection-and-hit-test-maps.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphHitTestMapTest.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
+- `reports/font/fixtures/expected/paragraph/hit-test-map.json`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m8-005-selection-hit-test-maps.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+
+Evidence:
+
+- `ParagraphLayoutResult` now exposes bounded `SelectionBox`, `CaretStop`,
+  `HitTestEntry`, `HitTestMap`, `SelectionQueryResult`, and
+  `HitTestQueryResult` contracts derived from current line metrics, shaped
+  cluster spans, and `placeholderBoxes`.
+- Selection now produces deterministic per-line boxes for cross-line ranges and
+  carries explicit `placeholderId` values when the selected span is an inline
+  placeholder, while hit testing now also consumes non-participating
+  placeholder overflow geometry, closing the placeholder-consumer gate left by
+  `KFONT-M8-006`.
+- Hit testing now snaps to grapheme-cluster-safe caret boundaries, records
+  upstream/downstream affinity, never returns an offset inside the combining
+  mark or emoji surrogate-pair clusters covered by the fixture, and clamps
+  finite out-of-bounds points to the nearest available caret stop.
+- `hit-test-map.json` checks in bounded evidence for multi-line placeholder
+  selection, non-participating placeholder overflow routing, combining-mark
+  snapping, emoji cluster boundaries, and finite out-of-bounds clamp behavior,
+  while invalid selection ranges and non-finite hit-test points emit stable
+  refusal diagnostics.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphHitTestMapTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.exposesExpectedPureKotlinTextStackTypes
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: this checks in bounded selection and hit-test evidence only. It
+does not yet claim paragraph-owned bidi visual ordering, explicit word
+boundary query APIs, full grapheme/word boundary dumps beyond hit-test
+snapping, complete paragraph layout parity, CPU oracle parity, or GPU text
+support.
 ### KFONT-M8-006: Implement placeholder layout metrics
 
 Status: implemented; evidence refreshed for independent review.
@@ -3091,9 +3144,8 @@ rtk git diff --check
 ```
 
 Remaining gate: this checks in bounded placeholder geometry evidence only. It
-does not yet claim selection-map or hit-test-map placeholder consumers, full
-ellipsis/max-lines placeholder conflict evidence, complete paragraph layout
-parity, CPU oracle parity, or GPU text support.
+does not yet claim full ellipsis/max-lines placeholder conflict evidence,
+complete paragraph layout parity, CPU oracle parity, or GPU text support.
 ### KFONT-M8-001: Expand TextStyle and paragraph style contracts
 
 Status: done; deterministic contract evidence freshly validated.

@@ -822,10 +822,12 @@
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphShapingSegmentation.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphHitTestMapTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphPlaceholderLayoutTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphStyleContractTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphShapingSegmentationTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/paragraph/hit-test-map.json",
         "reports/font/fixtures/expected/paragraph/paragraph-input.json",
         "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json",
         "reports/font/fixtures/expected/paragraph/placeholder-layout.json",
@@ -833,22 +835,23 @@
         "reports/font/fixtures/expected/paragraph/paragraph-shaping-requests-goldens.json",
         "reports/pure-kotlin-text/2026-06-17-kfont-m8-001-textstyle-paragraph-contracts.md",
         "reports/pure-kotlin-text/2026-06-18-kfont-m8-002-paragraph-shaping-segmentation.md",
+        "reports/pure-kotlin-text/2026-06-18-kfont-m8-005-selection-hit-test-maps.md",
         "reports/pure-kotlin-text/2026-06-18-kfont-m8-006-placeholder-layout-metrics.md"
       ],
       "requiredEvidenceGates": [
         "Add bidi paragraph fixture evidence.",
         "Add hard and soft line break fixture evidence.",
-        "Add ellipsis, selection boxes, and hit testing evidence; KFONT-M8-006 now checks in bounded placeholder geometry and line-height participation only.",
+        "Add ellipsis policy plus explicit word/grapheme boundary query evidence; KFONT-M8-005 now checks in bounded selection boxes and hit testing, and KFONT-M8-006 now checks in bounded placeholder geometry and line-height participation only.",
         "Retain shaping and fallback gates for complete paragraph claims."
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.ParagraphShapingSegmentationTest --tests org.graphiks.kanvas.text.ParagraphPlaceholderLayoutTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphInputGoldenPinsSchemaCasesAndNonClaims --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphShapingRequestGoldenPinsMixedScriptFallbackAndClusterCases",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.ParagraphShapingSegmentationTest --tests org.graphiks.kanvas.text.ParagraphPlaceholderLayoutTest --tests org.graphiks.kanvas.text.ParagraphHitTestMapTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphInputGoldenPinsSchemaCasesAndNonClaims --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphShapingRequestGoldenPinsMixedScriptFallbackAndClusterCases",
         "rtk python3 scripts/validate_font_fixture_assets.py",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
       "fixtureCommands": [
-        "KFONT-M8-001, KFONT-M8-002, and KFONT-M8-006 now cover paragraph input contracts, shaping segmentation, and bounded placeholder geometry dumps with mixed-style placeholder exclusion, cluster-boundary refusal, fallback-unresolved diagnostics, and line-height participation evidence only."
+        "KFONT-M8-001, KFONT-M8-002, KFONT-M8-005, and KFONT-M8-006 now cover paragraph input contracts, shaping segmentation, bounded placeholder geometry, and bounded hit-test/selection dumps with mixed-style placeholder exclusion, non-participating placeholder overflow routing, cluster-safe snapping, out-of-bounds clamp behavior, cluster-boundary refusal, and fallback-unresolved diagnostics only."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",
@@ -872,10 +875,12 @@
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphLineBreaking.kt",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphShapingSegmentation.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphLineBreakingTest.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphHitTestMapTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphPlaceholderLayoutTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphStyleContractTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphShapingSegmentationTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/paragraph/hit-test-map.json",
         "reports/font/fixtures/expected/paragraph/line-breaks.json",
         "reports/font/fixtures/expected/paragraph/paragraph-input.json",
         "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json",
@@ -885,23 +890,25 @@
         "reports/pure-kotlin-text/2026-06-17-kfont-m8-001-textstyle-paragraph-contracts.md",
         "reports/pure-kotlin-text/2026-06-18-kfont-m8-002-paragraph-shaping-segmentation.md",
         "reports/pure-kotlin-text/2026-06-18-kfont-m8-003-uax14-line-breaker.md",
+        "reports/pure-kotlin-text/2026-06-18-kfont-m8-005-selection-hit-test-maps.md",
         "reports/pure-kotlin-text/2026-06-18-kfont-m8-006-placeholder-layout-metrics.md"
       ],
       "requiredEvidenceGates": [
         "Add bidi visual line ordering rows that name PKT-07 and PKT-08 shaping blockers separately.",
         "KFONT-M8-003 now checks in bounded hard-break, soft-wrap, current-cluster fallback when no optional break fits, punctuation, CJK fallback, combining-mark, emoji-ZWJ, and locale-refinement-limited line-break evidence only; ellipsis and max-lines policy remain separate gates.",
-        "KFONT-M8-006 now checks in bounded placeholder ascent/descent, baseline offset, and serialized placeholder-box evidence only; hit-test and selection-map consumers remain separate gates.",
-        "Add hit-test, selection box, word boundary, and grapheme boundary golden rows.",
+        "KFONT-M8-005 now checks in bounded selection-box and hit-test evidence for multi-line selection, placeholder IDs including non-participating overflow geometry, combining marks, emoji cluster boundaries, and finite out-of-bounds clamp behavior only; bidi visual ordering plus explicit word/grapheme boundary query evidence remain separate gates.",
+        "KFONT-M8-006 now checks in bounded placeholder ascent/descent, baseline offset, and serialized placeholder-box evidence only; placeholder/ellipsis conflict evidence remains a separate gate.",
+        "Add bidi visual ordering and explicit word-boundary golden rows.",
         "Keep paragraph-owned layout diagnostics separate from shaping-owned fallback and script diagnostics."
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.ParagraphLineBreakingTest --tests org.graphiks.kanvas.text.ParagraphPlaceholderLayoutTest --tests org.graphiks.kanvas.text.ParagraphShapingSegmentationTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.simpleLineBreakerFallsBackToCurrentClusterBoundaryWhenNoSoftBreakFits --tests org.graphiks.kanvas.text.TextStackSurfaceTest.simpleLineBreakerKeepsSurrogatePairRangesIntactWhenWidthIsZero --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineDoesNotDuplicateEmojiWhenLineBreakerOverflowsSingleCluster --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutMergesLineBreakDiagnosticsIntoResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenLineBreakUnicodeDataIsUnavailable --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphInputGoldenPinsSchemaCasesAndNonClaims --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphShapingRequestGoldenPinsMixedScriptFallbackAndClusterCases",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.ParagraphLineBreakingTest --tests org.graphiks.kanvas.text.ParagraphHitTestMapTest --tests org.graphiks.kanvas.text.ParagraphPlaceholderLayoutTest --tests org.graphiks.kanvas.text.ParagraphShapingSegmentationTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.exposesExpectedPureKotlinTextStackTypes --tests org.graphiks.kanvas.text.TextStackSurfaceTest.simpleLineBreakerFallsBackToCurrentClusterBoundaryWhenNoSoftBreakFits --tests org.graphiks.kanvas.text.TextStackSurfaceTest.simpleLineBreakerKeepsSurrogatePairRangesIntactWhenWidthIsZero --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineDoesNotDuplicateEmojiWhenLineBreakerOverflowsSingleCluster --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutMergesLineBreakDiagnosticsIntoResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenLineBreakUnicodeDataIsUnavailable --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphInputGoldenPinsSchemaCasesAndNonClaims --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphShapingRequestGoldenPinsMixedScriptFallbackAndClusterCases",
         "rtk python3 scripts/validate_font_fixture_assets.py",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
       "fixtureCommands": [
-        "KFONT-M8-001 through KFONT-M8-003 plus KFONT-M8-006 now check in paragraph input, line-break, shaping-segmentation, and bounded placeholder-geometry evidence only; bidi visual ordering, ellipsis/max-lines, hit testing, and selection geometry remain gated on later M8 tickets."
+        "KFONT-M8-001 through KFONT-M8-003 plus KFONT-M8-005 and KFONT-M8-006 now check in paragraph input, line-break, shaping-segmentation, bounded hit-test/selection, and bounded placeholder-geometry evidence only, including non-participating placeholder overflow routing; bidi visual ordering, explicit word boundaries, and ellipsis/max-lines remain gated on later M8 tickets."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",

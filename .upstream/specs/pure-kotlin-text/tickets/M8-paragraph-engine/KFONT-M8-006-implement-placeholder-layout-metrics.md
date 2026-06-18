@@ -102,7 +102,8 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*Placeholder*'
 ## Status Notes
 
 - `review`: `PlaceholderStyle` now serializes `baseline` as nullable plus `participatesInLineHeight`, input validation refuses missing required baselines and non-finite/negative placeholder constraints, and `BasicParagraphLayoutEngine` emits deterministic `placeholderBoxes` plus line metrics for baseline, above-baseline, below-baseline, and centered cases in `placeholder-layout.json`.
-- Remaining gate before `done`: `KFONT-M8-005` must consume placeholder IDs and geometry in selection/hit-test dumps, and the ellipsis/max-lines path must attach the placeholder conflict evidence called out by this ticket without broadening paragraph support claims.
+- `review`: `KFONT-M8-005` now consumes placeholder IDs and geometry in deterministic selection/hit-test evidence, including a non-participating below-baseline overflow case, so placeholder layout facts are no longer isolated to line metrics and layout dumps.
+- Remaining gate before `done`: the ellipsis/max-lines path must still attach the placeholder conflict evidence called out by this ticket without broadening paragraph support claims.
 
 ## Linear Labels
 
