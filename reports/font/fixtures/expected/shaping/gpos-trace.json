@@ -1,15 +1,361 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "dumpId": "gpos-trace",
-  "ownerTickets": ["KFONT-M6-001"],
+  "ownerTickets": [
+    "KFONT-M6-004"
+  ],
   "unicodeVersion": "16.0.0",
   "sourceTextHashAlgorithm": "SHA-256-UTF-8",
-  "sourceTextHash": "38164fbd17603d73f696b8b4d72664d735bb6a7c88577687fd2ae33fd6964153",
+  "sourceTextHash": "5e9c9666d7a180123127cf360f856d865b752e1aad68e1874be37f1d13acbe4f",
   "stage": "GPOS",
-  "typefaceId": "550e8400-e29b-41d4-a716-446655440601",
-  "scriptRun": {"clusterRange": "0..1", "utf16Range": "0..1", "codePointRange": "0..1", "selectedScript": "Latn", "openTypeScriptTags": ["latn"], "extensionCandidates": ["Latn"], "languageHint": null, "reason": "context-script"},
-  "features": {"requested": [{"tag": "liga", "value": 1}, {"tag": "kern", "value": 1}], "enabled": [{"tag": "ccmp", "value": 1}, {"tag": "locl", "value": 1}, {"tag": "liga", "value": 1}, {"tag": "rlig", "value": 1}, {"tag": "clig", "value": 1}, {"tag": "calt", "value": 1}, {"tag": "kern", "value": 1}, {"tag": "mark", "value": 1}, {"tag": "mkmk", "value": 1}], "disabled": [], "defaulted": [{"tag": "ccmp", "value": 1}, {"tag": "locl", "value": 1}, {"tag": "rlig", "value": 1}, {"tag": "clig", "value": 1}, {"tag": "calt", "value": 1}, {"tag": "mark", "value": 1}, {"tag": "mkmk", "value": 1}], "unsupported": []},
-  "events": [{"stage": "GPOS", "lookupId": "gpos-noop", "lookupType": null, "decision": "no-op-contract", "featureTags": ["ccmp", "locl", "liga", "rlig", "clig", "calt", "kern", "mark", "mkmk"], "diagnosticCode": null}],
-  "diagnostics": [],
-  "nonClaims": ["no-complete-target-support-claim", "no-complex-shaping-support-claim", "no-gsub-gpos-lookup-implementation-claim", "no-native-shaper-oracle-claim", "no-gpu-text-route-claim"]
+  "typefaceId": "gpos-pair-format1-kerning",
+  "scriptRun": {
+    "clusterRange": "0..3",
+    "utf16Range": "0..3",
+    "codePointRange": "0..3",
+    "selectedScript": "Latn",
+    "openTypeScriptTags": [
+      "latn"
+    ],
+    "extensionCandidates": [
+      "Latn"
+    ],
+    "languageHint": null,
+    "reason": "context-script"
+  },
+  "features": {
+    "requested": [
+      {
+        "tag": "liga",
+        "value": 1
+      },
+      {
+        "tag": "kern",
+        "value": 1
+      }
+    ],
+    "enabled": [
+      {
+        "tag": "ccmp",
+        "value": 1
+      },
+      {
+        "tag": "liga",
+        "value": 1
+      },
+      {
+        "tag": "kern",
+        "value": 1
+      }
+    ],
+    "disabled": [],
+    "defaulted": [
+      {
+        "tag": "ccmp",
+        "value": 1
+      }
+    ],
+    "unsupported": []
+  },
+  "events": [
+    {
+      "stage": "GPOS",
+      "lookupId": "gpos-single-adjustment",
+      "lookupIndex": 0,
+      "lookupType": 1,
+      "decision": "positioned",
+      "coverageMatched": true,
+      "featureTags": [
+        "kern"
+      ],
+      "matchedGlyphIds": [
+        7
+      ],
+      "matchedClassIds": [],
+      "valueRecords": {
+        "first": {
+          "xPlacement": 10,
+          "yPlacement": 0,
+          "xAdvance": 0,
+          "yAdvance": 0
+        },
+        "second": {
+          "xPlacement": 0,
+          "yPlacement": 0,
+          "xAdvance": 0,
+          "yAdvance": 0
+        }
+      },
+      "beforePositions": {
+        "xAdvances": [
+          1000
+        ],
+        "xOffsets": [
+          0
+        ],
+        "yOffsets": [
+          0
+        ]
+      },
+      "afterPositions": {
+        "xAdvances": [
+          1000
+        ],
+        "xOffsets": [
+          10
+        ],
+        "yOffsets": [
+          0
+        ]
+      },
+      "diagnosticCode": null
+    },
+    {
+      "stage": "GPOS",
+      "lookupId": "gpos-pair-format1-kerning",
+      "lookupIndex": 1,
+      "lookupType": 2,
+      "decision": "positioned",
+      "coverageMatched": true,
+      "featureTags": [
+        "kern"
+      ],
+      "matchedGlyphIds": [
+        7,
+        11
+      ],
+      "matchedClassIds": [],
+      "valueRecords": {
+        "first": {
+          "xPlacement": 0,
+          "yPlacement": 0,
+          "xAdvance": -55,
+          "yAdvance": 0
+        },
+        "second": {
+          "xPlacement": 0,
+          "yPlacement": 0,
+          "xAdvance": 0,
+          "yAdvance": 0
+        }
+      },
+      "beforePositions": {
+        "xAdvances": [
+          1000,
+          1000
+        ],
+        "xOffsets": [
+          0,
+          0
+        ],
+        "yOffsets": [
+          0,
+          0
+        ]
+      },
+      "afterPositions": {
+        "xAdvances": [
+          945,
+          1000
+        ],
+        "xOffsets": [
+          0,
+          0
+        ],
+        "yOffsets": [
+          0,
+          0
+        ]
+      },
+      "diagnosticCode": null
+    },
+    {
+      "stage": "GPOS",
+      "lookupId": "gpos-pair-format2-class",
+      "lookupIndex": 2,
+      "lookupType": 2,
+      "decision": "positioned",
+      "coverageMatched": true,
+      "featureTags": [
+        "kern"
+      ],
+      "matchedGlyphIds": [
+        7,
+        11
+      ],
+      "matchedClassIds": [
+        1,
+        2
+      ],
+      "valueRecords": {
+        "first": {
+          "xPlacement": 0,
+          "yPlacement": 0,
+          "xAdvance": -40,
+          "yAdvance": 0
+        },
+        "second": {
+          "xPlacement": 0,
+          "yPlacement": 0,
+          "xAdvance": 10,
+          "yAdvance": 0
+        }
+      },
+      "beforePositions": {
+        "xAdvances": [
+          1000,
+          1000
+        ],
+        "xOffsets": [
+          0,
+          0
+        ],
+        "yOffsets": [
+          0,
+          0
+        ]
+      },
+      "afterPositions": {
+        "xAdvances": [
+          960,
+          1010
+        ],
+        "xOffsets": [
+          0,
+          0
+        ],
+        "yOffsets": [
+          0,
+          0
+        ]
+      },
+      "diagnosticCode": null
+    },
+    {
+      "stage": "GPOS",
+      "lookupId": "gpos-valueformat-malformed",
+      "lookupIndex": 3,
+      "lookupType": 1,
+      "decision": "malformed-refusal",
+      "coverageMatched": true,
+      "featureTags": [
+        "kern"
+      ],
+      "matchedGlyphIds": [
+        7
+      ],
+      "matchedClassIds": [],
+      "valueRecords": {
+        "first": {
+          "xPlacement": 0,
+          "yPlacement": 0,
+          "xAdvance": 0,
+          "yAdvance": 0
+        },
+        "second": {
+          "xPlacement": 0,
+          "yPlacement": 0,
+          "xAdvance": 0,
+          "yAdvance": 0
+        }
+      },
+      "beforePositions": {
+        "xAdvances": [
+          1000
+        ],
+        "xOffsets": [
+          0
+        ],
+        "yOffsets": [
+          0
+        ]
+      },
+      "afterPositions": {
+        "xAdvances": [
+          1000
+        ],
+        "xOffsets": [
+          0
+        ],
+        "yOffsets": [
+          0
+        ]
+      },
+      "diagnosticCode": "text.shaping.lookup-malformed"
+    },
+    {
+      "stage": "GPOS",
+      "lookupId": "gpos-pair-out-of-range",
+      "lookupIndex": 4,
+      "lookupType": 2,
+      "decision": "malformed-refusal",
+      "coverageMatched": false,
+      "featureTags": [
+        "kern"
+      ],
+      "matchedGlyphIds": [
+        7,
+        11
+      ],
+      "matchedClassIds": [],
+      "valueRecords": {
+        "first": {
+          "xPlacement": 0,
+          "yPlacement": 0,
+          "xAdvance": 0,
+          "yAdvance": 0
+        },
+        "second": {
+          "xPlacement": 0,
+          "yPlacement": 0,
+          "xAdvance": 0,
+          "yAdvance": 0
+        }
+      },
+      "beforePositions": {
+        "xAdvances": [
+          1000,
+          1000
+        ],
+        "xOffsets": [
+          0,
+          0
+        ],
+        "yOffsets": [
+          0,
+          0
+        ]
+      },
+      "afterPositions": {
+        "xAdvances": [
+          1000,
+          1000
+        ],
+        "xOffsets": [
+          0,
+          0
+        ],
+        "yOffsets": [
+          0,
+          0
+        ]
+      },
+      "diagnosticCode": "text.shaping.lookup-malformed"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "text.shaping.lookup-malformed",
+      "severity": "refusal",
+      "textRange": "0..1",
+      "message": "Malformed GPOS lookup fixture remains explicit and deterministic."
+    }
+  ],
+  "nonClaims": [
+    "no-complete-target-support-claim",
+    "no-complete-gsub-gpos-support-claim",
+    "no-greek-cyrillic-hebrew-promotion-claim",
+    "no-native-shaper-oracle-claim",
+    "no-gpu-text-route-claim"
+  ]
 }
