@@ -409,7 +409,7 @@
         ]
       },
       "requiredEvidenceGates": [
-        "KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own shaping/paragraph/glyph/GPU producer emission; keep parser/scaler rows advisory-only until the remaining telemetry domains land.",
+        "KFONT-M12-005 still owns GPU handoff producer emission before the telemetry pack is domain-complete.",
         "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
       ],
       "legacyGates": [],
@@ -448,7 +448,7 @@
         ]
       },
       "requiredEvidenceGates": [
-        "KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own shaping/paragraph/glyph/GPU producer emission; keep parser/scaler rows advisory-only until the remaining telemetry domains land.",
+        "KFONT-M12-005 still owns GPU handoff producer emission before the telemetry pack is domain-complete.",
         "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
       ],
       "legacyGates": [],
@@ -490,7 +490,7 @@
         ]
       },
       "requiredEvidenceGates": [
-        "KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own shaping/paragraph/glyph/GPU producer emission into the shared schema; parser/scaler producer evidence is now attached separately and this row stays schema-only advisory evidence until those subsystem tickets land.",
+        "KFONT-M12-005 still owns GPU handoff producer emission before the telemetry pack is domain-complete.",
         "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
       ],
       "legacyGates": [],
@@ -499,6 +499,55 @@
         "no-performance-release-gate-claim",
         "no-gpu-route-support-claim",
         "no-native-engine-oracle-claim"
+      ]
+    },
+    {
+      "surfaceId": "glyph-artifact-metrics",
+      "label": "Glyph artifact metrics",
+      "classification": "tracked-gap",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/glyph-artifact-metrics.json",
+          "reports/pure-kotlin-text/dump-evidence-index.json"
+        ],
+        "cpuOracle": [
+          "reports/font/fixtures/expected/glyph/glyph-artifact-plan.json",
+          "reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json",
+          "reports/font/fixtures/expected/color/color-glyph-plan.json",
+          "reports/font/fixtures/expected/color/bitmap-glyph-plan.json",
+          "reports/font/fixtures/expected/color/svg-glyph-plan.json"
+        ],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/pure-kotlin-text/glyph-artifact-metrics.json",
+          "reports/font/fixtures/expected/glyph/glyph-artifact-plan.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/pure-kotlin-text/glyph-artifact-metrics.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "KFONT-M12-004 now lands deterministic glyph artifact telemetry for route counts plus bounded A8/SDF/COLR/bitmap/SVG CPU preparation costs; keep GPU text-route and dftext-retirement claims gated on M11 and KFONT-M12-005.",
+        "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
+      ],
+      "legacyGates": [
+        "dftext"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-dftext-retirement"
       ]
     },
     {
@@ -589,6 +638,97 @@
       "nonClaims": [
         "no-complete-target-support-claim",
         "no-gpu-text-route-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "surfaceId": "glyph-atlas-occupancy",
+      "label": "Glyph atlas occupancy",
+      "classification": "tracked-gap",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Cache Budgets"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/glyph-atlas-occupancy.json",
+          "reports/pure-kotlin-text/dump-evidence-index.json"
+        ],
+        "cpuOracle": [
+          "reports/font/fixtures/expected/glyph/glyph-atlas.json",
+          "reports/font/fixtures/expected/glyph/glyph-cache-inventory.json"
+        ],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/pure-kotlin-text/glyph-atlas-occupancy.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "KFONT-M12-004 now lands stable atlas artifact IDs, key hashes, dimensions, entry counts, and occupancy ratios without claiming GPU execution or dftext retirement.",
+        "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
+      ],
+      "legacyGates": [
+        "dftext"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "surfaceId": "glyph-cache-metrics",
+      "label": "Glyph cache metrics",
+      "classification": "tracked-gap",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Cache Budgets"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/glyph-cache-metrics.json",
+          "reports/pure-kotlin-text/dump-evidence-index.json"
+        ],
+        "cpuOracle": [
+          "reports/font/fixtures/expected/glyph/glyph-cache-inventory.json",
+          "reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json",
+          "reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json"
+        ],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/pure-kotlin-text/glyph-cache-metrics.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/pure-kotlin-text/glyph-cache-metrics.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "KFONT-M12-004 now lands deterministic cache telemetry for pack time, resident/upload bytes, hit/miss/eviction, invalidation-token changes, and stable atlas refusal diagnostics; keep GPU text-route and upload-execution claims gated on M11 and KFONT-M12-005.",
+        "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
+      ],
+      "legacyGates": [
+        "dftext"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
         "no-dftext-retirement"
       ]
     },

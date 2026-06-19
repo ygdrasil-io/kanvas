@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.font
 
+import java.util.Locale
+
 enum class FontTelemetryDomain(val serializedName: String) {
     Parser("parser"),
     Scaler("scaler"),
@@ -282,6 +284,98 @@ private data class FontTelemetryDomainDump(
         append("\n  ],\n")
         append("  \"negativeCases\": [\n")
         append(negativeCases.joinToString(",\n") { "    ${it.toCanonicalJson()}" })
+        append("\n  ],\n")
+        append("  \"nonClaims\": ")
+        append(nonClaims.joinToString(prefix = "[", postfix = "]", separator = ", ") { it.quoted() })
+        append("\n}")
+    }
+}
+
+private data class GlyphAtlasOccupancyEntry(
+    val atlasArtifactId: String,
+    val textureFormat: String,
+    val generation: Int,
+    val invalidationToken: String,
+    val width: Int,
+    val height: Int,
+    val rowStride: Int,
+    val entryCount: Int,
+    val occupiedPixelCount: Int,
+    val totalPixelCount: Int,
+    val occupancyRatio: Double,
+    val strikeKeySha256: List<String>,
+    val keyPreimageSha256: List<String>,
+) {
+    init {
+        require(atlasArtifactId.matches(Regex("[0-9a-f]{64}"))) { "atlasArtifactId must be lowercase hexadecimal." }
+        require(textureFormat.isNotBlank()) { "textureFormat must not be blank." }
+        require(generation >= 0) { "generation must be non-negative." }
+        require(invalidationToken.isNotBlank()) { "invalidationToken must not be blank." }
+        require(width > 0) { "width must be positive." }
+        require(height > 0) { "height must be positive." }
+        require(rowStride >= width) { "rowStride must be greater than or equal to width." }
+        require(entryCount >= 0) { "entryCount must be non-negative." }
+        require(occupiedPixelCount >= 0) { "occupiedPixelCount must be non-negative." }
+        require(totalPixelCount > 0) { "totalPixelCount must be positive." }
+        require(occupiedPixelCount <= totalPixelCount) { "occupiedPixelCount must not exceed totalPixelCount." }
+        require(occupancyRatio >= 0.0 && occupancyRatio <= 1.0) { "occupancyRatio must stay within [0, 1]." }
+        require(strikeKeySha256.all { it.matches(Regex("[0-9a-f]{64}")) }) {
+            "strikeKeySha256 values must be lowercase hexadecimal."
+        }
+        require(keyPreimageSha256.all { it.matches(Regex("[0-9a-f]{64}")) }) {
+            "keyPreimageSha256 values must be lowercase hexadecimal."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{")
+        appendTelemetryField("atlasArtifactId", atlasArtifactId, comma = true)
+        appendTelemetryField("textureFormat", textureFormat, comma = true)
+        appendTelemetryField("generation", generation, comma = true)
+        appendTelemetryField("invalidationToken", invalidationToken, comma = true)
+        append("dimensions".quoted()).append(":")
+        append("{")
+        appendTelemetryField("width", width, comma = true)
+        appendTelemetryField("height", height, comma = true)
+        appendTelemetryField("rowStride", rowStride, comma = false)
+        append("}").append(",")
+        appendTelemetryField("entryCount", entryCount, comma = true)
+        appendTelemetryField("occupiedPixelCount", occupiedPixelCount, comma = true)
+        appendTelemetryField("totalPixelCount", totalPixelCount, comma = true)
+        appendTelemetryField("occupancyRatio", occupancyRatio, comma = true)
+        appendTelemetryStringArray("strikeKeySha256", strikeKeySha256, comma = true)
+        appendTelemetryStringArray("keyPreimageSha256", keyPreimageSha256, comma = false)
+        append("}")
+    }
+}
+
+private data class GlyphAtlasOccupancyDump(
+    val dumpId: String,
+    val ownerTickets: List<String>,
+    val sourceDumps: List<String>,
+    val atlases: List<GlyphAtlasOccupancyEntry>,
+    val nonClaims: List<String>,
+) {
+    init {
+        require(dumpId.isStableTelemetryToken()) { "dumpId must be a stable one-line token." }
+        require(ownerTickets.isNotEmpty()) { "ownerTickets must not be empty." }
+        require(sourceDumps.isNotEmpty()) { "sourceDumps must not be empty." }
+        require(atlases.isNotEmpty()) { "atlases must not be empty." }
+        require(nonClaims.isNotEmpty()) { "nonClaims must not be empty." }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  \"schemaVersion\": 1,\n")
+        append("  \"dumpId\": ").append(dumpId.quoted()).append(",\n")
+        append("  \"ownerTickets\": ")
+        append(ownerTickets.joinToString(prefix = "[", postfix = "]", separator = ", ") { it.quoted() })
+        append(",\n")
+        append("  \"sourceDumps\": ")
+        append(sourceDumps.joinToString(prefix = "[", postfix = "]", separator = ", ") { it.quoted() })
+        append(",\n")
+        append("  \"atlases\": [\n")
+        append(atlases.joinToString(",\n") { "    ${it.toCanonicalJson()}" })
         append("\n  ],\n")
         append("  \"nonClaims\": ")
         append(nonClaims.joinToString(prefix = "[", postfix = "]", separator = ", ") { it.quoted() })
@@ -1568,6 +1662,344 @@ object FontTelemetryEvidenceWriter {
         nonClaims = commonNonClaims(),
     ).toCanonicalJson()
 
+    fun writeGlyphArtifactMetricsJson(): String = FontTelemetryDomainDump(
+        dumpId = "glyph-artifact-metrics",
+        ownerTickets = listOf("KFONT-M12-004"),
+        domain = FontTelemetryDomain.GlyphArtifact,
+        trendSeriesPrefix = "font.glyph.artifact",
+        samples = listOf(
+            FontTelemetrySample(
+                fixtureId = "glyph-artifact-plan-placeholders",
+                domain = FontTelemetryDomain.GlyphArtifact,
+                measurementPhase = "cold-baseline",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Cold,
+                fontSourceSetHash = "fontset-glyph-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "glyph-artifact.route.count",
+                        trendSeriesId = "font.glyph.artifact.route.count",
+                        unit = FontTelemetryUnit.Count,
+                        median = 5,
+                        p90 = 5,
+                        max = 5,
+                        counters = mapOf(
+                            "outlineRouteCount" to 1L,
+                            "colrRouteCount" to 1L,
+                            "bitmapRouteCount" to 1L,
+                            "svgRouteCount" to 1L,
+                            "unsupportedRouteCount" to 1L,
+                            "refusalCount" to 1L,
+                        ),
+                    ),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "glyph-artifact-plan-policy-refusals",
+                domain = FontTelemetryDomain.GlyphArtifact,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Mixed,
+                fontSourceSetHash = "fontset-glyph-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "glyph-artifact.route.count",
+                        trendSeriesId = "font.glyph.artifact.route.count",
+                        unit = FontTelemetryUnit.Count,
+                        median = 4,
+                        p90 = 4,
+                        max = 4,
+                        counters = mapOf(
+                            "outlineRouteCount" to 2L,
+                            "a8RouteCount" to 1L,
+                            "sdfRouteCount" to 1L,
+                            "atlasCapacityRefusalCount" to 1L,
+                            "sdfTransformRefusalCount" to 1L,
+                        ),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "glyph-artifact.a8.time",
+                        trendSeriesId = "font.glyph.artifact.a8.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 280_000,
+                        p90 = 320_000,
+                        max = 360_000,
+                        counters = mapOf("sourceMaskHashCount" to 1L),
+                    ),
+                ),
+                diagnostics = listOf("text.glyph.SDF-transform-unsupported", "text.glyph.atlas-capacity-exceeded"),
+            ),
+            FontTelemetrySample(
+                fixtureId = "sdf-default-spread",
+                domain = FontTelemetryDomain.GlyphArtifact,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-glyph-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "glyph-artifact.sdf.time",
+                        trendSeriesId = "font.glyph.artifact.sdf.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 520_000,
+                        p90 = 600_000,
+                        max = 680_000,
+                        counters = mapOf("sourceMaskHashCount" to 1L, "spreadPx" to 8L, "sourceResolutionPx" to 16L),
+                    ),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "colrv0-layered-palette-override",
+                domain = FontTelemetryDomain.GlyphArtifact,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-color-glyph-v1",
+                unicodeDataVersion = "16.0.0",
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "glyph-artifact.color.time",
+                        trendSeriesId = "font.glyph.artifact.color.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 540_000,
+                        p90 = 620_000,
+                        max = 700_000,
+                        counters = mapOf("colorLayerCount" to 2L, "paletteOverrideCount" to 1L),
+                    ),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "cbdt-cblc-png",
+                domain = FontTelemetryDomain.GlyphArtifact,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Cold,
+                fontSourceSetHash = "fontset-color-glyph-v1",
+                unicodeDataVersion = "16.0.0",
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "glyph-artifact.bitmap.time",
+                        trendSeriesId = "font.glyph.artifact.bitmap.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 330_000,
+                        p90 = 390_000,
+                        max = 440_000,
+                        counters = mapOf("decodedPixelCount" to 2L, "bitmapPlanCount" to 1L),
+                    ),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "path-and-basic-shape",
+                domain = FontTelemetryDomain.GlyphArtifact,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Cold,
+                fontSourceSetHash = "fontset-color-glyph-v1",
+                unicodeDataVersion = "16.0.0",
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "glyph-artifact.svg.time",
+                        trendSeriesId = "font.glyph.artifact.svg.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 410_000,
+                        p90 = 480_000,
+                        max = 540_000,
+                        counters = mapOf("primitiveCount" to 2L, "pathCommandCount" to 2L),
+                    ),
+                ),
+            ),
+        ),
+        negativeCases = emptyList(),
+        nonClaims = glyphTelemetryNonClaims(),
+    ).toCanonicalJson()
+
+    fun writeGlyphCacheMetricsJson(): String = FontTelemetryDomainDump(
+        dumpId = "glyph-cache-metrics",
+        ownerTickets = listOf("KFONT-M12-004"),
+        domain = FontTelemetryDomain.GlyphArtifact,
+        trendSeriesPrefix = "font.glyph.cache",
+        samples = listOf(
+            FontTelemetrySample(
+                fixtureId = "cold-cache-sample",
+                domain = FontTelemetryDomain.GlyphArtifact,
+                measurementPhase = "cold-baseline",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Cold,
+                fontSourceSetHash = "fontset-glyph-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "glyph-artifact.atlas-pack.time",
+                        trendSeriesId = "font.glyph.cache.atlas-pack.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 600_000,
+                        p90 = 800_000,
+                        max = 900_000,
+                        counters = mapOf("strikeKeyCount" to 3L, "cacheMissCount" to 3L, "evictionCount" to 1L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "glyph-artifact.cache.bytes",
+                        trendSeriesId = "font.glyph.cache.bytes",
+                        unit = FontTelemetryUnit.Bytes,
+                        median = 352,
+                        p90 = 352,
+                        max = 352,
+                        counters = mapOf("cacheHitCount" to 0L, "cacheMissCount" to 3L, "invalidationTokenChangeCount" to 1L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "glyph-artifact.upload.bytes",
+                        trendSeriesId = "font.glyph.cache.upload.bytes",
+                        unit = FontTelemetryUnit.Bytes,
+                        median = 768,
+                        p90 = 768,
+                        max = 768,
+                        counters = mapOf("uploadCount" to 1L, "artifactBudgetRefusalCount" to 1L),
+                    ),
+                ),
+                diagnostics = listOf("text.glyph.artifact-budget-exceeded"),
+            ),
+            FontTelemetrySample(
+                fixtureId = "warm-cache-sample",
+                domain = FontTelemetryDomain.GlyphArtifact,
+                measurementPhase = "warm-repeat",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-glyph-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "glyph-artifact.atlas-pack.time",
+                        trendSeriesId = "font.glyph.cache.atlas-pack.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 100_000,
+                        p90 = 120_000,
+                        max = 130_000,
+                        counters = mapOf("strikeKeyCount" to 3L, "cacheHitCount" to 3L, "evictionCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "glyph-artifact.cache.bytes",
+                        trendSeriesId = "font.glyph.cache.bytes",
+                        unit = FontTelemetryUnit.Bytes,
+                        median = 352,
+                        p90 = 352,
+                        max = 352,
+                        counters = mapOf("cacheHitCount" to 3L, "cacheMissCount" to 0L, "invalidationTokenChangeCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "glyph-artifact.upload.bytes",
+                        trendSeriesId = "font.glyph.cache.upload.bytes",
+                        unit = FontTelemetryUnit.Bytes,
+                        median = 256,
+                        p90 = 256,
+                        max = 256,
+                        counters = mapOf("uploadCount" to 1L, "artifactBudgetRefusalCount" to 1L),
+                    ),
+                ),
+                diagnostics = listOf("text.glyph.artifact-budget-exceeded"),
+            ),
+            FontTelemetrySample(
+                fixtureId = "stale-generation",
+                domain = FontTelemetryDomain.GlyphArtifact,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Mixed,
+                fontSourceSetHash = "fontset-glyph-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "glyph-artifact.atlas-pack.time",
+                        trendSeriesId = "font.glyph.cache.atlas-pack.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 720_000,
+                        p90 = 860_000,
+                        max = 980_000,
+                        counters = mapOf(
+                            "strikeKeyCount" to 3L,
+                            "evictionCount" to 2L,
+                            "staleGenerationRefusalCount" to 1L,
+                            "atlasCapacityRefusalCount" to 1L,
+                        ),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "glyph-artifact.cache.bytes",
+                        trendSeriesId = "font.glyph.cache.bytes",
+                        unit = FontTelemetryUnit.Bytes,
+                        median = 224,
+                        p90 = 224,
+                        max = 224,
+                        counters = mapOf("residentBytesBefore" to 224L, "residentBytesAfter" to 96L, "invalidationTokenChangeCount" to 1L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "glyph-artifact.upload.bytes",
+                        trendSeriesId = "font.glyph.cache.upload.bytes",
+                        unit = FontTelemetryUnit.Bytes,
+                        median = 96,
+                        p90 = 96,
+                        max = 96,
+                        counters = mapOf("uploadCount" to 1L, "keyPreimageHashCount" to 2L),
+                    ),
+                ),
+                diagnostics = listOf("text.glyph.atlas-capacity-exceeded", "text.glyph.atlas-generation-stale"),
+            ),
+        ),
+        negativeCases = emptyList(),
+        nonClaims = glyphTelemetryNonClaims(),
+    ).toCanonicalJson()
+
+    fun writeGlyphAtlasOccupancyJson(): String = GlyphAtlasOccupancyDump(
+        dumpId = "glyph-atlas-occupancy",
+        ownerTickets = listOf("KFONT-M12-004"),
+        sourceDumps = listOf(
+            "reports/font/fixtures/expected/glyph/glyph-atlas.json",
+            "reports/font/fixtures/expected/glyph/glyph-cache-inventory.json",
+        ),
+        atlases = listOf(
+            GlyphAtlasOccupancyEntry(
+                atlasArtifactId = "2811ca06954ad09572dbc82a74b338559e8b1df2477847ff559c8760d9720354",
+                textureFormat = "A8",
+                generation = 7,
+                invalidationToken = "font-source-v7",
+                width = 3,
+                height = 3,
+                rowStride = 3,
+                entryCount = 1,
+                occupiedPixelCount = 4,
+                totalPixelCount = 9,
+                occupancyRatio = 0.444444,
+                strikeKeySha256 = listOf("33db747e82cc559bbad2c4b83ffc9873b243ad7b21e2fdbeaa82cf7d830ccf56"),
+                keyPreimageSha256 = listOf("33c026d3c2a10f25400ef02380634c1dfa168349cb330a1589c385b9fafd6c63"),
+            ),
+            GlyphAtlasOccupancyEntry(
+                atlasArtifactId = "43eccb8fcc53683f26bf42562370d025bba6e07087a4b6fa87164604461df337",
+                textureFormat = "R8Unorm",
+                generation = 8,
+                invalidationToken = "font-source-v8",
+                width = 3,
+                height = 3,
+                rowStride = 3,
+                entryCount = 1,
+                occupiedPixelCount = 4,
+                totalPixelCount = 9,
+                occupancyRatio = 0.444444,
+                strikeKeySha256 = listOf("18d6a60bd014e768f1875bce635e5f2298b86bdfc51526856e6a40d8d6252351"),
+                keyPreimageSha256 = listOf("62a0d1d6ddb02139d37c0bb66aa10ec45abcebc7149ac8d666bb16d5c884d485"),
+            ),
+        ),
+        nonClaims = glyphTelemetryNonClaims(),
+    ).toCanonicalJson()
+
     private fun commonDimensions(): List<String> = listOf(
         "environmentLabel",
         "runtimeLabel",
@@ -1596,6 +2028,13 @@ object FontTelemetryEvidenceWriter {
     )
 
     private fun defaultNonClaims(): List<String> = commonNonClaims()
+
+    private fun glyphTelemetryNonClaims(): List<String> = listOf(
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-dftext-retirement",
+    )
 }
 
 private fun String.quoted(): String = "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
@@ -1625,6 +2064,13 @@ private fun StringBuilder.appendTelemetryField(name: String, value: Int, comma: 
 
 private fun StringBuilder.appendTelemetryField(name: String, value: Long, comma: Boolean) {
     append(name.quoted()).append(": ").append(value)
+    if (comma) {
+        append(",")
+    }
+}
+
+private fun StringBuilder.appendTelemetryField(name: String, value: Double, comma: Boolean) {
+    append(name.quoted()).append(": ").append(String.format(Locale.US, "%.6f", value))
     if (comma) {
         append(",")
     }

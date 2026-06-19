@@ -8,7 +8,10 @@
 - `reports/pure-kotlin-text/font-telemetry-pm-bundle.json` records one advisory
   row for each telemetry domain already covered by
   `font-telemetry-schema-fixture.json`, and the PM bundle now also ships the
-  checked-in `parser-metrics.json` and `scaler-metrics.json` telemetry slices.
+  checked-in `parser-metrics.json`, `scaler-metrics.json`,
+  `shaping-metrics.json`, `paragraph-metrics.json`,
+  `glyph-artifact-metrics.json`, `glyph-cache-metrics.json`, and
+  `glyph-atlas-occupancy.json` telemetry slices.
 - The PM evidence remains warning-only and keeps the telemetry row classified
   as `tracked-gap` with `claimPromotionAllowed=false`.
 
@@ -23,10 +26,10 @@
   paragraph style-run and hit-test-index-build slices added by
   `KFONT-M12-003`.
 - The report keeps the performance posture advisory/warning-only and points
-  downstream producer emission to `KFONT-M12-004` and `KFONT-M12-005`, while
-  `KFONT-M12-002` and `KFONT-M12-003` now contribute the checked-in
-  parser/scaler and shaping/paragraph telemetry dumps separately instead of
-  keeping the schema ticket open.
+  the remaining downstream producer emission only to `KFONT-M12-005`, while
+  `KFONT-M12-002`, `KFONT-M12-003`, and `KFONT-M12-004` now contribute the
+  checked-in parser/scaler, shaping/paragraph, and glyph/cache telemetry dumps
+  separately instead of keeping the schema ticket open.
 
 ## Validation
 
@@ -43,8 +46,8 @@ rtk git diff --check
 ## Remaining gate
 
 No schema-local gate remains for `KFONT-M12-001`. Downstream producer emission
-into the shared schema is now owned by `KFONT-M12-003`, `KFONT-M12-004`, and
-`KFONT-M12-005`; parser/scaler producer evidence is attached separately under
-`KFONT-M12-002`, while the report stays warning-only, keeps all budgets
+into the shared schema is now owned only by `KFONT-M12-005`; the already
+landed parser/scaler, shaping/paragraph, and glyph/cache producer evidence is
+attached separately, while the report stays warning-only, keeps all budgets
 advisory, and does not promote any GPU route, release gate, or complete
 telemetry support claim.

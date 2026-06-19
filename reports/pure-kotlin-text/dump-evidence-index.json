@@ -1734,6 +1734,63 @@
       ]
     },
     {
+      "dumpId": "glyph-artifact-metrics",
+      "ownerTicket": "KFONT-M12-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/glyph-artifact-metrics.json"
+      ],
+      "expectedFields": [
+        "cacheState",
+        "counters",
+        "diagnostics",
+        "domain",
+        "dumpId",
+        "environment",
+        "fixtureId",
+        "fontSourceSetHash",
+        "max",
+        "measurementPhase",
+        "median",
+        "metrics",
+        "name",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "p90",
+        "sampleCount",
+        "samples",
+        "schemaVersion",
+        "trendSeriesId",
+        "trendSeriesPrefix",
+        "unicodeDataVersion",
+        "unit"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk ./gradlew --no-daemon pipelinePmBundle",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Glyph artifact telemetry dump changes require reviewed route-count, bounded A8/SDF/COLR/bitmap/SVG cost evidence, stable refusal diagnostics, and explicit non-claims without GPU or dftext promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
       "dumpId": "glyph-atlas-eviction-trace",
       "ownerTicket": "KFONT-M9-005",
       "classification": "golden-gated",
@@ -1820,6 +1877,52 @@
       ]
     },
     {
+      "dumpId": "glyph-atlas-occupancy",
+      "ownerTicket": "KFONT-M12-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Cache Budgets"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/glyph-atlas-occupancy.json"
+      ],
+      "expectedFields": [
+        "atlasArtifactId",
+        "atlases",
+        "dimensions",
+        "dumpId",
+        "entryCount",
+        "generation",
+        "invalidationToken",
+        "keyPreimageSha256",
+        "nonClaims",
+        "occupancyRatio",
+        "occupiedPixelCount",
+        "ownerTickets",
+        "schemaVersion",
+        "sourceDumps",
+        "strikeKeySha256",
+        "textureFormat",
+        "totalPixelCount"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Glyph atlas occupancy dump changes require reviewed artifact IDs, key hashes, dimensions, occupancy ratios, and explicit CPU-only non-claims without GPU upload or dftext promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
       "dumpId": "glyph-cache-inventory",
       "ownerTicket": "KFONT-M9-006",
       "classification": "golden-gated",
@@ -1860,6 +1963,63 @@
         "producer-only",
         "no-complete-cache-lifecycle-claim",
         "no-gpu-text-route-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "dumpId": "glyph-cache-metrics",
+      "ownerTicket": "KFONT-M12-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Cache Budgets"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/glyph-cache-metrics.json"
+      ],
+      "expectedFields": [
+        "cacheState",
+        "counters",
+        "diagnostics",
+        "domain",
+        "dumpId",
+        "environment",
+        "fixtureId",
+        "fontSourceSetHash",
+        "max",
+        "measurementPhase",
+        "median",
+        "metrics",
+        "name",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "p90",
+        "sampleCount",
+        "samples",
+        "schemaVersion",
+        "trendSeriesId",
+        "trendSeriesPrefix",
+        "unicodeDataVersion",
+        "unit"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk ./gradlew --no-daemon pipelinePmBundle",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Glyph cache telemetry dump changes require reviewed pack-time, resident/upload-byte, hit/miss/eviction, invalidation-token, and refusal-diagnostic evidence without GPU or release-gate promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
         "no-dftext-retirement"
       ]
     },
