@@ -1158,6 +1158,53 @@
       ]
     },
     {
+      "surfaceId": "skia-facade-adapter-inventory",
+      "label": "Skia facade adapter inventory",
+      "classification": "tracked-gap",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-001-add-facade-adapter-inventory.md",
+        "section": "Dashboard Impact"
+      },
+      "evidence": {
+        "fixtureProvenance": [],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/facade-adapter-inventory.json",
+          "reports/pure-kotlin-text/2026-06-19-kfont-m13-001-facade-adapter-inventory.md"
+        ],
+        "cpuOracle": [],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/pure-kotlin-text/facade-adapter-inventory.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/facade-adapter-inventory.json",
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "Keep this row as M13 coordination evidence only; route-specific support promotion still belongs to KFONT-M13-002, KFONT-M13-003, and KFONT-M13-004.",
+        "Preserve the simple deterministic `SkCanvas.drawString` boundary and keep missing paragraph facade scope plus typed handoff gates visible without broadening any support claim.",
+        "Keep `pdf_never_embed` visible as an adjacent/out-of-scope durable gate instead of assigning it a false runtime facade owner."
+      ],
+      "legacyGates": [
+        "coloremoji_blendmodes",
+        "dftext",
+        "fontations",
+        "fontations_ft_compare",
+        "pdf_never_embed",
+        "scaledemoji",
+        "scaledemoji_rendering"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-facade-route-support-promotion",
+        "no-gpu-route-support-claim",
+        "no-legacy-gate-retirement"
+      ]
+    },
+    {
       "surfaceId": "text-shaping-metrics",
       "label": "Text shaping metrics",
       "classification": "tracked-gap",

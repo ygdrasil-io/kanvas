@@ -1167,6 +1167,52 @@
       ]
     },
     {
+      "dumpId": "facade-adapter-inventory",
+      "ownerTicket": "KFONT-M13-001",
+      "classification": "producer-only",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-001-add-facade-adapter-inventory.md",
+        "section": "Required Evidence"
+      },
+      "producerPaths": [
+        "scripts/validate_kfont_m13_001_facade_inventory.py",
+        "scripts/test_validate_kfont_m13_001_facade_inventory.py",
+        "reports/pure-kotlin-text/facade-adapter-inventory.json",
+        "reports/pure-kotlin-text/2026-06-19-kfont-m13-001-facade-adapter-inventory.md"
+      ],
+      "expectedFields": [
+        "artifactId",
+        "dashboardSurfaceId",
+        "generatedOn",
+        "legacyGateCoverage",
+        "migrationCategories",
+        "nonClaims",
+        "pmBundleTask",
+        "remainingGates",
+        "routes",
+        "schema",
+        "schemaVersion",
+        "sourceSpecs",
+        "summary",
+        "ticketId",
+        "validationCommands"
+      ],
+      "validationCommands": [
+        "rtk python3 -m unittest scripts/test_validate_kfont_m13_001_facade_inventory.py",
+        "rtk python3 scripts/validate_kfont_m13_001_facade_inventory.py",
+        "rtk ./gradlew --no-daemon validateKfontM13001FacadeInventory",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Facade inventory changes require reviewed route coverage, durable gate mapping, dashboard row wiring, and PM bundle diff review without facade support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-facade-route-support-promotion",
+        "no-gpu-route-support-claim",
+        "no-legacy-gate-retirement"
+      ]
+    },
+    {
       "dumpId": "fallback-catalog-build",
       "ownerTicket": "PKT-02B",
       "classification": "producer-only",

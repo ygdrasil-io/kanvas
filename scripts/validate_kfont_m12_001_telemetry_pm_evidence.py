@@ -53,6 +53,28 @@ def load_text(root: Path, relative_path: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def task_block(build_gradle: str, marker: str) -> str:
+    start = build_gradle.find(marker)
+    require(start >= 0, f"missing Gradle marker: {marker}")
+    block_chars: list[str] = []
+    depth = 0
+    seen_open = False
+    for char in build_gradle[start:]:
+        block_chars.append(char)
+        if char == "{":
+            depth += 1
+            seen_open = True
+        elif char == "}":
+            depth -= 1
+            if seen_open and depth == 0:
+                return "".join(block_chars)
+    fail(f"unterminated Gradle block: {marker}")
+
+
+def pipeline_pm_bundle_block(build_gradle: str) -> str:
+    return task_block(build_gradle, 'tasks.register("pipelinePmBundle")')
+
+
 def main() -> int:
     root = project_root()
     dashboard = load_json(root, DASHBOARD_PATH)
@@ -175,9 +197,7 @@ def main() -> int:
     require("remains open before `done`" not in advisory_md, "markdown report must not keep KFONT-M12-001 open before done")
 
     require(f'tasks.register<Exec>("{TASK_NAME}")' in build_gradle, "build.gradle.kts must register validateKfontM12001TelemetryPmEvidence")
-    pm_bundle_start = build_gradle.find('tasks.register("pipelinePmBundle")')
-    require(pm_bundle_start >= 0, "pipelinePmBundle task is missing")
-    pm_bundle_block = build_gradle[pm_bundle_start: pm_bundle_start + 16000]
+    pm_bundle_block = pipeline_pm_bundle_block(build_gradle)
     require(f'"{TASK_NAME}"' in pm_bundle_block, "pipelinePmBundle must depend on validateKfontM12001TelemetryPmEvidence")
     require("reports/pure-kotlin-text/parser-metrics.json" in pm_bundle_block, "pipelinePmBundle must include parser-metrics.json")
     require("reports/pure-kotlin-text/scaler-metrics.json" in pm_bundle_block, "pipelinePmBundle must include scaler-metrics.json")
