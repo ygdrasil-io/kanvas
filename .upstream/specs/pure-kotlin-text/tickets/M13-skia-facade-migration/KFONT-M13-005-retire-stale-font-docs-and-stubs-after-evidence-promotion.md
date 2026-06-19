@@ -108,9 +108,10 @@ rtk ./gradlew --no-daemon pipelinePmBundle
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
 - `blocked` (2026-06-19): Readiness audit confirmed that `KFONT-M12-005` is
   `done`, but stale docs and stub retirement must remain behind
-  `KFONT-M13-001` through `KFONT-M13-004`. Remaining gate: land the facade
-  inventory plus the `SkTypeface`, explicit `SkShaper`, and `SkTextBlob` route
-  evidence first, then review each retirement candidate with linked
+  `KFONT-M13-002` through `KFONT-M13-004`; `KFONT-M13-001` now only provides
+  the prerequisite inventory and does not retire any legacy row by itself.
+  Remaining gate: land the `SkTypeface`, explicit `SkShaper`, and `SkTextBlob`
+  route evidence first, then review each retirement candidate with linked
   implementation tests, fixture provenance, semantic dumps, CPU/GPU evidence
   where claimed, stable diagnostics, and PM/dashboard updates.
 - Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.

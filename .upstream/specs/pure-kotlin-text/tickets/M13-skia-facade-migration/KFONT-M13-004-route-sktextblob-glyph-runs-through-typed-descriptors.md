@@ -109,11 +109,11 @@ rtk ./gradlew --no-daemon pipelinePmBundle
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
 - `blocked` (2026-06-19): Readiness audit confirmed that `KFONT-M9-002` and
-  `KFONT-M11-003` are `done`, but this route still depends on `KFONT-M13-001`.
-  Remaining gate: land the facade inventory so the `SkTextBlob` descriptor
-  route has an approved owner mapping, no-`Sk*` boundary expectations, `dftext`
-  gate row, and PM/dashboard classification before descriptor or handoff
-  evidence is promoted.
+  `KFONT-M11-003` are `done`, and `KFONT-M13-001` has now landed the facade
+  inventory for this route. Remaining gate: add typed `SkTextBlob`
+  descriptor/handoff dumps with no `Sk*` payload leakage, preserve stable
+  stale/unregistered refusal diagnostics, and keep `dftext` retirement gated
+  until route-specific evidence and dashboard updates are linked.
 - Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
 
 ## Linear Labels

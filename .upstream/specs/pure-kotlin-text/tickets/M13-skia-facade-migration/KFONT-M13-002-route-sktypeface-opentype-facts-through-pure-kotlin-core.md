@@ -108,11 +108,12 @@ rtk ./gradlew --no-daemon pipelinePmBundle
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
 - `blocked` (2026-06-19): Readiness audit confirmed that `KFONT-M1-003` and
-  `KFONT-M2-004` are `done`, but this route must stay behind
-  `KFONT-M13-001`. Remaining gate: land the facade adapter inventory first so
-  the `SkTypeface` route has an approved owner mapping, diagnostics surface,
-  legacy `typeface` gate row, and PM/dashboard classification before parity
-  dumps or facade-core route promotion begin.
+  `KFONT-M2-004` are `done`, and `KFONT-M13-001` has now landed the facade
+  adapter inventory for this route. Remaining gate: add route-specific
+  `SkTypeface` parity dumps over pure Kotlin SFNT/variation facts, keep any
+  Fontations or FreeType comparisons drift-only, and attach stable refusal /
+  dashboard evidence before facade-core promotion or any `typeface` legacy
+  gate retirement claim.
 - Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
 
 ## Linear Labels
