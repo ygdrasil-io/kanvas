@@ -5723,7 +5723,7 @@ explicit in `fixture-evidence-manifest.json`.
 
 ### KFONT-M11 Readiness Gate Audit
 
-Status: blocked wave documented after independent readiness review.
+Status: KFONT-M11-004 done on bounded A8 route evidence; downstream M11 wave remains blocked.
 
 Files:
 
@@ -5743,15 +5743,18 @@ Evidence:
   `10f8ffeb86783294760ea4854ccda2a2623c72ed`, M11 tickets, pure Kotlin text
   handoff specs, GPU text glyph pipeline specs, and current `font:gpu-api`
   contracts.
-- `KFONT-M11-004` is blocked by missing atlas
-  entry/page/generation/invalidation evidence from `KFONT-M9-005` plus the
-  remaining downstream M9 handoff work after `KFONT-M9-003`.
+- `KFONT-M11-004` is now done on a bounded accepted
+  `GlyphAtlasArtifact` -> `AtlasMaskSample` route with checked-in
+  `reports/pure-kotlin-text/gpu-text-a8-route-plan.json`,
+  `reports/pure-kotlin-text/gpu-text-a8-route-refusals.json`, reviewed
+  `reports/wgsl4k-evolution/generated/text-wgsl-reflection.json` linkage,
+  and focused simple-Latin GPU evidence via
+  `reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/`.
 - `KFONT-M11-006`, `KFONT-M11-007`, `KFONT-M11-008`, `KFONT-M11-009`, and
-  `KFONT-M11-010` are blocked by the missing A8 route and downstream
-  subrun/resource/upload/binding contracts.
-- wgsl4k evolution fixtures remain prerequisite validation evidence only; they
-  do not provide real text route WGSL modules, `GPUTextBinding` comparisons,
-  CPU/GPU/reference evidence, or product activation.
+  `KFONT-M11-010` remain blocked on downstream subrun/resource/upload/binding,
+  ordering, route-specific WGSL validation, and `MaterialKey` leakage work.
+- The bounded A8 route does not promote broad text GPU support, SDF/outline/
+  color/bitmap/SVG routes, or `dftext` retirement.
 
 Validation:
 
@@ -5759,7 +5762,9 @@ Validation:
 rtk git diff --check
 ```
 
-Remaining gate: unblock M11 by completing `KFONT-M9-004` and `KFONT-M9-005`,
-then re-evaluate `KFONT-M11-004`. This blocked wave does not claim GPU text
-support, A8 atlas route support, SDF/outline/color/bitmap/SVG text support, or
-retirement of `dftext`, `scaledemoji_rendering`, or `coloremoji_blendmodes`.
+Remaining gate: complete `KFONT-M11-006`, `KFONT-M11-007`, `KFONT-M11-008`,
+`KFONT-M11-009`, and `KFONT-M11-010` for downstream subrun/resource/upload/
+binding, ordering, WGSL validation, and `MaterialKey` leakage proof. This
+bounded wave does not claim broad GPU text support, SDF/outline/color/bitmap/
+SVG text support, or retirement of `dftext`, `scaledemoji_rendering`, or
+`coloremoji_blendmodes`.
