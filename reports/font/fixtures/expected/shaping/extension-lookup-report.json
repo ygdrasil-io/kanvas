@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "dumpId": "extension-lookup-report",
+  "ownerTickets": ["KFONT-M6-010"],
+  "fixtureKind": "generated-memory-font",
+  "cases": [
+    {
+      "caseId": "extension-single-substitution",
+      "featureTag": "ccmp",
+      "text": "A",
+      "inputGlyphIds": [5],
+      "outputGlyphIds": [15],
+      "lookupType": 7,
+      "resolvedLookupType": 1
+    },
+    {
+      "caseId": "extension-ligature-substitution",
+      "featureTag": "liga",
+      "text": "fi",
+      "inputGlyphIds": [7, 8],
+      "outputGlyphIds": [42],
+      "lookupType": 7,
+      "resolvedLookupType": 4
+    }
+  ],
+  "remainingGates": [
+    "GSUB extension lookup targets beyond single and ligature substitutions remain out of scope for this bounded wave.",
+    "GSUB chaining contextual substitution and reverse chaining substitution remain open.",
+    "GPOS contextual, chaining contextual, and extension positioning remain open.",
+    "Device and variation-adjustment parsing, traces, and diagnostics remain open."
+  ],
+  "nonClaims": [
+    "no-complete-advanced-lookup-support-claim",
+    "no-gpos-contextual-or-variation-claim",
+    "no-native-shaper-oracle-claim"
+  ]
+}

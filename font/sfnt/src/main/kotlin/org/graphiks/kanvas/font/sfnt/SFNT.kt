@@ -6795,6 +6795,95 @@ object OpenTypeGsubTableParser {
             GSUB_MULTIPLE_SUBSTITUTION_LOOKUP_TYPE -> parseMultipleLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
             GSUB_LIGATURE_SUBSTITUTION_LOOKUP_TYPE -> parseLigatureLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
             GSUB_CONTEXTUAL_SUBSTITUTION_LOOKUP_TYPE -> parseContextLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
+            GSUB_EXTENSION_SUBSTITUTION_LOOKUP_TYPE -> parseExtensionLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
+            else -> null
+        }
+    }
+
+    private fun parseExtensionLookup(
+        table: ByteArray,
+        lookupStart: Int,
+        lookupIndex: Int,
+        subtableCount: Int,
+        featureTags: Collection<String>,
+    ): OpenTypeGsubLookup? {
+        val singleSubstitutions = LinkedHashMap<Int, Int>()
+        val ligatureSubstitutions = mutableListOf<OpenTypeGsubLigatureSubstitution>()
+        var extensionLookupType: Int? = null
+        repeat(subtableCount) { subtableIndex ->
+            val subtableOffset = table.readUInt16BE(
+                lookupStart + GPOS_LOOKUP_HEADER_SIZE + subtableIndex * UINT16_BYTE_LENGTH,
+                "OpenType GSUB LookupTable subtableOffset[$subtableIndex]",
+            )
+            val extensionStart = table.checkedOffset(
+                base = lookupStart,
+                offset = subtableOffset,
+                label = "OpenType GSUB ExtensionSubst subtable $subtableIndex",
+            )
+            table.requireRange(extensionStart, 8, "OpenType GSUB ExtensionSubst subtable header")
+            val substFormat = table.readUInt16BE(
+                extensionStart,
+                "OpenType GSUB ExtensionSubst substFormat",
+            )
+            require(substFormat == 1) {
+                "OpenType GSUB ExtensionSubst format $substFormat is not supported."
+            }
+            val parsedLookupType = table.readUInt16BE(
+                extensionStart + UINT16_BYTE_LENGTH,
+                "OpenType GSUB ExtensionSubst extensionLookupType",
+            )
+            if (extensionLookupType == null) {
+                extensionLookupType = parsedLookupType
+            } else {
+                require(extensionLookupType == parsedLookupType) {
+                    "OpenType GSUB ExtensionSubst target lookup types must stay consistent within one lookup."
+                }
+            }
+            val extensionOffset = table.readUInt32BE(
+                extensionStart + UINT16_BYTE_LENGTH * 2,
+                "OpenType GSUB ExtensionSubst extensionOffset",
+            )
+            val targetStart = table.checkedOffset(
+                base = extensionStart,
+                offset = extensionOffset.toInt(),
+                label = "OpenType GSUB ExtensionSubst target subtable $subtableIndex",
+            )
+            when (parsedLookupType) {
+                GSUB_SINGLE_SUBSTITUTION_LOOKUP_TYPE -> parseSingleSubtable(
+                    table = table,
+                    subtableStart = targetStart,
+                    substitutions = singleSubstitutions,
+                )
+                GSUB_LIGATURE_SUBSTITUTION_LOOKUP_TYPE -> parseLigatureSubtable(
+                    table = table,
+                    subtableStart = targetStart,
+                    substitutions = ligatureSubstitutions,
+                )
+                else -> throw IllegalArgumentException(
+                    "OpenType GSUB ExtensionSubst target lookup type $parsedLookupType is not supported.",
+                )
+            }
+        }
+        val orderedFeatureTags = featureTags.toList()
+        return when (extensionLookupType) {
+            GSUB_SINGLE_SUBSTITUTION_LOOKUP_TYPE -> singleSubstitutions.takeUnless { it.isEmpty() }?.let { parsed ->
+                OpenTypeGsubSingleSubstitutionLookup(
+                    featureTag = orderedFeatureTags.firstOrNull().orEmpty(),
+                    extraFeatureTags = orderedFeatureTags.drop(1).toSet(),
+                    lookupIndex = lookupIndex,
+                    substitutions = parsed.map { (inputGlyphId, replacementGlyphId) ->
+                        OpenTypeGsubSingleSubstitution(inputGlyphId = inputGlyphId, replacementGlyphId = replacementGlyphId)
+                    },
+                )
+            }
+            GSUB_LIGATURE_SUBSTITUTION_LOOKUP_TYPE -> ligatureSubstitutions.takeUnless { it.isEmpty() }?.let { parsed ->
+                OpenTypeGsubLigatureSubstitutionLookup(
+                    featureTag = orderedFeatureTags.firstOrNull().orEmpty(),
+                    extraFeatureTags = orderedFeatureTags.drop(1).toSet(),
+                    lookupIndex = lookupIndex,
+                    substitutions = parsed,
+                )
+            }
             else -> null
         }
     }
@@ -7789,6 +7878,7 @@ private const val GSUB_SINGLE_SUBSTITUTION_LOOKUP_TYPE = 1
 private const val GSUB_MULTIPLE_SUBSTITUTION_LOOKUP_TYPE = 2
 private const val GSUB_LIGATURE_SUBSTITUTION_LOOKUP_TYPE = 4
 private const val GSUB_CONTEXTUAL_SUBSTITUTION_LOOKUP_TYPE = 5
+private const val GSUB_EXTENSION_SUBSTITUTION_LOOKUP_TYPE = 7
 
 /**
  * Parsed bounded subset of OpenType GPOS pair-position kerning.

@@ -1020,6 +1020,40 @@
       ]
     },
     {
+      "dumpId": "extension-lookup-report",
+      "ownerTicket": "KFONT-M6-010",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "GSUB Target"
+      },
+      "producerPaths": [
+        "font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ExtensionLookupFixtureTest.kt",
+        "reports/font/fixtures/expected/shaping/extension-lookup-report.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "fixtureKind",
+        "nonClaims",
+        "ownerTickets",
+        "remainingGates",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ExtensionLookupFixtureTest",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Extension lookup report updates require reviewed generated-memory-font case diffs, explicit remaining-gate review, and no promotion of chaining, reverse-chaining, GPOS advanced lookup, or variation/device support.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-advanced-lookup-support-claim",
+        "no-gpos-contextual-or-variation-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
       "dumpId": "fallback-catalog-build",
       "ownerTicket": "PKT-02B",
       "classification": "producer-only",

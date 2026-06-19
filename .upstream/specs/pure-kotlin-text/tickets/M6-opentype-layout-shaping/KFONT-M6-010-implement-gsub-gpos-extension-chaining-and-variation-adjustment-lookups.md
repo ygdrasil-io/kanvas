@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-010"
 title: "Implement GSUB/GPOS extension, chaining and variation-adjustment lookups"
-status: "proposed"
+status: "blocked"
 milestone: "M6"
 priority: "P1"
 owner_area: "shaping"
@@ -105,7 +105,8 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ExtensionLookup*' --tests '*
 ## Status Notes
 
 - `proposed`: Advanced lookup work depends on basic GSUB/GPOS, mark/cursive positioning, and variation path foundations.
-- Current blocker audit (2026-06-18): `KFONT-M6-004` and `KFONT-M6-005` are `done`, `KFONT-M6-003` remains gated by its missing contextual fixture family, `KFONT-M4-005` is still `proposed`, and the advanced-lookup fixture set `gsub-chaining-context.otf`, `gsub-extension-substitution.otf`, `gsub-reverse-chaining.otf`, `gpos-contextual-positioning.otf`, `gpos-chaining-positioning.otf`, `gpos-extension-positioning.otf`, `gpos-variation-device.otf`, and `layout-extension-cycle.otf` is not present in-repo. Remaining gate is keep the bounded GSUB/GPOS base slices in place, implement the contextual, variation, and advanced-lookup prerequisites, then add reviewed fixture provenance and variation-adjustment evidence.
+- `blocked`: `ExtensionLookupFixtureTest` plus `extension-lookup-report.json` now prove bounded generated-memory-font parsing and shaping for GSUB extension lookups that resolve to single and ligature substitutions, without promoting broader advanced-lookup support.
+- `blocked`: Remaining gates are GSUB extension targets beyond single/ligature, GSUB chaining contextual substitution, GSUB reverse chaining substitution, GPOS contextual/chaining/extension positioning, device/variation adjustment parsing and diagnostics, and ticket-local `gsub-trace.json` / `gpos-trace.json` / `variation-adjustment-trace.json` evidence.
 - Move to `ready` only after lookup-type coverage and variation diagnostics are reviewed.
 
 ## Linear Labels
