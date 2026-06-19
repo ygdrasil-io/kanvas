@@ -2442,6 +2442,53 @@
       ]
     },
     {
+      "dumpId": "paragraph-metrics",
+      "ownerTicket": "KFONT-M12-003",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Metrics And Boxes"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/paragraph-metrics.json"
+      ],
+      "expectedFields": [
+        "cacheState",
+        "diagnostics",
+        "domain",
+        "dumpId",
+        "environment",
+        "fixtureId",
+        "fontSourceSetHash",
+        "measurementPhase",
+        "metrics",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "sampleCount",
+        "samples",
+        "schemaVersion",
+        "unicodeDataVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Paragraph telemetry dump changes require reviewed line-break, hit-test, selection, placeholder, and refusal-diagnostic diffs without paragraph parity, GPU text, or performance-gate promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-complete-paragraph-layout-claim",
+        "no-gpu-route-support-claim"
+      ]
+    },
+    {
       "dumpId": "paragraph-shaping-requests",
       "ownerTicket": "KFONT-M8-002",
       "classification": "producer-only",
@@ -2979,6 +3026,53 @@
         "no-complete-gsub-gpos-support-claim",
         "no-native-shaper-oracle-claim",
         "no-gpu-text-route-claim"
+      ]
+    },
+    {
+      "dumpId": "shaping-metrics",
+      "ownerTicket": "KFONT-M12-003",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Shaping Pipeline"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/shaping-metrics.json"
+      ],
+      "expectedFields": [
+        "cacheState",
+        "diagnostics",
+        "domain",
+        "dumpId",
+        "environment",
+        "fixtureId",
+        "fontSourceSetHash",
+        "measurementPhase",
+        "metrics",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "sampleCount",
+        "samples",
+        "schemaVersion",
+        "unicodeDataVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Shaping telemetry dump changes require reviewed segmentation, bidi, script-itemization, fallback, emoji-refusal, and script-fixture diffs without script-support, GPU text, or performance-gate promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-emoji-support-claim",
+        "no-gpu-route-support-claim"
       ]
     },
     {
