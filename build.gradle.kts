@@ -3532,8 +3532,11 @@ tasks.register<Exec>("validateKfontM12001TelemetryPmEvidence") {
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-schema-fixture.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/parser-metrics.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/scaler-metrics.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/shaping-metrics.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/paragraph-metrics.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-pm-bundle.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-19-kfont-m12-003-shaping-paragraph-metrics.md"))
     inputs.file(layout.projectDirectory.file("build.gradle.kts"))
     outputs.upToDateWhen { false }
 }
@@ -6200,8 +6203,11 @@ tasks.register("pipelinePmBundle") {
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-claim-dashboard.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-schema.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-schema-fixture.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/shaping-metrics.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/paragraph-metrics.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-pm-bundle.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-19-kfont-m12-003-shaping-paragraph-metrics.md"))
     outputs.dir(bundleDir)
     outputs.upToDateWhen { false }
 
@@ -6379,8 +6385,11 @@ tasks.register("pipelinePmBundle") {
             "reports/pure-kotlin-text/font-telemetry-schema-fixture.json",
             "reports/pure-kotlin-text/parser-metrics.json",
             "reports/pure-kotlin-text/scaler-metrics.json",
+            "reports/pure-kotlin-text/shaping-metrics.json",
+            "reports/pure-kotlin-text/paragraph-metrics.json",
             "reports/pure-kotlin-text/font-telemetry-pm-bundle.json",
             "reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md",
+            "reports/pure-kotlin-text/2026-06-19-kfont-m12-003-shaping-paragraph-metrics.md",
         ).forEach { path ->
             val source = rootDir.resolve(path)
             val destination = targetRoot.resolve(path)

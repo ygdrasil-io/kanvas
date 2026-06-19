@@ -117,6 +117,10 @@ private data class FontTelemetrySample(
     val fontSourceSetHash: String,
     val unicodeDataVersion: String,
     val tableTags: List<String> = emptyList(),
+    val runId: String? = null,
+    val paragraphId: String? = null,
+    val textRangeStart: Int? = null,
+    val textRangeEnd: Int? = null,
     val environment: FontTelemetryEnvironment,
     val metrics: List<FontTelemetryMetricSeries>,
     val diagnostics: List<String> = emptyList(),
@@ -134,9 +138,36 @@ private data class FontTelemetrySample(
         require(tableTags.all { it.isStableTelemetryToken() }) {
             "tableTags must use stable one-line tokens."
         }
+        require(runId == null || runId.isStableTelemetryToken()) {
+            "runId must be a stable one-line token when present."
+        }
+        require(paragraphId == null || paragraphId.isStableTelemetryToken()) {
+            "paragraphId must be a stable one-line token when present."
+        }
+        require((textRangeStart == null) == (textRangeEnd == null)) {
+            "textRangeStart and textRangeEnd must be both present or both absent."
+        }
+        if (textRangeStart != null && textRangeEnd != null) {
+            require(textRangeStart >= 0) { "textRangeStart must be non-negative." }
+            require(textRangeEnd >= textRangeStart) { "textRangeEnd must be greater than or equal to textRangeStart." }
+        }
         require(metrics.isNotEmpty()) { "metrics must not be empty." }
         require(diagnostics.all { it.isStableDiagnosticToken() }) {
             "diagnostics must use stable one-line diagnostic tokens."
+        }
+        when (domain) {
+            FontTelemetryDomain.Shaping -> {
+                require(runId != null) { "Shaping samples must record runId." }
+                require(paragraphId == null) { "Shaping samples must not record paragraphId." }
+            }
+            FontTelemetryDomain.Paragraph -> {
+                require(paragraphId != null) { "Paragraph samples must record paragraphId." }
+                require(runId == null) { "Paragraph samples must not record runId." }
+            }
+            else -> {
+                require(runId == null) { "Only shaping samples may record runId." }
+                require(paragraphId == null) { "Only paragraph samples may record paragraphId." }
+            }
         }
         if (domain == FontTelemetryDomain.GPUTextHandoff) {
             require(environment.gpuAdapter != null) {
@@ -164,7 +195,13 @@ private data class FontTelemetrySample(
         appendTelemetryField("cacheState", cacheState.serializedName, comma = true)
         appendTelemetryField("fontSourceSetHash", fontSourceSetHash, comma = true)
         appendTelemetryField("unicodeDataVersion", unicodeDataVersion, comma = true)
-        appendTelemetryStringArray("tableTags", tableTags, comma = true)
+        if (domain == FontTelemetryDomain.Parser || domain == FontTelemetryDomain.Scaler || tableTags.isNotEmpty()) {
+            appendTelemetryStringArray("tableTags", tableTags, comma = true)
+        }
+        runId?.let { appendTelemetryField("runId", it, comma = true) }
+        paragraphId?.let { appendTelemetryField("paragraphId", it, comma = true) }
+        textRangeStart?.let { appendTelemetryField("textRangeStart", it, comma = true) }
+        textRangeEnd?.let { appendTelemetryField("textRangeEnd", it, comma = true) }
         append("environment".quoted()).append(":").append(environment.toCanonicalJson()).append(",")
         append("metrics".quoted()).append(":")
         append(metrics.joinToString(prefix = "[", postfix = "]", separator = ",") { it.toCanonicalJson() })
@@ -206,20 +243,24 @@ private data class FontTelemetryNegativeCase(
 
 private data class FontTelemetryDomainDump(
     val dumpId: String,
-    val ownerTicket: String,
+    val ownerTickets: List<String>,
     val domain: FontTelemetryDomain,
-    val trendSeriesPrefix: String,
+    val trendSeriesPrefix: String? = null,
     val samples: List<FontTelemetrySample>,
     val negativeCases: List<FontTelemetryNegativeCase>,
     val nonClaims: List<String>,
 ) {
     init {
         require(dumpId.isStableTelemetryToken()) { "dumpId must be a stable one-line token." }
-        require(ownerTicket.isNotBlank()) { "ownerTicket must not be blank." }
-        require(trendSeriesPrefix.isStableTelemetryToken()) {
-            "trendSeriesPrefix must be a stable one-line token."
+        require(ownerTickets.isNotEmpty()) { "ownerTickets must not be empty." }
+        require(ownerTickets.all { it.isStableTelemetryToken() }) {
+            "ownerTickets must use stable one-line tokens."
+        }
+        require(trendSeriesPrefix == null || trendSeriesPrefix.isStableTelemetryToken()) {
+            "trendSeriesPrefix must be a stable one-line token when present."
         }
         require(samples.isNotEmpty()) { "samples must not be empty." }
+        require(nonClaims.isNotEmpty()) { "nonClaims must not be empty." }
         require(nonClaims.all { it.isStableTelemetryToken() }) {
             "nonClaims must use stable one-line tokens."
         }
@@ -229,9 +270,13 @@ private data class FontTelemetryDomainDump(
         append("{\n")
         append("  \"schemaVersion\": 1,\n")
         append("  \"dumpId\": ").append(dumpId.quoted()).append(",\n")
-        append("  \"ownerTickets\": [").append(ownerTicket.quoted()).append("],\n")
+        append("  \"ownerTickets\": ")
+        append(ownerTickets.joinToString(prefix = "[", postfix = "]", separator = ", ") { it.quoted() })
+        append(",\n")
         append("  \"domain\": ").append(domain.serializedName.quoted()).append(",\n")
-        append("  \"trendSeriesPrefix\": ").append(trendSeriesPrefix.quoted()).append(",\n")
+        if (trendSeriesPrefix != null) {
+            append("  \"trendSeriesPrefix\": ").append(trendSeriesPrefix.quoted()).append(",\n")
+        }
         append("  \"samples\": [\n")
         append(samples.joinToString(",\n") { "    ${it.toCanonicalJson()}" })
         append("\n  ],\n")
@@ -266,14 +311,34 @@ object FontTelemetryEvidenceWriter {
             ),
             FontTelemetryDomainSchema(
                 domain = FontTelemetryDomain.Shaping,
-                requiredDimensions = commonDimensions(),
-                metricNames = listOf("shaping.segmentation.time", "shaping.fallback.time", "shaping.glyph.count"),
+                requiredDimensions = shapingDimensions(),
+                metricNames = listOf(
+                    "shaping.segmentation.time",
+                    "shaping.bidi.time",
+                    "shaping.script-itemization.time",
+                    "shaping.fallback.time",
+                    "shaping.gsub.time",
+                    "shaping.gpos.time",
+                    "shaping.glyph.count",
+                    "shaping.cluster.count",
+                    "shaping.diagnostic.count",
+                ),
                 gpuAdapterRequired = false,
             ),
             FontTelemetryDomainSchema(
                 domain = FontTelemetryDomain.Paragraph,
-                requiredDimensions = commonDimensions(),
-                metricNames = listOf("paragraph.layout.time", "paragraph.line.count", "paragraph.hit-test.time"),
+                requiredDimensions = paragraphDimensions(),
+                metricNames = listOf(
+                    "paragraph.layout.time",
+                    "paragraph.style-run.count",
+                    "paragraph.line-break-opportunity.count",
+                    "paragraph.shaped-run.count",
+                    "paragraph.line.count",
+                    "paragraph.hit-test-index-build.time",
+                    "paragraph.selection-query.time",
+                    "paragraph.ellipsis.attempt.count",
+                    "paragraph.placeholder.count",
+                ),
                 gpuAdapterRequired = false,
             ),
             FontTelemetryDomainSchema(
@@ -371,6 +436,9 @@ object FontTelemetryEvidenceWriter {
                 cacheState = FontTelemetryCacheState.Warm,
                 fontSourceSetHash = "fontset-latin-bundled-v1",
                 unicodeDataVersion = "16.0.0",
+                runId = "latin-kerning-ligature-run",
+                textRangeStart = 0,
+                textRangeEnd = 16,
                 environment = FontTelemetryEnvironment(
                     environmentLabel = "developer-desktop",
                     runtimeLabel = "jdk-25-kotlin-2.3",
@@ -384,6 +452,13 @@ object FontTelemetryEvidenceWriter {
                         max = 720_000,
                         counters = mapOf("clusterCount" to 12L, "diagnosticCount" to 1L),
                     ),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.diagnostic.count",
+                        unit = FontTelemetryUnit.Count,
+                        median = 1,
+                        p90 = 1,
+                        max = 1,
+                    ),
                 ),
             ),
             FontTelemetrySample(
@@ -394,6 +469,9 @@ object FontTelemetryEvidenceWriter {
                 cacheState = FontTelemetryCacheState.Warm,
                 fontSourceSetHash = "fontset-latin-bundled-v1",
                 unicodeDataVersion = "16.0.0",
+                paragraphId = "rich-text-wrap-layout",
+                textRangeStart = 0,
+                textRangeEnd = 58,
                 environment = FontTelemetryEnvironment(
                     environmentLabel = "developer-desktop",
                     runtimeLabel = "jdk-25-kotlin-2.3",
@@ -406,6 +484,20 @@ object FontTelemetryEvidenceWriter {
                         p90 = 2_400_000,
                         max = 2_650_000,
                         counters = mapOf("lineCount" to 3L, "styleRunCount" to 4L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "paragraph.style-run.count",
+                        unit = FontTelemetryUnit.Count,
+                        median = 4,
+                        p90 = 4,
+                        max = 4,
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "paragraph.hit-test-index-build.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 170_000,
+                        p90 = 220_000,
+                        max = 250_000,
                     ),
                 ),
             ),
@@ -491,10 +583,9 @@ object FontTelemetryEvidenceWriter {
             append("}")
         }
     }
-
     fun writeParserMetricsJson(): String = FontTelemetryDomainDump(
         dumpId = "parser-metrics",
-        ownerTicket = "KFONT-M12-002",
+        ownerTickets = listOf("KFONT-M12-002"),
         domain = FontTelemetryDomain.Parser,
         trendSeriesPrefix = "font.parser",
         samples = listOf(
@@ -775,7 +866,7 @@ object FontTelemetryEvidenceWriter {
 
     fun writeScalerMetricsJson(): String = FontTelemetryDomainDump(
         dumpId = "scaler-metrics",
-        ownerTicket = "KFONT-M12-002",
+        ownerTickets = listOf("KFONT-M12-002"),
         domain = FontTelemetryDomain.Scaler,
         trendSeriesPrefix = "font.scaler",
         samples = listOf(
@@ -1019,6 +1110,464 @@ object FontTelemetryEvidenceWriter {
         nonClaims = defaultNonClaims(),
     ).toCanonicalJson()
 
+    fun writeShapingMetricsJson(): String = FontTelemetryDomainDump(
+        dumpId = "shaping-metrics",
+        ownerTickets = listOf("KFONT-M12-003"),
+        domain = FontTelemetryDomain.Shaping,
+        samples = listOf(
+            FontTelemetrySample(
+                fixtureId = "telemetry-shaping-repeat",
+                domain = FontTelemetryDomain.Shaping,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-latin-bundled-v1",
+                unicodeDataVersion = "16.0.0",
+                runId = "latin-kerning-ligature-run",
+                textRangeStart = 0,
+                textRangeEnd = 16,
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(name = "shaping.segmentation.time", unit = FontTelemetryUnit.Nanoseconds, median = 180_000, p90 = 240_000, max = 260_000),
+                    FontTelemetryMetricSeries(name = "shaping.bidi.time", unit = FontTelemetryUnit.Nanoseconds, median = 90_000, p90 = 120_000, max = 140_000),
+                    FontTelemetryMetricSeries(name = "shaping.script-itemization.time", unit = FontTelemetryUnit.Nanoseconds, median = 110_000, p90 = 145_000, max = 165_000),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.fallback.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 450_000,
+                        p90 = 650_000,
+                        max = 720_000,
+                        counters = mapOf("fallbackRunCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.gsub.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 310_000,
+                        p90 = 390_000,
+                        max = 430_000,
+                        counters = mapOf("gsubLookupCount" to 2L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.gpos.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 150_000,
+                        p90 = 210_000,
+                        max = 235_000,
+                        counters = mapOf("gposLookupCount" to 1L),
+                    ),
+                    FontTelemetryMetricSeries(name = "shaping.glyph.count", unit = FontTelemetryUnit.Count, median = 14, p90 = 14, max = 14),
+                    FontTelemetryMetricSeries(name = "shaping.cluster.count", unit = FontTelemetryUnit.Count, median = 12, p90 = 12, max = 12),
+                    FontTelemetryMetricSeries(name = "shaping.diagnostic.count", unit = FontTelemetryUnit.Count, median = 0, p90 = 0, max = 0),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "arabic-shaped-glyph-run",
+                domain = FontTelemetryDomain.Shaping,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-arabic-vendored-v1",
+                unicodeDataVersion = "16.0.0",
+                runId = "arabic-joining-run",
+                textRangeStart = 0,
+                textRangeEnd = 8,
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(name = "shaping.segmentation.time", unit = FontTelemetryUnit.Nanoseconds, median = 260_000, p90 = 330_000, max = 360_000),
+                    FontTelemetryMetricSeries(name = "shaping.bidi.time", unit = FontTelemetryUnit.Nanoseconds, median = 175_000, p90 = 240_000, max = 270_000),
+                    FontTelemetryMetricSeries(name = "shaping.script-itemization.time", unit = FontTelemetryUnit.Nanoseconds, median = 130_000, p90 = 170_000, max = 185_000),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.fallback.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 210_000,
+                        p90 = 260_000,
+                        max = 290_000,
+                        counters = mapOf("fallbackRunCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.gsub.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 610_000,
+                        p90 = 760_000,
+                        max = 820_000,
+                        counters = mapOf("gsubLookupCount" to 4L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.gpos.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 490_000,
+                        p90 = 610_000,
+                        max = 670_000,
+                        counters = mapOf("gposLookupCount" to 3L),
+                    ),
+                    FontTelemetryMetricSeries(name = "shaping.glyph.count", unit = FontTelemetryUnit.Count, median = 7, p90 = 7, max = 7),
+                    FontTelemetryMetricSeries(name = "shaping.cluster.count", unit = FontTelemetryUnit.Count, median = 4, p90 = 4, max = 4),
+                    FontTelemetryMetricSeries(name = "shaping.diagnostic.count", unit = FontTelemetryUnit.Count, median = 0, p90 = 0, max = 0),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "devanagari-shaping-report",
+                domain = FontTelemetryDomain.Shaping,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-devanagari-vendored-v1",
+                unicodeDataVersion = "16.0.0",
+                runId = "devanagari-reordering-run",
+                textRangeStart = 0,
+                textRangeEnd = 6,
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(name = "shaping.segmentation.time", unit = FontTelemetryUnit.Nanoseconds, median = 240_000, p90 = 300_000, max = 335_000),
+                    FontTelemetryMetricSeries(name = "shaping.bidi.time", unit = FontTelemetryUnit.Nanoseconds, median = 70_000, p90 = 95_000, max = 110_000),
+                    FontTelemetryMetricSeries(name = "shaping.script-itemization.time", unit = FontTelemetryUnit.Nanoseconds, median = 145_000, p90 = 190_000, max = 215_000),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.fallback.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 220_000,
+                        p90 = 290_000,
+                        max = 315_000,
+                        counters = mapOf("fallbackRunCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.gsub.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 720_000,
+                        p90 = 890_000,
+                        max = 970_000,
+                        counters = mapOf("gsubLookupCount" to 5L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.gpos.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 405_000,
+                        p90 = 520_000,
+                        max = 575_000,
+                        counters = mapOf("gposLookupCount" to 2L),
+                    ),
+                    FontTelemetryMetricSeries(name = "shaping.glyph.count", unit = FontTelemetryUnit.Count, median = 6, p90 = 6, max = 6),
+                    FontTelemetryMetricSeries(name = "shaping.cluster.count", unit = FontTelemetryUnit.Count, median = 3, p90 = 3, max = 3),
+                    FontTelemetryMetricSeries(name = "shaping.diagnostic.count", unit = FontTelemetryUnit.Count, median = 0, p90 = 0, max = 0),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "fallback-cluster-thai",
+                domain = FontTelemetryDomain.Shaping,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Mixed,
+                fontSourceSetHash = "fontset-thai-fallback-v1",
+                unicodeDataVersion = "16.0.0",
+                runId = "thai-mark-fallback-run",
+                textRangeStart = 0,
+                textRangeEnd = 5,
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(name = "shaping.segmentation.time", unit = FontTelemetryUnit.Nanoseconds, median = 195_000, p90 = 250_000, max = 280_000),
+                    FontTelemetryMetricSeries(name = "shaping.bidi.time", unit = FontTelemetryUnit.Nanoseconds, median = 55_000, p90 = 80_000, max = 95_000),
+                    FontTelemetryMetricSeries(name = "shaping.script-itemization.time", unit = FontTelemetryUnit.Nanoseconds, median = 115_000, p90 = 150_000, max = 170_000),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.fallback.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 330_000,
+                        p90 = 420_000,
+                        max = 465_000,
+                        counters = mapOf("fallbackRunCount" to 1L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.gsub.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 260_000,
+                        p90 = 340_000,
+                        max = 375_000,
+                        counters = mapOf("gsubLookupCount" to 1L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.gpos.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 210_000,
+                        p90 = 275_000,
+                        max = 305_000,
+                        counters = mapOf("gposLookupCount" to 2L),
+                    ),
+                    FontTelemetryMetricSeries(name = "shaping.glyph.count", unit = FontTelemetryUnit.Count, median = 5, p90 = 5, max = 5),
+                    FontTelemetryMetricSeries(name = "shaping.cluster.count", unit = FontTelemetryUnit.Count, median = 3, p90 = 3, max = 3),
+                    FontTelemetryMetricSeries(name = "shaping.diagnostic.count", unit = FontTelemetryUnit.Count, median = 0, p90 = 0, max = 0),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "fallback-cluster-cjk-vs",
+                domain = FontTelemetryDomain.Shaping,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-cjk-vendored-v1",
+                unicodeDataVersion = "16.0.0",
+                runId = "cjk-variation-selector-run",
+                textRangeStart = 0,
+                textRangeEnd = 2,
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(name = "shaping.segmentation.time", unit = FontTelemetryUnit.Nanoseconds, median = 155_000, p90 = 205_000, max = 225_000),
+                    FontTelemetryMetricSeries(name = "shaping.bidi.time", unit = FontTelemetryUnit.Nanoseconds, median = 45_000, p90 = 65_000, max = 75_000),
+                    FontTelemetryMetricSeries(name = "shaping.script-itemization.time", unit = FontTelemetryUnit.Nanoseconds, median = 120_000, p90 = 150_000, max = 170_000),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.fallback.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 140_000,
+                        p90 = 190_000,
+                        max = 210_000,
+                        counters = mapOf("fallbackRunCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.gsub.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 95_000,
+                        p90 = 125_000,
+                        max = 145_000,
+                        counters = mapOf("gsubLookupCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.gpos.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 90_000,
+                        p90 = 120_000,
+                        max = 140_000,
+                        counters = mapOf("gposLookupCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(name = "shaping.glyph.count", unit = FontTelemetryUnit.Count, median = 2, p90 = 2, max = 2),
+                    FontTelemetryMetricSeries(name = "shaping.cluster.count", unit = FontTelemetryUnit.Count, median = 1, p90 = 1, max = 1),
+                    FontTelemetryMetricSeries(name = "shaping.diagnostic.count", unit = FontTelemetryUnit.Count, median = 0, p90 = 0, max = 0),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "fallback-cluster-mixed-bidi",
+                domain = FontTelemetryDomain.Shaping,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Mixed,
+                fontSourceSetHash = "fontset-mixed-fallback-v1",
+                unicodeDataVersion = "16.0.0",
+                runId = "mixed-bidi-fallback-run",
+                textRangeStart = 0,
+                textRangeEnd = 12,
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(name = "shaping.segmentation.time", unit = FontTelemetryUnit.Nanoseconds, median = 205_000, p90 = 270_000, max = 300_000),
+                    FontTelemetryMetricSeries(name = "shaping.bidi.time", unit = FontTelemetryUnit.Nanoseconds, median = 180_000, p90 = 235_000, max = 260_000),
+                    FontTelemetryMetricSeries(name = "shaping.script-itemization.time", unit = FontTelemetryUnit.Nanoseconds, median = 145_000, p90 = 190_000, max = 210_000),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.fallback.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 510_000,
+                        p90 = 650_000,
+                        max = 710_000,
+                        counters = mapOf("fallbackRunCount" to 2L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.gsub.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 350_000,
+                        p90 = 430_000,
+                        max = 470_000,
+                        counters = mapOf("gsubLookupCount" to 1L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.gpos.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 240_000,
+                        p90 = 310_000,
+                        max = 345_000,
+                        counters = mapOf("gposLookupCount" to 1L),
+                    ),
+                    FontTelemetryMetricSeries(name = "shaping.glyph.count", unit = FontTelemetryUnit.Count, median = 10, p90 = 10, max = 10),
+                    FontTelemetryMetricSeries(name = "shaping.cluster.count", unit = FontTelemetryUnit.Count, median = 8, p90 = 8, max = 8),
+                    FontTelemetryMetricSeries(name = "shaping.diagnostic.count", unit = FontTelemetryUnit.Count, median = 1, p90 = 1, max = 1),
+                ),
+                diagnostics = listOf("text.shaping.fallback-missing"),
+            ),
+            FontTelemetrySample(
+                fixtureId = "emoji-sequence-refusal",
+                domain = FontTelemetryDomain.Shaping,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Mixed,
+                fontSourceSetHash = "fontset-emoji-sequence-v1",
+                unicodeDataVersion = "16.0.0",
+                runId = "emoji-sequence-refusal-run",
+                textRangeStart = 0,
+                textRangeEnd = 5,
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(name = "shaping.segmentation.time", unit = FontTelemetryUnit.Nanoseconds, median = 215_000, p90 = 280_000, max = 315_000),
+                    FontTelemetryMetricSeries(name = "shaping.bidi.time", unit = FontTelemetryUnit.Nanoseconds, median = 50_000, p90 = 72_000, max = 88_000),
+                    FontTelemetryMetricSeries(name = "shaping.script-itemization.time", unit = FontTelemetryUnit.Nanoseconds, median = 135_000, p90 = 175_000, max = 198_000),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.fallback.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 415_000,
+                        p90 = 540_000,
+                        max = 590_000,
+                        counters = mapOf("fallbackRunCount" to 1L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.gsub.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 230_000,
+                        p90 = 300_000,
+                        max = 330_000,
+                        counters = mapOf("gsubLookupCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "shaping.gpos.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 120_000,
+                        p90 = 165_000,
+                        max = 190_000,
+                        counters = mapOf("gposLookupCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(name = "shaping.glyph.count", unit = FontTelemetryUnit.Count, median = 0, p90 = 0, max = 0),
+                    FontTelemetryMetricSeries(name = "shaping.cluster.count", unit = FontTelemetryUnit.Count, median = 1, p90 = 1, max = 1),
+                    FontTelemetryMetricSeries(name = "shaping.diagnostic.count", unit = FontTelemetryUnit.Count, median = 1, p90 = 1, max = 1),
+                ),
+                diagnostics = listOf("text.shaping.emoji-sequence-unsupported"),
+            ),
+        ),
+        negativeCases = emptyList(),
+        nonClaims = commonNonClaims(),
+    ).toCanonicalJson()
+
+    fun writeParagraphMetricsJson(): String = FontTelemetryDomainDump(
+        dumpId = "paragraph-metrics",
+        ownerTickets = listOf("KFONT-M12-003"),
+        domain = FontTelemetryDomain.Paragraph,
+        samples = listOf(
+            FontTelemetrySample(
+                fixtureId = "paragraph-shaping-requests",
+                domain = FontTelemetryDomain.Paragraph,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-rich-style-bundled-v1",
+                unicodeDataVersion = "16.0.0",
+                paragraphId = "rich-text-wrap-layout",
+                textRangeStart = 0,
+                textRangeEnd = 58,
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(name = "paragraph.layout.time", unit = FontTelemetryUnit.Nanoseconds, median = 2_100_000, p90 = 2_400_000, max = 2_650_000),
+                    FontTelemetryMetricSeries(name = "paragraph.style-run.count", unit = FontTelemetryUnit.Count, median = 4, p90 = 4, max = 4),
+                    FontTelemetryMetricSeries(name = "paragraph.line-break-opportunity.count", unit = FontTelemetryUnit.Count, median = 11, p90 = 11, max = 11),
+                    FontTelemetryMetricSeries(name = "paragraph.shaped-run.count", unit = FontTelemetryUnit.Count, median = 4, p90 = 4, max = 4),
+                    FontTelemetryMetricSeries(name = "paragraph.line.count", unit = FontTelemetryUnit.Count, median = 3, p90 = 3, max = 3),
+                    FontTelemetryMetricSeries(name = "paragraph.hit-test-index-build.time", unit = FontTelemetryUnit.Nanoseconds, median = 170_000, p90 = 220_000, max = 250_000),
+                    FontTelemetryMetricSeries(name = "paragraph.selection-query.time", unit = FontTelemetryUnit.Nanoseconds, median = 160_000, p90 = 205_000, max = 235_000),
+                    FontTelemetryMetricSeries(name = "paragraph.ellipsis.attempt.count", unit = FontTelemetryUnit.Count, median = 0, p90 = 0, max = 0),
+                    FontTelemetryMetricSeries(name = "paragraph.placeholder.count", unit = FontTelemetryUnit.Count, median = 1, p90 = 1, max = 1),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "paragraph-layout",
+                domain = FontTelemetryDomain.Paragraph,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-rich-style-bundled-v1",
+                unicodeDataVersion = "16.0.0",
+                paragraphId = "wrapped-rich-paragraph",
+                textRangeStart = 0,
+                textRangeEnd = 72,
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(name = "paragraph.layout.time", unit = FontTelemetryUnit.Nanoseconds, median = 2_350_000, p90 = 2_700_000, max = 2_950_000),
+                    FontTelemetryMetricSeries(name = "paragraph.style-run.count", unit = FontTelemetryUnit.Count, median = 5, p90 = 5, max = 5),
+                    FontTelemetryMetricSeries(name = "paragraph.line-break-opportunity.count", unit = FontTelemetryUnit.Count, median = 15, p90 = 15, max = 15),
+                    FontTelemetryMetricSeries(name = "paragraph.shaped-run.count", unit = FontTelemetryUnit.Count, median = 5, p90 = 5, max = 5),
+                    FontTelemetryMetricSeries(name = "paragraph.line.count", unit = FontTelemetryUnit.Count, median = 4, p90 = 4, max = 4),
+                    FontTelemetryMetricSeries(name = "paragraph.hit-test-index-build.time", unit = FontTelemetryUnit.Nanoseconds, median = 190_000, p90 = 245_000, max = 275_000),
+                    FontTelemetryMetricSeries(name = "paragraph.selection-query.time", unit = FontTelemetryUnit.Nanoseconds, median = 175_000, p90 = 225_000, max = 255_000),
+                    FontTelemetryMetricSeries(name = "paragraph.ellipsis.attempt.count", unit = FontTelemetryUnit.Count, median = 0, p90 = 0, max = 0),
+                    FontTelemetryMetricSeries(name = "paragraph.placeholder.count", unit = FontTelemetryUnit.Count, median = 1, p90 = 1, max = 1),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "line-breaks",
+                domain = FontTelemetryDomain.Paragraph,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-mixed-bidi-v1",
+                unicodeDataVersion = "16.0.0",
+                paragraphId = "mixed-bidi-line-breaks",
+                textRangeStart = 0,
+                textRangeEnd = 84,
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(name = "paragraph.layout.time", unit = FontTelemetryUnit.Nanoseconds, median = 2_600_000, p90 = 2_980_000, max = 3_200_000),
+                    FontTelemetryMetricSeries(name = "paragraph.style-run.count", unit = FontTelemetryUnit.Count, median = 6, p90 = 6, max = 6),
+                    FontTelemetryMetricSeries(name = "paragraph.line-break-opportunity.count", unit = FontTelemetryUnit.Count, median = 18, p90 = 18, max = 18),
+                    FontTelemetryMetricSeries(name = "paragraph.shaped-run.count", unit = FontTelemetryUnit.Count, median = 6, p90 = 6, max = 6),
+                    FontTelemetryMetricSeries(name = "paragraph.line.count", unit = FontTelemetryUnit.Count, median = 4, p90 = 4, max = 4),
+                    FontTelemetryMetricSeries(name = "paragraph.hit-test-index-build.time", unit = FontTelemetryUnit.Nanoseconds, median = 205_000, p90 = 260_000, max = 290_000),
+                    FontTelemetryMetricSeries(name = "paragraph.selection-query.time", unit = FontTelemetryUnit.Nanoseconds, median = 195_000, p90 = 250_000, max = 285_000),
+                    FontTelemetryMetricSeries(name = "paragraph.ellipsis.attempt.count", unit = FontTelemetryUnit.Count, median = 0, p90 = 0, max = 0),
+                    FontTelemetryMetricSeries(name = "paragraph.placeholder.count", unit = FontTelemetryUnit.Count, median = 0, p90 = 0, max = 0),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "hit-test-map",
+                domain = FontTelemetryDomain.Paragraph,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-rich-style-bundled-v1",
+                unicodeDataVersion = "16.0.0",
+                paragraphId = "paragraph-hit-test-index",
+                textRangeStart = 0,
+                textRangeEnd = 41,
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(name = "paragraph.layout.time", unit = FontTelemetryUnit.Nanoseconds, median = 1_950_000, p90 = 2_240_000, max = 2_410_000),
+                    FontTelemetryMetricSeries(name = "paragraph.style-run.count", unit = FontTelemetryUnit.Count, median = 3, p90 = 3, max = 3),
+                    FontTelemetryMetricSeries(name = "paragraph.line-break-opportunity.count", unit = FontTelemetryUnit.Count, median = 9, p90 = 9, max = 9),
+                    FontTelemetryMetricSeries(name = "paragraph.shaped-run.count", unit = FontTelemetryUnit.Count, median = 3, p90 = 3, max = 3),
+                    FontTelemetryMetricSeries(name = "paragraph.line.count", unit = FontTelemetryUnit.Count, median = 2, p90 = 2, max = 2),
+                    FontTelemetryMetricSeries(name = "paragraph.hit-test-index-build.time", unit = FontTelemetryUnit.Nanoseconds, median = 95_000, p90 = 125_000, max = 150_000),
+                    FontTelemetryMetricSeries(name = "paragraph.selection-query.time", unit = FontTelemetryUnit.Nanoseconds, median = 130_000, p90 = 175_000, max = 205_000),
+                    FontTelemetryMetricSeries(name = "paragraph.ellipsis.attempt.count", unit = FontTelemetryUnit.Count, median = 0, p90 = 0, max = 0),
+                    FontTelemetryMetricSeries(name = "paragraph.placeholder.count", unit = FontTelemetryUnit.Count, median = 1, p90 = 1, max = 1),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "placeholder-layout",
+                domain = FontTelemetryDomain.Paragraph,
+                measurementPhase = "steady-state",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-rich-style-bundled-v1",
+                unicodeDataVersion = "16.0.0",
+                paragraphId = "placeholder-ellipsis-layout",
+                textRangeStart = 0,
+                textRangeEnd = 47,
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(name = "paragraph.layout.time", unit = FontTelemetryUnit.Nanoseconds, median = 2_420_000, p90 = 2_760_000, max = 3_040_000),
+                    FontTelemetryMetricSeries(name = "paragraph.style-run.count", unit = FontTelemetryUnit.Count, median = 4, p90 = 4, max = 4),
+                    FontTelemetryMetricSeries(name = "paragraph.line-break-opportunity.count", unit = FontTelemetryUnit.Count, median = 12, p90 = 12, max = 12),
+                    FontTelemetryMetricSeries(name = "paragraph.shaped-run.count", unit = FontTelemetryUnit.Count, median = 4, p90 = 4, max = 4),
+                    FontTelemetryMetricSeries(name = "paragraph.line.count", unit = FontTelemetryUnit.Count, median = 3, p90 = 3, max = 3),
+                    FontTelemetryMetricSeries(name = "paragraph.hit-test-index-build.time", unit = FontTelemetryUnit.Nanoseconds, median = 115_000, p90 = 145_000, max = 175_000),
+                    FontTelemetryMetricSeries(name = "paragraph.selection-query.time", unit = FontTelemetryUnit.Nanoseconds, median = 145_000, p90 = 185_000, max = 215_000),
+                    FontTelemetryMetricSeries(name = "paragraph.ellipsis.attempt.count", unit = FontTelemetryUnit.Count, median = 1, p90 = 1, max = 1),
+                    FontTelemetryMetricSeries(name = "paragraph.placeholder.count", unit = FontTelemetryUnit.Count, median = 2, p90 = 2, max = 2),
+                ),
+                diagnostics = listOf("text.paragraph.placeholder-ellipsis-conflict"),
+            ),
+        ),
+        negativeCases = emptyList(),
+        nonClaims = commonNonClaims(),
+    ).toCanonicalJson()
+
     private fun commonDimensions(): List<String> = listOf(
         "environmentLabel",
         "runtimeLabel",
@@ -1030,17 +1579,23 @@ object FontTelemetryEvidenceWriter {
         "measurementPhase",
     )
 
-    private fun defaultEnvironment(): FontTelemetryEnvironment = FontTelemetryEnvironment(
-        environmentLabel = "developer-desktop",
-        runtimeLabel = "jdk-25-kotlin-2.3",
-    )
+    private fun shapingDimensions(): List<String> = commonDimensions() + listOf("runId", "textRangeStart", "textRangeEnd")
 
-    private fun defaultNonClaims(): List<String> = listOf(
+    private fun paragraphDimensions(): List<String> = commonDimensions() + listOf("paragraphId", "textRangeStart", "textRangeEnd")
+
+    private fun commonNonClaims(): List<String> = listOf(
         "no-complete-target-support-claim",
         "no-performance-release-gate-claim",
         "no-gpu-route-support-claim",
         "no-native-engine-oracle-claim",
     )
+
+    private fun defaultEnvironment(): FontTelemetryEnvironment = FontTelemetryEnvironment(
+        environmentLabel = "developer-desktop",
+        runtimeLabel = "jdk-25-kotlin-2.3",
+    )
+
+    private fun defaultNonClaims(): List<String> = commonNonClaims()
 }
 
 private fun String.quoted(): String = "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""

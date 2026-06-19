@@ -19,12 +19,14 @@
   task instead of inventing a runtime telemetry gate.
 - Domain rows cover parser, scaler, shaping, paragraph, glyph artifact, and GPU
   text handoff samples with stable fixture IDs, sample counts, cache states,
-  and metric names.
+  and metric names, including the shaping diagnostic-count series plus the
+  paragraph style-run and hit-test-index-build slices added by
+  `KFONT-M12-003`.
 - The report keeps the performance posture advisory/warning-only and points
-  downstream producer emission to `KFONT-M12-003`, `KFONT-M12-004`, and
-  `KFONT-M12-005`, while `KFONT-M12-002` now contributes the checked-in parser
-  and scaler telemetry dumps separately instead of keeping the schema ticket
-  open.
+  downstream producer emission to `KFONT-M12-004` and `KFONT-M12-005`, while
+  `KFONT-M12-002` and `KFONT-M12-003` now contribute the checked-in
+  parser/scaler and shaping/paragraph telemetry dumps separately instead of
+  keeping the schema ticket open.
 
 ## Validation
 
@@ -43,6 +45,6 @@ rtk git diff --check
 No schema-local gate remains for `KFONT-M12-001`. Downstream producer emission
 into the shared schema is now owned by `KFONT-M12-003`, `KFONT-M12-004`, and
 `KFONT-M12-005`; parser/scaler producer evidence is attached separately under
-`KFONT-M12-002`. The report stays warning-only, keeps all budgets advisory, and
-does not promote any GPU route, release gate, or complete telemetry support
-claim.
+`KFONT-M12-002`, while the report stays warning-only, keeps all budgets
+advisory, and does not promote any GPU route, release gate, or complete
+telemetry support claim.
