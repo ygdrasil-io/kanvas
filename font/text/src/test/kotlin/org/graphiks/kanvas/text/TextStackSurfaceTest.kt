@@ -3210,6 +3210,50 @@ class TextStackSurfaceTest {
     }
 
     @Test
+    fun shapeWithRuntimeTraceCapturesReviewedMarkToMarkLookup() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440626",
+            relativePath = "reports/font/fixtures/fonts/shaping/gpos-mark-to-mark.otf",
+        )
+        val engine = BasicOpenTypeShapingEngine(
+            scriptItemizer = object : ScriptItemizer {
+                override fun itemize(request: ShapingRequest): List<ScriptRun> =
+                    listOf(ScriptRun(request.textRange, "Arab"))
+            },
+            bidiResolver = object : BidiResolver {
+                override fun resolve(request: ShapingRequest): List<BidiRun> =
+                    listOf(BidiRun(request.textRange, level = 1, isRightToLeft = true))
+            },
+            glyphMapper = CMapGlyphMapper(cmapsByTypefaceId = mapOf(face.typefaceId to face.cmap)),
+            gdefTablesByTypefaceId = mapOf(face.typefaceId to requireNotNull(face.gdef)),
+            gposTablesByTypefaceId = mapOf(face.typefaceId to requireNotNull(face.gpos)),
+            kernUnitsPerEmByTypefaceId = mapOf(face.typefaceId to face.unitsPerEm),
+        )
+
+        val trace = engine.shapeWithRuntimeTrace(
+            ShapingRequest(
+                text = "\uE003\u064E",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+                paragraphDirection = -1,
+            ),
+        )
+
+        assertEquals(emptyList(), trace.result.diagnostics)
+        assertEquals(1, trace.gposLookups.size)
+        val lookup = trace.gposLookups.single()
+        assertEquals(6, lookup.lookupType)
+        assertEquals("mkmk", lookup.featureTag)
+        assertEquals(listOf(3, 3), lookup.glyphClasses)
+        assertEquals(0, lookup.markClass)
+        assertEquals(listOf(1, 1), lookup.anchorFormats)
+        assertEquals(listOf(-33, 181), lookup.attachmentVector)
+        val dotAboveGlyphId = requireNotNull(face.cmap.lookupGlyphId(0xE003))
+        val fathaGlyphId = requireNotNull(face.cmap.lookupGlyphId(0x064E))
+        assertEquals(setOf(dotAboveGlyphId, fathaGlyphId), lookup.matchedGlyphIds.toSet())
+    }
+
+    @Test
     fun basicOpenTypeShapingEngineSkipsUnsupportedCursiveLookupsForScriptPolicy() {
         val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440632"))
         val engine = BasicOpenTypeShapingEngine(
