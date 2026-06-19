@@ -10,7 +10,13 @@ SCHEMA_PATH = "reports/pure-kotlin-text/font-telemetry-schema.json"
 FIXTURE_PATH = "reports/pure-kotlin-text/font-telemetry-schema-fixture.json"
 ADVISORY_JSON_PATH = "reports/pure-kotlin-text/font-telemetry-pm-bundle.json"
 ADVISORY_MD_PATH = "reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"
+GPU_HANDOFF_PATH = "reports/pure-kotlin-text/gpu-text-handoff-metrics.json"
+GPU_UPLOAD_PATH = "reports/pure-kotlin-text/draw-text-run-upload-plan.json"
+GPU_REPORT_PATH = "reports/pure-kotlin-text/2026-06-19-kfont-m12-005-gpu-handoff-metrics.md"
 BUILD_GRADLE_PATH = "build.gradle.kts"
+DOMAIN_COMPLETE_GATE = "All M12 telemetry domains now have checked-in deterministic producer evidence"
+OLD_M12004_GATE = "KFONT-M12-004 now solely owns the remaining glyph/cache producer emission"
+OLD_M12005_GATE = "KFONT-M12-005 still owns GPU handoff producer emission"
 
 
 class ValidationError(RuntimeError):
@@ -85,8 +91,12 @@ def main() -> int:
         "dashboard still reports the PM bundle ingestion gate as open",
     )
     require(
-        any("KFONT-M12-005" in str(gate) and "KFONT-M12-004" not in str(gate) for gate in gates),
-        "dashboard must point remaining producer emission at KFONT-M12-005 only",
+        any(DOMAIN_COMPLETE_GATE in str(gate) for gate in gates),
+        "dashboard must record that all M12 telemetry producer domains now have checked-in evidence",
+    )
+    require(
+        all(OLD_M12004_GATE not in str(gate) and OLD_M12005_GATE not in str(gate) for gate in gates),
+        "dashboard must not keep KFONT-M12-004 or KFONT-M12-005 as open producer gates",
     )
 
     schema_domains = schema.get("domains")
@@ -126,6 +136,13 @@ def main() -> int:
     require("reports/pure-kotlin-text/glyph-artifact-metrics.json" in bundle_paths, "bundlePaths must include glyph-artifact-metrics.json")
     require("reports/pure-kotlin-text/glyph-cache-metrics.json" in bundle_paths, "bundlePaths must include glyph-cache-metrics.json")
     require("reports/pure-kotlin-text/glyph-atlas-occupancy.json" in bundle_paths, "bundlePaths must include glyph-atlas-occupancy.json")
+    require(GPU_HANDOFF_PATH in bundle_paths, "bundlePaths must include gpu-text-handoff-metrics.json")
+    require(GPU_UPLOAD_PATH in bundle_paths, "bundlePaths must include draw-text-run-upload-plan.json")
+    require(GPU_REPORT_PATH in bundle_paths, "bundlePaths must include the KFONT-M12-005 markdown report")
+    require(
+        "reports/pure-kotlin-text/2026-06-19-kfont-m12-004-glyph-cache-metrics.md" in bundle_paths,
+        "bundlePaths must include the KFONT-M12-004 markdown report",
+    )
     for relative_path in bundle_paths:
         require(isinstance(relative_path, str) and relative_path, "bundlePaths entries must be non-empty strings")
         require((root / relative_path).is_file(), f"bundlePaths references a missing checked-in file: {relative_path}")
@@ -133,21 +150,28 @@ def main() -> int:
     remaining_gates = advisory.get("remainingGates")
     require(isinstance(remaining_gates, list) and remaining_gates, "remainingGates must be a non-empty list")
     require(
-        any("KFONT-M12-005" in str(gate) and "KFONT-M12-004" not in str(gate) for gate in remaining_gates),
-        "remainingGates must point remaining producer emission at KFONT-M12-005 only",
+        any(DOMAIN_COMPLETE_GATE in str(gate) for gate in remaining_gates),
+        "remainingGates must record that all M12 telemetry producer domains now have checked-in evidence",
+    )
+    require(
+        all(OLD_M12004_GATE not in str(gate) and OLD_M12005_GATE not in str(gate) for gate in remaining_gates),
+        "remainingGates must not keep KFONT-M12-004 or KFONT-M12-005 as open producer gates",
     )
     require(
         all("PM bundle evidence" not in str(gate) for gate in remaining_gates),
         "remainingGates must not keep PM bundle evidence open after this slice",
     )
-
     require("pipelinePmBundle" in advisory_md, "markdown report must mention pipelinePmBundle")
     require("warning-only" in advisory_md, "markdown report must mention warning-only status")
     require("tracked-gap" in advisory_md, "markdown report must mention tracked-gap classification")
     require("glyph-artifact-metrics.json" in advisory_md, "markdown report must mention glyph-artifact-metrics.json")
     require("glyph-cache-metrics.json" in advisory_md, "markdown report must mention glyph-cache-metrics.json")
     require("glyph-atlas-occupancy.json" in advisory_md, "markdown report must mention glyph-atlas-occupancy.json")
-    require("KFONT-M12-005" in advisory_md and "KFONT-M12-004" not in advisory_md.split("Remaining gate", 1)[-1], "markdown report must mention only KFONT-M12-005 as the remaining producer gate")
+    require("gpu-text-handoff-metrics.json" in advisory_md, "markdown report must mention gpu-text-handoff-metrics.json")
+    require("draw-text-run-upload-plan.json" in advisory_md, "markdown report must mention draw-text-run-upload-plan.json")
+    remaining_gate_section = advisory_md.split("## Remaining gate", 1)[-1]
+    require(DOMAIN_COMPLETE_GATE in remaining_gate_section, "markdown report must record domain-complete M12 telemetry evidence")
+    require(OLD_M12004_GATE not in remaining_gate_section and OLD_M12005_GATE not in remaining_gate_section, "markdown report must not keep KFONT-M12-004 or KFONT-M12-005 as open producer gates")
     require("remains open before `done`" not in advisory_md, "markdown report must not keep KFONT-M12-001 open before done")
 
     require(f'tasks.register<Exec>("{TASK_NAME}")' in build_gradle, "build.gradle.kts must register validateKfontM12001TelemetryPmEvidence")
@@ -160,6 +184,10 @@ def main() -> int:
     require("reports/pure-kotlin-text/glyph-artifact-metrics.json" in pm_bundle_block, "pipelinePmBundle must include glyph-artifact-metrics.json")
     require("reports/pure-kotlin-text/glyph-cache-metrics.json" in pm_bundle_block, "pipelinePmBundle must include glyph-cache-metrics.json")
     require("reports/pure-kotlin-text/glyph-atlas-occupancy.json" in pm_bundle_block, "pipelinePmBundle must include glyph-atlas-occupancy.json")
+    require(GPU_HANDOFF_PATH in pm_bundle_block, "pipelinePmBundle must include gpu-text-handoff-metrics.json")
+    require(GPU_UPLOAD_PATH in pm_bundle_block, "pipelinePmBundle must include draw-text-run-upload-plan.json")
+    require(GPU_REPORT_PATH in pm_bundle_block, "pipelinePmBundle must include the KFONT-M12-005 markdown report")
+    require("reports/pure-kotlin-text/2026-06-19-kfont-m12-004-glyph-cache-metrics.md" in pm_bundle_block, "pipelinePmBundle must include the KFONT-M12-004 markdown report")
     require(ADVISORY_JSON_PATH in pm_bundle_block, "pipelinePmBundle must include font-telemetry-pm-bundle.json")
     require(ADVISORY_MD_PATH in pm_bundle_block, "pipelinePmBundle must include the telemetry PM markdown report")
 

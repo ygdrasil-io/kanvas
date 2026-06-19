@@ -5169,11 +5169,11 @@ Evidence:
   domain coverage, repeated-run aggregation fields, conditional GPU adapter
   facts, and stable telemetry refusal diagnostics without HarfBuzz or
   FreeType wording.
-- `validateKfontM12001TelemetryPmEvidence` and its Python validator assert that
-  the PM bundle copies the telemetry schema/dashboard artifacts, preserves
-  `warning-only` wording, and keeps downstream producer work explicit under
-  `KFONT-M12-002`, `KFONT-M12-004`, and `KFONT-M12-005`
-  without keeping the schema slice open.
+- `validateKfontM12001TelemetryPmEvidence` and its Python validator assert
+  that the PM bundle copies the telemetry schema/dashboard artifacts,
+  preserves `warning-only` wording, and records that all M12 telemetry
+  producer domains now have checked-in deterministic evidence without keeping
+  the schema slice open.
 
 Validation:
 
@@ -5186,11 +5186,7 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 rtk git diff --check
 ```
 
-Remaining gate: no schema-local gate remains. Downstream producer emission into
-the shared schema is now owned by `KFONT-M12-003`, `KFONT-M12-004`, and
-`KFONT-M12-005`; parser/scaler producer evidence is attached separately under
-`KFONT-M12-002`, and this slice still does not promote any performance budget,
-GPU route, or release-gate claim.
+Remaining gate: no schema-local gate remains. All M12 telemetry domains now have checked-in deterministic producer evidence under `KFONT-M12-002` through `KFONT-M12-005`. This slice still does not promote any performance budget, GPU route, `dftext` retirement, or release-gate claim.
 
 ### KFONT-M12-002: Add parser and scaler metrics
 
@@ -5236,8 +5232,8 @@ Evidence:
   `font.telemetry.scaler-domain-missing`.
 - `font-claim-dashboard.json` now exposes separate `Font parser metrics` and
   `Font scaler metrics` advisory rows, while the older schema/PM-bundle
-  artifacts now point remaining downstream producer work only at
-  `KFONT-M12-003`, `KFONT-M12-004`, and `KFONT-M12-005`.
+  artifacts now record that all M12 telemetry producer domains have checked-in
+  deterministic evidence and remain advisory-only.
 
 Validation:
 
@@ -5252,10 +5248,10 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 rtk git diff --check
 ```
 
-Remaining gate: no ticket-local gate remains. Shaping/paragraph, glyph/cache,
-and GPU handoff producer emission remain with `KFONT-M12-003`,
-`KFONT-M12-004`, and `KFONT-M12-005`; this slice keeps all budgets advisory
-and does not promote any release-gate, GPU-route, or complete subsystem claim.
+Remaining gate: no ticket-local gate remains. All M12 telemetry producer
+domains now have checked-in deterministic evidence. This slice keeps all
+budgets advisory and does not promote any release-gate, GPU-route, or
+complete subsystem claim.
 
 ### KFONT-M12-003: Add shaping and paragraph metrics
 
@@ -5331,6 +5327,7 @@ Files:
 - `reports/pure-kotlin-text/font-telemetry-pm-bundle.json`
 - `reports/pure-kotlin-text/fixture-evidence-manifest.json`
 - `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-004-add-glyph-artifact-and-cache-metrics.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md`
 - `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
@@ -5354,9 +5351,8 @@ Evidence:
   as the ticket-local equivalent occupancy dump while keeping the evidence
   CPU-only and advisory.
 - The dashboard now exposes separate `Glyph artifact metrics`, `Glyph cache
-  metrics`, and `Glyph atlas occupancy` tracked-gap rows, while the PM bundle
-  packaging and schema advisory report now leave only `KFONT-M12-005` as the
-  remaining shared-schema producer gate.
+  metrics`, and `Glyph atlas occupancy` tracked-gap rows while leaving
+  `dftext` visible without promoting GPU support or release-gate claims.
 
 Validation:
 
@@ -5372,8 +5368,63 @@ rtk git diff --check
 ```
 
 Remaining gate: no ticket-local gate remains. `dftext` retirement, GPU text
-route claims, upload-execution claims, and any performance-gate promotion
-remain owned by `KFONT-M12-005` and the broader M11 GPU handoff chain.
+route promotion, executed-upload claims, and any performance-gate promotion
+remain owned by the broader M11 GPU handoff chain and explicit GPU evidence.
+
+### KFONT-M12-005: Add GPU handoff metrics
+
+Status: done; implemented and freshly revalidated for closeout.
+
+Files:
+
+- `font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextHandoffMetricsEvidence.kt`
+- `font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextHandoffMetricsEvidenceTest.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt`
+- `reports/pure-kotlin-text/gpu-text-handoff-metrics.json`
+- `reports/pure-kotlin-text/draw-text-run-upload-plan.json`
+- `reports/pure-kotlin-text/2026-06-19-kfont-m12-005-gpu-handoff-metrics.md`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `reports/pure-kotlin-text/font-telemetry-pm-bundle.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-005-add-gpu-handoff-metrics.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `gpu-text-handoff-metrics.json` now records deterministic advisory selected
+  and refused GPU handoff rows for the bounded simple-Latin A8 route plus
+  stable SDF/outline/color/bitmap/SVG/upload-plan/stale/budget/nondeterministic
+  and CPU-rendered-texture refusal diagnostics.
+- `draw-text-run-upload-plan.json` now records deterministic advisory upload
+  dependency ordering, upload byte counts, reuse counters, stable artifact key
+  hashes, and a bounded MaterialKey/no-`Sk*` leakage audit excerpt tied to the
+  same fixture family.
+- `font-claim-dashboard.json`, `font-telemetry-pm-bundle.json`,
+  `fixture-evidence-manifest.json`, and `dump-evidence-index.json` now expose
+  separate `GPU text handoff metrics`, `GPU text upload metrics`, and
+  `GPU text route refusals` tracked-gap rows plus the checked-in PM bundle
+  packaging for `gpu-text-handoff-metrics.json` and
+  `draw-text-run-upload-plan.json`.
+- `no-performance-release-gate-claim` remains explicit throughout this slice.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextHandoffMetricsEvidenceTest*'
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
+rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: no ticket-local gate remains. `dftext`, broader M11 GPU route
+promotion, executed GPU upload claims, and any release-gate promotion stay on
+their owning tickets and specs.
 ### KFONT-M1-004: Bundled Source Fixture Manifest
 
 Status: done; merged, independently reviewed, and freshly revalidated for closeout.

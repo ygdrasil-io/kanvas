@@ -1073,6 +1073,58 @@
       ]
     },
     {
+      "dumpId": "draw-text-run-upload-plan",
+      "ownerTicket": "KFONT-M12-005",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md",
+        "section": "Acceptance Criteria"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextHandoffMetricsEvidence.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextHandoffMetricsEvidenceTest.kt",
+        "reports/pure-kotlin-text/draw-text-run-upload-plan.json"
+      ],
+      "expectedFields": [
+        "artifactKeyHashes",
+        "artifactReuseCount",
+        "classification",
+        "commandId",
+        "dumpId",
+        "findings",
+        "leakageAudit",
+        "materialKey",
+        "nonClaims",
+        "ownerTickets",
+        "payloadKind",
+        "productActivation",
+        "routePromotion",
+        "schemaVersion",
+        "status",
+        "uploadByteCount",
+        "uploadDependencyCount",
+        "uploadDependencyLabels",
+        "uploadPlanReuseCount"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextHandoffMetricsEvidenceTest*'",
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "DrawTextRun upload-plan dump changes require reviewed artifact key hash/order diffs, bounded leakage-audit field review, and explicit confirmation that no Sk type, font bytes, or live GPU handle leaked into the dump.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
       "dumpId": "emoji-route-trace",
       "ownerTicket": "KFONT-M10-009",
       "classification": "golden-gated",
@@ -2214,6 +2266,57 @@
       "nonClaims": [
         "producer-only",
         "no-broad-gpu-text-support-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "dumpId": "gpu-text-handoff-metrics",
+      "ownerTicket": "KFONT-M12-005",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextHandoffMetricsEvidence.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextHandoffMetricsEvidenceTest.kt",
+        "reports/pure-kotlin-text/gpu-text-handoff-metrics.json"
+      ],
+      "expectedFields": [
+        "advisoryBudgets",
+        "aggregateCounters",
+        "artifactKeyHash",
+        "artifactType",
+        "cacheRecords",
+        "classification",
+        "commandId",
+        "dumpId",
+        "evidenceRefs",
+        "gpuAdapter",
+        "gpuBackend",
+        "handoffDiagnostic",
+        "nonClaims",
+        "ownerTickets",
+        "rendererDiagnostic",
+        "routeOutcome",
+        "routeRows",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextHandoffMetricsEvidenceTest*'",
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "GPU handoff telemetry dump changes require reviewed route outcome diffs, stable text.gpu/unsupported.text diagnostics, advisory-only wording, and explicit confirmation that no GPU support claim or dftext retirement was added.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim",
         "no-dftext-retirement"
       ]
     },
