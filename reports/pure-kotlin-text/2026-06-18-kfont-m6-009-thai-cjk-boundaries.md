@@ -1,12 +1,13 @@
 # KFONT-M6-009 - Thai And CJK Boundary Review Wave
 
 Date: 2026-06-18
-Status: review with bounded vendored-font evidence; independent review complete.
+Status: blocked with bounded vendored-font evidence; independent review complete.
 
 ## Scope
 
-This wave advances `KFONT-M6-009` from `proposed` to `review` without
-promoting Thai or CJK shaping support:
+This wave lands bounded `KFONT-M6-009` evidence while the ticket remains
+`blocked` on narrower Thai/CJK gates, without promoting Thai or CJK shaping
+support:
 
 - `ThaiCjkBoundaryFixtureTest` now injects a pinned Script_Extensions
   itemization route locally so the mixed `Aก้A` case can prove Thai script

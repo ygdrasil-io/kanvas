@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-009"
 title: "Add Thai and CJK shaping boundaries"
-status: "review"
+status: "blocked"
 milestone: "M6"
 priority: "P1"
 owner_area: "shaping"
@@ -101,8 +101,8 @@ rtk git diff --check
 ## Status Notes
 
 - `proposed`: Boundary fixtures depend on script itemization, feature policy, and positioning support.
-- `review`: `ThaiCjkBoundaryFixtureTest` plus `thai-cjk-boundary-report.json` now prove bounded vendored-font evidence for Thai tone-mark positioning, mixed Latin/Thai script boundaries, and CJK kana `vert` alternates on `NotoSansThai-Regular.ttf` and `NotoSansSC-Regular.otf` without promoting Thai or CJK shaping support.
-- `review`: This wave intentionally keeps Thai paragraph-owned dictionary diagnostics, Thai refusal fixtures/codes, CJK `cmap` format 14 variation-selector evidence, Han/Hangul boundary rows, paragraph-owned ruby/line-break diagnostics, and ticket-local `shaping-plan.json` / `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` / `cmap-map.json` / `unicode-segments.json` families as explicit remaining gates.
+- `blocked`: `ThaiCjkBoundaryFixtureTest` plus `thai-cjk-boundary-report.json` now prove bounded vendored-font evidence for Thai tone-mark positioning, mixed Latin/Thai script boundaries, and CJK kana `vert` alternates on `NotoSansThai-Regular.ttf` and `NotoSansSC-Regular.otf` without promoting Thai or CJK shaping support.
+- `blocked`: This wave intentionally keeps Thai paragraph-owned dictionary diagnostics, Thai refusal fixtures/codes, CJK `cmap` format 14 variation-selector evidence, Han/Hangul boundary rows, paragraph-owned ruby/line-break diagnostics, and ticket-local `shaping-plan.json` / `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` / `cmap-map.json` / `unicode-segments.json` families as explicit remaining gates.
 - Move to `ready` only after paragraph-owned diagnostics and fixture scope are reviewed.
 
 ## Linear Labels
