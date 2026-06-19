@@ -698,7 +698,7 @@
         "reports/pure-kotlin-text/dump-evidence-index.json"
       ],
       "requiredEvidenceGates": [
-        "KFONT-M12-004 and KFONT-M12-005 own the remaining glyph/GPU producer emission into the shared schema; parser/scaler and shaping/paragraph producer evidence is now attached separately and this family remains schema-only advisory evidence until those subsystem tickets land.",
+        "KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own shaping/paragraph/glyph/GPU producer emission into the shared schema; parser/scaler producer evidence is now attached separately and this family remains schema-only advisory evidence until those subsystem tickets land.",
         "Keep performance budgets advisory until the dedicated promotion policy is updated."
       ],
       "validationCommands": [

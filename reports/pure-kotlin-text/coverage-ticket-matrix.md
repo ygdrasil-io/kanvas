@@ -5187,11 +5187,10 @@ rtk git diff --check
 ```
 
 Remaining gate: no schema-local gate remains. Downstream producer emission into
-the shared schema is now limited to `KFONT-M12-004` and `KFONT-M12-005`;
-parser/scaler producer evidence is attached separately under `KFONT-M12-002`
-and shaping/paragraph producer evidence under `KFONT-M12-003`, and this slice
-still does not promote any performance budget, GPU route, or release-gate
-claim.
+the shared schema is now owned by `KFONT-M12-003`, `KFONT-M12-004`, and
+`KFONT-M12-005`; parser/scaler producer evidence is attached separately under
+`KFONT-M12-002`, and this slice still does not promote any performance budget,
+GPU route, or release-gate claim.
 
 ### KFONT-M12-002: Add parser and scaler metrics
 
