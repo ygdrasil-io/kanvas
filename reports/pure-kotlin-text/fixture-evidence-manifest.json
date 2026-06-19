@@ -852,23 +852,28 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifacts.kt",
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextA8RoutePlan.kt",
         "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifactsSurfaceTest.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextA8RoutePlanTest.kt",
         "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/commands/NormalizedDrawCommand.kt",
         "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/text/TextContracts.kt",
-        "gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/text/GPUTextCommandHandoffTest.kt"
+        "gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/text/GPUTextCommandHandoffTest.kt",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SimpleLatinLineSceneEvidenceTest.kt",
+        "reports/pure-kotlin-text/gpu-text-a8-route-plan.json",
+        "reports/pure-kotlin-text/gpu-text-a8-route-refusals.json",
+        "reports/pure-kotlin-text/2026-06-19-kfont-m11-004-a8-route-plan.md"
       ],
       "requiredEvidenceGates": [
-        "Add DrawTextRun registered artifact fixture evidence.",
-        "Add unregistered artifact refusal evidence.",
-        "Add upload plan dump evidence.",
-        "Add route evidence proving no CPU-rendered texture route.",
-        "Add adapter-backed GPU evidence before any GPU support claim."
+        "KFONT-M11-004 now lands the first bounded accepted A8 atlas route plan plus checked-in missing-entry/stale-generation refusal snapshots, with explicit atlas page/entry refs, binding facts, and focused simple-Latin GPU evidence while keeping `routePromotion=not-promoted` and `productActivation=false`.",
+        "KFONT-M11-005 already covers refusal-only SDF/outline/color/bitmap/SVG/unregistered/upload/stale/CPU-texture cases; keep broader subrun/resource/upload/binding, ordering, WGSL route validation, and `MaterialKey` leakage work on KFONT-M11-006 through KFONT-M11-010.",
+        "Do not treat the current route as broad text GPU support or `dftext` retirement; adapter-backed evidence remains bounded to the accepted simple-Latin A8 atlas route."
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:gpu-api:test :gpu-renderer:test"
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*A8Text*'",
+        "rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*A8Text*'"
       ],
       "fixtureCommands": [
-        "Current PKT-12A/PKT-12B evidence is contract-only and does not activate a GPU text route."
+        "The checked-in `gpu-text-a8-route-plan.json` and `gpu-text-a8-route-refusals.json` dumps are emitted by `defaultGPUTextA8RoutePlan()` / `defaultGPUTextA8RouteRefusalReport()` and paired with the simple-Latin route artifacts under `reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/`."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",
