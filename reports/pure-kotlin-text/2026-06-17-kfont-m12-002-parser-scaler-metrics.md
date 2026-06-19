@@ -28,8 +28,8 @@
   `font.cff-table-malformed`, and `font.telemetry.scaler-domain-missing`.
 - `font-claim-dashboard.json` now exposes separate `Font parser metrics` and
   `Font scaler metrics` advisory rows, while the older
-  `font-telemetry-schema` row now points remaining downstream producer work only
-  at `KFONT-M12-003`, `KFONT-M12-004`, and `KFONT-M12-005`.
+  `font-telemetry-schema` row now records that all M12 telemetry domains have
+  checked-in deterministic producer evidence and remain advisory-only.
 - `font-telemetry-pm-bundle.json` now carries the checked-in parser/scaler
   dumps as advisory PM artifacts, and `pipelinePmBundle` now copies those
   exact checked-in JSON files without changing `warning-only` posture.
@@ -53,8 +53,7 @@ rtk git diff --check
 
 ## Remaining gate
 
-No ticket-local gate remains for `KFONT-M12-002`. Shaping/paragraph,
-glyph/cache, and GPU handoff producer emission stay with `KFONT-M12-003`,
-`KFONT-M12-004`, and `KFONT-M12-005`. This evidence remains advisory telemetry
-only and keeps `no-performance-release-gate-claim`,
+No ticket-local gate remains for `KFONT-M12-002`. All M12 telemetry producer
+domains now have checked-in deterministic evidence. This slice remains
+advisory telemetry only and keeps `no-performance-release-gate-claim`,
 `no-gpu-route-support-claim`, and all broader subsystem non-claims explicit.

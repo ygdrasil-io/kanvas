@@ -10,9 +10,9 @@ Subsystem contracts from M1 through M11.
 
 ## Exit Criteria
 
-- [ ] Parser, scaler, shaping, paragraph, glyph cache, and GPU handoff metrics are emitted separately.
-- [ ] Telemetry distinguishes CPU generation, cache behavior, and GPU upload costs.
-- [ ] Dashboard trend warnings do not silently promote support claims.
+- [x] Parser, scaler, shaping, paragraph, glyph cache, and GPU handoff metrics are emitted separately.
+- [x] Telemetry distinguishes CPU generation, cache behavior, and GPU upload costs.
+- [x] Dashboard trend warnings do not silently promote support claims.
 
 ## Tickets
 
@@ -22,7 +22,7 @@ Subsystem contracts from M1 through M11.
 | [KFONT-M12-002 - Add parser and scaler metrics](KFONT-M12-002-add-parser-and-scaler-metrics.md) | `done` | `P1` | `tracked-gap` | `telemetry` | `KFONT-M12-001`, `KFONT-M2-004`, `KFONT-M3-005`, `KFONT-M4-004` | - |
 | [KFONT-M12-003 - Add shaping and paragraph metrics](KFONT-M12-003-add-shaping-and-paragraph-metrics.md) | `done` | `P1` | `tracked-gap` | `telemetry` | `KFONT-M12-001`, `KFONT-M6-001`, `KFONT-M8-002` | `scaledemoji` |
 | [KFONT-M12-004 - Add glyph artifact and cache metrics](KFONT-M12-004-add-glyph-artifact-and-cache-metrics.md) | `done` | `P1` | `tracked-gap` | `telemetry` | `KFONT-M12-001`, `KFONT-M9-006`, `KFONT-M10-010` | `dftext` |
-| [KFONT-M12-005 - Add GPU handoff metrics](KFONT-M12-005-add-gpu-handoff-metrics.md) | `proposed` | `P1` | `tracked-gap` | `telemetry` | `KFONT-M12-001`, `KFONT-M11-004`, `KFONT-M11-005` | `dftext` |
+| [KFONT-M12-005 - Add GPU handoff metrics](KFONT-M12-005-add-gpu-handoff-metrics.md) | `done` | `P1` | `tracked-gap` | `telemetry` | `KFONT-M12-001`, `KFONT-M11-004`, `KFONT-M11-005` | `dftext` |
 
 ## Validation Bundle
 

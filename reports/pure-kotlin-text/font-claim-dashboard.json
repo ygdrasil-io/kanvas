@@ -409,7 +409,7 @@
         ]
       },
       "requiredEvidenceGates": [
-        "KFONT-M12-005 still owns GPU handoff producer emission before the telemetry pack is domain-complete.",
+        "All M12 telemetry domains now have checked-in deterministic producer evidence; parser/scaler rows stay advisory-only and do not promote GPU-route, `dftext`, or release-gate support.",
         "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
       ],
       "legacyGates": [],
@@ -448,7 +448,7 @@
         ]
       },
       "requiredEvidenceGates": [
-        "KFONT-M12-005 still owns GPU handoff producer emission before the telemetry pack is domain-complete.",
+        "All M12 telemetry domains now have checked-in deterministic producer evidence; parser/scaler rows stay advisory-only and do not promote GPU-route, `dftext`, or release-gate support.",
         "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
       ],
       "legacyGates": [],
@@ -490,7 +490,7 @@
         ]
       },
       "requiredEvidenceGates": [
-        "KFONT-M12-005 still owns GPU handoff producer emission before the telemetry pack is domain-complete.",
+        "All M12 telemetry domains now have checked-in deterministic producer evidence; this row stays schema-only/advisory and does not promote GPU-route, `dftext`, or release-gate support.",
         "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
       ],
       "legacyGates": [],
@@ -537,7 +537,8 @@
         ]
       },
       "requiredEvidenceGates": [
-        "KFONT-M12-004 now lands deterministic glyph artifact telemetry for route counts plus bounded A8/SDF/COLR/bitmap/SVG CPU preparation costs; keep GPU text-route and dftext-retirement claims gated on M11 and KFONT-M12-005.",
+        "KFONT-M12-004 now lands deterministic glyph artifact telemetry for route counts plus bounded A8/SDF/COLR/bitmap/SVG CPU preparation costs.",
+        "Keep GPU text-route promotion, executed-upload claims, `dftext` retirement, and any release-gate promotion on the broader M11 GPU handoff chain and explicit GPU evidence.",
         "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
       ],
       "legacyGates": [
@@ -719,7 +720,8 @@
         ]
       },
       "requiredEvidenceGates": [
-        "KFONT-M12-004 now lands deterministic cache telemetry for pack time, resident/upload bytes, hit/miss/eviction, invalidation-token changes, and stable atlas refusal diagnostics; keep GPU text-route and upload-execution claims gated on M11 and KFONT-M12-005.",
+        "KFONT-M12-004 now lands deterministic cache telemetry for pack time, resident/upload bytes, hit/miss/eviction, invalidation-token changes, and stable atlas refusal diagnostics.",
+        "Keep GPU text-route promotion, executed-upload claims, `dftext` retirement, and any release-gate promotion on the broader M11 GPU handoff chain and explicit GPU evidence.",
         "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
       ],
       "legacyGates": [
@@ -821,6 +823,137 @@
         "no-gpu-text-route-claim",
         "no-color-emoji-rendering-claim",
         "no-lcd-support-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "surfaceId": "gpu-text-handoff-metrics",
+      "label": "GPU text handoff metrics",
+      "classification": "tracked-gap",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/gpu-text-handoff-metrics.json",
+          "reports/pure-kotlin-text/dump-evidence-index.json"
+        ],
+        "cpuOracle": [],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/pure-kotlin-text/gpu-text-handoff-metrics.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/gpu-text-handoff-metrics.json",
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "KFONT-M12-005 now lands deterministic advisory GPU handoff metrics for selected A8 handoff rows plus bounded refusal diagnostics across SDF, outline, color, bitmap, SVG, upload-plan, generation-stale, budget, nondeterministic-key, and CPU-rendered-texture cases.",
+        "Keep GPU support promotion, `dftext` retirement, executed-upload claims, and any release-gate promotion on the broader M11 GPU handoff chain and explicit GPU evidence; telemetry alone does not promote support."
+      ],
+      "legacyGates": [
+        "dftext"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "surfaceId": "gpu-text-route-refusals",
+      "label": "GPU text route refusals",
+      "classification": "tracked-gap",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/gpu-text-handoff-metrics.json",
+          "reports/pure-kotlin-text/gpu-text-a8-route-refusals.json",
+          "reports/pure-kotlin-text/dump-evidence-index.json"
+        ],
+        "cpuOracle": [],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/pure-kotlin-text/gpu-text-handoff-metrics.json",
+          "reports/pure-kotlin-text/gpu-text-a8-route-refusals.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/gpu-text-handoff-metrics.json",
+          "reports/pure-kotlin-text/gpu-text-a8-route-refusals.json",
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "KFONT-M12-005 now keeps stable refusal diagnostics visible in one advisory telemetry family while preserving explicit unregistered/upload-missing/stale/budget/CPU-texture and route-capability boundaries.",
+        "Keep `dftext` open and keep GPU support promotion or release-gate promotion on the broader M11 GPU handoff chain and explicit GPU evidence; refusal metrics alone do not promote support."
+      ],
+      "legacyGates": [
+        "dftext"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "surfaceId": "gpu-text-upload-metrics",
+      "label": "GPU text upload metrics",
+      "classification": "tracked-gap",
+      "gpuClaimed": false,
+      "claimPromotionAllowed": false,
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "evidence": {
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/fixture-evidence-manifest.json"
+        ],
+        "deterministicDumps": [
+          "reports/pure-kotlin-text/draw-text-run-upload-plan.json",
+          "reports/pure-kotlin-text/dump-evidence-index.json"
+        ],
+        "cpuOracle": [],
+        "gpuArtifacts": [],
+        "routeDiagnostics": [
+          "reports/pure-kotlin-text/draw-text-run-upload-plan.json"
+        ],
+        "refusalDiagnostics": [
+          "reports/pure-kotlin-text/draw-text-run-upload-plan.json"
+        ]
+      },
+      "requiredEvidenceGates": [
+        "KFONT-M12-005 now lands deterministic advisory upload-plan evidence with stable artifact key hashes, upload dependency ordering, upload byte counts, and bounded reuse counters.",
+        "Keep this row bounded to payload-hand-off evidence only; it does not by itself prove executed GPU uploads, route promotion, or release-gate readiness."
+      ],
+      "legacyGates": [
+        "dftext"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim",
         "no-dftext-retirement"
       ]
     },
