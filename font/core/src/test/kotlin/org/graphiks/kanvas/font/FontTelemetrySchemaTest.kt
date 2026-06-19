@@ -62,6 +62,7 @@ class FontTelemetrySchemaTest {
         val advisoryMarkdown = Files.readString(
             root.resolve("reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"),
         )
+        val buildGradle = Files.readString(root.resolve("build.gradle.kts"))
 
         assertContains(advisoryJson, """"ownerTickets": ["KFONT-M12-001"]""")
         assertContains(advisoryJson, """"surfaceId": "font-telemetry-schema"""")
@@ -72,11 +73,17 @@ class FontTelemetrySchemaTest {
         assertContains(advisoryJson, """"domain": "parser"""")
         assertContains(advisoryJson, """"domain": "gpu-text-handoff"""")
         assertContains(advisoryJson, """"bundlePaths": [""")
+        assertContains(advisoryJson, """"reports/pure-kotlin-text/parser-metrics.json"""")
+        assertContains(advisoryJson, """"reports/pure-kotlin-text/scaler-metrics.json"""")
         assertContains(advisoryMarkdown, "pipelinePmBundle")
+        assertContains(advisoryMarkdown, "parser-metrics.json")
+        assertContains(advisoryMarkdown, "scaler-metrics.json")
         assertContains(advisoryMarkdown, "tracked-gap")
         assertContains(advisoryMarkdown, "warning-only")
-        assertContains(advisoryMarkdown, "KFONT-M12-002")
         assertContains(advisoryMarkdown, "KFONT-M12-005")
+        assertContains(advisoryMarkdown, "KFONT-M12-003")
+        assertContains(buildGradle, "\"reports/pure-kotlin-text/parser-metrics.json\"")
+        assertContains(buildGradle, "\"reports/pure-kotlin-text/scaler-metrics.json\"")
         assertFalse(advisoryMarkdown.contains("remains open before `done`"))
     }
 
@@ -97,17 +104,61 @@ class FontTelemetrySchemaTest {
         )
 
         assertContains(ticket, """status: "done"""")
-        assertContains(ticket, "KFONT-M12-002")
         assertContains(ticket, "KFONT-M12-005")
+        assertContains(ticket, "KFONT-M12-003")
         assertFalse(ticket.contains("producer-side subsystem wiring remains open before `done`"))
         assertContains(
             milestoneReadme,
             "| [KFONT-M12-001 - Define font telemetry schema](KFONT-M12-001-define-font-telemetry-schema.md) | `done` |",
         )
-        assertContains(statusSummary, "| M12 | 4 | 0 | 0 | 0 | 0 | 1 |")
+        assertContains(statusSummary, "| M12 | 3 | 0 | 0 | 0 | 0 | 2 |")
         assertContains(schemaReport, "No schema-local gate remains")
-        assertContains(schemaReport, "KFONT-M12-002")
         assertContains(schemaReport, "KFONT-M12-005")
+        assertContains(schemaReport, "KFONT-M12-003")
+    }
+
+    @Test
+    fun `parser and scaler telemetry dumps close KFONT-M12-002 without promoting performance claims`() {
+        val root = projectRoot()
+        val expectedParser = Files.readString(root.resolve("reports/pure-kotlin-text/parser-metrics.json"))
+        val expectedScaler = Files.readString(root.resolve("reports/pure-kotlin-text/scaler-metrics.json"))
+        val dashboard = Files.readString(root.resolve("reports/pure-kotlin-text/font-claim-dashboard.json"))
+        val ticket = Files.readString(
+            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-002-add-parser-and-scaler-metrics.md"),
+        )
+        val milestoneReadme = Files.readString(
+            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md"),
+        )
+        val statusSummary = Files.readString(
+            root.resolve(".upstream/specs/pure-kotlin-text/tickets/STATUS.md"),
+        )
+        val report = Files.readString(
+            root.resolve("reports/pure-kotlin-text/2026-06-17-kfont-m12-002-parser-scaler-metrics.md"),
+        )
+
+        assertEquals(expectedParser.trimEnd(), FontTelemetryEvidenceWriter.writeParserMetricsJson().trimEnd())
+        assertEquals(expectedScaler.trimEnd(), FontTelemetryEvidenceWriter.writeScalerMetricsJson().trimEnd())
+        assertContains(dashboard, """"surfaceId": "font-parser-metrics"""")
+        assertContains(dashboard, """"label": "Font parser metrics"""")
+        assertContains(dashboard, """"surfaceId": "font-scaler-metrics"""")
+        assertContains(dashboard, """"label": "Font scaler metrics"""")
+        assertContains(dashboard, "KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own shaping/paragraph/glyph/GPU producer emission")
+        assertFalse(dashboard.contains("KFONT-M12-002, KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own parser/scaler/shaping/paragraph/glyph/GPU producer emission"))
+        assertContains(ticket, """status: "done"""")
+        assertContains(ticket, "font.parser.parse.time")
+        assertContains(ticket, "font.scaler.outline.time")
+        assertContains(
+            milestoneReadme,
+            "| [KFONT-M12-002 - Add parser and scaler metrics](KFONT-M12-002-add-parser-and-scaler-metrics.md) | `done` |",
+        )
+        assertContains(statusSummary, "| M12 | 3 | 0 | 0 | 0 | 0 | 2 |")
+        assertContains(report, "No ticket-local gate remains")
+        assertContains(report, "font.parser.parse.time")
+        assertContains(report, "font.scaler.outline.time")
+        assertContains(expectedParser, """"fixtureId": "font-source-sfnt-malformed-directory-diagnostic"""")
+        assertContains(report, "malformed-directory")
+        assertContains(report, "pipelinePerformanceTrendWarnings")
+        assertContains(report, "no-performance-release-gate-claim")
     }
 
     private fun projectRoot(): Path {

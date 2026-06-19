@@ -3530,6 +3530,8 @@ tasks.register<Exec>("validateKfontM12001TelemetryPmEvidence") {
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-claim-dashboard.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-schema.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-schema-fixture.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/parser-metrics.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/scaler-metrics.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-pm-bundle.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"))
     inputs.file(layout.projectDirectory.file("build.gradle.kts"))
@@ -6155,6 +6157,10 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/parser-metrics.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/scaler-metrics.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-pm-bundle.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m65-kadre-audit.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m65-runtime-smoke.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m65-m66-sprint-report-and-readiness-accounting.md"))
@@ -6371,6 +6377,8 @@ tasks.register("pipelinePmBundle") {
             "reports/pure-kotlin-text/font-claim-dashboard.json",
             "reports/pure-kotlin-text/font-telemetry-schema.json",
             "reports/pure-kotlin-text/font-telemetry-schema-fixture.json",
+            "reports/pure-kotlin-text/parser-metrics.json",
+            "reports/pure-kotlin-text/scaler-metrics.json",
             "reports/pure-kotlin-text/font-telemetry-pm-bundle.json",
             "reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md",
         ).forEach { path ->
