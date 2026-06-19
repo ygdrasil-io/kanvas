@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M10-010"
 title: "Add color/emoji fixture manifest"
-status: "proposed"
+status: "done"
 milestone: "M10"
 priority: "P0"
 owner_area: "color"
@@ -23,7 +23,7 @@ M10 spans COLRv0, COLRv1, PNG bitmap glyphs, SVG glyphs, and emoji routes. Suppo
 ## Scope
 
 - Create a manifest covering COLRv0 layers, COLRv1 solid/glyph/gradient/transform/composite/clip/cycle/budget cases, CBDT/CBLC PNG, sbix PNG, SVG supported/refused cases, and emoji sequence routes.
-- Record fixture ID, font source ID, glyph IDs or text sequence, provenance, license note, generated source recipe when applicable, expected route, expected diagnostics, expected dumps, and linked legacy gates.
+- Record fixture ID, font source ID, glyph IDs and/or text sequence (with sequence fixtures allowed to carry resolved glyph IDs when the planner already selected a glyph), provenance, license note, generated source recipe when applicable, expected route, expected diagnostics, expected dumps, and linked legacy gates.
 - Mark CPU/text evidence separately from future GPU evidence so metadata-only or CPU-only support cannot retire GPU rows.
 - Emit `color-emoji-fixture-manifest.json` with deterministic ordering and stable hashes.
 - Define rebaseline rules requiring old/new expected dump diffs and a reason for behavior changes.
@@ -61,11 +61,11 @@ data class ColorEmojiFixtureManifestEntry(
 
 ## Acceptance Criteria
 
-- [ ] The manifest covers every M10 ticket family and links each fixture to expected dump files.
-- [ ] Fixture provenance, license notes, source hashes, and generated recipes are present for every entry.
-- [ ] Legacy gates `scaledemoji`, `scaledemoji_rendering`, and `coloremoji_blendmodes` are mapped to specific fixtures and remaining evidence.
-- [ ] GPU-required rows remain blocked until M11 evidence is linked.
-- [ ] Rebaseline updates require reviewed old/new expectation diffs and cannot auto-overwrite goldens.
+- [x] The manifest covers every M10 ticket family and links each fixture to expected dump files.
+- [x] Fixture provenance, license notes, source hashes, and generated recipes are present for every entry.
+- [x] Legacy gates `scaledemoji`, `scaledemoji_rendering`, and `coloremoji_blendmodes` are mapped to specific fixtures and remaining evidence.
+- [x] GPU-required rows remain blocked until M11 evidence is linked.
+- [x] Rebaseline updates require reviewed old/new expectation diffs and cannot auto-overwrite goldens.
 
 ## Required Evidence
 
@@ -90,12 +90,17 @@ data class ColorEmojiFixtureManifestEntry(
 ```bash
 rtk git diff --check
 rtk ./gradlew --no-daemon :font:glyph:test --tests '*ColorEmoji*Fixture*'
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_color_emoji_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_color_emoji_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
 ```
 
 ## Status Notes
 
-- `proposed`: Manifest gate for all M10 evidence and legacy color/emoji gate traceability.
-- Move to `ready` only after fixture families, provenance fields, and legacy gate mappings are reviewed.
+- `done`: `color-emoji-fixture-manifest.json` is checked in with deterministic COLRv0/COLRv1, bitmap PNG, SVG, and emoji rows; legacy gates remain explicitly open until M11 GPU evidence is linked.
 
 ## Linear Labels
 
