@@ -2856,6 +2856,88 @@ Remaining gate: this is Arabic fixture-row seed evidence only. It does not
 claim Arabic shaping support, Indic/Thai/CJK/emoji shaping support, complete
 complex shaping, native shaper oracle status, CPU oracle evidence, or GPU text
 evidence.
+### KFONT-M6-007: Arabic Shaping Fixture Review Wave
+
+Status: blocked after bounded vendored-font evidence landed and was independently reviewed.
+
+Files:
+
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt`
+- `reports/font/fixtures/expected/shaping/arabic-mixed-bidi.txt`
+- `reports/font/fixtures/expected/shaping/arabic-gsub-trace.json`
+- `reports/font/fixtures/expected/shaping/arabic-gpos-trace.json`
+- `reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json`
+- `reports/font/fixtures/expected/shaping/arabic-shaping-plan.json`
+- `reports/font/fixtures/expected/shaping/arabic-shaping-report.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m6-007-arabic-shaping-fixtures.md`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m6-007-arabic-runtime-traces.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-007-add-arabic-shaping-fixtures.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `ArabicShapingFixtureTest` now proves bounded vendored-font evidence for
+  joining-form behavior on `NotoNaskhArabic-Regular.ttf` by asserting the
+  runtime diverges from the raw visual-order cmap glyph sequence without
+  promoting full Arabic support.
+- The same test now keeps a bounded non-promotional `لا` lam-alef runtime check
+  by asserting that both visual-order component glyph IDs change away from the
+  raw visual-order cmap pair without treating that divergence as ticket-local
+  positive lam-alef evidence.
+- The same test proves a bounded `اَ` mark-positioning case by tying the
+  positioned-or-zero-advance check to the mark cluster itself, plus a stable
+  mixed Arabic/LTR `text.shaping.paragraph-bidi-required` diagnostic sourced
+  from `arabic-mixed-bidi.txt`.
+- The same test also proves that reviewed repo fixture `gpos-missing-gdef.otf`
+  emits the stable generic `text.shaping.gdef-required` refusal for Arabic
+  base+mark input instead of approximating mark attachment without GDEF glyph
+  classes.
+- `arabic-shaped-glyph-run.json` now pins ticket-local glyph/cluster facts and
+  run-level `bidiLevel` evidence for vendored joining forms, vendored marks,
+  bounded `lam-alef` runtime divergence, and the reviewed generic
+  `gdef-required` refusal row without claiming ticket-ready positive
+  `lam-alef` evidence.
+- `arabic-shaping-plan.json` now pins the required Arabic default feature set
+  (`init`, `medi`, `fina`, `isol`, `rlig`, `liga`, `calt`, `mark`, `mkmk`,
+  `curs`), the `Arab`/`arab` script-policy selection, RTL bidi level facts for
+  the ticket-local rows, and the refusal-on-missing expectations carried by the
+  Arabic policy row.
+- `arabic-gsub-trace.json` now records the bounded runtime `init`/`fina`
+  lookup chain observed on the vendored joining-form and bounded `lam-alef`
+  rows, while pinning the full required Arabic runtime feature order for those
+  runs.
+- `arabic-gpos-trace.json` now records the bounded runtime `mark` lookup and
+  attachment vector observed on the vendored base-plus-mark row, plus the
+  empty-lookup generic `text.shaping.gdef-required` refusal row on
+  `gpos-missing-gdef.otf`, and uses runtime pre-GPOS cluster metrics for the
+  `before` state.
+- `arabic-shaping-report.json` summarizes the fresh positive/diagnostic rows and
+  now references the ticket-local shaped-glyph-run, shaping-plan, GSUB trace,
+  and GPOS trace goldens while keeping explicit `lam-alef`, vendored positive
+  cursive attachment, Arabic-specific missing-mark/missing-cursive fixtures,
+  and narrower `text.shaping.arabic-*` refusals as explicit remaining gates.
+- This wave intentionally keeps `arabic-seed-readiness.json` as the broader
+  seed matrix while attaching reviewed ticket-local evidence only for the
+  bounded rows above.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest
+rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: explicit `lam-alef` positive evidence, ticket-local positive
+cursive attachment, and Arabic-specific refusal fixtures/diagnostic codes
+remain explicit Arabic shaping gates. Keep this ticket `blocked` until those
+gates land.
 ### PKT-09A: Paragraph Semantic Layout Dumps And Refusals
 
 Status: implemented and independently reviewed.
