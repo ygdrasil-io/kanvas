@@ -2510,6 +2510,63 @@
       ]
     },
     {
+      "dumpId": "parser-metrics",
+      "ownerTicket": "KFONT-M12-002",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/parser-metrics.json"
+      ],
+      "expectedFields": [
+        "cacheState",
+        "counters",
+        "diagnostics",
+        "domain",
+        "dumpId",
+        "environment",
+        "fixtureId",
+        "fontSourceSetHash",
+        "max",
+        "measurementPhase",
+        "median",
+        "metrics",
+        "name",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "p90",
+        "sampleCount",
+        "samples",
+        "schemaVersion",
+        "tableTags",
+        "trendSeriesId",
+        "trendSeriesPrefix",
+        "unicodeDataVersion",
+        "unit"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk ./gradlew --no-daemon pipelinePmBundle",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Parser telemetry dump changes require reviewed fixture IDs, stable advisory trend series, semantic malformed-table diagnostics, and matrix checkpoint updates without performance-gate promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim"
+      ]
+    },
+    {
       "dumpId": "placeholder-layout",
       "ownerTicket": "KFONT-M8-006",
       "classification": "producer-only",
@@ -2621,6 +2678,63 @@
         "no-cluster-safe-fallback-claim",
         "no-platform-font-fallback-claim",
         "no-shaping-engine-claim"
+      ]
+    },
+    {
+      "dumpId": "scaler-metrics",
+      "ownerTicket": "KFONT-M12-002",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/scaler-metrics.json"
+      ],
+      "expectedFields": [
+        "cacheState",
+        "counters",
+        "diagnostics",
+        "domain",
+        "dumpId",
+        "environment",
+        "fixtureId",
+        "fontSourceSetHash",
+        "max",
+        "measurementPhase",
+        "median",
+        "metrics",
+        "name",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "p90",
+        "sampleCount",
+        "samples",
+        "schemaVersion",
+        "tableTags",
+        "trendSeriesId",
+        "trendSeriesPrefix",
+        "unicodeDataVersion",
+        "unit"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk ./gradlew --no-daemon pipelinePmBundle",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Scaler telemetry dump changes require reviewed fixture IDs, stable advisory trend series, malformed/refusal diagnostics, and matrix checkpoint updates without performance-gate promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim"
       ]
     },
     {

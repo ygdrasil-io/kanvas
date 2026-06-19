@@ -67,6 +67,7 @@ private data class FontTelemetryEnvironment(
 
 private data class FontTelemetryMetricSeries(
     val name: String,
+    val trendSeriesId: String? = null,
     val unit: FontTelemetryUnit,
     val median: Long,
     val p90: Long,
@@ -75,6 +76,9 @@ private data class FontTelemetryMetricSeries(
 ) {
     init {
         require(name.isNotBlank()) { "name must not be blank." }
+        require(trendSeriesId == null || trendSeriesId.isStableTelemetryToken()) {
+            "trendSeriesId must be a stable one-line token when present."
+        }
         require(median >= 0) { "median must be non-negative." }
         require(p90 >= 0) { "p90 must be non-negative." }
         require(max >= 0) { "max must be non-negative." }
@@ -87,6 +91,9 @@ private data class FontTelemetryMetricSeries(
     fun toCanonicalJson(): String = buildString {
         append("{")
         appendTelemetryField("name", name, comma = true)
+        if (trendSeriesId != null) {
+            appendTelemetryField("trendSeriesId", trendSeriesId, comma = true)
+        }
         appendTelemetryField("unit", unit.serializedName, comma = true)
         appendTelemetryField("median", median, comma = true)
         appendTelemetryField("p90", p90, comma = true)
@@ -109,6 +116,7 @@ private data class FontTelemetrySample(
     val cacheState: FontTelemetryCacheState,
     val fontSourceSetHash: String,
     val unicodeDataVersion: String,
+    val tableTags: List<String> = emptyList(),
     val environment: FontTelemetryEnvironment,
     val metrics: List<FontTelemetryMetricSeries>,
     val diagnostics: List<String> = emptyList(),
@@ -123,9 +131,12 @@ private data class FontTelemetrySample(
         }
         require(fontSourceSetHash.isNotBlank()) { "fontSourceSetHash must not be blank." }
         require(unicodeDataVersion.isNotBlank()) { "unicodeDataVersion must not be blank." }
+        require(tableTags.all { it.isStableTelemetryToken() }) {
+            "tableTags must use stable one-line tokens."
+        }
         require(metrics.isNotEmpty()) { "metrics must not be empty." }
-        require(diagnostics.all { it.isStableTelemetryDiagnosticCode() }) {
-            "diagnostics must use stable telemetry diagnostic codes."
+        require(diagnostics.all { it.isStableDiagnosticToken() }) {
+            "diagnostics must use stable one-line diagnostic tokens."
         }
         if (domain == FontTelemetryDomain.GPUTextHandoff) {
             require(environment.gpuAdapter != null) {
@@ -153,6 +164,7 @@ private data class FontTelemetrySample(
         appendTelemetryField("cacheState", cacheState.serializedName, comma = true)
         appendTelemetryField("fontSourceSetHash", fontSourceSetHash, comma = true)
         appendTelemetryField("unicodeDataVersion", unicodeDataVersion, comma = true)
+        appendTelemetryStringArray("tableTags", tableTags, comma = true)
         append("environment".quoted()).append(":").append(environment.toCanonicalJson()).append(",")
         append("metrics".quoted()).append(":")
         append(metrics.joinToString(prefix = "[", postfix = "]", separator = ",") { it.toCanonicalJson() })
@@ -189,6 +201,46 @@ private data class FontTelemetryNegativeCase(
         append("missingField".quoted()).append(":").append(missingField.toTelemetryNullableString()).append(",")
         appendTelemetryField("sampleCount", sampleCount, comma = false)
         append("}")
+    }
+}
+
+private data class FontTelemetryDomainDump(
+    val dumpId: String,
+    val ownerTicket: String,
+    val domain: FontTelemetryDomain,
+    val trendSeriesPrefix: String,
+    val samples: List<FontTelemetrySample>,
+    val negativeCases: List<FontTelemetryNegativeCase>,
+    val nonClaims: List<String>,
+) {
+    init {
+        require(dumpId.isStableTelemetryToken()) { "dumpId must be a stable one-line token." }
+        require(ownerTicket.isNotBlank()) { "ownerTicket must not be blank." }
+        require(trendSeriesPrefix.isStableTelemetryToken()) {
+            "trendSeriesPrefix must be a stable one-line token."
+        }
+        require(samples.isNotEmpty()) { "samples must not be empty." }
+        require(nonClaims.all { it.isStableTelemetryToken() }) {
+            "nonClaims must use stable one-line tokens."
+        }
+    }
+
+    fun toCanonicalJson(): String = buildString {
+        append("{\n")
+        append("  \"schemaVersion\": 1,\n")
+        append("  \"dumpId\": ").append(dumpId.quoted()).append(",\n")
+        append("  \"ownerTickets\": [").append(ownerTicket.quoted()).append("],\n")
+        append("  \"domain\": ").append(domain.serializedName.quoted()).append(",\n")
+        append("  \"trendSeriesPrefix\": ").append(trendSeriesPrefix.quoted()).append(",\n")
+        append("  \"samples\": [\n")
+        append(samples.joinToString(",\n") { "    ${it.toCanonicalJson()}" })
+        append("\n  ],\n")
+        append("  \"negativeCases\": [\n")
+        append(negativeCases.joinToString(",\n") { "    ${it.toCanonicalJson()}" })
+        append("\n  ],\n")
+        append("  \"nonClaims\": ")
+        append(nonClaims.joinToString(prefix = "[", postfix = "]", separator = ", ") { it.quoted() })
+        append("\n}")
     }
 }
 
@@ -239,6 +291,7 @@ object FontTelemetryEvidenceWriter {
         )
         val diagnosticCodes = listOf(
             "font.telemetry.dimension-missing",
+            "font.telemetry.scaler-domain-missing",
             "font.telemetry.schema-domain-missing",
             "font.telemetry.single-run-budget-refused",
         )
@@ -251,9 +304,13 @@ object FontTelemetryEvidenceWriter {
             append(domains.joinToString(",\n") { "    ${it.toCanonicalJson()}" })
             append("\n  ],\n")
             append("  \"requiredAggregationFields\": [\"median\", \"p90\", \"max\", \"sampleCount\", \"cacheState\"],\n")
-            append("  \"diagnosticCodes\": [\"${diagnosticCodes[0]}\", \"${diagnosticCodes[1]}\", \"${diagnosticCodes[2]}\"],\n")
+            append("  \"diagnosticCodes\": [")
+            append(diagnosticCodes.joinToString(separator = ", ") { it.quoted() })
+            append("],\n")
             append("  \"dashboardRow\": {\"label\":\"Font telemetry schema\",\"classification\":\"tracked-gap\",\"claimPromotionAllowed\":false},\n")
-            append("  \"nonClaims\": [\"no-complete-target-support-claim\", \"no-performance-release-gate-claim\", \"no-gpu-route-support-claim\", \"no-native-engine-oracle-claim\"]\n")
+            append("  \"nonClaims\": ")
+            append(defaultNonClaims().joinToString(prefix = "[", postfix = "]", separator = ", ") { it.quoted() })
+            append("\n")
             append("}")
         }
     }
@@ -428,10 +485,539 @@ object FontTelemetryEvidenceWriter {
             append("  \"negativeCases\": [\n")
             append(negativeCases.joinToString(",\n") { "    ${it.toCanonicalJson()}" })
             append("\n  ],\n")
-            append("  \"nonClaims\": [\"no-complete-target-support-claim\", \"no-performance-release-gate-claim\", \"no-gpu-route-support-claim\", \"no-native-engine-oracle-claim\"]\n")
+            append("  \"nonClaims\": ")
+            append(defaultNonClaims().joinToString(prefix = "[", postfix = "]", separator = ", ") { it.quoted() })
+            append("\n")
             append("}")
         }
     }
+
+    fun writeParserMetricsJson(): String = FontTelemetryDomainDump(
+        dumpId = "parser-metrics",
+        ownerTicket = "KFONT-M12-002",
+        domain = FontTelemetryDomain.Parser,
+        trendSeriesPrefix = "font.parser",
+        samples = listOf(
+            FontTelemetrySample(
+                fixtureId = "font-source-sfnt-single-ttf-provenance",
+                domain = FontTelemetryDomain.Parser,
+                measurementPhase = "cold-baseline",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Cold,
+                fontSourceSetHash = "fontset-sfnt-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                tableTags = listOf("cmap", "head", "hhea", "hmtx", "maxp"),
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "parser.scan.time",
+                        trendSeriesId = "font.parser.scan.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 180_000,
+                        p90 = 210_000,
+                        max = 240_000,
+                        counters = mapOf("bytesRead" to 2_048L, "tableCount" to 5L, "diagnosticCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "parser.parse.time",
+                        trendSeriesId = "font.parser.parse.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 980_000,
+                        p90 = 1_120_000,
+                        max = 1_240_000,
+                        counters = mapOf(
+                            "tableCacheHit" to 0L,
+                            "tableCacheMiss" to 5L,
+                            "malformedTableCount" to 0L,
+                            "boundsFailureCount" to 0L,
+                            "diagnosticCount" to 0L,
+                        ),
+                    ),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "font-source-sfnt-ttc-face-index-provenance",
+                domain = FontTelemetryDomain.Parser,
+                measurementPhase = "warm-repeat",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-sfnt-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                tableTags = listOf("cmap", "head", "hhea", "hmtx", "maxp", "name"),
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "parser.scan.time",
+                        trendSeriesId = "font.parser.scan.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 240_000,
+                        p90 = 280_000,
+                        max = 320_000,
+                        counters = mapOf("bytesRead" to 3_072L, "tableCount" to 6L, "diagnosticCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "parser.parse.time",
+                        trendSeriesId = "font.parser.parse.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 1_180_000,
+                        p90 = 1_340_000,
+                        max = 1_480_000,
+                        counters = mapOf(
+                            "tableCacheHit" to 4L,
+                            "tableCacheMiss" to 2L,
+                            "malformedTableCount" to 0L,
+                            "boundsFailureCount" to 0L,
+                            "diagnosticCount" to 0L,
+                        ),
+                    ),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "cff-cff2-scaler-selected-table-provenance",
+                domain = FontTelemetryDomain.Parser,
+                measurementPhase = "warm-repeat",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-sfnt-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                tableTags = listOf("cff", "cmap", "head", "hhea", "hmtx", "maxp"),
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "parser.scan.time",
+                        trendSeriesId = "font.parser.scan.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 260_000,
+                        p90 = 300_000,
+                        max = 340_000,
+                        counters = mapOf("bytesRead" to 2_816L, "tableCount" to 6L, "diagnosticCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "parser.parse.time",
+                        trendSeriesId = "font.parser.parse.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 1_240_000,
+                        p90 = 1_390_000,
+                        max = 1_520_000,
+                        counters = mapOf(
+                            "tableCacheHit" to 3L,
+                            "tableCacheMiss" to 3L,
+                            "malformedTableCount" to 0L,
+                            "boundsFailureCount" to 0L,
+                            "diagnosticCount" to 0L,
+                        ),
+                    ),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "truetype-scaler-truetype-avar-coordinate-mapping",
+                domain = FontTelemetryDomain.Parser,
+                measurementPhase = "warm-repeat",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-sfnt-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                tableTags = listOf("avar", "cmap", "fvar", "gvar", "head", "hhea", "hmtx", "maxp"),
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "parser.scan.time",
+                        trendSeriesId = "font.parser.scan.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 300_000,
+                        p90 = 340_000,
+                        max = 390_000,
+                        counters = mapOf("bytesRead" to 3_584L, "tableCount" to 8L, "diagnosticCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "parser.parse.time",
+                        trendSeriesId = "font.parser.parse.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 1_360_000,
+                        p90 = 1_520_000,
+                        max = 1_680_000,
+                        counters = mapOf(
+                            "tableCacheHit" to 4L,
+                            "tableCacheMiss" to 4L,
+                            "malformedTableCount" to 0L,
+                            "boundsFailureCount" to 0L,
+                            "diagnosticCount" to 0L,
+                        ),
+                    ),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "font-source-sfnt-malformed-directory-diagnostic",
+                domain = FontTelemetryDomain.Parser,
+                measurementPhase = "cold-baseline",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Cold,
+                fontSourceSetHash = "fontset-sfnt-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                tableTags = listOf("cmap", "head", "hhea", "maxp"),
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "parser.scan.time",
+                        trendSeriesId = "font.parser.scan.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 210_000,
+                        p90 = 250_000,
+                        max = 290_000,
+                        counters = mapOf("bytesRead" to 1_536L, "tableCount" to 4L, "diagnosticCount" to 1L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "parser.parse.time",
+                        trendSeriesId = "font.parser.parse.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 1_080_000,
+                        p90 = 1_220_000,
+                        max = 1_340_000,
+                        counters = mapOf(
+                            "tableCacheHit" to 0L,
+                            "tableCacheMiss" to 4L,
+                            "malformedTableCount" to 1L,
+                            "boundsFailureCount" to 1L,
+                            "diagnosticCount" to 1L,
+                        ),
+                    ),
+                ),
+                diagnostics = listOf("font.sfnt.table-overlap"),
+            ),
+            FontTelemetrySample(
+                fixtureId = "font-source-sfnt-malformed-optional-table-diagnostic",
+                domain = FontTelemetryDomain.Parser,
+                measurementPhase = "cold-baseline",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Cold,
+                fontSourceSetHash = "fontset-sfnt-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                tableTags = listOf("cmap", "gpos", "head", "hhea", "hmtx", "maxp"),
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "parser.scan.time",
+                        trendSeriesId = "font.parser.scan.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 250_000,
+                        p90 = 290_000,
+                        max = 330_000,
+                        counters = mapOf("bytesRead" to 2_688L, "tableCount" to 6L, "diagnosticCount" to 1L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "parser.parse.time",
+                        trendSeriesId = "font.parser.parse.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 1_410_000,
+                        p90 = 1_590_000,
+                        max = 1_760_000,
+                        counters = mapOf(
+                            "tableCacheHit" to 0L,
+                            "tableCacheMiss" to 6L,
+                            "malformedTableCount" to 1L,
+                            "boundsFailureCount" to 1L,
+                            "diagnosticCount" to 1L,
+                        ),
+                    ),
+                ),
+                diagnostics = listOf("font.sfnt.optional-table-malformed"),
+            ),
+            FontTelemetrySample(
+                fixtureId = "font-source-sfnt-malformed-required-table-diagnostic",
+                domain = FontTelemetryDomain.Parser,
+                measurementPhase = "cold-baseline",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Cold,
+                fontSourceSetHash = "fontset-sfnt-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                tableTags = listOf("cmap", "head", "maxp"),
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "parser.scan.time",
+                        trendSeriesId = "font.parser.scan.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 170_000,
+                        p90 = 200_000,
+                        max = 230_000,
+                        counters = mapOf("bytesRead" to 1_024L, "tableCount" to 3L, "diagnosticCount" to 1L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "parser.parse.time",
+                        trendSeriesId = "font.parser.parse.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 820_000,
+                        p90 = 930_000,
+                        max = 1_020_000,
+                        counters = mapOf(
+                            "tableCacheHit" to 0L,
+                            "tableCacheMiss" to 3L,
+                            "malformedTableCount" to 1L,
+                            "boundsFailureCount" to 0L,
+                            "diagnosticCount" to 1L,
+                        ),
+                    ),
+                ),
+                diagnostics = listOf("font.sfnt.required-table-missing"),
+            ),
+        ),
+        negativeCases = listOf(
+            FontTelemetryNegativeCase(
+                fixtureId = "parser-metrics-missing-metrics",
+                domain = FontTelemetryDomain.Parser.serializedName,
+                diagnosticCode = "font.telemetry.dimension-missing",
+                missingField = "metrics",
+                sampleCount = 1,
+            ),
+        ),
+        nonClaims = defaultNonClaims(),
+    ).toCanonicalJson()
+
+    fun writeScalerMetricsJson(): String = FontTelemetryDomainDump(
+        dumpId = "scaler-metrics",
+        ownerTicket = "KFONT-M12-002",
+        domain = FontTelemetryDomain.Scaler,
+        trendSeriesPrefix = "font.scaler",
+        samples = listOf(
+            FontTelemetrySample(
+                fixtureId = "truetype-scaler-truetype-simple-glyph",
+                domain = FontTelemetryDomain.Scaler,
+                measurementPhase = "warm-repeat",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-scaler-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "scaler.outline.time",
+                        trendSeriesId = "font.scaler.outline.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 520_000,
+                        p90 = 610_000,
+                        max = 690_000,
+                        counters = mapOf("glyphCount" to 1L, "outlineCommandCount" to 5L, "scalerCacheHit" to 4L, "scalerCacheMiss" to 1L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "scaler.bounds.time",
+                        trendSeriesId = "font.scaler.bounds.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 140_000,
+                        p90 = 170_000,
+                        max = 190_000,
+                        counters = mapOf("notdefFallbackCount" to 0L, "diagnosticCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "scaler.metrics.time",
+                        trendSeriesId = "font.scaler.metrics.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 120_000,
+                        p90 = 150_000,
+                        max = 180_000,
+                        counters = mapOf("diagnosticCount" to 0L),
+                    ),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "truetype-scaler-truetype-composite-glyph-transform",
+                domain = FontTelemetryDomain.Scaler,
+                measurementPhase = "warm-repeat",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-scaler-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "scaler.outline.time",
+                        trendSeriesId = "font.scaler.outline.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 760_000,
+                        p90 = 880_000,
+                        max = 980_000,
+                        counters = mapOf("glyphCount" to 1L, "outlineCommandCount" to 10L, "scalerCacheHit" to 3L, "scalerCacheMiss" to 2L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "scaler.bounds.time",
+                        trendSeriesId = "font.scaler.bounds.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 180_000,
+                        p90 = 220_000,
+                        max = 250_000,
+                        counters = mapOf("notdefFallbackCount" to 0L, "diagnosticCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "scaler.metrics.time",
+                        trendSeriesId = "font.scaler.metrics.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 150_000,
+                        p90 = 190_000,
+                        max = 220_000,
+                        counters = mapOf("diagnosticCount" to 0L),
+                    ),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "truetype-scaler-truetype-gvar-simple-delta",
+                domain = FontTelemetryDomain.Scaler,
+                measurementPhase = "warm-repeat",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-scaler-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "scaler.outline.time",
+                        trendSeriesId = "font.scaler.outline.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 680_000,
+                        p90 = 790_000,
+                        max = 870_000,
+                        counters = mapOf("glyphCount" to 1L, "outlineCommandCount" to 5L, "scalerCacheHit" to 3L, "scalerCacheMiss" to 2L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "scaler.metrics.time",
+                        trendSeriesId = "font.scaler.metrics.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 190_000,
+                        p90 = 240_000,
+                        max = 280_000,
+                        counters = mapOf("notdefFallbackCount" to 0L, "diagnosticCount" to 1L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "scaler.variation.time",
+                        trendSeriesId = "font.scaler.variation.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 210_000,
+                        p90 = 260_000,
+                        max = 310_000,
+                        counters = mapOf("diagnosticCount" to 1L),
+                    ),
+                ),
+                diagnostics = listOf("font.metrics-variation-unavailable"),
+            ),
+            FontTelemetrySample(
+                fixtureId = "cff-cff2-scaler-cff-local-global-subroutines",
+                domain = FontTelemetryDomain.Scaler,
+                measurementPhase = "warm-repeat",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-scaler-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "scaler.outline.time",
+                        trendSeriesId = "font.scaler.outline.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 840_000,
+                        p90 = 960_000,
+                        max = 1_080_000,
+                        counters = mapOf("glyphCount" to 1L, "outlineCommandCount" to 8L, "scalerCacheHit" to 2L, "scalerCacheMiss" to 3L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "scaler.charstring.time",
+                        trendSeriesId = "font.scaler.charstring.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 260_000,
+                        p90 = 310_000,
+                        max = 360_000,
+                        counters = mapOf("notdefFallbackCount" to 0L, "diagnosticCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "scaler.metrics.time",
+                        trendSeriesId = "font.scaler.metrics.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 170_000,
+                        p90 = 210_000,
+                        max = 250_000,
+                        counters = mapOf("diagnosticCount" to 0L),
+                    ),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "cff-cff2-scaler-cff2-variation-store-region",
+                domain = FontTelemetryDomain.Scaler,
+                measurementPhase = "warm-repeat",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Warm,
+                fontSourceSetHash = "fontset-scaler-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "scaler.outline.time",
+                        trendSeriesId = "font.scaler.outline.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 900_000,
+                        p90 = 1_040_000,
+                        max = 1_180_000,
+                        counters = mapOf("glyphCount" to 1L, "outlineCommandCount" to 9L, "scalerCacheHit" to 2L, "scalerCacheMiss" to 3L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "scaler.charstring.time",
+                        trendSeriesId = "font.scaler.charstring.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 290_000,
+                        p90 = 340_000,
+                        max = 390_000,
+                        counters = mapOf("notdefFallbackCount" to 0L, "diagnosticCount" to 0L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "scaler.variation.time",
+                        trendSeriesId = "font.scaler.variation.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 240_000,
+                        p90 = 290_000,
+                        max = 340_000,
+                        counters = mapOf("diagnosticCount" to 0L),
+                    ),
+                ),
+            ),
+            FontTelemetrySample(
+                fixtureId = "cff-cff2-scaler-malformed-index-dict-refusal",
+                domain = FontTelemetryDomain.Scaler,
+                measurementPhase = "cold-baseline",
+                sampleCount = 5,
+                cacheState = FontTelemetryCacheState.Cold,
+                fontSourceSetHash = "fontset-scaler-telemetry-v1",
+                unicodeDataVersion = "16.0.0",
+                environment = defaultEnvironment(),
+                metrics = listOf(
+                    FontTelemetryMetricSeries(
+                        name = "scaler.outline.time",
+                        trendSeriesId = "font.scaler.outline.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 430_000,
+                        p90 = 500_000,
+                        max = 580_000,
+                        counters = mapOf("glyphCount" to 1L, "outlineCommandCount" to 0L, "scalerCacheHit" to 0L, "scalerCacheMiss" to 5L),
+                    ),
+                    FontTelemetryMetricSeries(
+                        name = "scaler.metrics.time",
+                        trendSeriesId = "font.scaler.metrics.time",
+                        unit = FontTelemetryUnit.Nanoseconds,
+                        median = 110_000,
+                        p90 = 130_000,
+                        max = 160_000,
+                        counters = mapOf("notdefFallbackCount" to 1L, "diagnosticCount" to 1L),
+                    ),
+                ),
+                diagnostics = listOf("font.cff-table-malformed"),
+            ),
+        ),
+        negativeCases = listOf(
+            FontTelemetryNegativeCase(
+                fixtureId = "scaler-metrics-unsupported-domain",
+                domain = FontTelemetryDomain.Scaler.serializedName,
+                diagnosticCode = "font.telemetry.scaler-domain-missing",
+                missingField = null,
+                sampleCount = 1,
+            ),
+        ),
+        nonClaims = defaultNonClaims(),
+    ).toCanonicalJson()
 
     private fun commonDimensions(): List<String> = listOf(
         "environmentLabel",
@@ -442,6 +1028,18 @@ object FontTelemetryEvidenceWriter {
         "fixtureId",
         "sampleCount",
         "measurementPhase",
+    )
+
+    private fun defaultEnvironment(): FontTelemetryEnvironment = FontTelemetryEnvironment(
+        environmentLabel = "developer-desktop",
+        runtimeLabel = "jdk-25-kotlin-2.3",
+    )
+
+    private fun defaultNonClaims(): List<String> = listOf(
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim",
     )
 }
 
@@ -489,3 +1087,6 @@ private fun String.isStableTelemetryToken(): Boolean = all { it.isLetterOrDigit(
 
 private fun String.isStableTelemetryDiagnosticCode(): Boolean =
     startsWith("font.telemetry.") && isStableTelemetryToken()
+
+private fun String.isStableDiagnosticToken(): Boolean =
+    (startsWith("font.") || startsWith("text.")) && isStableTelemetryToken()
