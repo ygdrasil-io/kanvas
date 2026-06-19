@@ -1,12 +1,12 @@
 # KFONT-M6-007 - Arabic Shaping Fixture Review Wave
 
 Date: 2026-06-18
-Status: review with bounded vendored-font evidence and independent review complete.
+Status: blocked with bounded vendored-font evidence and independent review complete.
 
 ## Scope
 
-This wave advances `KFONT-M6-007` from `proposed` to `review` without
-promoting Arabic shaping support:
+This wave lands bounded `KFONT-M6-007` evidence while the ticket remains
+`blocked` on narrower Arabic gates, without promoting Arabic shaping support:
 
 - `font/text` now has focused runtime coverage for vendored
   `NotoNaskhArabic-Regular.ttf` on contextual joining forms, base-plus-mark
