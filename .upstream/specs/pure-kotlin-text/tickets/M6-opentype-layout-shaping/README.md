@@ -57,6 +57,7 @@ rtk git diff --check
 
 - 2026-06-18 audit: `KFONT-M6-006` remains blocked by absent per-script shaping fixture families from `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`.
 - 2026-06-19 audit: `KFONT-M6-007` remains blocked on positive `lam-alef`, vendored positive cursive, and Arabic-specific refusal fixtures/codes; `KFONT-M6-008` remains blocked on ticket-local syllable-plan or phase evidence, the full required `deva` / `dev2` feature set, dedicated unsupported-syllable and phase refusal fixtures/codes, and ticket-local `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` / `unicode-segments.json` dump families; `KFONT-M6-009` and `KFONT-M6-010` remain gated by their own named fixture families, required-script rows, or advanced lookup dependencies.
+- 2026-06-19 asset/license audit: `reports/pure-kotlin-text/2026-06-19-kfont-m6-fixture-asset-license-audit.md` confirms compatible candidate sources remain available, including in-repo OFL assets and `unicode-org/text-rendering-tests` under `Unicode-3.0`, but no reviewed ticket-local Thai/CJK or advanced-lookup fixture pack is yet present in-repo for `KFONT-M6-009` or `KFONT-M6-010`.
 
 ## Non-Claims
 

@@ -1,6 +1,6 @@
 # Pure Kotlin Text Coverage And Ticket Matrix
 
-Date: 2026-06-18
+Date: 2026-06-19
 Status: coordination evidence
 
 This report maps `.upstream/specs/pure-kotlin-text/` to implementation slices.
@@ -50,7 +50,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | PKT-04 TrueType `glyf` and variation evidence | Implementable now | Simple/composite outlines, component transforms, variation metadata and metrics dumps. | `font/scaler/src/main`, `font/scaler/src/test`. | Path hashes, bounds, variation delta fixtures. |
 | PKT-05 CFF/CFF2 vertical | Tracked-gap; generated fixture parser/scaler/operator/table/variation-store slices implemented | CFF INDEX/dicts/Type 2 operators/CFF2 variation. | `font/scaler/src/main`, `font/scaler/src/test`. | Generated CFF/CFF2 tables now expose typed INDEX/DICT evidence, stable parse refusals, and minimal CFF2 VariationStore region lookup; complete support still needs broader real-font corpus coverage. |
 | PKT-06 Unicode data and script matrix seed | Implementable now | Pinned Unicode version surface, basic segmentation/bidi/script dumps. | `font/text/src/main/.../shaping`, `font/text/src/test`. | Script/bidi/grapheme tests and explicit unsupported-script diagnostics. |
-| PKT-07 GSUB/GPOS simple script shaping | Partially implementable; bounded GSUB/GPOS fixture slices are done and the script-policy slice remains in review | Latin/Greek/Cyrillic/Hebrew defaults, features, clusters, fallback runs. | `font/text`, `font/sfnt`. | Requires parsed layout table fixtures and feature ordering evidence. |
+| PKT-07 GSUB/GPOS simple script shaping | Partially implementable; bounded GSUB/GPOS fixture slices are done and script-policy adoption is now blocked on the remaining per-script shaping fixture families | Latin/Greek/Cyrillic/Hebrew defaults, features, clusters, fallback runs. | `font/text`, `font/sfnt`. | Requires parsed layout table fixtures and feature ordering evidence. |
 | PKT-08 complex shaping rows | Dependency-gated | Arabic, Devanagari, Thai, CJK, emoji shaping support/refusals. | `font/text`. | Requires PKT-07 and per-row positive/refusal fixtures. |
 | PKT-09 paragraph semantic layout | Partially implementable; full claim gated | Rich styles, bidi visual lines, placeholders, ellipsis, selection, hit testing. | `font/text/src/main/.../paragraph`, `font/text/src/test`. | Layout dumps; full claim waits on shaping/fallback support. |
 | PKT-10 A8/SDF glyph artifact planner | Implementable now | Route policy, key preimage, A8/SDF generation, atlas capacity/stale diagnostics. | `font/glyph`, `font/gpu-api`. | Mask/SDF hashes, atlas dump tests, stable `text.glyph.*` refusals. |
@@ -129,6 +129,41 @@ rtk git diff --check
 Remaining gate: treat this audit as historical context only; current resumption
 work depends on the explicit fixture families and remaining ticket-local gates
 named in the active M6 tickets.
+
+### KFONT-M6 Fixture Asset/License Audit Refresh
+
+Status: coordination evidence.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-009-add-thai-and-cjk-shaping-boundaries.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-010-implement-gsub-gpos-extension-chaining-and-variation-adjustment-lookups.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/README.md`
+- `reports/pure-kotlin-text/2026-06-19-kfont-m6-fixture-asset-license-audit.md`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- The refreshed audit records that compatible candidate sources still exist for
+  future reviewed shaping fixtures, including in-repo `SIL-OFL-1.1` evidence
+  and `unicode-org/text-rendering-tests` under `Unicode-3.0`.
+- The audit also keeps the critical non-claim explicit: no reviewed
+  ticket-local Thai/CJK boundary fixture pack or advanced-lookup fixture pack
+  is present in-repo yet, so `KFONT-M6-009` and `KFONT-M6-010` must not move
+  past `proposed`.
+- `KFONT-M6-009` and `KFONT-M6-010` status notes now point at current gates
+  rather than older `review` / prerequisite wording that no longer matches the
+  merged M6 state on `master`.
+
+Validation:
+
+```bash
+rtk git diff --check
+```
+
+Remaining gate: this is coordination-only blocker evidence. It does not add
+Thai shaping support, CJK shaping support, extension/chaining lookup support,
+variation-adjustment support, or any fixture-ready claim.
 
 ## Checkpoint Evidence
 
