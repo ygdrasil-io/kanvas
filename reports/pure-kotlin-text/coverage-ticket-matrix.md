@@ -5314,6 +5314,66 @@ Remaining gate: no ticket-local gate remains. `scaledemoji`, broader script
 support promotion, complete paragraph bidi visual-order evidence, GPU text
 handoff metrics, and any performance-gate promotion remain owned by their
 separate tickets and legacy gates.
+
+### KFONT-M12-004: Add glyph artifact and cache metrics
+
+Status: done; implemented and freshly revalidated for closeout.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt`
+- `reports/pure-kotlin-text/glyph-artifact-metrics.json`
+- `reports/pure-kotlin-text/glyph-cache-metrics.json`
+- `reports/pure-kotlin-text/glyph-atlas-occupancy.json`
+- `reports/pure-kotlin-text/2026-06-19-kfont-m12-004-glyph-cache-metrics.md`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `reports/pure-kotlin-text/font-telemetry-pm-bundle.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-004-add-glyph-artifact-and-cache-metrics.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `FontTelemetryEvidenceWriter` now emits deterministic
+  `glyph-artifact-metrics.json` and `glyph-cache-metrics.json` dumps under the
+  shared telemetry schema without widening any support claim.
+- `glyph-artifact-metrics.json` separates route counts, A8 time, SDF time,
+  COLR planning time, PNG decode time, and SVG evaluation time across route
+  taxonomy, policy refusal, SDF, COLR, bitmap, and SVG fixture IDs with stable
+  diagnostics for `text.glyph.SDF-transform-unsupported`.
+- `glyph-cache-metrics.json` separates atlas pack time, resident cache bytes,
+  upload bytes, hit/miss/eviction counts, invalidation-token changes, and
+  stable diagnostics for `text.glyph.artifact-budget-exceeded`,
+  `text.glyph.atlas-capacity-exceeded`, and
+  `text.glyph.atlas-generation-stale`.
+- `glyph-atlas-occupancy.json` records stable atlas artifact IDs, strike-key
+  hashes, key-preimage hashes, dimensions, entry counts, and occupancy ratios
+  as the ticket-local equivalent occupancy dump while keeping the evidence
+  CPU-only and advisory.
+- The dashboard now exposes separate `Glyph artifact metrics`, `Glyph cache
+  metrics`, and `Glyph atlas occupancy` tracked-gap rows, while the PM bundle
+  packaging and schema advisory report now leave only `KFONT-M12-005` as the
+  remaining shared-schema producer gate.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
+rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence
+rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
+rtk ./gradlew --no-daemon pipelinePmBundle
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: no ticket-local gate remains. `dftext` retirement, GPU text
+route claims, upload-execution claims, and any performance-gate promotion
+remain owned by `KFONT-M12-005` and the broader M11 GPU handoff chain.
 ### KFONT-M1-004: Bundled Source Fixture Manifest
 
 Status: done; merged, independently reviewed, and freshly revalidated for closeout.
