@@ -5172,7 +5172,7 @@ Evidence:
 - `validateKfontM12001TelemetryPmEvidence` and its Python validator assert that
   the PM bundle copies the telemetry schema/dashboard artifacts, preserves
   `warning-only` wording, and keeps downstream producer work explicit under
-  `KFONT-M12-002`, `KFONT-M12-003`, `KFONT-M12-004`, and `KFONT-M12-005`
+  `KFONT-M12-002`, `KFONT-M12-004`, and `KFONT-M12-005`
   without keeping the schema slice open.
 
 Validation:
@@ -5187,10 +5187,11 @@ rtk git diff --check
 ```
 
 Remaining gate: no schema-local gate remains. Downstream producer emission into
-the shared schema is now limited to `KFONT-M12-003`, `KFONT-M12-004`, and
-`KFONT-M12-005`; parser/scaler producer evidence is attached separately under
-`KFONT-M12-002`, and this slice still does not promote any performance budget,
-GPU route, or release-gate claim.
+the shared schema is now limited to `KFONT-M12-004` and `KFONT-M12-005`;
+parser/scaler producer evidence is attached separately under `KFONT-M12-002`
+and shaping/paragraph producer evidence under `KFONT-M12-003`, and this slice
+still does not promote any performance budget, GPU route, or release-gate
+claim.
 
 ### KFONT-M12-002: Add parser and scaler metrics
 
@@ -5245,6 +5246,7 @@ Validation:
 rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
 rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
 rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
@@ -5255,6 +5257,63 @@ Remaining gate: no ticket-local gate remains. Shaping/paragraph, glyph/cache,
 and GPU handoff producer emission remain with `KFONT-M12-003`,
 `KFONT-M12-004`, and `KFONT-M12-005`; this slice keeps all budgets advisory
 and does not promote any release-gate, GPU-route, or complete subsystem claim.
+
+### KFONT-M12-003: Add shaping and paragraph metrics
+
+Status: done; implemented and freshly revalidated for closeout.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt`
+- `reports/pure-kotlin-text/shaping-metrics.json`
+- `reports/pure-kotlin-text/paragraph-metrics.json`
+- `reports/pure-kotlin-text/2026-06-19-kfont-m12-003-shaping-paragraph-metrics.md`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `reports/pure-kotlin-text/font-telemetry-pm-bundle.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-003-add-shaping-and-paragraph-metrics.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `FontTelemetryEvidenceWriter` now emits deterministic `shaping-metrics.json`
+  and `paragraph-metrics.json` dumps under the shared telemetry schema without
+  widening any support claim.
+- `shaping-metrics.json` separates segmentation, bidi, script itemization,
+  fallback, GSUB, GPOS, glyph-count, cluster-count, and diagnostic-count
+  series across Latin, Arabic, Devanagari, Thai, mixed-bidi, CJK
+  variation-selector, and explicit emoji/fallback refusal cases.
+- `paragraph-metrics.json` separates layout, style-run count,
+  line-break-opportunity count, shaped-run count, line count,
+  hit-test-index-build time, selection-query time, ellipsis attempts, and
+  placeholder count across shaping-request, wrapped-layout, hit-test, and
+  placeholder-conflict cases.
+- The dashboard now exposes separate `Text shaping metrics` and
+  `Paragraph layout metrics` tracked-gap rows, while `scaledemoji`, complete
+  paragraph bidi visual-order evidence, GPU text readiness, and release-gate
+  promotion remain explicit non-claims.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
+rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
+rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence
+rtk ./gradlew --no-daemon pipelinePmBundle
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: no ticket-local gate remains. `scaledemoji`, broader script
+support promotion, complete paragraph bidi visual-order evidence, GPU text
+handoff metrics, and any performance-gate promotion remain owned by their
+separate tickets and legacy gates.
 ### KFONT-M1-004: Bundled Source Fixture Manifest
 
 Status: done; merged, independently reviewed, and freshly revalidated for closeout.

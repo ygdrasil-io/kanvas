@@ -161,6 +161,43 @@ class FontTelemetrySchemaTest {
         assertContains(report, "no-performance-release-gate-claim")
     }
 
+    @Test
+    fun `shaping and paragraph telemetry dumps close KFONT-M12-003 without promoting performance claims`() {
+        val root = projectRoot()
+        val expectedShaping = Files.readString(root.resolve("reports/pure-kotlin-text/shaping-metrics.json"))
+        val expectedParagraph = Files.readString(root.resolve("reports/pure-kotlin-text/paragraph-metrics.json"))
+        val ticket = Files.readString(
+            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-003-add-shaping-and-paragraph-metrics.md"),
+        )
+        val milestoneReadme = Files.readString(
+            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md"),
+        )
+        val statusSummary = Files.readString(
+            root.resolve(".upstream/specs/pure-kotlin-text/tickets/STATUS.md"),
+        )
+        val report = Files.readString(
+            root.resolve("reports/pure-kotlin-text/2026-06-19-kfont-m12-003-shaping-paragraph-metrics.md"),
+        )
+
+        assertEquals(expectedShaping.trimEnd(), FontTelemetryEvidenceWriter.writeShapingMetricsJson().trimEnd())
+        assertEquals(expectedParagraph.trimEnd(), FontTelemetryEvidenceWriter.writeParagraphMetricsJson().trimEnd())
+        assertContains(expectedShaping, """"dumpId": "shaping-metrics"""")
+        assertContains(expectedShaping, """"fixtureId": "telemetry-shaping-repeat"""")
+        assertContains(expectedShaping, """"text.shaping.emoji-sequence-unsupported"""")
+        assertContains(expectedParagraph, """"dumpId": "paragraph-metrics"""")
+        assertContains(expectedParagraph, """"fixtureId": "paragraph-shaping-requests"""")
+        assertContains(expectedParagraph, """"text.paragraph.placeholder-ellipsis-conflict"""")
+        assertContains(ticket, """status: "done"""")
+        assertContains(
+            milestoneReadme,
+            "| [KFONT-M12-003 - Add shaping and paragraph metrics](KFONT-M12-003-add-shaping-and-paragraph-metrics.md) | `done` |",
+        )
+        assertContains(statusSummary, "| M12 | 3 | 0 | 0 | 0 | 0 | 2 |")
+        assertContains(report, "No ticket-local gate remains")
+        assertContains(report, "tracked-gap")
+        assertFalse(report.contains("claim promotion", ignoreCase = true))
+    }
+
     private fun projectRoot(): Path {
         var current = Path.of("").toAbsolutePath().normalize()
         while (current.parent != null && !Files.isDirectory(current.resolve("reports/pure-kotlin-text"))) {

@@ -21,10 +21,10 @@
   text handoff samples with stable fixture IDs, sample counts, cache states,
   and metric names.
 - The report keeps the performance posture advisory/warning-only and points
-  downstream producer emission to `KFONT-M12-003`, `KFONT-M12-004`, and
-  `KFONT-M12-005`, while `KFONT-M12-002` now contributes the checked-in parser
-  and scaler telemetry dumps separately instead of keeping the schema ticket
-  open.
+  downstream producer emission to `KFONT-M12-004` and `KFONT-M12-005`, while
+  `KFONT-M12-002` and `KFONT-M12-003` now contribute the checked-in
+  parser/scaler and shaping/paragraph telemetry dumps separately instead of
+  keeping the schema ticket open.
 
 ## Validation
 
@@ -41,8 +41,8 @@ rtk git diff --check
 ## Remaining gate
 
 No schema-local gate remains for `KFONT-M12-001`. Downstream producer emission
-into the shared schema is now owned by `KFONT-M12-003`, `KFONT-M12-004`, and
-`KFONT-M12-005`; parser/scaler producer evidence is attached separately under
-`KFONT-M12-002`. The report stays warning-only, keeps all budgets advisory, and
-does not promote any GPU route, release gate, or complete telemetry support
-claim.
+into the shared schema is now limited to `KFONT-M12-004` and `KFONT-M12-005`;
+parser/scaler producer evidence is attached separately under `KFONT-M12-002`
+and shaping/paragraph producer evidence under `KFONT-M12-003`. The report
+stays warning-only, keeps all budgets advisory, and does not promote any GPU
+route, release gate, or complete telemetry support claim.
