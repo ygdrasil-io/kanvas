@@ -1,12 +1,13 @@
 # KFONT-M6-008 - Devanagari Shaping Fixture Review Wave
 
 Date: 2026-06-18
-Status: review with bounded vendored-font evidence.
+Status: blocked with bounded vendored-font evidence and independent review complete.
 
 ## Scope
 
-This wave advances `KFONT-M6-008` from `proposed` to `review` without
-promoting Devanagari or complete Indic shaping support:
+This wave lands bounded `KFONT-M6-008` evidence while the ticket remains
+`blocked` on narrower Devanagari gates, without promoting Devanagari or
+complete Indic shaping support:
 
 - `DevanagariShapingFixtureTest` now injects a pinned Script_Extensions
   itemization route locally so the reviewed `deva` / `dev2` feature-policy

@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-008"
 title: "Add Devanagari shaping fixtures"
-status: "review"
+status: "blocked"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
@@ -101,8 +101,8 @@ rtk git diff --check
 ## Status Notes
 
 - `proposed`: Devanagari evidence depends on M5 clusters/itemization, contextual GSUB, mark positioning, and feature policy.
-- `review`: `DevanagariShapingFixtureTest` plus `devanagari-shaping-report.json` now prove bounded vendored-font evidence for pinned Script_Extensions `Deva` script selection on the pre-base matra case, consonant-cluster preservation, reph-like shaping, and mark placement on `NotoSansDevanagari-Regular.ttf` without promoting Devanagari or Indic shaping support.
-- `review`: This wave intentionally keeps `indic-syllable-plan.json` or equivalent phase evidence, the full required `deva` / `dev2` feature set, dedicated unsupported-syllable and phase refusal fixtures/codes, and ticket-local `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` / `unicode-segments.json` families as explicit remaining gates.
+- `blocked`: `DevanagariShapingFixtureTest` plus `devanagari-shaping-report.json` now prove bounded vendored-font evidence for pinned Script_Extensions `Deva` script selection on the pre-base matra case, consonant-cluster preservation, reph-like shaping, and mark placement on `NotoSansDevanagari-Regular.ttf` without promoting Devanagari or Indic shaping support.
+- `blocked`: This wave intentionally keeps `indic-syllable-plan.json` or equivalent phase evidence, the full required `deva` / `dev2` feature set, dedicated unsupported-syllable and phase refusal fixtures/codes, and ticket-local `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` / `unicode-segments.json` families as explicit remaining gates.
 - Move to `ready` only after fixture coverage and syllable dump fields are reviewed.
 
 ## Linear Labels
