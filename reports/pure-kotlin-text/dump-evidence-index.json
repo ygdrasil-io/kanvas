@@ -2142,6 +2142,82 @@
       ]
     },
     {
+      "dumpId": "gpu-text-a8-route-plan",
+      "ownerTicket": "KFONT-M11-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md",
+        "section": "Text renderer handoff"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextA8RoutePlan.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextA8RoutePlanTest.kt",
+        "reports/pure-kotlin-text/gpu-text-a8-route-plan.json"
+      ],
+      "expectedFields": [
+        "artifact",
+        "atlasPages",
+        "bindingLayout",
+        "commandId",
+        "entryRefs",
+        "glyphRunId",
+        "layoutResultId",
+        "nonClaims",
+        "planId",
+        "productActivation",
+        "renderStep",
+        "routePromotion",
+        "schema",
+        "selectedRoute",
+        "uploadDependencyLabels",
+        "wgslModuleId"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*A8Text*'",
+        "rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*A8Text*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "A8 route plan dump changes require reviewed atlas page/entry, binding-layout, non-claim, and bounded GPU-evidence diffs without broad GPU text or dftext promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-broad-gpu-text-support-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "dumpId": "gpu-text-a8-route-refusals",
+      "ownerTicket": "KFONT-M11-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md",
+        "section": "Text renderer handoff"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextA8RoutePlan.kt",
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextRouteRefusals.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextA8RoutePlanTest.kt",
+        "reports/pure-kotlin-text/gpu-text-a8-route-refusals.json"
+      ],
+      "expectedFields": [
+        "classificationRows",
+        "diagnosticMappings",
+        "fixtureName",
+        "refusals",
+        "schema"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*A8Text*'",
+        "rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*A8Text*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "A8 refusal dump changes require reviewed missing-entry/stale-generation diagnostics that stay GPU-gated and must not broaden text GPU support or dftext-retirement claims.",
+      "nonClaims": [
+        "producer-only",
+        "no-broad-gpu-text-support-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
       "dumpId": "gsub-trace",
       "ownerTicket": "KFONT-M6-003",
       "classification": "golden-gated",

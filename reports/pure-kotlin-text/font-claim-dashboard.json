@@ -978,7 +978,7 @@
     {
       "surfaceId": "simple-latin-atlas",
       "label": "simple-latin atlas",
-      "classification": "fixture-gated",
+      "classification": "GPU-gated",
       "gpuClaimed": false,
       "claimPromotionAllowed": false,
       "targetSpec": {
@@ -986,24 +986,36 @@
         "section": "Glyph Atlas Artifact A8"
       },
       "evidence": {
-        "fixtureProvenance": [],
+        "fixtureProvenance": [
+          "reports/pure-kotlin-text/2026-06-19-kfont-m11-004-a8-route-plan.md"
+        ],
         "deterministicDumps": [
-          "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json"
+          "reports/pure-kotlin-text/gpu-text-a8-route-plan.json",
+          "reports/pure-kotlin-text/gpu-text-a8-route-refusals.json",
+          "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-webgpu.json"
         ],
         "cpuOracle": [
           "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json"
         ],
-        "gpuArtifacts": [],
+        "gpuArtifacts": [
+          "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png",
+          "reports/wgsl-pipeline/webgpu-glyph-atlas-sampling-route/kan-054-webgpu-glyph-atlas-sampling-route.json"
+        ],
         "routeDiagnostics": [
-          "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json"
+          "reports/pure-kotlin-text/gpu-text-a8-route-plan.json",
+          "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-webgpu.json"
         ],
         "refusalDiagnostics": [
-          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json"
+          "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
+          "reports/pure-kotlin-text/gpu-text-a8-route-refusals.json",
+          "reports/pure-kotlin-text/2026-06-19-kfont-m11-004-a8-route-plan.md"
         ]
       },
       "requiredEvidenceGates": [
-        "Attach pure Kotlin text fixture provenance before promoting this compatibility evidence.",
-        "Replace current WGSL scene evidence with font-owned glyph artifact dumps before target support."
+        "KFONT-M11-004 now lands bounded pure Kotlin `gpu-text-a8-route-plan.json` and `gpu-text-a8-route-refusals.json` dumps plus focused simple-Latin GPU evidence; keep this row limited to the accepted A8 atlas route only.",
+        "Do not broaden this row into general text GPU support, SDF/outline/color/bitmap/SVG routing, complex shaping, fallback fonts, emoji, or `dftext` retirement until the remaining M11 chain closes."
       ],
       "legacyGates": [],
       "nonClaims": [
