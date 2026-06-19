@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-010"
 title: "Implement GSUB/GPOS extension, chaining and variation-adjustment lookups"
-status: "proposed"
+status: "blocked"
 milestone: "M6"
 priority: "P1"
 owner_area: "shaping"
@@ -106,7 +106,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*ExtensionLookup*' --tests '*
 
 - `proposed`: Advanced lookup work depends on basic GSUB/GPOS, mark/cursive positioning, and variation path foundations.
 - Current blocker audit (2026-06-19): `KFONT-M6-003`, `KFONT-M6-004`, `KFONT-M6-005`, and `KFONT-M4-005` are now `done`, but the advanced-lookup fixture set `gsub-chaining-context.otf`, `gsub-extension-substitution.otf`, `gsub-reverse-chaining.otf`, `gpos-contextual-positioning.otf`, `gpos-chaining-positioning.otf`, `gpos-extension-positioning.otf`, `gpos-variation-device.otf`, and `layout-extension-cycle.otf` is still not present in-repo. The refreshed asset/license audit at `reports/pure-kotlin-text/2026-06-19-kfont-m6-fixture-asset-license-audit.md` confirms compatible candidate sources exist, but none yet satisfy the exact ticket-local fixture pack or the required `variation-adjustment-trace.json` evidence. Remaining gate is keep the bounded GSUB/GPOS base slices in place and add reviewed advanced-lookup fixture provenance plus variation-adjustment evidence without substituting unrelated robustness fonts for the named fixture family.
-- Move to `ready` only after lookup-type coverage and variation diagnostics are reviewed.
+- `blocked` (2026-06-19): This ticket is blocked on its own named advanced-lookup fixture family and required `variation-adjustment-trace.json` evidence. The compatible-asset audit found candidate sources, but no reviewed in-repo pack yet clears the exact Required Evidence set. Remaining gate: add reviewed ticket-local advanced-lookup fixture provenance plus variation-adjustment evidence before moving back to `ready`.
 
 ## Linear Labels
 

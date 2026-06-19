@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-009"
 title: "Add Thai and CJK shaping boundaries"
-status: "proposed"
+status: "blocked"
 milestone: "M6"
 priority: "P1"
 owner_area: "shaping"
@@ -98,7 +98,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*Thai*' --tests '*Cjk*'
 
 - `proposed`: Boundary fixtures depend on script itemization, feature policy, and positioning support.
 - Current blocker audit (2026-06-19): `KFONT-M6-004` and `KFONT-M6-005` are `done`, and `KFONT-M6-006` is now `blocked` only on the still-absent per-script fixture families. The Thai/CJK boundary fixture set `thai-base-marks.otf`, `thai-tone-marks.otf`, `thai-latin-mixed.txt`, `cjk-han-variation-selector.otf`, `cjk-kana-vertical.otf`, `cjk-hangul-direct.otf`, and `cjk-missing-vertical-alt.otf` is still not present in-repo, and the refreshed asset/license audit at `reports/pure-kotlin-text/2026-06-19-kfont-m6-fixture-asset-license-audit.md` did not identify a reviewed ticket-local pack that would clear this gate. Remaining gate is retain the bounded positioning and policy slices, then add reviewed Thai/CJK fixture provenance with paragraph-owned non-claim diagnostics.
-- Move to `ready` only after paragraph-owned diagnostics and fixture scope are reviewed.
+- `blocked` (2026-06-19): This ticket is no longer treated as the next actionable M6 slice. `KFONT-M6-006` is still blocked on absent per-script families, and the exact Thai/CJK fixture pack named in Required Evidence is still absent in-repo despite the refreshed compatible-asset audit. Remaining gate: land reviewed ticket-local Thai/CJK fixture provenance plus paragraph-owned non-claim diagnostics before moving back to `ready`.
 
 ## Linear Labels
 

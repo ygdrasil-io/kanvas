@@ -26,8 +26,8 @@ M2 parser facts and M5 Unicode segmentation foundations.
 | [KFONT-M6-006 - Add script-specific default feature policy](KFONT-M6-006-add-script-specific-default-feature-policy.md) | `blocked` | `P0` | `tracked-gap` | `shaping` | `KFONT-M6-001`, `KFONT-M5-004` | - |
 | [KFONT-M6-007 - Add Arabic shaping fixtures](KFONT-M6-007-add-arabic-shaping-fixtures.md) | `blocked` | `P0` | `fixture-gated` | `shaping` | `KFONT-M5-003`, `KFONT-M6-003`, `KFONT-M6-005`, `KFONT-M6-006` | - |
 | [KFONT-M6-008 - Add Devanagari shaping fixtures](KFONT-M6-008-add-devanagari-shaping-fixtures.md) | `blocked` | `P0` | `fixture-gated` | `shaping` | `KFONT-M5-002`, `KFONT-M5-004`, `KFONT-M6-003`, `KFONT-M6-005`, `KFONT-M6-006` | - |
-| [KFONT-M6-009 - Add Thai and CJK shaping boundaries](KFONT-M6-009-add-thai-and-cjk-shaping-boundaries.md) | `proposed` | `P1` | `fixture-gated` | `shaping` | `KFONT-M5-004`, `KFONT-M6-004`, `KFONT-M6-005`, `KFONT-M6-006` | - |
-| [KFONT-M6-010 - Implement GSUB/GPOS extension, chaining and variation-adjustment lookups](KFONT-M6-010-implement-gsub-gpos-extension-chaining-and-variation-adjustment-lookups.md) | `proposed` | `P1` | `tracked-gap` | `shaping` | `KFONT-M6-003`, `KFONT-M6-004`, `KFONT-M6-005`, `KFONT-M4-005` | - |
+| [KFONT-M6-009 - Add Thai and CJK shaping boundaries](KFONT-M6-009-add-thai-and-cjk-shaping-boundaries.md) | `blocked` | `P1` | `fixture-gated` | `shaping` | `KFONT-M5-004`, `KFONT-M6-004`, `KFONT-M6-005`, `KFONT-M6-006` | - |
+| [KFONT-M6-010 - Implement GSUB/GPOS extension, chaining and variation-adjustment lookups](KFONT-M6-010-implement-gsub-gpos-extension-chaining-and-variation-adjustment-lookups.md) | `blocked` | `P1` | `tracked-gap` | `shaping` | `KFONT-M6-003`, `KFONT-M6-004`, `KFONT-M6-005`, `KFONT-M4-005` | - |
 
 ## Validation Bundle
 
@@ -56,7 +56,9 @@ rtk git diff --check
 ## Current Blockers
 
 - 2026-06-18 audit: `KFONT-M6-006` remains blocked by absent per-script shaping fixture families from `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`.
-- 2026-06-19 audit: `KFONT-M6-007` remains blocked on positive `lam-alef`, vendored positive cursive, and Arabic-specific refusal fixtures/codes; `KFONT-M6-008` remains blocked on ticket-local syllable-plan or phase evidence, the full required `deva` / `dev2` feature set, dedicated unsupported-syllable and phase refusal fixtures/codes, and ticket-local `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` / `unicode-segments.json` dump families; `KFONT-M6-009` and `KFONT-M6-010` remain gated by their own named fixture families, required-script rows, or advanced lookup dependencies.
+- 2026-06-19 audit: `KFONT-M6-007` remains blocked on positive `lam-alef`, vendored positive cursive, and Arabic-specific refusal fixtures/codes; `KFONT-M6-008` remains blocked on ticket-local syllable-plan or phase evidence, the full required `deva` / `dev2` feature set, dedicated unsupported-syllable and phase refusal fixtures/codes, and ticket-local `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` / `unicode-segments.json` dump families.
+- 2026-06-19 blocker closeout: `KFONT-M6-009` is now `blocked` because `KFONT-M6-006` is itself blocked on absent per-script families and the exact Thai/CJK fixture pack named in Required Evidence is still absent in-repo despite the refreshed compatible-asset audit.
+- 2026-06-19 blocker closeout: `KFONT-M6-010` is now `blocked` because the exact advanced-lookup fixture family and `variation-adjustment-trace.json` evidence named in Required Evidence are still absent in-repo; candidate sources exist, but no reviewed ticket-local pack clears the gate yet.
 - 2026-06-19 asset/license audit: `reports/pure-kotlin-text/2026-06-19-kfont-m6-fixture-asset-license-audit.md` confirms compatible candidate sources remain available, including in-repo OFL assets and `unicode-org/text-rendering-tests` under `Unicode-3.0`, but no reviewed ticket-local Thai/CJK or advanced-lookup fixture pack is yet present in-repo for `KFONT-M6-009` or `KFONT-M6-010`.
 
 ## Non-Claims

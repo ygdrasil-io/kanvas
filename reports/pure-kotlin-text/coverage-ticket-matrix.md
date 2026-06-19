@@ -130,6 +130,14 @@ Remaining gate: treat this audit as historical context only; current resumption
 work depends on the explicit fixture families and remaining ticket-local gates
 named in the active M6 tickets.
 
+2026-06-19 blocker closeout: the last two `proposed` M6 tickets are no longer
+treated as actionable. `KFONT-M6-009` is now `blocked` on the still-absent
+Thai/CJK ticket-local fixture family plus the upstream `KFONT-M6-006` script
+policy gate, and `KFONT-M6-010` is now `blocked` on the still-absent advanced
+lookup fixture family plus required `variation-adjustment-trace.json`
+evidence. The compatible-asset audit found candidate sources, but no reviewed
+in-repo pack clears either Required Evidence set yet.
+
 ### KFONT-M6 Fixture Asset/License Audit Refresh
 
 Status: coordination evidence.
