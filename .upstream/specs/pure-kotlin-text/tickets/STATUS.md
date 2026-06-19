@@ -17,8 +17,8 @@ All tickets start as `proposed`. Move a ticket to `ready` only after its scope, 
 | M10 | 0 | 0 | 0 | 0 | 0 | 10 |
 | M11 | 0 | 0 | 0 | 5 | 0 | 5 |
 | M12 | 0 | 0 | 0 | 0 | 0 | 5 |
-| M13 | 5 | 0 | 0 | 0 | 0 | 0 |
-| **Total** | **5** | **0** | **0** | **11** | **0** | **70** |
+| M13 | 0 | 0 | 0 | 4 | 0 | 1 |
+| **Total** | **0** | **0** | **0** | **15** | **0** | **71** |
 
 ## Status Update Rule
 
