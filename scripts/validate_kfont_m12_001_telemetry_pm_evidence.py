@@ -121,6 +121,8 @@ def main() -> int:
 
     bundle_paths = advisory.get("bundlePaths")
     require(isinstance(bundle_paths, list) and bundle_paths, "bundlePaths must be a non-empty list")
+    require("reports/pure-kotlin-text/parser-metrics.json" in bundle_paths, "bundlePaths must include parser-metrics.json")
+    require("reports/pure-kotlin-text/scaler-metrics.json" in bundle_paths, "bundlePaths must include scaler-metrics.json")
     for relative_path in bundle_paths:
         require(isinstance(relative_path, str) and relative_path, "bundlePaths entries must be non-empty strings")
         require((root / relative_path).is_file(), f"bundlePaths references a missing checked-in file: {relative_path}")
@@ -147,6 +149,8 @@ def main() -> int:
     require(pm_bundle_start >= 0, "pipelinePmBundle task is missing")
     pm_bundle_block = build_gradle[pm_bundle_start: pm_bundle_start + 16000]
     require(f'"{TASK_NAME}"' in pm_bundle_block, "pipelinePmBundle must depend on validateKfontM12001TelemetryPmEvidence")
+    require("reports/pure-kotlin-text/parser-metrics.json" in pm_bundle_block, "pipelinePmBundle must include parser-metrics.json")
+    require("reports/pure-kotlin-text/scaler-metrics.json" in pm_bundle_block, "pipelinePmBundle must include scaler-metrics.json")
     require(ADVISORY_JSON_PATH in pm_bundle_block, "pipelinePmBundle must include font-telemetry-pm-bundle.json")
     require(ADVISORY_MD_PATH in pm_bundle_block, "pipelinePmBundle must include the telemetry PM markdown report")
 

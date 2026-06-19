@@ -7,7 +7,8 @@
   schema dumps.
 - `reports/pure-kotlin-text/font-telemetry-pm-bundle.json` records one advisory
   row for each telemetry domain already covered by
-  `font-telemetry-schema-fixture.json`.
+  `font-telemetry-schema-fixture.json`, and the PM bundle now also ships the
+  checked-in `parser-metrics.json` and `scaler-metrics.json` telemetry slices.
 - The PM evidence remains warning-only and keeps the telemetry row classified
   as `tracked-gap` with `claimPromotionAllowed=false`.
 

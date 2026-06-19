@@ -62,6 +62,7 @@ class FontTelemetrySchemaTest {
         val advisoryMarkdown = Files.readString(
             root.resolve("reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"),
         )
+        val buildGradle = Files.readString(root.resolve("build.gradle.kts"))
 
         assertContains(advisoryJson, """"ownerTickets": ["KFONT-M12-001"]""")
         assertContains(advisoryJson, """"surfaceId": "font-telemetry-schema"""")
@@ -72,11 +73,17 @@ class FontTelemetrySchemaTest {
         assertContains(advisoryJson, """"domain": "parser"""")
         assertContains(advisoryJson, """"domain": "gpu-text-handoff"""")
         assertContains(advisoryJson, """"bundlePaths": [""")
+        assertContains(advisoryJson, """"reports/pure-kotlin-text/parser-metrics.json"""")
+        assertContains(advisoryJson, """"reports/pure-kotlin-text/scaler-metrics.json"""")
         assertContains(advisoryMarkdown, "pipelinePmBundle")
+        assertContains(advisoryMarkdown, "parser-metrics.json")
+        assertContains(advisoryMarkdown, "scaler-metrics.json")
         assertContains(advisoryMarkdown, "tracked-gap")
         assertContains(advisoryMarkdown, "warning-only")
         assertContains(advisoryMarkdown, "KFONT-M12-005")
         assertContains(advisoryMarkdown, "KFONT-M12-003")
+        assertContains(buildGradle, "\"reports/pure-kotlin-text/parser-metrics.json\"")
+        assertContains(buildGradle, "\"reports/pure-kotlin-text/scaler-metrics.json\"")
         assertFalse(advisoryMarkdown.contains("remains open before `done`"))
     }
 
@@ -148,6 +155,8 @@ class FontTelemetrySchemaTest {
         assertContains(report, "No ticket-local gate remains")
         assertContains(report, "font.parser.parse.time")
         assertContains(report, "font.scaler.outline.time")
+        assertContains(expectedParser, """"fixtureId": "font-source-sfnt-malformed-directory-diagnostic"""")
+        assertContains(report, "malformed-directory")
         assertContains(report, "pipelinePerformanceTrendWarnings")
         assertContains(report, "no-performance-release-gate-claim")
     }

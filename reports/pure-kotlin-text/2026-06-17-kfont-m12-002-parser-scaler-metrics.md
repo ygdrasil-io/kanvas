@@ -7,8 +7,9 @@
   `reports/pure-kotlin-text/parser-metrics.json` and
   `reports/pure-kotlin-text/scaler-metrics.json`.
 - The parser dump covers stable TTF, TTC, CFF-selected, variable-axis,
-  malformed-optional-table, and missing-required-table fixture IDs with
-  repeated cold/warm samples and explicit `font.parser.*` trend series.
+  malformed-directory, malformed-optional-table, and missing-required-table
+  fixture IDs with repeated cold/warm samples and explicit `font.parser.*`
+  trend series.
 - The scaler dump covers simple `glyf`, composite `glyf`, variable `glyf`,
   CFF, CFF2 variation-store, and malformed CFF refusal fixtures with repeated
   samples and explicit `font.scaler.*` trend series.
@@ -18,7 +19,8 @@
 - `parser-metrics.json` records stable fixture IDs, parsed table tags, bytes
   read, table counts, cache hit/miss counters, malformed/bounds failure
   counters, and deterministic semantic diagnostics such as
-  `font.sfnt.optional-table-malformed` and `font.sfnt.required-table-missing`.
+  `font.sfnt.table-overlap`, `font.sfnt.optional-table-malformed`, and
+  `font.sfnt.required-table-missing`.
 - `scaler-metrics.json` records glyph counts, outline command counts, bounds
   and metrics lookup timings, variation and charstring timings where
   applicable, cache hit/miss counters, `.notdef` fallback counts, and stable
@@ -29,7 +31,8 @@
   `font-telemetry-schema` row now points remaining downstream producer work only
   at `KFONT-M12-003`, `KFONT-M12-004`, and `KFONT-M12-005`.
 - `font-telemetry-pm-bundle.json` now carries the checked-in parser/scaler
-  dumps as advisory PM artifacts without changing `warning-only` posture.
+  dumps as advisory PM artifacts, and `pipelinePmBundle` now copies those
+  exact checked-in JSON files without changing `warning-only` posture.
 - The trend-series excerpt remains advisory only: `font.parser.scan.time`,
   `font.parser.parse.time`, `font.scaler.outline.time`,
   `font.scaler.metrics.time`, `font.scaler.variation.time`, and
