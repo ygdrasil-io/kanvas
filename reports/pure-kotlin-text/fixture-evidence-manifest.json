@@ -312,6 +312,7 @@
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/DevanagariShapingFixtureTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
         "reports/font/fixtures/expected/shaping/arabic-seed-readiness.json",
         "reports/font/fixtures/expected/shaping/arabic-mixed-bidi.txt",
@@ -320,20 +321,24 @@
         "reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json",
         "reports/font/fixtures/expected/shaping/arabic-shaping-plan.json",
         "reports/font/fixtures/expected/shaping/arabic-shaping-report.json",
+        "reports/font/fixtures/expected/shaping/devanagari-shaping-report.json",
         "reports/pure-kotlin-text/2026-06-18-kfont-m6-007-arabic-shaping-fixtures.md",
-        "reports/pure-kotlin-text/2026-06-18-kfont-m6-007-arabic-runtime-traces.md"
+        "reports/pure-kotlin-text/2026-06-18-kfont-m6-007-arabic-runtime-traces.md",
+        "reports/pure-kotlin-text/2026-06-18-kfont-m6-008-devanagari-shaping-fixtures.md"
       ],
       "requiredEvidenceGates": [
         "KFONT-M6-007 now lands bounded Arabic review evidence for joining-form behavior beyond pure RTL reordering, ticket-local arabic-gsub-trace and arabic-gpos-trace goldens for bounded runtime lookup evidence on the current joining/mark rows, mark positioning tied to the mark cluster itself, a ticket-local arabic-shaped-glyph-run golden for joining/marks/bounded lam-alef/generic gdef-required rows, a ticket-local arabic-shaping-plan golden for required Arabic defaults plus refusal-on-missing expectations, a reviewed generic text.shaping.gdef-required refusal on gpos-missing-gdef.otf for Arabic base+mark input, and mixed-bidi paragraph-required diagnostics on vendored Noto Naskh Arabic; lam-alef still lacks feature-local positive proof, and ticket-local positive cursive evidence, Arabic-specific missing-mark/missing-cursive refusal fixtures, and narrower arabic-specific refusal codes remain explicit gates.",
-        "Add Devanagari positive and refusal rows for syllable formation, reph, pre-base matra, below-base forms, and mark placement.",
+        "KFONT-M6-008 now lands bounded Devanagari review evidence for pinned Script_Extensions Deva script selection on the pre-base matra case, consonant-cluster preservation, reph-like shaping, and mark placement on vendored Noto Sans Devanagari; syllable-plan evidence, the full required feature set, Devanagari-specific refusal fixtures/codes, and ticket-local trace dump families remain explicit gates.",
         "Add Thai positive and refusal rows for base+mark clusters, tone marks, mixed Latin/Thai runs, and paragraph-owned dictionary diagnostics.",
         "Add CJK positive and refusal rows for Han, kana, vertical alternates, variation selectors, and paragraph-owned ruby/line-break diagnostics.",
         "Add emoji shaping positive and refusal rows for VS15/VS16, skin tone, ZWJ sequence, fallback emoji font, and unsupported-sequence refusals."
       ],
       "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest",
         "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
         "rtk ./gradlew --no-daemon :font:text:test",
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest"
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.DevanagariShapingFixtureTest"
       ],
       "fixtureCommands": [
         "Split complex-script fixtures by script family before any script promotion beyond Latin."

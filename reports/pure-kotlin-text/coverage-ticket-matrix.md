@@ -2938,6 +2938,58 @@ Remaining gate: explicit `lam-alef` positive evidence, ticket-local positive
 cursive attachment, and Arabic-specific refusal fixtures/diagnostic codes
 remain explicit Arabic shaping gates. Keep this ticket `blocked` until those
 gates land.
+### KFONT-M6-008: Devanagari Shaping Fixture Review Wave
+
+Status: blocked after bounded vendored-font evidence landed and was independently reviewed.
+
+Files:
+
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/DevanagariShapingFixtureTest.kt`
+- `reports/font/fixtures/expected/shaping/devanagari-shaping-report.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-fixtures-manifest.json`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m6-008-devanagari-shaping-fixtures.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-008-add-devanagari-shaping-fixtures.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- The reviewed Devanagari evidence path now injects the pinned
+  Script_Extensions itemizer locally in `DevanagariShapingFixtureTest`
+  instead of through a new runtime surface, so the vendored pre-base matra
+  case exercises the reviewed `deva` / `dev2` policy path as `Deva` without
+  changing the default shaping behavior used by existing tickets.
+- `DevanagariShapingFixtureTest` now proves bounded vendored-font evidence for
+  pre-base matra script selection, consonant-cluster preservation, reph-like
+  shaping, and mark placement on `NotoSansDevanagari-Regular.ttf` without
+  promoting complete Devanagari or Indic shaping support.
+- `devanagari-shaping-report.json` summarizes these bounded positive rows and
+  keeps syllable-plan dumps, the full required feature set, Devanagari-specific
+  refusal fixtures/codes, and ticket-local trace dump families as explicit
+  remaining gates.
+- `font-fixtures-manifest.json` now narrows the Devanagari bundled-font gate to
+  the reviewed bounded evidence already attached on `NotoSansDevanagari-Regular.ttf`
+  instead of leaving the manifest at a generic shaping placeholder.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.DevanagariShapingFixtureTest
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: ticket-local `indic-syllable-plan.json` or equivalent phase
+evidence, the full required `deva` / `dev2` feature set, dedicated
+unsupported-syllable and phase refusal fixtures/codes, and ticket-local
+`gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` /
+`unicode-segments.json` dump families remain open. Keep this ticket `blocked`
+until those gates land.
 ### PKT-09A: Paragraph Semantic Layout Dumps And Refusals
 
 Status: implemented and independently reviewed.
