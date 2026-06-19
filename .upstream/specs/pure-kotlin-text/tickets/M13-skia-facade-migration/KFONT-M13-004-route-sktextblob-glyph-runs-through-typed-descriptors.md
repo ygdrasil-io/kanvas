@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M13-004"
 title: "Route `SkTextBlob` glyph runs through typed descriptors"
-status: "proposed"
+status: "blocked"
 milestone: "M13"
 priority: "P1"
 owner_area: "skia-facade"
@@ -108,6 +108,12 @@ rtk ./gradlew --no-daemon pipelinePmBundle
 ## Status Notes
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
+- `blocked` (2026-06-19): Readiness audit confirmed that `KFONT-M9-002` and
+  `KFONT-M11-003` are `done`, but this route still depends on `KFONT-M13-001`.
+  Remaining gate: land the facade inventory so the `SkTextBlob` descriptor
+  route has an approved owner mapping, no-`Sk*` boundary expectations, `dftext`
+  gate row, and PM/dashboard classification before descriptor or handoff
+  evidence is promoted.
 - Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
 
 ## Linear Labels

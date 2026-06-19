@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M13-005"
 title: "Retire stale font docs and stubs after evidence promotion"
-status: "proposed"
+status: "blocked"
 milestone: "M13"
 priority: "P1"
 owner_area: "docs-validation"
@@ -106,6 +106,13 @@ rtk ./gradlew --no-daemon pipelinePmBundle
 ## Status Notes
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
+- `blocked` (2026-06-19): Readiness audit confirmed that `KFONT-M12-005` is
+  `done`, but stale docs and stub retirement must remain behind
+  `KFONT-M13-001` through `KFONT-M13-004`. Remaining gate: land the facade
+  inventory plus the `SkTypeface`, explicit `SkShaper`, and `SkTextBlob` route
+  evidence first, then review each retirement candidate with linked
+  implementation tests, fixture provenance, semantic dumps, CPU/GPU evidence
+  where claimed, stable diagnostics, and PM/dashboard updates.
 - Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
 
 ## Linear Labels

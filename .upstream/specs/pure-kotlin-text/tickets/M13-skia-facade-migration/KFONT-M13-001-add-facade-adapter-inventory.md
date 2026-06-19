@@ -107,6 +107,13 @@ rtk ./gradlew --no-daemon pipelinePmBundle
 ## Status Notes
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
+- `proposed` (2026-06-19 readiness audit): `KFONT-M1-004`, `KFONT-M2-005`,
+  `KFONT-M8-006`, `KFONT-M9-006`, and `KFONT-M12-005` are `done`. The still-open
+  `KFONT-M6-010` and `KFONT-M11-010` slices are inputs that the inventory must
+  classify as shaping/GPU-gated facade rows, not blockers that prevent writing
+  the inventory itself. Remaining gate to move `ready`: review the exact
+  facade-route surface, PM/dashboard row shape, diagnostic mapping, and legacy
+  gate coverage expected from the inventory output before implementation starts.
 - Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
 
 ## Linear Labels

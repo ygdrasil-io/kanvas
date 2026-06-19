@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M13-003"
 title: "Route explicit `SkShaper` APIs through pure Kotlin shaping"
-status: "proposed"
+status: "blocked"
 milestone: "M13"
 priority: "P1"
 owner_area: "skia-facade"
@@ -105,6 +105,13 @@ rtk ./gradlew --no-daemon pipelinePmBundle
 ## Status Notes
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
+- `blocked` (2026-06-19): Readiness audit confirmed that `KFONT-M5-005` and
+  `KFONT-M7-004` are `done`, but this facade route still depends on both
+  `KFONT-M13-001` and the unresolved advanced-lookup gate in `KFONT-M6-010`.
+  Remaining gate: land the facade inventory, then close the advanced GSUB/GPOS
+  fixture and variation-adjustment evidence gaps before explicit `SkShaper`
+  routing can claim bounded complex-shaping parity without broadening
+  `drawString`.
 - Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
 
 ## Linear Labels
