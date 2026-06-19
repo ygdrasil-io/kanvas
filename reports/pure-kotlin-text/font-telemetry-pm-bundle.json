@@ -43,7 +43,7 @@
       "sampleCount": 5,
       "measurementPhase": "steady-state",
       "cacheState": "warm",
-      "metricNames": ["shaping.fallback.time"]
+      "metricNames": ["shaping.fallback.time", "shaping.diagnostic.count"]
     },
     {
       "domain": "paragraph",
@@ -51,7 +51,7 @@
       "sampleCount": 5,
       "measurementPhase": "steady-state",
       "cacheState": "warm",
-      "metricNames": ["paragraph.layout.time"]
+      "metricNames": ["paragraph.layout.time", "paragraph.style-run.count", "paragraph.hit-test-index-build.time"]
     },
     {
       "domain": "glyph-artifact",

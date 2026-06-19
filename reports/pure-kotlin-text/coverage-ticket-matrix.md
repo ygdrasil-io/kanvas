@@ -5284,14 +5284,15 @@ Evidence:
   and `paragraph-metrics.json` dumps under the shared telemetry schema without
   widening any support claim.
 - `shaping-metrics.json` separates segmentation, bidi, script itemization,
-  fallback, GSUB, GPOS, glyph-count, cluster-count, and diagnostic-count
-  series across Latin, Arabic, Devanagari, Thai, mixed-bidi, CJK
-  variation-selector, and explicit emoji/fallback refusal cases.
-- `paragraph-metrics.json` separates layout, style-run count,
-  line-break-opportunity count, shaped-run count, line count,
-  hit-test-index-build time, selection-query time, ellipsis attempts, and
-  placeholder count across shaping-request, wrapped-layout, hit-test, and
-  placeholder-conflict cases.
+  fallback, GSUB, GPOS, glyph-count, cluster-count, and shaping diagnostic
+  count series across Latin, Arabic, Devanagari, Thai, mixed-bidi, CJK
+  variation-selector, and explicit emoji/fallback refusal cases, with stable
+  run IDs and UTF-16 text ranges.
+- `paragraph-metrics.json` separates layout, line-break opportunity count,
+  shaped-run count, line count, style-run count, hit-test index build time,
+  selection-query time, ellipsis attempts, and placeholder count across
+  shaping-request, wrapped-layout, hit-test, and placeholder-conflict cases,
+  with stable paragraph IDs and UTF-16 text ranges.
 - The dashboard now exposes separate `Text shaping metrics` and
   `Paragraph layout metrics` tracked-gap rows, while `scaledemoji`, complete
   paragraph bidi visual-order evidence, GPU text readiness, and release-gate

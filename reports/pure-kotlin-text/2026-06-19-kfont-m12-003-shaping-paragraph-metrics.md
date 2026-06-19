@@ -4,20 +4,24 @@
 
 - `reports/pure-kotlin-text/shaping-metrics.json` now records deterministic
   shaping telemetry slices for Latin, Arabic, Devanagari, Thai, mixed bidi,
-  CJK variation-selector, and explicit emoji-sequence refusal cases.
+  CJK variation-selector, and explicit emoji-sequence refusal cases with stable
+  run IDs and UTF-16 text ranges.
 - `reports/pure-kotlin-text/paragraph-metrics.json` now records deterministic
   paragraph telemetry slices for shaping requests, wrapped layout, line-break
-  pressure, hit testing, selection queries, and placeholder conflict cases.
+  pressure, hit testing, selection queries, and placeholder conflict cases with
+  stable paragraph IDs and UTF-16 text ranges.
 - The wave keeps the telemetry posture advisory-only and does not widen
   shaping, paragraph, emoji, GPU, or release-gate claims.
 
 ## Evidence
 
 - Shaping samples separate segmentation, bidi, script itemization, fallback,
-  GSUB, GPOS, glyph-count, and cluster-count series in one stable dump.
+  GSUB, GPOS, glyph-count, cluster-count, and shaping diagnostic count series
+  in one stable dump.
 - Paragraph samples separate layout, line-break opportunity count, shaped-run
-  count, line count, hit-test time, selection-query time, ellipsis attempts,
-  and placeholder count in one stable dump.
+  count, line count, style-run count, hit-test index build time,
+  selection-query time, ellipsis attempts, and placeholder count in one stable
+  dump.
 - Refusal visibility remains explicit: `text.shaping.fallback-missing`,
   `text.shaping.emoji-sequence-unsupported`, and
   `text.paragraph.placeholder-ellipsis-conflict` stay serialized as

@@ -19,7 +19,9 @@
   task instead of inventing a runtime telemetry gate.
 - Domain rows cover parser, scaler, shaping, paragraph, glyph artifact, and GPU
   text handoff samples with stable fixture IDs, sample counts, cache states,
-  and metric names.
+  and metric names, including the shaping diagnostic-count series plus the
+  paragraph style-run and hit-test-index-build slices added by
+  `KFONT-M12-003`.
 - The report keeps the performance posture advisory/warning-only and points
   downstream producer emission to `KFONT-M12-004` and `KFONT-M12-005`, while
   `KFONT-M12-002` and `KFONT-M12-003` now contribute the checked-in
