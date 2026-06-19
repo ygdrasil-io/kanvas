@@ -59,7 +59,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | PKT-13 validation fixture and evidence harness | Implementable now | Fixture manifest, deterministic dumps, CPU oracle hooks, drift labels. | `font/*/src/test`, `reports/pure-kotlin-text`. | Golden update policy and no external normative oracle. |
 | PKT-14 text telemetry and cache counters | Skeleton implementable now | Cache keys, hit/miss/bytes/upload counters, advisory budget records. | `font/*`, `gpu-renderer/telemetry`. | Deterministic telemetry records; no blocking perf gate. |
 | PKT-15 GPU A8/SDF route registration | Dependency-gated | Artifact registry, A8/SDF route refusals, upload-before-sample ordering. | `gpu-renderer/text`, `gpu-renderer/resources`, `gpu-renderer/routing`. | Requires stable text artifacts plus GPU ABI route evidence. |
-| PKT-16 `:kanvas-skia` facade migration adapters | Dependency-gated | Delegate `SkFontMgr`, `SkTypeface`, `SkShaper`, `SkTextBlob` toward pure Kotlin dumps. | `kanvas-skia/src/main/kotlin/org/skia/foundation`. | Current gates preserved; no implicit complex `drawString`. |
+| PKT-16 `:kanvas-skia` facade migration adapters | Dependency-gated; the M13 facade inventory slice is now checked in, while route implementation slices stay blocked on advanced shaping plus GPU handoff readiness gaps. | Delegate `SkFontMgr`, `SkTypeface`, `SkShaper`, `SkTextBlob` toward pure Kotlin dumps. | `kanvas-skia/src/main/kotlin/org/skia/foundation`. | Current gates preserved; no implicit complex `drawString`. |
 
 ## Parallel Workstreams
 
@@ -73,7 +73,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | COLR/PNG/SVG/emoji | PKT-11 plan-only and refusal evidence. | Low if isolated to `glyph/color`. |
 | GPU handoff | PKT-12 command/artifact/refusal contracts only. | Low if no renderer route activation. |
 | Validation/drift/perf | PKT-13/14 harness and telemetry skeletons. | Low, but avoid modifying business APIs. |
-| Migration/refusal retirement | PKT-16 only after supporting evidence exists. | High; defer facade changes until contracts stabilize. |
+| Migration/refusal retirement | PKT-16 only after supporting evidence exists; keep legacy gates visible until facade inventory and route evidence land. | High; defer facade changes until contracts stabilize. |
 
 ## Current Coordination Notes
 
@@ -138,6 +138,47 @@ lookup fixture family plus required `variation-adjustment-trace.json`
 evidence. The compatible-asset audit found candidate sources, but no reviewed
 in-repo pack clears either Required Evidence set yet.
 
+### KFONT-M13 Facade Migration Readiness Audit
+
+Status: coordination evidence.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-001-add-facade-adapter-inventory.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-002-route-sktypeface-opentype-facts-through-pure-kotlin-core.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-003-route-explicit-skshaper-apis-through-pure-kotlin-shaping.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-004-route-sktextblob-glyph-runs-through-typed-descriptors.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-005-retire-stale-font-docs-and-stubs-after-evidence-promotion.md`
+- `reports/pure-kotlin-text/2026-06-19-kfont-m13-readiness-audit.md`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- The readiness audit confirms PKT-16 remains dependency-gated overall, but it
+  separates the actionable coordination slice from the blocked route slices:
+  `KFONT-M13-001` should inventory still-open shaping and GPU gates such as
+  `KFONT-M6-010` and `KFONT-M11-010`, while the route implementation tickets
+  remain blocked behind that inventory and their route-specific evidence.
+- `KFONT-M13-002`, `KFONT-M13-003`, and `KFONT-M13-004` now point at concrete
+  remaining gates instead of generic `proposed` notes, and `KFONT-M13-005`
+  keeps legacy-doc retirement explicitly behind the route evidence it needs.
+- The audit preserves all legacy non-claims: no facade route support claim, no
+  GPU route claim, no hidden `drawString` complex shaping claim, and no legacy
+  gate retirement by documentation alone.
+
+Validation:
+
+```bash
+rtk git diff --check
+```
+
+Remaining gate: this is coordination-only readiness evidence. It does not add a
+facade inventory dump, `SkTypeface` parity evidence, explicit `SkShaper`
+parity, `SkTextBlob` typed descriptor evidence, or any legacy-gate retirement
+claim.
+
 ### KFONT-M6 Fixture Asset/License Audit Refresh
 
 Status: coordination evidence.
@@ -157,8 +198,8 @@ Evidence:
   and `unicode-org/text-rendering-tests` under `Unicode-3.0`.
 - The audit also keeps the critical non-claim explicit: no reviewed
   ticket-local Thai/CJK boundary fixture pack or advanced-lookup fixture pack
-  is present in-repo yet, so `KFONT-M6-009` and `KFONT-M6-010` must not move
-  past `proposed`.
+  is present in-repo yet, so `KFONT-M6-009` and `KFONT-M6-010` remain
+  `blocked` and must not be treated as actionable.
 - `KFONT-M6-009` and `KFONT-M6-010` status notes now point at current gates
   rather than older `review` / prerequisite wording that no longer matches the
   merged M6 state on `master`.
@@ -172,6 +213,54 @@ rtk git diff --check
 Remaining gate: this is coordination-only blocker evidence. It does not add
 Thai shaping support, CJK shaping support, extension/chaining lookup support,
 variation-adjustment support, or any fixture-ready claim.
+
+### KFONT-M13-001 Facade Adapter Inventory
+
+Status: done; implementation evidence.
+
+Files:
+
+- `reports/pure-kotlin-text/facade-adapter-inventory.json`
+- `reports/pure-kotlin-text/2026-06-19-kfont-m13-001-facade-adapter-inventory.md`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `scripts/validate_kfont_m13_001_facade_inventory.py`
+- `scripts/test_validate_kfont_m13_001_facade_inventory.py`
+- `.upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-001-add-facade-adapter-inventory.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/README.md`
+
+Evidence:
+
+- `facade-adapter-inventory.json` now covers all scoped façade routes:
+  `SkFontMgr`, `SkTypeface`, `SkFont`, simple deterministic
+  `SkCanvas.drawString`, explicit `SkShaper`, `SkTextBlob`, and
+  paragraph-compatible APIs.
+- The inventory maps every durable legacy gate and keeps `pdf_never_embed`
+  visible as an explicit adjacent/out-of-scope gate rather than assigning it a
+  false runtime facade owner.
+- The dashboard now includes the `skia-facade-adapter-inventory` row as
+  `tracked-gap`, with the inventory JSON/markdown plus the diagnostic taxonomy
+  linked as route/refusal evidence.
+- `dump-evidence-index.json` now tracks the facade inventory artifact as a
+  producer-only coordination dump with PM bundle/dashboard wiring validations.
+- The inventory preserves all non-claims: no route support promotion, no GPU
+  route readiness claim, no legacy-gate retirement, no hidden native-engine
+  dependency, and no implicit complex `drawString` broadening.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_kfont_m13_001_facade_inventory.py
+rtk python3 scripts/validate_kfont_m13_001_facade_inventory.py
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_claim_dashboard.py
+rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+```
+
+Remaining gate: route-specific façade promotions still belong to
+`KFONT-M13-002`, `KFONT-M13-003`, and `KFONT-M13-004`; the inventory itself is
+coordination evidence, not a support claim.
 
 ## Checkpoint Evidence
 

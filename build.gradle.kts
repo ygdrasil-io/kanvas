@@ -3548,11 +3548,26 @@ tasks.register<Exec>("validateKfontM12001TelemetryPmEvidence") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("validateKfontM13001FacadeInventory") {
+    group = "verification"
+    description = "Validates the advisory PM bundle evidence for the KFONT-M13-001 facade adapter inventory slice."
+    commandLine("python3", "scripts/validate_kfont_m13_001_facade_inventory.py", rootDir.absolutePath)
+    inputs.file(layout.projectDirectory.file("scripts/validate_kfont_m13_001_facade_inventory.py"))
+    inputs.file(layout.projectDirectory.file("scripts/test_validate_kfont_m13_001_facade_inventory.py"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/facade-adapter-inventory.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-19-kfont-m13-001-facade-adapter-inventory.md"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-claim-dashboard.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-diagnostic-taxonomy.json"))
+    inputs.file(layout.projectDirectory.file("build.gradle.kts"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register("pipelineSceneDashboardGate") {
     group = "verification"
     description = "Runs the M50 release gate validation for the generated scene dashboard."
 
     dependsOn("validatePureKotlinTextClaimDashboard")
+    dependsOn("validateKfontM13001FacadeInventory")
     dependsOn("pipelineSceneDashboard")
 
     val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
@@ -6043,6 +6058,7 @@ tasks.register("pipelinePmBundle") {
     dependsOn(
         "validatePureKotlinTextClaimDashboard",
         "validateKfontM12001TelemetryPmEvidence",
+        "validateKfontM13001FacadeInventory",
         "pipelineM65RuntimeSmoke",
         "pipelineM86FidelityBurndown",
         "validateM88ReleaseCandidate2",
@@ -6174,8 +6190,11 @@ tasks.register("pipelinePmBundle") {
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/glyph-atlas-occupancy.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/gpu-text-handoff-metrics.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/draw-text-run-upload-plan.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-diagnostic-taxonomy.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-pm-bundle.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/facade-adapter-inventory.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-19-kfont-m13-001-facade-adapter-inventory.md"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-19-kfont-m12-004-glyph-cache-metrics.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m65-kadre-audit.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m65-runtime-smoke.md"))
@@ -6223,8 +6242,11 @@ tasks.register("pipelinePmBundle") {
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/glyph-atlas-occupancy.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/gpu-text-handoff-metrics.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/draw-text-run-upload-plan.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-diagnostic-taxonomy.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/font-telemetry-pm-bundle.json"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/facade-adapter-inventory.json"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"))
+    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-19-kfont-m13-001-facade-adapter-inventory.md"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-19-kfont-m12-003-shaping-paragraph-metrics.md"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-19-kfont-m12-004-glyph-cache-metrics.md"))
     inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-19-kfont-m12-005-gpu-handoff-metrics.md"))
@@ -6412,8 +6434,11 @@ tasks.register("pipelinePmBundle") {
             "reports/pure-kotlin-text/glyph-atlas-occupancy.json",
             "reports/pure-kotlin-text/gpu-text-handoff-metrics.json",
             "reports/pure-kotlin-text/draw-text-run-upload-plan.json",
+            "reports/pure-kotlin-text/font-diagnostic-taxonomy.json",
             "reports/pure-kotlin-text/font-telemetry-pm-bundle.json",
+            "reports/pure-kotlin-text/facade-adapter-inventory.json",
             "reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md",
+            "reports/pure-kotlin-text/2026-06-19-kfont-m13-001-facade-adapter-inventory.md",
             "reports/pure-kotlin-text/2026-06-19-kfont-m12-003-shaping-paragraph-metrics.md",
             "reports/pure-kotlin-text/2026-06-19-kfont-m12-004-glyph-cache-metrics.md",
             "reports/pure-kotlin-text/2026-06-19-kfont-m12-005-gpu-handoff-metrics.md",

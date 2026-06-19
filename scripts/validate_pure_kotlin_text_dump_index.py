@@ -29,6 +29,7 @@ REQUIRED_DUMPS = {
     "color-emoji-fixture-manifest",
     "color-svg-emoji-goldens",
     "emoji-route-trace",
+    "facade-adapter-inventory",
     "fallback-catalog-build",
     "font-source-liberation-scan-root",
     "glyph-atlas-lifecycle",
