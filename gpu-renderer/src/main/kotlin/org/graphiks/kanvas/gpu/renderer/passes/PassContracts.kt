@@ -1212,4 +1212,68 @@ object GPUFirstRoutePassBuilder {
             targetStateHash = targetStateHash,
             code = code,
         )
+
+    /**
+     * Builds an accepted DrawTextRun/A8 pass with invocation identity but no
+     * concrete resource or binding slots.
+     */
+    fun acceptedDrawTextRun(
+        commandIdValue: Int,
+        analysisRecordId: String,
+        renderStepIdentity: String,
+        sortKey: Long,
+        pipelineKeyHash: String,
+        boundsHash: String,
+        scissorBoundsHash: String?,
+        originalPaintOrder: Int,
+        targetStateHash: String,
+    ): GPUDrawPass {
+        val invocation = GPUDrawInvocation(
+            commandIdValue = commandIdValue,
+            analysisRecordId = analysisRecordId,
+            renderStepIndex = 0,
+            renderStepId = GPURenderStepID(renderStepIdentity),
+            role = "text",
+            layerScopeId = "root",
+            sortKey = sortKey,
+            pipelineKeyHash = pipelineKeyHash,
+            uniformSlot = null,
+            resourceSlot = null,
+            boundsHash = boundsHash,
+            scissorBoundsHash = scissorBoundsHash,
+            originalPaintOrder = originalPaintOrder,
+        )
+        return GPUDrawPass(
+            passId = "pass.text.$commandIdValue",
+            targetStateHash = targetStateHash,
+            layerScopeId = "root",
+            loadStoreLabel = "load.store",
+            invocations = listOf(invocation),
+            pipelineKeys = listOf(pipelineKeyHash),
+            barriers = emptyList(),
+        )
+    }
+
+    /** Builds an empty refused DrawTextRun pass. */
+    fun refusedDrawTextRun(
+        commandIdValue: Int,
+        targetStateHash: String,
+        code: String,
+    ): GPUDrawPass =
+        GPUDrawPass(
+            passId = "pass.refused.$commandIdValue",
+            targetStateHash = targetStateHash,
+            layerScopeId = "root",
+            loadStoreLabel = "refused",
+            invocations = emptyList(),
+            pipelineKeys = emptyList(),
+            barriers = emptyList(),
+            diagnostics = listOf(
+                GPUPassDiagnostic(
+                    code = code,
+                    passId = "pass.refused.$commandIdValue",
+                    terminal = true,
+                ),
+            ),
+        )
 }
