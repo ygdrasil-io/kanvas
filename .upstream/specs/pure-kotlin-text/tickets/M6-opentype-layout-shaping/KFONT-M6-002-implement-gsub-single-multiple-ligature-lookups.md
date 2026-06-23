@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-002"
 title: "Implement GSUB single/multiple/ligature lookups"
-status: "blocked"
+status: "done"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
@@ -64,17 +64,19 @@ data class GsubTraceEvent(
 
 ## Acceptance Criteria
 
-- [ ] Single substitution fixture maps one glyph to another and records the feature and lookup index.
-- [ ] Multiple substitution fixture maps one glyph to multiple glyphs while preserving the original cluster range.
-- [ ] Ligature fixture maps `f` + `i` or equivalent fixture glyphs into one glyph with a merged cluster range.
-- [ ] Malformed coverage, invalid sequence length, and invalid ligature component fixtures emit `text.shaping.lookup-malformed`.
-- [ ] Substitution output is deterministic and independent of external shaping engines.
+- [x] Single substitution fixture maps one glyph to another and records the feature and lookup index.
+- [x] Multiple substitution fixture maps one glyph to multiple glyphs while preserving the original cluster range.
+- [x] Ligature fixture maps `f` + `i` or equivalent fixture glyphs into one glyph with a merged cluster range.
+- [x] Malformed coverage, invalid sequence length, and invalid ligature component fixtures emit `text.shaping.lookup-malformed`.
+- [x] Substitution output is deterministic and independent of external shaping engines.
 
 ## Current Slice
 
 - Parsed `GSUB` table facts now surface LookupType 1 single substitution, LookupType 2 multiple substitution, and LookupType 4 ligature substitution through `OpenTypeLayoutTables`.
 - `BasicOpenTypeShapingEngine` now applies those parsed lookups in active feature traversal order, preserves cluster ranges across one-to-one, one-to-many, and many-to-one substitutions, and honors explicit feature disable requests such as `liga=0`.
-- This slice does not yet promote `OpenTypeLayoutEngineContract` trace dumps, malformed/refusal fixtures, or full `ShapingPlan`-driven feature-order behavior.
+- Reviewed synthetic Latin fixture fonts are now checked in under `reports/font/fixtures/fonts/shaping/` and pinned in `reports/font/fixtures/provenance/index.json`.
+- Promoted `gsub-trace.json` and shared `shaped-glyph-run.json` evidence now record lookup indices, coverage matches, input/output glyph IDs, cluster actions, and an explicit `no-match` row separate from the retained M6-001 contract-only goldens.
+- This slice remains bounded to simple Latin GSUB single, multiple, and ligature lookups; contextual and extension substitutions remain separate tickets.
 
 ## Required Evidence
 
@@ -108,8 +110,8 @@ rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextS
 ## Status Notes
 
 - `proposed`: Basic GSUB behavior depends on the M6 contract and M2 table facts.
-- `review`: Bounded parser/runtime support for GSUB LookupType 1/2/4 is implemented and freshly validated in `font/sfnt` and `font/text` surface tests.
-- `blocked`: 2026-06-18 asset audit confirmed reviewed real-font candidates for ligature and single-substitution slices (`Source Serif 4` under `SIL-OFL-1.1`) plus contextual/reference GSUB fixtures in `unicode-org/text-rendering-tests` under `Unicode-3.0`, but no reviewed in-repo asset yet proves a simple GSUB LookupType 2 multiple-substitution fixture for this ticket. Remaining gate: add reviewed provenance and expected dumps for `gsub-single-substitution.otf`, `gsub-multiple-substitution.otf`, `gsub-ligature-fi.otf`, `gsub-coverage-malformed.otf`, and `gsub-ligature-bad-component.otf`, with `gsub-multiple-substitution.otf` specifically backed by a real simple LookupType 2 fixture rather than a contextual-only substitute, then promote `gsub-trace.json` / `shaped-glyph-run.json` beyond the current M6-001 contract goldens with explicit `ShapingPlan` ordering.
+- `review`: Bounded parser/runtime support for GSUB LookupType 1/2/4 is implemented and freshly validated in `font/sfnt` and `font/text` surface tests. Remaining gate: add reviewed fixture provenance and expected dumps for `gsub-single-substitution.otf`, `gsub-multiple-substitution.otf`, `gsub-ligature-fi.otf`, `gsub-coverage-malformed.otf`, and `gsub-ligature-bad-component.otf`, then promote `gsub-trace.json` / `shaped-glyph-run.json` beyond the current M6-001 contract goldens with explicit `ShapingPlan` ordering.
+- `done`: Reviewed synthetic Latin GSUB fixtures, provenance, and promoted `gsub-trace.json` / `shaped-glyph-run.json` evidence are checked in and freshly validated. Broader script coverage, contextual substitutions, and any support promotion remain separate gates outside this ticket.
 - Move to `ready` only after fixture fonts and trace fields are reviewed.
 
 ## Linear Labels

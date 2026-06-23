@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-008"
 title: "Add Devanagari shaping fixtures"
-status: "proposed"
+status: "blocked"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
@@ -90,14 +90,19 @@ data class DevanagariFixtureCase(
 ## Validation
 
 ```bash
-rtk git diff --check
+rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest
 rtk ./gradlew --no-daemon :font:text:test --tests '*DevanagariShaping*'
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
 ```
 
 ## Status Notes
 
 - `proposed`: Devanagari evidence depends on M5 clusters/itemization, contextual GSUB, mark positioning, and feature policy.
-- Current blocker audit (2026-06-18): merged PR `#1707` (`KFONT-M6-006`) delivered the bounded feature-policy prerequisite slice, but `KFONT-M6-006` still remains blocked on per-script runtime adoption and `drawString` non-enablement evidence, `KFONT-M6-003` and `KFONT-M6-005` remain gated by absent fixture families, and the Devanagari fixture set `devanagari-consonant-cluster.otf`, `devanagari-reph.otf`, `devanagari-prebase-matra.otf`, `devanagari-below-base.otf`, `devanagari-mark-placement.otf`, and `devanagari-unsupported-syllable.otf` is not present in-repo. Remaining gate is complete the contextual and mark-positioning dependencies, satisfy the remaining `KFONT-M6-006` runtime-evidence gate, then add reviewed Indic fixture provenance and syllable-plan dumps.
+- `blocked`: `DevanagariShapingFixtureTest` plus `devanagari-shaping-report.json` now prove bounded vendored-font evidence for pinned Script_Extensions `Deva` script selection on the pre-base matra case, consonant-cluster preservation, reph-like shaping, and mark placement on `NotoSansDevanagari-Regular.ttf` without promoting Devanagari or Indic shaping support.
+- `blocked`: This wave intentionally keeps `indic-syllable-plan.json` or equivalent phase evidence, the full required `deva` / `dev2` feature set, dedicated unsupported-syllable and phase refusal fixtures/codes, and ticket-local `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` / `unicode-segments.json` families as explicit remaining gates.
 - Move to `ready` only after fixture coverage and syllable dump fields are reviewed.
 
 ## Linear Labels

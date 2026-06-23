@@ -13,8 +13,6 @@
     "mixed-bidi"
   ],
   "requiredDiagnostics": [
-    "text.shaping.cursive-attachment-unavailable",
-    "text.shaping.mark-positioning-unavailable",
     "text.shaping.gdef-required",
     "text.shaping.paragraph-bidi-required"
   ],
