@@ -26,6 +26,73 @@ import org.graphiks.kanvas.text.shaping.ShapingRequest
 class ExtensionLookupFixtureTest {
 
     @Test
+    fun defaultOpenTypeFaceParserResolvesCheckedInGsubExtensionFixtureFromRepo() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440714",
+            relativePath = "reports/font/fixtures/fonts/shaping/gsub-extension-substitution.otf",
+        )
+
+        val gsub = requireNotNull(face.gsub)
+        assertEquals(listOf("ccmp", "liga"), gsub.lookups.map { it.featureTag })
+        assertEquals(2, gsub.lookups.size)
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineAppliesCheckedInGsubExtensionFixtureFromRepo() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440715",
+            relativePath = "reports/font/fixtures/fonts/shaping/gsub-extension-substitution.otf",
+        )
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = CMapGlyphMapper(cmapsByTypefaceId = mapOf(face.typefaceId to face.cmap)),
+            gsubTablesByTypefaceId = mapOf(face.typefaceId to requireNotNull(face.gsub)),
+            kernUnitsPerEmByTypefaceId = mapOf(face.typefaceId to face.unitsPerEm),
+        )
+
+        val singleResult = engine.shape(
+            ShapingRequest(
+                text = "A",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        val ligatureResult = engine.shape(
+            ShapingRequest(
+                text = "fi",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(emptyList(), singleResult.diagnostics)
+        assertEquals(listOf(15), singleResult.glyphRuns.single().glyphIds)
+        assertEquals(emptyList(), ligatureResult.diagnostics)
+        assertEquals(listOf(42), ligatureResult.glyphRuns.single().glyphIds)
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserReportsCheckedInMalformedExtensionFixtureDiagnostic() {
+        val path = projectRoot().resolve("reports/font/fixtures/fonts/shaping/layout-extension-cycle.otf")
+        val source = FontSource(
+            id = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440716")),
+            kind = FontSourceKind.FILE,
+            displayName = path.fileName.toString(),
+            bytes = Files.readAllBytes(path),
+        )
+
+        val parsed = DefaultOpenTypeFaceParser().parse(source)
+
+        assertEquals(listOf("font.sfnt.optional-table-malformed"), parsed.diagnostics.map { it.causeCode })
+        assertTrue(parsed.diagnostics.single().message.contains("Unable to parse OpenType table GSUB."))
+        assertTrue(
+            parsed.diagnostics.single().causeMessage?.contains(
+                "OpenType GSUB ExtensionSubst target lookup type 7 is not supported.",
+            ) == true,
+        )
+        assertEquals(null, parsed.layout.gsub)
+    }
+
+    @Test
     fun defaultOpenTypeFaceParserResolvesGsubExtensionSingleLookupFromMemoryFont() {
         val face = parsedFace(
             uuid = "550e8400-e29b-41d4-a716-446655440710",
@@ -135,10 +202,23 @@ class ExtensionLookupFixtureTest {
 
         assertTrue(report.contains(""""dumpId": "extension-lookup-report""""))
         assertTrue(report.contains(""""ownerTickets": ["KFONT-M6-010"]"""))
+        assertTrue(report.contains(""""fixtureKind": "checked-in-synthetic-font""""))
         assertTrue(report.contains(""""extension-single-substitution""""))
         assertTrue(report.contains(""""extension-ligature-substitution""""))
+        assertTrue(report.contains(""""extension-unsupported-target-diagnostic""""))
         assertTrue(report.contains(""""no-complete-advanced-lookup-support-claim""""))
         assertTrue(report.contains(""""no-gpos-contextual-or-variation-claim""""))
+    }
+
+    private fun parsedFixtureFace(
+        uuid: String,
+        relativePath: String,
+    ): ParsedFace {
+        val path = projectRoot().resolve(relativePath)
+        return parsedFace(
+            uuid = uuid,
+            bytes = Files.readAllBytes(path),
+        )
     }
 
     private fun parsedFace(uuid: String, bytes: ByteArray): ParsedFace {
