@@ -14,7 +14,7 @@ M8 supplies paragraph and glyph run outputs. M9 supplies strike keys, A8/SDF art
 - [ ] A8 atlas route evidence includes route plan, resource plan, instance layout, bindings, WGSL reflection, upload-before-sample ordering, and focused GPU proof.
 - [ ] Unsupported SDF, outline, color, bitmap, SVG, stale atlas, missing upload, and unregistered artifact cases refuse with precise `text.gpu.*` and `unsupported.text.*` diagnostics.
 - [x] `GPUTextSubRunPlan` splitting preserves visual order and records split reasons by representation, atlas page/generation, transform, material, clip, layer, destination-read, and budget.
-- [ ] `MaterialKey` tests prove glyph IDs, atlas coordinates, generations, live handles, and upload tokens stay out of material identity.
+- [x] `MaterialKey` tests prove glyph IDs, atlas coordinates, generations, live handles, and upload tokens stay out of material identity.
 
 ## Tickets
 
@@ -29,7 +29,7 @@ M8 supplies paragraph and glyph run outputs. M9 supplies strike keys, A8/SDF art
 | [KFONT-M11-007 - Add resource/upload/instance/binding plan contracts](KFONT-M11-007-add-resource-upload-instance-binding-plan-contracts.md) | `done` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-006` | `dftext` |
 | [KFONT-M11-008 - Add upload-before-sample ordering validation](KFONT-M11-008-add-upload-before-sample-ordering-validation.md) | `done` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-004`, `KFONT-M11-007` | `dftext` |
 | [KFONT-M11-009 - Add WGSL parser/reflection validation for text routes](KFONT-M11-009-add-wgsl-parser-reflection-validation-for-text-routes.md) | `done` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-004`, `KFONT-M11-007` | `dftext`, `coloremoji_blendmodes` |
-| [KFONT-M11-010 - Add `MaterialKey` leakage tests](KFONT-M11-010-add-materialkey-leakage-tests.md) | `ready` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-006`, `KFONT-M11-007` | - |
+| [KFONT-M11-010 - Add `MaterialKey` leakage tests](KFONT-M11-010-add-materialkey-leakage-tests.md) | `done` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-006`, `KFONT-M11-007` | - |
 
 ## Validation Bundle
 
@@ -50,14 +50,14 @@ Required evidence for this milestone includes `text-gpu-artifact-registry.json`,
 
 ## Current Readiness Gate
 
-2026-06-23 update: `KFONT-M11-009` is now `done` on deterministic text WGSL
-reflection and validation evidence for the accepted A8 atlas subrun, including
-reflected texture/sampler/uniform bindings, `TextParams` uniform layout,
-instance input expectations, Kotlin plan comparisons, and parser/binding/SDF/
-registration refusal diagnostics. `KFONT-M11-010` remains `ready` for full
-`MaterialKey` leakage fixtures. The milestone still does not claim executed
-uploads, broad GPU text support, SDF support, a general GPU task graph
-scheduler, route promotion, or `dftext` retirement.
+2026-06-23 update: `KFONT-M11-010` is now `done` on deterministic
+`MaterialKey` leakage validation evidence for the accepted A8 atlas subrun,
+covering glyph ID variance, atlas rect/UV variance, atlas generation variance,
+upload token variance, live texture handle variance, legitimate material color
+change, and negative fixtures for each forbidden field category. All 10 M11
+tickets are now `done`. The milestone still does not claim executed uploads,
+broad GPU text support, SDF support, a general GPU task graph scheduler, route
+promotion, or `dftext` retirement.
 
 ## Status Update Rule
 

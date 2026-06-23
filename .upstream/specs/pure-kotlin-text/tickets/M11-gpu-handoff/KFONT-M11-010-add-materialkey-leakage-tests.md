@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-010"
 title: "Add `MaterialKey` leakage tests"
-status: "ready"
+status: "done"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
