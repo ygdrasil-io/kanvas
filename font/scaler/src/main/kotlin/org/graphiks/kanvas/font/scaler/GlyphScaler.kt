@@ -72,6 +72,13 @@ class GlyphScaler private constructor(
         return if (id in 0 until numGlyphs) id else null
     }
 
+    /**
+     * Scales a glyph outline for the given glyph ID and size.
+     *
+     * Throws on CFF/CFF2 fonts — callers that may encounter unknown font types
+     * should use [scaleGlyphOrDiagnostic] instead, which catches the exception
+     * and returns an [GlyphScaleResult.Unsupported] diagnostic.
+     */
     fun scaleGlyph(glyphId: Int, size: Float, sourceCodepoint: Int = 0): ScaledGlyph {
         if (glyphId < 0 || glyphId >= numGlyphs) {
             throw IllegalArgumentException("Glyph ID $glyphId out of range [0, $numGlyphs)")
@@ -127,7 +134,6 @@ class GlyphScaler private constructor(
         val bytes = fontBytes
         require(bytes.size >= 12)
         val sfnt = String(bytes, 0, 4, Charsets.ISO_8859_1)
-        val sfntU32 = u32(bytes, 0)
         require(sfnt == "\u0000\u0001\u0000\u0000" || sfnt == "true" || sfnt == "OTTO" || sfnt == "typ1") {
             "Unsupported SFNT scaler type: ${bytes[0].toInt() and 0xFF}${bytes[1].toInt() and 0xFF}${bytes[2].toInt() and 0xFF}${bytes[3].toInt() and 0xFF}"
         }
@@ -279,7 +285,7 @@ class GlyphScaler private constructor(
         return CmapFormat12(groups)
     }
 
-    private fun parseGlyphOutline(glyphId: Int): GlyphData {
+    private fun parseGlyphOutline(glyphId: Int, depth: Int = 0): GlyphData {
         if (isCFF) error("CFF/CFF2 charstring parsing is deferred")
         val glyf = tables["glyf"] ?: error("Missing glyf table")
         val start = glyphOffsets[glyphId]
@@ -288,7 +294,7 @@ class GlyphScaler private constructor(
         val p = glyf.offset + start
         val numberOfContours = i16(fontBytes, p).toInt()
         if (numberOfContours >= 0) return parseSimpleGlyph(p, numberOfContours)
-        return parseCompositeGlyph(p)
+        return parseCompositeGlyph(p, depth)
     }
 
     private fun parseSimpleGlyph(p: Int, numberOfContours: Int): GlyphData {
@@ -387,7 +393,7 @@ class GlyphScaler private constructor(
                     c = f2dot14(bytes, off + 4); d = f2dot14(bytes, off + 6); off += 8
                 }
             }
-            val childData = parseGlyphOutline(componentGlyph)
+            val childData = parseGlyphOutline(componentGlyph, depth + 1)
             if (childData is GlyphData.Simple) {
                 for (contour in childData.contours) {
                     allContours.add(contour.map { pt ->

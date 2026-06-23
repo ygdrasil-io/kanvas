@@ -25,18 +25,17 @@ import org.skia.foundation.SkPaint
  * `Disabled` means no normalized renderer command is created and no planner is
  * called. `Shadow` permits evidence-only normalization and first-route planning
  * without changing pixels, resources, backend submission, or product routing.
- * `ProductFlag` records a controlled product-route candidate when explicitly
- * requested, while the legacy draw remains available and still performs the
- * actual rendering.
+ * `ProductFlag` records a controlled product-route candidate. This is the
+ * default since M1 product activation (2026-06-23).
  */
 internal enum class GpuRendererShadowMode {
-    /** Default mode: legacy rendering remains the only behavior. */
+    /** Rollback mode: legacy rendering only. Opt-in via disable property. */
     Disabled,
 
     /** Evidence mode: normalize facts and ask the renderer planner for a route decision. */
     Shadow,
 
-    /** Controlled flag mode: record product-candidate diagnostics without default activation. */
+    /** Product mode: record first-route diagnostics. Default since M1 activation. */
     ProductFlag,
 }
 
@@ -61,12 +60,12 @@ internal data class GpuRendererFirstRouteFlagState(
  * Configuration for the FillRect shadow handoff.
  *
  * The config owns the explicit feature gate and immutable capability snapshot
- * passed to `:gpu-renderer`. The default is disabled, so constructing an adapter
- * cannot activate a renderer route unless callers opt into [GpuRendererShadowMode.Shadow]
- * or use [fromSystemProperties] with the documented feature flag.
+ * passed to `:gpu-renderer`. The default is [GpuRendererShadowMode.ProductFlag]
+ * since M1 product activation (2026-06-23). Legacy rendering can be restored
+ * via the `kanvas.gpu.renderer.product.fillRect.disable` system property.
  */
 internal data class GpuRendererShadowConfig(
-    val mode: GpuRendererShadowMode = GpuRendererShadowMode.Disabled,
+    val mode: GpuRendererShadowMode = GpuRendererShadowMode.ProductFlag,
     val capabilities: GPUCapabilities = firstSliceShadowCapabilities(),
     val productFlag: GpuRendererFirstRouteFlagState = GpuRendererFirstRouteFlagState.forMode(mode),
 ) {
@@ -84,20 +83,36 @@ internal data class GpuRendererShadowConfig(
         public const val ProductFillRectProperty: String = "kanvas.gpu.renderer.product.fillRect"
 
         /**
-         * Builds config from system properties without changing the default.
+         * System property that restores legacy rendering when set to `true`.
+         *
+         * Since M1 product activation (2026-06-23), the default mode is
+         * [GpuRendererShadowMode.ProductFlag]. Setting this property to `true`
+         * switches the mode to [GpuRendererShadowMode.Disabled], which restores
+         * the legacy rendering path without first-route diagnostics.
+         */
+        public const val ProductFillRectDisableProperty: String =
+            "kanvas.gpu.renderer.product.fillRect.disable"
+
+        /**
+         * Builds config from system properties.
+         *
+         * The product mode is the default since M1 activation. The disable
+         * property restores legacy rendering for rollback. Shadow mode is
+         * selected only when opt-in evidence is explicitly requested and the
+         * product flag is not disabled.
          *
          * Only the literal value `true`, parsed by [String.toBoolean], enables
-         * a non-default mode. Missing or false values keep the handoff skipped.
-         * The product flag is intentionally separate from shadow mode and wins
-         * when both local properties are set, so diagnostics cannot be ambiguous.
+         * a non-default mode. The disable property wins over all others, and
+         * shadow mode wins over the default product mode when both local
+         * properties are set.
          */
         public fun fromSystemProperties(
             propertyReader: (String) -> String? = System::getProperty,
         ): GpuRendererShadowConfig {
             val mode = when {
-                propertyReader(ProductFillRectProperty).toBoolean() -> GpuRendererShadowMode.ProductFlag
+                propertyReader(ProductFillRectDisableProperty).toBoolean() -> GpuRendererShadowMode.Disabled
                 propertyReader(ShadowFillRectProperty).toBoolean() -> GpuRendererShadowMode.Shadow
-                else -> GpuRendererShadowMode.Disabled
+                else -> GpuRendererShadowMode.ProductFlag
             }
             return GpuRendererShadowConfig(mode = mode)
         }
@@ -389,11 +404,12 @@ internal class GpuRendererShadowAdapter(
 /**
  * Shared hook used by legacy `drawRect` and tests for FillRect shadow evidence.
  *
- * The hook keeps default rendering unchanged: disabled mode returns before a
- * renderer command is built, and shadow mode only produces evidence. For
- * `StrokeAndFill`, the legacy path decomposes the fill component before stroke
- * rendering; this hook mirrors that decomposition by passing a fill-style paint
- * copy to the adapter while leaving the caller's paint unchanged.
+ * Since M1 product activation (2026-06-23), the default mode is ProductFlag.
+ * Disabled mode returns before a renderer command is built, and shadow mode
+ * only produces evidence. For `StrokeAndFill`, the legacy path decomposes the
+ * fill component before stroke rendering; this hook mirrors that decomposition
+ * by passing a fill-style paint copy to the adapter while leaving the caller's
+ * paint unchanged.
  */
 internal fun shadowFillRectForLegacyPath(
     config: GpuRendererShadowConfig,
