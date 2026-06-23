@@ -10,6 +10,157 @@
   "offlinePolicy": "tests-must-not-download",
   "fixtures": [
     {
+      "fixtureId": "advanced-lookup-ticket-local-fixture-wave",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-010"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT M6 advanced lookup seed wave",
+        "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts + existing reviewed shaping fixtures",
+        "version": "2026-06-23 deterministic resource seed wave"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-chaining-positioning.otf",
+          "sha256": "30d29a4e1e9afdc372fb0ac587ef2ce358faeb4ae7c82ec7ab54e3445ec957c9",
+          "sizeBytes": 462,
+          "role": "advanced-lookup-seed-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-contextual-positioning.otf",
+          "sha256": "89a81bd7d5469a1f07df118feb3eb78a28233836be61a9ade6fc462bf72c8ffd",
+          "sizeBytes": 462,
+          "role": "advanced-lookup-seed-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-extension-positioning.otf",
+          "sha256": "89a81bd7d5469a1f07df118feb3eb78a28233836be61a9ade6fc462bf72c8ffd",
+          "sizeBytes": 462,
+          "role": "advanced-lookup-seed-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-chaining-context.otf",
+          "sha256": "b0b6c9fa035d952764da00c9846b1275714551c62a6304997ff00f0ffd6f305e",
+          "sizeBytes": 19720,
+          "role": "advanced-lookup-seed-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-reverse-chaining.otf",
+          "sha256": "956f6a48c47a27d761f51acabb1fbd7175b235e46dd15b229402b2d787f3ef14",
+          "sizeBytes": 604,
+          "role": "advanced-lookup-seed-font"
+        }
+      ],
+      "expectedDumps": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-advanced-lookup-support-claim",
+        "no-runtime-wiring-claim",
+        "no-variation-device-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "advanced-lookup-variation-seed",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-010"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT M6 variation seed from Roboto Flex",
+        "url": "reports/font/fixtures/fonts/scaler/RobotoFlex-Variable.ttf",
+        "version": "repo-vendored-existing + 2026-06-23 deterministic subset wave"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/roboto-flex-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gpos-variation-device.otf",
+          "sha256": "14eeced61fa1ad9828028fd8ba10431e9805c9f34d7b56b38564a6cdf81b0c43",
+          "sizeBytes": 18992,
+          "role": "variation-seed-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/variation-adjustment-trace.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-advanced-lookup-support-claim",
+        "no-runtime-variation-adjustment-claim",
+        "no-device-table-parser-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "arabic-ticket-local-fixture-wave",
+      "familyId": "complex-script-fixture-matrix",
+      "ownerTickets": [
+        "KFONT-M6-007"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT Arabic local subset wave from Noto Naskh Arabic",
+        "url": "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
+        "version": "repo-vendored-existing + 2026-06-23 deterministic subset wave"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/noto-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/arabic-joining-forms.otf",
+          "sha256": "f3061ffdb517f9c305fff792d7548bc116761051f6dc87c76a406217d4998284",
+          "sizeBytes": 12652,
+          "role": "arabic-subset-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/arabic-lam-alef.otf",
+          "sha256": "5e3a4112d265f82859a76d52541fa61db864c1a01bc6509d6766b1c2946ce6e1",
+          "sizeBytes": 8080,
+          "role": "arabic-subset-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/arabic-marks-cursive.otf",
+          "sha256": "ba71ec85cb9d0b1509ffa744711d79ce7a55490d9f699b4e16fa0ea3748a1fe5",
+          "sizeBytes": 10368,
+          "role": "arabic-subset-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/arabic-missing-cursive.otf",
+          "sha256": "e0638d818ad17ace2e09379b71ccdcf65f0df7614a87b4b7440dcc7d1eee0b32",
+          "sizeBytes": 9356,
+          "role": "arabic-refusal-seed-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/arabic-missing-mark.otf",
+          "sha256": "0ace92b75342aae6efb408ba93fd7785a09f470a00bc7a744db793eab932bb3c",
+          "sizeBytes": 6764,
+          "role": "arabic-refusal-seed-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/arabic-mixed-bidi.txt"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-positive-lamalef-claim",
+        "no-positive-cursive-claim",
+        "no-arabic-refusal-diagnostic-promotion",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
       "fixtureId": "color-colrv1-test-glyphs",
       "familyId": "color-glyphs",
       "ownerTickets": [
@@ -48,6 +199,69 @@
         "no-complete-target-support-claim",
         "no-complete-colrv1-rendering-claim",
         "no-gpu-color-glyph-support-claim"
+      ]
+    },
+    {
+      "fixtureId": "devanagari-ticket-local-fixture-wave",
+      "familyId": "complex-script-fixture-matrix",
+      "ownerTickets": [
+        "KFONT-M6-008"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT Devanagari local subset wave from Noto Sans Devanagari",
+        "url": "reports/font/fixtures/fonts/fallback/NotoSansDevanagari-Regular.ttf",
+        "version": "repo-vendored-existing + 2026-06-23 deterministic subset wave"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/noto-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/devanagari-below-base.otf",
+          "sha256": "ce186c21bb1700847f4ef0b6fa5b0c4d5a2880e3e693a0c6a2f0af549f8d487a",
+          "sizeBytes": 7236,
+          "role": "devanagari-subset-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/devanagari-consonant-cluster.otf",
+          "sha256": "d250d78a0f032ab8dd07fe48b8e497ba109a902cac55c000c70ca94c67c5da55",
+          "sizeBytes": 8104,
+          "role": "devanagari-subset-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/devanagari-mark-placement.otf",
+          "sha256": "30c465138e76e17431738cb63b53050845edadbc8461bf004251376574173e01",
+          "sizeBytes": 7232,
+          "role": "devanagari-subset-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/devanagari-prebase-matra.otf",
+          "sha256": "4a15ed9e3925a8ca22e9ea09a29def90015bbc87eec843acdb49413da0e2b356",
+          "sizeBytes": 6816,
+          "role": "devanagari-subset-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/devanagari-reph.otf",
+          "sha256": "efa2edffee9c11ad623a01639f01546b5391c16432869ec50a3a7b964cce10f3",
+          "sizeBytes": 8972,
+          "role": "devanagari-subset-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/devanagari-unsupported-syllable.otf",
+          "sha256": "c137bf22f93a9374f936d0f35886404d9b6c6f2e2aa9b30fe673afce8e99b4f3",
+          "sizeBytes": 8720,
+          "role": "devanagari-refusal-seed-font"
+        }
+      ],
+      "expectedDumps": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-indic-phase-claim",
+        "no-unsupported-syllable-closeout-claim",
+        "no-ticket-local-trace-claim",
+        "no-native-shaper-oracle-claim"
       ]
     },
     {
@@ -1082,6 +1296,71 @@
         "no-cff-rendering-support-claim",
         "no-cff2-variation-support-claim",
         "no-native-scaler-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "thai-cjk-ticket-local-fixture-wave",
+      "familyId": "complex-script-fixture-matrix",
+      "ownerTickets": [
+        "KFONT-M6-009"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT Thai and CJK local subset wave from Noto families",
+        "url": "reports/font/fixtures/fonts/fallback/NotoSansThai-Regular.ttf + reports/font/fixtures/fonts/fallback/NotoSansSC-Regular.otf + https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/OTF/Korean/NotoSansCJKkr-Regular.otf",
+        "version": "2026-06-23 deterministic subset wave"
+      },
+      "license": {
+        "id": "SIL-OFL-1.1",
+        "path": "reports/font/fixtures/licenses/noto-OFL-1.1.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/cjk-han-variation-selector.otf",
+          "sha256": "5c58d6b3bb0ac33b65b121bff5a118a20e06d21b1df573aaeda5d9de36932660",
+          "sizeBytes": 3608,
+          "role": "cjk-subset-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/cjk-hangul-direct.otf",
+          "sha256": "2923043aced38d9ce3721d0b1ab85873c4712640443c78cb97087da85961e041",
+          "sizeBytes": 3608,
+          "role": "cjk-subset-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/cjk-kana-vertical.otf",
+          "sha256": "4e418696260ec27fe2442fa3551538960b07bf6d8601550433bd7e12a7667f85",
+          "sizeBytes": 4552,
+          "role": "cjk-subset-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/cjk-missing-vertical-alt.otf",
+          "sha256": "5a7c3f887afd84683f7bf0d6e195e805f84eb3257f0e0052c2402dbdd9ef7b10",
+          "sizeBytes": 4428,
+          "role": "cjk-refusal-seed-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/thai-base-marks.otf",
+          "sha256": "5f8869ce6d126c6ff6a9b3d66b12b12784483347c3836834ff4900206deac165",
+          "sizeBytes": 7428,
+          "role": "thai-subset-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/thai-tone-marks.otf",
+          "sha256": "6a6cdf07d6c3a75a7737be382b2f428cad78cc91620b525e6a5e3558ed818973",
+          "sizeBytes": 7140,
+          "role": "thai-subset-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/thai-latin-mixed.txt"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-thai-paragraph-support-claim",
+        "no-cjk-paragraph-support-claim",
+        "no-ticket-local-trace-claim",
+        "no-native-shaper-oracle-claim"
       ]
     }
   ]
