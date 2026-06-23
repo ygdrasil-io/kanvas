@@ -18,7 +18,7 @@ will be measured. Cache and telemetry contracts must cite
 - [x] Cache counters are tied to named source artifacts and cannot be inferred
       from comments or synthetic ledgers.
 - [x] Release gates include warmup, variance, quarantine, and rebaseline policy.
-- [ ] PM bundles separate correctness support from realtime/performance
+- [x] PM bundles separate correctness support from realtime/performance
       readiness.
 
 ## Tickets
@@ -27,7 +27,7 @@ will be measured. Cache and telemetry contracts must cite
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M9-001 - Add observed cache telemetry source map](KGPU-M9-001-add-observed-cache-telemetry-source-map.md) | `done` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `telemetry-cache` | `KGPU-M1-001` | `cache reporting-only` |
 | [KGPU-M9-002 - Add release-blocking frame gate policy](KGPU-M9-002-add-release-blocking-frame-gate-policy.md) | `done` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `performance` | `KGPU-M9-001` | `frame reporting-only` |
-| [KGPU-M9-003 - Add PM readiness dashboard integration for GPU renderer](KGPU-M9-003-add-pm-readiness-dashboard-integration-for-gpu-renderer.md) | `blocked` | `P1` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `pm-evidence` | `KGPU-M9-001`, `KGPU-M9-002` | `pipelinePmBundle` |
+| [KGPU-M9-003 - Add PM readiness dashboard integration for GPU renderer](KGPU-M9-003-add-pm-readiness-dashboard-integration-for-gpu-renderer.md) | `done` | `P1` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `pm-evidence` | `KGPU-M9-001`, `KGPU-M9-002` | `pipelinePmBundle` |
 
 ## Validation Bundle
 
@@ -66,8 +66,18 @@ rtk python3 scripts/validate_gpu_renderer_r6_promotion_readiness_boundary.py .
   candidate/non-release-blocking. Independent review
   `019ed26f-3531-7fd0-8e5d-61f9a15d5a9a` accepted KGPU-M9-002 for `done`
   with no blocking findings.
-- KGPU-M9-003 remains `blocked` until PM dashboard and manifest integration is
-  implemented without moving readiness.
+- KGPU-M9-003 is `done` with
+  `GPURendererReadinessDashboardIntegrator` and
+  `gpuRendererM9ReadinessPmEvidenceBundle` evidence for
+  `gpu-renderer.readiness`. The PM manifest now injects
+  `gpuRendererM9ReadinessPmEvidence` under
+  `release/gpu-renderer-m9-readiness-pm-evidence/`, with separate correctness,
+  activation, performance, cache, and release rows. It remains non-promotional:
+  `readinessDelta=0.0`, `releaseBlocking=false`,
+  `productRouteActivated=false`, `webGpuAdapterRequired=false`, and
+  `nativeKadreCiRequired=false`. Independent review
+  `019ed60a-90f1-73c3-8ecd-59666e982a64` found no remaining P0/P1/P2 blockers
+  after dashboard-line token validation and stale-manifest ordering fixes.
 
 ## Non-Claims
 

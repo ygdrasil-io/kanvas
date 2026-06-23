@@ -4,6 +4,11 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandBinding
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
+import org.graphiks.kanvas.gpu.renderer.resources.dumpCommandOperandFields
 
 /** Stable render-step identifier. */
 @JvmInline
@@ -444,6 +449,203 @@ sealed interface GPUPassCommand {
         }
     }
 
+    /** Copies a texture region before later commands sample it. */
+    data class CopyTexture(
+        val sourceLabel: String,
+        val destinationLabel: String,
+        val boundsLabel: String,
+        val tokenLabel: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "copyTexture"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(sourceLabel.isNotBlank()) { "CopyTexture.sourceLabel must not be blank" }
+            require(destinationLabel.isNotBlank()) { "CopyTexture.destinationLabel must not be blank" }
+            require(boundsLabel.isNotBlank()) { "CopyTexture.boundsLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "CopyTexture.tokenLabel must not be blank" }
+        }
+    }
+
+    /** Materializes or reuses an offscreen layer target before rendering children. */
+    data class PrepareLayerTarget(
+        val targetLabel: String,
+        val descriptorHash: String,
+        val usageLabel: String,
+        val byteEstimate: Long,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "prepareLayerTarget"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(targetLabel.isNotBlank()) { "PrepareLayerTarget.targetLabel must not be blank" }
+            require(descriptorHash.isNotBlank()) { "PrepareLayerTarget.descriptorHash must not be blank" }
+            require(usageLabel.isNotBlank()) { "PrepareLayerTarget.usageLabel must not be blank" }
+            require(byteEstimate >= 0L) { "PrepareLayerTarget.byteEstimate must be non-negative" }
+        }
+    }
+
+    /** Clears an isolated layer target before child rendering. */
+    data class ClearLayerTarget(
+        val targetLabel: String,
+        val clearPolicy: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "clearLayerTarget"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(targetLabel.isNotBlank()) { "ClearLayerTarget.targetLabel must not be blank" }
+            require(clearPolicy.isNotBlank()) { "ClearLayerTarget.clearPolicy must not be blank" }
+        }
+    }
+
+    /** Materializes or reuses a pass-local depth/stencil attachment before stencil-cover work. */
+    data class PrepareStencilAttachment(
+        val attachmentLabel: String,
+        val descriptorHash: String,
+        val formatLabel: String,
+        val usageLabel: String,
+        val sampleCount: Int,
+        val byteEstimate: Long,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "prepareStencilAttachment"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(attachmentLabel.isNotBlank()) { "PrepareStencilAttachment.attachmentLabel must not be blank" }
+            require(descriptorHash.isNotBlank()) { "PrepareStencilAttachment.descriptorHash must not be blank" }
+            require(formatLabel.isNotBlank()) { "PrepareStencilAttachment.formatLabel must not be blank" }
+            require(usageLabel.isNotBlank()) { "PrepareStencilAttachment.usageLabel must not be blank" }
+            require(sampleCount > 0) { "PrepareStencilAttachment.sampleCount must be positive" }
+            require(byteEstimate >= 0L) { "PrepareStencilAttachment.byteEstimate must be non-negative" }
+        }
+    }
+
+    /** Clears pass-local stencil state before the producer writes coverage. */
+    data class ClearStencilAttachment(
+        val attachmentLabel: String,
+        val clearValue: Int,
+        val loadStorePolicy: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "clearStencilAttachment"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(attachmentLabel.isNotBlank()) { "ClearStencilAttachment.attachmentLabel must not be blank" }
+            require(loadStorePolicy.isNotBlank()) { "ClearStencilAttachment.loadStorePolicy must not be blank" }
+        }
+    }
+
+    /** Emits the bounded path stencil producer command before the cover consumer. */
+    data class StencilCoverProducer(
+        val attachmentLabel: String,
+        val pipelineLabel: String,
+        val boundsLabel: String,
+        val stencilStateLabel: String,
+        val tokenLabel: String,
+        val packetId: GPUDrawPacketID,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "stencilCoverProducer"
+        override val sourcePacketId: GPUDrawPacketID get() = packetId
+
+        init {
+            require(attachmentLabel.isNotBlank()) { "StencilCoverProducer.attachmentLabel must not be blank" }
+            require(pipelineLabel.isNotBlank()) { "StencilCoverProducer.pipelineLabel must not be blank" }
+            require(boundsLabel.isNotBlank()) { "StencilCoverProducer.boundsLabel must not be blank" }
+            require(stencilStateLabel.isNotBlank()) { "StencilCoverProducer.stencilStateLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "StencilCoverProducer.tokenLabel must not be blank" }
+        }
+    }
+
+    /** Emits the cover draw command that consumes producer-written stencil state. */
+    data class StencilCoverDraw(
+        val attachmentLabel: String,
+        val pipelineLabel: String,
+        val boundsLabel: String,
+        val compareLabel: String,
+        val writeMaskLabel: String,
+        val tokenLabel: String,
+        val packetId: GPUDrawPacketID,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "stencilCoverDraw"
+        override val sourcePacketId: GPUDrawPacketID get() = packetId
+
+        init {
+            require(attachmentLabel.isNotBlank()) { "StencilCoverDraw.attachmentLabel must not be blank" }
+            require(pipelineLabel.isNotBlank()) { "StencilCoverDraw.pipelineLabel must not be blank" }
+            require(boundsLabel.isNotBlank()) { "StencilCoverDraw.boundsLabel must not be blank" }
+            require(compareLabel.isNotBlank()) { "StencilCoverDraw.compareLabel must not be blank" }
+            require(writeMaskLabel.isNotBlank()) { "StencilCoverDraw.writeMaskLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "StencilCoverDraw.tokenLabel must not be blank" }
+        }
+    }
+
+    /** Renders layer children into the isolated target scope. */
+    data class RenderLayerChildren(
+        val scopeLabel: String,
+        val targetLabel: String,
+        val childrenLabel: String,
+        val tokenLabel: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "renderLayerChildren"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(scopeLabel.isNotBlank()) { "RenderLayerChildren.scopeLabel must not be blank" }
+            require(targetLabel.isNotBlank()) { "RenderLayerChildren.targetLabel must not be blank" }
+            require(childrenLabel.isNotBlank()) { "RenderLayerChildren.childrenLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "RenderLayerChildren.tokenLabel must not be blank" }
+        }
+    }
+
+    /** Composites an isolated layer source back into its parent target. */
+    data class CompositeLayer(
+        val sourceLabel: String,
+        val parentTargetLabel: String,
+        val blendModeLabel: String,
+        val routeLabel: String,
+        val tokenLabel: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "compositeLayer"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(sourceLabel.isNotBlank()) { "CompositeLayer.sourceLabel must not be blank" }
+            require(parentTargetLabel.isNotBlank()) { "CompositeLayer.parentTargetLabel must not be blank" }
+            require(blendModeLabel.isNotBlank()) { "CompositeLayer.blendModeLabel must not be blank" }
+            require(routeLabel.isNotBlank()) { "CompositeLayer.routeLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "CompositeLayer.tokenLabel must not be blank" }
+        }
+    }
+
+    /** Records a stable layer materialization refusal in command-stream evidence. */
+    data class RefuseLayer(
+        val scopeLabel: String,
+        val reasonCode: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "refuseLayer"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(scopeLabel.isNotBlank()) { "RefuseLayer.scopeLabel must not be blank" }
+            require(reasonCode.isNotBlank()) { "RefuseLayer.reasonCode must not be blank" }
+        }
+    }
+
+    /** Records a stable stencil-cover materialization refusal in command-stream evidence. */
+    data class RefuseStencilCover(
+        val pathLabel: String,
+        val reasonCode: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "refuseStencilCover"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(pathLabel.isNotBlank()) { "RefuseStencilCover.pathLabel must not be blank" }
+            require(reasonCode.isNotBlank()) { "RefuseStencilCover.reasonCode must not be blank" }
+        }
+    }
+
     /** Ends a render pass after all packet commands have been emitted. */
     data class EndRenderPass(val passId: String) : GPUPassCommand {
         override val commandLabel: String get() = "endRenderPass"
@@ -452,6 +654,27 @@ sealed interface GPUPassCommand {
         init {
             require(passId.isNotBlank()) { "EndRenderPass.passId must not be blank" }
         }
+    }
+}
+
+/** Packet-to-command bridge for provider-materialized command operands. */
+data class GPUPassCommandOperandBridge(
+    val packetId: GPUDrawPacketID?,
+    val commandLabel: String,
+    val operand: GPUMaterializedCommandOperandReference,
+) {
+    init {
+        require(commandLabel.isNotBlank()) { "GPUPassCommandOperandBridge.commandLabel must not be blank" }
+    }
+
+    companion object {
+        /** Converts provider-owned string evidence into pass-local typed packet evidence. */
+        fun fromMaterializedBinding(binding: GPUMaterializedCommandOperandBinding): GPUPassCommandOperandBridge =
+            GPUPassCommandOperandBridge(
+                packetId = binding.packetId?.let(::GPUDrawPacketID),
+                commandLabel = binding.commandLabel,
+                operand = binding.operand,
+            )
     }
 }
 
@@ -467,12 +690,16 @@ class GPUPassCommandStream(
     val passId: String,
     commands: List<GPUPassCommand>,
     diagnostics: List<GPUPassDiagnostic> = emptyList(),
+    operandBridge: List<GPUPassCommandOperandBridge> = emptyList(),
 ) {
     /** Commands copied in facade call order. */
     val commands: List<GPUPassCommand> = commands.toList()
 
     /** Command-stream diagnostics copied before encoder planning. */
     val diagnostics: List<GPUPassDiagnostic> = diagnostics.toList()
+
+    /** Provider-materialized packet-to-command operands copied before encoder planning. */
+    val operandBridge: List<GPUPassCommandOperandBridge> = operandBridge.toList()
 
     /** Facade operation labels in encoded order. */
     val commandLabels: List<String>
@@ -486,11 +713,26 @@ class GPUPassCommandStream(
     val commandCount: Int
         get() = commands.size
 
+    /** Materialized operand labels in bridge order. */
+    val materializedOperandLabels: List<String>
+        get() = operandBridge.map { bridge -> bridge.operand.label }
+
     init {
         require(streamId.isNotBlank()) { "GPUPassCommandStream.streamId must not be blank" }
         require(packetStreamId.isNotBlank()) { "GPUPassCommandStream.packetStreamId must not be blank" }
         require(passId.isNotBlank()) { "GPUPassCommandStream.passId must not be blank" }
         require(commands.isNotEmpty()) { "GPUPassCommandStream.commands must not be empty" }
+        val packetIds = sourcePacketIds.toSet()
+        val commandKeys = commands.map { command -> command.sourcePacketId to command.commandLabel }.toSet()
+        require(operandBridge.all { bridge -> bridge.packetId == null || bridge.packetId in packetIds }) {
+            "GPUPassCommandStream operandBridge packets must belong to source packet ids"
+        }
+        require(operandBridge.all { bridge -> bridge.packetId to bridge.commandLabel in commandKeys }) {
+            "GPUPassCommandStream operandBridge command labels must match the bridged packet"
+        }
+        require(operandBridge.all { bridge -> bridge.matchesCommandOperandKind() }) {
+            "GPUPassCommandStream operandBridge operand kinds must match the bridged command"
+        }
     }
 
     companion object {
@@ -500,6 +742,8 @@ class GPUPassCommandStream(
             packetStream: GPUDrawPacketStream,
             targetStateHash: String,
             loadStoreLabel: String,
+            materialization: GPUResourceMaterializationDecision.Materialized? = null,
+            operandBridge: List<GPUPassCommandOperandBridge> = emptyList(),
         ): GPUPassCommandStream {
             val commands = buildList {
                 add(
@@ -543,6 +787,13 @@ class GPUPassCommandStream(
                 }
                 add(GPUPassCommand.EndRenderPass(passId = packetStream.passId))
             }
+            val materializedOperandBridge =
+                materialization?.dumpOperandBridgeSnapshot
+                    ?.map(GPUPassCommandOperandBridge::fromMaterializedBinding)
+                    .orEmpty()
+            require(materializedOperandBridge.isEmpty() || operandBridge.isEmpty()) {
+                "GPUPassCommandStream accepts either provider materialization or explicit operandBridge, not both"
+            }
 
             return GPUPassCommandStream(
                 streamId = streamId,
@@ -550,6 +801,7 @@ class GPUPassCommandStream(
                 passId = packetStream.passId,
                 commands = commands,
                 diagnostics = packetStream.diagnostics,
+                operandBridge = materializedOperandBridge.ifEmpty { operandBridge },
             )
         }
     }
@@ -636,7 +888,10 @@ fun GPUPassCommandStream.dumpLines(): List<String> =
             "commands=${commandLabels.dumpSequence()} " +
             "packets=${sourcePacketIds.map { packetId -> packetId.value }.dumpSequence()} " +
             "diagnostics=${diagnostics.dumpCodes()}",
-    ) + commands.map { command -> command.dumpLine() } + diagnostics.dumpLines()
+    ) +
+        commands.map { command -> command.dumpLine() } +
+        operandBridge.map { bridge -> bridge.dumpLine() } +
+        diagnostics.dumpLines()
 
 /** Draw pass descriptor close to GPU submission. */
 data class GPUDrawPass(
@@ -737,8 +992,87 @@ private fun GPUPassCommand.dumpLine(): String =
             "passes.command setScissor packet=${packetId.value} scissor=$scissorBoundsHash"
         is GPUPassCommand.Draw ->
             "passes.command draw packet=${packetId.value} vertex=$vertexSourceLabel"
+        is GPUPassCommand.CopyTexture ->
+            "passes.command copyTexture source=$sourceLabel destination=$destinationLabel " +
+                "bounds=$boundsLabel token=$tokenLabel"
+        is GPUPassCommand.PrepareLayerTarget ->
+            "passes.command prepareLayerTarget target=$targetLabel descriptor=$descriptorHash " +
+                "usage=$usageLabel bytes=$byteEstimate"
+        is GPUPassCommand.ClearLayerTarget ->
+            "passes.command clearLayerTarget target=$targetLabel clear=$clearPolicy"
+        is GPUPassCommand.PrepareStencilAttachment ->
+            "passes.command prepareStencilAttachment attachment=$attachmentLabel " +
+                "descriptor=$descriptorHash format=$formatLabel usage=$usageLabel " +
+                "samples=$sampleCount bytes=$byteEstimate"
+        is GPUPassCommand.ClearStencilAttachment ->
+            "passes.command clearStencilAttachment attachment=$attachmentLabel " +
+                "clear=$clearValue loadStore=$loadStorePolicy"
+        is GPUPassCommand.StencilCoverProducer ->
+            "passes.command stencilCoverProducer attachment=$attachmentLabel " +
+                "pipeline=$pipelineLabel bounds=$boundsLabel state=$stencilStateLabel " +
+                "token=$tokenLabel packet=${packetId.value}"
+        is GPUPassCommand.StencilCoverDraw ->
+            "passes.command stencilCoverDraw attachment=$attachmentLabel " +
+                "pipeline=$pipelineLabel bounds=$boundsLabel compare=$compareLabel " +
+                "writeMask=$writeMaskLabel token=$tokenLabel packet=${packetId.value}"
+        is GPUPassCommand.RenderLayerChildren ->
+            "passes.command renderLayerChildren scope=$scopeLabel target=$targetLabel " +
+                "children=$childrenLabel token=$tokenLabel"
+        is GPUPassCommand.CompositeLayer ->
+            "passes.command compositeLayer source=$sourceLabel parent=$parentTargetLabel " +
+                "blend=$blendModeLabel route=$routeLabel token=$tokenLabel"
+        is GPUPassCommand.RefuseLayer ->
+            "passes.command refuseLayer scope=$scopeLabel reason=$reasonCode"
+        is GPUPassCommand.RefuseStencilCover ->
+            "passes.command refuseStencilCover path=$pathLabel reason=$reasonCode"
         is GPUPassCommand.EndRenderPass ->
             "passes.command endRenderPass pass=$passId"
+    }
+
+private fun GPUPassCommandOperandBridge.dumpLine(): String =
+    "passes.command-bridge packet=${packetId?.value ?: NONE_DUMP_VALUE} command=$commandLabel " +
+        operand.dumpCommandOperandFields()
+
+private fun GPUPassCommandOperandBridge.matchesCommandOperandKind(): Boolean =
+    when (commandLabel) {
+        "beginRenderPass" ->
+            operand.kind in setOf(
+                GPUMaterializedCommandOperandKind.RenderTarget,
+                GPUMaterializedCommandOperandKind.TextureView,
+            )
+        "copyTexture" -> operand.kind == GPUMaterializedCommandOperandKind.DestinationCopyTexture
+        "prepareLayerTarget" -> operand.kind == GPUMaterializedCommandOperandKind.Texture
+        "clearLayerTarget", "renderLayerChildren" ->
+            operand.kind == GPUMaterializedCommandOperandKind.RenderTarget
+        "prepareStencilAttachment" -> operand.kind == GPUMaterializedCommandOperandKind.Texture
+        "clearStencilAttachment" ->
+            operand.kind == GPUMaterializedCommandOperandKind.DepthStencilAttachment
+        "stencilCoverProducer", "stencilCoverDraw" ->
+            operand.kind in setOf(
+                GPUMaterializedCommandOperandKind.RenderPipeline,
+                GPUMaterializedCommandOperandKind.DepthStencilAttachment,
+            )
+        "compositeLayer" ->
+            operand.kind in setOf(
+                GPUMaterializedCommandOperandKind.TextureView,
+                GPUMaterializedCommandOperandKind.Sampler,
+            )
+        "setRenderPipeline" -> operand.kind == GPUMaterializedCommandOperandKind.RenderPipeline
+        "setBindGroup" ->
+            operand.kind in setOf(
+                GPUMaterializedCommandOperandKind.BindGroup,
+                GPUMaterializedCommandOperandKind.UniformBuffer,
+                GPUMaterializedCommandOperandKind.StorageBuffer,
+                GPUMaterializedCommandOperandKind.Texture,
+                GPUMaterializedCommandOperandKind.TextureView,
+                GPUMaterializedCommandOperandKind.Sampler,
+            )
+        "draw" ->
+            operand.kind in setOf(
+                GPUMaterializedCommandOperandKind.VertexBuffer,
+                GPUMaterializedCommandOperandKind.IndexBuffer,
+            )
+        else -> false
     }
 
 private fun List<GPURenderStepAttribute>.dumpAttributes(): String =

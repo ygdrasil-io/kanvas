@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.resources
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -132,6 +133,22 @@ class GPUResourceProviderTest {
             ),
             expectedCode = "stale.texture.surface_lease",
         )
+    }
+
+    /** Ensures an evicted surface resource remains a terminal late materialization refusal. */
+    @Test
+    fun `surface lease provider refuses evicted lease`() {
+        val refused = assertSurfaceLeaseRefused(
+            request = surfaceLeaseRequest(
+                lease = currentSurfaceLease(evictedReason = "resource-cache-purge"),
+            ),
+            expectedCode = "unsupported.resource.evicted",
+        )
+
+        val dump = refused.dumpLines().joinToString("\n")
+        assertContains(dump, "resource.materialization:refused")
+        assertContains(dump, "resource.diagnostic code=unsupported.resource.evicted")
+        assertFalse(dump.contains("execution.submission"))
     }
 
     /** Ensures missing required usage prevents lease materialization. */
@@ -414,6 +431,146 @@ class GPUResourceProviderTest {
         assertFalse(lines.joinToString("\n").contains("backend-handle-never-dump"))
     }
 
+    /** Ensures the provider bridge materializes scoped command operands for an accepted route. */
+    @Test
+    fun `command operand provider materializes bridge references`() {
+        val decision = ValidatingCommandOperandResourceProvider().materializeCommandOperands(
+            request = commandOperandMaterializationRequest(),
+            context = targetPreparationContext(),
+        )
+
+        val materialized = assertIs<GPUResourceMaterializationDecision.Materialized>(decision)
+        assertEquals(emptyList(), materialized.resources)
+        assertEquals(
+            listOf(
+                null to "beginRenderPass",
+                "packet-1" to "setRenderPipeline",
+                "packet-1" to "setBindGroup",
+                "packet-1" to "draw",
+            ),
+            materialized.dumpOperandBridgeSnapshot.map { bridge -> bridge.packetId to bridge.commandLabel },
+        )
+        assertEquals(
+            listOf(
+                "target-view:root",
+                "render-pipeline:solid-fill",
+                "bind-group:solid-fill:packet-1",
+                "vertex-buffer:solid-quad",
+            ),
+            materialized.dumpOperandBridgeSnapshot.map { bridge -> bridge.operand.label },
+        )
+        assertContains(
+            materialized.dumpLines(),
+            "resource.materialization:operand operand=target-view:root kind=render-target " +
+                "deviceGeneration=11 owner=render-pass:main-pass usage=render_attachment " +
+                "invalidation=frame-end descriptor=sha256:target-view:root facts=loadStore=clear-store",
+        )
+    }
+
+    /** Ensures command operand refs reject raw backend handles before they can be dumped. */
+    @Test
+    fun `command operand references reject handle like dump fields`() {
+        assertFailsWith<IllegalArgumentException> {
+            commandOperandRef(
+                label = "WGPUTexture@0xDEADBEEF",
+                kind = GPUMaterializedCommandOperandKind.Texture,
+                usageLabels = listOf("texture_binding"),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            commandOperandRef(
+                label = "texture-binding",
+                kind = GPUMaterializedCommandOperandKind.Texture,
+                usageLabels = listOf("texture_binding"),
+                evidenceFacts = mapOf("backend" to "WGPUBindGroup@0xDEADBEEF"),
+            )
+        }
+    }
+
+    /** Ensures refused provider operand plans cannot leak raw handles through diagnostics. */
+    @Test
+    fun `command operand materialization plans reject handle like refusal fields`() {
+        assertFailsWith<IllegalArgumentException> {
+            commandOperandPlan(
+                packetId = "packet-1",
+                commandLabel = "setBindGroup",
+                label = "WGPUBindGroup@0xDEADBEEF",
+                kind = GPUMaterializedCommandOperandKind.BindGroup,
+                usageLabels = setOf("uniform"),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            commandOperandPlan(
+                packetId = "packet-1",
+                commandLabel = "setBindGroup",
+                label = "bind-group:solid-fill",
+                kind = GPUMaterializedCommandOperandKind.BindGroup,
+                usageLabels = setOf("uniform"),
+                evictedReason = "WGPUResourceHandle@0xFEEDFACE",
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUMaterializedCommandOperandBinding(
+                packetId = "WGPUCommandBuffer@0xFEEDFACE",
+                commandLabel = "setBindGroup",
+                operand = commandOperandRef(
+                    label = "bind-group:solid-fill",
+                    kind = GPUMaterializedCommandOperandKind.BindGroup,
+                    usageLabels = listOf("uniform"),
+                ),
+            )
+        }
+    }
+
+    /** Ensures accepted first-route materialization dumps scoped command operands without handles. */
+    @Test
+    fun `materialized resource decision dump includes command operand references`() {
+        val decision = GPUResourceMaterializationDecision.Materialized(
+            resources = listOf(GPUTextureResourceRef("backend-handle-never-dump")),
+            operandRefs = listOf(
+                commandOperandRef(
+                    label = "render-pipeline:solid-fill",
+                    kind = GPUMaterializedCommandOperandKind.RenderPipeline,
+                    usageLabels = listOf("render"),
+                    invalidationPolicy = "device-generation",
+                    evidenceFacts = mapOf("cache" to "warm"),
+                ),
+                commandOperandRef(
+                    label = "bind-group:solid-fill:packet-1",
+                    kind = GPUMaterializedCommandOperandKind.BindGroup,
+                    usageLabels = listOf("uniform", "texture_binding"),
+                    evidenceFacts = mapOf("layout" to "layout-solid-v1"),
+                ),
+            ),
+            targetId = "root-target",
+            taskIds = listOf("task-fill-rect"),
+            resourcePlanLabels = listOf("first-route"),
+        )
+
+        val lines = decision.dumpLines()
+
+        assertEquals(
+            "resource.materialization:materialized target=root-target tasks=task-fill-rect " +
+                "resourcePlans=first-route resourceCount=1 operands=2 diagnostics=none",
+            lines.first(),
+        )
+        assertContains(
+            lines,
+            "resource.materialization:operand operand=render-pipeline:solid-fill kind=render-pipeline " +
+                "deviceGeneration=11 owner=render-pass:main-pass usage=render " +
+                "invalidation=device-generation descriptor=sha256:render-pipeline:solid-fill facts=cache=warm",
+        )
+        assertContains(
+            lines,
+            "resource.materialization:operand operand=bind-group:solid-fill:packet-1 kind=bind-group " +
+                "deviceGeneration=11 owner=render-pass:main-pass usage=texture_binding,uniform " +
+                "invalidation=pass-end descriptor=sha256:bind-group:solid-fill:packet-1 " +
+                "facts=layout=layout-solid-v1",
+        )
+        assertFalse(lines.joinToString("\n").contains("backend-handle-never-dump"))
+        assertFalse(lines.joinToString("\n").contains("WGPU"))
+    }
+
     /** Ensures mutable diagnostic, task, and resource-plan inputs cannot rewrite dump evidence. */
     @Test
     fun `resource materialization dump snapshots mutable diagnostics tasks and resource plans`() {
@@ -570,6 +727,95 @@ class GPUResourceProviderTest {
             budgetClass = "unit-test",
         )
 
+    /** Creates a materialized command operand reference for decision dump tests. */
+    private fun commandOperandRef(
+        label: String,
+        kind: GPUMaterializedCommandOperandKind,
+        usageLabels: List<String>,
+        invalidationPolicy: String = "pass-end",
+        evidenceFacts: Map<String, String> = emptyMap(),
+    ): GPUMaterializedCommandOperandReference =
+        GPUMaterializedCommandOperandReference(
+            label = label,
+            kind = kind,
+            descriptorHash = "sha256:$label",
+            deviceGeneration = 11,
+            ownerScope = "render-pass:main-pass",
+            usageLabels = usageLabels,
+            invalidationPolicy = invalidationPolicy,
+            evidenceFacts = evidenceFacts,
+        )
+
+    /** Creates provider-owned command operand materialization input for bridge tests. */
+    private fun commandOperandMaterializationRequest(): GPUCommandOperandMaterializationRequest =
+        GPUCommandOperandMaterializationRequest(
+            targetId = "root-target",
+            taskIds = listOf("task-fill-rect"),
+            resourcePlanLabels = listOf("first-route-command-operands"),
+            operands = listOf(
+                commandOperandPlan(
+                    packetId = null,
+                    commandLabel = "beginRenderPass",
+                    label = "target-view:root",
+                    kind = GPUMaterializedCommandOperandKind.RenderTarget,
+                    usageLabels = setOf("render_attachment"),
+                    invalidationPolicy = "frame-end",
+                    evidenceFacts = mapOf("loadStore" to "clear-store"),
+                ),
+                commandOperandPlan(
+                    packetId = "packet-1",
+                    commandLabel = "setRenderPipeline",
+                    label = "render-pipeline:solid-fill",
+                    kind = GPUMaterializedCommandOperandKind.RenderPipeline,
+                    usageLabels = setOf("render"),
+                    invalidationPolicy = "device-generation",
+                    evidenceFacts = mapOf("cache" to "warm"),
+                ),
+                commandOperandPlan(
+                    packetId = "packet-1",
+                    commandLabel = "setBindGroup",
+                    label = "bind-group:solid-fill:packet-1",
+                    kind = GPUMaterializedCommandOperandKind.BindGroup,
+                    usageLabels = setOf("uniform", "texture_binding"),
+                    evidenceFacts = mapOf("layout" to "layout-solid-v1"),
+                ),
+                commandOperandPlan(
+                    packetId = "packet-1",
+                    commandLabel = "draw",
+                    label = "vertex-buffer:solid-quad",
+                    kind = GPUMaterializedCommandOperandKind.VertexBuffer,
+                    usageLabels = setOf("vertex"),
+                    evidenceFacts = mapOf("topology" to "triangle-list"),
+                ),
+            ),
+        )
+
+    /** Creates one provider command operand plan with matching required and available usage. */
+    private fun commandOperandPlan(
+        packetId: String?,
+        commandLabel: String,
+        label: String,
+        kind: GPUMaterializedCommandOperandKind,
+        usageLabels: Set<String>,
+        invalidationPolicy: String = "pass-end",
+        evidenceFacts: Map<String, String> = emptyMap(),
+        evictedReason: String? = null,
+    ): GPUCommandOperandMaterializationPlan =
+        GPUCommandOperandMaterializationPlan(
+            packetId = packetId,
+            commandLabel = commandLabel,
+            label = label,
+            kind = kind,
+            descriptorHash = "sha256:$label",
+            deviceGeneration = 11,
+            ownerScope = "render-pass:main-pass",
+            requiredUsageLabels = usageLabels,
+            availableUsageLabels = usageLabels,
+            invalidationPolicy = invalidationPolicy,
+            evidenceFacts = evidenceFacts,
+            evictedReason = evictedReason,
+        )
+
     /** Creates a renderer-owned texture allocation plan for refusal tests. */
     private fun createTexturePlan(): GPUTextureAllocationPlan.CreateTexture =
         GPUTextureAllocationPlan.CreateTexture(
@@ -591,6 +837,7 @@ class GPUResourceProviderTest {
         resourceRefValue: String = "surface-texture-ref",
         usageLabels: Set<String> = setOf("render_attachment", "copy_src"),
         expiredReason: String? = null,
+        evictedReason: String? = null,
     ): GPUSurfaceTextureLease =
         GPUSurfaceTextureLease(
             targetId = targetId,
@@ -601,6 +848,7 @@ class GPUResourceProviderTest {
             useToken = GPUUseToken(42),
             usageLabels = usageLabels,
             expiredReason = expiredReason,
+            evictedReason = evictedReason,
         )
 
     /** Creates the explicit opt-in lease materialization request under test. */
@@ -629,7 +877,7 @@ class GPUResourceProviderTest {
         expectedCode: String,
         plan: GPUTextureAllocationPlan = GPUTextureAllocationPlan.LeaseSurfaceTexture(targetId = "root-target"),
         forbiddenDumpText: String = request.lease.resourceRef.value,
-    ) {
+    ): GPUResourceMaterializationDecision.Refused {
         val decision = RevalidatingSurfaceLeaseResourceProvider(request).materialize(
             plan = plan,
             context = targetPreparationContext(),
@@ -638,6 +886,7 @@ class GPUResourceProviderTest {
         val refused = assertIs<GPUResourceMaterializationDecision.Refused>(decision)
         assertEquals(expectedCode, refused.diagnostic.code)
         assertFalse(refused.dumpLines().joinToString("\n").contains(forbiddenDumpText))
+        return refused
     }
 
     /** Resource test double that relies on production refuse-by-default behavior. */

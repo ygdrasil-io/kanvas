@@ -1,7 +1,7 @@
 ---
 id: KGPU-M11-004
 title: "Add texture and sampler live materialization from boundary evidence"
-status: proposed
+status: done
 milestone: M11
 priority: P1
 owner_area: textures-samplers
@@ -74,16 +74,16 @@ data class GPUTextureSamplerMaterializationPlan(
 
 ## Acceptance Criteria
 
-- [ ] Accepted texture ownership plans materialize into provider-owned texture,
+- [x] Accepted texture ownership plans materialize into provider-owned texture,
       view, and sampler refs with generation and usage facts.
-- [ ] Uploaded texture artifacts use explicit upload/copy paths and do not
+- [x] Uploaded texture artifacts use explicit upload/copy paths and do not
       become CPU-rendered compatibility fallbacks.
-- [ ] Sampled texture bindings enter `GPUResourceBindingBlock` and bind groups
+- [x] Sampled texture bindings enter `GPUResourceBindingBlock` and bind groups
       with layout-compatible view/sample types.
-- [ ] Missing usage flags, unavailable mipmaps, unsupported sampling modes,
+- [x] Missing usage flags, unavailable mipmaps, unsupported sampling modes,
       swizzle requirements, stale generations, and upload failures refuse with
       stable diagnostics.
-- [ ] Adapter-backed evidence includes at least one sampled texture readback or
+- [x] Adapter-backed evidence includes at least one sampled texture readback or
       an explicit skipped-readback reason without support promotion.
 
 ## Required Evidence
@@ -109,13 +109,31 @@ fallback texture.
 ## Validation
 
 ```bash
+rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.resources.GPUTextureSamplerMaterializationProviderTest --tests org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadMaterializationProviderTest
+rtk ./gradlew --no-daemon :gpu-renderer:check
 rtk git diff --check
 ```
 
 ## Status Notes
 
-- `proposed`: Planning-only continuation of KGPU-M4-004 boundary evidence into
-  live materialization.
+- `done`: Added `GPUTextureSamplerMaterializationRequest` and
+  `ValidatingTextureSamplerResourceProvider` so accepted uploaded texture
+  ownership plans materialize provider-owned texture, texture-view, and sampler
+  operands with descriptor, usage, generation, upload-before-sample, and
+  no-CPU-fallback facts. `ValidatingPayloadResourceProvider` now bridges paired
+  sampled texture/sampler binding facts into bind-group operands while keeping
+      resource facts dumpable and enforcing one-to-one texture/sampler binding
+      pairs. Refusal coverage includes missing usage, stale device/resource
+      generation, unavailable mip levels, swizzle requirements, unsupported sampler
+      modes, upload/allocation failure, active attachment sampling, missing or
+      mismatched sampler pairs, undeclared structured binding facts, and
+      handle-like uploaded artifact keys before they can enter dump diagnostics.
+      Adapter-backed readback remains
+  explicitly skipped with
+  `kgpu-m11-004.adapter-readback-not-promoted`; no product route activation,
+  broad image/codec support, or CPU-rendered compatibility texture is claimed.
+  Evidence:
+  `reports/gpu-renderer/2026-06-17-m11-004-texture-sampler-materialization.md`.
 
 ## Linear Labels
 

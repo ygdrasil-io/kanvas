@@ -1,7 +1,7 @@
 ---
 id: KGPU-M11-001
 title: "Add WGPU module, pipeline, and bind group layout caches"
-status: proposed
+status: done
 milestone: M11
 priority: P0
 owner_area: execution-cache
@@ -113,9 +113,12 @@ rtk git diff --check
 
 ## Status Notes
 
-- `proposed`: Cut from the Graphite/Dawn execution gap matrix as planning-only
-  coverage. M9 telemetry remains reporting/observational until this ticket has
-  live WGPU evidence.
+- `done`: Added execution-owned WGPU module, bind-group-layout,
+  pipeline-layout, and render-pipeline caches for the runtime helper. Evidence
+  includes deterministic preimage dumps, adapter-backed hit/miss/create/failure
+  telemetry, stale-generation/eviction contract fixtures, disposer-backed
+  eviction, full `:gpu-renderer:check`, and independent review acceptance with
+  no remaining P0/P1/P2 blockers. No product route activation is claimed.
 
 ## Linear Labels
 

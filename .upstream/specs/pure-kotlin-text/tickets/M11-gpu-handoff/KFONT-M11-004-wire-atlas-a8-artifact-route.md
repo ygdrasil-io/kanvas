@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-004"
 title: "Wire atlas A8 artifact route"
-status: "blocked"
+status: "done"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -59,11 +59,11 @@ data class A8TextMaskRoutePlan(
 
 ## Acceptance Criteria
 
-- [ ] An A8 `GlyphAtlasArtifact` fixture routes to `AtlasMaskSample` without font parsing or shaping in the renderer.
-- [ ] Atlas entry refs validate generation, page, UV rect, source bounds, and source mask hash.
-- [ ] `A8TextMaskStep` WGSL samples R8/A8 coverage and modulates text material/color without putting atlas refs in `MaterialKey`.
-- [ ] Missing atlas entry, stale generation, unsupported texture format, or missing upload plan refuses with stable `unsupported.text.*` diagnostics.
-- [ ] GPU evidence is focused on A8 atlas sampling and does not imply broad shaping or color glyph support.
+- [x] An A8 `GlyphAtlasArtifact` fixture routes to `AtlasMaskSample` without font parsing or shaping in the renderer.
+- [x] Atlas entry refs validate generation, page, UV rect, source bounds, and source mask hash.
+- [x] `A8TextMaskStep` WGSL samples R8/A8 coverage and modulates text material/color without putting atlas refs in `MaterialKey`.
+- [x] Missing atlas entry, stale generation, unsupported texture format, or missing upload plan refuses with stable `unsupported.text.*` diagnostics.
+- [x] GPU evidence is focused on A8 atlas sampling and does not imply broad shaping or color glyph support.
 
 ## Required Evidence
 
@@ -93,16 +93,19 @@ rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*A8Text*'
 
 ## Status Notes
 
-- `proposed`: First positive GPU route for typed text artifacts, still scoped to A8 atlas masks.
-- Move to `ready` only after route dump, instance layout, and focused GPU evidence requirements are reviewed.
-- `blocked` (2026-06-16): Readiness audit confirmed this ticket must not
-  start until `KFONT-M9-003` and `KFONT-M9-005` produce real A8 mask,
-  atlas entry/page/generation, source mask hash, invalidation, and eviction
-  evidence. Current `font:gpu-api` contracts register `GlyphAtlasArtifact`
-  as a value surface only; they do not provide `gpu-text-a8-route-plan.json`,
-  `A8TextMaskStep` WGSL, parser/reflection evidence, or focused GPU proof.
-  Remaining gate: complete the M9 A8/atlas artifact chain, then re-review
-  route dump, instance layout, WGSL, and GPU evidence readiness.
+- `done`: `gpu-text-a8-route-plan.json` now captures a bounded accepted
+  `GlyphAtlasArtifact` -> `AtlasMaskSample` route with stable atlas page/entry
+  refs, `A8TextMaskStep` binding facts, and checked-in refusal snapshots in
+  `gpu-text-a8-route-refusals.json` for missing atlas entry / stale generation
+  plus stable diagnostics for missing upload plan / unsupported texture format,
+  reviewed WGSL reflection linkage via
+  `reports/wgsl4k-evolution/generated/text-wgsl-reflection.json`, and focused
+  simple-Latin GPU evidence from
+  `reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/`.
+  Remaining gates stay explicit: this ticket does not land subrun splitting,
+  resource/upload/instance/binding expansion, upload-before-sample ordering,
+  broad WGSL text validation, `MaterialKey` leakage validation, SDF/outline/
+  color/bitmap/SVG routes, or `dftext` retirement.
 
 ## Linear Labels
 

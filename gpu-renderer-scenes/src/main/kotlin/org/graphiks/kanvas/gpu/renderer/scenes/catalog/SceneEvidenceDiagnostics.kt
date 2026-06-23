@@ -65,9 +65,10 @@ internal fun GPURendererScene<*>.pmReadinessFreezeDiagnostics(): List<String> {
         "releaseBlocking=false",
         "productRouteActivated=false",
         "performanceReadinessPromoted=false",
-        "missingGate=KGPU-M9-002",
+        "missingGate=none",
         "reportingOnlyGatesVisible=true",
-        "pipelinePmBundleUpdated=false",
+        "pipelinePmBundleUpdated=true",
+        "pmManifestKey=gpuRendererM9ReadinessPmEvidence",
         "nonClaims=no-product-activation,no-release-blocking-gate,no-readiness-delta,no-performance-readiness-from-correctness,no-dashboard-row-promotes-readiness,no-derived-cache-as-observed",
     )
 }

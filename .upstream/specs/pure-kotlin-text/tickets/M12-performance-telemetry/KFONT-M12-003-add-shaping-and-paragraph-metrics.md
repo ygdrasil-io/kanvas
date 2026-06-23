@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M12-003"
 title: "Add shaping and paragraph metrics"
-status: "proposed"
+status: "done"
 milestone: "M12"
 priority: "P1"
 owner_area: "telemetry"
@@ -78,11 +78,11 @@ data class ParagraphMetricSample(
 
 ## Acceptance Criteria
 
-- [ ] Shaping samples expose segmentation, bidi, script itemization, fallback lookup, GSUB, and GPOS costs as separate series.
-- [ ] Paragraph samples expose line breaking, line fitting, visual ordering, hit-test index, and selection query costs as separate series.
-- [ ] Glyph count and cluster count are serialized together so cluster inflation or collapse is visible.
-- [ ] Unsupported emoji, fallback, or script cases emit the original shaping/paragraph diagnostic plus a telemetry sample; they are not counted as successful shaped support.
-- [ ] The `scaledemoji` legacy gate remains open unless the required shaping, emoji fallback, color glyph, dashboard, and validation evidence are linked by the owning tickets.
+- [x] Shaping samples expose segmentation, bidi, script itemization, fallback lookup, GSUB, and GPOS costs as separate series.
+- [x] Paragraph samples expose line breaking, line fitting, visual ordering, hit-test index, and selection query costs as separate series.
+- [x] Glyph count and cluster count are serialized together so cluster inflation or collapse is visible.
+- [x] Unsupported emoji, fallback, or script cases emit the original shaping/paragraph diagnostic plus a telemetry sample; they are not counted as successful shaped support.
+- [x] The `scaledemoji` legacy gate remains open unless the required shaping, emoji fallback, color glyph, dashboard, and validation evidence are linked by the owning tickets.
 
 ## Required Evidence
 
@@ -115,6 +115,7 @@ rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
 - Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `done`: `shaping-metrics.json` and `paragraph-metrics.json` now serialize deterministic shaping/paragraph telemetry slices with explicit fallback and refusal diagnostics, advisory-only dashboard evidence, and no promotion of shaping, paragraph, GPU, or release-gate claims.
 
 ## Linear Labels
 

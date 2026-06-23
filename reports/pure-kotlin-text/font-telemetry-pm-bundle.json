@@ -1,7 +1,9 @@
 {
   "schemaVersion": 1,
   "artifactId": "font-telemetry-pm-bundle",
-  "ownerTickets": ["KFONT-M12-001"],
+  "ownerTickets": [
+    "KFONT-M12-001"
+  ],
   "surfaceId": "font-telemetry-schema",
   "classification": "tracked-gap",
   "claimPromotionAllowed": false,
@@ -12,8 +14,20 @@
     "reports/pure-kotlin-text/font-claim-dashboard.json",
     "reports/pure-kotlin-text/font-telemetry-schema.json",
     "reports/pure-kotlin-text/font-telemetry-schema-fixture.json",
+    "reports/pure-kotlin-text/parser-metrics.json",
+    "reports/pure-kotlin-text/scaler-metrics.json",
+    "reports/pure-kotlin-text/shaping-metrics.json",
+    "reports/pure-kotlin-text/paragraph-metrics.json",
+    "reports/pure-kotlin-text/glyph-artifact-metrics.json",
+    "reports/pure-kotlin-text/glyph-cache-metrics.json",
+    "reports/pure-kotlin-text/glyph-atlas-occupancy.json",
     "reports/pure-kotlin-text/font-telemetry-pm-bundle.json",
-    "reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"
+    "reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md",
+    "reports/pure-kotlin-text/2026-06-19-kfont-m12-003-shaping-paragraph-metrics.md",
+    "reports/pure-kotlin-text/2026-06-19-kfont-m12-004-glyph-cache-metrics.md",
+    "reports/pure-kotlin-text/gpu-text-handoff-metrics.json",
+    "reports/pure-kotlin-text/draw-text-run-upload-plan.json",
+    "reports/pure-kotlin-text/2026-06-19-kfont-m12-005-gpu-handoff-metrics.md"
   ],
   "domainRows": [
     {
@@ -22,7 +36,9 @@
       "sampleCount": 5,
       "measurementPhase": "steady-state",
       "cacheState": "cold",
-      "metricNames": ["parser.parse.time"]
+      "metricNames": [
+        "parser.parse.time"
+      ]
     },
     {
       "domain": "scaler",
@@ -30,7 +46,9 @@
       "sampleCount": 5,
       "measurementPhase": "steady-state",
       "cacheState": "warm",
-      "metricNames": ["scaler.outline.time"]
+      "metricNames": [
+        "scaler.outline.time"
+      ]
     },
     {
       "domain": "shaping",
@@ -38,7 +56,10 @@
       "sampleCount": 5,
       "measurementPhase": "steady-state",
       "cacheState": "warm",
-      "metricNames": ["shaping.fallback.time"]
+      "metricNames": [
+        "shaping.fallback.time",
+        "shaping.diagnostic.count"
+      ]
     },
     {
       "domain": "paragraph",
@@ -46,7 +67,11 @@
       "sampleCount": 5,
       "measurementPhase": "steady-state",
       "cacheState": "warm",
-      "metricNames": ["paragraph.layout.time"]
+      "metricNames": [
+        "paragraph.layout.time",
+        "paragraph.style-run.count",
+        "paragraph.hit-test-index-build.time"
+      ]
     },
     {
       "domain": "glyph-artifact",
@@ -54,7 +79,9 @@
       "sampleCount": 5,
       "measurementPhase": "steady-state",
       "cacheState": "mixed",
-      "metricNames": ["glyph-artifact.cache.bytes"]
+      "metricNames": [
+        "glyph-artifact.cache.bytes"
+      ]
     },
     {
       "domain": "gpu-text-handoff",
@@ -62,11 +89,13 @@
       "sampleCount": 5,
       "measurementPhase": "steady-state",
       "cacheState": "warm",
-      "metricNames": ["gpu-text-handoff.upload.bytes"]
+      "metricNames": [
+        "gpu-text-handoff.upload.bytes"
+      ]
     }
   ],
   "remainingGates": [
-    "KFONT-M12-002, KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own parser/scaler/shaping/paragraph/glyph/GPU producer emission into the shared schema; keep this pack advisory and schema-only until those subsystem tickets land.",
+    "All M12 telemetry domains now have checked-in deterministic producer evidence; keep this pack advisory-only and do not treat telemetry evidence alone as GPU-route support, `dftext` retirement, or release-gate readiness.",
     "Keep all performance budgets advisory until an explicit budget-promotion target/spec update exists."
   ],
   "nonClaims": [

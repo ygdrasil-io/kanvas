@@ -1,7 +1,7 @@
 ---
 id: KGPU-M11-002
 title: "Add payload upload and bind group materialization lane"
-status: proposed
+status: done
 milestone: M11
 priority: P0
 owner_area: payloads-bind-groups
@@ -74,16 +74,16 @@ data class GPUPayloadMaterializationPlan(
 
 ## Acceptance Criteria
 
-- [ ] Uniform payload bytes are uploaded through an accepted upload/staging path
+- [x] Uniform payload bytes are uploaded through an accepted upload/staging path
       with zeroed padding, layout hash, and byte-count evidence.
-- [ ] `GPUResourceBindingBlock` values materialize into bind groups matching
+- [x] `GPUResourceBindingBlock` values materialize into bind groups matching
       the reflected `WGSLBindingLayout`.
-- [ ] Bind group creation refuses on missing usage, stale resource generation,
+- [x] Bind group creation refuses on missing usage, stale resource generation,
       incompatible layout, exceeded dynamic-offset limits, or missing upload
       capability.
-- [ ] `GPUPassCommandStream` can reference materialized bind group IDs without
+- [x] `GPUPassCommandStream` can reference materialized bind group IDs without
       exposing raw backend handles in dumps.
-- [ ] Payload upload and bind group telemetry records real create/reuse/failure
+- [x] Payload upload and bind group telemetry records real create/reuse/failure
       facts and remains non-promotional.
 
 ## Required Evidence
@@ -110,13 +110,19 @@ values, or CPU-render the draw.
 ## Validation
 
 ```bash
+rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadMaterializationProviderTest --tests org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketCommandStreamTest --tests org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeWgpuSmokeTest
+rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadMaterializationProviderTest --tests org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeContractsTest --tests org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeWgpuSmokeTest
+rtk ./gradlew --no-daemon :gpu-renderer:check
 rtk git diff --check
 ```
 
 ## Status Notes
 
-- `proposed`: Planning-only execution gap ticket for the CPU-packed to
-  WGPU-bound payload boundary.
+- `done`: Implemented provider-owned payload upload and bind-group
+  materialization contracts, pass-command bridge evidence, adapter-backed
+  uniform-only payload smoke, scoped non-promotional telemetry, and refusal
+  fixtures for layout, usage, generation, upload range, budget, dynamic
+  offsets, upload capability, and incomplete sampled/storage binding facts.
 
 ## Linear Labels
 

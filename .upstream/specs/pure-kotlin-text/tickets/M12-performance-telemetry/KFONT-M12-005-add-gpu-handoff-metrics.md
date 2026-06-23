@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M12-005"
 title: "Add GPU handoff metrics"
-status: "proposed"
+status: "done"
 milestone: "M12"
 priority: "P1"
 owner_area: "telemetry"
@@ -74,11 +74,11 @@ data class GPUTextRefusalMetric(
 
 ## Acceptance Criteria
 
-- [ ] Handoff samples count every typed artifact and every `DrawTextRun` route selected or refused.
-- [ ] Upload byte counts, upload dependency counts, artifact reuse, and upload-plan reuse are serialized separately.
-- [ ] Stale generation, artifact budget, capability, transform, color, SVG, and CPU-rendered-texture refusals keep stable `text.gpu.*` diagnostics.
-- [ ] Telemetry dumps prove no `Sk*` object, font bytes, live GPU handle, atlas coordinate, glyph ID list, or upload token leaks into `MaterialKey` identity.
-- [ ] The `dftext` legacy gate remains open unless SDF artifact, atlas/cache, transform policy, GPU route evidence, diagnostics, and dashboard updates are linked.
+- [x] Handoff samples count every typed artifact and every `DrawTextRun` route selected or refused.
+- [x] Upload byte counts, upload dependency counts, artifact reuse, and upload-plan reuse are serialized separately.
+- [x] Stale generation, artifact budget, capability, transform, color, SVG, and CPU-rendered-texture refusals keep stable `text.gpu.*` diagnostics.
+- [x] Telemetry dumps prove no `Sk*` object, font bytes, live GPU handle, atlas coordinate, glyph ID list, or upload token leaks into `MaterialKey` identity.
+- [x] The `dftext` legacy gate remains open unless SDF artifact, atlas/cache, transform policy, GPU route evidence, diagnostics, and dashboard updates are linked.
 
 ## Required Evidence
 
@@ -111,6 +111,7 @@ rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
 - Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `done`: `gpu-text-handoff-metrics.json` and `draw-text-run-upload-plan.json` now attach deterministic advisory GPU handoff/upload-plan evidence, stable refusal diagnostics, and bounded MaterialKey/no-`Sk*` leakage audit facts without promoting GPU support or release-gate claims.
 
 ## Linear Labels
 

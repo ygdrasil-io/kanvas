@@ -57,8 +57,8 @@ class OpenTypeLayoutEngineContractTest {
         assertEquals(listOf("ccmp", "locl", "rlig", "clig", "calt", "mark", "mkmk"), result.shapingPlan.features.defaulted.map { it.tag })
         assertEquals(emptyList(), result.shapingPlan.features.unsupported)
         assertEquals("dflt", result.shapingPlan.languageSystem)
-        assertEquals("gsub-trace", result.shapingPlan.gsubTraceRef)
-        assertEquals("gpos-trace", result.shapingPlan.gposTraceRef)
+        assertEquals("opentype-layout-contract-gsub-trace", result.shapingPlan.gsubTraceRef)
+        assertEquals("opentype-layout-contract-gpos-trace", result.shapingPlan.gposTraceRef)
         assertEquals("no-op-contract", result.gsubTrace.events.single().decision)
         assertEquals("no-op-contract", result.gposTrace.events.single().decision)
         assertEquals(emptyList(), result.diagnostics)
@@ -180,12 +180,18 @@ class OpenTypeLayoutEngineContractTest {
         val shapingPlanCases = shapingPlanCasesJson()
 
         assertEquals(readProjectFile("reports/font/fixtures/expected/shaping/shaping-plan.json"), shapingPlanCases)
-        assertTrue(bundle.gsubTraceJson.contains("\"ownerTickets\": [\"KFONT-M6-001\"]"))
-        assertTrue(bundle.gposTraceJson.contains("\"ownerTickets\": [\"KFONT-M6-001\"]"))
-        assertTrue(bundle.shapedGlyphRunJson.contains("\"ownerTickets\": [\"KFONT-M6-001\"]"))
-        assertTrue(bundle.gsubTraceJson.contains("\"decision\": \"no-op-contract\""))
-        assertTrue(bundle.gposTraceJson.contains("\"decision\": \"no-op-contract\""))
-        assertTrue(bundle.shapedGlyphRunJson.contains("\"source\": \"cmap-no-op\""))
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/shaping/opentype-layout-contract-gsub-trace.json"),
+            bundle.gsubTraceJson,
+        )
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/shaping/opentype-layout-contract-gpos-trace.json"),
+            bundle.gposTraceJson,
+        )
+        assertEquals(
+            readProjectFile("reports/font/fixtures/expected/shaping/opentype-layout-contract-shaped-glyph-run.json"),
+            bundle.shapedGlyphRunJson,
+        )
 
         listOf(
             shapingPlanCases,
@@ -270,10 +276,9 @@ class OpenTypeLayoutEngineContractTest {
 
     @Test
     fun lookupTraceGoldensCarryRequiredRunFacts() {
-        val bundle = engine.shape(latinRunInput()).toEvidenceBundle()
         listOf(
-            bundle.gsubTraceJson,
-            bundle.gposTraceJson,
+            readProjectFile("reports/font/fixtures/expected/shaping/opentype-layout-contract-gsub-trace.json"),
+            readProjectFile("reports/font/fixtures/expected/shaping/opentype-layout-contract-gpos-trace.json"),
         ).forEach { trace ->
             assertTrue(trace.contains("\"typefaceId\": \"550e8400-e29b-41d4-a716-446655440601\""))
             assertTrue(trace.contains("\"scriptRun\": {"))
@@ -293,11 +298,10 @@ class OpenTypeLayoutEngineContractTest {
         val dumpIndex = readProjectFile("reports/pure-kotlin-text/dump-evidence-index.json")
         assertTrue(dumpIndex.contains("\"dumpId\": \"shaping-plan\""))
         assertTrue(dumpIndex.contains("\"ownerTicket\": \"KFONT-M6-001\""))
-        assertTrue(dumpIndex.contains("\"reports/font/fixtures/expected/shaping/shaping-plan.json\""))
+        assertTrue(dumpIndex.contains("\"reports/font/fixtures/expected/shaping/opentype-layout-contract-shaped-glyph-run.json\""))
 
         val manifest = readProjectFile("reports/pure-kotlin-text/fixture-evidence-manifest.json")
         assertTrue(manifest.contains("\"familyId\": \"opentype-layout-contract\""))
-        assertTrue(manifest.contains("\"reports/font/fixtures/expected/shaping/shaping-plan.json\""))
         assertTrue(manifest.contains("\"no-complex-shaping-support-claim\""))
 
         val dashboard = readProjectFile("reports/pure-kotlin-text/font-claim-dashboard.json")
