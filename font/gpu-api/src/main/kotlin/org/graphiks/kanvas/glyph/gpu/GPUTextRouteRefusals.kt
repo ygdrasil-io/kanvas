@@ -40,6 +40,14 @@ enum class GPUTextRouteBlocker(
         ownerLabel = "text-binding-layout",
         classification = "GPU-gated",
     ),
+    EVICTION_BARRIER(
+        ownerLabel = "text-atlas-eviction-order",
+        classification = "GPU-gated",
+    ),
+    INSTANCE_UPLOAD_ORDER(
+        ownerLabel = "text-instance-upload-order",
+        classification = "GPU-gated",
+    ),
     CPU_RENDERED_TEXTURE(
         ownerLabel = "forbidden-compatibility-path",
         classification = "expected-unsupported",
