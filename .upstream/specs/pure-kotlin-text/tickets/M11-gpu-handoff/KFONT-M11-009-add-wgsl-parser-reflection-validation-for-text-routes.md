@@ -112,6 +112,11 @@ rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*TextWgsl
   snippet tied to a `GPUTextBinding`/resource plan. Remaining gate: finish
   `KFONT-M11-004` and `KFONT-M11-007`, then validate actual text WGSL modules
   against reflected bindings and Kotlin plan comparisons.
+- `blocked` (2026-06-23): `KFONT-M11-004` and `KFONT-M11-006` are done, and
+  `KFONT-M11-007` is ready but not implemented. This ticket stays blocked
+  until the resource/upload/instance/binding dumps exist, then text WGSL
+  modules can be validated against reflected bindings and Kotlin plan
+  comparisons.
 
 ## Linear Labels
 

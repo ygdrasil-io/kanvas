@@ -13,7 +13,7 @@ M8 supplies paragraph and glyph run outputs. M9 supplies strike keys, A8/SDF art
 - [ ] `DrawTextRunPayload` and text artifact registry dumps contain only immutable value objects and no `Sk*`, font bytes, native handles, raw GPU handles, or CPU-rendered full text texture routes.
 - [ ] A8 atlas route evidence includes route plan, resource plan, instance layout, bindings, WGSL reflection, upload-before-sample ordering, and focused GPU proof.
 - [ ] Unsupported SDF, outline, color, bitmap, SVG, stale atlas, missing upload, and unregistered artifact cases refuse with precise `text.gpu.*` and `unsupported.text.*` diagnostics.
-- [ ] `GPUTextSubRunPlan` splitting preserves visual order and records split reasons by representation, atlas page/generation, transform, material, clip, layer, destination-read, and budget.
+- [x] `GPUTextSubRunPlan` splitting preserves visual order and records split reasons by representation, atlas page/generation, transform, material, clip, layer, destination-read, and budget.
 - [ ] `MaterialKey` tests prove glyph IDs, atlas coordinates, generations, live handles, and upload tokens stay out of material identity.
 
 ## Tickets
@@ -25,8 +25,8 @@ M8 supplies paragraph and glyph run outputs. M9 supplies strike keys, A8/SDF art
 | [KFONT-M11-003 - Add normalized `DrawTextRun` contract](KFONT-M11-003-add-normalized-drawtextrun-contract.md) | `done` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M8-002`, `KFONT-M9-002`, `KFONT-M11-002` | - |
 | [KFONT-M11-004 - Wire atlas A8 artifact route](KFONT-M11-004-wire-atlas-a8-artifact-route.md) | `done` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M9-003`, `KFONT-M9-005`, `KFONT-M11-003` | - |
 | [KFONT-M11-005 - Wire dependency-gated diagnostics for unsupported routes](KFONT-M11-005-wire-dependency-gated-diagnostics-for-unsupported-routes.md) | `done` | `P0` | `DependencyGated` | `gpu-api` | `KFONT-M11-001`, `KFONT-M11-003` | `dftext`, `scaledemoji_rendering`, `coloremoji_blendmodes` |
-| [KFONT-M11-006 - Add `GPUTextSubRunPlan` splitting tests](KFONT-M11-006-add-gputextsubrunplan-splitting-tests.md) | `blocked` | `P1` | `GPU-gated` | `gpu-api` | `KFONT-M11-003`, `KFONT-M11-004`, `KFONT-M11-005` | - |
-| [KFONT-M11-007 - Add resource/upload/instance/binding plan contracts](KFONT-M11-007-add-resource-upload-instance-binding-plan-contracts.md) | `blocked` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-006` | `dftext` |
+| [KFONT-M11-006 - Add `GPUTextSubRunPlan` splitting tests](KFONT-M11-006-add-gputextsubrunplan-splitting-tests.md) | `done` | `P1` | `GPU-gated` | `gpu-api` | `KFONT-M11-003`, `KFONT-M11-004`, `KFONT-M11-005` | - |
+| [KFONT-M11-007 - Add resource/upload/instance/binding plan contracts](KFONT-M11-007-add-resource-upload-instance-binding-plan-contracts.md) | `ready` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-006` | `dftext` |
 | [KFONT-M11-008 - Add upload-before-sample ordering validation](KFONT-M11-008-add-upload-before-sample-ordering-validation.md) | `blocked` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-004`, `KFONT-M11-007` | `dftext` |
 | [KFONT-M11-009 - Add WGSL parser/reflection validation for text routes](KFONT-M11-009-add-wgsl-parser-reflection-validation-for-text-routes.md) | `blocked` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-004`, `KFONT-M11-007` | `dftext`, `coloremoji_blendmodes` |
 | [KFONT-M11-010 - Add `MaterialKey` leakage tests](KFONT-M11-010-add-materialkey-leakage-tests.md) | `blocked` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-006`, `KFONT-M11-007` | - |
@@ -50,13 +50,14 @@ Required evidence for this milestone includes `text-gpu-artifact-registry.json`,
 
 ## Current Readiness Gate
 
-2026-06-19 update: `KFONT-M11-004` is now `done` on the bounded A8 atlas route
-plan, checked-in `gpu-text-a8-route-plan.json`, reviewed text WGSL reflection
-linkage, and focused simple-Latin GPU evidence. `KFONT-M11-006` through
-`KFONT-M11-010` remain blocked because they still need subrun splitting,
-resource/upload/instance/binding expansion, upload-before-sample ordering,
-route-specific WGSL validation, and `MaterialKey` leakage fixtures beyond the
-first accepted A8 route.
+2026-06-23 update: `KFONT-M11-006` is now `done` on deterministic
+`gpu-text-subrun-plan.json` evidence covering atlas page/generation splits,
+clip/layer/destination-read barriers, instance-budget refusal, and mixed
+A8/SDF/COLR/bitmap representation refusals. `KFONT-M11-007` is now `ready`
+for resource/upload/instance/binding contract implementation. `KFONT-M11-008`
+through `KFONT-M11-010` remain blocked because they still need the
+`KFONT-M11-007` expansion before upload-before-sample ordering, route-specific
+WGSL validation, and `MaterialKey` leakage fixtures can be validated.
 
 ## Status Update Rule
 
