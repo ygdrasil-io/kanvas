@@ -1,5 +1,15 @@
 package org.skia.foundation.opentype
 
+import org.graphiks.kanvas.font.FontSource
+import org.graphiks.kanvas.font.FontSourceID
+import org.graphiks.kanvas.font.FontSourceKind
+import org.graphiks.kanvas.font.TypefaceID
+import org.graphiks.kanvas.font.sfnt.DefaultOpenTypeFaceParser
+import org.graphiks.kanvas.font.sfnt.OpenTypeFaceData
+import org.graphiks.kanvas.font.sfnt.OpenTypeFaceEvidence
+import org.graphiks.kanvas.font.sfnt.OpenTypeStyle
+import org.graphiks.kanvas.font.sfnt.OpenTypeStyleSlant
+import org.graphiks.kanvas.font.sfnt.rawTableBytes
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
 import org.graphiks.math.SkColorGetG
@@ -41,6 +51,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sign
 import kotlin.math.sqrt
+import kotlin.uuid.Uuid
 
 /**
  * Pure-Kotlin OpenType/TrueType font manager.
@@ -104,20 +115,56 @@ public class OpenTypeTypeface private constructor(
     override val fontStyle: SkFontStyle,
     private val paletteSelection: OpenTypePaletteSelection = OpenTypePaletteSelection.Default,
     private val variationPosition: OpenTypeVariationPosition = OpenTypeVariationPosition.Default,
+    private val faceData: OpenTypeFaceData? = null,
 ) : SkTypeface() {
-    override fun countGlyphs(): Int = font.numGlyphs
+    /**
+     * Stable typeface identity from the pure Kotlin font core, when the
+     * [DefaultOpenTypeFaceParser] path was used for construction. Null for
+     * the legacy [ParsedTrueTypeFont]-only constructor path.
+     */
+    val typefaceId: TypefaceID? get() = faceData?.id
+
+    /**
+     * Private constructor for the pure Kotlin core fact path.
+     * Accepts both [faceData] (pure Kotlin OpenType facts) and [font]
+     * (legacy scaler/glyph operations). OpenType facts such as family
+     * name, style, glyph count, table access, and variation axes are
+     * routed through [faceData]; glyph rendering operations remain on
+     * the legacy [font] scaler.
+     */
+    private constructor(
+        faceData: OpenTypeFaceData,
+        font: ParsedTrueTypeFont,
+        fontStyle: SkFontStyle,
+        paletteSelection: OpenTypePaletteSelection = OpenTypePaletteSelection.Default,
+        variationPosition: OpenTypeVariationPosition = OpenTypeVariationPosition.Default,
+    ) : this(font, fontStyle, paletteSelection, variationPosition, faceData)
+
+    override fun countGlyphs(): Int =
+        faceData?.metrics?.numGlyphs ?: font.numGlyphs
 
     override fun getFamilyName(name: StringBuilder) {
-        name.append(font.familyName)
+        val familyName = faceData?.names?.preferredFamilyName() ?: font.familyName
+        name.append(familyName)
     }
 
-    override fun getPostScriptName(): String? = font.postScriptName
+    override fun getPostScriptName(): String? =
+        faceData?.names?.preferredPostScriptName() ?: font.postScriptName
 
     internal val hasParsedFontStyle: Boolean
         get() = font.hasParsedFontStyle
 
-    override fun createFamilyNameIterator(): Iterator<SkTypeface.LocalizedString> =
-        font.localizedFamilyNames.iterator()
+    override fun createFamilyNameIterator(): Iterator<SkTypeface.LocalizedString> {
+        if (faceData != null) {
+            val localized = faceData.names.localizedFamilyNames()
+            if (localized.isNotEmpty()) {
+                return localized.map { name ->
+                    SkTypeface.LocalizedString(name.value, name.languageTag)
+                }.iterator()
+            }
+        }
+        return font.localizedFamilyNames.iterator()
+    }
 
     override fun unicharsToGlyphsInternal(unichars: IntArray, count: Int, glyphs: ShortArray) {
         for (i in 0 until count) {
@@ -149,11 +196,30 @@ public class OpenTypeTypeface private constructor(
     override fun getKerningPairAdjustments(glyphs: ShortArray): IntArray? =
         font.kerningPairAdjustments(glyphs)
 
-    override fun copyTableData(tag: Int): ByteArray? =
-        font.tableData(tag)
+    override fun copyTableData(tag: Int): ByteArray? {
+        if (faceData != null) {
+            val tagStr = openTypeTagToString(tag)
+            val table = faceData.rawTableBytes(tagStr)
+            if (table != null) return table
+        }
+        return font.tableData(tag)
+    }
 
-    override fun getVariationDesignParameters(): List<SkFontVariation.Axis> =
-        font.variationAxes
+    override fun getVariationDesignParameters(): List<SkFontVariation.Axis> {
+        if (faceData != null && faceData.variations.axes.isNotEmpty()) {
+            return faceData.variations.axes.map { axis ->
+                SkFontVariation.Axis(
+                    tag = axis.tag.rawValue,
+                    min = axis.minimum.value.toFloat(),
+                    default = axis.defaultValue.value.toFloat(),
+                    max = axis.maximum.value.toFloat(),
+                    flags = axis.flags,
+                    nameId = axis.nameId,
+                )
+            }
+        }
+        return font.variationAxes
+    }
 
     internal fun colorPalettes(): List<List<Int>> =
         font.colorPalettes()
@@ -759,10 +825,77 @@ public class OpenTypeTypeface private constructor(
             .addPathOffset(path, x, y)
             .detach()
 
+    /**
+     * Returns a facade parity evidence dump comparing the pure Kotlin core
+     * [OpenTypeFaceData] facts with the legacy [ParsedTrueTypeFont] facts.
+     *
+     * The dump includes the typeface identity, family name, PostScript name,
+     * font style, glyph count, table tags, variation axis count, and diagnostic
+     * counts. Returns null when the pure Kotlin core path was not used
+     * (legacy-only construction).
+     */
+    internal fun facadeParityEvidence(): OpenTypeFaceParityDump? {
+        val fd = faceData ?: return null
+        return OpenTypeFaceParityDump(
+            typefaceId = fd.id.value.toString(),
+            coreFamilyName = fd.names.preferredFamilyName(),
+            legacyFamilyName = font.familyName,
+            corePostScriptName = fd.names.preferredPostScriptName(),
+            legacyPostScriptName = font.postScriptName,
+            coreGlyphCount = fd.metrics.numGlyphs,
+            legacyGlyphCount = font.numGlyphs,
+            coreTableTags = fd.directory.tables.map { it.tag.value }.sorted(),
+            legacyTableTags = font.tableTags(),
+            coreAxisCount = fd.variations.axes.size,
+            legacyAxisCount = font.variationAxes.size,
+            coreDiagnosticCount = fd.diagnostics.size,
+        )
+    }
+
     public companion object {
         @Suppress("FunctionName")
         public fun MakeFromBytes(bytes: ByteArray, ttcIndex: Int = 0): OpenTypeTypeface? =
             ParsedTrueTypeFont.parse(bytes, ttcIndex)?.let { OpenTypeTypeface(it, it.fontStyle) }
+
+        /**
+         * Creates an [OpenTypeTypeface] using the pure Kotlin
+         * [DefaultOpenTypeFaceParser] for OpenType facts while keeping the
+         * [ParsedTrueTypeFont] for glyph scaler operations.
+         *
+         * This is the recommended construction path for M13 code. The legacy
+         * [MakeFromBytes] path remains available for backward compatibility.
+         *
+         * OpenType facts such as family name, PostScript name, style, glyph
+         * count, table access, and variation axes are routed through the pure
+         * Kotlin core types. Glyph rendering (paths, widths, bounds, color)
+         * continues through the legacy [ParsedTrueTypeFont] scaler.
+         *
+         * Returns null when the font bytes are too malformed for either parser.
+         * When the [DefaultOpenTypeFaceParser] fails but [ParsedTrueTypeFont]
+         * succeeds, the typeface is constructed with only the legacy path
+         * (equivalent to [MakeFromBytes]) and the [faceData] field is null.
+         */
+        @Suppress("FunctionName")
+        public fun MakeFromBytesWithCorePath(bytes: ByteArray, ttcIndex: Int = 0): OpenTypeTypeface? {
+            val parsed = ParsedTrueTypeFont.parse(bytes, ttcIndex) ?: return null
+            val source = FontSource(
+                id = FontSourceID(Uuid.random()),
+                kind = FontSourceKind.MEMORY,
+                displayName = "OpenType Typeface",
+                bytes = bytes,
+            )
+            return try {
+                val parser = DefaultOpenTypeFaceParser()
+                val faceData = parser.parse(source, ttcIndex)
+                OpenTypeTypeface(
+                    faceData = faceData,
+                    font = parsed,
+                    fontStyle = faceData.style.toSkFontStyle(),
+                )
+            } catch (_: IllegalArgumentException) {
+                OpenTypeTypeface(parsed, parsed.fontStyle)
+            }
+        }
     }
 }
 
@@ -828,6 +961,8 @@ private class ParsedTrueTypeFont(
         kern?.adjustment(leftGlyphId, rightGlyphId)
             ?: gpos?.adjustment(leftGlyphId, rightGlyphId)
             ?: 0
+
+    fun tableTags(): List<String> = tables.keys.toList()
 
     fun tableData(tag: Int): ByteArray? {
         val record = tables[openTypeTagToString(tag)] ?: return null
@@ -3604,6 +3739,51 @@ private const val OS2_USE_TYPO_METRICS = 0x0080
 private const val OS2_FS_SELECTION_OBLIQUE = 0x0200
 private const val HEAD_MAC_STYLE_BOLD = 0x0001
 private const val HEAD_MAC_STYLE_ITALIC = 0x0002
+
+/**
+ * Maps the pure Kotlin [OpenTypeStyle] to the Skia facade [SkFontStyle].
+ */
+private fun OpenTypeStyle.toSkFontStyle(): SkFontStyle = SkFontStyle(
+    weight = weight,
+    width = width,
+    slant = when (slant) {
+        OpenTypeStyleSlant.UPRIGHT -> SkFontStyle.Slant.kUpright_Slant
+        OpenTypeStyleSlant.ITALIC -> SkFontStyle.Slant.kItalic_Slant
+        OpenTypeStyleSlant.OBLIQUE -> SkFontStyle.Slant.kOblique_Slant
+    },
+)
+
+/**
+ * Facade parity evidence dump — compares pure Kotlin core facts with legacy
+ * [ParsedTrueTypeFont] facts for the same font bytes.
+ *
+ * @property typefaceId Stable typeface identity from the pure Kotlin core.
+ * @property coreFamilyName Family name from [OpenTypeFaceData.names].
+ * @property legacyFamilyName Family name from [ParsedTrueTypeFont].
+ * @property corePostScriptName PostScript name from [OpenTypeFaceData.names].
+ * @property legacyPostScriptName PostScript name from [ParsedTrueTypeFont].
+ * @property coreGlyphCount Glyph count from [OpenTypeFaceData.metrics].
+ * @property legacyGlyphCount Glyph count from [ParsedTrueTypeFont].
+ * @property coreTableTags Sorted table tags from [OpenTypeFaceData.directory].
+ * @property legacyTableTags Table tags from [ParsedTrueTypeFont].
+ * @property coreAxisCount Variation axis count from [OpenTypeFaceData.variations].
+ * @property legacyAxisCount Variation axis count from [ParsedTrueTypeFont].
+ * @property coreDiagnosticCount Non-fatal parse diagnostic count.
+ */
+internal data class OpenTypeFaceParityDump(
+    val typefaceId: String,
+    val coreFamilyName: String?,
+    val legacyFamilyName: String,
+    val corePostScriptName: String?,
+    val legacyPostScriptName: String?,
+    val coreGlyphCount: Int?,
+    val legacyGlyphCount: Int,
+    val coreTableTags: List<String>,
+    val legacyTableTags: List<String>,
+    val coreAxisCount: Int,
+    val legacyAxisCount: Int,
+    val coreDiagnosticCount: Int,
+)
 
 private fun openTypeTagToString(tag: Int): String = buildString(4) {
     append(((tag ushr 24) and 0xFF).toChar())
