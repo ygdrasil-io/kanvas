@@ -68,6 +68,8 @@ enum class GPUDrawKind {
     FillRect,
     /** Filled rounded rectangle command family. */
     FillRRect,
+    /** Filled path command family with tessellated vertex buffers. */
+    FillPath,
     /** Text run command family with prepared text stack artifacts. */
     DrawTextRun,
 }
@@ -148,6 +150,19 @@ data class GPUBounds(
     val top: Float,
     val right: Float,
     val bottom: Float,
+)
+
+/** M15 path-fill facts captured from the legacy path fill before tessellation. */
+data class GPUPathFacts(
+    val pathKey: String,
+    val verbCount: Int,
+    val pointCount: Int,
+    val fillRule: String,
+    val inverseFill: Boolean,
+    val finiteProof: String,
+    val volatility: String,
+    val transformClass: String,
+    val edgeCount: Int,
 )
 
 /** Captured transform facts owned by commands and consumed by analysis without replaying Canvas state. */
@@ -488,6 +503,64 @@ object GPULinearGradientCommandBuilder {
     }
 }
 
+/** Builds Kanvas-owned M15 path-fill commands from tessellated vertex buffers. */
+object GPUFillPathCommandBuilder {
+    fun build(
+        commandId: GPUDrawCommandID,
+        pathKey: String,
+        pathDescriptor: GPUPathFacts,
+        tessellatedVertices: List<Float>,
+        contourStarts: List<Int>,
+        edgeCount: Int,
+        target: GPUTargetFacts,
+        material: GPUMaterialDescriptor,
+        transform: GPUTransformFacts = GPUTransformFacts.identity(),
+        clip: GPUClipFacts? = null,
+        layer: GPULayerFacts? = null,
+        blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        paintOrder: Int = 0,
+        source: GPUCommandSource = GPUCommandSource(adapter = "gpu-renderer", operation = "fillPath.shadow"),
+    ): NormalizedDrawCommand.FillPath {
+        val vertexCount = tessellatedVertices.size / 2
+        val minBounds = if (vertexCount > 0) {
+            var minX = Float.POSITIVE_INFINITY; var minY = Float.POSITIVE_INFINITY
+            var maxX = Float.NEGATIVE_INFINITY; var maxY = Float.NEGATIVE_INFINITY
+            var i = 0
+            while (i < tessellatedVertices.size) {
+                val x = tessellatedVertices[i]; val y = tessellatedVertices[i + 1]
+                minX = minOf(minX, x); minY = minOf(minY, y)
+                maxX = maxOf(maxX, x); maxY = maxOf(maxY, y)
+                i += 2
+            }
+            GPUBounds(minX, minY, maxX, maxY)
+        } else {
+            GPUBounds(0f, 0f, 0f, 0f)
+        }
+        val resolvedClip = clip ?: GPUClipFacts.wideOpen(bounds = minBounds)
+        return NormalizedDrawCommand.FillPath(
+            commandId = commandId,
+            pathKey = pathKey,
+            pathDescriptor = pathDescriptor,
+            tessellatedVertices = tessellatedVertices,
+            contourStarts = contourStarts,
+            totalVertexCount = vertexCount,
+            edgeCount = edgeCount,
+            transform = transform,
+            clip = resolvedClip,
+            layer = layer ?: GPULayerFacts.root(target = target),
+            material = material,
+            blend = blend,
+            bounds = minBounds,
+            ordering = GPUOrderingFacts(
+                paintOrder = paintOrder,
+                dependsOnDestination = false,
+                requiresBarrier = false,
+            ),
+            source = source,
+        )
+    }
+}
+
 /** High-level draw command after legacy state has been captured and normalized. */
 sealed interface NormalizedDrawCommand {
     /** Recording-local command identifier. */
@@ -545,6 +618,27 @@ sealed interface NormalizedDrawCommand {
         override val source: GPUCommandSource,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRRect
+    }
+
+    /** M15 path-fill command with tessellated vertex buffers from the shadow adapter. */
+    data class FillPath(
+        override val commandId: GPUDrawCommandID,
+        val pathKey: String,
+        val pathDescriptor: GPUPathFacts,
+        val tessellatedVertices: List<Float>,
+        val contourStarts: List<Int>,
+        val totalVertexCount: Int,
+        val edgeCount: Int,
+        override val transform: GPUTransformFacts,
+        override val clip: GPUClipFacts,
+        override val layer: GPULayerFacts,
+        override val material: GPUMaterialDescriptor,
+        override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        override val bounds: GPUBounds,
+        override val ordering: GPUOrderingFacts,
+        override val source: GPUCommandSource,
+    ) : NormalizedDrawCommand {
+        override val drawKind: GPUDrawKind = GPUDrawKind.FillPath
     }
 
     /**

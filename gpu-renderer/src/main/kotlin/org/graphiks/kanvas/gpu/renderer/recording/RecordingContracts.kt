@@ -264,8 +264,13 @@ class GPURecorder(
         when (command) {
             is NormalizedDrawCommand.FillRect -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
             is NormalizedDrawCommand.FillRRect -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
+            is NormalizedDrawCommand.FillPath -> planFillPath(command)
             is NormalizedDrawCommand.DrawTextRun -> planDrawTextRun(command)
         }
+
+    private fun planFillPath(command: NormalizedDrawCommand.FillPath): GPUFirstRoutePlan {
+        return GPUFirstRoutePlanner(capabilities = capabilities).planFillPath(command)
+    }
 
     private fun planDrawTextRun(command: NormalizedDrawCommand.DrawTextRun): GPUFirstRoutePlan {
         val descriptor = command.glyphRunDescriptor

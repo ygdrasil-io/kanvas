@@ -6,7 +6,7 @@ class GlyphCache(
     private val maxEntries: Int = 512,
     private val maxBytes: Long = 4L * 1024L * 1024L,
 ) {
-    private val entries = LinkedHashMap<GlyphStrikeKey, A8Bitmap>()
+    private val entries = LinkedHashMap<GlyphStrikeKey, A8Bitmap>(maxEntries, 0.75f, true)
     private var totalBytes: Long = 0L
 
     fun getOrRasterize(

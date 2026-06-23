@@ -104,6 +104,27 @@ class A8RasterizerTest {
     }
 
     @Test
+    fun `cache uses LRU eviction - recently accessed entry survives`() {
+        val cache = GlyphCache(maxEntries = 2, maxBytes = Long.MAX_VALUE)
+        val key1 = GlyphStrikeKey(glyphId = 1, size = 16.0f, subpixelX = 0, subpixelY = 0)
+        val key2 = GlyphStrikeKey(glyphId = 2, size = 16.0f, subpixelX = 0, subpixelY = 0)
+        val key3 = GlyphStrikeKey(glyphId = 3, size = 16.0f, subpixelX = 0, subpixelY = 0)
+
+        cache.put(key1, A8Bitmap(1, 1, byteArrayOf(1)))
+        cache.put(key2, A8Bitmap(1, 1, byteArrayOf(2)))
+
+        // Access key1 to mark it recently used; key2 becomes least-recently-used
+        assertNotNull(cache.getOrRasterize(key1) { null })
+
+        cache.put(key3, A8Bitmap(1, 1, byteArrayOf(3)))
+
+        assertEquals(2, cache.occupancy().entryCount)
+        // key1 was accessed recently, so it should survive; key2 should be evicted
+        assertNotNull(cache.getOrRasterize(key1) { null })
+        assertNull(cache.getOrRasterize(key2) { null })
+    }
+
+    @Test
     fun `rasterizer returns null for empty glyph`() {
         val fontBytes = javaClass.getResourceAsStream("/fonts/liberation/LiberationSans-Regular.ttf")!!
             .readBytes()
