@@ -2094,6 +2094,9 @@ object GPURendererSceneRegistry {
             ),
         ),
         legacyParitySnapshotBoardScene,
+        roundedRectSolidsScene,
+        linearGradientLanesScene,
+        scissorOverlayScene,
     )
 
     val registry: SceneRegistry<SceneCommand> = SceneRegistry(scenes)

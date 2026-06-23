@@ -140,6 +140,9 @@ object GPURendererSceneHumanDocs {
         doc("shadow-parity-migration-gate-board", "Documenter les gates de parite shadow avant migration.", "Valide lanes par famille pour parite, evidence et refus de migration.", "Ne revendique pas parite shadow complete ni remplacement accepte.", "Preuve WebGPU offscreen avec gates de parite."),
         doc("legacy-retirement-blocker-board", "Exposer les blockers de retrait legacy.", "Valide lanes replacement, activation decision, rollback et evidence PM.", "Ne revendique pas retirement legacy ni route produit activee.", "Preuve WebGPU offscreen avec blockers de retirement."),
         doc("legacy-parity-snapshot-board", "Verifier une vue de parite legacy lisible avant toute decision de retirement.", "Valide un board de comparaison rrect/rect borne avec lanes de parite, evidence et blockers.", "Ne revendique pas remplacement accepte ni retrait effectif de la route legacy.", "Preuve WebGPU offscreen et Kadre windowed."),
+        doc("rounded-rect-solids", "Verifier trois rrects solides avec rayons varies.", "Valide FillRRect avec rayons petits, moyens et grands.", "Ne revendique pas rayons par coin, gradients ou transforms avances.", "Preuve WebGPU offscreen et Kadre windowed."),
+        doc("linear-gradient-lanes", "Verifier trois degradees lineaires bornes avec clamp.", "Valide LinearGradientRect horizontal, vertical et diagonal.", "Ne revendique pas repeat, mirror, decal, local matrix ou plus de deux arrets.", "Preuve WebGPU offscreen et Kadre windowed."),
+        doc("scissor-overlay", "Verifier un scissor simple avec rectangles bornes.", "Valide Clip device-rect et FillRect ordonnes.", "Ne revendique pas clip rrect, stencil-cover ni clip stack complexe.", "Preuve WebGPU offscreen et Kadre windowed."),
     )
 
     val candidateScenes: List<CandidateScene> = listOf(

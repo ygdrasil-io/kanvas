@@ -102,6 +102,8 @@ enum class GPUClipKind {
 enum class GPUMaterialKind {
     /** Solid source color material. */
     SolidColor,
+    /** Linear gradient source material. */
+    LinearGradient,
 }
 
 /** Rectangle geometry in local command coordinates. */
@@ -310,6 +312,25 @@ sealed interface GPUMaterialDescriptor {
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.SolidColor
     }
+
+    /** Linear gradient descriptor with start/end colors and tile mode for the first GPU expansion slice. */
+    data class LinearGradient(
+        val startX: Float,
+        val startY: Float,
+        val endX: Float,
+        val endY: Float,
+        val startR: Float,
+        val startG: Float,
+        val startB: Float,
+        val startA: Float,
+        val endR: Float,
+        val endG: Float,
+        val endB: Float,
+        val endA: Float,
+        val tileMode: String = "clamp",
+    ) : GPUMaterialDescriptor {
+        override val kind: GPUMaterialKind = GPUMaterialKind.LinearGradient
+    }
 }
 
 /** Captured ordering facts for normalized draw commands. */
@@ -407,6 +428,50 @@ object GPUFillRRectCommandBuilder {
         return NormalizedDrawCommand.FillRRect(
             commandId = commandId,
             rrect = rrect,
+            transform = transform,
+            clip = resolvedClip,
+            layer = layer ?: GPULayerFacts.root(target = target),
+            material = material,
+            blend = blend,
+            bounds = bounds,
+            ordering = GPUOrderingFacts(
+                paintOrder = paintOrder,
+                dependsOnDestination = false,
+                requiresBarrier = false,
+            ),
+            source = source,
+        )
+    }
+}
+
+/** Builds Kanvas-owned first-expansion LinearGradient rect commands from already-normalized facts. */
+object GPULinearGradientCommandBuilder {
+    /**
+     * Builds an immutable FillRect command with a linear gradient material descriptor.
+     *
+     * The builder reuses the FillRect command family with a
+     * [GPUMaterialDescriptor.LinearGradient] material so the planner can accept
+     * gradient rects without a new command family. Gradient-specific validation
+     * (non-degenerate endpoints, finite colors, valid tile mode) is deferred to
+     * analysis-time refusal checks.
+     */
+    fun build(
+        commandId: GPUDrawCommandID,
+        rect: GPURect,
+        target: GPUTargetFacts,
+        material: GPUMaterialDescriptor.LinearGradient,
+        transform: GPUTransformFacts = GPUTransformFacts.identity(),
+        clip: GPUClipFacts? = null,
+        layer: GPULayerFacts? = null,
+        blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        paintOrder: Int = 0,
+        source: GPUCommandSource = GPUCommandSource(adapter = "gpu-renderer", operation = "linearGradientRect"),
+    ): NormalizedDrawCommand.FillRect {
+        val bounds = rect.toBounds()
+        val resolvedClip = clip ?: GPUClipFacts.wideOpen(bounds = bounds)
+        return NormalizedDrawCommand.FillRect(
+            commandId = commandId,
+            rect = rect,
             transform = transform,
             clip = resolvedClip,
             layer = layer ?: GPULayerFacts.root(target = target),
