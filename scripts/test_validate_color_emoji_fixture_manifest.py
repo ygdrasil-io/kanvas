@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import copy
 import importlib.util
 import sys
 import unittest
@@ -30,86 +31,67 @@ class ColorEmojiFixtureManifestValidatorTest(unittest.TestCase):
         validator.validate_manifest(PROJECT_ROOT, manifest)
 
         self.assertEqual("color-emoji-fixture-manifest", manifest["dumpId"])
-        self.assertEqual(39, len(manifest["cases"]))
         self.assertEqual(["KFONT-M10-010"], manifest["ownerTickets"])
+        self.assertEqual(4, len(manifest["families"]))
+        self.assertEqual(9, len(manifest["componentDumps"]))
 
-    def test_validator_rejects_missing_required_fixture(self) -> None:
+    def test_validator_rejects_missing_component_dump(self) -> None:
         validator = load_validator()
         manifest = validator.load_json(PROJECT_ROOT, validator.MANIFEST_PATH)
-        modified = dict(manifest)
-        modified["cases"] = [case for case in manifest["cases"] if case["fixtureId"] != "emoji-variation-selector-colr"]
+        modified = copy.deepcopy(manifest)
+        modified["componentDumps"] = [
+            dump for dump in manifest["componentDumps"] if dump["dumpId"] != "emoji-route-trace"
+        ]
 
         with self.assertRaises(validator.ValidationError) as missing:
             validator.validate_manifest(PROJECT_ROOT, modified)
-        self.assertIn("exact required fixture ids", str(missing.exception))
+        self.assertIn("componentDumps changed", str(missing.exception))
 
-    def test_validator_rejects_provenance_hash_drift_for_real_asset(self) -> None:
+    def test_validator_rejects_component_dump_hash_drift(self) -> None:
         validator = load_validator()
         manifest = validator.load_json(PROJECT_ROOT, validator.MANIFEST_PATH)
-        modified = dict(manifest)
-        mutated_cases = []
-        for case in manifest["cases"]:
-            cloned = dict(case)
-            if cloned["fixtureId"] == "emoji-variation-selector-colr":
-                provenance = dict(cloned["provenance"])
-                provenance["sourceSha256"] = "0" * 64
-                cloned["provenance"] = provenance
-            mutated_cases.append(cloned)
-        modified["cases"] = mutated_cases
+        modified = copy.deepcopy(manifest)
+        modified["componentDumps"][0]["bodySha256"] = "0" * 64
 
         with self.assertRaises(validator.ValidationError) as drift:
             validator.validate_manifest(PROJECT_ROOT, modified)
-        self.assertIn("asset hash", str(drift.exception))
+        self.assertIn("bodySha256 does not match", str(drift.exception))
 
-    def test_validator_rejects_provenance_hash_drift_for_synthetic_recipe(self) -> None:
+    def test_validator_rejects_family_legacy_gate_drift(self) -> None:
         validator = load_validator()
         manifest = validator.load_json(PROJECT_ROOT, validator.MANIFEST_PATH)
-        modified = dict(manifest)
-        mutated_cases = []
-        for case in manifest["cases"]:
-            cloned = dict(case)
-            if cloned["fixtureId"] == "svg-glyphs-svg-static-path":
-                provenance = dict(cloned["provenance"])
-                provenance["sourceSha256"] = "f" * 64
-                cloned["provenance"] = provenance
-            mutated_cases.append(cloned)
-        modified["cases"] = mutated_cases
+        modified = copy.deepcopy(manifest)
+        for family in modified["families"]:
+            if family["familyId"] == "emoji":
+                family["legacyGates"] = []
 
         with self.assertRaises(validator.ValidationError) as drift:
             validator.validate_manifest(PROJECT_ROOT, modified)
-        self.assertIn("generatedSourceRecipe hash", str(drift.exception))
+        self.assertIn("emoji.legacyGates changed", str(drift.exception))
 
-    def test_validator_rejects_unknown_expected_route(self) -> None:
+    def test_validator_rejects_unknown_provenance_hash(self) -> None:
         validator = load_validator()
         manifest = validator.load_json(PROJECT_ROOT, validator.MANIFEST_PATH)
-        modified = dict(manifest)
-        mutated_cases = []
-        for case in manifest["cases"]:
-            cloned = dict(case)
-            if cloned["fixtureId"] == "svg-glyphs-svg-static-path":
-                cloned["expectedRoute"] = "svg-plan-typo"
-            mutated_cases.append(cloned)
-        modified["cases"] = mutated_cases
-
-        with self.assertRaises(validator.ValidationError) as route:
-            validator.validate_manifest(PROJECT_ROOT, modified)
-        self.assertIn("expectedRoute is unknown", str(route.exception))
-
-    def test_validator_rejects_case_legacy_gate_drift(self) -> None:
-        validator = load_validator()
-        manifest = validator.load_json(PROJECT_ROOT, validator.MANIFEST_PATH)
-        modified = dict(manifest)
-        mutated_cases = []
-        for case in manifest["cases"]:
-            cloned = dict(case)
-            if cloned["fixtureId"] == "emoji-variation-selector-colr":
-                cloned["legacyGates"] = []
-            mutated_cases.append(cloned)
-        modified["cases"] = mutated_cases
+        modified = copy.deepcopy(manifest)
+        for family in modified["families"]:
+            if family["familyId"] == "color-glyphs":
+                family["provenance"]["sourceHashes"] = ["0" * 64]
 
         with self.assertRaises(validator.ValidationError) as drift:
             validator.validate_manifest(PROJECT_ROOT, modified)
-        self.assertIn("case legacyGates changed", str(drift.exception))
+        self.assertIn("unknown provenance asset hash", str(drift.exception))
+
+    def test_validator_rejects_non_claim_drift(self) -> None:
+        validator = load_validator()
+        manifest = validator.load_json(PROJECT_ROOT, validator.MANIFEST_PATH)
+        modified = copy.deepcopy(manifest)
+        modified["nonClaims"] = [
+            non_claim for non_claim in manifest["nonClaims"] if non_claim != "no-gpu-color-glyph-support-claim"
+        ]
+
+        with self.assertRaises(validator.ValidationError) as drift:
+            validator.validate_manifest(PROJECT_ROOT, modified)
+        self.assertIn("nonClaims changed", str(drift.exception))
 
 
 if __name__ == "__main__":

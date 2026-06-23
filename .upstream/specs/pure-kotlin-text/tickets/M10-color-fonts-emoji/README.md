@@ -50,7 +50,7 @@ Required evidence for this milestone includes `color-glyph-plan.json`, `colrv1-p
 
 - Metadata-only parsing is not color glyph rendering support.
 - CPU/text color plans do not claim GPU composite, texture, SVG vector, or emoji rendering; M11 owns those route proofs.
-- `scaledemoji`, `scaledemoji_rendering`, and `coloremoji_blendmodes` remain open until fixture, implementation, CPU oracle, GPU evidence, diagnostics, and dashboard updates are all linked.
+- `scaledemoji`, `scaledemoji_rendering`, and `coloremoji_blendmodes` now have reviewed fixture convergence via `KFONT-M10-010`, but they remain open until CPU oracle and M11 GPU renderer-route evidence are linked.
 
 ## Status Update Rule
 
