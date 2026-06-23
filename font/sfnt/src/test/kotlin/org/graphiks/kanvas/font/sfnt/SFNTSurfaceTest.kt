@@ -296,6 +296,38 @@ class SFNTSurfaceTest {
     }
 
     @Test
+    fun m6ExtensionLayoutFixturesAreCheckedInWithSyntheticProvenance() {
+        val fixturePaths = listOf(
+            "reports/font/fixtures/fonts/shaping/gsub-extension-substitution.otf",
+            "reports/font/fixtures/fonts/shaping/layout-extension-cycle.otf",
+        )
+        val provenanceIndex = Files.readString(fixturePath("reports/font/fixtures/provenance/index.json"))
+
+        fixturePaths.forEach { relativePath ->
+            assertTrue(
+                actual = Files.isRegularFile(fixturePath(relativePath)),
+                message = "Expected checked-in M6 extension fixture $relativePath",
+            )
+            assertTrue(
+                actual = provenanceIndex.contains(relativePath),
+                message = "Fixture provenance index should reference $relativePath",
+            )
+        }
+
+        listOf(
+            "gsub-extension-substitution",
+            "layout-extension-cycle",
+            "\"ownerTickets\": [\n        \"KFONT-M6-010\"",
+            "\"kind\": \"synthetic-kanvas\"",
+        ).forEach { requiredSnippet ->
+            assertTrue(
+                actual = provenanceIndex.contains(requiredSnippet),
+                message = "Fixture provenance index is missing $requiredSnippet",
+            )
+        }
+    }
+
+    @Test
     fun defaultOpenTypeFaceParserParsesSvgTableAndLooksUpDocumentsByGlyphId() {
         val svgBytes = "<svg><path id=\"glyph-eight\"/></svg>".toByteArray(Charsets.UTF_8)
         val svg = svgTable(

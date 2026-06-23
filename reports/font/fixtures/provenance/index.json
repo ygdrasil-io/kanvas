@@ -515,6 +515,40 @@
       ]
     },
     {
+      "fixtureId": "gsub-extension-substitution",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-010"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M6 GSUB extension substitution",
+        "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
+        "version": "2026-06-23 synthetic M6 shaping fixture generator v3"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-extension-substitution.otf",
+          "sha256": "956f6a48c47a27d761f51acabb1fbd7175b235e46dd15b229402b2d787f3ef14",
+          "sizeBytes": 604,
+          "role": "extension-substitution-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/extension-lookup-report.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-advanced-lookup-support-claim",
+        "no-gpos-contextual-or-variation-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
       "fixtureId": "gsub-ligature-bad-component",
       "familyId": "latin-gsub-gpos-fixtures",
       "ownerTickets": [
@@ -707,6 +741,40 @@
         "no-complete-target-support-claim",
         "no-complete-gsub-support-claim",
         "no-complete-gsub-gpos-support-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "layout-extension-cycle",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-010"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M6 GSUB extension cycle refusal",
+        "url": "scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts",
+        "version": "2026-06-23 synthetic M6 shaping fixture generator v3"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/layout-extension-cycle.otf",
+          "sha256": "592ed12f92b2749e7aa2189274b72d49ea8923fccabf6c3457327372cfa899e2",
+          "sizeBytes": 466,
+          "role": "extension-cycle-refusal-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/extension-lookup-report.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-advanced-lookup-support-claim",
+        "no-gpos-contextual-or-variation-claim",
         "no-native-shaper-oracle-claim"
       ]
     },

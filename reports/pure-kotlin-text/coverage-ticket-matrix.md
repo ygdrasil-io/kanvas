@@ -3192,29 +3192,36 @@ Files:
 
 Evidence:
 
-- `DefaultOpenTypeFaceParser` now resolves GSUB lookup type `7` extension
-  subtables into bounded single-substitution and ligature-substitution lookup
-  models on deterministic generated-memory-font fixtures.
-- `ExtensionLookupFixtureTest` now proves those parsed extension targets shape
-  `A -> glyph 15` under `ccmp` defaults and `fi -> glyph 42` under `liga`
-  defaults without introducing native shaper dependencies or broader advanced
-  lookup claims.
-- `extension-lookup-report.json` records the bounded single/ligature extension
-  cases and keeps chaining, reverse-chaining, GPOS advanced lookup, and
-  variation/device work as explicit remaining gates.
+- `gsub-extension-substitution.otf` and `layout-extension-cycle.otf` are now
+  checked in under synthetic Apache-2.0 provenance for `KFONT-M6-010`.
+- `ExtensionLookupFixtureTest` now proves those repo-backed extension fixtures
+  shape `A -> glyph 15` under `ccmp` defaults and `fi -> glyph 42` under
+  `liga`, and it also pins a deterministic
+  `font.sfnt.optional-table-malformed` refusal for the self-targeting
+  extension fixture.
+- `extension-lookup-report.json` records the checked-in extension
+  single/ligature cases plus the unsupported-target refusal while keeping
+  chaining, reverse-chaining, GPOS advanced lookup, and variation/device work
+  as explicit remaining gates.
 
 Validation:
 
 ```bash
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.m6ExtensionLayoutFixturesAreCheckedInWithSyntheticProvenance
 rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ExtensionLookupFixtureTest
+rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk git diff --check
 ```
 
-Remaining gate: GSUB extension lookup targets beyond single and ligature
-substitution, GSUB chaining contextual substitution, GSUB reverse chaining
-substitution, GPOS contextual/chaining/extension positioning, device/variation
-adjustments, and ticket-local `gsub-trace.json` / `gpos-trace.json` /
+Remaining gate: only the checked-in `gsub-extension-substitution.otf` and
+`layout-extension-cycle.otf` slice is now landed. The named advanced-lookup
+fixture family still lacks `gsub-chaining-context.otf`,
+`gsub-reverse-chaining.otf`, `gpos-contextual-positioning.otf`,
+`gpos-chaining-positioning.otf`, `gpos-extension-positioning.otf`, and
+`gpos-variation-device.otf`, while GSUB chaining/reverse-chaining runtime,
+advanced GPOS positioning, device/variation adjustments, and ticket-local
 `variation-adjustment-trace.json` evidence remain open. Keep this ticket
 `blocked` until those gates land.
 ### PKT-09A: Paragraph Semantic Layout Dumps And Refusals
