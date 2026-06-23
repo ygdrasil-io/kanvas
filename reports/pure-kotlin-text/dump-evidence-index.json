@@ -2247,6 +2247,46 @@
       ]
     },
     {
+      "dumpId": "golden-update-policy",
+      "ownerTicket": "PKT-13C",
+      "classification": "producer-only",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md",
+        "section": "Evidence Artifacts and Fixture Strategy"
+      },
+      "producerPaths": [
+        "reports/pure-kotlin-text/golden-update-policy.json",
+        "scripts/validate_pure_kotlin_text_golden_update_policy.py",
+        "scripts/test_validate_pure_kotlin_text_golden_update_policy.py"
+      ],
+      "expectedFields": [
+        "driftLabels",
+        "goldenTypes",
+        "nonClaims",
+        "oraclePolicy",
+        "ordinaryTestRuns",
+        "policyId",
+        "rebaselineApproval",
+        "reviewRequirement",
+        "schemaVersion",
+        "sourceSpec",
+        "supportClaim",
+        "validationCommand"
+      ],
+      "validationCommands": [
+        "rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_golden_update_policy.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_golden_update_policy.py"
+      ],
+      "updatePolicy": "Policy changes require spec 07 cross-reference review, cross-file consistency verification, and explicit non-claim preservation.",
+      "nonClaims": [
+        "producer-only",
+        "policy-definition-only",
+        "no-complete-target-support-claim",
+        "no-CPU-or-GPU-oracle-artifacts-added",
+        "no-external-engine-normative-oracle"
+      ]
+    },
+    {
       "dumpId": "gpos-trace",
       "ownerTicket": "KFONT-M6-004",
       "classification": "golden-gated",
