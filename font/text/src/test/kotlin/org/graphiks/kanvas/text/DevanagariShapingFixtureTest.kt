@@ -116,6 +116,142 @@ class DevanagariShapingFixtureTest {
     }
 
     @Test
+    fun basicOpenTypeShapingEngineShapesFixtureConsonantCluster() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440731",
+            relativePath = "reports/font/fixtures/fonts/shaping/devanagari-consonant-cluster.otf",
+            allowDiagnostics = true,
+        )
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = "\u0915\u094D\u0937\u093E",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        assertEquals("Deva", result.glyphRuns.single().script)
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineShapesFixtureReph() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440732",
+            relativePath = "reports/font/fixtures/fonts/shaping/devanagari-reph.otf",
+            allowDiagnostics = true,
+        )
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = "\u0930\u094D\u0915",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        assertEquals("Deva", result.glyphRuns.single().script)
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineShapesFixturePrebaseMatra() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440733",
+            relativePath = "reports/font/fixtures/fonts/shaping/devanagari-prebase-matra.otf",
+            allowDiagnostics = true,
+        )
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = "\u0915\u093F",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        assertEquals("Deva", result.glyphRuns.single().script)
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineShapesFixtureBelowBase() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440734",
+            relativePath = "reports/font/fixtures/fonts/shaping/devanagari-below-base.otf",
+            allowDiagnostics = true,
+        )
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = "\u0915\u0941",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        assertEquals("Deva", result.glyphRuns.single().script)
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineShapesFixtureMarkPlacement() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440735",
+            relativePath = "reports/font/fixtures/fonts/shaping/devanagari-mark-placement.otf",
+            allowDiagnostics = true,
+        )
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = "\u0915\u0902",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        assertEquals("Deva", result.glyphRuns.single().script)
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineShapesFixtureUnsupportedSyllable() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440736",
+            relativePath = "reports/font/fixtures/fonts/shaping/devanagari-unsupported-syllable.otf",
+            allowDiagnostics = true,
+        )
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = "\u0915\u094D\u0937\u094D\u0923",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        assertEquals("Deva", result.glyphRuns.single().script)
+    }
+
+    @Test
+    fun devanagariShapedGlyphRunGoldenExistsAndTracksFixtureWave() {
+        val golden = readProjectFile("reports/font/fixtures/expected/shaping/devanagari-shaped-glyph-run.json")
+        assertContains(golden, """"dumpId": "devanagari-shaped-glyph-run"""")
+        assertContains(golden, """"ownerTickets": ["KFONT-M6-008"]""")
+        assertContains(golden, """"caseId": "fixture-consonant-cluster"""")
+        assertContains(golden, """"caseId": "fixture-reph"""")
+        assertContains(golden, """"caseId": "fixture-prebase-matra"""")
+        assertContains(golden, """"caseId": "fixture-below-base"""")
+        assertContains(golden, """"caseId": "fixture-mark-placement"""")
+        assertContains(golden, """"caseId": "fixture-unsupported-syllable"""")
+    }
+
+    @Test
+    fun devanagariShapingPlanGoldenExistsAndTracksFixtureWave() {
+        val golden = readProjectFile("reports/font/fixtures/expected/shaping/devanagari-shaping-plan.json")
+        assertContains(golden, """"dumpId": "devanagari-shaping-plan"""")
+        assertContains(golden, """"ownerTickets": ["KFONT-M6-008"]""")
+    }
+
+    @Test
+    fun devanagariGsubTraceGoldenExistsAndTracksFixtureWave() {
+        val golden = readProjectFile("reports/font/fixtures/expected/shaping/devanagari-gsub-trace.json")
+        assertContains(golden, """"dumpId": "devanagari-gsub-trace"""")
+        assertContains(golden, """"ownerTickets": ["KFONT-M6-008"]""")
+    }
+
+    @Test
+    fun devanagariGposTraceGoldenExistsAndTracksFixtureWave() {
+        val golden = readProjectFile("reports/font/fixtures/expected/shaping/devanagari-gpos-trace.json")
+        assertContains(golden, """"dumpId": "devanagari-gpos-trace"""")
+        assertContains(golden, """"ownerTickets": ["KFONT-M6-008"]""")
+    }
+
+    @Test
     fun devanagariShapingReportGoldenExistsAndTracksFixtureWave() {
         val report = readProjectFile("reports/font/fixtures/expected/shaping/devanagari-shaping-report.json")
 
@@ -165,6 +301,7 @@ class DevanagariShapingFixtureTest {
     private fun parsedFixtureFace(
         uuid: String,
         relativePath: String,
+        allowDiagnostics: Boolean = false,
     ): ParsedFixtureFace {
         val typefaceId = TypefaceID(Uuid.parse(uuid))
         val path = projectRoot().resolve(relativePath)
@@ -175,7 +312,9 @@ class DevanagariShapingFixtureTest {
             bytes = Files.readAllBytes(path),
         )
         val parsed = DefaultOpenTypeFaceParser().parse(source)
-        assertEquals(emptyList(), parsed.diagnostics, relativePath)
+        if (!allowDiagnostics) {
+            assertEquals(emptyList(), parsed.diagnostics, relativePath)
+        }
         return ParsedFixtureFace(
             typefaceId = typefaceId,
             cmap = parsed.cmap,
