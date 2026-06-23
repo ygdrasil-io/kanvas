@@ -7,7 +7,12 @@
   schema dumps.
 - `reports/pure-kotlin-text/font-telemetry-pm-bundle.json` records one advisory
   row for each telemetry domain already covered by
-  `font-telemetry-schema-fixture.json`.
+  `font-telemetry-schema-fixture.json`, and the PM bundle now also ships the
+  checked-in `parser-metrics.json`, `scaler-metrics.json`,
+  `shaping-metrics.json`, `paragraph-metrics.json`,
+  `glyph-artifact-metrics.json`, `glyph-cache-metrics.json`,
+  `glyph-atlas-occupancy.json`, `gpu-text-handoff-metrics.json`, and
+  `draw-text-run-upload-plan.json` telemetry slices.
 - The PM evidence remains warning-only and keeps the telemetry row classified
   as `tracked-gap` with `claimPromotionAllowed=false`.
 
@@ -18,11 +23,13 @@
   task instead of inventing a runtime telemetry gate.
 - Domain rows cover parser, scaler, shaping, paragraph, glyph artifact, and GPU
   text handoff samples with stable fixture IDs, sample counts, cache states,
-  and metric names.
-- The report keeps the performance posture advisory/warning-only and points
-  downstream producer emission to `KFONT-M12-002`, `KFONT-M12-003`,
-  `KFONT-M12-004`, and `KFONT-M12-005` instead of keeping the schema ticket
-  open.
+  and metric names, including the shaping diagnostic-count series plus the
+  paragraph style-run and hit-test-index-build slices added by
+  `KFONT-M12-003`.
+- The report keeps the performance posture advisory/warning-only and now
+  records checked-in parser/scaler, shaping/paragraph, glyph/cache, and GPU
+  handoff/upload telemetry evidence separately instead of keeping any shared
+  producer gate open inside the schema slice.
 
 ## Validation
 
@@ -38,8 +45,4 @@ rtk git diff --check
 
 ## Remaining gate
 
-No schema-local gate remains for `KFONT-M12-001`. Downstream producer emission
-into the shared schema is owned by `KFONT-M12-002`, `KFONT-M12-003`,
-`KFONT-M12-004`, and `KFONT-M12-005`. The report stays warning-only, keeps all
-budgets advisory, and does not promote any GPU route, release gate, or
-complete telemetry support claim.
+No schema-local gate remains for `KFONT-M12-001`. All M12 telemetry domains now have checked-in deterministic producer evidence, while the report stays warning-only, keeps all budgets advisory, and does not promote any GPU route, `dftext` retirement, release gate, or complete telemetry support claim.

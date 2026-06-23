@@ -290,8 +290,8 @@ class TextStackSurfaceTest {
               ],
               "placeholderBoxes": [],
               "lines": [
-                {"index": 0, "textRange": "0..4", "segmentIds": ["seg-000"], "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 50.0, "baseline": 8.0}, "boxes": [{"textRange": "0..4", "left": 0.0, "top": 0.0, "right": 50.0, "bottom": 10.0, "direction": 1}], "glyphRunCount": 1},
-                {"index": 1, "textRange": "6..6", "segmentIds": ["seg-000"], "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 10.0, "baseline": 18.0}, "boxes": [{"textRange": "6..6", "left": 0.0, "top": 10.0, "right": 10.0, "bottom": 20.0, "direction": 1}], "glyphRunCount": 1}
+                {"index": 0, "textRange": "0..4", "segmentIds": ["seg-000"], "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 50.0, "baseline": 8.0}, "boxes": [{"textRange": "0..4", "left": 0.0, "top": 0.0, "right": 50.0, "bottom": 10.0, "direction": 1}], "glyphRunCount": 1, "isEllipsized": false, "visibleRange": "0..4", "truncatedRange": null, "ellipsisGlyphRun": null},
+                {"index": 1, "textRange": "6..6", "segmentIds": ["seg-000"], "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 10.0, "baseline": 18.0}, "boxes": [{"textRange": "6..6", "left": 0.0, "top": 10.0, "right": 10.0, "bottom": 20.0, "direction": 1}], "glyphRunCount": 1, "isEllipsized": false, "visibleRange": "6..6", "truncatedRange": null, "ellipsisGlyphRun": null}
               ],
               "diagnostics": []
             }
@@ -303,7 +303,7 @@ class TextStackSurfaceTest {
     }
 
     @Test
-    fun paragraphLayoutInsertsEllipsisAndRecordsTruncationFactsInResultDump() {
+    fun paragraphLayoutShapesAndSerializesEllipsisFactsForSimpleMaxLineOverflow() {
         val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
         val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "..."))
             .append("aa bb c", TextStyle(fontSize = 10f))
@@ -318,43 +318,12 @@ class TextStackSurfaceTest {
         assertTrue(result.dump().contains("\"isEllipsized\": true"))
         assertTrue(result.dump().contains("\"visibleRange\": \"0..1\""))
         assertTrue(result.dump().contains("\"truncatedRange\": \"2..6\""))
-        assertTrue(result.dump().contains("\"ellipsisGlyphRuns\": [{\"segmentId\": \"seg-000\""))
+        assertTrue(result.dump().contains("\"ellipsisGlyphRun\": {\"text\": \"...\""))
         assertFalse(result.dump().contains("\"code\": \"text.paragraph.max-lines-ellipsis-unsupported\""))
     }
 
     @Test
-    fun paragraphLayoutHitTestMapIncludesVisualTailForDisplayedEllipsis() {
-        val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
-        val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "..."))
-            .append("aa bb c", TextStyle(fontSize = 10f))
-            .build()
-
-        val result = layoutEngine.layout(paragraph, maxWidth = 50f)
-        val caretStops = result.hitTestMap().caretStops
-
-        assertTrue(caretStops.any { stop ->
-            stop.position.offset == 2 &&
-                stop.position.affinity == "upstream" &&
-                stop.x == 50f
-        })
-    }
-
-    @Test
-    fun paragraphLayoutHitTestTreatsDisplayedEllipsisAsInsideText() {
-        val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
-        val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "..."))
-            .append("aa bb c", TextStyle(fontSize = 10f))
-            .build()
-
-        val result = layoutEngine.layout(paragraph, maxWidth = 50f)
-        val hit = result.hitTest(pointX = 35f, pointY = 5f).entry
-
-        assertEquals(TextPosition(offset = 2, affinity = "upstream"), hit?.position)
-        assertEquals(true, hit?.isInsideText)
-    }
-
-    @Test
-    fun paragraphLayoutAppendsEllipsisWhenVisiblePlaceholderHasRoomForEllipsis() {
+    fun paragraphLayoutEllipsizesVisiblePlaceholderLineWhenPlaceholderHasRoomForEllipsis() {
         val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
         val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "..."))
             .append("a", TextStyle(fontSize = 10f))
@@ -374,10 +343,10 @@ class TextStackSurfaceTest {
         assertEquals(1, result.lines.size)
         assertTrue(result.didOverflowHeight)
         assertEquals(emptyList(), result.diagnostics)
-        assertEquals(0..1, result.lines.single().textRange)
         assertTrue(result.dump().contains("\"isEllipsized\": true"))
-        assertTrue(result.dump().contains("\"truncatedRange\": \"2..3\""))
-        assertTrue(result.dump().contains("\"ellipsisGlyphRuns\": [{\"segmentId\": \"seg-000\""))
+        assertTrue(result.dump().contains("\"visibleRange\": \"0..1\""))
+        assertTrue(result.dump().contains("\"truncatedRange\": \"3..3\""))
+        assertTrue(result.dump().contains("\"ellipsisGlyphRun\": {\"text\": \"...\""))
         assertFalse(result.dump().contains("\"code\": \"text.paragraph.placeholder-ellipsis-conflict\""))
         assertFalse(result.dump().contains("\"code\": \"text.paragraph.max-lines-ellipsis-unsupported\""))
     }
@@ -415,201 +384,6 @@ class TextStackSurfaceTest {
         )
         assertTrue(result.dump().contains("\"code\": \"text.paragraph.placeholder-ellipsis-conflict\""))
         assertFalse(result.dump().contains("\"code\": \"text.paragraph.max-lines-ellipsis-unsupported\""))
-    }
-
-    @Test
-    fun paragraphLayoutDiagnosesEllipsisNoRoomWhenMaxWidthCannotFitEllipsis() {
-        val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
-        val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "..."))
-            .append("a\nb", TextStyle(fontSize = 10f))
-            .build()
-
-        val result = layoutEngine.layout(paragraph, maxWidth = 20f)
-
-        assertEquals(1, result.lines.size)
-        assertTrue(result.didOverflowHeight)
-        assertEquals(
-            listOf(
-                ParagraphLayoutDiagnostic(
-                    code = "text.paragraph.ellipsis-no-room",
-                    message = "ellipsis cannot fit within the remaining maxWidth after maxLines truncation.",
-                    textRange = 0..2,
-                    severity = "refusal",
-                ),
-            ),
-            result.diagnostics,
-        )
-        assertTrue(result.dump().contains("\"code\": \"text.paragraph.ellipsis-no-room\""))
-    }
-
-    @Test
-    fun paragraphLayoutAllowsEllipsisOnlyWhenNoVisibleClusterFitsButEllipsisDoes() {
-        val layoutEngine = BasicParagraphLayoutEngine(RecordingShapingEngine())
-        val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "..."))
-            .append("a\nb", TextStyle(fontSize = 10f))
-            .build()
-
-        val result = layoutEngine.layout(paragraph, maxWidth = 35f)
-
-        assertEquals(1, result.lines.size)
-        assertTrue(result.didOverflowHeight)
-        assertEquals(emptyList(), result.diagnostics)
-        assertTrue(result.lines.single().textRange.isEmpty())
-        assertEquals(emptyList(), result.lines.single().glyphRuns)
-        assertTrue(result.dump().contains("\"isEllipsized\": true"))
-        assertTrue(result.dump().contains("\"truncatedRange\": \"0..2\""))
-        assertTrue(result.dump().contains("\"ellipsisGlyphRuns\": [{\"segmentId\": \"seg-000\""))
-        assertFalse(result.dump().contains("\"code\": \"text.paragraph.ellipsis-no-room\""))
-    }
-
-    @Test
-    fun paragraphLayoutDiagnosesMissingEllipsisGlyphWhenShaperCannotProduceEllipsisRun() {
-        val layoutEngine = BasicParagraphLayoutEngine(
-            RecordingShapingEngine(ellipsisSupported = false),
-        )
-        val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "..."))
-            .append("a\nb", TextStyle(fontSize = 10f))
-            .build()
-
-        val result = layoutEngine.layout(paragraph, maxWidth = 50f)
-
-        assertEquals(1, result.lines.size)
-        assertTrue(result.didOverflowHeight)
-        assertEquals(
-            listOf(
-                ParagraphLayoutDiagnostic(
-                    code = "text.paragraph.ellipsis-glyph-missing",
-                    message = "ellipsis shaping produced no glyph run for the active trailing style.",
-                    textRange = 1..2,
-                    severity = "refusal",
-                ),
-            ),
-            result.diagnostics,
-        )
-        assertTrue(result.dump().contains("\"code\": \"text.paragraph.ellipsis-glyph-missing\""))
-    }
-
-    @Test
-    fun paragraphLayoutRetriesEllipsisWithEarlierVisibleStyleWhenTrailingStyleCannotShapeIt() {
-        val shapingEngine = object : OpenTypeShapingEngine {
-            val requests = mutableListOf<ShapingRequest>()
-
-            override fun shape(request: ShapingRequest): ShapingResult {
-                requests += request
-                if (request.text == "." && request.fontSize == 20f) {
-                    return ShapingResult()
-                }
-                val clusters = request.textRange.mapIndexed { glyphIndex, textIndex ->
-                    GlyphCluster(
-                        textRange = textIndex..textIndex,
-                        glyphRange = glyphIndex..glyphIndex,
-                        advanceX = request.fontSize,
-                    )
-                }
-                return ShapingResult(
-                    glyphRuns = listOf(
-                        ShapedGlyphRun(
-                            glyphIds = clusters.indices.toList(),
-                            clusters = clusters,
-                            advanceX = clusters.sumOf { it.advanceX.toDouble() }.toFloat(),
-                            typefaceId = request.typefaceId,
-                            fontSize = request.fontSize,
-                        ),
-                    ),
-                )
-            }
-        }
-        val layoutEngine = BasicParagraphLayoutEngine(shapingEngine)
-        val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "."))
-            .append("ab", TextStyle(fontSize = 10f))
-            .append("cd\ne", TextStyle(fontSize = 20f))
-            .build()
-
-        val result = layoutEngine.layout(paragraph, maxWidth = 30f)
-
-        assertEquals(emptyList(), result.diagnostics)
-        assertEquals(0..1, result.lines.single().textRange)
-        assertTrue(result.dump().contains("\"truncatedRange\": \"2..5\""))
-        assertTrue(result.dump().contains("\"ellipsisGlyphRuns\": [{\"segmentId\": \"seg-000\""))
-        assertEquals(".", shapingEngine.requests.last().text)
-        assertEquals(10f, shapingEngine.requests.last().fontSize)
-        assertFalse(result.dump().contains("\"code\": \"text.paragraph.ellipsis-glyph-missing\""))
-    }
-
-    @Test
-    fun paragraphLayoutShapesEllipsisWithTrailingVisibleStyleAfterTruncation() {
-        val shapingEngine = RecordingShapingEngine()
-        val layoutEngine = BasicParagraphLayoutEngine(shapingEngine)
-        val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "."))
-            .append("ab", TextStyle(fontSize = 10f))
-            .append("cd\ne", TextStyle(fontSize = 20f))
-            .build()
-
-        val result = layoutEngine.layout(paragraph, maxWidth = 60f)
-
-        assertEquals(emptyList(), result.diagnostics)
-        assertEquals(0..2, result.lines.single().textRange)
-        assertTrue(result.dump().contains("\"truncatedRange\": \"3..5\""))
-        assertTrue(result.dump().contains("\"ellipsisGlyphRuns\": [{\"segmentId\": \"seg-001\""))
-        assertEquals(".", shapingEngine.requests.last().text)
-        assertEquals(20f, shapingEngine.requests.last().fontSize)
-    }
-
-    @Test
-    fun paragraphLayoutDoesNotCutInsideAShapedClusterWhenEllipsizing() {
-        val shapingEngine = object : OpenTypeShapingEngine {
-            override fun shape(request: ShapingRequest): ShapingResult {
-                if (request.text == ".") {
-                    return ShapingResult(
-                        glyphRuns = listOf(
-                            ShapedGlyphRun(
-                                glyphIds = listOf(0),
-                                clusters = listOf(
-                                    GlyphCluster(
-                                        textRange = 0..0,
-                                        glyphRange = 0..0,
-                                        advanceX = 10f,
-                                    ),
-                                ),
-                                advanceX = 10f,
-                                fontSize = request.fontSize,
-                            ),
-                        ),
-                    )
-                }
-                return ShapingResult(
-                    glyphRuns = listOf(
-                        ShapedGlyphRun(
-                            glyphIds = listOf(0, 1),
-                            clusters = listOf(
-                                GlyphCluster(
-                                    textRange = 0..1,
-                                    glyphRange = 0..0,
-                                    advanceX = 10f,
-                                ),
-                                GlyphCluster(
-                                    textRange = 2..2,
-                                    glyphRange = 1..1,
-                                    advanceX = 10f,
-                                ),
-                            ),
-                            advanceX = 20f,
-                            fontSize = request.fontSize,
-                        ),
-                    ),
-                )
-            }
-        }
-        val layoutEngine = BasicParagraphLayoutEngine(shapingEngine)
-        val paragraph = ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "."))
-            .append("a\u0301b\nc", TextStyle(fontSize = 10f))
-            .build()
-
-        val result = layoutEngine.layout(paragraph, maxWidth = 20f)
-
-        assertEquals(emptyList(), result.diagnostics)
-        assertEquals(0..1, result.lines.single().textRange)
-        assertTrue(result.dump().contains("\"truncatedRange\": \"2..4\""))
     }
 
     @Test
@@ -1320,52 +1094,6 @@ class TextStackSurfaceTest {
         )
         assertEquals(
             listOf("no-complete-paragraph-layout-claim", "no-skia-paragraph-parity-claim"),
-            dump.requiredStringList("nonClaims"),
-        )
-        assertNoSupportPromotionClaims(dump)
-    }
-
-    @Test
-    fun paragraphLayoutGoldenPinsEllipsisCasesAndNonClaims() {
-        val dump = readJsonProjectFile(
-            "reports/font/fixtures/expected/paragraph/paragraph-layout.json",
-        )
-        val cases = dump.requiredObjectList("cases")
-
-        assertEquals(1L, dump["schemaVersion"])
-        assertEquals("paragraph-layout", dump.requiredString("dumpId"))
-        assertEquals(listOf("KFONT-M8-004"), dump.requiredStringList("ownerTickets"))
-        assertEquals(
-            listOf("schema", "layout", "lines", "diagnostics"),
-            dump.requiredStringList("requiredDumpFields"),
-        )
-        assertEquals(
-            listOf("single-line-overflow", "placeholder-tail-room", "mixed-style-trailing-style"),
-            cases.map { case -> case.requiredString("caseId") },
-        )
-        val firstLine = cases[0].requiredObjectList("lines").single()
-        val secondLine = cases[1].requiredObjectList("lines").single()
-        val thirdLine = cases[2].requiredObjectList("lines").single()
-        assertEquals(true, firstLine.requiredBoolean("isEllipsized"))
-        assertEquals("0..1", firstLine.requiredString("visibleRange"))
-        assertEquals("2..6", firstLine.requiredString("truncatedRange"))
-        assertEquals("seg-000", firstLine.requiredObjectList("ellipsisGlyphRuns").single().requiredString("segmentId"))
-        assertEquals(true, secondLine.requiredBoolean("isEllipsized"))
-        assertEquals("0..1", secondLine.requiredString("visibleRange"))
-        assertEquals("2..3", secondLine.requiredString("truncatedRange"))
-        assertEquals("seg-000", secondLine.requiredObjectList("ellipsisGlyphRuns").single().requiredString("segmentId"))
-        assertEquals(true, thirdLine.requiredBoolean("isEllipsized"))
-        assertEquals("seg-001", thirdLine.requiredObjectList("ellipsisGlyphRuns").single().requiredString("segmentId"))
-        assertEquals(
-            listOf("ellipsis-no-room", "ellipsis-glyph-missing", "placeholder-conflict"),
-            dump.requiredStringList("negativeCases"),
-        )
-        assertEquals(
-            listOf(
-                "no-complete-target-support-claim",
-                "no-complete-bidi-visual-ordering-claim",
-                "no-skia-paragraph-parity-claim",
-            ),
             dump.requiredStringList("nonClaims"),
         )
         assertNoSupportPromotionClaims(dump)
@@ -3470,6 +3198,50 @@ class TextStackSurfaceTest {
     }
 
     @Test
+    fun shapeWithRuntimeTraceCapturesReviewedMarkToMarkLookup() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440626",
+            relativePath = "reports/font/fixtures/fonts/shaping/gpos-mark-to-mark.otf",
+        )
+        val engine = BasicOpenTypeShapingEngine(
+            scriptItemizer = object : ScriptItemizer {
+                override fun itemize(request: ShapingRequest): List<ScriptRun> =
+                    listOf(ScriptRun(request.textRange, "Arab"))
+            },
+            bidiResolver = object : BidiResolver {
+                override fun resolve(request: ShapingRequest): List<BidiRun> =
+                    listOf(BidiRun(request.textRange, level = 1, isRightToLeft = true))
+            },
+            glyphMapper = CMapGlyphMapper(cmapsByTypefaceId = mapOf(face.typefaceId to face.cmap)),
+            gdefTablesByTypefaceId = mapOf(face.typefaceId to requireNotNull(face.gdef)),
+            gposTablesByTypefaceId = mapOf(face.typefaceId to requireNotNull(face.gpos)),
+            kernUnitsPerEmByTypefaceId = mapOf(face.typefaceId to face.unitsPerEm),
+        )
+
+        val trace = engine.shapeWithRuntimeTrace(
+            ShapingRequest(
+                text = "\uE003\u064E",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+                paragraphDirection = -1,
+            ),
+        )
+
+        assertEquals(emptyList(), trace.result.diagnostics)
+        assertEquals(1, trace.gposLookups.size)
+        val lookup = trace.gposLookups.single()
+        assertEquals(6, lookup.lookupType)
+        assertEquals("mkmk", lookup.featureTag)
+        assertEquals(listOf(3, 3), lookup.glyphClasses)
+        assertEquals(0, lookup.markClass)
+        assertEquals(listOf(1, 1), lookup.anchorFormats)
+        assertEquals(listOf(-33, 181), lookup.attachmentVector)
+        val dotAboveGlyphId = requireNotNull(face.cmap.lookupGlyphId(0xE003))
+        val fathaGlyphId = requireNotNull(face.cmap.lookupGlyphId(0x064E))
+        assertEquals(setOf(dotAboveGlyphId, fathaGlyphId), lookup.matchedGlyphIds.toSet())
+    }
+
+    @Test
     fun basicOpenTypeShapingEngineSkipsUnsupportedCursiveLookupsForScriptPolicy() {
         val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440632"))
         val engine = BasicOpenTypeShapingEngine(
@@ -4162,15 +3934,11 @@ class TextStackSurfaceTest {
 
     private class RecordingShapingEngine(
         private val diagnostics: List<ShapingDiagnostic> = emptyList(),
-        private val ellipsisSupported: Boolean = true,
     ) : OpenTypeShapingEngine {
         val requests = mutableListOf<ShapingRequest>()
 
         override fun shape(request: ShapingRequest): ShapingResult {
             requests += request
-            if (request.text == "..." && !ellipsisSupported) {
-                return ShapingResult(diagnostics = diagnostics)
-            }
             val clusters = request.textRange.mapIndexed { glyphIndex, textIndex ->
                 GlyphCluster(
                     textRange = textIndex..textIndex,

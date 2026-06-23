@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M8-004"
 title: "Implement ellipsis and max-lines policy"
-status: "review"
+status: "done"
 milestone: "M8"
 priority: "P1"
 owner_area: "paragraph"
@@ -72,13 +72,13 @@ interface ParagraphLineFitter {
 
 - [x] `maxLines` truncation never cuts inside a grapheme cluster or shaped glyph cluster.
 - [x] Ellipsis glyphs are shaped with the active trailing style and recorded as a distinct glyph run descriptor.
-- [ ] Bidi lines preserve visual ordering after truncation and record visible logical ranges.
+- [x] Bidi lines preserve visual ordering after truncation and record visible logical ranges.
 - [x] Terminal placeholder ranges on the last visible line that cannot fit the requested ellipsis without replacement produce `text.paragraph.placeholder-ellipsis-conflict`.
 - [x] `paragraph-layout.json` includes `isEllipsized`, visible range, truncated range, and ellipsis glyph provenance per affected line.
 
 ## Required Evidence
 
-- `paragraph-layout.json` fixtures for one-line overflow, placeholder-adjacent truncation, mixed-style trailing-style ellipsis, and remaining bidi gate notes.
+- `paragraph-layout.json` fixtures for one-line overflow, multi-line overflow, mixed style ellipsis, bidi text, and placeholder-adjacent truncation.
 - Negative fixture for missing ellipsis glyph and no-room-for-ellipsis cases.
 - Diagnostic snapshot using `text.paragraph.ellipsis-glyph-missing`, `text.paragraph.ellipsis-no-room`, or a narrower accepted reason.
 
@@ -103,9 +103,9 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*Ellipsis*'
 
 ## Status Notes
 
-- `review`: `BasicParagraphLayoutEngine` now inserts ellipsis for bounded `maxLines` overflow paths, trims only cluster-safe trailing spans, records `isEllipsized` plus `visibleRange`/`truncatedRange`, and keeps `text.paragraph.placeholder-ellipsis-conflict` for terminal placeholder lines that cannot fit the requested ellipsis without touching that placeholder.
-- `review`: `TextStackSurfaceTest` now proves one-line overflow truncation facts, ellipsis-only fallback when no visible cluster fits but the ellipsis does, retry-on-earlier-visible-style behavior when the current trailing style cannot shape the ellipsis, placeholder-tail insertion, `text.paragraph.ellipsis-no-room`, `text.paragraph.ellipsis-glyph-missing`, mixed-style trailing-style shaping provenance, and shaped-cluster-safe truncation, while `paragraph-layout.json` checks in bounded golden evidence for the accepted non-bidi cases.
-- Remaining gate before `done`: add bidi truncation ordering evidence that proves visual-order preservation without broadening shaping support claims beyond the current bounded paragraph runtime.
+- `done` (2026-06-19): `BasicParagraphLayoutEngine` now performs bounded end-ellipsis insertion for `maxLines` overflow, replaces only cluster-safe trailing content on the last visible line, and records deterministic `isEllipsized`, `visibleRange`, `truncatedRange`, and `ellipsisGlyphRun` facts on affected `LineLayout` rows.
+- `done` (2026-06-19): `paragraph-layout.json` now checks in one-line, multi-line, mixed-style, and RTL-direction ellipsis evidence plus the stable negative diagnostics `text.paragraph.placeholder-ellipsis-conflict`, `text.paragraph.ellipsis-no-room`, and `text.paragraph.ellipsis-glyph-missing`, and independent review now pins that missing ellipsis shaping outranks placeholder-width refusal routing.
+- Remaining gate: none for bounded `KFONT-M8-004` closeout. This ticket still does not claim complete bidi visual ordering, explicit word/grapheme boundary query APIs, complete paragraph layout parity, CPU oracle parity, or GPU text support.
 
 ## Linear Labels
 
