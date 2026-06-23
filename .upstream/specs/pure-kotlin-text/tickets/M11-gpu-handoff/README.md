@@ -27,7 +27,7 @@ M8 supplies paragraph and glyph run outputs. M9 supplies strike keys, A8/SDF art
 | [KFONT-M11-005 - Wire dependency-gated diagnostics for unsupported routes](KFONT-M11-005-wire-dependency-gated-diagnostics-for-unsupported-routes.md) | `done` | `P0` | `DependencyGated` | `gpu-api` | `KFONT-M11-001`, `KFONT-M11-003` | `dftext`, `scaledemoji_rendering`, `coloremoji_blendmodes` |
 | [KFONT-M11-006 - Add `GPUTextSubRunPlan` splitting tests](KFONT-M11-006-add-gputextsubrunplan-splitting-tests.md) | `done` | `P1` | `GPU-gated` | `gpu-api` | `KFONT-M11-003`, `KFONT-M11-004`, `KFONT-M11-005` | - |
 | [KFONT-M11-007 - Add resource/upload/instance/binding plan contracts](KFONT-M11-007-add-resource-upload-instance-binding-plan-contracts.md) | `done` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-006` | `dftext` |
-| [KFONT-M11-008 - Add upload-before-sample ordering validation](KFONT-M11-008-add-upload-before-sample-ordering-validation.md) | `ready` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-004`, `KFONT-M11-007` | `dftext` |
+| [KFONT-M11-008 - Add upload-before-sample ordering validation](KFONT-M11-008-add-upload-before-sample-ordering-validation.md) | `done` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-004`, `KFONT-M11-007` | `dftext` |
 | [KFONT-M11-009 - Add WGSL parser/reflection validation for text routes](KFONT-M11-009-add-wgsl-parser-reflection-validation-for-text-routes.md) | `ready` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-004`, `KFONT-M11-007` | `dftext`, `coloremoji_blendmodes` |
 | [KFONT-M11-010 - Add `MaterialKey` leakage tests](KFONT-M11-010-add-materialkey-leakage-tests.md) | `ready` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-006`, `KFONT-M11-007` | - |
 
@@ -50,12 +50,15 @@ Required evidence for this milestone includes `text-gpu-artifact-registry.json`,
 
 ## Current Readiness Gate
 
-2026-06-23 update: `KFONT-M11-007` is now `done` on deterministic
-resource/upload/instance/binding dumps and refusal snapshots for the accepted
-A8 atlas subrun. `KFONT-M11-008`, `KFONT-M11-009`, and `KFONT-M11-010` are now
-`ready` for upload-before-sample ordering, route-specific WGSL validation, and
-full `MaterialKey` leakage fixtures. The milestone still does not claim
-executed uploads, broad GPU text support, SDF support, or `dftext` retirement.
+2026-06-23 update: `KFONT-M11-008` is now `done` on deterministic
+upload-before-sample ordering trace evidence for the accepted A8 atlas subrun,
+including instance-upload-before-draw, generation validation,
+draw-before-eviction barrier evidence, and negative ordering refusals.
+`KFONT-M11-009` and
+`KFONT-M11-010` remain `ready` for route-specific WGSL validation and full
+`MaterialKey` leakage fixtures. The milestone still does not claim executed
+uploads, broad GPU text support, SDF support, a general GPU task graph
+scheduler, or `dftext` retirement.
 
 ## Status Update Rule
 

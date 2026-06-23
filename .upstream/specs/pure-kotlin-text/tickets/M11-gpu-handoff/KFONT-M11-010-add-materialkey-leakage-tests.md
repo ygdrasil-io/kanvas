@@ -111,6 +111,10 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*MaterialKey*Text*'
   for glyph IDs, atlas rects, atlas generations, upload tokens, and live
   texture handles. This ticket can now add the full material preimage leakage
   validation and negative fixtures.
+- `ready` (2026-06-23): `KFONT-M11-008` now links upload tokens, atlas
+  generations, resource refs, and draw refs through deterministic ordering
+  trace evidence. The full leakage tests can now prove those facts remain
+  resource/order identity, not material identity.
 
 ## Linear Labels
 

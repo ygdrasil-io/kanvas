@@ -121,6 +121,10 @@ rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*TextWgsl
   resource slots, atlas generation facts, and material refs for the accepted
   A8 resource contract. This ticket can now validate text WGSL parser/
   reflection evidence against Kotlin binding and resource plan comparisons.
+- `ready` (2026-06-23): `KFONT-M11-008` now adds deterministic ordering token,
+  upload-before-sample, instance-upload-before-draw, and generation-validation
+  trace evidence for the accepted A8 route. WGSL reflection can now link
+  reflected binding layouts to ordered resource and draw refs.
 
 ## Linear Labels
 
