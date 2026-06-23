@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-009"
 title: "Add WGSL parser/reflection validation for text routes"
-status: "ready"
+status: "done"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -60,11 +60,11 @@ data class TextWgslReflectionReport(
 
 ## Acceptance Criteria
 
-- [ ] Text WGSL modules parse successfully through `wgsl4k` before support is promoted.
-- [ ] Reflected bindings match `GPUTextBinding`, resource plans, uniform packs, texture/sampler slots, and instance layout expectations.
-- [ ] A8 text mask WGSL evidence is present before A8 route promotion.
-- [ ] SDF validation refuses missing `GPUTextSDFParams` with `unsupported.text.sdf_params_missing` until SDF route support exists.
-- [ ] No text shader validation path references SkSL or native Skia shader compilation.
+- [x] Text WGSL modules parse successfully through `wgsl4k` before support is promoted.
+- [x] Reflected bindings match `GPUTextBinding`, resource plans, uniform packs, texture/sampler slots, and instance layout expectations.
+- [x] A8 text mask WGSL evidence is present before A8 route promotion.
+- [x] SDF validation refuses missing `GPUTextSDFParams` with `unsupported.text.sdf_params_missing` until SDF route support exists.
+- [x] No text shader validation path references SkSL or native Skia shader compilation.
 
 ## Required Evidence
 
@@ -125,6 +125,13 @@ rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*TextWgsl
   upload-before-sample, instance-upload-before-draw, and generation-validation
   trace evidence for the accepted A8 route. WGSL reflection can now link
   reflected binding layouts to ordered resource and draw refs.
+- `done` (2026-06-23): Added `TextWgslValidation` contract evidence plus
+  `text-wgsl-reflection.json` and `text-wgsl-validation-report.json` for the
+  accepted A8 text mask route. The validation report links parser-validated
+  WGSL module metadata, reflected bindings, `TextParams` uniform layout,
+  instance input expectations, Kotlin resource/binding/ordering plan
+  comparisons, and stable parser/binding/SDF/registration refusal diagnostics
+  without route promotion or product activation.
 
 ## Linear Labels
 
