@@ -12,6 +12,14 @@ enum class GPUTextRouteBlocker(
         ownerLabel = "text-artifact-registry",
         classification = "GPU-gated",
     ),
+    ATLAS_DESCRIPTOR(
+        ownerLabel = "text-atlas-descriptor",
+        classification = "GPU-gated",
+    ),
+    ATLAS_ENTRY(
+        ownerLabel = "text-atlas-entry",
+        classification = "GPU-gated",
+    ),
     UPLOAD_PLAN(
         ownerLabel = "text-upload-plan",
         classification = "GPU-gated",

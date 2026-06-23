@@ -117,6 +117,29 @@ class PureKotlinTextFontFixtureInventoryTest(unittest.TestCase):
             validator.validate_inventory(PROJECT_ROOT, modified)
         self.assertIn("target-supported", str(failure.exception))
 
+    def test_validator_rejects_fixture_non_claim_drift_from_dump_fixture(self) -> None:
+        validator = load_validator()
+        inventory = validator.load_inventory(PROJECT_ROOT)
+        modified = dict(inventory)
+        families = [dict(family) for family in inventory["families"]]
+        fixtures = [dict(fixture) for fixture in families[0]["fixtures"]]
+        target = next(
+            fixture
+            for fixture in fixtures
+            if fixture["fixtureId"] == "a8-sdf-artifacts-glyph-cache-metrics"
+        )
+        target["nonClaims"] = [
+            claim
+            for claim in target["nonClaims"]
+            if claim != "no-hidden-performance-gate"
+        ]
+        families[0]["fixtures"] = fixtures
+        modified["families"] = families
+
+        with self.assertRaises(validator.ValidationError) as drift:
+            validator.validate_inventory(PROJECT_ROOT, modified)
+        self.assertIn("must match dump nonClaims", str(drift.exception))
+
     def test_sfnt_optional_malformed_fixture_records_source_hash_and_intended_diagnostic(self) -> None:
         validator = load_validator()
         inventory = validator.load_inventory(PROJECT_ROOT)

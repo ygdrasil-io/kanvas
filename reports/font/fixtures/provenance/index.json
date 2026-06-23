@@ -41,6 +41,7 @@
         }
       ],
       "expectedDumps": [
+        "reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json",
         "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
       ],
       "nonClaims": [
@@ -53,7 +54,8 @@
       "fixtureId": "fallback-emoji-noto-color",
       "familyId": "font-fallback-catalog",
       "ownerTickets": [
-        "KFONT-M7-001"
+        "KFONT-M7-001",
+        "KFONT-M10-010"
       ],
       "source": {
         "kind": "vendored-external",
@@ -73,7 +75,9 @@
           "role": "emoji-colrv1-font"
         }
       ],
-      "expectedDumps": [],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json"
+      ],
       "nonClaims": [
         "no-complete-target-support-claim",
         "no-fallback-support-claim",
@@ -137,7 +141,11 @@
           "role": "arabic-ttf-font"
         }
       ],
-      "expectedDumps": [],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/arabic-gsub-trace.json",
+        "reports/font/fixtures/expected/shaping/arabic-gpos-trace.json",
+        "reports/font/fixtures/expected/shaping/arabic-shaping-report.json"
+      ],
       "nonClaims": [
         "no-complete-target-support-claim",
         "no-fallback-support-claim",
@@ -169,7 +177,9 @@
           "role": "devanagari-ttf-font"
         }
       ],
-      "expectedDumps": [],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/devanagari-shaping-report.json"
+      ],
       "nonClaims": [
         "no-complete-target-support-claim",
         "no-fallback-support-claim",
@@ -248,6 +258,7 @@
         "PKT-02D",
         "PKT-03D",
         "KFONT-M1-004",
+        "KFONT-M12-004",
         "KFONT-M2-005",
         "KFONT-M9-001"
       ],
@@ -284,7 +295,10 @@
       "expectedDumps": [
         "reports/font/fixtures/expected/font-source/liberation-scan-root.json",
         "reports/font/fixtures/expected/glyph/a8-sdf-atlas-lifecycle.json",
+        "reports/font/fixtures/expected/glyph/glyph-artifact-metrics.json",
         "reports/font/fixtures/expected/glyph/glyph-strike-key.json",
+        "reports/font/fixtures/expected/glyph/glyph-atlas-occupancy.json",
+        "reports/font/fixtures/expected/glyph/glyph-cache-metrics.json",
         "reports/font/fixtures/expected/paragraph/paragraph-input-goldens.json",
         "reports/font/fixtures/expected/shaping/latin-gsub-gpos-goldens.json",
         "reports/font/fixtures/expected/sfnt/sfnt-cmap-format14-readiness.json"
@@ -801,7 +815,7 @@
       "source": {
         "kind": "synthetic-kanvas",
         "project": "KFONT synthetic M8 paragraph ellipsis layout",
-        "url": "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "url": "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphEllipsisLayoutTest.kt",
         "version": "2026-06-18 synthetic paragraph ellipsis fixture v1"
       },
       "license": {
@@ -811,8 +825,8 @@
       "assets": [
         {
           "path": "reports/font/fixtures/fonts/paragraph/paragraph-ellipsis-fixture.txt",
-          "sha256": "f1193bdfd5257ccb75a3731d71e6984d180b7d1042ffcb38d42a9e4d9c084924",
-          "sizeBytes": 521,
+          "sha256": "fb59eaca7976b879fcb06e39345f6b7152043f09e23a8fc96182d75a60860f3a",
+          "sizeBytes": 379,
           "role": "synthetic-paragraph-input"
         }
       ],

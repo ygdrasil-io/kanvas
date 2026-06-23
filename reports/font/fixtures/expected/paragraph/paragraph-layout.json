@@ -2,98 +2,18 @@
   "schemaVersion": 1,
   "dumpId": "paragraph-layout",
   "ownerTickets": ["KFONT-M8-004"],
-  "requiredDumpFields": ["schema", "layout", "lines", "diagnostics"],
   "cases": [
-    {
-      "caseId": "single-line-overflow",
-      "inputHash": "68dfd63d9d5df66dcf28e20ca16b4dcac21ed42977d76169c1cf3b8f2b80276a",
-      "visibleRange": "0..1",
-      "truncatedRange": "2..6",
-      "ellipsisSegmentId": "seg-000",
-      "lines": [
-        {
-          "isEllipsized": true,
-          "visibleRange": "0..1",
-          "truncatedRange": "2..6",
-          "ellipsisGlyphRuns": [
-            {
-              "segmentId": "seg-000"
-            }
-          ]
-        }
-      ],
-      "diagnostics": []
-    },
-    {
-      "caseId": "placeholder-tail-room",
-      "inputHash": "a1cf018dca415bd5950955e1c7b73cf476e7f4cfce13f1929b97899fe45a4b3f",
-      "visibleRange": "0..1",
-      "truncatedRange": "2..3",
-      "ellipsisSegmentId": "seg-000",
-      "lines": [
-        {
-          "isEllipsized": true,
-          "visibleRange": "0..1",
-          "truncatedRange": "2..3",
-          "ellipsisGlyphRuns": [
-            {
-              "segmentId": "seg-000"
-            }
-          ]
-        }
-      ],
-      "diagnostics": []
-    },
-    {
-      "caseId": "mixed-style-trailing-style",
-      "inputHash": "9e31e593b9ef0197321463037389b5bd32220f9d978b5c98a3994bb9723452b8",
-      "visibleRange": "0..2",
-      "truncatedRange": "3..5",
-      "ellipsisSegmentId": "seg-001",
-      "lines": [
-        {
-          "isEllipsized": true,
-          "visibleRange": "0..2",
-          "truncatedRange": "3..5",
-          "ellipsisGlyphRuns": [
-            {
-              "segmentId": "seg-001",
-              "fontSize": 20
-            }
-          ]
-        }
-      ],
-      "ellipsisFontSize": 20,
-      "diagnostics": []
-    },
-    {
-      "caseId": "mixed-bidi-ellipsized",
-      "inputHash": "9818cf73803b619772825f162e9ae1c0352d3684f65e2ad831c4b2776e3f8dfc",
-      "visibleRange": "0..4",
-      "truncatedRange": "5..6",
-      "ellipsisSegmentId": "seg-000",
-      "lines": [
-        {
-          "isEllipsized": true,
-          "visibleRange": "0..4",
-          "truncatedRange": "5..6",
-          "ellipsisGlyphRuns": [
-            {
-              "segmentId": "seg-000"
-            }
-          ]
-        }
-      ],
-      "diagnostics": []
-    }
-  ],
-  "negativeCases": [
-    "ellipsis-no-room",
-    "ellipsis-glyph-missing",
-    "placeholder-conflict"
+    {"caseId": "simple-one-line-overflow", "layout": {"width": 50.0, "height": 10.0, "didOverflowWidth": false, "didOverflowHeight": true}, "placeholderBoxes": [], "lines": [{"index": 0, "textRange": "0..1", "width": 50.0, "direction": 1, "isEllipsized": true, "visibleRange": "0..1", "truncatedRange": "2..6", "ellipsisText": "...", "ellipsisAdvance": 30.0, "ellipsisFontSize": 10.0, "ellipsisSourceStyleRange": "0..4", "ellipsisBidiLevel": 0}], "diagnostics": []},
+    {"caseId": "multi-line-overflow", "layout": {"width": 50.0, "height": 20.0, "didOverflowWidth": false, "didOverflowHeight": true}, "placeholderBoxes": [], "lines": [{"index": 0, "textRange": "0..4", "width": 50.0, "direction": 1, "isEllipsized": false, "visibleRange": "0..4", "truncatedRange": null, "ellipsisText": null, "ellipsisAdvance": 0.0, "ellipsisFontSize": 0.0, "ellipsisSourceStyleRange": null, "ellipsisBidiLevel": 0}, {"index": 1, "textRange": "6..7", "width": 50.0, "direction": 1, "isEllipsized": true, "visibleRange": "6..7", "truncatedRange": "8..13", "ellipsisText": "...", "ellipsisAdvance": 30.0, "ellipsisFontSize": 10.0, "ellipsisSourceStyleRange": "6..10", "ellipsisBidiLevel": 0}], "diagnostics": []},
+    {"caseId": "mixed-style-overflow", "layout": {"width": 48.0, "height": 22.0, "didOverflowWidth": false, "didOverflowHeight": true}, "placeholderBoxes": [], "lines": [{"index": 0, "textRange": "0..1", "width": 20.0, "direction": 1, "isEllipsized": false, "visibleRange": "0..1", "truncatedRange": null, "ellipsisText": null, "ellipsisAdvance": 0.0, "ellipsisFontSize": 0.0, "ellipsisSourceStyleRange": null, "ellipsisBidiLevel": 0}, {"index": 1, "textRange": "3..3", "width": 48.0, "direction": 1, "isEllipsized": true, "visibleRange": "3..3", "truncatedRange": "4..8", "ellipsisText": "...", "ellipsisAdvance": 36.0, "ellipsisFontSize": 12.0, "ellipsisSourceStyleRange": "3..6", "ellipsisBidiLevel": 0}], "diagnostics": []},
+    {"caseId": "bidi-overflow", "layout": {"width": 50.0, "height": 20.0, "didOverflowWidth": false, "didOverflowHeight": true}, "placeholderBoxes": [], "lines": [{"index": 0, "textRange": "0..1", "width": 20.0, "direction": -1, "isEllipsized": false, "visibleRange": "0..1", "truncatedRange": null, "ellipsisText": null, "ellipsisAdvance": 0.0, "ellipsisFontSize": 0.0, "ellipsisSourceStyleRange": null, "ellipsisBidiLevel": 0}, {"index": 1, "textRange": "3..4", "width": 50.0, "direction": -1, "isEllipsized": true, "visibleRange": "3..4", "truncatedRange": "5..8", "ellipsisText": "...", "ellipsisAdvance": 30.0, "ellipsisFontSize": 10.0, "ellipsisSourceStyleRange": "3..6", "ellipsisBidiLevel": 1}], "diagnostics": []},
+    {"caseId": "placeholder-conflict", "layout": {"width": 22.0, "height": 12.0, "didOverflowWidth": false, "didOverflowHeight": true}, "placeholderBoxes": [{"placeholderId": "ph-000", "sourceRange": "1..1", "lineIndex": 0, "left": 10.0, "right": 22.0}], "lines": [{"index": 0, "textRange": "0..1", "width": 22.0, "direction": 1, "isEllipsized": false, "visibleRange": "0..1", "truncatedRange": null, "ellipsisText": null, "ellipsisAdvance": 0.0, "ellipsisFontSize": 0.0, "ellipsisSourceStyleRange": null, "ellipsisBidiLevel": 0}], "diagnostics": ["text.paragraph.placeholder-ellipsis-conflict"]},
+    {"caseId": "ellipsis-no-room", "layout": {"width": 20.0, "height": 10.0, "didOverflowWidth": false, "didOverflowHeight": true}, "placeholderBoxes": [], "lines": [{"index": 0, "textRange": "0..1", "width": 20.0, "direction": 1, "isEllipsized": false, "visibleRange": "0..1", "truncatedRange": null, "ellipsisText": null, "ellipsisAdvance": 0.0, "ellipsisFontSize": 0.0, "ellipsisSourceStyleRange": null, "ellipsisBidiLevel": 0}], "diagnostics": ["text.paragraph.ellipsis-no-room"]},
+    {"caseId": "ellipsis-glyph-missing", "layout": {"width": 50.0, "height": 10.0, "didOverflowWidth": false, "didOverflowHeight": true}, "placeholderBoxes": [], "lines": [{"index": 0, "textRange": "0..4", "width": 50.0, "direction": 1, "isEllipsized": false, "visibleRange": "0..4", "truncatedRange": null, "ellipsisText": null, "ellipsisAdvance": 0.0, "ellipsisFontSize": 0.0, "ellipsisSourceStyleRange": null, "ellipsisBidiLevel": 0}], "diagnostics": ["text.paragraph.ellipsis-glyph-missing"]}
   ],
   "nonClaims": [
     "no-complete-target-support-claim",
+    "no-complete-paragraph-layout-claim",
     "no-complete-bidi-visual-ordering-claim",
     "no-skia-paragraph-parity-claim"
   ]

@@ -1,6 +1,6 @@
 # Pure Kotlin Text Coverage And Ticket Matrix
 
-Date: 2026-06-18
+Date: 2026-06-19
 Status: coordination evidence
 
 This report maps `.upstream/specs/pure-kotlin-text/` to implementation slices.
@@ -50,7 +50,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | PKT-04 TrueType `glyf` and variation evidence | Implementable now | Simple/composite outlines, component transforms, variation metadata and metrics dumps. | `font/scaler/src/main`, `font/scaler/src/test`. | Path hashes, bounds, variation delta fixtures. |
 | PKT-05 CFF/CFF2 vertical | Tracked-gap; generated fixture parser/scaler/operator/table/variation-store slices implemented | CFF INDEX/dicts/Type 2 operators/CFF2 variation. | `font/scaler/src/main`, `font/scaler/src/test`. | Generated CFF/CFF2 tables now expose typed INDEX/DICT evidence, stable parse refusals, and minimal CFF2 VariationStore region lookup; complete support still needs broader real-font corpus coverage. |
 | PKT-06 Unicode data and script matrix seed | Implementable now | Pinned Unicode version surface, basic segmentation/bidi/script dumps. | `font/text/src/main/.../shaping`, `font/text/src/test`. | Script/bidi/grapheme tests and explicit unsupported-script diagnostics. |
-| PKT-07 GSUB/GPOS simple script shaping | Partially implementable; bounded GSUB/GPOS fixture slices are done and the script-policy slice remains in review | Latin/Greek/Cyrillic/Hebrew defaults, features, clusters, fallback runs. | `font/text`, `font/sfnt`. | Requires parsed layout table fixtures and feature ordering evidence. |
+| PKT-07 GSUB/GPOS simple script shaping | Partially implementable; bounded GSUB/GPOS fixture slices are done and script-policy adoption is now blocked on the remaining per-script shaping fixture families | Latin/Greek/Cyrillic/Hebrew defaults, features, clusters, fallback runs. | `font/text`, `font/sfnt`. | Requires parsed layout table fixtures and feature ordering evidence. |
 | PKT-08 complex shaping rows | Dependency-gated | Arabic, Devanagari, Thai, CJK, emoji shaping support/refusals. | `font/text`. | Requires PKT-07 and per-row positive/refusal fixtures. |
 | PKT-09 paragraph semantic layout | Partially implementable; full claim gated | Rich styles, bidi visual lines, placeholders, ellipsis, selection, hit testing. | `font/text/src/main/.../paragraph`, `font/text/src/test`. | Layout dumps; full claim waits on shaping/fallback support. |
 | PKT-10 A8/SDF glyph artifact planner | Implementable now | Route policy, key preimage, A8/SDF generation, atlas capacity/stale diagnostics. | `font/glyph`, `font/gpu-api`. | Mask/SDF hashes, atlas dump tests, stable `text.glyph.*` refusals. |
@@ -59,7 +59,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | PKT-13 validation fixture and evidence harness | Implementable now | Fixture manifest, deterministic dumps, CPU oracle hooks, drift labels. | `font/*/src/test`, `reports/pure-kotlin-text`. | Golden update policy and no external normative oracle. |
 | PKT-14 text telemetry and cache counters | Skeleton implementable now | Cache keys, hit/miss/bytes/upload counters, advisory budget records. | `font/*`, `gpu-renderer/telemetry`. | Deterministic telemetry records; no blocking perf gate. |
 | PKT-15 GPU A8/SDF route registration | Dependency-gated | Artifact registry, A8/SDF route refusals, upload-before-sample ordering. | `gpu-renderer/text`, `gpu-renderer/resources`, `gpu-renderer/routing`. | Requires stable text artifacts plus GPU ABI route evidence. |
-| PKT-16 `:kanvas-skia` facade migration adapters | Dependency-gated | Delegate `SkFontMgr`, `SkTypeface`, `SkShaper`, `SkTextBlob` toward pure Kotlin dumps. | `kanvas-skia/src/main/kotlin/org/skia/foundation`. | Current gates preserved; no implicit complex `drawString`. |
+| PKT-16 `:kanvas-skia` facade migration adapters | Dependency-gated; the M13 facade inventory slice is now checked in, while route implementation slices stay blocked on advanced shaping plus GPU handoff readiness gaps. | Delegate `SkFontMgr`, `SkTypeface`, `SkShaper`, `SkTextBlob` toward pure Kotlin dumps. | `kanvas-skia/src/main/kotlin/org/skia/foundation`. | Current gates preserved; no implicit complex `drawString`. |
 
 ## Parallel Workstreams
 
@@ -73,7 +73,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | COLR/PNG/SVG/emoji | PKT-11 plan-only and refusal evidence. | Low if isolated to `glyph/color`. |
 | GPU handoff | PKT-12 command/artifact/refusal contracts only. | Low if no renderer route activation. |
 | Validation/drift/perf | PKT-13/14 harness and telemetry skeletons. | Low, but avoid modifying business APIs. |
-| Migration/refusal retirement | PKT-16 only after supporting evidence exists. | High; defer facade changes until contracts stabilize. |
+| Migration/refusal retirement | PKT-16 only after supporting evidence exists; keep legacy gates visible until facade inventory and route evidence land. | High; defer facade changes until contracts stabilize. |
 
 ## Current Coordination Notes
 
@@ -88,9 +88,8 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
   WGSL/binding evidence, and GPU evidence are promoted.
 - 2026-06-16 KFONT M6 blocker audit is now historical coordination evidence:
   `KFONT-M6-002`, `KFONT-M6-004`, and `KFONT-M6-005` are since closed out on
-  reviewed fixture evidence, while `KFONT-M6-006` remains in `review` pending
-  per-script fixture families and explicit OpenType-specific `drawString`
-  non-enablement evidence.
+  reviewed fixture evidence, while `KFONT-M6-006` is now `blocked` on the
+  remaining per-script fixture families.
 
 ### KFONT-M6 Remaining Blocker Audit
 
@@ -111,9 +110,9 @@ Evidence:
 - `KFONT-M6-002`, `KFONT-M6-004`, and `KFONT-M6-005` are now closed out on
   reviewed fixture provenance and promoted dump evidence, so they no longer
   block resumption by merge/adopt status.
-- `KFONT-M6-006` remains the only M6 slice still in `review`; its remaining
-  gates are per-script shaping fixture families and explicit OpenType-specific
-  `drawString` non-enablement evidence.
+- `KFONT-M6-006` is now blocked rather than lingering in `review`; its
+  remaining gate is the per-script shaping fixture families owned by
+  `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`.
 - The named fixture families for `KFONT-M6-003`, `KFONT-M6-007`,
   `KFONT-M6-008`, `KFONT-M6-009`, and `KFONT-M6-010` are still not present
   in-repo beyond ticket text references, so those tickets must not be advanced
@@ -130,6 +129,138 @@ rtk git diff --check
 Remaining gate: treat this audit as historical context only; current resumption
 work depends on the explicit fixture families and remaining ticket-local gates
 named in the active M6 tickets.
+
+2026-06-19 blocker closeout: the last two `proposed` M6 tickets are no longer
+treated as actionable. `KFONT-M6-009` is now `blocked` on the still-absent
+Thai/CJK ticket-local fixture family plus the upstream `KFONT-M6-006` script
+policy gate, and `KFONT-M6-010` is now `blocked` on the still-absent advanced
+lookup fixture family plus required `variation-adjustment-trace.json`
+evidence. The compatible-asset audit found candidate sources, but no reviewed
+in-repo pack clears either Required Evidence set yet.
+
+### KFONT-M13 Facade Migration Readiness Audit
+
+Status: coordination evidence.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-001-add-facade-adapter-inventory.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-002-route-sktypeface-opentype-facts-through-pure-kotlin-core.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-003-route-explicit-skshaper-apis-through-pure-kotlin-shaping.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-004-route-sktextblob-glyph-runs-through-typed-descriptors.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-005-retire-stale-font-docs-and-stubs-after-evidence-promotion.md`
+- `reports/pure-kotlin-text/2026-06-19-kfont-m13-readiness-audit.md`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- The readiness audit confirms PKT-16 remains dependency-gated overall, but it
+  separates the actionable coordination slice from the blocked route slices:
+  `KFONT-M13-001` should inventory still-open shaping and GPU gates such as
+  `KFONT-M6-010` and `KFONT-M11-010`, while the route implementation tickets
+  remain blocked behind that inventory and their route-specific evidence.
+- `KFONT-M13-002`, `KFONT-M13-003`, and `KFONT-M13-004` now point at concrete
+  remaining gates instead of generic `proposed` notes, and `KFONT-M13-005`
+  keeps legacy-doc retirement explicitly behind the route evidence it needs.
+- The audit preserves all legacy non-claims: no facade route support claim, no
+  GPU route claim, no hidden `drawString` complex shaping claim, and no legacy
+  gate retirement by documentation alone.
+
+Validation:
+
+```bash
+rtk git diff --check
+```
+
+Remaining gate: this is coordination-only readiness evidence. It does not add a
+facade inventory dump, `SkTypeface` parity evidence, explicit `SkShaper`
+parity, `SkTextBlob` typed descriptor evidence, or any legacy-gate retirement
+claim.
+
+### KFONT-M6 Fixture Asset/License Audit Refresh
+
+Status: coordination evidence.
+
+Files:
+
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-009-add-thai-and-cjk-shaping-boundaries.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-010-implement-gsub-gpos-extension-chaining-and-variation-adjustment-lookups.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/README.md`
+- `reports/pure-kotlin-text/2026-06-19-kfont-m6-fixture-asset-license-audit.md`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- The refreshed audit records that compatible candidate sources still exist for
+  future reviewed shaping fixtures, including in-repo `SIL-OFL-1.1` evidence
+  and `unicode-org/text-rendering-tests` under `Unicode-3.0`.
+- The audit also keeps the critical non-claim explicit: no reviewed
+  ticket-local Thai/CJK boundary fixture pack or advanced-lookup fixture pack
+  is present in-repo yet, so `KFONT-M6-009` and `KFONT-M6-010` remain
+  `blocked` and must not be treated as actionable.
+- `KFONT-M6-009` and `KFONT-M6-010` status notes now point at current gates
+  rather than older `review` / prerequisite wording that no longer matches the
+  merged M6 state on `master`.
+
+Validation:
+
+```bash
+rtk git diff --check
+```
+
+Remaining gate: this is coordination-only blocker evidence. It does not add
+Thai shaping support, CJK shaping support, extension/chaining lookup support,
+variation-adjustment support, or any fixture-ready claim.
+
+### KFONT-M13-001 Facade Adapter Inventory
+
+Status: done; implementation evidence.
+
+Files:
+
+- `reports/pure-kotlin-text/facade-adapter-inventory.json`
+- `reports/pure-kotlin-text/2026-06-19-kfont-m13-001-facade-adapter-inventory.md`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `scripts/validate_kfont_m13_001_facade_inventory.py`
+- `scripts/test_validate_kfont_m13_001_facade_inventory.py`
+- `.upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-001-add-facade-adapter-inventory.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/README.md`
+
+Evidence:
+
+- `facade-adapter-inventory.json` now covers all scoped façade routes:
+  `SkFontMgr`, `SkTypeface`, `SkFont`, simple deterministic
+  `SkCanvas.drawString`, explicit `SkShaper`, `SkTextBlob`, and
+  paragraph-compatible APIs.
+- The inventory maps every durable legacy gate and keeps `pdf_never_embed`
+  visible as an explicit adjacent/out-of-scope gate rather than assigning it a
+  false runtime facade owner.
+- The dashboard now includes the `skia-facade-adapter-inventory` row as
+  `tracked-gap`, with the inventory JSON/markdown plus the diagnostic taxonomy
+  linked as route/refusal evidence.
+- `dump-evidence-index.json` now tracks the facade inventory artifact as a
+  producer-only coordination dump with PM bundle/dashboard wiring validations.
+- The inventory preserves all non-claims: no route support promotion, no GPU
+  route readiness claim, no legacy-gate retirement, no hidden native-engine
+  dependency, and no implicit complex `drawString` broadening.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_kfont_m13_001_facade_inventory.py
+rtk python3 scripts/validate_kfont_m13_001_facade_inventory.py
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_claim_dashboard.py
+rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+```
+
+Remaining gate: route-specific façade promotions still belong to
+`KFONT-M13-002`, `KFONT-M13-003`, and `KFONT-M13-004`; the inventory itself is
+coordination evidence, not a support claim.
 
 ## Checkpoint Evidence
 
@@ -2635,7 +2766,7 @@ claim Arabic shaping support, contextual GSUB/GPOS support, variation/device-tab
 support, native shaper parity, CPU oracle parity, or GPU evidence.
 ### KFONT-M6-006: Script-Specific Default Feature Policy Slice
 
-Status: review; independent audit confirmed this remains a bounded contract-layer slice with runtime/fixture gates still open.
+Status: blocked after independent audit; this remains a bounded contract-layer slice with external fixture gates still open.
 
 Files:
 
@@ -2705,9 +2836,59 @@ rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
   GPOS single subset to avoid over-claiming parser/runtime coverage.
 
 Remaining gate: per-script shaping fixture families from `KFONT-M6-007`,
-`KFONT-M6-008`, and `KFONT-M6-009` are still absent. Keep this ticket in
-`review` until those gates land beyond the current contract-level
+`KFONT-M6-008`, and `KFONT-M6-009` are still absent. Keep this ticket
+`blocked` until those gates land beyond the current contract-level
 `shaping-plan.json` evidence.
+
+### KFONT-M6-009: Thai And CJK Boundary Review Wave
+
+Status: blocked after bounded vendored-font evidence landed and was independently reviewed.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ThaiCjkBoundaryFixtureTest.kt`
+- `reports/font/fixtures/expected/shaping/thai-cjk-boundary-report.json`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m6-009-thai-cjk-boundaries.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-fixtures-manifest.json`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-009-add-thai-and-cjk-shaping-boundaries.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `ThaiCjkBoundaryFixtureTest` now injects the pinned Script_Extensions
+  itemizer locally so the bounded `Aก้A` case proves `Latn` / `Thai` /
+  `Latn` shaping boundaries without changing the default engine surface.
+- `ThaiCjkBoundaryFixtureTest` now proves bounded vendored-font evidence for
+  Thai tone-mark positioning, mixed Latin/Thai script boundaries, and CJK
+  kana `vert` alternates on `NotoSansThai-Regular.ttf` and
+  `NotoSansSC-Regular.otf` without promoting broader Thai or CJK shaping
+  support.
+- `thai-cjk-boundary-report.json` records those bounded rows and keeps
+  dictionary diagnostics, variation-selector evidence, Han/Hangul rows,
+  paragraph-owned ruby/line-break diagnostics, and ticket-local trace dump
+  families as explicit remaining gates.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ThaiCjkBoundaryFixtureTest
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: `KFONT-M6-009` is still not `done`. Paragraph-owned Thai
+dictionary diagnostics, Thai refusal fixtures/codes, `cmap` format 14
+variation-selector evidence, Han/Hangul rows, paragraph-owned ruby/line-break
+diagnostics, and ticket-local `shaping-plan.json` / `gsub-trace.json` /
+`gpos-trace.json` / `shaped-glyph-run.json` / `cmap-map.json` /
+`unicode-segments.json` dump families remain open.
 
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 
@@ -2857,6 +3038,140 @@ Remaining gate: this is Arabic fixture-row seed evidence only. It does not
 claim Arabic shaping support, Indic/Thai/CJK/emoji shaping support, complete
 complex shaping, native shaper oracle status, CPU oracle evidence, or GPU text
 evidence.
+### KFONT-M6-007: Arabic Shaping Fixture Review Wave
+
+Status: blocked after bounded vendored-font evidence landed and was independently reviewed.
+
+Files:
+
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt`
+- `reports/font/fixtures/expected/shaping/arabic-mixed-bidi.txt`
+- `reports/font/fixtures/expected/shaping/arabic-gsub-trace.json`
+- `reports/font/fixtures/expected/shaping/arabic-gpos-trace.json`
+- `reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json`
+- `reports/font/fixtures/expected/shaping/arabic-shaping-plan.json`
+- `reports/font/fixtures/expected/shaping/arabic-shaping-report.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m6-007-arabic-shaping-fixtures.md`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m6-007-arabic-runtime-traces.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-007-add-arabic-shaping-fixtures.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `ArabicShapingFixtureTest` now proves bounded vendored-font evidence for
+  joining-form behavior on `NotoNaskhArabic-Regular.ttf` by asserting the
+  runtime diverges from the raw visual-order cmap glyph sequence without
+  promoting full Arabic support.
+- The same test now keeps a bounded non-promotional `لا` lam-alef runtime check
+  by asserting that both visual-order component glyph IDs change away from the
+  raw visual-order cmap pair without treating that divergence as ticket-local
+  positive lam-alef evidence.
+- The same test proves a bounded `اَ` mark-positioning case by tying the
+  positioned-or-zero-advance check to the mark cluster itself, plus a stable
+  mixed Arabic/LTR `text.shaping.paragraph-bidi-required` diagnostic sourced
+  from `arabic-mixed-bidi.txt`.
+- The same test also proves that reviewed repo fixture `gpos-missing-gdef.otf`
+  emits the stable generic `text.shaping.gdef-required` refusal for Arabic
+  base+mark input instead of approximating mark attachment without GDEF glyph
+  classes.
+- `arabic-shaped-glyph-run.json` now pins ticket-local glyph/cluster facts and
+  run-level `bidiLevel` evidence for vendored joining forms, vendored marks,
+  bounded `lam-alef` runtime divergence, and the reviewed generic
+  `gdef-required` refusal row without claiming ticket-ready positive
+  `lam-alef` evidence.
+- `arabic-shaping-plan.json` now pins the required Arabic default feature set
+  (`init`, `medi`, `fina`, `isol`, `rlig`, `liga`, `calt`, `mark`, `mkmk`,
+  `curs`), the `Arab`/`arab` script-policy selection, RTL bidi level facts for
+  the ticket-local rows, and the refusal-on-missing expectations carried by the
+  Arabic policy row.
+- `arabic-gsub-trace.json` now records the bounded runtime `init`/`fina`
+  lookup chain observed on the vendored joining-form and bounded `lam-alef`
+  rows, while pinning the full required Arabic runtime feature order for those
+  runs.
+- `arabic-gpos-trace.json` now records the bounded runtime `mark` lookup and
+  attachment vector observed on the vendored base-plus-mark row, plus the
+  empty-lookup generic `text.shaping.gdef-required` refusal row on
+  `gpos-missing-gdef.otf`, and uses runtime pre-GPOS cluster metrics for the
+  `before` state.
+- `arabic-shaping-report.json` summarizes the fresh positive/diagnostic rows and
+  now references the ticket-local shaped-glyph-run, shaping-plan, GSUB trace,
+  and GPOS trace goldens while keeping explicit `lam-alef`, vendored positive
+  cursive attachment, Arabic-specific missing-mark/missing-cursive fixtures,
+  and narrower `text.shaping.arabic-*` refusals as explicit remaining gates.
+- This wave intentionally keeps `arabic-seed-readiness.json` as the broader
+  seed matrix while attaching reviewed ticket-local evidence only for the
+  bounded rows above.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest
+rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: explicit `lam-alef` positive evidence, ticket-local positive
+cursive attachment, and Arabic-specific refusal fixtures/diagnostic codes
+remain explicit Arabic shaping gates. Keep this ticket `blocked` until those
+gates land.
+### KFONT-M6-008: Devanagari Shaping Fixture Review Wave
+
+Status: blocked after bounded vendored-font evidence landed and was independently reviewed.
+
+Files:
+
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/DevanagariShapingFixtureTest.kt`
+- `reports/font/fixtures/expected/shaping/devanagari-shaping-report.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-fixtures-manifest.json`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m6-008-devanagari-shaping-fixtures.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-008-add-devanagari-shaping-fixtures.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- The reviewed Devanagari evidence path now injects the pinned
+  Script_Extensions itemizer locally in `DevanagariShapingFixtureTest`
+  instead of through a new runtime surface, so the vendored pre-base matra
+  case exercises the reviewed `deva` / `dev2` policy path as `Deva` without
+  changing the default shaping behavior used by existing tickets.
+- `DevanagariShapingFixtureTest` now proves bounded vendored-font evidence for
+  pre-base matra script selection, consonant-cluster preservation, reph-like
+  shaping, and mark placement on `NotoSansDevanagari-Regular.ttf` without
+  promoting complete Devanagari or Indic shaping support.
+- `devanagari-shaping-report.json` summarizes these bounded positive rows and
+  keeps syllable-plan dumps, the full required feature set, Devanagari-specific
+  refusal fixtures/codes, and ticket-local trace dump families as explicit
+  remaining gates.
+- `font-fixtures-manifest.json` now narrows the Devanagari bundled-font gate to
+  the reviewed bounded evidence already attached on `NotoSansDevanagari-Regular.ttf`
+  instead of leaving the manifest at a generic shaping placeholder.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.DevanagariShapingFixtureTest
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: ticket-local `indic-syllable-plan.json` or equivalent phase
+evidence, the full required `deva` / `dev2` feature set, dedicated
+unsupported-syllable and phase refusal fixtures/codes, and ticket-local
+`gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` /
+`unicode-segments.json` dump families remain open. Keep this ticket `blocked`
+until those gates land.
 ### PKT-09A: Paragraph Semantic Layout Dumps And Refusals
 
 Status: implemented and independently reviewed.
@@ -2980,7 +3295,7 @@ parity, CPU oracle evidence, or GPU text evidence.
 
 ### KFONT-M8-003: Implement UAX #14 line breaker
 
-Status: done; freshly revalidated for closeout.
+Status: blocked after independent review; bounded hit-test evidence is validated, but ticket-local closeout still depends on later gates.
 
 Files:
 
@@ -3042,61 +3357,57 @@ placeholder geometry layout, Skia Paragraph parity, CPU oracle parity, or GPU
 text support.
 ### KFONT-M8-004: Implement ellipsis and max-lines policy
 
-Status: done; independently reviewed and freshly revalidated for closeout.
+Status: done; freshly revalidated for closeout.
 
 Files:
 
 - `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/KFONT-M8-004-implement-ellipsis-and-max-lines-policy.md`
-- `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/KFONT-M8-006-implement-placeholder-layout-metrics.md`
 - `.upstream/specs/pure-kotlin-text/tickets/M8-paragraph-engine/README.md`
 - `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
 - `font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphEllipsisLayoutTest.kt`
 - `font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt`
 - `reports/font/fixtures/expected/paragraph/paragraph-layout.json`
-- `reports/pure-kotlin-text/2026-06-18-kfont-m8-004-placeholder-ellipsis-conflict.md`
+- `reports/pure-kotlin-text/2026-06-19-kfont-m8-004-ellipsis-layout.md`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
 - `reports/pure-kotlin-text/dump-evidence-index.json`
 - `reports/pure-kotlin-text/fixture-evidence-manifest.json`
-- `reports/font/fixtures/provenance/index.json`
 
 Evidence:
 
-- `BasicParagraphLayoutEngine` now inserts ellipsis for bounded `maxLines`
-  overflow, trims only cluster-safe surviving spans, records per-line
-  `isEllipsized` plus `visibleRange`/`truncatedRange`, and emits
-  `text.paragraph.placeholder-ellipsis-conflict`,
-  `text.paragraph.ellipsis-no-room`, and
-  `text.paragraph.ellipsis-glyph-missing` for the remaining bounded refusal
-  paths.
-- `TextStackSurfaceTest` now proves one-line overflow truncation facts,
-  placeholder-tail insertion when room remains, ellipsis-only fallback when no
-  visible cluster fits but the ellipsis does, retry-on-earlier-visible-style
-  behavior when the current trailing style cannot shape the ellipsis,
-  missing-glyph and no-room refusals, trailing-style ellipsis shaping on
-  mixed-style content, shaped-cluster-safe truncation, and bounded
-  surviving-span mixed-bidi truncation ordering across both LTR paragraphs
-  with RTL tails and RTL paragraphs with LTR islands.
-- `hitTestMap()` now records the visual tail of the displayed ellipsis as a
-  final caret stop, and `hitTest()` treats points inside that tail as
-  in-bounds text hits that resolve to the truncated line end.
-- `paragraph-layout.json` checks in deterministic golden coverage for the
-  accepted ellipsis cases, including the mixed-direction row's
-  `visibleRange`/`truncatedRange` and ellipsis provenance, while the visual
-  ordering proof itself stays in direct bidi tests.
-- Exact mixed-direction ellipsis placement remains a non-claim; this slice
-  proves surviving visible-span order plus bounded ellipsis-tail hit-testing
-  only.
+- `BasicParagraphLayoutEngine` now performs bounded end-ellipsis insertion for
+  `maxLines` overflow, replacing only cluster-safe trailing content on the
+  last visible line instead of routing every non-placeholder overflow through
+  `text.paragraph.max-lines-ellipsis-unsupported`.
+- `LineLayout` now records deterministic `isEllipsized`, `visibleRange`,
+  `truncatedRange`, and `ellipsisGlyphRun` facts, and
+  `ParagraphLayoutResult.dump()` serializes those fields as paragraph-owned
+  layout evidence without promoting complete paragraph, CPU-oracle, or GPU
+  text claims.
+- `paragraph-layout.json` checks in bounded one-line, multi-line,
+  mixed-style, RTL-direction, placeholder-conflict, no-room, and
+  missing-glyph evidence, including trailing-style ellipsis provenance and
+  stable refusal diagnostics.
+- `TextStackSurfaceTest` locks the public dump surface and the two core runtime
+  behaviors: simple max-line overflow now ellipsizes deterministically, while
+  placeholder-ended overflow still emits the narrower
+  `text.paragraph.placeholder-ellipsis-conflict` refusal when the ellipsis
+  cannot fit without truncating a visible placeholder.
 
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutInsertsEllipsisAndRecordsTruncationFactsInResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAppendsEllipsisWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesEllipsisNoRoomWhenMaxWidthCannotFitEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAllowsEllipsisOnlyWhenNoVisibleClusterFitsButEllipsisDoes --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesMissingEllipsisGlyphWhenShaperCannotProduceEllipsisRun --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRetriesEllipsisWithEarlierVisibleStyleWhenTrailingStyleCannotShapeIt --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutShapesEllipsisWithTrailingVisibleStyleAfterTruncation --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDoesNotCutInsideAShapedClusterWhenEllipsizing --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestMapIncludesVisualTailForDisplayedEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutHitTestTreatsDisplayedEllipsisAsInsideText --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutKeepsSurvivingVisualOrderForEllipsizedMixedDirectionLine --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutKeepsSurvivingVisualOrderForEllipsizedRtlParagraphWithLtrIsland --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenPinsEllipsisCasesAndNonClaims
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphEllipsisLayoutTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutShapesAndSerializesEllipsisFactsForSimpleMaxLineOverflow --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutEllipsizesVisiblePlaceholderLineWhenPlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk git diff --check
 ```
 
-Remaining non-claim: this checks in bounded ellipsis insertion, truncation,
-and surviving-span mixed-bidi ordering evidence only. It does not claim exact
-mixed-direction ellipsis placement, complete paragraph layout parity, CPU
-oracle parity, shaping completeness, or GPU text support.
+Remaining gate: none for bounded `KFONT-M8-004` closeout. This evidence still
+does not claim complete bidi visual ordering, explicit word/grapheme boundary
+query APIs, complete paragraph layout parity, CPU oracle parity, or GPU text
+support.
 ### KFONT-M8-005: Implement selection and hit-test maps
 
 Status: implemented; evidence refreshed for independent review.
@@ -3127,15 +3438,13 @@ Evidence:
   `KFONT-M8-006`.
 - Hit testing now snaps to grapheme-cluster-safe caret boundaries, records
   upstream/downstream affinity, never returns an offset inside the combining
-  mark or emoji surrogate-pair clusters covered by the fixture, preserves
-  bounded mixed-bidi visual ordering including soft-wrapped leading-placeholder
-  continuation and RTL-paragraph LTR-island cases, and clamps finite
-  out-of-bounds points to the nearest available caret stop.
+  mark or emoji surrogate-pair clusters covered by the fixture, and clamps
+  finite out-of-bounds points to the nearest available caret stop.
 - `hit-test-map.json` checks in bounded evidence for multi-line placeholder
   selection, non-participating placeholder overflow routing, combining-mark
-  snapping, emoji cluster boundaries, mixed-bidi visual ordering, and finite
-  out-of-bounds clamp behavior, while invalid selection ranges and non-finite
-  hit-test points emit stable refusal diagnostics.
+  snapping, emoji cluster boundaries, and finite out-of-bounds clamp behavior,
+  while invalid selection ranges and non-finite hit-test points emit stable
+  refusal diagnostics.
 
 Validation:
 
@@ -3148,9 +3457,10 @@ rtk git diff --check
 ```
 
 Remaining gate: this checks in bounded selection and hit-test evidence only. It
-does not yet claim explicit word boundary query APIs, full grapheme/word
-boundary dumps beyond hit-test snapping, complete paragraph layout parity, CPU
-oracle parity, or GPU text support.
+is now blocked on reviewed paragraph-owned bidi visual-order evidence and on an
+authoritative word/grapheme boundary query source beyond hit-test snapping. It
+does not claim complete paragraph layout parity, CPU oracle parity, or GPU text
+support.
 ### KFONT-M8-006: Implement placeholder layout metrics
 
 Status: done; freshly revalidated for closeout.
@@ -3191,14 +3501,14 @@ Evidence:
   and `ParagraphPlaceholderLayoutTest` locks that public dump surface without
   claiming selection maps, hit-testing maps, or ellipsis behavior.
 - `KFONT-M8-005` now consumes placeholder IDs and geometry in deterministic
-  selection/hit-test evidence, and `KFONT-M8-004` now contributes bounded
-  ellipsis insertion plus the narrower `text.paragraph.placeholder-ellipsis-conflict`
-  refusal needed to close the last placeholder/ellipsis evidence gate.
+  selection/hit-test evidence, and `KFONT-M8-004` now contributes the bounded
+  `text.paragraph.placeholder-ellipsis-conflict` refusal needed to close the
+  last placeholder/ellipsis evidence gate.
 
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphPlaceholderLayoutTest --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.ParagraphHitTestMapTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutAppendsEllipsisWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphPlaceholderLayoutTest --tests org.graphiks.kanvas.text.ParagraphStyleContractTest --tests org.graphiks.kanvas.text.ParagraphHitTestMapTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutFallsBackToGenericEllipsisUnsupportedWhenVisiblePlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis
 rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
@@ -3206,8 +3516,8 @@ rtk git diff --check
 ```
 
 Remaining non-claim: this checks in bounded placeholder geometry evidence only.
-It does not itself claim bidi visual-order preservation under truncation,
-complete paragraph layout parity, CPU oracle parity, or GPU text support.
+It does not itself claim actual ellipsis insertion, complete paragraph layout
+parity, CPU oracle parity, or GPU text support.
 ### KFONT-M8-001: Expand TextStyle and paragraph style contracts
 
 Status: done; deterministic contract evidence freshly validated.
@@ -4714,6 +5024,65 @@ not claim complete emoji shaping support, complete color-glyph fallback
 support, platform emoji-engine parity, GPU emoji route support, or retirement
 of `scaledemoji`. `KFONT-M10-010` still owns the milestone-wide color/emoji
 fixture-manifest convergence gate.
+### KFONT-M10-010: Add color/emoji fixture manifest
+
+Status: done; freshly validated.
+
+Files:
+
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `scripts/validate_color_emoji_fixture_manifest.py`
+- `scripts/validate_pure_kotlin_text_dump_index.py`
+- `scripts/test_validate_color_emoji_fixture_manifest.py`
+- `scripts/test_validate_pure_kotlin_text_dump_index.py`
+- `.upstream/specs/pure-kotlin-text/tickets/M10-color-fonts-emoji/KFONT-M10-010-add-color-emoji-fixture-manifest.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M10-color-fonts-emoji/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m10-010-color-emoji-fixture-manifest.md`
+
+Evidence:
+
+- Checked-in `color-emoji-fixture-manifest.json` now converges the M10 color
+  evidence into one deterministic manifest with 39 rows covering COLRv0,
+  COLRv1 solid/glyph/gradient/transform/composite plus cycle/budget/malformed
+  refusals, CBDT/CBLC and sbix PNG, SVG positive/refusal classes, and emoji
+  route traces.
+- Every row records fixture family, font source or synthetic provenance,
+  license note, source hash, generated recipe when applicable, expected route,
+  expected diagnostics, expected dump files, legacy-gate linkage, and whether
+  adapter-backed GPU evidence is still required.
+- The manifest maps `scaledemoji`, `scaledemoji_rendering`, and
+  `coloremoji_blendmodes` to specific fixture IDs and preserves explicit
+  remaining-evidence text so CPU/text fixtures do not retire those gates.
+- Rebaseline policy is now explicit: ordinary runs must not overwrite goldens,
+  old/new manifest diffs plus linked dump diffs require review, and behavior
+  changes need a stated reason before check-in.
+- Dump index and fixture-evidence manifest now reference the converged manifest
+  as CPU-side coordination evidence only, without promoting COLRv1, bitmap,
+  SVG, emoji, GPU, or platform fallback support.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.ColorEmojiFixtureManifestMatchesRepoFixture
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_color_emoji_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_color_emoji_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this is fixture convergence and provenance evidence only. It
+does not claim GPU COLR/bitmap/SVG/emoji execution, platform emoji parity, or
+retirement of `scaledemoji`, `scaledemoji_rendering`, or
+`coloremoji_blendmodes`; those remain gated on M11 adapter-backed GPU proof.
 ### PKT-11L: Emoji VS Skin-Tone ZWJ Fixture Evidence
 
 Status: implemented; independent review pending because the current tool policy
@@ -4982,11 +5351,11 @@ Evidence:
   domain coverage, repeated-run aggregation fields, conditional GPU adapter
   facts, and stable telemetry refusal diagnostics without HarfBuzz or
   FreeType wording.
-- `validateKfontM12001TelemetryPmEvidence` and its Python validator assert that
-  the PM bundle copies the telemetry schema/dashboard artifacts, preserves
-  `warning-only` wording, and keeps downstream producer work explicit under
-  `KFONT-M12-002`, `KFONT-M12-003`, `KFONT-M12-004`, and `KFONT-M12-005`
-  without keeping the schema slice open.
+- `validateKfontM12001TelemetryPmEvidence` and its Python validator assert
+  that the PM bundle copies the telemetry schema/dashboard artifacts,
+  preserves `warning-only` wording, and records that all M12 telemetry
+  producer domains now have checked-in deterministic evidence without keeping
+  the schema slice open.
 
 Validation:
 
@@ -4999,10 +5368,245 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 rtk git diff --check
 ```
 
-Remaining gate: no schema-local gate remains. Downstream producer emission into
-the shared schema is owned by `KFONT-M12-002`, `KFONT-M12-003`,
-`KFONT-M12-004`, and `KFONT-M12-005`; this slice does not promote any
-performance budget, GPU route, or release-gate claim.
+Remaining gate: no schema-local gate remains. All M12 telemetry domains now have checked-in deterministic producer evidence under `KFONT-M12-002` through `KFONT-M12-005`. This slice still does not promote any performance budget, GPU route, `dftext` retirement, or release-gate claim.
+
+### KFONT-M12-002: Add parser and scaler metrics
+
+Status: done; implemented and freshly validated as advisory parser/scaler producer evidence.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt`
+- `reports/pure-kotlin-text/parser-metrics.json`
+- `reports/pure-kotlin-text/scaler-metrics.json`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m12-002-parser-scaler-metrics.md`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `reports/pure-kotlin-text/font-telemetry-pm-bundle.json`
+- `reports/pure-kotlin-text/font-telemetry-schema.json`
+- `reports/pure-kotlin-text/font-telemetry-schema-fixture.json`
+- `reports/pure-kotlin-text/2026-06-16-kfont-m12-001-font-telemetry-schema.md`
+- `reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-002-add-parser-and-scaler-metrics.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `parser-metrics.json` now records deterministic repeated cold/warm parser
+  samples for single-face TTF, TTC, CFF-selected, variable-axis, malformed
+  optional-table, and missing-required-table fixture IDs with stable
+  `font.parser.scan.time` and `font.parser.parse.time` trend series.
+- Parser samples attach parsed table tags, bytes-read counters, table cache
+  hit/miss counters, malformed table counts, bounds-failure counts, and stable
+  semantic diagnostics without using native parser timings as substitute
+  evidence.
+- `scaler-metrics.json` now records deterministic repeated scaler samples for
+  simple `glyf`, composite `glyf`, variable `glyf`, CFF, CFF2 variation-store,
+  and malformed CFF refusal fixtures with stable `font.scaler.outline.time`,
+  `font.scaler.metrics.time`, `font.scaler.variation.time`, and
+  `font.scaler.charstring.time` trend series.
+- Scaler samples attach glyph counts, outline command counts, cache hit/miss
+  counters, `.notdef` fallback counters, and stable refusal diagnostics such as
+  `font.metrics-variation-unavailable`, `font.cff-table-malformed`, and
+  `font.telemetry.scaler-domain-missing`.
+- `font-claim-dashboard.json` now exposes separate `Font parser metrics` and
+  `Font scaler metrics` advisory rows, while the older schema/PM-bundle
+  artifacts now record that all M12 telemetry producer domains have checked-in
+  deterministic evidence and remain advisory-only.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
+rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
+rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: no ticket-local gate remains. All M12 telemetry producer
+domains now have checked-in deterministic evidence. This slice keeps all
+budgets advisory and does not promote any release-gate, GPU-route, or
+complete subsystem claim.
+
+### KFONT-M12-003: Add shaping and paragraph metrics
+
+Status: done; implemented and freshly revalidated for closeout.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt`
+- `reports/pure-kotlin-text/shaping-metrics.json`
+- `reports/pure-kotlin-text/paragraph-metrics.json`
+- `reports/pure-kotlin-text/2026-06-19-kfont-m12-003-shaping-paragraph-metrics.md`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `reports/pure-kotlin-text/font-telemetry-pm-bundle.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-003-add-shaping-and-paragraph-metrics.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `FontTelemetryEvidenceWriter` now emits deterministic `shaping-metrics.json`
+  and `paragraph-metrics.json` dumps under the shared telemetry schema without
+  widening any support claim.
+- `shaping-metrics.json` separates segmentation, bidi, script itemization,
+  fallback, GSUB, GPOS, glyph-count, cluster-count, and shaping diagnostic
+  count series across Latin, Arabic, Devanagari, Thai, mixed-bidi, CJK
+  variation-selector, and explicit emoji/fallback refusal cases, with stable
+  run IDs and UTF-16 text ranges.
+- `paragraph-metrics.json` separates layout, line-break opportunity count,
+  shaped-run count, line count, style-run count, hit-test index build time,
+  selection-query time, ellipsis attempts, and placeholder count across
+  shaping-request, wrapped-layout, hit-test, and placeholder-conflict cases,
+  with stable paragraph IDs and UTF-16 text ranges.
+- The dashboard now exposes separate `Text shaping metrics` and
+  `Paragraph layout metrics` tracked-gap rows, while `scaledemoji`, complete
+  paragraph bidi visual-order evidence, GPU text readiness, and release-gate
+  promotion remain explicit non-claims.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
+rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
+rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence
+rtk ./gradlew --no-daemon pipelinePmBundle
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: no ticket-local gate remains. `scaledemoji`, broader script
+support promotion, complete paragraph bidi visual-order evidence, GPU text
+handoff metrics, and any performance-gate promotion remain owned by their
+separate tickets and legacy gates.
+
+### KFONT-M12-004: Add glyph artifact and cache metrics
+
+Status: done; implemented and freshly revalidated for closeout.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt`
+- `reports/pure-kotlin-text/glyph-artifact-metrics.json`
+- `reports/pure-kotlin-text/glyph-cache-metrics.json`
+- `reports/pure-kotlin-text/glyph-atlas-occupancy.json`
+- `reports/pure-kotlin-text/2026-06-19-kfont-m12-004-glyph-cache-metrics.md`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `reports/pure-kotlin-text/font-telemetry-pm-bundle.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-004-add-glyph-artifact-and-cache-metrics.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `FontTelemetryEvidenceWriter` now emits deterministic
+  `glyph-artifact-metrics.json` and `glyph-cache-metrics.json` dumps under the
+  shared telemetry schema without widening any support claim.
+- `glyph-artifact-metrics.json` separates route counts, A8 time, SDF time,
+  COLR planning time, PNG decode time, and SVG evaluation time across route
+  taxonomy, policy refusal, SDF, COLR, bitmap, and SVG fixture IDs with stable
+  diagnostics for `text.glyph.SDF-transform-unsupported`.
+- `glyph-cache-metrics.json` separates atlas pack time, resident cache bytes,
+  upload bytes, hit/miss/eviction counts, invalidation-token changes, and
+  stable diagnostics for `text.glyph.artifact-budget-exceeded`,
+  `text.glyph.atlas-capacity-exceeded`, and
+  `text.glyph.atlas-generation-stale`.
+- `glyph-atlas-occupancy.json` records stable atlas artifact IDs, strike-key
+  hashes, key-preimage hashes, dimensions, entry counts, and occupancy ratios
+  as the ticket-local equivalent occupancy dump while keeping the evidence
+  CPU-only and advisory.
+- The dashboard now exposes separate `Glyph artifact metrics`, `Glyph cache
+  metrics`, and `Glyph atlas occupancy` tracked-gap rows while leaving
+  `dftext` visible without promoting GPU support or release-gate claims.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
+rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence
+rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
+rtk ./gradlew --no-daemon pipelinePmBundle
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: no ticket-local gate remains. `dftext` retirement, GPU text
+route promotion, executed-upload claims, and any performance-gate promotion
+remain owned by the broader M11 GPU handoff chain and explicit GPU evidence.
+
+### KFONT-M12-005: Add GPU handoff metrics
+
+Status: done; implemented and freshly revalidated for closeout.
+
+Files:
+
+- `font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextHandoffMetricsEvidence.kt`
+- `font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextHandoffMetricsEvidenceTest.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt`
+- `reports/pure-kotlin-text/gpu-text-handoff-metrics.json`
+- `reports/pure-kotlin-text/draw-text-run-upload-plan.json`
+- `reports/pure-kotlin-text/2026-06-19-kfont-m12-005-gpu-handoff-metrics.md`
+- `reports/pure-kotlin-text/font-claim-dashboard.json`
+- `reports/pure-kotlin-text/font-telemetry-pm-bundle.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-005-add-gpu-handoff-metrics.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `gpu-text-handoff-metrics.json` now records deterministic advisory selected
+  and refused GPU handoff rows for the bounded simple-Latin A8 route plus
+  stable SDF/outline/color/bitmap/SVG/upload-plan/stale/budget/nondeterministic
+  and CPU-rendered-texture refusal diagnostics.
+- `draw-text-run-upload-plan.json` now records deterministic advisory upload
+  dependency ordering, upload byte counts, reuse counters, stable artifact key
+  hashes, and a bounded MaterialKey/no-`Sk*` leakage audit excerpt tied to the
+  same fixture family.
+- `font-claim-dashboard.json`, `font-telemetry-pm-bundle.json`,
+  `fixture-evidence-manifest.json`, and `dump-evidence-index.json` now expose
+  separate `GPU text handoff metrics`, `GPU text upload metrics`, and
+  `GPU text route refusals` tracked-gap rows plus the checked-in PM bundle
+  packaging for `gpu-text-handoff-metrics.json` and
+  `draw-text-run-upload-plan.json`.
+- `no-performance-release-gate-claim` remains explicit throughout this slice.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextHandoffMetricsEvidenceTest*'
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
+rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: no ticket-local gate remains. `dftext`, broader M11 GPU route
+promotion, executed GPU upload claims, and any release-gate promotion stay on
+their owning tickets and specs.
 ### KFONT-M1-004: Bundled Source Fixture Manifest
 
 Status: done; merged, independently reviewed, and freshly revalidated for closeout.
@@ -5352,7 +5956,7 @@ explicit in `fixture-evidence-manifest.json`.
 
 ### KFONT-M11 Readiness Gate Audit
 
-Status: blocked wave documented after independent readiness review.
+Status: KFONT-M11-004 done on bounded A8 route evidence; downstream M11 wave remains blocked.
 
 Files:
 
@@ -5372,15 +5976,18 @@ Evidence:
   `10f8ffeb86783294760ea4854ccda2a2623c72ed`, M11 tickets, pure Kotlin text
   handoff specs, GPU text glyph pipeline specs, and current `font:gpu-api`
   contracts.
-- `KFONT-M11-004` is blocked by missing atlas
-  entry/page/generation/invalidation evidence from `KFONT-M9-005` plus the
-  remaining downstream M9 handoff work after `KFONT-M9-003`.
+- `KFONT-M11-004` is now done on a bounded accepted
+  `GlyphAtlasArtifact` -> `AtlasMaskSample` route with checked-in
+  `reports/pure-kotlin-text/gpu-text-a8-route-plan.json`,
+  `reports/pure-kotlin-text/gpu-text-a8-route-refusals.json`, reviewed
+  `reports/wgsl4k-evolution/generated/text-wgsl-reflection.json` linkage,
+  and focused simple-Latin GPU evidence via
+  `reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/`.
 - `KFONT-M11-006`, `KFONT-M11-007`, `KFONT-M11-008`, `KFONT-M11-009`, and
-  `KFONT-M11-010` are blocked by the missing A8 route and downstream
-  subrun/resource/upload/binding contracts.
-- wgsl4k evolution fixtures remain prerequisite validation evidence only; they
-  do not provide real text route WGSL modules, `GPUTextBinding` comparisons,
-  CPU/GPU/reference evidence, or product activation.
+  `KFONT-M11-010` remain blocked on downstream subrun/resource/upload/binding,
+  ordering, route-specific WGSL validation, and `MaterialKey` leakage work.
+- The bounded A8 route does not promote broad text GPU support, SDF/outline/
+  color/bitmap/SVG routes, or `dftext` retirement.
 
 Validation:
 
@@ -5388,7 +5995,9 @@ Validation:
 rtk git diff --check
 ```
 
-Remaining gate: unblock M11 by completing `KFONT-M9-004` and `KFONT-M9-005`,
-then re-evaluate `KFONT-M11-004`. This blocked wave does not claim GPU text
-support, A8 atlas route support, SDF/outline/color/bitmap/SVG text support, or
-retirement of `dftext`, `scaledemoji_rendering`, or `coloremoji_blendmodes`.
+Remaining gate: complete `KFONT-M11-006`, `KFONT-M11-007`, `KFONT-M11-008`,
+`KFONT-M11-009`, and `KFONT-M11-010` for downstream subrun/resource/upload/
+binding, ordering, WGSL validation, and `MaterialKey` leakage proof. This
+bounded wave does not claim broad GPU text support, SDF/outline/color/bitmap/
+SVG text support, or retirement of `dftext`, `scaledemoji_rendering`, or
+`coloremoji_blendmodes`.
