@@ -3,6 +3,7 @@ package org.skia.foundation.opentype
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -3100,6 +3101,112 @@ class OpenTypeFontTest {
 
     private fun toF2Dot14(value: Float): Int =
         (value * 16384f).toInt()
+
+    @Test
+    fun `MakeFromBytesWithCorePath creates typeface with pure Kotlin facts`() {
+        val typeface = OpenTypeTypeface.MakeFromBytesWithCorePath(liberationSansBytes())!!
+
+        assertNotNull(typeface.typefaceId)
+        assertEquals("Liberation Sans", typeface.getFamilyName())
+        assertEquals("LiberationSans", typeface.getPostScriptName())
+        assertTrue(typeface.countGlyphs() > 100)
+    }
+
+    @Test
+    fun `MakeFromBytesWithCorePath exposes non null typefaceId`() {
+        val typeface = OpenTypeTypeface.MakeFromBytesWithCorePath(liberationSansBytes())!!
+
+        assertNotNull(typeface.typefaceId)
+    }
+
+    @Test
+    fun `MakeFromBytesWithCorePath typeface has mutable fontStyle match`() {
+        val coreTypeface = OpenTypeTypeface.MakeFromBytesWithCorePath(liberationSansBytes())!!
+        val legacyTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+
+        assertEquals(legacyTypeface.fontStyle.weight, coreTypeface.fontStyle.weight)
+        assertEquals(legacyTypeface.fontStyle.width, coreTypeface.fontStyle.width)
+        assertEquals(legacyTypeface.fontStyle.slant, coreTypeface.fontStyle.slant)
+    }
+
+    @Test
+    fun `MakeFromBytesWithCorePath produces facade parity evidence dump`() {
+        val typeface = OpenTypeTypeface.MakeFromBytesWithCorePath(liberationSansBytes())!!
+
+        val dump = requireNotNull(typeface.facadeParityEvidence())
+        assertEquals(typeface.typefaceId!!.value.toString(), dump.typefaceId)
+        assertEquals("Liberation Sans", dump.legacyFamilyName)
+        assertTrue(
+            dump.coreFamilyName == null || dump.coreFamilyName == dump.legacyFamilyName,
+            "coreFamilyName should be null or match legacy: core=${dump.coreFamilyName}, legacy=${dump.legacyFamilyName}",
+        )
+        assertTrue(dump.coreTableTags.contains("cmap"))
+        assertTrue(dump.coreTableTags.contains("glyf"))
+        assertTrue(dump.legacyTableTags.contains("cmap"))
+        assertTrue(dump.legacyTableTags.contains("glyf"))
+    }
+
+    @Test
+    fun `MakeFromBytesWithCorePath variant exposes variation axes from pure Kotlin core`() {
+        val typeface = OpenTypeTypeface.MakeFromBytesWithCorePath(distortableBytes())!!
+
+        val axes = typeface.getVariationDesignParameters()
+        assertEquals(1, axes.size)
+        assertEquals(SkFontVariation.WEIGHT.raw, axes.single().tag)
+        assertEquals(0.5f, axes.single().min, 0.0001f)
+        assertEquals(1f, axes.single().default, 0.0001f)
+        assertEquals(2f, axes.single().max, 0.0001f)
+        assertEquals(1, axes.single().flags)
+        assertEquals(256, axes.single().nameId)
+    }
+
+    @Test
+    fun `MakeFromBytesWithCorePath legacy fallback for malformed font`() {
+        val randomBytes = ByteArray(128)
+        Random(0x5EED).nextBytes(randomBytes)
+
+        val typeface = OpenTypeTypeface.MakeFromBytesWithCorePath(ByteArray(0))
+        assertNull(typeface)
+    }
+
+    @Test
+    fun `MakeFromBytesWithCorePath family name matches between core and legacy paths`() {
+        val coreTypeface = OpenTypeTypeface.MakeFromBytesWithCorePath(liberationSansBytes())!!
+        val legacyTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+
+        assertEquals(legacyTypeface.getFamilyName(), coreTypeface.getFamilyName())
+        assertEquals(legacyTypeface.getPostScriptName(), coreTypeface.getPostScriptName())
+        assertEquals(legacyTypeface.countGlyphs(), coreTypeface.countGlyphs())
+    }
+
+    @Test
+    fun `MakeFromBytesWithCorePath glyph metrics match legacy path`() {
+        val coreTypeface = OpenTypeTypeface.MakeFromBytesWithCorePath(liberationSansBytes())!!
+        val legacyTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+
+        val coreGlyphs = ShortArray(1)
+        coreTypeface.unicharsToGlyphsInternal(intArrayOf('A'.code), 1, coreGlyphs)
+        val legacyGlyphs = ShortArray(1)
+        legacyTypeface.unicharsToGlyphsInternal(intArrayOf('A'.code), 1, legacyGlyphs)
+        assertEquals(coreGlyphs[0], legacyGlyphs[0])
+
+        val coreWidth = coreTypeface.getGlyphWidthInternal(1, 12f, 1f, 0f)
+        val legacyWidth = legacyTypeface.getGlyphWidthInternal(1, 12f, 1f, 0f)
+        assertEquals(legacyWidth, coreWidth, 0.001f)
+    }
+
+    @Test
+    fun `MakeFromBytesWithCorePath copyTableData matches legacy path`() {
+        val coreTypeface = OpenTypeTypeface.MakeFromBytesWithCorePath(liberationSansBytes())!!
+        val legacyTypeface = OpenTypeTypeface.MakeFromBytes(liberationSansBytes())!!
+        val nameTag = SkFontVariation.Tag.of("name").raw
+
+        val coreTable = requireNotNull(coreTypeface.copyTableData(nameTag))
+        val legacyTable = requireNotNull(legacyTypeface.copyTableData(nameTag))
+
+        assertTrue(coreTable.size > 6)
+        assertTrue(coreTable.contentEquals(legacyTable))
+    }
 
     private companion object {
         private const val ARG_1_AND_2_ARE_WORDS = 0x0001

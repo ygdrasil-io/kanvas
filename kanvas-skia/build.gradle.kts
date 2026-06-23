@@ -14,6 +14,8 @@ dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":math"))
     implementation(project(":render-pipeline"))
+    implementation(project(":font:core"))
+    implementation(project(":font:sfnt"))
     implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
 
     // :kanvas-skia/src/main has NO dependency on :cpu-raster (architecture
