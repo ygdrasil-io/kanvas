@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-006"
 title: "Add script-specific default feature policy"
-status: "blocked"
+status: "done"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
