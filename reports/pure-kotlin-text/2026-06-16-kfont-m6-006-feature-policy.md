@@ -2,7 +2,7 @@
 
 ## Scope
 
-This wave implements a bounded `review` slice for script-specific default
+This wave implements a bounded contract slice for script-specific default
 feature policy:
 
 - `RequiredScriptFeaturePolicies` now defines explicit rows for Latin, Greek,
@@ -30,7 +30,7 @@ rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
   contract-only serialization.
 - Add per-script positive/refusal shaping fixtures beyond the contract layer.
 - Record explicit `drawString` compatibility non-enablement for complex shaping
-  defaults before promotion beyond `review`.
+  defaults before promotion beyond `blocked`.
 
 ## Non-Claims
 

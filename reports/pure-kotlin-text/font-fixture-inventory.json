@@ -129,6 +129,77 @@
           ]
         },
         {
+          "fixtureId": "a8-sdf-artifacts-glyph-artifact-metrics",
+          "targetGate": "glyph-artifact-metrics",
+          "status": "current-positive-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Use deterministic cold/warm artifact metric samples with fixed route counts, per-route timing counters, source-mask hash counts, refusal counts, and route-specific strike-key preimages for outline, A8, SDF, COLR, bitmap, and SVG paths.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-artifact-metrics.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "cold artifact metric sample",
+            "warm artifact metric sample",
+            "route-specific strike-key preimages",
+            "refusal-count rows"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-gpu-text-route-claim",
+            "no-hidden-performance-gate",
+            "no-dftext-retirement"
+          ]
+        },
+        {
+          "fixtureId": "a8-sdf-artifacts-glyph-atlas-occupancy",
+          "targetGate": "glyph-atlas-occupancy",
+          "status": "current-positive-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Derive stable A8 and SDF atlas occupancy rows from deterministic atlas artifacts and assert artifact IDs, dimensions, key hashes, entry counts, occupied pixels, and occupancy ratios without live handles.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-atlas-occupancy.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "atlas artifact ID",
+            "entry-count and dimension facts",
+            "occupancy ratio",
+            "stable strike-key hashes"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-gpu-text-route-claim",
+            "no-dftext-retirement"
+          ]
+        },
+        {
+          "fixtureId": "a8-sdf-artifacts-glyph-cache-metrics",
+          "targetGate": "glyph-cache-metrics",
+          "status": "current-positive-evidence",
+          "fixtureKind": "structured-dump",
+          "generationPolicy": "Use fixed cold/warm cache metric samples with atlas artifact IDs, stable strike-key hashes, occupancy ratios, pack timing counters, hit/miss/eviction counts, stale-generation facts, invalidation changes, and advisory budget refusals.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/glyph/glyph-cache-metrics.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "cold cache metrics sample",
+            "warm cache metrics sample",
+            "atlas artifact ID and key hashes",
+            "pack timing and advisory budget rows"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-gpu-text-route-claim",
+            "no-hidden-performance-gate",
+            "no-dftext-retirement"
+          ]
+        },
+        {
           "fixtureId": "a8-sdf-artifacts-sdf-normalization",
           "targetGate": "sdf-normalization",
           "status": "current-positive-evidence",
