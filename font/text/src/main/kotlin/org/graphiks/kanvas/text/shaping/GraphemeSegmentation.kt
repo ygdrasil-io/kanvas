@@ -225,6 +225,7 @@ public class GraphemeClusterer(
             },
             indicConjunctBreak = unicodeDataSet.indicConjunctBreak.valueAt(codePoint),
             extendedPictographic = unicodeDataSet.emojiProperties.extendedPictographic.valueAt(codePoint),
+            variationSelector = unicodeDataSet.variationSelector.valueAt(codePoint),
         )
 
     private fun boundaryDecision(scalars: List<GraphemeScalar>, rightIndex: Int): GraphemeBoundaryDecision {
@@ -240,7 +241,8 @@ public class GraphemeClusterer(
                 GraphemeRule("GB7", breakAllowed = false)
             left.graphemeBreak in setOf(GcbLvt, GcbT) && right.graphemeBreak == GcbT ->
                 GraphemeRule("GB8", breakAllowed = false)
-            right.graphemeBreak in setOf(GcbExtend, GcbZwj) -> GraphemeRule("GB9", breakAllowed = false)
+            right.graphemeBreak in setOf(GcbExtend, GcbZwj) || right.variationSelector ->
+                GraphemeRule("GB9", breakAllowed = false)
             right.graphemeBreak == GcbSpacingMark -> GraphemeRule("GB9a", breakAllowed = false)
             left.graphemeBreak == GcbPrepend -> GraphemeRule("GB9b", breakAllowed = false)
             hasIndicConjunctLinkerBefore(scalars, rightIndex) -> GraphemeRule("GB9c", breakAllowed = false)
@@ -420,6 +422,7 @@ private data class GraphemeScalar(
     val graphemeBreak: String,
     val indicConjunctBreak: String,
     val extendedPictographic: Boolean,
+    val variationSelector: Boolean,
 )
 
 private data class GraphemeRule(
