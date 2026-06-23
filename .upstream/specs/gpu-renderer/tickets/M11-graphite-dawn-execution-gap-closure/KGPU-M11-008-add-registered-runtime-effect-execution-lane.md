@@ -1,7 +1,7 @@
 ---
 id: KGPU-M11-008
 title: "Add registered runtime-effect execution lane"
-status: proposed
+status: done
 milestone: M11
 priority: P1
 owner_area: runtime-effects
@@ -75,16 +75,16 @@ data class GPURuntimeEffectExecutionPlan(
 
 ## Acceptance Criteria
 
-- [ ] Registered descriptor execution validates descriptor ID/version, registry
+- [x] Registered descriptor execution validates descriptor ID/version, registry
       generation, route placement, WGSL reflection, and uniform schema before
       pipeline materialization.
-- [ ] Runtime-effect uniform values materialize through payload upload and bind
+- [x] Runtime-effect uniform values materialize through payload upload and bind
       group creation without entering material or pipeline keys.
-- [ ] WGSL module and pipeline cache entries include descriptor/WGSL identity and
+- [x] WGSL module and pipeline cache entries include descriptor/WGSL identity and
       reject stale registry generations.
-- [ ] GPU readback/reference diff evidence compares against the registered CPU
+- [x] GPU readback/reference diff evidence compares against the registered CPU
       oracle before any support promotion.
-- [ ] Unknown descriptors, arbitrary source, child slots, filters, blenders, and
+- [x] Unknown descriptors, arbitrary source, child slots, filters, blenders, and
       reflection/schema mismatches refuse stably.
 
 ## Required Evidence
@@ -110,13 +110,20 @@ execute arbitrary WGSL strings, or use CPU oracle output as product rendering.
 ## Validation
 
 ```bash
+rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.runtimeeffects.RegisteredRuntimeEffectExecutionLaneTest
+rtk ./gradlew --no-daemon :gpu-renderer:check
 rtk git diff --check
 ```
 
 ## Status Notes
 
-- `proposed`: Planning-only continuation of KGPU-M7-001 from descriptor gate to
-  registered execution lane.
+- `done`: Added contract-only registered runtime-effect execution
+  materialization that consumes the KGPU-M7-001 descriptor gate, validates
+  registry generation, descriptor version, route placement, WGSL/reflection,
+  uniform schema, CPU oracle hash, payload binding layout, and material-key
+  exclusion before adding payload upload, bind-group, render-pipeline, and
+  command-stream evidence. See
+  `reports/gpu-renderer/2026-06-17-m11-008-runtime-effect-execution.md`.
 
 ## Linear Labels
 

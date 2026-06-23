@@ -14,14 +14,23 @@ enum class GPUCacheEventResult {
     Hit,
     /** Cache lookup did not find an existing entry. */
     Miss,
+    /** Cache materialization created a backend-owned entry. */
+    Create,
+    /** Cache materialization failed before an entry could be stored. */
+    Failure,
+    /** Cache lookup refused because device-generation facts were stale. */
+    StaleGeneration,
+    /** Cache entry was evicted by policy or explicit invalidation. */
+    Evict,
 }
 
 /**
  * Deterministic cache hit or miss event fact.
  *
- * Cache telemetry is observational only: it records material, module, and
- * pipeline cache behavior after another package has made support decisions.
- * Domains are intentionally closed to those three cache classes, and key facts
+ * Cache telemetry is observational only: it records material, module,
+ * pipeline, pipeline-layout, and bind-group-layout cache behavior after
+ * another package has made support decisions.
+ * Domains are intentionally closed to canonical cache classes, and key facts
  * must be stable non-blank hashes rather than route decisions or backend
  * object identities.
  */
@@ -61,6 +70,32 @@ data class GPUCacheTelemetryEvent(
         fun pipeline(result: GPUCacheEventResult, keyHash: String, subjectHash: String): GPUCacheTelemetryEvent =
             GPUCacheTelemetryEvent(
                 domain = "pipeline",
+                result = result,
+                keyHash = keyHash,
+                subjectHash = subjectHash,
+            )
+
+        /** Creates a bind-group-layout cache event. */
+        fun bindGroupLayout(
+            result: GPUCacheEventResult,
+            keyHash: String,
+            subjectHash: String,
+        ): GPUCacheTelemetryEvent =
+            GPUCacheTelemetryEvent(
+                domain = "bind-group-layout",
+                result = result,
+                keyHash = keyHash,
+                subjectHash = subjectHash,
+            )
+
+        /** Creates a pipeline-layout cache event. */
+        fun pipelineLayout(
+            result: GPUCacheEventResult,
+            keyHash: String,
+            subjectHash: String,
+        ): GPUCacheTelemetryEvent =
+            GPUCacheTelemetryEvent(
+                domain = "pipeline-layout",
                 result = result,
                 keyHash = keyHash,
                 subjectHash = subjectHash,
@@ -444,6 +479,9 @@ data class GPUCacheTelemetry(
     val evictions: Long,
     val residentBytes: Long,
     val pressureBytes: Long,
+    val creations: Long = 0L,
+    val failures: Long = 0L,
+    val staleGenerations: Long = 0L,
 )
 
 /** Budget telemetry facts. */
@@ -501,6 +539,11 @@ data class GPUTelemetryLedger(
         val updated = when (event.result) {
             GPUCacheEventResult.Hit -> existing.copy(hits = existing.hits + 1)
             GPUCacheEventResult.Miss -> existing.copy(misses = existing.misses + 1)
+            GPUCacheEventResult.Create -> existing.copy(creations = existing.creations + 1)
+            GPUCacheEventResult.Failure -> existing.copy(failures = existing.failures + 1)
+            GPUCacheEventResult.StaleGeneration ->
+                existing.copy(staleGenerations = existing.staleGenerations + 1)
+            GPUCacheEventResult.Evict -> existing.copy(evictions = existing.evictions + 1)
         }
 
         return copy(
@@ -550,7 +593,7 @@ data class GPUTelemetryLedger(
     }
 }
 
-private val canonicalCacheDomains = setOf("material", "module", "pipeline")
+private val canonicalCacheDomains = setOf("material", "module", "pipeline", "bind-group-layout", "pipeline-layout")
 
 private val firstRouteCounterNames = GPUFirstRouteCounterDomain.values()
     .map { domain -> domain.counterName }

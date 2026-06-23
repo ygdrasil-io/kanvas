@@ -423,6 +423,9 @@ class GPUFirstRouteRenderSubmitRequest(
         require(this.preflightRequest.dumpPassIdsSnapshot.contains(this.pass.passId)) {
             "GPUFirstRouteRenderSubmitRequest preflight passIds must include ${this.pass.passId}"
         }
+        require(this.materialization.dumpOperandBridgeSnapshot.isNotEmpty()) {
+            "GPUFirstRouteRenderSubmitRequest requires bridged materialized command operands"
+        }
         require(this.pass.invocations.isNotEmpty()) {
             "GPUFirstRouteRenderSubmitRequest pass must contain at least one invocation"
         }
@@ -1006,6 +1009,8 @@ private fun GPUResourceMaterializationDecision.Materialized.snapshot(): GPUResou
         diagnostics = dumpDiagnosticsSnapshot,
         taskIds = dumpTaskIdsSnapshot,
         resourcePlanLabels = dumpResourcePlanLabelsSnapshot,
+        operandRefs = dumpOperandRefsSnapshot,
+        operandBridge = dumpOperandBridgeSnapshot,
     )
 
 private fun GPUResourceMaterializationDecision.snapshot(): GPUResourceMaterializationDecision =

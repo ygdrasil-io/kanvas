@@ -2,6 +2,23 @@ package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
 import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceDescriptor
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
+import org.graphiks.kanvas.gpu.renderer.passes.dumpLines
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeyPreimage
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeys
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandBinding
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadMaterializationRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceDiagnostic
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceProvider
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
+import org.graphiks.kanvas.gpu.renderer.resources.ValidatingPayloadResourceProvider
+import org.graphiks.kanvas.gpu.renderer.resources.dumpLines
 import org.graphiks.kanvas.gpu.renderer.wgsl.WgslConsumedReflectionReport
 
 /** Runtime-effect identifier. */
@@ -227,6 +244,213 @@ data class GPURuntimeEffectDescriptorGatePlan(
                 "uniformValuesInKey=$materialKeyIncludesUniformValues route=registered-descriptor",
             "runtime-effect:diagnostic code=${diagnostics.single().code} terminal=${diagnostics.single().terminal}",
             RUNTIME_EFFECT_NONCLAIM_LINE,
+        )
+    }
+}
+
+/** Request for executing one registered descriptor-backed runtime-effect material lane. */
+data class GPURuntimeEffectExecutionRequest(
+    val label: String,
+    val gatePlan: GPURuntimeEffectDescriptorGatePlan,
+    val expectedDescriptorId: GPURuntimeEffectID,
+    val expectedDescriptorVersion: GPURuntimeEffectDescriptorVersion,
+    val expectedRegistryGeneration: Long,
+    val expectedRoutePlacement: GPURuntimeEffectRoutePlacement,
+    val expectedWgslModuleHash: String,
+    val expectedReflectionHash: String,
+    val expectedUniformSchemaHash: String,
+    val payloadRequest: GPUPayloadMaterializationRequest,
+    val pipelineCacheKey: String,
+    val targetStateHash: String,
+    val loadStoreLabel: String,
+    val passId: String,
+    val packetStreamId: String,
+    val streamId: String,
+    val vertexSourceLabel: String,
+    val cpuOracleEvidenceHash: String,
+    val gpuReadbackStatus: String,
+    val gpuReadbackReason: String,
+) {
+    init {
+        require(label.isNotBlank()) { "GPURuntimeEffectExecutionRequest.label must not be blank" }
+        require(expectedRegistryGeneration >= 0L) {
+            "GPURuntimeEffectExecutionRequest.expectedRegistryGeneration must be non-negative"
+        }
+        require(expectedWgslModuleHash.isNotBlank()) {
+            "GPURuntimeEffectExecutionRequest.expectedWgslModuleHash must not be blank"
+        }
+        require(expectedReflectionHash.isNotBlank()) {
+            "GPURuntimeEffectExecutionRequest.expectedReflectionHash must not be blank"
+        }
+        require(expectedUniformSchemaHash.isNotBlank()) {
+            "GPURuntimeEffectExecutionRequest.expectedUniformSchemaHash must not be blank"
+        }
+        require(pipelineCacheKey.isNotBlank()) {
+            "GPURuntimeEffectExecutionRequest.pipelineCacheKey must not be blank"
+        }
+        require(targetStateHash.isNotBlank()) {
+            "GPURuntimeEffectExecutionRequest.targetStateHash must not be blank"
+        }
+        require(loadStoreLabel.isNotBlank()) { "GPURuntimeEffectExecutionRequest.loadStoreLabel must not be blank" }
+        require(passId.isNotBlank()) { "GPURuntimeEffectExecutionRequest.passId must not be blank" }
+        require(packetStreamId.isNotBlank()) {
+            "GPURuntimeEffectExecutionRequest.packetStreamId must not be blank"
+        }
+        require(streamId.isNotBlank()) { "GPURuntimeEffectExecutionRequest.streamId must not be blank" }
+        require(vertexSourceLabel.isNotBlank()) {
+            "GPURuntimeEffectExecutionRequest.vertexSourceLabel must not be blank"
+        }
+        require(cpuOracleEvidenceHash.isNotBlank()) {
+            "GPURuntimeEffectExecutionRequest.cpuOracleEvidenceHash must not be blank"
+        }
+        require(gpuReadbackStatus.isNotBlank()) {
+            "GPURuntimeEffectExecutionRequest.gpuReadbackStatus must not be blank"
+        }
+        require(gpuReadbackReason.isNotBlank()) {
+            "GPURuntimeEffectExecutionRequest.gpuReadbackReason must not be blank"
+        }
+    }
+}
+
+/** Result of contract-only registered runtime-effect execution materialization. */
+data class GPURuntimeEffectExecutionResult(
+    val evidenceRow: String,
+    val descriptorId: GPURuntimeEffectID,
+    val descriptorVersion: GPURuntimeEffectDescriptorVersion?,
+    val registryGeneration: Long,
+    val routePlacement: GPURuntimeEffectRoutePlacement?,
+    val pipelineLabel: String?,
+    val renderPipelineKey: String?,
+    val pipelineCacheKey: String?,
+    val payloadFingerprint: String?,
+    val bindingLayoutHash: String?,
+    val wgslModuleHash: String?,
+    val reflectionHash: String?,
+    val uniformSchemaHash: String?,
+    val cpuOracleEvidenceHash: String?,
+    val gpuReadbackStatus: String,
+    val gpuReadbackReason: String,
+    val resourceDecision: GPUResourceMaterializationDecision,
+    val commandStream: GPUPassCommandStream?,
+    val uniformValuesInKey: Boolean,
+    val adapterBacked: Boolean = false,
+    val productActivation: Boolean = false,
+) {
+    /** Returns canonical PM/review dump lines for this execution lane. */
+    fun dumpLines(): List<String> {
+        val executionLine = if (resourceDecision is GPUResourceMaterializationDecision.Materialized) {
+            "runtime-effect:execution row=$evidenceRow " +
+                "descriptor=${descriptorId.value} version=${descriptorVersion?.value ?: NONE_RUNTIME_EFFECT_VALUE} " +
+                "registryGeneration=$registryGeneration route=${routePlacement ?: NONE_RUNTIME_EFFECT_VALUE} " +
+                "wgsl=${wgslModuleHash ?: NONE_RUNTIME_EFFECT_VALUE} " +
+                "reflection=${reflectionHash ?: NONE_RUNTIME_EFFECT_VALUE} " +
+                "schema=${uniformSchemaHash ?: NONE_RUNTIME_EFFECT_VALUE} " +
+                "payload=${payloadFingerprint ?: NONE_RUNTIME_EFFECT_VALUE} " +
+                "bindingLayout=${bindingLayoutHash ?: NONE_RUNTIME_EFFECT_VALUE} " +
+                "pipeline=${pipelineLabel ?: NONE_RUNTIME_EFFECT_VALUE} " +
+                "renderKey=${renderPipelineKey ?: NONE_RUNTIME_EFFECT_VALUE} " +
+                "pipelineCache=${pipelineCacheKey ?: NONE_RUNTIME_EFFECT_VALUE} " +
+                "uniformValuesInKey=$uniformValuesInKey " +
+                "adapterBacked=$adapterBacked productActivation=$productActivation"
+        } else {
+            val diagnosticCode = when (resourceDecision) {
+                is GPUResourceMaterializationDecision.Refused -> resourceDecision.diagnostic.code
+                is GPUResourceMaterializationDecision.Deferred -> resourceDecision.reasonCode
+                is GPUResourceMaterializationDecision.Materialized -> RUNTIME_EFFECT_ACCEPTED_CODE
+            }
+            "runtime-effect:execution.refused row=$evidenceRow " +
+                "descriptor=${descriptorId.value} version=${descriptorVersion?.value ?: NONE_RUNTIME_EFFECT_VALUE} " +
+                "registryGeneration=$registryGeneration route=${routePlacement ?: NONE_RUNTIME_EFFECT_VALUE} " +
+                "reason=$diagnosticCode adapterBacked=$adapterBacked productActivation=$productActivation"
+        }
+        val readbackLine =
+            "runtime-effect:readback row=$evidenceRow descriptor=${descriptorId.value} " +
+                "cpuOracle=${cpuOracleEvidenceHash ?: NONE_RUNTIME_EFFECT_VALUE} " +
+                "gpuReadback=$gpuReadbackStatus reason=$gpuReadbackReason promoted=false"
+
+        return listOf(executionLine, readbackLine) +
+            resourceDecision.dumpLines() +
+            commandStream?.dumpLines().orEmpty() +
+            listOf(RUNTIME_EFFECT_EXECUTION_NONCLAIM_LINE)
+    }
+}
+
+/** Deterministic pipeline key derivation for registered runtime-effect execution. */
+object GPURuntimeEffectExecutionKeys {
+    /** Builds the render pipeline preimage from accepted descriptor-gate evidence. */
+    fun renderPipelinePreimage(gatePlan: GPURuntimeEffectDescriptorGatePlan): GPUPipelineKeyPreimage.Render {
+        val accepted = gatePlan.routePlan as GPURuntimeEffectRoutePlan.Accepted
+        val descriptor = accepted.descriptor
+        return GPUPipelineKeyPreimage.Render(
+            renderStepIdentity = "runtime-effect:${descriptor.id.value}",
+            renderStepVersion = descriptor.version.value.toString(),
+            primitiveTopology = "triangle-list",
+            materialKeyHash = gatePlan.materialKeyBoundaryHash,
+            materialProgramId = descriptor.id.value,
+            materialDictionaryVersion = gatePlan.registrySnapshot.registryVersion,
+            materialLayoutHash = descriptor.uniformSchema.schemaHash,
+            snippetIdentityHash = runtimeEffectRouteContractHash(descriptor),
+            moduleHash = descriptor.wgslPlan.moduleHash,
+            vertexLayoutHash = "runtime-effect-fullscreen-triangle-v1",
+            targetFormatClass = "rgba8unorm",
+            blendStateHash = "runtime-effect-source-over-v1",
+            sampleStateHash = "sample-count-1",
+            bindGroupLayoutHash = descriptor.resources.bindingPlanHash,
+            capabilityClass = "registered-runtime-effect",
+            capabilityFacts = listOf(
+                "descriptor=${descriptor.id.value}@${descriptor.version.value}",
+                "registry=${gatePlan.registrySnapshot.registryVersion}@${gatePlan.registrySnapshot.generation}",
+                "reflection=${descriptor.wgslPlan.reflectionHash}",
+                "route=${accepted.lookupPlan.routePlacement}",
+                "schema=${descriptor.uniformSchema.schemaHash}",
+                "uniformValuesInKey=false",
+            ),
+            rendererSalt = "kanvas-runtime-effect-execution-v1",
+        )
+    }
+
+    /** Derives the render key used by `setRenderPipeline`. */
+    fun renderPipelineKey(gatePlan: GPURuntimeEffectDescriptorGatePlan) =
+        GPUPipelineKeys.renderPipelineKey(renderPipelinePreimage(gatePlan))
+
+    /** Derives the cache key used for render pipeline cache evidence. */
+    fun pipelineCacheKey(gatePlan: GPURuntimeEffectDescriptorGatePlan) =
+        GPUPipelineKeys.pipelineCacheKey(renderPipelinePreimage(gatePlan))
+}
+
+/** Materializes one registered runtime-effect material lane after the descriptor gate accepts it. */
+class ValidatingRuntimeEffectExecutionMaterializer(
+    private val payloadProvider: GPUResourceProvider = ValidatingPayloadResourceProvider(),
+) {
+    /** Validates descriptor, registry, WGSL, uniform, payload, and pipeline facts before command encoding. */
+    fun materialize(
+        request: GPURuntimeEffectExecutionRequest,
+        context: GPUTargetPreparationContext,
+    ): GPURuntimeEffectExecutionResult {
+        val accepted = request.gatePlan.routePlan as? GPURuntimeEffectRoutePlan.Accepted
+            ?: return request.refusedFromGate(context)
+
+        val diagnostics = request.executionDiagnostics(accepted, context)
+        if (diagnostics.isNotEmpty()) {
+            return request.refusedExecution(accepted, diagnostics, context)
+        }
+
+        val payloadDecision = payloadProvider.materializePayloadBindings(request.payloadRequest, context)
+        val payloadMaterialized = payloadDecision as? GPUResourceMaterializationDecision.Materialized
+            ?: return request.resultFromDecision(accepted, payloadDecision, commandStream = null)
+
+        val pipelineBinding = request.pipelineOperandBinding(accepted, context)
+        val materializedDecision = payloadMaterialized.copy(
+            resourcePlanLabels = (payloadMaterialized.dumpResourcePlanLabelsSnapshot + pipelineBinding.operand.label)
+                .distinct(),
+            operandBridge = payloadMaterialized.dumpOperandBridgeSnapshot + pipelineBinding,
+        )
+        val commandStream = request.commandStream(materializedDecision)
+
+        return request.resultFromDecision(
+            accepted = accepted,
+            decision = materializedDecision,
+            commandStream = commandStream,
         )
     }
 }
@@ -509,11 +733,271 @@ object GPURuntimeEffectRefusalMatrix {
     }
 }
 
+private fun GPURuntimeEffectExecutionRequest.refusedFromGate(
+    context: GPUTargetPreparationContext,
+): GPURuntimeEffectExecutionResult {
+    val refused = gatePlan.routePlan as GPURuntimeEffectRoutePlan.Refused
+    val diagnostic = refused.diagnostic.toResourceDiagnostic(resourceLabel = executionResourceLabel())
+    val decision = GPUResourceMaterializationDecision.Refused(
+        diagnostic = diagnostic,
+        targetId = context.targetId,
+        taskIds = payloadRequest.dumpTaskIdsSnapshot,
+        resourcePlanLabels = listOf(executionResourceLabel()),
+        diagnostics = listOf(diagnostic),
+    )
+    return GPURuntimeEffectExecutionResult(
+        evidenceRow = RUNTIME_EFFECT_EXECUTION_EVIDENCE_ROW,
+        descriptorId = refused.lookupPlan.requestedEffectId,
+        descriptorVersion = refused.lookupPlan.descriptorVersion,
+        registryGeneration = refused.lookupPlan.registryGeneration,
+        routePlacement = refused.lookupPlan.routePlacement,
+        pipelineLabel = null,
+        renderPipelineKey = null,
+        pipelineCacheKey = pipelineCacheKey,
+        payloadFingerprint = null,
+        bindingLayoutHash = null,
+        wgslModuleHash = null,
+        reflectionHash = null,
+        uniformSchemaHash = null,
+        cpuOracleEvidenceHash = null,
+        gpuReadbackStatus = "refused",
+        gpuReadbackReason = diagnostic.code,
+        resourceDecision = decision,
+        commandStream = null,
+        uniformValuesInKey = gatePlan.materialKeyIncludesUniformValues,
+    )
+}
+
+private fun GPURuntimeEffectExecutionRequest.refusedExecution(
+    accepted: GPURuntimeEffectRoutePlan.Accepted,
+    diagnostics: List<GPUResourceDiagnostic>,
+    context: GPUTargetPreparationContext,
+): GPURuntimeEffectExecutionResult {
+    val decision = GPUResourceMaterializationDecision.Refused(
+        diagnostic = diagnostics.first(),
+        targetId = context.targetId,
+        taskIds = payloadRequest.dumpTaskIdsSnapshot,
+        resourcePlanLabels = listOf(executionResourceLabel()),
+        diagnostics = diagnostics,
+    )
+    return resultFromDecision(accepted, decision, commandStream = null)
+}
+
+private fun GPURuntimeEffectExecutionRequest.resultFromDecision(
+    accepted: GPURuntimeEffectRoutePlan.Accepted,
+    decision: GPUResourceMaterializationDecision,
+    commandStream: GPUPassCommandStream?,
+): GPURuntimeEffectExecutionResult {
+    val descriptor = accepted.descriptor
+    return GPURuntimeEffectExecutionResult(
+        evidenceRow = RUNTIME_EFFECT_EXECUTION_EVIDENCE_ROW,
+        descriptorId = descriptor.id,
+        descriptorVersion = descriptor.version,
+        registryGeneration = gatePlan.registrySnapshot.generation,
+        routePlacement = accepted.lookupPlan.routePlacement,
+        pipelineLabel = runtimeEffectPipelineOperandLabel(descriptor),
+        renderPipelineKey = GPURuntimeEffectExecutionKeys.renderPipelineKey(gatePlan).value,
+        pipelineCacheKey = pipelineCacheKey,
+        payloadFingerprint = payloadRequest.uniformBlock.fingerprint.value,
+        bindingLayoutHash = payloadRequest.reflectedBindingLayoutHash,
+        wgslModuleHash = descriptor.wgslPlan.moduleHash,
+        reflectionHash = descriptor.wgslPlan.reflectionHash,
+        uniformSchemaHash = descriptor.uniformSchema.schemaHash,
+        cpuOracleEvidenceHash = accepted.cpuOracle.evidenceHash,
+        gpuReadbackStatus = if (decision is GPUResourceMaterializationDecision.Materialized) {
+            gpuReadbackStatus
+        } else {
+            "refused"
+        },
+        gpuReadbackReason = if (decision is GPUResourceMaterializationDecision.Materialized) {
+            gpuReadbackReason
+        } else {
+            decision.runtimeEffectRefusalReason()
+        },
+        resourceDecision = decision,
+        commandStream = commandStream,
+        uniformValuesInKey = gatePlan.materialKeyIncludesUniformValues,
+    )
+}
+
+private fun GPURuntimeEffectExecutionRequest.executionDiagnostics(
+    accepted: GPURuntimeEffectRoutePlan.Accepted,
+    context: GPUTargetPreparationContext,
+): List<GPUResourceDiagnostic> {
+    val descriptor = accepted.descriptor
+    return buildList {
+        if (payloadRequest.targetId != context.targetId) {
+            add(executionDiagnostic("unsupported.runtime_effect.target_mismatch", descriptor))
+        }
+        if (gatePlan.registrySnapshot.generation != expectedRegistryGeneration ||
+            accepted.lookupPlan.registryGeneration != expectedRegistryGeneration
+        ) {
+            add(executionDiagnostic("unsupported.runtime_effect.registry_generation_stale", descriptor))
+        }
+        if (descriptor.id != expectedDescriptorId) {
+            add(executionDiagnostic("unsupported.runtime_effect.descriptor_id_mismatch", descriptor))
+        }
+        if (descriptor.version != expectedDescriptorVersion) {
+            add(executionDiagnostic("unsupported.runtime_effect.descriptor_version_mismatch", descriptor))
+        }
+        if (accepted.lookupPlan.routePlacement != expectedRoutePlacement) {
+            add(executionDiagnostic("unsupported.runtime_effect.route_placement_mismatch", descriptor))
+        }
+        if (descriptor.wgslPlan.moduleHash != expectedWgslModuleHash) {
+            add(executionDiagnostic("unsupported.runtime_effect.wgsl_module_mismatch", descriptor))
+        }
+        if (descriptor.wgslPlan.reflectionHash != expectedReflectionHash) {
+            add(executionDiagnostic("unsupported.runtime_effect.wgsl_reflection_mismatch", descriptor))
+        }
+        if (descriptor.uniformSchema.schemaHash != expectedUniformSchemaHash) {
+            add(executionDiagnostic("unsupported.runtime_effect.uniform_schema_mismatch", descriptor))
+        }
+        if (descriptor.uniformBlockPlan.blockSizeBytes != payloadRequest.uniformBlock.byteSize) {
+            add(executionDiagnostic("unsupported.runtime_effect.uniform_block_size_mismatch", descriptor))
+        }
+        val payloadFields = payloadRequest.uniformBlock.fields.map { field ->
+            "${field.fieldPath}:${field.valueClass}@${field.byteOffset}:${field.byteSize}"
+        }
+        if (payloadFields != descriptor.uniformSchema.fields) {
+            add(executionDiagnostic("unsupported.runtime_effect.uniform_payload_schema_mismatch", descriptor))
+        }
+        if (descriptor.resources.bindingPlanHash != payloadRequest.reflectedBindingLayoutHash ||
+            descriptor.resources.bindingPlanHash != payloadRequest.resourceBlock.bindingPlanHash
+        ) {
+            add(executionDiagnostic("unsupported.runtime_effect.payload_binding_mismatch", descriptor))
+        }
+        if (pipelineCacheKey != GPURuntimeEffectExecutionKeys.pipelineCacheKey(gatePlan).value) {
+            add(executionDiagnostic("unsupported.runtime_effect.pipeline_cache_key_mismatch", descriptor))
+        }
+        if (descriptor.childSlots.isNotEmpty()) {
+            add(executionDiagnostic("unsupported.runtime_effect.child_count", descriptor))
+        }
+        if (descriptor.liveEditPlan.enabled) {
+            add(executionDiagnostic("unsupported.runtime_effect.live_edit_unaccepted", descriptor))
+        }
+        if (gatePlan.materialKeyIncludesUniformValues) {
+            add(executionDiagnostic("unsupported.runtime_effect.uniform_values_in_pipeline_key", descriptor))
+        }
+        if (accepted.cpuOracle.evidenceHash != cpuOracleEvidenceHash) {
+            add(executionDiagnostic("unsupported.runtime_effect.cpu_oracle_mismatch", descriptor))
+        }
+        if (accepted.lookupPlan.requestedPlacement != GPURuntimeEffectRoutePlacement.MaterialSource) {
+            add(executionDiagnostic("unsupported.runtime_effect.route_placement_mismatch", descriptor))
+        }
+    }
+}
+
+private fun GPURuntimeEffectExecutionRequest.pipelineOperandBinding(
+    accepted: GPURuntimeEffectRoutePlan.Accepted,
+    context: GPUTargetPreparationContext,
+): GPUMaterializedCommandOperandBinding {
+    val descriptor = accepted.descriptor
+    return GPUMaterializedCommandOperandBinding(
+        packetId = payloadRequest.packetId,
+        commandLabel = "setRenderPipeline",
+        operand = GPUMaterializedCommandOperandReference(
+            label = runtimeEffectPipelineOperandLabel(descriptor),
+            kind = GPUMaterializedCommandOperandKind.RenderPipeline,
+            descriptorHash = pipelineCacheKey,
+            deviceGeneration = context.deviceGeneration,
+            ownerScope = "runtime-effect-pipeline-cache",
+            usageLabels = listOf("render"),
+            invalidationPolicy = "registry-generation",
+            evidenceFacts = mapOf(
+                "descriptor" to descriptor.id.value,
+                "entry" to descriptor.wgslPlan.entryPoint,
+                "registryGeneration" to gatePlan.registrySnapshot.generation.toString(),
+                "route" to accepted.lookupPlan.routePlacement.toString(),
+                "schema" to descriptor.uniformSchema.schemaHash,
+                "uniformValuesInKey" to gatePlan.materialKeyIncludesUniformValues.toString(),
+                "wgsl" to descriptor.wgslPlan.moduleHash,
+            ),
+        ),
+    )
+}
+
+private fun GPURuntimeEffectExecutionRequest.commandStream(
+    materializedDecision: GPUResourceMaterializationDecision.Materialized,
+): GPUPassCommandStream {
+    val packetId = GPUDrawPacketID(payloadRequest.packetId)
+    return GPUPassCommandStream(
+        streamId = streamId,
+        packetStreamId = packetStreamId,
+        passId = passId,
+        commands = listOf(
+            GPUPassCommand.BeginRenderPass(
+                targetStateHash = targetStateHash,
+                loadStoreLabel = loadStoreLabel,
+            ),
+            GPUPassCommand.SetRenderPipeline(
+                pipelineKey = GPURuntimeEffectExecutionKeys.renderPipelineKey(gatePlan),
+                packetId = packetId,
+            ),
+            GPUPassCommand.SetBindGroup(
+                bindingLayoutHash = payloadRequest.reflectedBindingLayoutHash,
+                uniformSlot = payloadRequest.uniformSlot,
+                resourceSlot = payloadRequest.resourceSlot,
+                packetId = packetId,
+            ),
+            GPUPassCommand.Draw(
+                vertexSourceLabel = vertexSourceLabel,
+                packetId = packetId,
+            ),
+            GPUPassCommand.EndRenderPass(passId = passId),
+        ),
+        operandBridge = materializedDecision.dumpOperandBridgeSnapshot.map(GPUPassCommandOperandBridge::fromMaterializedBinding),
+    )
+}
+
+private fun GPURuntimeEffectExecutionRequest.executionDiagnostic(
+    code: String,
+    descriptor: GPURuntimeEffectDescriptor,
+): GPUResourceDiagnostic =
+    GPUResourceDiagnostic(
+        code = code,
+        resourceLabel = executionResourceLabel(),
+        message = "registered runtime-effect execution refused for ${descriptor.id.value}: $code",
+        terminal = true,
+        facts = mapOf(
+            "descriptor" to descriptor.id.value,
+            "version" to descriptor.version.value.toString(),
+            "registryGeneration" to gatePlan.registrySnapshot.generation.toString(),
+            "expectedRegistryGeneration" to expectedRegistryGeneration.toString(),
+        ),
+    )
+
+private fun GPURuntimeEffectDiagnostic.toResourceDiagnostic(resourceLabel: String): GPUResourceDiagnostic =
+    GPUResourceDiagnostic(
+        code = code,
+        resourceLabel = resourceLabel,
+        message = message,
+        terminal = terminal,
+        facts = effectId?.let { id -> mapOf("effectId" to id.value) }.orEmpty(),
+    )
+
+private fun GPUResourceMaterializationDecision.runtimeEffectRefusalReason(): String =
+    when (this) {
+        is GPUResourceMaterializationDecision.Refused -> diagnostic.code
+        is GPUResourceMaterializationDecision.Deferred -> reasonCode
+        is GPUResourceMaterializationDecision.Materialized -> RUNTIME_EFFECT_ACCEPTED_CODE
+    }
+
+private fun GPURuntimeEffectExecutionRequest.executionResourceLabel(): String =
+    "runtime-effect-execution:${expectedDescriptorId.value}"
+
+private fun runtimeEffectPipelineOperandLabel(descriptor: GPURuntimeEffectDescriptor): String =
+    "runtime-effect-pipeline:${descriptor.id.value}@${descriptor.version.value}"
+
 private const val RUNTIME_EFFECT_EVIDENCE_ROW = "gpu-renderer.runtime-effect.registered"
+private const val RUNTIME_EFFECT_EXECUTION_EVIDENCE_ROW = "gpu-renderer.runtime-effect.registered.execution"
+private const val NONE_RUNTIME_EFFECT_VALUE = "none"
 private const val RUNTIME_EFFECT_ACCEPTED_CODE = "accepted.runtime_effect.registered_descriptor"
 private const val RUNTIME_EFFECT_NONCLAIM_LINE =
     "runtime-effect:nonclaim nativeRuntimeEffect=false adapterBacked=false dynamicSkSL=false " +
         "arbitraryWGSL=false children=false blender=false filter=false productActivation=false"
+private const val RUNTIME_EFFECT_EXECUTION_NONCLAIM_LINE =
+    "runtime-effect:nonclaim executionLane=registered-descriptor adapterBacked=false " +
+        "dynamicSkSL=false arbitraryWGSL=false children=false blender=false filter=false productActivation=false"
 private const val RUNTIME_EFFECT_REFUSAL_EVIDENCE_ROW = "gpu-renderer.runtime-effect-refusals"
 private const val RUNTIME_EFFECT_REFUSAL_CLASSIFICATION = "RefuseRequired"
 private const val RUNTIME_EFFECT_REFUSAL_NONCLAIM_LINE =

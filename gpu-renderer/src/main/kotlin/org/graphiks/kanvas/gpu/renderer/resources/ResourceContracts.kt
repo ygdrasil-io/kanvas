@@ -1,5 +1,13 @@
 package org.graphiks.kanvas.gpu.renderer.resources
 
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadUploadPlan
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingBlock
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingFact
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingKind
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadBlock
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
+
 /**
  * Target-scoped coordinator for resource preparation before submission.
  *
@@ -123,6 +131,226 @@ enum class GPUMaterializedResourceRole {
     StencilAttachment,
     /** Generic pass resource evidence when a narrower role is unavailable. */
     PassResource,
+}
+
+/** Backend-neutral kind for a live command operand owned by resource materialization. */
+enum class GPUMaterializedCommandOperandKind {
+    /** Render pipeline selected before `setPipeline`. */
+    RenderPipeline,
+    /** Compute pipeline selected before a compute dispatch. */
+    ComputePipeline,
+    /** Uniform buffer bound through a bind group. */
+    UniformBuffer,
+    /** Storage buffer bound through a bind group. */
+    StorageBuffer,
+    /** Vertex buffer consumed by draw commands. */
+    VertexBuffer,
+    /** Index buffer consumed by indexed draw commands. */
+    IndexBuffer,
+    /** Backend bind group or descriptor set facade object. */
+    BindGroup,
+    /** Texture resource used by a pass or copy. */
+    Texture,
+    /** Texture view used by an attachment or sampled binding. */
+    TextureView,
+    /** Sampler object used by sampled texture bindings. */
+    Sampler,
+    /** Current render target attachment. */
+    RenderTarget,
+    /** Current depth/stencil attachment for stencil or depth-producing passes. */
+    DepthStencilAttachment,
+    /** Destination-copy texture used by read-before-write effects. */
+    DestinationCopyTexture,
+    /** Readback buffer or texture-copy destination. */
+    ReadbackResource,
+}
+
+/**
+ * Provider-owned command operand reference.
+ *
+ * This is the live-resource handoff boundary for command streams. It carries
+ * scoped, dumpable facts that prove a provider validated generation, owner
+ * scope, usage, and invalidation policy without exposing raw WGPU objects or
+ * making the reference durable key material.
+ */
+data class GPUMaterializedCommandOperandReference(
+    val label: String,
+    val kind: GPUMaterializedCommandOperandKind,
+    val descriptorHash: String,
+    val deviceGeneration: Long,
+    val ownerScope: String,
+    val usageLabels: List<String>,
+    val invalidationPolicy: String,
+    val evidenceFacts: Map<String, String> = emptyMap(),
+) {
+    internal val dumpUsageLabelsSnapshot: List<String> = usageLabels.toList()
+    internal val dumpEvidenceFactsSnapshot: Map<String, String> = evidenceFacts.toMap()
+
+    init {
+        require(label.isNotBlank()) { "GPUMaterializedCommandOperandReference.label must not be blank" }
+        requireDumpSafeValue("GPUMaterializedCommandOperandReference.label", label)
+        require(descriptorHash.isNotBlank()) {
+            "GPUMaterializedCommandOperandReference.descriptorHash must not be blank"
+        }
+        requireDumpSafeValue("GPUMaterializedCommandOperandReference.descriptorHash", descriptorHash)
+        require(deviceGeneration >= 0L) {
+            "GPUMaterializedCommandOperandReference.deviceGeneration must be non-negative"
+        }
+        require(ownerScope.isNotBlank()) {
+            "GPUMaterializedCommandOperandReference.ownerScope must not be blank"
+        }
+        requireDumpSafeValue("GPUMaterializedCommandOperandReference.ownerScope", ownerScope)
+        require(usageLabels.none { label -> label.isBlank() }) {
+            "GPUMaterializedCommandOperandReference.usageLabels must not contain blank labels"
+        }
+        usageLabels.forEach { label ->
+            requireDumpSafeValue("GPUMaterializedCommandOperandReference.usageLabels", label)
+        }
+        require(invalidationPolicy.isNotBlank()) {
+            "GPUMaterializedCommandOperandReference.invalidationPolicy must not be blank"
+        }
+        requireDumpSafeValue("GPUMaterializedCommandOperandReference.invalidationPolicy", invalidationPolicy)
+        require(evidenceFacts.keys.none { key -> key.isBlank() }) {
+            "GPUMaterializedCommandOperandReference.evidenceFacts must not contain blank keys"
+        }
+        require(evidenceFacts.values.none { value -> value.isBlank() }) {
+            "GPUMaterializedCommandOperandReference.evidenceFacts must not contain blank values"
+        }
+        evidenceFacts.forEach { (key, value) ->
+            requireDumpSafeValue("GPUMaterializedCommandOperandReference.evidenceFacts key", key)
+            requireDumpSafeValue("GPUMaterializedCommandOperandReference.evidenceFacts value", value)
+        }
+    }
+}
+
+/** Provider output that binds a materialized operand to a pass command. */
+data class GPUMaterializedCommandOperandBinding(
+    val packetId: String? = null,
+    val commandLabel: String,
+    val operand: GPUMaterializedCommandOperandReference,
+) {
+    init {
+        require(packetId == null || packetId.isNotBlank()) {
+            "GPUMaterializedCommandOperandBinding.packetId must not be blank"
+        }
+        packetId?.let { value ->
+            requireDumpSafeValue("GPUMaterializedCommandOperandBinding.packetId", value)
+        }
+        require(commandLabel.isNotBlank()) {
+            "GPUMaterializedCommandOperandBinding.commandLabel must not be blank"
+        }
+        requireDumpSafeValue("GPUMaterializedCommandOperandBinding.commandLabel", commandLabel)
+    }
+}
+
+/** Provider input for one command-stream operand that must be materialized. */
+data class GPUCommandOperandMaterializationPlan(
+    val packetId: String? = null,
+    val commandLabel: String,
+    val label: String,
+    val kind: GPUMaterializedCommandOperandKind,
+    val descriptorHash: String,
+    val deviceGeneration: Long,
+    val ownerScope: String,
+    val requiredUsageLabels: Set<String>,
+    val availableUsageLabels: Set<String>,
+    val invalidationPolicy: String,
+    val evidenceFacts: Map<String, String> = emptyMap(),
+    val evictedReason: String? = null,
+) {
+    internal val dumpRequiredUsageLabelsSnapshot: Set<String> = requiredUsageLabels.toSet()
+    internal val dumpAvailableUsageLabelsSnapshot: Set<String> = availableUsageLabels.toSet()
+    internal val dumpEvidenceFactsSnapshot: Map<String, String> = evidenceFacts.toMap()
+
+    init {
+        require(packetId == null || packetId.isNotBlank()) {
+            "GPUCommandOperandMaterializationPlan.packetId must not be blank"
+        }
+        packetId?.let { value ->
+            requireDumpSafeValue("GPUCommandOperandMaterializationPlan.packetId", value)
+        }
+        require(commandLabel.isNotBlank()) {
+            "GPUCommandOperandMaterializationPlan.commandLabel must not be blank"
+        }
+        requireDumpSafeValue("GPUCommandOperandMaterializationPlan.commandLabel", commandLabel)
+        require(label.isNotBlank()) { "GPUCommandOperandMaterializationPlan.label must not be blank" }
+        requireDumpSafeValue("GPUCommandOperandMaterializationPlan.label", label)
+        require(descriptorHash.isNotBlank()) {
+            "GPUCommandOperandMaterializationPlan.descriptorHash must not be blank"
+        }
+        requireDumpSafeValue("GPUCommandOperandMaterializationPlan.descriptorHash", descriptorHash)
+        require(deviceGeneration >= 0L) {
+            "GPUCommandOperandMaterializationPlan.deviceGeneration must be non-negative"
+        }
+        require(ownerScope.isNotBlank()) {
+            "GPUCommandOperandMaterializationPlan.ownerScope must not be blank"
+        }
+        requireDumpSafeValue("GPUCommandOperandMaterializationPlan.ownerScope", ownerScope)
+        require(requiredUsageLabels.none { label -> label.isBlank() }) {
+            "GPUCommandOperandMaterializationPlan.requiredUsageLabels must not contain blank labels"
+        }
+        requiredUsageLabels.forEach { label ->
+            requireDumpSafeValue("GPUCommandOperandMaterializationPlan.requiredUsageLabels", label)
+        }
+        require(availableUsageLabels.none { label -> label.isBlank() }) {
+            "GPUCommandOperandMaterializationPlan.availableUsageLabels must not contain blank labels"
+        }
+        availableUsageLabels.forEach { label ->
+            requireDumpSafeValue("GPUCommandOperandMaterializationPlan.availableUsageLabels", label)
+        }
+        require(invalidationPolicy.isNotBlank()) {
+            "GPUCommandOperandMaterializationPlan.invalidationPolicy must not be blank"
+        }
+        requireDumpSafeValue("GPUCommandOperandMaterializationPlan.invalidationPolicy", invalidationPolicy)
+        require(evidenceFacts.keys.none { key -> key.isBlank() }) {
+            "GPUCommandOperandMaterializationPlan.evidenceFacts must not contain blank keys"
+        }
+        require(evidenceFacts.values.none { value -> value.isBlank() }) {
+            "GPUCommandOperandMaterializationPlan.evidenceFacts must not contain blank values"
+        }
+        evidenceFacts.forEach { (key, value) ->
+            requireDumpSafeValue("GPUCommandOperandMaterializationPlan.evidenceFacts key", key)
+            requireDumpSafeValue("GPUCommandOperandMaterializationPlan.evidenceFacts value", value)
+        }
+        require(evictedReason == null || evictedReason.isNotBlank()) {
+            "GPUCommandOperandMaterializationPlan.evictedReason must not be blank"
+        }
+        evictedReason?.let { reason ->
+            requireDumpSafeValue("GPUCommandOperandMaterializationPlan.evictedReason", reason)
+        }
+    }
+}
+
+/** Provider request for all operands required by one command-stream bridge. */
+data class GPUCommandOperandMaterializationRequest(
+    val targetId: String,
+    val taskIds: List<String> = emptyList(),
+    val resourcePlanLabels: List<String> = emptyList(),
+    val operands: List<GPUCommandOperandMaterializationPlan>,
+) {
+    internal val dumpTaskIdsSnapshot: List<String> = taskIds.toList()
+    internal val dumpResourcePlanLabelsSnapshot: List<String> = resourcePlanLabels.toList()
+    internal val dumpOperandsSnapshot: List<GPUCommandOperandMaterializationPlan> = operands.toList()
+
+    init {
+        require(targetId.isNotBlank()) { "GPUCommandOperandMaterializationRequest.targetId must not be blank" }
+        requireDumpSafeValue("GPUCommandOperandMaterializationRequest.targetId", targetId)
+        require(taskIds.none { taskId -> taskId.isBlank() }) {
+            "GPUCommandOperandMaterializationRequest.taskIds must not contain blank labels"
+        }
+        taskIds.forEach { taskId ->
+            requireDumpSafeValue("GPUCommandOperandMaterializationRequest.taskIds", taskId)
+        }
+        require(resourcePlanLabels.none { label -> label.isBlank() }) {
+            "GPUCommandOperandMaterializationRequest.resourcePlanLabels must not contain blank labels"
+        }
+        resourcePlanLabels.forEach { label ->
+            requireDumpSafeValue("GPUCommandOperandMaterializationRequest.resourcePlanLabels", label)
+        }
+        require(operands.isNotEmpty()) {
+            "GPUCommandOperandMaterializationRequest.operands must not be empty"
+        }
+    }
 }
 
 /**
@@ -281,7 +509,14 @@ sealed interface GPUTextureAllocationPlan {
     data class CreateTexture(val descriptor: GPUTextureDescriptor, val ownership: GPUTextureOwnershipPlan) : GPUTextureAllocationPlan
 
     /** Upload pixels from a typed artifact into a texture. */
-    data class UploadFromArtifact(val artifactKey: String, val descriptor: GPUTextureDescriptor) : GPUTextureAllocationPlan
+    data class UploadFromArtifact(val artifactKey: String, val descriptor: GPUTextureDescriptor) : GPUTextureAllocationPlan {
+        init {
+            require(artifactKey.isNotBlank()) {
+                "GPUTextureAllocationPlan.UploadFromArtifact.artifactKey must not be blank"
+            }
+            requireDumpSafeValue("GPUTextureAllocationPlan.UploadFromArtifact.artifactKey", artifactKey)
+        }
+    }
 
     /**
      * Import an external texture through the facade.
@@ -362,11 +597,18 @@ sealed interface GPUResourceMaterializationDecision {
         val targetId: String = UNSPECIFIED_DUMP_VALUE,
         val taskIds: List<String> = emptyList(),
         val resourcePlanLabels: List<String> = emptyList(),
+        val operandRefs: List<GPUMaterializedCommandOperandReference> = emptyList(),
+        val operandBridge: List<GPUMaterializedCommandOperandBinding> = emptyList(),
+        val payloadTelemetry: List<GPUPayloadMaterializationTelemetryEvent> = emptyList(),
     ) : GPUResourceMaterializationDecision {
         internal val dumpResourcesSnapshot: List<GPUTextureResourceRef> = resources.toList()
         internal val dumpDiagnosticsSnapshot: List<GPUResourceDiagnostic> = diagnostics.toList()
         internal val dumpTaskIdsSnapshot: List<String> = taskIds.toList()
         internal val dumpResourcePlanLabelsSnapshot: List<String> = resourcePlanLabels.toList()
+        internal val dumpOperandRefsSnapshot: List<GPUMaterializedCommandOperandReference> = operandRefs.toList()
+        internal val dumpOperandBridgeSnapshot: List<GPUMaterializedCommandOperandBinding> = operandBridge.toList()
+        internal val dumpPayloadTelemetrySnapshot: List<GPUPayloadMaterializationTelemetryEvent> =
+            payloadTelemetry.toList()
     }
 
     /**
@@ -404,10 +646,13 @@ sealed interface GPUResourceMaterializationDecision {
         val taskIds: List<String> = emptyList(),
         val resourcePlanLabels: List<String> = emptyList(),
         val diagnostics: List<GPUResourceDiagnostic> = listOf(diagnostic),
+        val payloadTelemetry: List<GPUPayloadMaterializationTelemetryEvent> = emptyList(),
     ) : GPUResourceMaterializationDecision {
         internal val dumpDiagnosticsSnapshot: List<GPUResourceDiagnostic> = diagnostics.toList()
         internal val dumpTaskIdsSnapshot: List<String> = taskIds.toList()
         internal val dumpResourcePlanLabelsSnapshot: List<String> = resourcePlanLabels.toList()
+        internal val dumpPayloadTelemetrySnapshot: List<GPUPayloadMaterializationTelemetryEvent> =
+            payloadTelemetry.toList()
 
         init {
             require(diagnostics.isNotEmpty()) {
@@ -416,6 +661,242 @@ sealed interface GPUResourceMaterializationDecision {
             require(diagnostics.first() == diagnostic) {
                 "GPUResourceMaterializationDecision.Refused.diagnostics must start with diagnostic"
             }
+        }
+    }
+}
+
+/** Result of a payload upload or bind-group materialization attempt. */
+enum class GPUPayloadMaterializationTelemetryResult(val dumpToken: String) {
+    /** Provider created a new upload buffer or bind group facade. */
+    Create("create"),
+    /** Provider reused a matching upload buffer or bind group facade. */
+    Reuse("reuse"),
+    /** Provider refused before returning an upload buffer or bind group facade. */
+    Failure("failure"),
+}
+
+/**
+ * Non-promotional telemetry for payload materialization.
+ *
+ * The event records provider-owned create/reuse/failure facts only. It does not
+ * carry route support fields, backend handles, or product activation.
+ */
+data class GPUPayloadMaterializationTelemetryEvent(
+    val lane: String,
+    val result: GPUPayloadMaterializationTelemetryResult,
+    val keyHash: String,
+    val subjectHash: String,
+    val productRouteActivated: Boolean = false,
+) {
+    init {
+        require(lane in payloadMaterializationTelemetryLanes) {
+            "GPUPayloadMaterializationTelemetryEvent.lane must be one of $payloadMaterializationTelemetryLanes"
+        }
+        require(keyHash.isNotBlank()) { "GPUPayloadMaterializationTelemetryEvent.keyHash must not be blank" }
+        require(subjectHash.isNotBlank()) { "GPUPayloadMaterializationTelemetryEvent.subjectHash must not be blank" }
+        requireDumpSafeValue("GPUPayloadMaterializationTelemetryEvent.keyHash", keyHash)
+        requireDumpSafeValue("GPUPayloadMaterializationTelemetryEvent.subjectHash", subjectHash)
+        require(!productRouteActivated) {
+            "GPUPayloadMaterializationTelemetryEvent.productRouteActivated must stay false"
+        }
+    }
+}
+
+/**
+ * Provider input for one pass-local payload upload and bind-group materialization.
+ *
+ * Payload slot identifiers remain pass-local labels. The request contains only
+ * dumpable layout, generation, usage, and budget facts; backend handles remain
+ * provider-owned and out of durable keys.
+ */
+data class GPUPayloadMaterializationRequest(
+    val targetId: String,
+    val packetId: String,
+    val taskIds: List<String> = emptyList(),
+    val resourcePlanLabels: List<String> = emptyList(),
+    val uniformBlock: GPUUniformPayloadBlock,
+    val uniformSlot: GPUUniformPayloadSlot,
+    val resourceBlock: GPUResourceBindingBlock,
+    val resourceSlot: GPUResourceBindingSlot,
+    val uploadPlan: GPUPayloadUploadPlan,
+    val reflectedBindingLayoutHash: String,
+    val deviceGeneration: Long,
+    val payloadGeneration: Long,
+    val alignmentBytes: Long,
+    val uploadBudgetBytes: Long,
+    val uploadCapabilityAvailable: Boolean,
+    val maxDynamicOffsets: Int,
+    val requiredUniformUsageLabels: Set<String>,
+    val availableUniformUsageLabels: Set<String>,
+) {
+    internal val dumpTaskIdsSnapshot: List<String> = taskIds.toList()
+    internal val dumpResourcePlanLabelsSnapshot: List<String> = resourcePlanLabels.toList()
+    internal val dumpRequiredUniformUsageLabelsSnapshot: Set<String> = requiredUniformUsageLabels.toSet()
+    internal val dumpAvailableUniformUsageLabelsSnapshot: Set<String> = availableUniformUsageLabels.toSet()
+
+    init {
+        require(targetId.isNotBlank()) { "GPUPayloadMaterializationRequest.targetId must not be blank" }
+        require(packetId.isNotBlank()) { "GPUPayloadMaterializationRequest.packetId must not be blank" }
+        require(reflectedBindingLayoutHash.isNotBlank()) {
+            "GPUPayloadMaterializationRequest.reflectedBindingLayoutHash must not be blank"
+        }
+        require(deviceGeneration >= 0L) { "GPUPayloadMaterializationRequest.deviceGeneration must be non-negative" }
+        require(payloadGeneration >= 0L) { "GPUPayloadMaterializationRequest.payloadGeneration must be non-negative" }
+        require(alignmentBytes > 0L) { "GPUPayloadMaterializationRequest.alignmentBytes must be positive" }
+        require(uploadBudgetBytes >= 0L) { "GPUPayloadMaterializationRequest.uploadBudgetBytes must be non-negative" }
+        require(maxDynamicOffsets >= 0) { "GPUPayloadMaterializationRequest.maxDynamicOffsets must be non-negative" }
+        require(taskIds.none { taskId -> taskId.isBlank() }) {
+            "GPUPayloadMaterializationRequest.taskIds must not contain blank labels"
+        }
+        require(resourcePlanLabels.none { label -> label.isBlank() }) {
+            "GPUPayloadMaterializationRequest.resourcePlanLabels must not contain blank labels"
+        }
+        require(requiredUniformUsageLabels.none { label -> label.isBlank() }) {
+            "GPUPayloadMaterializationRequest.requiredUniformUsageLabels must not contain blank labels"
+        }
+        require(availableUniformUsageLabels.none { label -> label.isBlank() }) {
+            "GPUPayloadMaterializationRequest.availableUniformUsageLabels must not contain blank labels"
+        }
+        listOf(
+            "GPUPayloadMaterializationRequest.targetId" to targetId,
+            "GPUPayloadMaterializationRequest.packetId" to packetId,
+            "GPUPayloadMaterializationRequest.reflectedBindingLayoutHash" to reflectedBindingLayoutHash,
+            "GPUPayloadMaterializationRequest.uniformSlot" to uniformSlot.slotId.value,
+            "GPUPayloadMaterializationRequest.resourceSlot" to resourceSlot.slotId.value,
+            "GPUPayloadMaterializationRequest.uploadPlan" to uploadPlan.planHash,
+            "GPUPayloadMaterializationRequest.uploadScope" to uploadPlan.stagingScope,
+        ).forEach { (field, value) -> requireDumpSafeValue(field, value) }
+        taskIds.forEach { taskId -> requireDumpSafeValue("GPUPayloadMaterializationRequest.taskIds", taskId) }
+        resourcePlanLabels.forEach { label ->
+            requireDumpSafeValue("GPUPayloadMaterializationRequest.resourcePlanLabels", label)
+        }
+        resourceBlock.resourceDescriptorLabels.forEach { label ->
+            requireDumpSafeValue("GPUPayloadMaterializationRequest.resourceDescriptorLabels", label)
+        }
+        resourceBlock.bindingFacts.forEach { fact ->
+            requireDumpSafeValue("GPUPayloadMaterializationRequest.bindingFact.label", fact.bindingLabel)
+            requireDumpSafeValue("GPUPayloadMaterializationRequest.bindingFact.descriptorHash", fact.descriptorHash)
+            fact.requiredUsageLabels.forEach { label ->
+                requireDumpSafeValue("GPUPayloadMaterializationRequest.bindingFact.requiredUsageLabels", label)
+            }
+            fact.availableUsageLabels.forEach { label ->
+                requireDumpSafeValue("GPUPayloadMaterializationRequest.bindingFact.availableUsageLabels", label)
+            }
+            fact.evictedReason?.let { reason ->
+                requireDumpSafeValue("GPUPayloadMaterializationRequest.bindingFact.evictedReason", reason)
+            }
+        }
+        requiredUniformUsageLabels.forEach { label ->
+            requireDumpSafeValue("GPUPayloadMaterializationRequest.requiredUniformUsageLabels", label)
+        }
+        availableUniformUsageLabels.forEach { label ->
+            requireDumpSafeValue("GPUPayloadMaterializationRequest.availableUniformUsageLabels", label)
+        }
+    }
+}
+
+/**
+ * Provider input for one accepted sampled texture + sampler binding.
+ *
+ * This is the live materialization lane for KGPU-M11-004. It consumes the
+ * descriptor and ownership facts accepted by the M4 sampler/upload gates and
+ * asks the resource provider for texture, texture-view, and sampler operands.
+ * The request contains no backend handles; upload and allocation failures stay
+ * stable diagnostics instead of becoming hidden CPU-rendered textures.
+ */
+data class GPUTextureSamplerMaterializationRequest(
+    val targetId: String,
+    val packetId: String,
+    val taskIds: List<String> = emptyList(),
+    val resourcePlanLabels: List<String> = emptyList(),
+    val allocation: GPUTextureAllocationPlan,
+    val ownership: GPUTextureOwnershipPlan,
+    val textureDescriptor: GPUTextureDescriptor,
+    val viewDescriptor: GPUTextureViewDescriptor,
+    val samplerDescriptor: GPUSamplerDescriptor,
+    val binding: GPUSampledTextureBinding,
+    val bindingLayoutHash: String,
+    val deviceGeneration: Long,
+    val expectedResourceGeneration: Long,
+    val actualResourceGeneration: Long,
+    val requiredTextureUsageLabels: Set<String>,
+    val availableTextureUsageLabels: Set<String>,
+    val requiredMipLevels: Int,
+    val uploadBytes: Long,
+    val uploadBudgetBytes: Long,
+    val uploadCapabilityAvailable: Boolean,
+    val swizzleRequired: Boolean = false,
+    val unsupportedSamplingReason: String? = null,
+    val uploadFailedReason: String? = null,
+    val activeAttachmentSampled: Boolean = false,
+) {
+    internal val dumpTaskIdsSnapshot: List<String> = taskIds.toList()
+    internal val dumpResourcePlanLabelsSnapshot: List<String> = resourcePlanLabels.toList()
+    internal val dumpRequiredTextureUsageLabelsSnapshot: Set<String> = requiredTextureUsageLabels.toSet()
+    internal val dumpAvailableTextureUsageLabelsSnapshot: Set<String> = availableTextureUsageLabels.toSet()
+
+    init {
+        require(targetId.isNotBlank()) { "GPUTextureSamplerMaterializationRequest.targetId must not be blank" }
+        require(packetId.isNotBlank()) { "GPUTextureSamplerMaterializationRequest.packetId must not be blank" }
+        require(bindingLayoutHash.isNotBlank()) {
+            "GPUTextureSamplerMaterializationRequest.bindingLayoutHash must not be blank"
+        }
+        require(deviceGeneration >= 0L) {
+            "GPUTextureSamplerMaterializationRequest.deviceGeneration must be non-negative"
+        }
+        require(expectedResourceGeneration >= 0L) {
+            "GPUTextureSamplerMaterializationRequest.expectedResourceGeneration must be non-negative"
+        }
+        require(actualResourceGeneration >= 0L) {
+            "GPUTextureSamplerMaterializationRequest.actualResourceGeneration must be non-negative"
+        }
+        require(requiredMipLevels > 0) {
+            "GPUTextureSamplerMaterializationRequest.requiredMipLevels must be positive"
+        }
+        require(uploadBytes >= 0L) { "GPUTextureSamplerMaterializationRequest.uploadBytes must be non-negative" }
+        require(uploadBudgetBytes >= 0L) {
+            "GPUTextureSamplerMaterializationRequest.uploadBudgetBytes must be non-negative"
+        }
+        require(taskIds.none { taskId -> taskId.isBlank() }) {
+            "GPUTextureSamplerMaterializationRequest.taskIds must not contain blank labels"
+        }
+        require(resourcePlanLabels.none { label -> label.isBlank() }) {
+            "GPUTextureSamplerMaterializationRequest.resourcePlanLabels must not contain blank labels"
+        }
+        require(requiredTextureUsageLabels.none { label -> label.isBlank() }) {
+            "GPUTextureSamplerMaterializationRequest.requiredTextureUsageLabels must not contain blank labels"
+        }
+        require(availableTextureUsageLabels.none { label -> label.isBlank() }) {
+            "GPUTextureSamplerMaterializationRequest.availableTextureUsageLabels must not contain blank labels"
+        }
+        require(unsupportedSamplingReason == null || unsupportedSamplingReason.isNotBlank()) {
+            "GPUTextureSamplerMaterializationRequest.unsupportedSamplingReason must not be blank"
+        }
+        require(uploadFailedReason == null || uploadFailedReason.isNotBlank()) {
+            "GPUTextureSamplerMaterializationRequest.uploadFailedReason must not be blank"
+        }
+        listOf(
+            "GPUTextureSamplerMaterializationRequest.targetId" to targetId,
+            "GPUTextureSamplerMaterializationRequest.packetId" to packetId,
+            "GPUTextureSamplerMaterializationRequest.bindingLayoutHash" to bindingLayoutHash,
+            "GPUTextureSamplerMaterializationRequest.ownerLabel" to ownership.ownerLabel,
+            "GPUTextureSamplerMaterializationRequest.bindingLabel" to binding.bindingLabel,
+        ).forEach { (field, value) -> requireDumpSafeValue(field, value) }
+        taskIds.forEach { taskId -> requireDumpSafeValue("GPUTextureSamplerMaterializationRequest.taskIds", taskId) }
+        resourcePlanLabels.forEach { label ->
+            requireDumpSafeValue("GPUTextureSamplerMaterializationRequest.resourcePlanLabels", label)
+        }
+        requiredTextureUsageLabels.forEach { label ->
+            requireDumpSafeValue("GPUTextureSamplerMaterializationRequest.requiredTextureUsageLabels", label)
+        }
+        availableTextureUsageLabels.forEach { label ->
+            requireDumpSafeValue("GPUTextureSamplerMaterializationRequest.availableTextureUsageLabels", label)
+        }
+        unsupportedSamplingReason?.let { reason ->
+            requireDumpSafeValue("GPUTextureSamplerMaterializationRequest.unsupportedSamplingReason", reason)
+        }
+        uploadFailedReason?.let { reason ->
+            requireDumpSafeValue("GPUTextureSamplerMaterializationRequest.uploadFailedReason", reason)
         }
     }
 }
@@ -450,6 +931,284 @@ interface GPUResourceProvider {
             ),
             targetId = context.targetId,
             resourcePlanLabels = listOf(resourcePlanLabel),
+        )
+    }
+
+    /** Materializes provider-owned command operands or refuses before encoding/submission. */
+    fun materializeCommandOperands(
+        request: GPUCommandOperandMaterializationRequest,
+        context: GPUTargetPreparationContext,
+    ): GPUResourceMaterializationDecision =
+        GPUResourceMaterializationDecision.Refused(
+            diagnostic = GPUResourceDiagnostic.providerUnconfigured(
+                resourceLabel = request.resourcePlanLabel(),
+                targetId = context.targetId,
+            ),
+            targetId = context.targetId,
+            taskIds = request.dumpTaskIdsSnapshot,
+            resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+        )
+
+    /** Materializes payload upload buffers and bind groups or refuses before encoding/submission. */
+    fun materializePayloadBindings(
+        request: GPUPayloadMaterializationRequest,
+        context: GPUTargetPreparationContext,
+    ): GPUResourceMaterializationDecision =
+        GPUResourceMaterializationDecision.Refused(
+            diagnostic = GPUResourceDiagnostic.providerUnconfigured(
+                resourceLabel = request.resourcePlanLabel(),
+                targetId = context.targetId,
+            ),
+            targetId = context.targetId,
+            taskIds = request.dumpTaskIdsSnapshot,
+            resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+            payloadTelemetry = request.payloadTelemetry(GPUPayloadMaterializationTelemetryResult.Failure),
+        )
+
+    /** Materializes sampled texture/view/sampler operands or refuses before command encoding. */
+    fun materializeTextureSamplerBinding(
+        request: GPUTextureSamplerMaterializationRequest,
+        context: GPUTargetPreparationContext,
+    ): GPUResourceMaterializationDecision =
+        GPUResourceMaterializationDecision.Refused(
+            diagnostic = GPUResourceDiagnostic.providerUnconfigured(
+                resourceLabel = request.resourcePlanLabel(),
+                targetId = context.targetId,
+            ),
+            targetId = context.targetId,
+            taskIds = request.dumpTaskIdsSnapshot,
+            resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+        )
+}
+
+/** Resource-layer provider that validates command operands without exposing backend handles. */
+class ValidatingCommandOperandResourceProvider : GPUResourceProvider {
+    override fun materializeCommandOperands(
+        request: GPUCommandOperandMaterializationRequest,
+        context: GPUTargetPreparationContext,
+    ): GPUResourceMaterializationDecision {
+        val diagnostics = buildList {
+            if (request.targetId != context.targetId) {
+                add(
+                    GPUResourceDiagnostic.commandOperandTargetMismatch(
+                        resourceLabel = request.resourcePlanLabel(),
+                        requestTargetId = request.targetId,
+                        contextTargetId = context.targetId,
+                    ),
+                )
+            }
+            request.dumpOperandsSnapshot.forEach { plan ->
+                addAll(plan.validationDiagnostics(expectedDeviceGeneration = context.deviceGeneration))
+            }
+        }
+
+        if (diagnostics.isNotEmpty()) {
+            return GPUResourceMaterializationDecision.Refused(
+                diagnostic = diagnostics.first(),
+                targetId = context.targetId,
+                taskIds = request.dumpTaskIdsSnapshot,
+                resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+                diagnostics = diagnostics,
+            )
+        }
+
+        val bridge = request.dumpOperandsSnapshot.map { plan ->
+            GPUMaterializedCommandOperandBinding(
+                packetId = plan.packetId,
+                commandLabel = plan.commandLabel,
+                operand = plan.toMaterializedReference(),
+            )
+        }
+
+        return GPUResourceMaterializationDecision.Materialized(
+            resources = emptyList(),
+            targetId = context.targetId,
+            taskIds = request.dumpTaskIdsSnapshot,
+            resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+            operandBridge = bridge,
+        )
+    }
+}
+
+/** Resource-layer provider that validates pass-local payload uploads and bind groups. */
+class ValidatingPayloadResourceProvider : GPUResourceProvider {
+    private val uploadedPayloadKeys = linkedSetOf<String>()
+    private val bindGroupKeys = linkedSetOf<String>()
+
+    override fun materializePayloadBindings(
+        request: GPUPayloadMaterializationRequest,
+        context: GPUTargetPreparationContext,
+    ): GPUResourceMaterializationDecision {
+        val diagnostics = request.validationDiagnostics(expectedDeviceGeneration = context.deviceGeneration)
+
+        if (request.targetId != context.targetId) {
+            val targetDiagnostic = GPUResourceDiagnostic.commandOperandTargetMismatch(
+                resourceLabel = request.resourcePlanLabel(),
+                requestTargetId = request.targetId,
+                contextTargetId = context.targetId,
+            )
+            return GPUResourceMaterializationDecision.Refused(
+                diagnostic = targetDiagnostic,
+                targetId = context.targetId,
+                taskIds = request.dumpTaskIdsSnapshot,
+                resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+                diagnostics = listOf(targetDiagnostic) + diagnostics,
+                payloadTelemetry = request.payloadTelemetry(GPUPayloadMaterializationTelemetryResult.Failure),
+            )
+        }
+
+        if (diagnostics.isNotEmpty()) {
+            return GPUResourceMaterializationDecision.Refused(
+                diagnostic = diagnostics.first(),
+                targetId = context.targetId,
+                taskIds = request.dumpTaskIdsSnapshot,
+                resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+                diagnostics = diagnostics,
+                payloadTelemetry = request.payloadTelemetry(GPUPayloadMaterializationTelemetryResult.Failure),
+            )
+        }
+
+        val uniformLabel = request.uniformBufferOperandLabel()
+        val bindGroupLabel = request.bindGroupOperandLabel()
+        val uniformResult = if (uploadedPayloadKeys.add(request.uniformCacheKey())) {
+            GPUPayloadMaterializationTelemetryResult.Create
+        } else {
+            GPUPayloadMaterializationTelemetryResult.Reuse
+        }
+        val bindGroupResult = if (bindGroupKeys.add(request.bindGroupCacheKey())) {
+            GPUPayloadMaterializationTelemetryResult.Create
+        } else {
+            GPUPayloadMaterializationTelemetryResult.Reuse
+        }
+        val uniformRef = GPUMaterializedCommandOperandReference(
+            label = uniformLabel,
+            kind = GPUMaterializedCommandOperandKind.UniformBuffer,
+            descriptorHash = request.uniformBlock.fingerprint.value,
+            deviceGeneration = request.deviceGeneration,
+            ownerScope = request.payloadOwnerScope(),
+            usageLabels = request.dumpRequiredUniformUsageLabelsSnapshot.sorted(),
+            invalidationPolicy = "pass-end",
+            evidenceFacts = request.uniformUploadEvidenceFacts(),
+        )
+        val bindGroupRef = GPUMaterializedCommandOperandReference(
+            label = bindGroupLabel,
+            kind = GPUMaterializedCommandOperandKind.BindGroup,
+            descriptorHash = request.reflectedBindingLayoutHash,
+            deviceGeneration = request.deviceGeneration,
+            ownerScope = request.payloadOwnerScope(),
+            usageLabels = request.bindGroupUsageLabels(),
+            invalidationPolicy = "pass-end",
+            evidenceFacts = request.bindGroupEvidenceFacts(uniformLabel),
+        )
+        val resourceBindings = request.resourceBlock.bindingFacts
+            .filter { fact ->
+                fact.kind == GPUResourceBindingKind.SampledTexture || fact.kind == GPUResourceBindingKind.Sampler
+            }
+            .map { fact ->
+                GPUMaterializedCommandOperandBinding(
+                    packetId = request.packetId,
+                    commandLabel = "setBindGroup",
+                    operand = fact.toPayloadResourceOperandReference(request),
+                )
+            }
+
+        return GPUResourceMaterializationDecision.Materialized(
+            resources = emptyList(),
+            targetId = context.targetId,
+            taskIds = request.dumpTaskIdsSnapshot,
+            resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+            operandBridge = listOf(
+                GPUMaterializedCommandOperandBinding(
+                    packetId = request.packetId,
+                    commandLabel = "setBindGroup",
+                    operand = uniformRef,
+                ),
+                GPUMaterializedCommandOperandBinding(
+                    packetId = request.packetId,
+                    commandLabel = "setBindGroup",
+                    operand = bindGroupRef,
+                ),
+            ) + resourceBindings,
+            payloadTelemetry = listOf(
+                request.uniformTelemetry(uniformResult),
+                request.bindGroupTelemetry(bindGroupResult),
+            ),
+        )
+    }
+}
+
+/** Resource-layer provider that validates sampled texture/view/sampler materialization. */
+class ValidatingTextureSamplerResourceProvider : GPUResourceProvider {
+    override fun materializeTextureSamplerBinding(
+        request: GPUTextureSamplerMaterializationRequest,
+        context: GPUTargetPreparationContext,
+    ): GPUResourceMaterializationDecision {
+        val diagnostics = request.textureSamplerDiagnostics(context)
+
+        if (diagnostics.isNotEmpty()) {
+            return GPUResourceMaterializationDecision.Refused(
+                diagnostic = diagnostics.first(),
+                targetId = context.targetId,
+                taskIds = request.dumpTaskIdsSnapshot,
+                resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+                diagnostics = diagnostics,
+            )
+        }
+
+        val textureRef = GPUTextureResourceRef("texture-ref:${request.ownership.ownerLabel}")
+        val textureOperand = GPUMaterializedCommandOperandReference(
+            label = request.textureOperandLabel(),
+            kind = GPUMaterializedCommandOperandKind.Texture,
+            descriptorHash = request.textureDescriptor.materializationDescriptorHash(),
+            deviceGeneration = request.deviceGeneration,
+            ownerScope = request.ownership.ownerLabel,
+            usageLabels = request.dumpRequiredTextureUsageLabelsSnapshot.sorted(),
+            invalidationPolicy = request.ownership.releasePolicy,
+            evidenceFacts = request.textureEvidenceFacts(),
+        )
+        val viewOperand = GPUMaterializedCommandOperandReference(
+            label = request.textureViewOperandLabel(),
+            kind = GPUMaterializedCommandOperandKind.TextureView,
+            descriptorHash = request.viewDescriptor.materializationViewHash(),
+            deviceGeneration = request.deviceGeneration,
+            ownerScope = request.ownership.ownerLabel,
+            usageLabels = listOf("texture_binding"),
+            invalidationPolicy = request.ownership.releasePolicy,
+            evidenceFacts = request.textureViewEvidenceFacts(textureOperand.label),
+        )
+        val samplerOperand = GPUMaterializedCommandOperandReference(
+            label = request.samplerOperandLabel(),
+            kind = GPUMaterializedCommandOperandKind.Sampler,
+            descriptorHash = request.samplerDescriptor.materializationSamplerHash(),
+            deviceGeneration = request.deviceGeneration,
+            ownerScope = "sampler-cache",
+            usageLabels = listOf("sampler"),
+            invalidationPolicy = "descriptor-cache",
+            evidenceFacts = request.samplerEvidenceFacts(),
+        )
+
+        return GPUResourceMaterializationDecision.Materialized(
+            resources = listOf(textureRef),
+            targetId = context.targetId,
+            taskIds = request.dumpTaskIdsSnapshot,
+            resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+            operandBridge = listOf(
+                GPUMaterializedCommandOperandBinding(
+                    packetId = request.packetId,
+                    commandLabel = "setBindGroup",
+                    operand = textureOperand,
+                ),
+                GPUMaterializedCommandOperandBinding(
+                    packetId = request.packetId,
+                    commandLabel = "setBindGroup",
+                    operand = viewOperand,
+                ),
+                GPUMaterializedCommandOperandBinding(
+                    packetId = request.packetId,
+                    commandLabel = "setBindGroup",
+                    operand = samplerOperand,
+                ),
+            ),
         )
     }
 }
@@ -650,6 +1409,7 @@ data class GPUSurfaceTextureLease(
     val useToken: GPUUseToken,
     val usageLabels: Set<String> = emptySet(),
     val expiredReason: String? = null,
+    val evictedReason: String? = null,
 ) {
     /**
      * Returns all diagnostics that make this lease illegal for the requested use.
@@ -672,6 +1432,12 @@ data class GPUSurfaceTextureLease(
             diagnostics += GPUResourceDiagnostic.surfaceLeaseStale(
                 resourceLabel = targetId,
                 reason = expiredReason,
+            )
+        }
+        if (evictedReason != null) {
+            diagnostics += GPUResourceDiagnostic.resourceEvicted(
+                resourceLabel = targetId,
+                reason = evictedReason,
             )
         }
         if (deviceGeneration != expectedDeviceGeneration) {
@@ -922,6 +1688,160 @@ data class GPUResourceDiagnostic(
                 ),
             )
 
+        /** Builds a refusal when command operand facts target a different surface. */
+        fun commandOperandTargetMismatch(
+            resourceLabel: String,
+            requestTargetId: String,
+            contextTargetId: String,
+        ): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.command_operand_target_mismatch",
+                resourceLabel = resourceLabel,
+                message = "Command operand materialization target mismatch for $resourceLabel: request=$requestTargetId context=$contextTargetId.",
+                terminal = true,
+                facts = mapOf(
+                    "contextTargetId" to contextTargetId,
+                    "requestTargetId" to requestTargetId,
+                ),
+            )
+
+        /** Builds a missing usage diagnostic for a command-stream operand. */
+        fun commandOperandUsageMissing(
+            resourceLabel: String,
+            missingUsageLabels: Set<String>,
+            availableUsageLabels: Set<String>,
+        ): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.command_operand_usage_missing",
+                resourceLabel = resourceLabel,
+                message = "Command operand $resourceLabel is missing usage ${missingUsageLabels.sorted()} from available ${availableUsageLabels.sorted()}.",
+                terminal = true,
+                facts = mapOf(
+                    "availableUsageLabels" to availableUsageLabels.sorted().joinToString(","),
+                    "missingUsageLabels" to missingUsageLabels.sorted().joinToString(","),
+                ),
+            )
+
+        /** Builds a refusal when a payload bind group does not match reflected WGSL layout facts. */
+        fun bindingLayoutMismatch(
+            resourceLabel: String,
+            reflectedLayoutHash: String,
+            bindingPlanHash: String,
+        ): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.binding_layout_mismatch",
+                resourceLabel = resourceLabel,
+                message = "Payload bind group $resourceLabel uses binding plan $bindingPlanHash but reflected layout is $reflectedLayoutHash.",
+                terminal = true,
+                facts = mapOf(
+                    "bindingPlanHash" to bindingPlanHash,
+                    "reflectedLayoutHash" to reflectedLayoutHash,
+                ),
+            )
+
+        /** Builds a refusal when a payload bind group exceeds the accepted dynamic-offset count. */
+        fun dynamicOffsetsExceeded(
+            resourceLabel: String,
+            dynamicOffsetCount: Int,
+            maxDynamicOffsets: Int,
+        ): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.dynamic_offsets_exceeded",
+                resourceLabel = resourceLabel,
+                message = "Payload bind group $resourceLabel requests $dynamicOffsetCount dynamic offsets but the limit is $maxDynamicOffsets.",
+                terminal = true,
+                facts = mapOf(
+                    "dynamicOffsetCount" to dynamicOffsetCount.toString(),
+                    "maxDynamicOffsets" to maxDynamicOffsets.toString(),
+                ),
+            )
+
+        /** Builds a refusal when upload/staging capability is absent for a payload plan. */
+        fun uploadCapabilityMissing(resourceLabel: String, uploadPlanHash: String): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.upload_capability_missing",
+                resourceLabel = resourceLabel,
+                message = "Payload upload plan $uploadPlanHash for $resourceLabel cannot run because upload capability is absent.",
+                terminal = true,
+                facts = mapOf("uploadPlanHash" to uploadPlanHash),
+            )
+
+        /** Builds a refusal when upload byte ranges do not cover the payload exactly once. */
+        fun uploadRangeInvalid(resourceLabel: String, reason: String): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.upload_range_invalid",
+                resourceLabel = resourceLabel,
+                message = "Payload upload ranges for $resourceLabel are invalid: $reason.",
+                terminal = true,
+                facts = mapOf("reason" to reason),
+            )
+
+        /** Builds a refusal when binding labels need structured resource facts. */
+        fun bindingFactMissing(resourceLabel: String, bindingLabel: String): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.binding_fact_missing",
+                resourceLabel = resourceLabel,
+                message = "Payload bind group $resourceLabel needs structured binding facts for $bindingLabel.",
+                terminal = true,
+                facts = mapOf("bindingLabel" to bindingLabel),
+            )
+
+        /** Builds a refusal when a structured binding fact is not declared by the bind group descriptors. */
+        fun bindingFactUnexpected(resourceLabel: String, bindingLabel: String): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.binding_fact_unexpected",
+                resourceLabel = resourceLabel,
+                message = "Payload bind group $resourceLabel has unexpected structured binding facts for $bindingLabel.",
+                terminal = true,
+                facts = mapOf("bindingLabel" to bindingLabel),
+            )
+
+        /** Builds a refusal when resource binding generation facts are stale. */
+        fun bindingGenerationStale(
+            resourceLabel: String,
+            bindingLabel: String,
+            expectedGeneration: Long,
+            actualGeneration: Long,
+        ): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.binding_generation_stale",
+                resourceLabel = resourceLabel,
+                message = "Payload binding $bindingLabel has generation $actualGeneration but expected $expectedGeneration.",
+                terminal = true,
+                facts = mapOf(
+                    "actualGeneration" to actualGeneration.toString(),
+                    "bindingLabel" to bindingLabel,
+                    "expectedGeneration" to expectedGeneration.toString(),
+                ),
+            )
+
+        /** Builds a refusal when a payload slot points at the wrong gathered block fingerprint. */
+        fun payloadFingerprintMismatch(
+            resourceLabel: String,
+            slotFingerprint: String,
+            blockFingerprint: String,
+        ): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.payload_fingerprint_mismatch",
+                resourceLabel = resourceLabel,
+                message = "Payload slot for $resourceLabel points at $slotFingerprint but block fingerprint is $blockFingerprint.",
+                terminal = true,
+                facts = mapOf(
+                    "blockFingerprint" to blockFingerprint,
+                    "slotFingerprint" to slotFingerprint,
+                ),
+            )
+
+        /** Builds a refusal when payload byte evidence is not uploadable. */
+        fun payloadUploadBytesInvalid(resourceLabel: String, reason: String): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.payload_upload_bytes_invalid",
+                resourceLabel = resourceLabel,
+                message = "Payload upload bytes for $resourceLabel are invalid: $reason.",
+                terminal = true,
+                facts = mapOf("reason" to reason),
+            )
+
         /** Builds a missing texture usage diagnostic. */
         fun textureUsageMissing(
             resourceLabel: String,
@@ -945,6 +1865,16 @@ data class GPUResourceDiagnostic(
                 code = "stale.texture.surface_lease",
                 resourceLabel = resourceLabel,
                 message = "Surface texture lease for $resourceLabel is stale: $reason.",
+                terminal = true,
+                facts = mapOf("reason" to reason),
+            )
+
+        /** Builds a resource-residency eviction diagnostic. */
+        fun resourceEvicted(resourceLabel: String, reason: String): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.evicted",
+                resourceLabel = resourceLabel,
+                message = "GPU resource $resourceLabel was evicted before materialization: $reason.",
                 terminal = true,
                 facts = mapOf("reason" to reason),
             )
@@ -1047,6 +1977,63 @@ data class GPUResourceDiagnostic(
                 facts = mapOf("reason" to reason),
             )
 
+        /** Builds a diagnostic for unavailable mip levels on a sampled texture route. */
+        fun textureMipmapUnavailable(
+            resourceLabel: String,
+            requiredMipLevels: Int,
+            availableMipLevels: Int,
+        ): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.texture.mipmap_unavailable",
+                resourceLabel = resourceLabel,
+                message = "Texture resource $resourceLabel requires $requiredMipLevels mip levels but only $availableMipLevels are available.",
+                terminal = true,
+                facts = mapOf(
+                    "availableMipLevels" to availableMipLevels.toString(),
+                    "requiredMipLevels" to requiredMipLevels.toString(),
+                ),
+            )
+
+        /** Builds a diagnostic for portable WebGPU texture swizzle gaps. */
+        fun textureSwizzleUnimplemented(resourceLabel: String): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.texture.swizzle_unimplemented",
+                resourceLabel = resourceLabel,
+                message = "Texture resource $resourceLabel requires a swizzle route that is not implemented.",
+                terminal = true,
+                facts = mapOf("swizzleRequired" to "true"),
+            )
+
+        /** Builds a diagnostic for sampler/tile/filter facts refused by the boundary gate. */
+        fun textureSamplingUnsupported(resourceLabel: String, reasonCode: String): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = reasonCode,
+                resourceLabel = resourceLabel,
+                message = "Texture sampler materialization for $resourceLabel is blocked by $reasonCode.",
+                terminal = true,
+                facts = mapOf("samplerBoundaryReason" to reasonCode),
+            )
+
+        /** Builds an allocation or upload failure diagnostic for texture materialization. */
+        fun textureAllocationFailed(resourceLabel: String, reason: String): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.texture.allocation_failed",
+                resourceLabel = resourceLabel,
+                message = "Texture materialization for $resourceLabel failed during allocation or upload: $reason.",
+                terminal = true,
+                facts = mapOf("reason" to reason),
+            )
+
+        /** Builds a diagnostic when a sampled texture fact is not paired with a sampler fact. */
+        fun sampledTextureSamplerMissing(resourceLabel: String): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.sampled_texture_sampler_missing",
+                resourceLabel = resourceLabel,
+                message = "Sampled texture binding $resourceLabel must include a paired sampler binding fact.",
+                terminal = true,
+                facts = mapOf("samplerBindingMissing" to "true"),
+            )
+
         /** Builds an upload or staging budget diagnostic. */
         fun uploadBudgetExceeded(
             resourceLabel: String,
@@ -1101,15 +2088,26 @@ fun GPUTargetPreparationContext.dumpLines(): List<String> =
  */
 fun GPUResourceMaterializationDecision.dumpLines(): List<String> =
     when (this) {
-        is GPUResourceMaterializationDecision.Materialized ->
+        is GPUResourceMaterializationDecision.Materialized -> {
+            val operandRefs = dumpCommandOperandRefs().sortedWith(
+                compareBy<GPUMaterializedCommandOperandReference> { operand -> operand.label }
+                    .thenBy { operand -> operand.kind.dumpLabel() },
+            )
+            val operandCount = if (operandRefs.isEmpty()) "" else " operands=${operandRefs.size}"
             listOf(
                 "resource.materialization:materialized " +
                     "target=$targetId " +
                     "tasks=${dumpTaskIdsSnapshot.dumpList()} " +
                     "resourcePlans=${dumpResourcePlanLabelsSnapshot.dumpList()} " +
-                    "resourceCount=${dumpResourcesSnapshot.size} " +
+                    "resourceCount=${dumpResourcesSnapshot.size}$operandCount " +
                     "diagnostics=${dumpDiagnosticsSnapshot.dumpCodes()}",
-            ) + dumpDiagnosticsSnapshot.dumpLines()
+            ) +
+                operandRefs.map { operand ->
+                    "resource.materialization:operand ${operand.dumpCommandOperandFields()}"
+                } +
+                dumpDiagnosticsSnapshot.dumpLines() +
+                dumpPayloadTelemetrySnapshot.dumpPayloadTelemetryLines()
+        }
         is GPUResourceMaterializationDecision.Deferred ->
             listOf(
                 "resource.materialization:deferred " +
@@ -1127,7 +2125,7 @@ fun GPUResourceMaterializationDecision.dumpLines(): List<String> =
                     "resourcePlans=${dumpResourcePlanLabelsSnapshot.dumpList()} " +
                     "code=${diagnostic.code} " +
                     "terminal=${diagnostic.terminal}",
-            ) + dumpDiagnosticsSnapshot.dumpLines()
+            ) + dumpDiagnosticsSnapshot.dumpLines() + dumpPayloadTelemetrySnapshot.dumpPayloadTelemetryLines()
     }
 
 /** Emits deterministic evidence for a resource materialization preimage plan. */
@@ -1152,7 +2150,32 @@ fun GPUResourceMaterializationPreimagePlan.dumpLines(): List<String> {
         nonClaims.dumpLine()
 }
 
+/** Emits scoped, non-handle fields for a materialized command operand reference. */
+fun GPUMaterializedCommandOperandReference.dumpCommandOperandFields(): String =
+    "operand=$label kind=${kind.dumpLabel()} " +
+        "deviceGeneration=$deviceGeneration owner=$ownerScope " +
+        "usage=${dumpUsageLabelsSnapshot.dumpList()} " +
+        "invalidation=$invalidationPolicy descriptor=$descriptorHash " +
+        "facts=${dumpEvidenceFactsSnapshot.dumpFacts()}"
+
 private const val UNSPECIFIED_DUMP_VALUE = "unspecified"
+
+private val payloadMaterializationTelemetryLanes = setOf("uniform-upload", "bind-group")
+
+private val RAW_HANDLE_DUMP_PATTERN =
+    Regex("""(?i)(wgpu|externaltexturehandle|gpu[a-z0-9]*handle|@0x[0-9a-f]+|0x[0-9a-f]{6,})""")
+
+private fun requireDumpSafeValue(fieldName: String, value: String) {
+    require(!RAW_HANDLE_DUMP_PATTERN.containsMatchIn(value)) {
+        "$fieldName must not contain raw backend handle evidence"
+    }
+}
+
+private fun GPUResourceMaterializationDecision.Materialized.dumpCommandOperandRefs(): List<GPUMaterializedCommandOperandReference> {
+    val bridgedRefs = dumpOperandBridgeSnapshot.map { binding -> binding.operand }
+    val bridgedLabels = bridgedRefs.map { operand -> operand.label to operand.kind }.toSet()
+    return bridgedRefs + dumpOperandRefsSnapshot.filter { operand -> operand.label to operand.kind !in bridgedLabels }
+}
 
 private fun GPUTextureAllocationPlan.resourcePlanLabel(): String =
     when (this) {
@@ -1174,7 +2197,683 @@ private fun GPUTextureAllocationPlan.planKindLabel(): String =
         is GPUTextureAllocationPlan.Refuse -> "Refuse"
     }
 
+private fun GPUCommandOperandMaterializationRequest.resourcePlanLabel(): String =
+    resourcePlanLabelsOrDefault().first()
+
+private fun GPUCommandOperandMaterializationRequest.resourcePlanLabelsOrDefault(): List<String> =
+    if (dumpResourcePlanLabelsSnapshot.isEmpty()) {
+        listOf("command-operands")
+    } else {
+        dumpResourcePlanLabelsSnapshot
+    }
+
+private fun GPUPayloadMaterializationRequest.resourcePlanLabel(): String =
+    resourcePlanLabelsOrDefault().first()
+
+private fun GPUPayloadMaterializationRequest.resourcePlanLabelsOrDefault(): List<String> =
+    if (dumpResourcePlanLabelsSnapshot.isEmpty()) {
+        listOf("payload-materialization")
+    } else {
+        dumpResourcePlanLabelsSnapshot
+    }
+
+private fun GPUTextureSamplerMaterializationRequest.resourcePlanLabel(): String =
+    resourcePlanLabelsOrDefault().first()
+
+private fun GPUTextureSamplerMaterializationRequest.resourcePlanLabelsOrDefault(): List<String> =
+    if (dumpResourcePlanLabelsSnapshot.isEmpty()) {
+        listOf("texture-sampler-materialization")
+    } else {
+        dumpResourcePlanLabelsSnapshot
+    }
+
+private fun GPUPayloadMaterializationRequest.validationDiagnostics(
+    expectedDeviceGeneration: Long,
+): List<GPUResourceDiagnostic> =
+    buildList {
+        val uniformLabel = uniformBufferOperandLabel()
+        val bindGroupLabel = bindGroupOperandLabel()
+        if (!uploadCapabilityAvailable) {
+            add(
+                GPUResourceDiagnostic.uploadCapabilityMissing(
+                    resourceLabel = uniformLabel,
+                    uploadPlanHash = uploadPlan.planHash,
+                ),
+            )
+        }
+        if (deviceGeneration != expectedDeviceGeneration) {
+            add(
+                GPUResourceDiagnostic.deviceGenerationStale(
+                    resourceLabel = uniformLabel,
+                    expectedDeviceGeneration = expectedDeviceGeneration,
+                    actualDeviceGeneration = deviceGeneration,
+                ),
+            )
+        }
+        val missingUniformUsage = dumpRequiredUniformUsageLabelsSnapshot - dumpAvailableUniformUsageLabelsSnapshot
+        if (missingUniformUsage.isNotEmpty()) {
+            add(
+                GPUResourceDiagnostic.commandOperandUsageMissing(
+                    resourceLabel = uniformLabel,
+                    missingUsageLabels = missingUniformUsage,
+                    availableUsageLabels = dumpAvailableUniformUsageLabelsSnapshot,
+                ),
+            )
+        }
+        if (uniformSlot.fingerprint != uniformBlock.fingerprint) {
+            add(
+                GPUResourceDiagnostic.payloadFingerprintMismatch(
+                    resourceLabel = uniformLabel,
+                    slotFingerprint = uniformSlot.fingerprint.value,
+                    blockFingerprint = uniformBlock.fingerprint.value,
+                ),
+            )
+        }
+        if (resourceSlot.fingerprint != resourceBlock.fingerprint) {
+            add(
+                GPUResourceDiagnostic.payloadFingerprintMismatch(
+                    resourceLabel = bindGroupLabel,
+                    slotFingerprint = resourceSlot.fingerprint.value,
+                    blockFingerprint = resourceBlock.fingerprint.value,
+                ),
+            )
+        }
+        if (resourceBlock.bindingPlanHash != reflectedBindingLayoutHash) {
+            add(
+                GPUResourceDiagnostic.bindingLayoutMismatch(
+                    resourceLabel = bindGroupLabel,
+                    reflectedLayoutHash = reflectedBindingLayoutHash,
+                    bindingPlanHash = resourceBlock.bindingPlanHash,
+                ),
+            )
+        }
+        if (resourceBlock.dynamicOffsets.size > maxDynamicOffsets) {
+            add(
+                GPUResourceDiagnostic.dynamicOffsetsExceeded(
+                    resourceLabel = bindGroupLabel,
+                    dynamicOffsetCount = resourceBlock.dynamicOffsets.size,
+                    maxDynamicOffsets = maxDynamicOffsets,
+                ),
+            )
+        }
+        if (resourceBlock.dynamicOffsets.any { offset -> offset < 0L }) {
+            add(
+                GPUResourceDiagnostic.payloadUploadBytesInvalid(
+                    resourceLabel = bindGroupLabel,
+                    reason = "dynamic offsets must be non-negative",
+                ),
+            )
+        }
+        if (uniformBlock.byteSize > uploadBudgetBytes) {
+            add(
+                GPUResourceDiagnostic.uploadBudgetExceeded(
+                    resourceLabel = uniformLabel,
+                    requestedBytes = uniformBlock.byteSize,
+                    budgetBytes = uploadBudgetBytes,
+                ),
+            )
+        }
+        uploadPlanByteRangeDiagnostic(uniformLabel)?.let(::add)
+        if (uniformBlock.bytes.isNotEmpty() && uniformBlock.bytes.size.toLong() != uniformBlock.byteSize) {
+            add(
+                GPUResourceDiagnostic.payloadUploadBytesInvalid(
+                    resourceLabel = uniformLabel,
+                    reason = "byte list size ${uniformBlock.bytes.size} does not match byteSize ${uniformBlock.byteSize}",
+                ),
+            )
+        }
+        if (uniformBlock.bytes.any { byte -> byte !in 0..255 }) {
+            add(
+                GPUResourceDiagnostic.payloadUploadBytesInvalid(
+                    resourceLabel = uniformLabel,
+                    reason = "byte values must be unsigned 0..255",
+                ),
+            )
+        }
+        if (!uniformBlock.zeroedPadding) {
+            add(
+                GPUResourceDiagnostic.payloadUploadBytesInvalid(
+                    resourceLabel = uniformLabel,
+                    reason = "padding bytes must be zeroed before upload",
+                ),
+            )
+        }
+        addAll(resourceBindingDiagnostics(bindGroupLabel))
+    }
+
+private fun GPUPayloadMaterializationRequest.uploadPlanByteRangeDiagnostic(
+    uniformLabel: String,
+): GPUResourceDiagnostic? {
+    val ranges = uploadPlan.byteRanges
+    if (ranges.isEmpty()) {
+        return GPUResourceDiagnostic.uploadRangeInvalid(
+            resourceLabel = uniformLabel,
+            reason = "byte ranges must not be empty",
+        )
+    }
+    val sortedRanges = ranges.sortedBy { range -> range.first }
+    var expectedStart = 0L
+    sortedRanges.forEach { range ->
+        if (range.isEmpty()) {
+            return GPUResourceDiagnostic.uploadRangeInvalid(
+                resourceLabel = uniformLabel,
+                reason = "byte ranges must not be empty ranges",
+            )
+        }
+        if (range.first != expectedStart) {
+            return GPUResourceDiagnostic.uploadRangeInvalid(
+                resourceLabel = uniformLabel,
+                reason = "byte ranges must cover contiguous bytes from 0",
+            )
+        }
+        if (range.last < range.first) {
+            return GPUResourceDiagnostic.uploadRangeInvalid(
+                resourceLabel = uniformLabel,
+                reason = "byte ranges must be ascending",
+            )
+        }
+        expectedStart = range.last + 1L
+    }
+    return if (expectedStart != uniformBlock.byteSize) {
+        GPUResourceDiagnostic.uploadRangeInvalid(
+            resourceLabel = uniformLabel,
+            reason = "byte ranges must cover exactly ${uniformBlock.byteSize} bytes",
+        )
+    } else {
+        null
+    }
+}
+
+private fun GPUPayloadMaterializationRequest.resourceBindingDiagnostics(
+    bindGroupLabel: String,
+): List<GPUResourceDiagnostic> =
+    buildList {
+        if (resourceBlock.bindingFacts.isEmpty()) {
+            resourceBlock.resourceDescriptorLabels
+                .filterNot { label -> label.startsWith("uniform:") }
+                .forEach { label ->
+                    add(
+                        GPUResourceDiagnostic.bindingFactMissing(
+                            resourceLabel = bindGroupLabel,
+                            bindingLabel = label,
+                        ),
+                    )
+                }
+            return@buildList
+        }
+
+        val descriptorLabels = resourceBlock.resourceDescriptorLabels.toSet()
+        val factLabels = resourceBlock.bindingFacts.map { fact -> fact.bindingLabel }.toSet()
+        (descriptorLabels - factLabels)
+            .filterNot { label -> label.startsWith("uniform:") }
+            .forEach { label ->
+                add(
+                    GPUResourceDiagnostic.bindingFactMissing(
+                        resourceLabel = bindGroupLabel,
+                        bindingLabel = label,
+                    ),
+                )
+            }
+        (factLabels - descriptorLabels).forEach { label ->
+            add(
+                GPUResourceDiagnostic.bindingFactUnexpected(
+                    resourceLabel = bindGroupLabel,
+                    bindingLabel = label,
+                ),
+            )
+        }
+        resourceBlock.bindingFacts.forEach { fact ->
+            addAll(fact.validationDiagnostics(resourceLabel = bindGroupLabel))
+        }
+        addAll(resourceBlock.bindingFacts.sampledTextureSamplerPairDiagnostics(bindGroupLabel))
+    }
+
+private fun GPUResourceBindingFact.validationDiagnostics(
+    resourceLabel: String,
+): List<GPUResourceDiagnostic> =
+    buildList {
+        val missingUsage = requiredUsageLabels - availableUsageLabels
+        if (missingUsage.isNotEmpty()) {
+            add(
+                GPUResourceDiagnostic.commandOperandUsageMissing(
+                    resourceLabel = bindingLabel,
+                    missingUsageLabels = missingUsage,
+                    availableUsageLabels = availableUsageLabels,
+                ),
+            )
+        }
+        if (actualResourceGeneration != expectedResourceGeneration) {
+            add(
+                GPUResourceDiagnostic.bindingGenerationStale(
+                    resourceLabel = resourceLabel,
+                    bindingLabel = bindingLabel,
+                    expectedGeneration = expectedResourceGeneration,
+                    actualGeneration = actualResourceGeneration,
+                ),
+            )
+        }
+        evictedReason?.let { reason ->
+            add(GPUResourceDiagnostic.resourceEvicted(resourceLabel = bindingLabel, reason = reason))
+        }
+    }
+
+private fun List<GPUResourceBindingFact>.sampledTextureSamplerPairDiagnostics(
+    bindGroupLabel: String,
+): List<GPUResourceDiagnostic> =
+    buildList {
+        val bindingFacts = this@sampledTextureSamplerPairDiagnostics
+        val sampledTextureKeys = bindingFacts.filter { fact -> fact.kind == GPUResourceBindingKind.SampledTexture }
+            .map { fact -> fact.textureSamplerPairKey() }
+        val samplerKeys = bindingFacts.filter { fact -> fact.kind == GPUResourceBindingKind.Sampler }
+            .map { fact -> fact.textureSamplerPairKey() }
+        if (sampledTextureKeys.isEmpty() && samplerKeys.isEmpty()) {
+            return@buildList
+        }
+
+        val hasDuplicateTexture = sampledTextureKeys.hasDuplicate()
+        val hasDuplicateSampler = samplerKeys.hasDuplicate()
+        if (
+            hasDuplicateTexture ||
+            hasDuplicateSampler ||
+            sampledTextureKeys.sorted() != samplerKeys.sorted()
+        ) {
+            add(GPUResourceDiagnostic.sampledTextureSamplerMissing(resourceLabel = bindGroupLabel))
+        }
+    }
+
+private fun GPUResourceBindingFact.textureSamplerPairKey(): String =
+    bindingLabel.substringAfter(':', bindingLabel)
+
+private fun List<String>.hasDuplicate(): Boolean =
+    size != toSet().size
+
+private fun GPUPayloadMaterializationRequest.uniformBufferOperandLabel(): String =
+    "payload-upload:${uniformSlot.slotId.value}"
+
+private fun GPUPayloadMaterializationRequest.bindGroupOperandLabel(): String =
+    "bind-group:${resourceSlot.slotId.value}"
+
+private fun GPUPayloadMaterializationRequest.payloadOwnerScope(): String =
+    "payload-scope:${uniformBlock.scope}"
+
+private fun GPUPayloadMaterializationRequest.uniformUploadEvidenceFacts(): Map<String, String> =
+    mapOf(
+        "alignment" to alignmentBytes.toString(),
+        "bindingLayout" to reflectedBindingLayoutHash,
+        "byteSize" to uniformBlock.byteSize.toString(),
+        "generation" to payloadGeneration.toString(),
+        "scope" to uniformBlock.scope,
+        "uploadPlan" to uploadPlan.planHash,
+        "uploadScope" to uploadPlan.stagingScope,
+        "zeroedPadding" to uniformBlock.zeroedPadding.toString(),
+    )
+
+private fun GPUPayloadMaterializationRequest.bindGroupEvidenceFacts(uniformBufferLabel: String): Map<String, String> =
+    buildMap {
+        put("bindingCount", resourceBlock.bindingCount.toString())
+        put("dynamicOffsets", resourceBlock.dynamicOffsets.dumpLongList())
+        put("layoutHash", reflectedBindingLayoutHash)
+        if (resourceBlock.bindingFacts.isNotEmpty()) {
+            put("resourceBindingFacts", resourceBlock.bindingFacts.dumpBindingFacts())
+        }
+        put("resourceDescriptors", resourceBlock.resourceDescriptorLabels.dumpList())
+        put("uniformBuffer", uniformBufferLabel)
+    }
+
+private fun GPUPayloadMaterializationRequest.bindGroupUsageLabels(): List<String> =
+    (listOf("uniform") + resourceBlock.bindingFacts.flatMap { fact -> fact.requiredUsageLabels })
+        .distinct()
+        .sorted()
+
+private fun GPUResourceBindingFact.toPayloadResourceOperandReference(
+    request: GPUPayloadMaterializationRequest,
+): GPUMaterializedCommandOperandReference =
+    GPUMaterializedCommandOperandReference(
+        label = when (kind) {
+            GPUResourceBindingKind.SampledTexture -> "texture-view:$bindingLabel"
+            GPUResourceBindingKind.Sampler -> "sampler:$bindingLabel"
+            GPUResourceBindingKind.StorageBuffer -> "storage-buffer:$bindingLabel"
+            GPUResourceBindingKind.UniformBuffer -> "uniform-buffer:$bindingLabel"
+        },
+        kind = when (kind) {
+            GPUResourceBindingKind.SampledTexture -> GPUMaterializedCommandOperandKind.TextureView
+            GPUResourceBindingKind.Sampler -> GPUMaterializedCommandOperandKind.Sampler
+            GPUResourceBindingKind.StorageBuffer -> GPUMaterializedCommandOperandKind.StorageBuffer
+            GPUResourceBindingKind.UniformBuffer -> GPUMaterializedCommandOperandKind.UniformBuffer
+        },
+        descriptorHash = descriptorHash,
+        deviceGeneration = request.deviceGeneration,
+        ownerScope = request.payloadOwnerScope(),
+        usageLabels = requiredUsageLabels.sorted(),
+        invalidationPolicy = "pass-end",
+        evidenceFacts = mapOf(
+            "bindingKind" to kind.dumpLabel(),
+            "bindingLabel" to bindingLabel,
+            "bindingLayout" to request.reflectedBindingLayoutHash,
+            "resourceGeneration" to actualResourceGeneration.toString(),
+            "resourceSlot" to request.resourceSlot.slotId.value,
+        ),
+    )
+
+private fun List<GPUResourceBindingFact>.dumpBindingFacts(): String =
+    if (isEmpty()) {
+        "none"
+    } else {
+        sortedBy { fact -> fact.bindingLabel }
+            .joinToString(",") { fact ->
+                "${fact.bindingLabel}:${fact.kind.dumpLabel()}:" +
+                    "descriptor=${fact.descriptorHash}:" +
+                    "usage=${fact.requiredUsageLabels.sorted().joinToString(",")}:" +
+                    "generation=${fact.actualResourceGeneration}"
+            }
+    }
+
+private fun GPUResourceBindingKind.dumpLabel(): String =
+    when (this) {
+        GPUResourceBindingKind.UniformBuffer -> "uniform-buffer"
+        GPUResourceBindingKind.StorageBuffer -> "storage-buffer"
+        GPUResourceBindingKind.SampledTexture -> "sampled-texture"
+        GPUResourceBindingKind.Sampler -> "sampler"
+    }
+
+private fun GPUPayloadMaterializationRequest.uniformCacheKey(): String =
+    listOf(
+        targetId,
+        uniformBlock.scope,
+        uniformSlot.slotId.value,
+        uniformBlock.fingerprint.value,
+        uploadPlan.planHash,
+        deviceGeneration.toString(),
+        payloadGeneration.toString(),
+        uniformBlock.byteSize.toString(),
+        "pass-end",
+    ).joinToString("|")
+
+private fun GPUPayloadMaterializationRequest.bindGroupCacheKey(): String =
+    listOf(
+        targetId,
+        uniformBlock.scope,
+        resourceSlot.slotId.value,
+        resourceBlock.fingerprint.value,
+        reflectedBindingLayoutHash,
+        uniformBlock.fingerprint.value,
+        deviceGeneration.toString(),
+        payloadGeneration.toString(),
+        "pass-end",
+    ).joinToString("|")
+
+private fun GPUTextureSamplerMaterializationRequest.textureSamplerDiagnostics(
+    context: GPUTargetPreparationContext,
+): List<GPUResourceDiagnostic> =
+    buildList {
+        val textureLabel = textureOperandLabel()
+        if (targetId != context.targetId) {
+            add(
+                GPUResourceDiagnostic.commandOperandTargetMismatch(
+                    resourceLabel = resourcePlanLabel(),
+                    requestTargetId = targetId,
+                    contextTargetId = context.targetId,
+                ),
+            )
+        }
+        if (allocation is GPUTextureAllocationPlan.Refuse) {
+            add(allocation.diagnostic)
+        }
+        if (
+            allocation is GPUTextureAllocationPlan.ImportExternalTexture ||
+            allocation is GPUTextureAllocationPlan.LeaseSurfaceTexture
+        ) {
+            add(
+                GPUResourceDiagnostic.resourcePlanNotSupported(
+                    resourceLabel = textureLabel,
+                    planKind = allocation.planKindLabel(),
+                    supportedPlanKind = "UploadFromArtifact,CreateTexture,ExistingGPUResource",
+                ),
+            )
+        }
+        val missingUsage = dumpRequiredTextureUsageLabelsSnapshot - dumpAvailableTextureUsageLabelsSnapshot
+        if (missingUsage.isNotEmpty()) {
+            add(
+                GPUResourceDiagnostic.textureUsageMissing(
+                    resourceLabel = textureLabel,
+                    missingUsageLabels = missingUsage,
+                    availableUsageLabels = dumpAvailableTextureUsageLabelsSnapshot,
+                ),
+            )
+        }
+        if (deviceGeneration != context.deviceGeneration) {
+            add(
+                GPUResourceDiagnostic.deviceGenerationStale(
+                    resourceLabel = textureLabel,
+                    expectedDeviceGeneration = context.deviceGeneration,
+                    actualDeviceGeneration = deviceGeneration,
+                ),
+            )
+        }
+        if (actualResourceGeneration != expectedResourceGeneration) {
+            add(
+                GPUResourceDiagnostic.bindingGenerationStale(
+                    resourceLabel = textureLabel,
+                    bindingLabel = binding.bindingLabel,
+                    expectedGeneration = expectedResourceGeneration,
+                    actualGeneration = actualResourceGeneration,
+                ),
+            )
+        }
+        val availableMipLevels = viewDescriptor.mipRange.count()
+        if (requiredMipLevels > availableMipLevels) {
+            add(
+                GPUResourceDiagnostic.textureMipmapUnavailable(
+                    resourceLabel = textureLabel,
+                    requiredMipLevels = requiredMipLevels,
+                    availableMipLevels = availableMipLevels,
+                ),
+            )
+        }
+        if (swizzleRequired) {
+            add(GPUResourceDiagnostic.textureSwizzleUnimplemented(resourceLabel = textureLabel))
+        }
+        unsupportedSamplingReason?.let { reason ->
+            add(GPUResourceDiagnostic.textureSamplingUnsupported(resourceLabel = textureLabel, reasonCode = reason))
+        }
+        if (allocation is GPUTextureAllocationPlan.UploadFromArtifact && !uploadCapabilityAvailable) {
+            add(
+                GPUResourceDiagnostic.uploadCapabilityMissing(
+                    resourceLabel = textureLabel,
+                    uploadPlanHash = allocation.artifactKey,
+                ),
+            )
+        }
+        if (uploadBytes > uploadBudgetBytes) {
+            add(
+                GPUResourceDiagnostic.uploadBudgetExceeded(
+                    resourceLabel = textureLabel,
+                    requestedBytes = uploadBytes,
+                    budgetBytes = uploadBudgetBytes,
+                ),
+            )
+        }
+        uploadFailedReason?.let { reason ->
+            add(GPUResourceDiagnostic.textureAllocationFailed(resourceLabel = textureLabel, reason = reason))
+        }
+        if (activeAttachmentSampled) {
+            add(GPUResourceDiagnostic.activeAttachmentSampled(resourceLabel = textureLabel))
+        }
+    }
+
+private fun GPUTextureSamplerMaterializationRequest.textureOperandLabel(): String =
+    "texture:${ownership.ownerLabel}"
+
+private fun GPUTextureSamplerMaterializationRequest.textureViewOperandLabel(): String =
+    "texture-view:${binding.bindingLabel}"
+
+private fun GPUTextureSamplerMaterializationRequest.samplerOperandLabel(): String =
+    "sampler:${binding.bindingLabel}"
+
+private fun GPUTextureSamplerMaterializationRequest.textureEvidenceFacts(): Map<String, String> =
+    buildMap {
+        put("allocation", allocation.planKindLabel())
+        if (allocation is GPUTextureAllocationPlan.UploadFromArtifact) {
+            put("artifact", allocation.artifactKey)
+            put("provenance", "UploadedTextureArtifact")
+            put("uploadBeforeSample", "true")
+        } else {
+            put("provenance", allocation.planKindLabel())
+            put("uploadBeforeSample", "false")
+        }
+        put("binding", binding.bindingLabel)
+        put("bindingLayout", bindingLayoutHash)
+        put("cpuRenderedCompatTexture", "false")
+        put("format", textureDescriptor.format)
+        put("lifetime", ownership.lifetimeClass)
+        put("owner", ownership.ownerLabel)
+        put("release", ownership.releasePolicy)
+        put("resourceGeneration", actualResourceGeneration.toString())
+        put("sampleCount", textureDescriptor.sampleCount.toString())
+        put("size", "${textureDescriptor.width}x${textureDescriptor.height}")
+        put("uploadBytes", uploadBytes.toString())
+    }
+
+private fun GPUTextureSamplerMaterializationRequest.textureViewEvidenceFacts(
+    textureOperandLabel: String,
+): Map<String, String> =
+    mapOf(
+        "arrayLayerRange" to viewDescriptor.arrayLayerRange.toString(),
+        "binding" to binding.bindingLabel,
+        "bindingLayout" to bindingLayoutHash,
+        "mipRange" to viewDescriptor.mipRange.toString(),
+        "sampleType" to textureDescriptor.format,
+        "texture" to textureOperandLabel,
+        "viewDimension" to viewDescriptor.viewDimension,
+    )
+
+private fun GPUTextureSamplerMaterializationRequest.samplerEvidenceFacts(): Map<String, String> =
+    mapOf(
+        "address" to "${samplerDescriptor.addressModeU}/${samplerDescriptor.addressModeV}",
+        "anisotropy" to samplerDescriptor.maxAnisotropy.toString(),
+        "binding" to binding.bindingLabel,
+        "bindingLayout" to bindingLayoutHash,
+        "compare" to samplerDescriptor.compareMode,
+        "filter" to "${samplerDescriptor.magFilter}/${samplerDescriptor.minFilter}",
+        "lod" to "${samplerDescriptor.lodMinClamp}..${samplerDescriptor.lodMaxClamp}",
+        "mipmap" to samplerDescriptor.mipmapFilter,
+    )
+
+private fun GPUTextureDescriptor.materializationDescriptorHash(): String =
+    listOf(
+        "texture",
+        "${width}x$height",
+        format,
+        "samples=$sampleCount",
+        "usage=${usageLabels.sorted().joinToString("+")}",
+    ).joinToString(":")
+
+private fun GPUTextureViewDescriptor.materializationViewHash(): String =
+    listOf(
+        "texture-view",
+        textureDescriptorHash,
+        viewDimension,
+        mipRange.toString(),
+        arrayLayerRange.toString(),
+    ).joinToString(":")
+
+private fun GPUSamplerDescriptor.materializationSamplerHash(): String =
+    listOf(
+        "sampler",
+        addressModeU,
+        addressModeV,
+        magFilter,
+        minFilter,
+        mipmapFilter,
+        lodMinClamp,
+        lodMaxClamp,
+        compareMode,
+        maxAnisotropy.toString(),
+        capabilityRequirements.sorted().joinToString("+"),
+    ).joinToString(":")
+
+private fun GPUPayloadMaterializationRequest.payloadTelemetry(
+    result: GPUPayloadMaterializationTelemetryResult,
+): List<GPUPayloadMaterializationTelemetryEvent> =
+    listOf(
+        uniformTelemetry(result),
+        bindGroupTelemetry(result),
+    )
+
+private fun GPUPayloadMaterializationRequest.uniformTelemetry(
+    result: GPUPayloadMaterializationTelemetryResult,
+): GPUPayloadMaterializationTelemetryEvent =
+    GPUPayloadMaterializationTelemetryEvent(
+        lane = "uniform-upload",
+        result = result,
+        keyHash = uniformBlock.fingerprint.value,
+        subjectHash = uploadPlan.planHash,
+    )
+
+private fun GPUPayloadMaterializationRequest.bindGroupTelemetry(
+    result: GPUPayloadMaterializationTelemetryResult,
+): GPUPayloadMaterializationTelemetryEvent =
+    GPUPayloadMaterializationTelemetryEvent(
+        lane = "bind-group",
+        result = result,
+        keyHash = resourceBlock.fingerprint.value,
+        subjectHash = reflectedBindingLayoutHash,
+    )
+
+private fun GPUCommandOperandMaterializationPlan.validationDiagnostics(
+    expectedDeviceGeneration: Long,
+): List<GPUResourceDiagnostic> =
+    buildList {
+        if (deviceGeneration != expectedDeviceGeneration) {
+            add(
+                GPUResourceDiagnostic.deviceGenerationStale(
+                    resourceLabel = label,
+                    expectedDeviceGeneration = expectedDeviceGeneration,
+                    actualDeviceGeneration = deviceGeneration,
+                ),
+            )
+        }
+        val missingUsage = dumpRequiredUsageLabelsSnapshot - dumpAvailableUsageLabelsSnapshot
+        if (missingUsage.isNotEmpty()) {
+            add(
+                GPUResourceDiagnostic.commandOperandUsageMissing(
+                    resourceLabel = label,
+                    missingUsageLabels = missingUsage,
+                    availableUsageLabels = dumpAvailableUsageLabelsSnapshot,
+                ),
+            )
+        }
+        evictedReason?.let { reason ->
+            add(GPUResourceDiagnostic.resourceEvicted(resourceLabel = label, reason = reason))
+        }
+    }
+
+private fun GPUCommandOperandMaterializationPlan.toMaterializedReference(): GPUMaterializedCommandOperandReference =
+    GPUMaterializedCommandOperandReference(
+        label = label,
+        kind = kind,
+        descriptorHash = descriptorHash,
+        deviceGeneration = deviceGeneration,
+        ownerScope = ownerScope,
+        usageLabels = dumpRequiredUsageLabelsSnapshot.sorted(),
+        invalidationPolicy = invalidationPolicy,
+        evidenceFacts = dumpEvidenceFactsSnapshot,
+    )
+
+private fun List<GPUPayloadMaterializationTelemetryEvent>.dumpPayloadTelemetryLines(): List<String> =
+    map { event ->
+        "payload.materialization.telemetry " +
+            "lane=${event.lane} " +
+            "result=${event.result.dumpToken} " +
+            "key=${event.keyHash} " +
+            "subject=${event.subjectHash} " +
+            "productRouteActivated=${event.productRouteActivated}"
+    }
+
 private fun List<String>.dumpList(): String =
+    if (isEmpty()) "none" else sorted().joinToString(",")
+
+private fun List<Long>.dumpLongList(): String =
     if (isEmpty()) "none" else sorted().joinToString(",")
 
 private fun List<GPUResourceDiagnostic>.dumpCodes(): String =
@@ -1219,6 +2918,24 @@ private fun GPUMaterializedResourceRole.dumpLabel(): String =
         GPUMaterializedResourceRole.LayerTargetTexture -> "layer-target-texture"
         GPUMaterializedResourceRole.StencilAttachment -> "stencil-attachment"
         GPUMaterializedResourceRole.PassResource -> "pass-resource"
+    }
+
+private fun GPUMaterializedCommandOperandKind.dumpLabel(): String =
+    when (this) {
+        GPUMaterializedCommandOperandKind.RenderPipeline -> "render-pipeline"
+        GPUMaterializedCommandOperandKind.ComputePipeline -> "compute-pipeline"
+        GPUMaterializedCommandOperandKind.UniformBuffer -> "uniform-buffer"
+        GPUMaterializedCommandOperandKind.StorageBuffer -> "storage-buffer"
+        GPUMaterializedCommandOperandKind.VertexBuffer -> "vertex-buffer"
+        GPUMaterializedCommandOperandKind.IndexBuffer -> "index-buffer"
+        GPUMaterializedCommandOperandKind.BindGroup -> "bind-group"
+        GPUMaterializedCommandOperandKind.Texture -> "texture"
+        GPUMaterializedCommandOperandKind.TextureView -> "texture-view"
+        GPUMaterializedCommandOperandKind.Sampler -> "sampler"
+        GPUMaterializedCommandOperandKind.RenderTarget -> "render-target"
+        GPUMaterializedCommandOperandKind.DepthStencilAttachment -> "depth-stencil-attachment"
+        GPUMaterializedCommandOperandKind.DestinationCopyTexture -> "destination-copy-texture"
+        GPUMaterializedCommandOperandKind.ReadbackResource -> "readback-resource"
     }
 
 private fun List<String>.dumpPreimageList(): String =

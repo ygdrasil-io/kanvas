@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "dumpId": "gsub-trace",
-  "ownerTickets": ["KFONT-M6-002"],
+  "ownerTickets": ["KFONT-M6-002", "KFONT-M6-003"],
   "fixtureFamilyId": "latin-gsub-gpos-fixtures",
   "cases": [
     {
@@ -75,6 +75,177 @@
         {"textRange": "0..1", "glyphRange": "0..0"}
       ],
       "diagnostics": []
+    },
+    {
+      "caseId": "context-format1-match",
+      "fixtureFont": "reports/font/fixtures/fonts/shaping/gsub-context-format1.otf",
+      "inputText": "ab",
+      "typefaceId": "550e8400-e29b-41d4-a716-446655440614",
+      "featureOrder": ["calt"],
+      "inputGlyphIds": [552, 553],
+      "outputGlyphIds": [555, 553],
+      "lookups": [
+        {
+          "lookupIndex": 1,
+          "lookupType": 5,
+          "featureTag": "calt",
+          "contextFormat": 1,
+          "cursor": 0,
+          "coverageMatch": true,
+          "ruleMatched": true,
+          "inputGlyphIds": [552, 553],
+          "outputGlyphIds": [555, 553],
+          "nestedLookupRecords": [[0, 0]],
+          "clusterAction": "preserved"
+        }
+      ],
+      "clusters": [
+        {"textRange": "0..0", "glyphRange": "0..0"},
+        {"textRange": "1..1", "glyphRange": "1..1"}
+      ],
+      "diagnostics": []
+    },
+    {
+      "caseId": "context-format1-no-match",
+      "fixtureFont": "reports/font/fixtures/fonts/shaping/gsub-context-format1.otf",
+      "inputText": "ac",
+      "typefaceId": "550e8400-e29b-41d4-a716-446655440614",
+      "featureOrder": ["calt"],
+      "inputGlyphIds": [552, 554],
+      "outputGlyphIds": [552, 554],
+      "lookups": [
+        {
+          "lookupIndex": 1,
+          "lookupType": 5,
+          "featureTag": "calt",
+          "contextFormat": 1,
+          "cursor": 0,
+          "coverageMatch": true,
+          "ruleMatched": false,
+          "inputGlyphIds": [552, 554],
+          "outputGlyphIds": [552, 554],
+          "nestedLookupRecords": [],
+          "clusterAction": "preserved"
+        }
+      ],
+      "clusters": [
+        {"textRange": "0..0", "glyphRange": "0..0"},
+        {"textRange": "1..1", "glyphRange": "1..1"}
+      ],
+      "diagnostics": []
+    },
+    {
+      "caseId": "context-format2-class",
+      "fixtureFont": "reports/font/fixtures/fonts/shaping/gsub-context-format2-class.otf",
+      "inputText": "abc",
+      "typefaceId": "550e8400-e29b-41d4-a716-446655440615",
+      "featureOrder": ["calt"],
+      "inputGlyphIds": [552, 553, 554],
+      "outputGlyphIds": [556, 553, 554],
+      "lookups": [
+        {
+          "lookupIndex": 1,
+          "lookupType": 5,
+          "featureTag": "calt",
+          "contextFormat": 2,
+          "cursor": 0,
+          "coverageMatch": true,
+          "ruleMatched": true,
+          "inputGlyphIds": [552, 553, 554],
+          "inputClassIds": [1, 2, 3],
+          "outputGlyphIds": [556, 553, 554],
+          "nestedLookupRecords": [[0, 0]],
+          "clusterAction": "preserved"
+        }
+      ],
+      "clusters": [
+        {"textRange": "0..0", "glyphRange": "0..0"},
+        {"textRange": "1..1", "glyphRange": "1..1"},
+        {"textRange": "2..2", "glyphRange": "2..2"}
+      ],
+      "diagnostics": []
+    },
+    {
+      "caseId": "context-format3-coverage",
+      "fixtureFont": "reports/font/fixtures/fonts/shaping/gsub-context-format3-coverage.otf",
+      "inputText": "abd",
+      "typefaceId": "550e8400-e29b-41d4-a716-446655440616",
+      "featureOrder": ["calt"],
+      "inputGlyphIds": [552, 553, 555],
+      "outputGlyphIds": [557, 553, 555],
+      "coverageGlyphSets": [[552], [553, 554], [555]],
+      "lookups": [
+        {
+          "lookupIndex": 1,
+          "lookupType": 5,
+          "featureTag": "calt",
+          "contextFormat": 3,
+          "cursor": 0,
+          "coverageMatch": true,
+          "ruleMatched": true,
+          "inputGlyphIds": [552, 553, 555],
+          "outputGlyphIds": [557, 553, 555],
+          "nestedLookupRecords": [[0, 0]],
+          "clusterAction": "preserved"
+        }
+      ],
+      "clusters": [
+        {"textRange": "0..0", "glyphRange": "0..0"},
+        {"textRange": "1..1", "glyphRange": "1..1"},
+        {"textRange": "2..2", "glyphRange": "2..2"}
+      ],
+      "diagnostics": []
+    },
+    {
+      "caseId": "context-nested-cycle",
+      "fixtureFont": "reports/font/fixtures/fonts/shaping/gsub-context-nested-cycle.otf",
+      "inputText": "ab",
+      "typefaceId": "550e8400-e29b-41d4-a716-446655440617",
+      "featureOrder": ["calt"],
+      "inputGlyphIds": [552, 553],
+      "outputGlyphIds": [552, 553],
+      "lookups": [
+        {
+          "lookupIndex": 1,
+          "lookupType": 5,
+          "featureTag": "calt",
+          "contextFormat": 1,
+          "cursor": 0,
+          "coverageMatch": true,
+          "ruleMatched": true,
+          "inputGlyphIds": [552, 553],
+          "outputGlyphIds": [552, 553],
+          "nestedLookupRecords": [[0, 1]],
+          "clusterAction": "preserved"
+        }
+      ],
+      "clusters": [
+        {"textRange": "0..0", "glyphRange": "0..0"},
+        {"textRange": "1..1", "glyphRange": "1..1"}
+      ],
+      "diagnostics": [
+        {
+          "code": "text.shaping.lookup-cycle-detected",
+          "message": "GSUB contextual nested lookup cycle detected."
+        }
+      ]
+    },
+    {
+      "caseId": "context-malformed-classdef",
+      "fixtureFont": "reports/font/fixtures/fonts/shaping/gsub-context-malformed-classdef.otf",
+      "inputText": "abc",
+      "typefaceId": "550e8400-e29b-41d4-a716-446655440618",
+      "featureOrder": ["calt"],
+      "inputGlyphIds": [],
+      "outputGlyphIds": [],
+      "lookups": [],
+      "clusters": [],
+      "diagnostics": [
+        {
+          "code": "font.sfnt.optional-table-malformed",
+          "message": "Unable to parse OpenType GSUB LookupType 5 ClassDef table."
+        }
+      ]
     },
     {
       "caseId": "coverage-malformed",

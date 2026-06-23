@@ -1,7 +1,7 @@
 ---
 id: KGPU-M10-002
 title: "Add per-family shadow parity migration gates"
-status: blocked
+status: done
 milestone: M10
 priority: P0
 owner_area: migration-validation
@@ -56,9 +56,9 @@ data class ShadowParityGate(val family: String, val evidenceRefs: List<String>)
 
 ## Acceptance Criteria
 
-- [ ] Each family has its own parity evidence requirements.
-- [ ] Missing parity keeps legacy default active.
-- [ ] Rollback is named.
+- [x] Each family has its own parity evidence requirements.
+- [x] Missing parity keeps legacy default active.
+- [x] Rollback is named.
 
 ## Required Evidence
 
@@ -77,17 +77,29 @@ Families without accepted parity stay legacy-default or refused by policy.
 ## Validation
 
 ```bash
+rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.GpuRendererShadowParityMigrationGateTest
 rtk ./gradlew --no-daemon :gpu-raster:test --tests '*GpuRendererShadow*'
+rtk ./gradlew --no-daemon :gpu-renderer:check
 rtk git diff --check
 ```
 
 ## Status Notes
 
-- `blocked`: Per-family shadow parity gates require accepted M10-001 inventory
-  plus adapter-backed shadow route tests, before/after dumps, PM rows, rollback
-  labels, and family-specific evidence. Current evidence covers only selected
-  first-route shadow/rollback lanes and cannot be generalized to all legacy
-  families without new adapter-backed runs.
+- `done`: Added `GpuRendererShadowParityMigrationGate`, a per-family
+  `PolicyGated` shadow parity contract for the M10 inventory families. The
+  gate accepts only route-family-scoped evidence with adapter-backed flag,
+  before/after dump hashes, PM row, rollback label, and replacement ticket, and
+  refuses missing, duplicate, unsafe, or broad evidence with stable diagnostics.
+- Missing or refused family evidence keeps `legacyDefaultActive=true`,
+  `defaultRouteChanged=false`, `productRouteActivated=false`,
+  `releaseBlocking=false`, and `readinessDelta=0.0`.
+- This ticket does not switch defaults or retire any legacy path. Concrete
+  family migration still requires supplying accepted route-specific evidence to
+  the gate and then passing KGPU-M10-003 retirement requirements.
+- Independent review `019ed714-fd15-72e2-a8f8-b1b0f9fbe2f5` found one P1
+  and two P2 issues around broad/shared evidence, explicit family coverage, and
+  review linkage. Follow-up fixes added shared-evidence refusal, explicit
+  family registry coverage, and this linked review note.
 
 ## Linear Labels
 

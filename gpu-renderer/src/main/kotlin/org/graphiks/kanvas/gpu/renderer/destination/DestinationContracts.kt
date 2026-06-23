@@ -1,9 +1,23 @@
 package org.graphiks.kanvas.gpu.renderer.destination
 
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketStream
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
+import org.graphiks.kanvas.gpu.renderer.passes.dumpLines
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandBinding
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceReference
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceDiagnostic
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationPreimagePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
+import org.graphiks.kanvas.gpu.renderer.resources.dumpLines
 
 /** Destination read token. */
 @JvmInline
@@ -344,6 +358,172 @@ fun GPUDestinationReadStrategyGatePlan.toDestinationReadMaterializationPreimage(
     )
 }
 
+/** Provider input for live destination-read copy/intermediate materialization. */
+data class GPUDestinationReadMaterializationRequest(
+    val targetId: String,
+    val taskIds: List<String> = emptyList(),
+    val resourcePlanLabels: List<String> = emptyList(),
+    val gatePlan: GPUDestinationReadStrategyGatePlan,
+    val packetStream: GPUDrawPacketStream,
+    val targetStateHash: String,
+    val loadStoreLabel: String,
+    val deviceGeneration: Long,
+    val expectedTargetGeneration: Long,
+    val actualTargetGeneration: Long,
+    val actualIntermediateGeneration: Long,
+    val availableSourceUsageLabels: Set<String>,
+    val availableReadUsageLabels: Set<String>,
+    val copyCapabilityAvailable: Boolean,
+    val copyBudgetBytes: Long,
+    val activeAttachmentSampled: Boolean = false,
+    val intermediateBoundsLabel: String = gatePlan.plan.bounds.copyBoundsLabel,
+    val intermediateFormatClass: String,
+    val intermediateSampleCount: Int,
+) {
+    internal val dumpTaskIdsSnapshot: List<String> = taskIds.toList()
+    internal val dumpResourcePlanLabelsSnapshot: List<String> = resourcePlanLabels.toList()
+    internal val dumpAvailableSourceUsageLabelsSnapshot: Set<String> = availableSourceUsageLabels.toSet()
+    internal val dumpAvailableReadUsageLabelsSnapshot: Set<String> = availableReadUsageLabels.toSet()
+
+    init {
+        require(targetId.isNotBlank()) { "GPUDestinationReadMaterializationRequest.targetId must not be blank" }
+        require(targetStateHash.isNotBlank()) {
+            "GPUDestinationReadMaterializationRequest.targetStateHash must not be blank"
+        }
+        require(loadStoreLabel.isNotBlank()) {
+            "GPUDestinationReadMaterializationRequest.loadStoreLabel must not be blank"
+        }
+        require(deviceGeneration >= 0L) {
+            "GPUDestinationReadMaterializationRequest.deviceGeneration must be non-negative"
+        }
+        require(expectedTargetGeneration >= 0L) {
+            "GPUDestinationReadMaterializationRequest.expectedTargetGeneration must be non-negative"
+        }
+        require(actualTargetGeneration >= 0L) {
+            "GPUDestinationReadMaterializationRequest.actualTargetGeneration must be non-negative"
+        }
+        require(actualIntermediateGeneration >= 0L) {
+            "GPUDestinationReadMaterializationRequest.actualIntermediateGeneration must be non-negative"
+        }
+        require(copyBudgetBytes >= 0L) {
+            "GPUDestinationReadMaterializationRequest.copyBudgetBytes must be non-negative"
+        }
+        require(intermediateBoundsLabel.isNotBlank()) {
+            "GPUDestinationReadMaterializationRequest.intermediateBoundsLabel must not be blank"
+        }
+        require(intermediateFormatClass.isNotBlank()) {
+            "GPUDestinationReadMaterializationRequest.intermediateFormatClass must not be blank"
+        }
+        require(intermediateSampleCount > 0) {
+            "GPUDestinationReadMaterializationRequest.intermediateSampleCount must be positive"
+        }
+        require(taskIds.none { taskId -> taskId.isBlank() }) {
+            "GPUDestinationReadMaterializationRequest.taskIds must not contain blank labels"
+        }
+        require(resourcePlanLabels.none { label -> label.isBlank() }) {
+            "GPUDestinationReadMaterializationRequest.resourcePlanLabels must not contain blank labels"
+        }
+        require(availableSourceUsageLabels.none { label -> label.isBlank() }) {
+            "GPUDestinationReadMaterializationRequest.availableSourceUsageLabels must not contain blank labels"
+        }
+        require(availableReadUsageLabels.none { label -> label.isBlank() }) {
+            "GPUDestinationReadMaterializationRequest.availableReadUsageLabels must not contain blank labels"
+        }
+    }
+}
+
+/** Live destination-read materialization output used by resources and pass command evidence. */
+data class GPUDestinationReadMaterializationResult(
+    val resourceDecision: GPUResourceMaterializationDecision,
+    val commandStream: GPUPassCommandStream,
+    val strategy: GPUDestinationReadStrategy,
+    val action: GPUDestinationReadAction,
+    val resourceLabel: String,
+    val bindingLabel: String,
+    val copyBeforeSample: Boolean,
+    val passSplit: Boolean,
+    val adapterBacked: Boolean = false,
+    val productActivation: Boolean = false,
+) {
+    init {
+        require(!adapterBacked) { "GPUDestinationReadMaterializationResult.adapterBacked must stay false" }
+        require(!productActivation) { "GPUDestinationReadMaterializationResult.productActivation must stay false" }
+    }
+
+    /** Emits deterministic evidence for live destination-read materialization without support promotion. */
+    fun dumpLines(): List<String> {
+        val head = if (resourceDecision is GPUResourceMaterializationDecision.Refused) {
+            "destination-read:materialization.refused row=$DESTINATION_READ_MATERIALIZATION_ROW " +
+                "strategy=${strategy.dumpLabel()} action=$action resource=$resourceLabel " +
+                "binding=$bindingLabel code=${resourceDecision.diagnostic.code} " +
+                "adapterBacked=$adapterBacked productActivation=$productActivation"
+        } else {
+            "destination-read:materialization row=$DESTINATION_READ_MATERIALIZATION_ROW " +
+                "strategy=${strategy.dumpLabel()} action=$action resource=$resourceLabel " +
+                "binding=$bindingLabel copyBeforeSample=$copyBeforeSample passSplit=$passSplit " +
+                "adapterBacked=$adapterBacked productActivation=$productActivation"
+        }
+        return listOf(head, DESTINATION_READ_MATERIALIZATION_NONCLAIM_LINE) +
+            resourceDecision.dumpLines() +
+            commandStream.dumpLines()
+    }
+}
+
+/** Validates and materializes accepted destination-copy or existing-intermediate strategy evidence. */
+class ValidatingDestinationReadMaterializer {
+    /** Materializes destination-read resources and command-stream ordering evidence, or refuses stably. */
+    fun materialize(
+        request: GPUDestinationReadMaterializationRequest,
+        context: GPUTargetPreparationContext,
+    ): GPUDestinationReadMaterializationResult {
+        val diagnostics = request.materializationDiagnostics(context)
+        val resourceLabel = request.resourceLabel()
+        val binding = request.gatePlan.plan.binding
+        val bindingLabel = binding?.bindingLabel ?: "none"
+        val baseCommandStream = request.baseCommandStream()
+
+        if (diagnostics.isNotEmpty()) {
+            val decision = GPUResourceMaterializationDecision.Refused(
+                diagnostic = diagnostics.first(),
+                targetId = context.targetId,
+                taskIds = request.dumpTaskIdsSnapshot,
+                resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+                diagnostics = diagnostics,
+            )
+            return GPUDestinationReadMaterializationResult(
+                resourceDecision = decision,
+                commandStream = baseCommandStream,
+                strategy = request.gatePlan.plan.strategy,
+                action = request.gatePlan.action,
+                resourceLabel = resourceLabel,
+                bindingLabel = bindingLabel,
+                copyBeforeSample = false,
+                passSplit = false,
+            )
+        }
+
+        val materializedBridge = request.destinationReadOperandBridge()
+        val decision = GPUResourceMaterializationDecision.Materialized(
+            resources = listOf(GPUTextureResourceRef("texture-ref:$resourceLabel")),
+            targetId = context.targetId,
+            taskIds = request.dumpTaskIdsSnapshot,
+            resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+            operandBridge = materializedBridge,
+        )
+        val commandStream = request.commandStream(materializedBridge)
+        return GPUDestinationReadMaterializationResult(
+            resourceDecision = decision,
+            commandStream = commandStream,
+            strategy = request.gatePlan.plan.strategy,
+            action = request.gatePlan.action,
+            resourceLabel = resourceLabel,
+            bindingLabel = requireNotNull(binding).bindingLabel,
+            copyBeforeSample = request.gatePlan.copyPlan?.copyBeforeSample == true,
+            passSplit = request.gatePlan.copyPlan?.passSplitRequired == true,
+        )
+    }
+}
+
 /** Planner for contract-only destination-read strategy evidence. */
 class GPUDestinationReadStrategyPlanner {
     /** Plans a destination-read copy/intermediate strategy or a stable refusal. */
@@ -448,11 +628,15 @@ data class GPUDestinationReadDiagnostic(
 
 private const val DEFAULT_DESTINATION_COPY_MAX_BYTES = 16L * 1024L * 1024L
 private const val DESTINATION_READ_EVIDENCE_ROW = "gpu-renderer.destination-read.strategy"
+private const val DESTINATION_READ_MATERIALIZATION_ROW = "gpu-renderer.destination-read.live-materialization"
 private const val DESTINATION_READ_BYTES_PER_PIXEL = 4L
 private const val DESTINATION_READ_ACCEPTED_CODE = "accepted.destination_read.strategy"
 private const val DESTINATION_READ_STRATEGY_UNACCEPTED = "unsupported.destination_read.strategy_unaccepted"
 private const val DESTINATION_READ_STRATEGY_ACTION_MISMATCH =
     "unsupported.destination_read.strategy_action_mismatch"
+private const val DESTINATION_READ_MATERIALIZATION_NONCLAIM_LINE =
+    "destination-read:materialization.nonclaim adapterBacked=false productActivation=false " +
+        "framebufferFetch=false inputAttachment=false cpuReadbackFallback=false"
 private const val DESTINATION_READ_NONCLAIM_LINE =
     "destination-read:nonclaim nativeDestinationRead=false adapterBacked=false framebufferFetch=false " +
         "inputAttachment=false cpuReadbackFallback=false productActivation=false"
@@ -486,6 +670,284 @@ private fun GPUDestinationReadStrategyRequest.refusalCode(copyBytes: Long): Stri
         copyBytes > maxCopyBytes -> "unsupported.destination_read.copy_budget_exceeded"
         else -> null
     }
+
+private fun GPUDestinationReadMaterializationRequest.materializationDiagnostics(
+    context: GPUTargetPreparationContext,
+): List<GPUResourceDiagnostic> =
+    buildList {
+        val terminalGateDiagnostic = gatePlan.diagnostics.firstOrNull { diagnostic -> diagnostic.terminal }
+        if (terminalGateDiagnostic != null) {
+            add(destinationReadResourceDiagnostic(terminalGateDiagnostic.code, resourceLabel()))
+            return@buildList
+        }
+        if (targetId != context.targetId) {
+            add(
+                GPUResourceDiagnostic.commandOperandTargetMismatch(
+                    resourceLabel = resourcePlanLabel(),
+                    requestTargetId = targetId,
+                    contextTargetId = context.targetId,
+                ),
+            )
+        }
+        if (deviceGeneration != context.deviceGeneration) {
+            add(
+                GPUResourceDiagnostic.deviceGenerationStale(
+                    resourceLabel = resourceLabel(),
+                    expectedDeviceGeneration = context.deviceGeneration,
+                    actualDeviceGeneration = deviceGeneration,
+                ),
+            )
+        }
+        if (packetStream.packetIds.isEmpty()) {
+            add(destinationReadResourceDiagnostic("unsupported.destination_read.packet_stream_empty", resourceLabel()))
+        }
+        if (!gatePlan.plan.strategy.isAcceptedByStrategyGate()) {
+            add(destinationReadResourceDiagnostic(DESTINATION_READ_STRATEGY_UNACCEPTED, resourceLabel()))
+        }
+        if (!gatePlan.plan.strategy.acceptsAction(gatePlan.action)) {
+            add(destinationReadResourceDiagnostic(DESTINATION_READ_STRATEGY_ACTION_MISMATCH, resourceLabel()))
+        }
+        val plannedTargetGeneration = plannedTargetGenerationForMaterialization()
+        if (plannedTargetGeneration != null && plannedTargetGeneration != expectedTargetGeneration) {
+            add(destinationReadResourceDiagnostic("unsupported.destination_read.target_generation_stale", resourceLabel()))
+        }
+        if (activeAttachmentSampled) {
+            add(destinationReadResourceDiagnostic("unsupported.destination_read.active_attachment_sampled", resourceLabel()))
+        }
+        if (actualTargetGeneration != expectedTargetGeneration) {
+            add(destinationReadResourceDiagnostic("unsupported.destination_read.target_generation_stale", resourceLabel()))
+        }
+
+        when (gatePlan.plan.strategy) {
+            GPUDestinationReadStrategy.CopyTarget -> addAll(copyTargetDiagnostics())
+            GPUDestinationReadStrategy.BindIntermediate -> addAll(existingIntermediateDiagnostics())
+            else -> Unit
+        }
+    }
+
+private fun GPUDestinationReadMaterializationRequest.copyTargetDiagnostics(): List<GPUResourceDiagnostic> =
+    buildList {
+        val descriptor = gatePlan.copyDescriptor
+        if (!copyCapabilityAvailable) {
+            add(destinationReadResourceDiagnostic("unsupported.destination_read.copy_unavailable", resourceLabel()))
+        }
+        if ("copy_src" !in dumpAvailableSourceUsageLabelsSnapshot) {
+            add(destinationReadResourceDiagnostic("unsupported.destination_read.copy_usage_missing", resourceLabel()))
+        }
+        if ("copy_dst" !in dumpAvailableReadUsageLabelsSnapshot) {
+            add(destinationReadResourceDiagnostic("unsupported.destination_read.copy_usage_missing", resourceLabel()))
+        }
+        if ("texture_binding" !in dumpAvailableReadUsageLabelsSnapshot) {
+            add(destinationReadResourceDiagnostic("unsupported.destination_read.texture_binding_missing", resourceLabel()))
+        }
+        if (descriptor != null && descriptor.byteEstimate > copyBudgetBytes) {
+            add(destinationReadResourceDiagnostic("unsupported.destination_read.copy_budget_exceeded", resourceLabel()))
+        }
+    }
+
+private fun GPUDestinationReadMaterializationRequest.existingIntermediateDiagnostics(): List<GPUResourceDiagnostic> =
+    buildList {
+        if (actualIntermediateGeneration != expectedTargetGeneration) {
+            add(destinationReadResourceDiagnostic("unsupported.destination_read.generation_stale", resourceLabel()))
+        }
+        if (intermediateBoundsLabel != gatePlan.plan.bounds.copyBoundsLabel) {
+            add(destinationReadResourceDiagnostic("unsupported.destination_read.intermediate_unvalidated", resourceLabel()))
+        }
+        if (intermediateFormatClass != gatePlan.plan.sourceFactValue("targetFormat")) {
+            add(destinationReadResourceDiagnostic("unsupported.destination_read.intermediate_unvalidated", resourceLabel()))
+        }
+        if (intermediateSampleCount != 1) {
+            add(destinationReadResourceDiagnostic("unsupported.destination_read.intermediate_unvalidated", resourceLabel()))
+        }
+        if ("texture_binding" !in dumpAvailableReadUsageLabelsSnapshot) {
+            add(destinationReadResourceDiagnostic("unsupported.destination_read.texture_binding_missing", resourceLabel()))
+        }
+    }
+
+private fun GPUDestinationReadMaterializationRequest.destinationReadOperandBridge():
+    List<GPUMaterializedCommandOperandBinding> {
+    val binding = requireNotNull(gatePlan.plan.binding)
+    val packetId = packetStream.packetIds.first().value
+    val viewOperand = GPUMaterializedCommandOperandReference(
+        label = "texture-view:${binding.bindingLabel}",
+        kind = GPUMaterializedCommandOperandKind.TextureView,
+        descriptorHash = binding.textureViewHash,
+        deviceGeneration = deviceGeneration,
+        ownerScope = resourceLabel(),
+        usageLabels = listOf("texture_binding"),
+        invalidationPolicy = "pass-end",
+        evidenceFacts = mapOf(
+            "binding" to binding.bindingLabel,
+            "bindingLayout" to binding.layoutHash,
+            "bounds" to gatePlan.plan.bounds.copyBoundsLabel,
+            "resourceGeneration" to actualResourceGenerationForStrategy().toString(),
+            "strategy" to gatePlan.plan.strategy.dumpLabel(),
+        ),
+    )
+    val samplerOperand = GPUMaterializedCommandOperandReference(
+        label = "sampler:${binding.bindingLabel}",
+        kind = GPUMaterializedCommandOperandKind.Sampler,
+        descriptorHash = binding.samplerHash,
+        deviceGeneration = deviceGeneration,
+        ownerScope = "sampler-cache",
+        usageLabels = listOf("sampler"),
+        invalidationPolicy = "descriptor-cache",
+        evidenceFacts = mapOf(
+            "address" to "clamp-to-edge/clamp-to-edge",
+            "binding" to binding.bindingLabel,
+            "bindingLayout" to binding.layoutHash,
+            "filter" to "nearest/nearest",
+            "strategy" to gatePlan.plan.strategy.dumpLabel(),
+        ),
+    )
+    val sampledBindings = listOf(
+        GPUMaterializedCommandOperandBinding(
+            packetId = packetId,
+            commandLabel = "setBindGroup",
+            operand = viewOperand,
+        ),
+        GPUMaterializedCommandOperandBinding(
+            packetId = packetId,
+            commandLabel = "setBindGroup",
+            operand = samplerOperand,
+        ),
+    )
+    if (gatePlan.plan.strategy != GPUDestinationReadStrategy.CopyTarget) {
+        return sampledBindings
+    }
+
+    val descriptor = requireNotNull(gatePlan.copyDescriptor)
+    val copyOperand = GPUMaterializedCommandOperandReference(
+        label = descriptor.label,
+        kind = GPUMaterializedCommandOperandKind.DestinationCopyTexture,
+        descriptorHash = descriptor.descriptorHash,
+        deviceGeneration = deviceGeneration,
+        ownerScope = "destination-read:pass-local",
+        usageLabels = descriptor.usageLabels,
+        invalidationPolicy = "pass-end",
+        evidenceFacts = mapOf(
+            "action" to gatePlan.action.name,
+            "bounds" to gatePlan.plan.bounds.copyBoundsLabel,
+            "copyBeforeSample" to "true",
+            "copyBytes" to descriptor.byteEstimate.toString(),
+            "source" to gatePlan.plan.sourceFactValue("source"),
+            "strategy" to gatePlan.plan.strategy.dumpLabel(),
+            "targetGeneration" to descriptor.targetGeneration.toString(),
+        ),
+    )
+    return listOf(
+        GPUMaterializedCommandOperandBinding(
+            packetId = null,
+            commandLabel = "copyTexture",
+            operand = copyOperand,
+        ),
+    ) + sampledBindings
+}
+
+private fun GPUDestinationReadMaterializationRequest.commandStream(
+    materializedBridge: List<GPUMaterializedCommandOperandBinding>,
+): GPUPassCommandStream =
+    GPUPassCommandStream(
+        streamId = "destination-read-command-stream:${gatePlan.plan.bounds.commandLabel().toStableLabel()}",
+        packetStreamId = packetStream.streamId,
+        passId = packetStream.passId,
+        commands = destinationReadCommands(),
+        diagnostics = packetStream.diagnostics,
+        operandBridge = materializedBridge.map(GPUPassCommandOperandBridge::fromMaterializedBinding),
+    )
+
+private fun GPUDestinationReadMaterializationRequest.baseCommandStream(): GPUPassCommandStream =
+    GPUPassCommandStream(
+        streamId = "destination-read-command-stream:${gatePlan.plan.bounds.commandLabel().toStableLabel()}",
+        packetStreamId = packetStream.streamId,
+        passId = packetStream.passId,
+        commands = drawCommands(),
+        diagnostics = packetStream.diagnostics,
+    )
+
+private fun GPUDestinationReadMaterializationRequest.destinationReadCommands(): List<GPUPassCommand> =
+    if (gatePlan.plan.strategy == GPUDestinationReadStrategy.CopyTarget) {
+        listOf(
+            GPUPassCommand.BeginRenderPass(targetStateHash = targetStateHash, loadStoreLabel = loadStoreLabel),
+            GPUPassCommand.EndRenderPass(passId = packetStream.passId),
+            GPUPassCommand.CopyTexture(
+                sourceLabel = gatePlan.plan.sourceFactValue("source"),
+                destinationLabel = requireNotNull(gatePlan.copyDescriptor).label,
+                boundsLabel = gatePlan.plan.bounds.copyBoundsLabel,
+                tokenLabel = requireNotNull(gatePlan.copyPlan).token.value,
+            ),
+        ) + drawCommands()
+    } else {
+        drawCommands()
+    }
+
+private fun GPUDestinationReadMaterializationRequest.drawCommands(): List<GPUPassCommand> =
+    buildList {
+        add(GPUPassCommand.BeginRenderPass(targetStateHash = targetStateHash, loadStoreLabel = loadStoreLabel))
+        packetStream.packets.forEach { packet -> addPacketDrawCommands(packet) }
+        add(GPUPassCommand.EndRenderPass(passId = packetStream.passId))
+    }
+
+private fun MutableList<GPUPassCommand>.addPacketDrawCommands(packet: GPUDrawPacket) {
+    val renderPipelineKey = requireNotNull(packet.renderPipelineKey) {
+        "Packet ${packet.packetId.value} cannot be lowered to render commands without renderPipelineKey"
+    }
+    add(GPUPassCommand.SetRenderPipeline(pipelineKey = renderPipelineKey, packetId = packet.packetId))
+    add(
+        GPUPassCommand.SetBindGroup(
+            bindingLayoutHash = packet.bindingLayoutHash,
+            uniformSlot = packet.uniformSlot,
+            resourceSlot = packet.resourceSlot,
+            packetId = packet.packetId,
+        ),
+    )
+    packet.scissorBoundsHash?.let { scissorBoundsHash ->
+        add(GPUPassCommand.SetScissor(scissorBoundsHash = scissorBoundsHash, packetId = packet.packetId))
+    }
+    add(GPUPassCommand.Draw(vertexSourceLabel = packet.vertexSourceLabel, packetId = packet.packetId))
+}
+
+private fun GPUDestinationReadMaterializationRequest.resourceLabel(): String =
+    when (gatePlan.plan.strategy) {
+        GPUDestinationReadStrategy.CopyTarget -> requireNotNull(gatePlan.copyDescriptor).label
+        GPUDestinationReadStrategy.BindIntermediate -> gatePlan.plan.sourceFactValue("intermediate")
+        else -> resourcePlanLabel()
+    }
+
+private fun GPUDestinationReadMaterializationRequest.actualResourceGenerationForStrategy(): Long =
+    when (gatePlan.plan.strategy) {
+        GPUDestinationReadStrategy.BindIntermediate -> actualIntermediateGeneration
+        else -> actualTargetGeneration
+    }
+
+private fun GPUDestinationReadMaterializationRequest.plannedTargetGenerationForMaterialization(): Long? =
+    when (gatePlan.plan.strategy) {
+        GPUDestinationReadStrategy.CopyTarget -> gatePlan.copyDescriptor?.targetGeneration
+        GPUDestinationReadStrategy.BindIntermediate -> gatePlan.plan.binding?.generation
+        else -> null
+    }
+
+private fun GPUDestinationReadMaterializationRequest.resourcePlanLabel(): String =
+    resourcePlanLabelsOrDefault().first()
+
+private fun GPUDestinationReadMaterializationRequest.resourcePlanLabelsOrDefault(): List<String> =
+    if (dumpResourcePlanLabelsSnapshot.isEmpty()) {
+        listOf("destination-read-materialization")
+    } else {
+        dumpResourcePlanLabelsSnapshot
+    }
+
+private fun destinationReadResourceDiagnostic(
+    code: String,
+    resourceLabel: String,
+): GPUResourceDiagnostic =
+    GPUResourceDiagnostic(
+        code = code,
+        resourceLabel = resourceLabel,
+        message = "Destination-read materialization for $resourceLabel refused: $code.",
+        terminal = true,
+        facts = mapOf("reason" to code),
+    )
 
 private fun GPUDestinationReadStrategyRequest.acceptedDiagnostic(): GPUDestinationReadDiagnostic =
     GPUDestinationReadDiagnostic(

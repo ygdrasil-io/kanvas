@@ -1,7 +1,7 @@
 ---
 id: KGPU-M11-005
 title: "Add destination-read copy and intermediate live materialization"
-status: proposed
+status: done
 milestone: M11
 priority: P1
 owner_area: destination-read
@@ -74,15 +74,15 @@ data class GPUDestinationReadMaterializationPlan(
 
 ## Acceptance Criteria
 
-- [ ] Bounded destination-copy plans create separate copy-destination and
+- [x] Bounded destination-copy plans create separate copy-destination and
       texture-binding resources before sampling.
-- [ ] Pass split and copy-before-sample ordering are visible in
+- [x] Pass split and copy-before-sample ordering are visible in
       `GPUPassCommandStream` dumps.
-- [ ] Existing-intermediate usage validates target generation, bounds, format,
+- [x] Existing-intermediate usage validates target generation, bounds, format,
       sample count, and texture-binding usage before binding.
-- [ ] Active attachment sampling, unbounded reads, missing copy capability,
+- [x] Active attachment sampling, unbounded reads, missing copy capability,
       budget overflow, and plan/action mismatches refuse stably.
-- [ ] Adapter-backed evidence includes copy/intermediate command traces and
+- [x] Adapter-backed evidence includes copy/intermediate command traces and
       readback or skipped-readback diagnostics without product activation.
 
 ## Required Evidence
@@ -91,7 +91,7 @@ data class GPUDestinationReadMaterializationPlan(
 - Pass split/copy-before-sample command stream dump.
 - Sampled binding dump for the copied or existing intermediate texture.
 - Refusal fixtures for active attachment sampling, missing usage, unbounded
-  reads, and budget overflow.
+  reads, stale gate generations, missing consumer packets, and budget overflow.
 
 ## Fallback / Refusal Behavior
 
@@ -109,13 +109,19 @@ must not sample the active attachment or use CPU readback for product rendering.
 ## Validation
 
 ```bash
+rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.destination.DestinationReadLiveMaterializationTest
 rtk git diff --check
 ```
 
 ## Status Notes
 
-- `proposed`: Planning-only continuation of KGPU-M5-002 from strategy gate to
-  live resource materialization.
+- `done` (2026-06-17): Added contract live materialization for accepted
+  destination-copy and existing-intermediate lanes. Evidence now includes
+  separate destination-copy texture operands, sampled texture-view/sampler
+  operands, pass split plus copy-before-sample command dumps, stale generation
+  and usage refusals, missing consumer-packet refusal, active-attachment
+  sampling refusal, and explicit skipped readback diagnostics. Product
+  activation remains false.
 
 ## Linear Labels
 

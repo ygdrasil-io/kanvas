@@ -1,7 +1,7 @@
 ---
 id: KGPU-M11-003
 title: "Add resource materialization handles and provider bridge"
-status: proposed
+status: done
 milestone: M11
 priority: P0
 owner_area: resources-execution
@@ -76,15 +76,15 @@ data class GPUMaterializedResourceSet(
 
 ## Acceptance Criteria
 
-- [ ] Provider materialization returns scoped references for every command-stream
+- [x] Provider materialization returns scoped references for every command-stream
       operand needed by the accepted route.
-- [ ] Materialized references carry device generation, owner scope, usage facts,
+- [x] Materialized references carry device generation, owner scope, usage facts,
       and invalidation policy in dumps.
-- [ ] Planning packages consume only logical refs or materialization records,
+- [x] Planning packages consume only logical refs or materialization records,
       never raw WGPU handles.
-- [ ] Late failures separate allocation, validation, encoding, submission, and
+- [x] Late failures separate allocation, validation, encoding, submission, and
       readback diagnostics.
-- [ ] Stale generation, missing usage, evicted resource, and active attachment
+- [x] Stale generation, missing usage, evicted resource, and active attachment
       sampling refuse before queue submission.
 
 ## Required Evidence
@@ -111,13 +111,19 @@ change route kind or CPU-render unsupported output.
 ## Validation
 
 ```bash
+rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.resources.GPUResourceProviderTest --tests org.graphiks.kanvas.gpu.renderer.execution.GPUExecutionContextTest --tests org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketCommandStreamTest
+rtk ./gradlew --no-daemon :gpu-renderer:check
 rtk git diff --check
 ```
 
 ## Status Notes
 
-- `proposed`: Planning-only bridge ticket for live resource handles and provider
-  materialization.
+- `done`: Added provider-owned materialized command operand refs and bridge
+  evidence, wired `GPUDrawPacketStream` lowering to provider materialization,
+  required bridged operands for first-route submit handoff, rejected handle-like
+  operand dump fields, and validated stale generation, missing usage, evicted
+  resource, active attachment sampling, and skipped-readback evidence. Evidence:
+  `reports/gpu-renderer/2026-06-17-m11-003-resource-provider-bridge.md`.
 
 ## Linear Labels
 

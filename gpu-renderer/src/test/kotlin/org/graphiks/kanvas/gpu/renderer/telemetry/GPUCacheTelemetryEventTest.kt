@@ -42,6 +42,53 @@ class GPUCacheTelemetryEventTest {
         assertEquals(1L, ledger.cacheTelemetry.single { it.cacheName == "pipeline" }.misses)
     }
 
+    /** Execution cache events record create, failure, stale-generation, eviction, and layout facts. */
+    @Test
+    fun `execution cache events record materialization outcomes and layout counters`() {
+        val ledger = listOf(
+            GPUCacheTelemetryEvent.module(
+                result = GPUCacheEventResult.Create,
+                keyHash = "module-preimage:solid",
+                subjectHash = "module:solid-v1",
+            ),
+            GPUCacheTelemetryEvent.pipeline(
+                result = GPUCacheEventResult.Failure,
+                keyHash = "pipeline:solid-rect",
+                subjectHash = "render-pipeline:solid-rect",
+            ),
+            GPUCacheTelemetryEvent.pipeline(
+                result = GPUCacheEventResult.StaleGeneration,
+                keyHash = "pipeline:solid-rect",
+                subjectHash = "render-pipeline:solid-rect",
+            ),
+            GPUCacheTelemetryEvent.pipeline(
+                result = GPUCacheEventResult.Evict,
+                keyHash = "pipeline:solid-rect",
+                subjectHash = "render-pipeline:solid-rect",
+            ),
+            GPUCacheTelemetryEvent.bindGroupLayout(
+                result = GPUCacheEventResult.Create,
+                keyHash = "layout:solid-rect",
+                subjectHash = "bgl:solid-rect-v1",
+            ),
+            GPUCacheTelemetryEvent.pipelineLayout(
+                result = GPUCacheEventResult.Create,
+                keyHash = "pipeline-layout:solid-rect",
+                subjectHash = "pipeline-layout:solid-rect-v1",
+            ),
+        ).fold(GPUTelemetryLedger.empty()) { current, event ->
+            current.recordCacheEvent(event)
+        }
+
+        assertEquals(1L, ledger.cacheTelemetry.single { it.cacheName == "module" }.creations)
+        val pipeline = ledger.cacheTelemetry.single { it.cacheName == "pipeline" }
+        assertEquals(1L, pipeline.failures)
+        assertEquals(1L, pipeline.staleGenerations)
+        assertEquals(1L, pipeline.evictions)
+        assertEquals(1L, ledger.cacheTelemetry.single { it.cacheName == "bind-group-layout" }.creations)
+        assertEquals(1L, ledger.cacheTelemetry.single { it.cacheName == "pipeline-layout" }.creations)
+    }
+
     /** Cache telemetry does not encode route support decisions. */
     @Test
     fun `cache event facts do not decide route support`() {
@@ -83,6 +130,20 @@ class GPUCacheTelemetryEventTest {
                 result = GPUCacheEventResult.Miss,
                 keyHash = "pipeline:solid",
                 subjectHash = "",
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUCacheTelemetryEvent.bindGroupLayout(
+                result = GPUCacheEventResult.Create,
+                keyHash = "",
+                subjectHash = "bgl:solid",
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUCacheTelemetryEvent.pipelineLayout(
+                result = GPUCacheEventResult.Create,
+                keyHash = "",
+                subjectHash = "pipeline-layout:solid",
             )
         }
     }

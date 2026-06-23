@@ -122,7 +122,58 @@ data class GPUResourceBindingBlock(
     val bindingCount: Int,
     val resourceDescriptorLabels: List<String>,
     val dynamicOffsets: List<Long> = emptyList(),
+    val bindingFacts: List<GPUResourceBindingFact> = emptyList(),
 )
+
+/** Resource binding kind described by a payload binding block. */
+enum class GPUResourceBindingKind {
+    /** The binding references the uploaded uniform payload buffer. */
+    UniformBuffer,
+    /** The binding references a storage payload buffer. */
+    StorageBuffer,
+    /** The binding references a sampled texture view. */
+    SampledTexture,
+    /** The binding references a sampler. */
+    Sampler,
+}
+
+/**
+ * Binding-level resource facts required before bind group materialization.
+ *
+ * These are descriptor and generation facts, not backend handles. Texture and
+ * sampler bindings may be validated here, while live image/sampler ownership
+ * remains gated by the later texture materialization lane.
+ */
+data class GPUResourceBindingFact(
+    val bindingLabel: String,
+    val kind: GPUResourceBindingKind,
+    val descriptorHash: String,
+    val requiredUsageLabels: Set<String>,
+    val availableUsageLabels: Set<String>,
+    val expectedResourceGeneration: Long,
+    val actualResourceGeneration: Long,
+    val evictedReason: String? = null,
+) {
+    init {
+        require(bindingLabel.isNotBlank()) { "GPUResourceBindingFact.bindingLabel must not be blank" }
+        require(descriptorHash.isNotBlank()) { "GPUResourceBindingFact.descriptorHash must not be blank" }
+        require(requiredUsageLabels.none { label -> label.isBlank() }) {
+            "GPUResourceBindingFact.requiredUsageLabels must not contain blank labels"
+        }
+        require(availableUsageLabels.none { label -> label.isBlank() }) {
+            "GPUResourceBindingFact.availableUsageLabels must not contain blank labels"
+        }
+        require(expectedResourceGeneration >= 0L) {
+            "GPUResourceBindingFact.expectedResourceGeneration must be non-negative"
+        }
+        require(actualResourceGeneration >= 0L) {
+            "GPUResourceBindingFact.actualResourceGeneration must be non-negative"
+        }
+        require(evictedReason == null || evictedReason.isNotBlank()) {
+            "GPUResourceBindingFact.evictedReason must not be blank"
+        }
+    }
+}
 
 /** Resource binding slot. */
 data class GPUResourceBindingSlot(

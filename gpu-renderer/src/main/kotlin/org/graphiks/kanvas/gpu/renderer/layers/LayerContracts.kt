@@ -1,9 +1,21 @@
 package org.graphiks.kanvas.gpu.renderer.layers
 
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
+import org.graphiks.kanvas.gpu.renderer.passes.dumpLines
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandBinding
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceReference
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceDiagnostic
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationPreimagePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
+import org.graphiks.kanvas.gpu.renderer.resources.dumpLines
 
 /** Layer scope identity. */
 @JvmInline
@@ -335,6 +347,172 @@ fun GPUSaveLayerIsolatedTargetGatePlan.toIsolatedTargetMaterializationPreimage()
     )
 }
 
+/** Provider input for live saveLayer isolated-target materialization. */
+data class GPUSaveLayerMaterializationRequest(
+    val targetId: String,
+    val taskIds: List<String> = emptyList(),
+    val resourcePlanLabels: List<String> = emptyList(),
+    val gatePlan: GPUSaveLayerIsolatedTargetGatePlan,
+    val parentPassId: String,
+    val childPassId: String,
+    val childTargetStateHash: String,
+    val parentTargetStateHash: String,
+    val childLoadStoreLabel: String,
+    val parentLoadStoreLabel: String,
+    val deviceGeneration: Long,
+    val expectedTargetGeneration: Long,
+    val actualTargetGeneration: Long,
+    val availableUsageLabels: Set<String>,
+    val allocationAvailable: Boolean,
+    val targetBudgetBytes: Long,
+    val activeParentAttachmentSampled: Boolean = false,
+    val parentReadAliasing: Boolean = false,
+    val actualBoundsLabel: String = gatePlan.layerPlan.bounds.deviceBoundsLabel,
+    val actualFormatClass: String,
+    val actualSampleCount: Int,
+) {
+    internal val dumpTaskIdsSnapshot: List<String> = taskIds.toList()
+    internal val dumpResourcePlanLabelsSnapshot: List<String> = resourcePlanLabels.toList()
+    internal val dumpAvailableUsageLabelsSnapshot: Set<String> = availableUsageLabels.toSet()
+
+    init {
+        require(targetId.isNotBlank()) { "GPUSaveLayerMaterializationRequest.targetId must not be blank" }
+        require(parentPassId.isNotBlank()) { "GPUSaveLayerMaterializationRequest.parentPassId must not be blank" }
+        require(childPassId.isNotBlank()) { "GPUSaveLayerMaterializationRequest.childPassId must not be blank" }
+        require(childTargetStateHash.isNotBlank()) {
+            "GPUSaveLayerMaterializationRequest.childTargetStateHash must not be blank"
+        }
+        require(parentTargetStateHash.isNotBlank()) {
+            "GPUSaveLayerMaterializationRequest.parentTargetStateHash must not be blank"
+        }
+        require(childLoadStoreLabel.isNotBlank()) {
+            "GPUSaveLayerMaterializationRequest.childLoadStoreLabel must not be blank"
+        }
+        require(parentLoadStoreLabel.isNotBlank()) {
+            "GPUSaveLayerMaterializationRequest.parentLoadStoreLabel must not be blank"
+        }
+        require(deviceGeneration >= 0L) { "GPUSaveLayerMaterializationRequest.deviceGeneration must be non-negative" }
+        require(expectedTargetGeneration >= 0L) {
+            "GPUSaveLayerMaterializationRequest.expectedTargetGeneration must be non-negative"
+        }
+        require(actualTargetGeneration >= 0L) {
+            "GPUSaveLayerMaterializationRequest.actualTargetGeneration must be non-negative"
+        }
+        require(targetBudgetBytes >= 0L) {
+            "GPUSaveLayerMaterializationRequest.targetBudgetBytes must be non-negative"
+        }
+        require(actualBoundsLabel.isNotBlank()) {
+            "GPUSaveLayerMaterializationRequest.actualBoundsLabel must not be blank"
+        }
+        require(actualFormatClass.isNotBlank()) {
+            "GPUSaveLayerMaterializationRequest.actualFormatClass must not be blank"
+        }
+        require(actualSampleCount > 0) { "GPUSaveLayerMaterializationRequest.actualSampleCount must be positive" }
+        require(taskIds.none { taskId -> taskId.isBlank() }) {
+            "GPUSaveLayerMaterializationRequest.taskIds must not contain blank labels"
+        }
+        require(resourcePlanLabels.none { label -> label.isBlank() }) {
+            "GPUSaveLayerMaterializationRequest.resourcePlanLabels must not contain blank labels"
+        }
+        require(availableUsageLabels.none { label -> label.isBlank() }) {
+            "GPUSaveLayerMaterializationRequest.availableUsageLabels must not contain blank labels"
+        }
+    }
+}
+
+/** Live saveLayer materialization output used by resources and pass command evidence. */
+data class GPUSaveLayerMaterializationResult(
+    val resourceDecision: GPUResourceMaterializationDecision,
+    val commandStream: GPUPassCommandStream,
+    val scopeLabel: String,
+    val targetLabel: String,
+    val parentTargetLabel: String,
+    val clearPolicy: String,
+    val childrenLabel: String,
+    val compositeRoute: String,
+    val adapterBacked: Boolean = false,
+    val productActivation: Boolean = false,
+) {
+    init {
+        require(!adapterBacked) { "GPUSaveLayerMaterializationResult.adapterBacked must stay false" }
+        require(!productActivation) { "GPUSaveLayerMaterializationResult.productActivation must stay false" }
+    }
+
+    /** Emits deterministic evidence for live saveLayer materialization without support promotion. */
+    fun dumpLines(): List<String> {
+        val head = if (resourceDecision is GPUResourceMaterializationDecision.Refused) {
+            "savelayer:materialization.refused row=$SAVE_LAYER_MATERIALIZATION_ROW " +
+                "scope=$scopeLabel target=$targetLabel code=${resourceDecision.diagnostic.code} " +
+                "adapterBacked=$adapterBacked productActivation=$productActivation"
+        } else {
+            "savelayer:materialization row=$SAVE_LAYER_MATERIALIZATION_ROW " +
+                "scope=$scopeLabel target=$targetLabel parent=$parentTargetLabel clear=$clearPolicy " +
+                "children=$childrenLabel composite=$compositeRoute " +
+                "adapterBacked=$adapterBacked productActivation=$productActivation"
+        }
+        return listOf(head, SAVE_LAYER_MATERIALIZATION_NONCLAIM_LINE) +
+            resourceDecision.dumpLines() +
+            commandStream.dumpLines()
+    }
+}
+
+/** Validates and materializes accepted saveLayer isolated-target evidence. */
+class ValidatingSaveLayerMaterializer {
+    /** Materializes layer target resources and command-stream ordering evidence, or refuses stably. */
+    fun materialize(
+        request: GPUSaveLayerMaterializationRequest,
+        context: GPUTargetPreparationContext,
+    ): GPUSaveLayerMaterializationResult {
+        val diagnostics = request.materializationDiagnostics(context)
+        val scopeLabel = request.scopeLabel()
+        val targetLabel = request.targetLabel()
+        val execution = request.isolatedExecutionOrNull()
+        val clearPolicy = execution?.initialization?.clearPolicy ?: "none"
+        val childrenLabel = request.childrenLabel()
+        val compositeRoute = execution?.composite?.compositeRoute ?: "none"
+        val parentTargetLabel = execution?.composite?.parentTargetLabel ?: request.targetId
+
+        if (diagnostics.isNotEmpty()) {
+            val decision = GPUResourceMaterializationDecision.Refused(
+                diagnostic = diagnostics.first(),
+                targetId = context.targetId,
+                taskIds = request.dumpTaskIdsSnapshot,
+                resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+                diagnostics = diagnostics,
+            )
+            return GPUSaveLayerMaterializationResult(
+                resourceDecision = decision,
+                commandStream = request.refusedCommandStream(diagnostics.first().code),
+                scopeLabel = scopeLabel,
+                targetLabel = targetLabel,
+                parentTargetLabel = parentTargetLabel,
+                clearPolicy = clearPolicy,
+                childrenLabel = childrenLabel,
+                compositeRoute = compositeRoute,
+            )
+        }
+
+        val materializedBridge = request.layerTargetOperandBridge()
+        val decision = GPUResourceMaterializationDecision.Materialized(
+            resources = listOf(GPUTextureResourceRef("texture-ref:$targetLabel")),
+            targetId = context.targetId,
+            taskIds = request.dumpTaskIdsSnapshot,
+            resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
+            operandBridge = materializedBridge,
+        )
+        return GPUSaveLayerMaterializationResult(
+            resourceDecision = decision,
+            commandStream = request.commandStream(materializedBridge),
+            scopeLabel = scopeLabel,
+            targetLabel = targetLabel,
+            parentTargetLabel = parentTargetLabel,
+            clearPolicy = clearPolicy,
+            childrenLabel = childrenLabel,
+            compositeRoute = compositeRoute,
+        )
+    }
+}
+
 /** Planner for the contract-only saveLayer isolated target route gate. */
 class GPUSaveLayerIsolatedTargetPlanner {
     /** Plans a contract-only saveLayer isolated target route or a stable refusal. */
@@ -486,10 +664,14 @@ data class GPULayerDiagnostic(
 
 private const val DEFAULT_SAVE_LAYER_TARGET_MAX_BYTES = 16L * 1024L * 1024L
 private const val SAVE_LAYER_EVIDENCE_ROW = "gpu-renderer.savelayer.isolated-target"
+private const val SAVE_LAYER_MATERIALIZATION_ROW = "gpu-renderer.savelayer.live-materialization"
 private const val TARGET_GENERATION_PREFIX = "target-generation:"
 private const val SAVE_LAYER_NONCLAIM_LINE =
     "savelayer:nonclaim nativeSaveLayer=false adapterBacked=false cpuLayerTextureFallback=false " +
         "arbitraryLayerStacks=false filters=false destinationRead=false"
+private const val SAVE_LAYER_MATERIALIZATION_NONCLAIM_LINE =
+    "savelayer:materialization.nonclaim adapterBacked=false productActivation=false " +
+        "cpuLayerTextureFallback=false framebufferFetch=false inputAttachment=false"
 
 private fun GPUSaveLayerIsolatedTargetRequest.refusalCode(targetBytes: Long): String? =
     when {
@@ -567,3 +749,283 @@ private const val SAVE_LAYER_BYTES_PER_PIXEL = 4L
 
 private fun GPUSaveLayerIsolatedTargetRequest.requiredSaveLayerUsageLabels(): Set<String> =
     requiredUsageLabels + SAVE_LAYER_REQUIRED_USAGE_LABELS
+
+private fun GPUSaveLayerMaterializationRequest.materializationDiagnostics(
+    context: GPUTargetPreparationContext,
+): List<GPUResourceDiagnostic> =
+    buildList {
+        val terminalGateDiagnostic = gatePlan.diagnostics.firstOrNull { diagnostic -> diagnostic.terminal }
+        if (terminalGateDiagnostic != null) {
+            add(layerMaterializationDiagnostic(terminalGateDiagnostic.code, targetLabel()))
+            return@buildList
+        }
+        if (targetId != context.targetId) {
+            add(
+                GPUResourceDiagnostic.commandOperandTargetMismatch(
+                    resourceLabel = targetLabel(),
+                    requestTargetId = targetId,
+                    contextTargetId = context.targetId,
+                ),
+            )
+        }
+        if (deviceGeneration != context.deviceGeneration) {
+            add(
+                GPUResourceDiagnostic.deviceGenerationStale(
+                    resourceLabel = targetLabel(),
+                    expectedDeviceGeneration = context.deviceGeneration,
+                    actualDeviceGeneration = deviceGeneration,
+                ),
+            )
+        }
+        val target = targetPlanOrNull()
+        val execution = isolatedExecutionOrNull()
+        if (target == null || execution == null) {
+            add(layerMaterializationDiagnostic("unsupported.layer.materialization_route", targetLabel()))
+            return@buildList
+        }
+        if (target.generationValue() != expectedTargetGeneration) {
+            add(layerMaterializationDiagnostic("unsupported.layer.target_generation_stale", targetLabel()))
+        }
+        if (actualTargetGeneration != expectedTargetGeneration) {
+            add(layerMaterializationDiagnostic("unsupported.layer.target_generation_stale", targetLabel()))
+        }
+        if ((target.usageLabels.toSet() - dumpAvailableUsageLabelsSnapshot).isNotEmpty()) {
+            add(layerMaterializationDiagnostic("unsupported.layer.target_usage_missing", targetLabel()))
+        }
+        if (target.byteEstimate > targetBudgetBytes) {
+            add(layerMaterializationDiagnostic("unsupported.layer.target_too_large", targetLabel()))
+        }
+        if (!allocationAvailable) {
+            add(layerMaterializationDiagnostic("unsupported.layer.allocation_unavailable", targetLabel()))
+        }
+        if (activeParentAttachmentSampled) {
+            add(layerMaterializationDiagnostic("unsupported.layer.active_attachment_sampled", targetLabel()))
+        }
+        if (parentReadAliasing) {
+            add(layerMaterializationDiagnostic("unsupported.layer.parent_read_aliasing", targetLabel()))
+        }
+        if (actualBoundsLabel != gatePlan.layerPlan.bounds.deviceBoundsLabel) {
+            add(layerMaterializationDiagnostic("unsupported.layer.target_bounds_mismatch", targetLabel()))
+        }
+        if (actualFormatClass != target.formatClass) {
+            add(layerMaterializationDiagnostic("unsupported.layer.target_format_mismatch", targetLabel()))
+        }
+        if (actualSampleCount != target.sampleCount) {
+            add(layerMaterializationDiagnostic("unsupported.layer.sample_count_mismatch", targetLabel()))
+        }
+    }
+
+private fun GPUSaveLayerMaterializationRequest.layerTargetOperandBridge():
+    List<GPUMaterializedCommandOperandBinding> {
+    val execution = requireNotNull(isolatedExecutionOrNull())
+    val target = execution.target
+    val scope = scopeLabel()
+    val targetOperand = GPUMaterializedCommandOperandReference(
+        label = target.targetLabel,
+        kind = GPUMaterializedCommandOperandKind.Texture,
+        descriptorHash = target.targetDescriptorHash,
+        deviceGeneration = deviceGeneration,
+        ownerScope = target.ownerLabel,
+        usageLabels = target.usageLabels,
+        invalidationPolicy = "layer-scope-end",
+        evidenceFacts = mapOf(
+            "allocation" to requireNotNull(gatePlan.layerPlan.resources).allocationPlanLabel,
+            "bounds" to gatePlan.layerPlan.bounds.deviceBoundsLabel,
+            "bytes" to target.byteEstimate.toString(),
+            "format" to target.formatClass,
+            "lifetime" to target.lifetimeClass,
+            "sampleCount" to target.sampleCount.toString(),
+            "scope" to scope,
+        ),
+    )
+    val renderTargetOperand = GPUMaterializedCommandOperandReference(
+        label = "render-target:${target.targetLabel}",
+        kind = GPUMaterializedCommandOperandKind.RenderTarget,
+        descriptorHash = target.targetDescriptorHash,
+        deviceGeneration = deviceGeneration,
+        ownerScope = target.targetLabel,
+        usageLabels = listOf("render_attachment"),
+        invalidationPolicy = "pass-end",
+        evidenceFacts = mapOf(
+            "clear" to execution.initialization.clearPolicy,
+            "load" to target.loadOp,
+            "origin" to target.originLabel,
+            "scope" to scope,
+            "store" to target.storeOp,
+        ),
+    )
+    val textureViewOperand = GPUMaterializedCommandOperandReference(
+        label = "texture-view:${target.targetLabel}",
+        kind = GPUMaterializedCommandOperandKind.TextureView,
+        descriptorHash = target.layerTargetViewHash(),
+        deviceGeneration = deviceGeneration,
+        ownerScope = target.targetLabel,
+        usageLabels = listOf("texture_binding"),
+        invalidationPolicy = "layer-scope-end",
+        evidenceFacts = mapOf(
+            "bounds" to gatePlan.layerPlan.bounds.deviceBoundsLabel,
+            "colorTreatment" to execution.composite.sourcePlan.colorTreatment,
+            "scope" to scope,
+            "source" to execution.composite.sourcePlan.sourceLabel,
+        ),
+    )
+    val samplerOperand = GPUMaterializedCommandOperandReference(
+        label = "sampler:${target.targetLabel}",
+        kind = GPUMaterializedCommandOperandKind.Sampler,
+        descriptorHash = target.layerTargetSamplerHash(),
+        deviceGeneration = deviceGeneration,
+        ownerScope = "sampler-cache",
+        usageLabels = listOf("sampler"),
+        invalidationPolicy = "descriptor-cache",
+        evidenceFacts = mapOf(
+            "address" to "clamp-to-edge/clamp-to-edge",
+            "filter" to "nearest/nearest",
+            "scope" to scope,
+            "source" to execution.composite.sourcePlan.sourceLabel,
+        ),
+    )
+    return listOf(
+        GPUMaterializedCommandOperandBinding(
+            packetId = null,
+            commandLabel = "prepareLayerTarget",
+            operand = targetOperand,
+        ),
+        GPUMaterializedCommandOperandBinding(
+            packetId = null,
+            commandLabel = "clearLayerTarget",
+            operand = renderTargetOperand,
+        ),
+        GPUMaterializedCommandOperandBinding(
+            packetId = null,
+            commandLabel = "renderLayerChildren",
+            operand = renderTargetOperand,
+        ),
+        GPUMaterializedCommandOperandBinding(
+            packetId = null,
+            commandLabel = "compositeLayer",
+            operand = textureViewOperand,
+        ),
+        GPUMaterializedCommandOperandBinding(
+            packetId = null,
+            commandLabel = "compositeLayer",
+            operand = samplerOperand,
+        ),
+    )
+}
+
+private fun GPUSaveLayerMaterializationRequest.commandStream(
+    materializedBridge: List<GPUMaterializedCommandOperandBinding>,
+): GPUPassCommandStream =
+    GPUPassCommandStream(
+        streamId = "savelayer-command-stream:${scopeLabel().toMaterializationPreimageLabel()}",
+        packetStreamId = "savelayer-packet-stream:${scopeLabel().toMaterializationPreimageLabel()}",
+        passId = parentPassId,
+        commands = layerCommands(),
+        operandBridge = materializedBridge.map(GPUPassCommandOperandBridge::fromMaterializedBinding),
+    )
+
+private fun GPUSaveLayerMaterializationRequest.refusedCommandStream(reasonCode: String): GPUPassCommandStream =
+    GPUPassCommandStream(
+        streamId = "savelayer-command-stream:${scopeLabel().toMaterializationPreimageLabel()}",
+        packetStreamId = "savelayer-packet-stream:${scopeLabel().toMaterializationPreimageLabel()}",
+        passId = parentPassId,
+        commands = listOf(GPUPassCommand.RefuseLayer(scopeLabel = scopeLabel(), reasonCode = reasonCode)),
+    )
+
+private fun GPUSaveLayerMaterializationRequest.layerCommands(): List<GPUPassCommand> {
+    val execution = requireNotNull(isolatedExecutionOrNull())
+    val target = execution.target
+    val token = execution.composite.orderingToken.value
+    return listOf(
+        GPUPassCommand.PrepareLayerTarget(
+            targetLabel = target.targetLabel,
+            descriptorHash = target.targetDescriptorHash,
+            usageLabel = target.usageLabel,
+            byteEstimate = target.byteEstimate,
+        ),
+        GPUPassCommand.BeginRenderPass(
+            targetStateHash = childTargetStateHash,
+            loadStoreLabel = childLoadStoreLabel,
+        ),
+        GPUPassCommand.ClearLayerTarget(
+            targetLabel = target.targetLabel,
+            clearPolicy = execution.initialization.clearPolicy,
+        ),
+        GPUPassCommand.RenderLayerChildren(
+            scopeLabel = scopeLabel(),
+            targetLabel = target.targetLabel,
+            childrenLabel = childrenLabel(),
+            tokenLabel = token,
+        ),
+        GPUPassCommand.EndRenderPass(passId = childPassId),
+        GPUPassCommand.BeginRenderPass(
+            targetStateHash = parentTargetStateHash,
+            loadStoreLabel = parentLoadStoreLabel,
+        ),
+        GPUPassCommand.CompositeLayer(
+            sourceLabel = execution.composite.sourcePlan.sourceLabel,
+            parentTargetLabel = execution.composite.parentTargetLabel,
+            blendModeLabel = execution.composite.blendModeLabel,
+            routeLabel = execution.composite.compositeRoute,
+            tokenLabel = token,
+        ),
+        GPUPassCommand.EndRenderPass(passId = parentPassId),
+    )
+}
+
+private fun GPUSaveLayerMaterializationRequest.isolatedExecutionOrNull(): GPULayerExecutionPlan.IsolatedTarget? =
+    gatePlan.layerPlan.execution as? GPULayerExecutionPlan.IsolatedTarget
+
+private fun GPUSaveLayerMaterializationRequest.targetPlanOrNull(): GPULayerTargetPlan? =
+    isolatedExecutionOrNull()?.target
+
+private fun GPUSaveLayerMaterializationRequest.scopeLabel(): String =
+    gatePlan.layerPlan.saveRecord.scopeId.value
+
+private fun GPUSaveLayerMaterializationRequest.targetLabel(): String =
+    targetPlanOrNull()?.targetLabel ?: "layer-target:${scopeLabel().removePrefix("layer:")}"
+
+private fun GPUSaveLayerMaterializationRequest.childrenLabel(): String =
+    gatePlan.layerPlan.saveRecord.childCommandIds.joinToString(",").ifEmpty { "none" }
+
+private fun GPUSaveLayerMaterializationRequest.resourcePlanLabelsOrDefault(): List<String> =
+    if (dumpResourcePlanLabelsSnapshot.isEmpty()) {
+        listOf("savelayer-materialization")
+    } else {
+        dumpResourcePlanLabelsSnapshot
+    }
+
+private fun GPULayerTargetPlan.generationValue(): Long =
+    generationLabel.removePrefix(TARGET_GENERATION_PREFIX).toLongOrNull() ?: 0L
+
+private fun GPULayerTargetPlan.layerTargetViewHash(): String =
+    "sha256:" + stableHash(
+        listOf(
+            "savelayer-target-view-v1",
+            targetDescriptorHash,
+            formatClass,
+            sampleCount.toString(),
+        ),
+    )
+
+private fun GPULayerTargetPlan.layerTargetSamplerHash(): String =
+    "sha256:" + stableHash(
+        listOf(
+            "savelayer-target-sampler-v1",
+            targetDescriptorHash,
+            "nearest",
+            "clamp-to-edge",
+        ),
+    )
+
+private fun layerMaterializationDiagnostic(
+    code: String,
+    targetLabel: String,
+): GPUResourceDiagnostic =
+    GPUResourceDiagnostic(
+        code = code,
+        resourceLabel = targetLabel,
+        message = "saveLayer materialization for $targetLabel refused: $code.",
+        terminal = true,
+        facts = mapOf("reason" to code),
+    )

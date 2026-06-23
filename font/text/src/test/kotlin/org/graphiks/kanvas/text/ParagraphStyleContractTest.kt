@@ -53,7 +53,7 @@ class ParagraphStyleContractTest {
         assertContains(dump, "\"palette\": {\"index\": 2, \"overrides\": [\"gid=7:#ff00ffff\"]}")
         assertContains(dump, "\"decoration\": {\"underline\": true, \"overline\": false, \"lineThrough\": true, \"style\": \"double\", \"thicknessMultiplier\": 1.25}")
         assertContains(dump, "\"placeholders\": [")
-        assertContains(dump, "{\"range\": \"5..5\", \"width\": 18.0, \"height\": 10.0, \"baselineOffset\": 8.0, \"alignment\": \"baseline\", \"baseline\": \"alphabetic\"}")
+        assertContains(dump, "{\"range\": \"5..5\", \"width\": 18.0, \"height\": 10.0, \"baselineOffset\": 8.0, \"alignment\": \"baseline\", \"baseline\": \"alphabetic\", \"participatesInLineHeight\": true}")
         assertTrue(Regex("\"inputHash\": \"[0-9a-f]{64}\"").containsMatchIn(dump))
     }
 
@@ -111,6 +111,26 @@ class ParagraphStyleContractTest {
         assertEquals(
             setOf("text.paragraph.invalid-constraint", "text.paragraph.unsupported-policy"),
             result.diagnostics.map { it.code }.toSet(),
+        )
+    }
+
+    @Test
+    fun paragraphStyleContractRejectsMissingPlaceholderBaselineWhenAlignmentRequiresIt() {
+        val paragraph = ParagraphBuilder()
+            .append("a", TextStyle(fontSize = 10f))
+            .appendPlaceholder(
+                PlaceholderStyle(
+                    width = 12f,
+                    height = 8f,
+                    alignment = PlaceholderAlignment.BASELINE,
+                    baseline = null,
+                ),
+            )
+            .build()
+
+        assertEquals(
+            listOf("text.paragraph.invalid-constraint"),
+            paragraph.inputDiagnostics.map { it.code },
         )
     }
 

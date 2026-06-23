@@ -1,7 +1,7 @@
 ---
 id: KGPU-M11-007
 title: "Add bounded stencil-cover adapter-backed lane"
-status: proposed
+status: done
 milestone: M11
 priority: P1
 owner_area: geometry-passes
@@ -73,16 +73,16 @@ data class GPUStencilCoverExecutionPlan(
 
 ## Acceptance Criteria
 
-- [ ] A bounded accepted stencil-cover route emits separate producer and cover
+- [x] A bounded accepted stencil-cover route emits separate producer and cover
       packets with explicit ordering tokens.
-- [ ] Depth/stencil attachment, load/store, clear, compare, write-mask, and
+- [x] Depth/stencil attachment, load/store, clear, compare, write-mask, and
       sample-count facts are materialized and dumpable.
-- [ ] Producer-before-cover and clip/path ordering constraints survive
+- [x] Producer-before-cover and clip/path ordering constraints survive
       sorting, batching, and pass-command emission.
-- [ ] Unsupported fill types, unbounded paths, unsupported sample counts,
+- [x] Unsupported fill types, unbounded paths, unsupported sample counts,
       missing depth/stencil support, and readback-unavailable lanes refuse or
       skip evidence stably.
-- [ ] GPU readback/reference diff evidence is linked before any native support
+- [x] GPU readback/reference diff evidence is linked before any native support
       claim.
 
 ## Required Evidence
@@ -108,13 +108,18 @@ back to CPU-rendered path textures.
 ## Validation
 
 ```bash
+rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.geometry.StencilCoverLiveMaterializationTest
+rtk ./gradlew --no-daemon :gpu-renderer:check
 rtk git diff --check
 ```
 
 ## Status Notes
 
-- `proposed`: Planning-only continuation of KGPU-M3-002 from contract gate to a
-  bounded adapter-backed lane.
+- `done`: Bounded stencil-cover live materialization now emits pass-local
+  depth/stencil attachment facts, distinct producer/cover packet identities,
+  command operands, stable refusal diagnostics, and explicit skipped-readback
+  evidence. Product activation and native support claims remain false; see
+  `reports/gpu-renderer/2026-06-17-m11-007-stencil-cover-lane.md`.
 
 ## Linear Labels
 

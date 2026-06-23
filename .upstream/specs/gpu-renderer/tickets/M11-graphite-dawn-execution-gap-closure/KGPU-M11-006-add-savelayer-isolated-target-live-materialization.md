@@ -1,7 +1,7 @@
 ---
 id: KGPU-M11-006
 title: "Add saveLayer isolated target live materialization"
-status: proposed
+status: done
 milestone: M11
 priority: P1
 owner_area: layers-resources
@@ -72,16 +72,16 @@ data class GPUSaveLayerMaterializationPlan(
 
 ## Acceptance Criteria
 
-- [ ] Accepted isolated-layer plans allocate or reuse a provider-owned offscreen
+- [x] Accepted isolated-layer plans allocate or reuse a provider-owned offscreen
       target with render-attachment, texture-binding, copy, and store facts as
       required by the plan.
-- [ ] Initialization, child rendering, optional source sampling, and restore
+- [x] Initialization, child rendering, optional source sampling, and restore
       composite appear as ordered pass-command evidence.
-- [ ] Layer target lifetime, generation, bounds, format, sample count, and
+- [x] Layer target lifetime, generation, bounds, format, sample count, and
       budget are dumpable.
-- [ ] Unsupported variants, missing target usage, read/write aliasing,
+- [x] Unsupported variants, missing target usage, read/write aliasing,
       over-budget targets, and illegal parent sampling refuse stably.
-- [ ] Adapter-backed evidence includes at least one isolated target render and
+- [x] Adapter-backed evidence includes at least one isolated target render and
       composite trace or an explicit skipped-readback reason.
 
 ## Required Evidence
@@ -106,13 +106,19 @@ layer as a compatibility texture.
 ## Validation
 
 ```bash
+rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.layers.SaveLayerLiveMaterializationTest
 rtk git diff --check
 ```
 
 ## Status Notes
 
-- `proposed`: Planning-only continuation of KGPU-M5-001 from contract gate to
-  live isolated-target execution.
+- `done` (2026-06-17): Added contract live materialization for accepted
+  saveLayer isolated-target lanes. Evidence includes provider-owned layer
+  target texture, render-target, texture-view, and sampler operands; ordered
+  target prepare, clear, child render, and restore composite command dumps;
+  stale generation, usage, budget, bounds, format, sample count, allocation,
+  parent aliasing, active-attachment, and gate-refusal diagnostics; and explicit
+  skipped readback evidence. Product activation remains false.
 
 ## Linear Labels
 

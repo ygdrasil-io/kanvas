@@ -72,6 +72,15 @@ class PureKotlinTextFontFixtureInventoryTest(unittest.TestCase):
             for fixture in family["fixtures"]
         }
         self.assertIn("colrv1-solid-glyph-colr-glyph", color_glyph_gates)
+        emoji_gates = {
+            fixture["targetGate"]
+            for family in inventory["families"]
+            if family["familyId"] == "emoji"
+            for fixture in family["fixtures"]
+        }
+        self.assertIn("emoji-flag", emoji_gates)
+        self.assertIn("emoji-keycap", emoji_gates)
+        self.assertIn("emoji-unsupported-sequence-refusal", emoji_gates)
         svg_gates = {
             fixture["targetGate"]
             for family in inventory["families"]
