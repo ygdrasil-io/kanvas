@@ -77,8 +77,9 @@ class ClusterSafetySuite {
 ## Required Evidence
 
 - `cluster-safety-report.json` linked to `unicode-segments.json`, `bidi-runs.json`, and `script-runs.json` by content hash.
-- Fixtures: `cluster-emoji-family-zwj.txt`, `cluster-emoji-skin-tone.txt`, `cluster-vs15-vs16.txt`, `cluster-arabic-mark.txt`, `cluster-devanagari-conjunct.txt`, `cluster-thai-tone.txt`, `cluster-cjk-variation-selector.txt`, `cluster-cjk-ivs-han.txt`, `cluster-cjk-ivs-mixed-script.txt`, `cluster-cjk-ivs-isolated.txt`, `cluster-mixed-bidi.txt`, `cluster-negative-split.txt`.
-- Diagnostics asserted in tests: `text.shaping.cluster-invariant-failed`, `text.shaping.emoji-sequence-unsupported`, `text.shaping.unicode-data-version-mismatch`.
+- Fixtures: `cluster-emoji-family-zwj.txt`, `cluster-emoji-skin-tone.txt`, `cluster-vs15-vs16.txt`, `cluster-arabic-mark.txt`, `cluster-devanagari-conjunct.txt`, `cluster-thai-tone.txt`, `cluster-cjk-variation-selector.txt`, `cluster-cjk-ivs-supplementary.txt`, `cluster-cjk-ivs-mixed-kana.txt`, `cluster-mixed-bidi.txt`, `cluster-negative-split.txt`.
+- Diagnostics asserted in tests: `text.shaping.cluster-invariant-failed`, `text.shaping.unicode-data-version-mismatch`.
+- Shared emoji refusal evidence: `text.shaping.emoji-sequence-unsupported` remains owned by `KFONT-M7-004` for the shared emoji-adjacent cluster family.
 - Dashboard note showing `scaledemoji` is still blocked on emoji shaping/fallback/rendering evidence, not merely segmentation.
 
 ## Fallback / Refusal Behavior
@@ -108,7 +109,8 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 
 - `proposed`: Regression suite depends on the concrete M5 segmentation, bidi, and itemization outputs.
 - Move to `ready` only after fixture list and legacy gate wording are reviewed.
-- `done` (2026-06-18): merged PR `#1730` now closes with checked-in broader CJK IVS review coverage via `cluster-cjk-ivs-han.txt`, `cluster-cjk-ivs-mixed-script.txt`, and `cluster-cjk-ivs-isolated.txt`, while keeping the bounded context row `cluster-cjk-variation-selector.txt`. `cluster-safety-report.json` links checked-in `unicode-segments`, `bidi-runs`, and `script-runs` dumps by content hash, proves stable grapheme/bidi/script boundary handling across Arabic/Devanagari/Thai/CJK/emoji/bidi cases plus a synthetic negative split, and records stable `text.shaping.script-run-ambiguous` refusals for the supplementary-IVS rows instead of implying mixed-script or full CJK shaping support. `KFONT-M7-004` supplies the explicit `text.shaping.emoji-sequence-unsupported` refusal row and fallback-boundary evidence; no remaining gate remains on `KFONT-M5-005` itself.
+- `review`: `cluster-safety-report.json` now links checked-in `unicode-segments`, `bidi-runs`, and `script-runs` dumps by content hash, covers bounded Arabic/Devanagari/Thai/CJK-context/emoji/bidi cluster cases plus a synthetic negative split, and keeps `scaledemoji` explicitly visible as a legacy gate. `KFONT-M7-004` now supplies the explicit `text.shaping.emoji-sequence-unsupported` refusal row and fallback-boundary evidence, so the remaining gate before `done` is broader reviewed CJK IVS coverage beyond the current bounded context fixture family.
+- `done`: Added reviewed supplementary-plane and mixed Kana CJK IVS fixtures to the checked-in cluster matrix, regenerated `cluster-safety-report.json`, and revalidated that grapheme, bidi, and script boundaries stay cluster-safe for the expanded CJK IVS coverage while keeping `scaledemoji` explicitly fixture-gated for later emoji shaping, route, and rendering evidence.
 
 ## Linear Labels
 

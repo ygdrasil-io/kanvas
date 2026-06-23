@@ -9,6 +9,18 @@ import org.skia.testing.TestUtils
 
 class SimpleLatinLineSceneEvidenceTest {
     @Test
+    fun `simple latin line A8Text route stays atlas backed without cpu texture fallback`() {
+        val evidence = SimpleLatinLineSceneEvidence.capture(writeArtifacts = false)
+
+        assertEquals("webgpu.text.glyph-atlas.simple-latin", evidence.webGpuRouteIdentifier)
+        assertEquals("webgpu.text.glyph-atlas.simple-latin", evidence.atlas.routeIdentifier)
+        assertEquals("A8", evidence.atlas.maskFormat)
+        assertEquals("R8Unorm", evidence.atlas.textureFormat)
+        assertEquals("none", evidence.webGpuFallbackReason)
+        assertTrue(evidence.webGpuComparison.similarity >= evidence.webGpuSimilarityThreshold)
+    }
+
+    @Test
     fun `simple latin line emits reference cpu gpu diff stats and route diagnostics`() {
         val evidence = SimpleLatinLineSceneEvidence.capture(writeArtifacts = true)
 

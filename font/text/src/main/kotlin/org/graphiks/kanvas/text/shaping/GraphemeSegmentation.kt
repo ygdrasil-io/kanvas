@@ -218,7 +218,11 @@ public class GraphemeClusterer(
             codePoint = codePoint,
             utf16Range = utf16Range,
             codePointIndex = codePointIndex,
-            graphemeBreak = unicodeDataSet.graphemeBreak.valueAt(codePoint),
+            graphemeBreak = if (unicodeDataSet.variationSelector.valueAt(codePoint)) {
+                GcbExtend
+            } else {
+                unicodeDataSet.graphemeBreak.valueAt(codePoint)
+            },
             indicConjunctBreak = unicodeDataSet.indicConjunctBreak.valueAt(codePoint),
             extendedPictographic = unicodeDataSet.emojiProperties.extendedPictographic.valueAt(codePoint),
             variationSelector = unicodeDataSet.variationSelector.valueAt(codePoint),
