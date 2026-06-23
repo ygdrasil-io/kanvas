@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M12-004"
 title: "Add glyph artifact and cache metrics"
-status: "proposed"
+status: "done"
 milestone: "M12"
 priority: "P1"
 owner_area: "telemetry"
@@ -76,11 +76,11 @@ data class GlyphCacheMetricSample(
 
 ## Acceptance Criteria
 
-- [ ] Each glyph route produces a route count, generation-time series when applicable, and refusal count when unsupported.
-- [ ] A8 and SDF metrics are separated; an A8 cache hit cannot satisfy SDF or `dftext` evidence.
-- [ ] Atlas metrics include occupancy, pack time, generation token, stale-generation refusal count, memory bytes, and eviction count.
-- [ ] `GlyphStrikeKey` telemetry exposes deterministic preimage hashes without leaking font bytes or live GPU handles.
-- [ ] The `dftext` legacy gate remains open unless SDF contract, atlas/cache telemetry, transform policy, CPU evidence, GPU evidence when claimed, and dashboard updates are all linked.
+- [x] Each glyph route produces a route count, generation-time series when applicable, and refusal count when unsupported.
+- [x] A8 and SDF metrics are separated; an A8 cache hit cannot satisfy SDF or `dftext` evidence.
+- [x] Atlas metrics include occupancy, pack time, generation token, stale-generation refusal count, memory bytes, and eviction count.
+- [x] `GlyphStrikeKey` telemetry exposes deterministic preimage hashes without leaking font bytes or live GPU handles.
+- [x] The `dftext` legacy gate remains open unless SDF contract, atlas/cache telemetry, transform policy, CPU evidence, GPU evidence when claimed, and dashboard updates are all linked.
 
 ## Required Evidence
 
@@ -113,6 +113,7 @@ rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
 - Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `done`: `glyph-artifact-metrics.json`, `glyph-cache-metrics.json`, and `glyph-atlas-occupancy.json` now serialize deterministic advisory glyph telemetry with stable refusal diagnostics, dashboard/PM bundle linkage, and no promotion of GPU, release-gate, or `dftext` retirement claims.
 
 ## Linear Labels
 

@@ -134,6 +134,74 @@
       ]
     },
     {
+      "dumpId": "arabic-gpos-trace",
+      "ownerTicket": "KFONT-M6-007",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "GPOS Target"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
+        "reports/font/fixtures/expected/shaping/arabic-gpos-trace.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "fixtureFamilyId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.arabicGposTraceGoldenMatchesRepoGolden --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.basicOpenTypeShapingEngineAppliesVendoredArabicMarkPositioning --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.basicOpenTypeShapingEngineEmitsReviewedGenericGdefRequiredDiagnosticForArabicBasePlusMarkFixture",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Arabic GPOS trace golden changes require reviewed vendored mark-attachment evidence, reviewed generic gdef-required refusal evidence, deterministic runtime lookup facts, and explicit non-promotion of Arabic or complex-shaping support.",
+      "nonClaims": [
+        "producer-only",
+        "no-arabic-shaping-support-claim",
+        "no-complex-shaping-support-claim",
+        "no-native-shaper-oracle-claim",
+        "no-cpu-or-gpu-rendering-claim"
+      ]
+    },
+    {
+      "dumpId": "arabic-gsub-trace",
+      "ownerTicket": "KFONT-M6-007",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "GSUB Target"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
+        "reports/font/fixtures/expected/shaping/arabic-gsub-trace.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "fixtureFamilyId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.arabicGsubTraceGoldenMatchesRepoGolden --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.basicOpenTypeShapingEngineAppliesVendoredArabicJoiningForms --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.basicOpenTypeShapingEngineChangesVendoredArabicLamAlefSequenceWithoutClosingLigatureGate",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Arabic GSUB trace golden changes require reviewed vendored joining-form evidence, bounded lam-alef runtime-divergence review, deterministic runtime lookup facts, and explicit non-promotion of Arabic or complex-shaping support.",
+      "nonClaims": [
+        "producer-only",
+        "no-arabic-shaping-support-claim",
+        "no-complex-shaping-support-claim",
+        "no-native-shaper-oracle-claim",
+        "no-cpu-or-gpu-rendering-claim"
+      ]
+    },
+    {
       "dumpId": "arabic-seed-readiness",
       "ownerTicket": "PKT-08B",
       "classification": "golden-gated",
@@ -165,6 +233,129 @@
         "no-arabic-shaping-support-claim",
         "no-complex-shaping-support-claim",
         "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "dumpId": "arabic-shaped-glyph-run",
+      "ownerTicket": "KFONT-M6-007",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Clusters"
+      },
+      "producerPaths": [
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
+        "reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "fixtureFamilyId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.arabicShapedGlyphRunGoldenMatchesRepoGolden --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.basicOpenTypeShapingEngineAppliesVendoredArabicJoiningForms --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.basicOpenTypeShapingEngineAppliesVendoredArabicMarkPositioning --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.basicOpenTypeShapingEngineChangesVendoredArabicLamAlefSequenceWithoutClosingLigatureGate --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.basicOpenTypeShapingEngineEmitsReviewedGenericGdefRequiredDiagnosticForArabicBasePlusMarkFixture",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Arabic shaped-glyph-run golden changes require reviewed vendored joining/mark rows, bounded lam-alef evidence, generic gdef-required refusal review, and explicit non-promotion of Arabic or complex-shaping support.",
+      "nonClaims": [
+        "producer-only",
+        "no-arabic-shaping-support-claim",
+        "no-complex-shaping-support-claim",
+        "no-native-shaper-oracle-claim",
+        "no-cpu-or-gpu-rendering-claim"
+      ]
+    },
+    {
+      "dumpId": "arabic-shaping-plan",
+      "ownerTicket": "KFONT-M6-007",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Kanvas Required Script Matrix"
+      },
+      "producerPaths": [
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
+        "reports/font/fixtures/expected/shaping/arabic-shaping-plan.json"
+      ],
+      "expectedFields": [
+        "bidi",
+        "caseId",
+        "cases",
+        "defaultedFeatures",
+        "dumpId",
+        "expectedDiagnostics",
+        "fixtureFamilyId",
+        "fixtureFont",
+        "inputText",
+        "languageSystem",
+        "nonClaims",
+        "ownerTickets",
+        "reportRef",
+        "requiredDefaults",
+        "requiredRefusals",
+        "schemaVersion",
+        "scriptRun",
+        "sourceTextHash",
+        "sourceTextHashAlgorithm",
+        "status",
+        "tableAvailability",
+        "textRange",
+        "ticketId",
+        "typefaceId",
+        "unicodeVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest.arabicShapingPlanGoldenMatchesRepoGolden",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Arabic shaping-plan golden changes require reviewed script-policy defaults, refusal-on-missing expectations, and explicit non-promotion of Arabic or complex-shaping support.",
+      "nonClaims": [
+        "producer-only",
+        "no-arabic-shaping-support-claim",
+        "no-complex-shaping-support-claim",
+        "no-native-shaper-oracle-claim",
+        "no-cpu-or-gpu-rendering-claim"
+      ]
+    },
+    {
+      "dumpId": "arabic-shaping-report",
+      "ownerTicket": "KFONT-M6-007",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Kanvas Required Script Matrix"
+      },
+      "producerPaths": [
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt",
+        "reports/font/fixtures/expected/shaping/arabic-mixed-bidi.txt",
+        "reports/font/fixtures/expected/shaping/arabic-shaping-report.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "fixtureFont",
+        "fixtureId",
+        "nonClaims",
+        "ownerTickets",
+        "remainingGates",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ArabicShapingFixtureTest",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Arabic shaping report updates require reviewed fixture/report diffs and explicit remaining-gate review without Arabic or complex-shaping support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-arabic-shaping-support-claim",
+        "no-complex-shaping-support-claim",
+        "no-native-shaper-oracle-claim",
+        "no-cpu-or-gpu-rendering-claim"
       ]
     },
     {
@@ -608,6 +799,59 @@
       ]
     },
     {
+      "dumpId": "color-emoji-fixture-manifest",
+      "ownerTicket": "KFONT-M10-010",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md",
+        "section": "Target Fixture Manifest"
+      },
+      "producerPaths": [
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+        "reports/font/fixtures/provenance/index.json",
+        "reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "fixtureFamilies",
+        "legacyGates",
+        "nonClaims",
+        "ownerTickets",
+        "rebaselinePolicy",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.ColorEmojiFixtureManifestMatchesRepoFixture",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_color_emoji_fixture_manifest.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_color_emoji_fixture_manifest.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Color/emoji fixture-manifest changes require reviewed old/new manifest diffs, linked dump diffs, provenance review, legacy-gate mapping review, and explicit non-claims without COLRv1, bitmap, SVG, emoji, GPU, or platform fallback support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-complete-colrv1-rendering-claim",
+        "no-complete-png-bitmap-glyph-routing-claim",
+        "no-complete-svg-in-opentype-rendering-claim",
+        "no-complete-emoji-sequence-shaping-claim",
+        "no-complete-color-glyph-fallback-support-claim",
+        "no-gpu-color-glyph-support-claim",
+        "no-gpu-bitmap-glyph-route-claim",
+        "no-gpu-svg-glyph-route-claim",
+        "no-platform-color-font-fallback-claim",
+        "no-platform-bitmap-codec-claim",
+        "no-platform-emoji-engine-claim",
+        "no-native-svg-renderer-claim",
+        "no-scaledemoji-retirement",
+        "no-scaledemoji-rendering-retirement",
+        "no-coloremoji-blendmodes-retirement"
+      ]
+    },
+    {
       "dumpId": "color-glyph-composite-plan",
       "ownerTicket": "KFONT-M10-004",
       "classification": "golden-gated",
@@ -787,6 +1031,185 @@
         "no-complete-colrv1-rendering-claim",
         "no-gpu-color-glyph-support-claim",
         "no-platform-color-font-fallback-claim"
+      ]
+    },
+    {
+      "dumpId": "devanagari-shaping-report",
+      "ownerTicket": "KFONT-M6-008",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Kanvas Required Script Matrix"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/DevanagariShapingFixtureTest.kt",
+        "reports/font/fixtures/expected/shaping/devanagari-shaping-report.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "fixtureFont",
+        "fixtureId",
+        "nonClaims",
+        "ownerTickets",
+        "remainingGates",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.DevanagariShapingFixtureTest",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Devanagari shaping report updates require reviewed runtime/fixture/report diffs and explicit remaining-gate review without Devanagari or Indic shaping support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-devanagari-shaping-support-claim",
+        "no-indic-shaping-support-claim",
+        "no-native-shaper-oracle-claim",
+        "no-cpu-or-gpu-rendering-claim"
+      ]
+    },
+    {
+      "dumpId": "draw-text-run-upload-plan",
+      "ownerTicket": "KFONT-M12-005",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md",
+        "section": "Acceptance Criteria"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextHandoffMetricsEvidence.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextHandoffMetricsEvidenceTest.kt",
+        "reports/pure-kotlin-text/draw-text-run-upload-plan.json"
+      ],
+      "expectedFields": [
+        "artifactKeyHashes",
+        "artifactReuseCount",
+        "classification",
+        "commandId",
+        "dumpId",
+        "findings",
+        "leakageAudit",
+        "materialKey",
+        "nonClaims",
+        "ownerTickets",
+        "payloadKind",
+        "productActivation",
+        "routePromotion",
+        "schemaVersion",
+        "status",
+        "uploadByteCount",
+        "uploadDependencyCount",
+        "uploadDependencyLabels",
+        "uploadPlanReuseCount"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextHandoffMetricsEvidenceTest*'",
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "DrawTextRun upload-plan dump changes require reviewed artifact key hash/order diffs, bounded leakage-audit field review, and explicit confirmation that no Sk type, font bytes, or live GPU handle leaked into the dump.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "dumpId": "emoji-route-trace",
+      "ownerTicket": "KFONT-M10-009",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
+        "section": "Emoji dispatch"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
+        "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/color/emoji-route-trace.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperRecognizesKeycapAndFlagFixturesAsSingleClusters --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperExposesTypedFactsForPlannerSequenceKinds --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperDumpsVS15SkinToneAndZwjFamilyFixtures --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperKeepsRepresentedSkinToneRoleSequenceAsZwj",
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.emojiSequencePlannerGoldenMatchesRepoFixture --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.exposesColorGlyphPipelineSurface",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_font_fixtures.py"
+      ],
+      "updatePolicy": "Emoji route trace golden changes require reviewed sequence-kind and text-range diffs, fallback-attempt review, route-diagnostic review, and explicit non-claims without full emoji shaping, platform emoji, GPU route, or scaledemoji support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-complete-emoji-sequence-shaping-claim",
+        "no-complete-color-glyph-fallback-support-claim",
+        "no-gpu-color-glyph-support-claim",
+        "no-platform-emoji-engine-claim",
+        "no-scaledemoji-retirement"
+      ]
+    },
+    {
+      "dumpId": "facade-adapter-inventory",
+      "ownerTicket": "KFONT-M13-001",
+      "classification": "producer-only",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-001-add-facade-adapter-inventory.md",
+        "section": "Required Evidence"
+      },
+      "producerPaths": [
+        "scripts/validate_kfont_m13_001_facade_inventory.py",
+        "scripts/test_validate_kfont_m13_001_facade_inventory.py",
+        "reports/pure-kotlin-text/facade-adapter-inventory.json",
+        "reports/pure-kotlin-text/2026-06-19-kfont-m13-001-facade-adapter-inventory.md"
+      ],
+      "expectedFields": [
+        "artifactId",
+        "dashboardSurfaceId",
+        "generatedOn",
+        "legacyGateCoverage",
+        "migrationCategories",
+        "nonClaims",
+        "pmBundleTask",
+        "remainingGates",
+        "routes",
+        "schema",
+        "schemaVersion",
+        "sourceSpecs",
+        "summary",
+        "ticketId",
+        "validationCommands"
+      ],
+      "validationCommands": [
+        "rtk python3 -m unittest scripts/test_validate_kfont_m13_001_facade_inventory.py",
+        "rtk python3 scripts/validate_kfont_m13_001_facade_inventory.py",
+        "rtk ./gradlew --no-daemon validateKfontM13001FacadeInventory",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Facade inventory changes require reviewed route coverage, durable gate mapping, dashboard row wiring, and PM bundle diff review without facade support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-facade-route-support-promotion",
+        "no-gpu-route-support-claim",
+        "no-legacy-gate-retirement"
       ]
     },
     {
@@ -1409,6 +1832,63 @@
       ]
     },
     {
+      "dumpId": "glyph-artifact-metrics",
+      "ownerTicket": "KFONT-M12-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/glyph-artifact-metrics.json"
+      ],
+      "expectedFields": [
+        "cacheState",
+        "counters",
+        "diagnostics",
+        "domain",
+        "dumpId",
+        "environment",
+        "fixtureId",
+        "fontSourceSetHash",
+        "max",
+        "measurementPhase",
+        "median",
+        "metrics",
+        "name",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "p90",
+        "sampleCount",
+        "samples",
+        "schemaVersion",
+        "trendSeriesId",
+        "trendSeriesPrefix",
+        "unicodeDataVersion",
+        "unit"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk ./gradlew --no-daemon pipelinePmBundle",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Glyph artifact telemetry dump changes require reviewed route-count, bounded A8/SDF/COLR/bitmap/SVG cost evidence, stable refusal diagnostics, and explicit non-claims without GPU or dftext promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
       "dumpId": "glyph-atlas-eviction-trace",
       "ownerTicket": "KFONT-M9-005",
       "classification": "golden-gated",
@@ -1495,6 +1975,52 @@
       ]
     },
     {
+      "dumpId": "glyph-atlas-occupancy",
+      "ownerTicket": "KFONT-M12-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Cache Budgets"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/glyph-atlas-occupancy.json"
+      ],
+      "expectedFields": [
+        "atlasArtifactId",
+        "atlases",
+        "dimensions",
+        "dumpId",
+        "entryCount",
+        "generation",
+        "invalidationToken",
+        "keyPreimageSha256",
+        "nonClaims",
+        "occupancyRatio",
+        "occupiedPixelCount",
+        "ownerTickets",
+        "schemaVersion",
+        "sourceDumps",
+        "strikeKeySha256",
+        "textureFormat",
+        "totalPixelCount"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Glyph atlas occupancy dump changes require reviewed artifact IDs, key hashes, dimensions, occupancy ratios, and explicit CPU-only non-claims without GPU upload or dftext promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
       "dumpId": "glyph-cache-inventory",
       "ownerTicket": "KFONT-M9-006",
       "classification": "golden-gated",
@@ -1535,6 +2061,63 @@
         "producer-only",
         "no-complete-cache-lifecycle-claim",
         "no-gpu-text-route-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "dumpId": "glyph-cache-metrics",
+      "ownerTicket": "KFONT-M12-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Cache Budgets"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/glyph-cache-metrics.json"
+      ],
+      "expectedFields": [
+        "cacheState",
+        "counters",
+        "diagnostics",
+        "domain",
+        "dumpId",
+        "environment",
+        "fixtureId",
+        "fontSourceSetHash",
+        "max",
+        "measurementPhase",
+        "median",
+        "metrics",
+        "name",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "p90",
+        "sampleCount",
+        "samples",
+        "schemaVersion",
+        "trendSeriesId",
+        "trendSeriesPrefix",
+        "unicodeDataVersion",
+        "unit"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk ./gradlew --no-daemon pipelinePmBundle",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Glyph cache telemetry dump changes require reviewed pack-time, resident/upload-byte, hit/miss/eviction, invalidation-token, and refusal-diagnostic evidence without GPU or release-gate promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
         "no-dftext-retirement"
       ]
     },
@@ -1657,8 +2240,135 @@
       ]
     },
     {
+      "dumpId": "gpu-text-a8-route-plan",
+      "ownerTicket": "KFONT-M11-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md",
+        "section": "Text renderer handoff"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextA8RoutePlan.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextA8RoutePlanTest.kt",
+        "reports/pure-kotlin-text/gpu-text-a8-route-plan.json"
+      ],
+      "expectedFields": [
+        "artifact",
+        "atlasPages",
+        "bindingLayout",
+        "commandId",
+        "entryRefs",
+        "glyphRunId",
+        "layoutResultId",
+        "nonClaims",
+        "planId",
+        "productActivation",
+        "renderStep",
+        "routePromotion",
+        "schema",
+        "selectedRoute",
+        "uploadDependencyLabels",
+        "wgslModuleId"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*A8Text*'",
+        "rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*A8Text*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "A8 route plan dump changes require reviewed atlas page/entry, binding-layout, non-claim, and bounded GPU-evidence diffs without broad GPU text or dftext promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-broad-gpu-text-support-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "dumpId": "gpu-text-a8-route-refusals",
+      "ownerTicket": "KFONT-M11-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md",
+        "section": "Text renderer handoff"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextA8RoutePlan.kt",
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextRouteRefusals.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextA8RoutePlanTest.kt",
+        "reports/pure-kotlin-text/gpu-text-a8-route-refusals.json"
+      ],
+      "expectedFields": [
+        "classificationRows",
+        "diagnosticMappings",
+        "fixtureName",
+        "refusals",
+        "schema"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*A8Text*'",
+        "rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*A8Text*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "A8 refusal dump changes require reviewed missing-entry/stale-generation diagnostics that stay GPU-gated and must not broaden text GPU support or dftext-retirement claims.",
+      "nonClaims": [
+        "producer-only",
+        "no-broad-gpu-text-support-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "dumpId": "gpu-text-handoff-metrics",
+      "ownerTicket": "KFONT-M12-005",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextHandoffMetricsEvidence.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextHandoffMetricsEvidenceTest.kt",
+        "reports/pure-kotlin-text/gpu-text-handoff-metrics.json"
+      ],
+      "expectedFields": [
+        "advisoryBudgets",
+        "aggregateCounters",
+        "artifactKeyHash",
+        "artifactType",
+        "cacheRecords",
+        "classification",
+        "commandId",
+        "dumpId",
+        "evidenceRefs",
+        "gpuAdapter",
+        "gpuBackend",
+        "handoffDiagnostic",
+        "nonClaims",
+        "ownerTickets",
+        "rendererDiagnostic",
+        "routeOutcome",
+        "routeRows",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextHandoffMetricsEvidenceTest*'",
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "GPU handoff telemetry dump changes require reviewed route outcome diffs, stable text.gpu/unsupported.text diagnostics, advisory-only wording, and explicit confirmation that no GPU support claim or dftext retirement was added.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
       "dumpId": "gsub-trace",
-      "ownerTicket": "KFONT-M6-002",
+      "ownerTicket": "KFONT-M6-003",
       "classification": "golden-gated",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
@@ -1678,17 +2388,49 @@
         "schemaVersion"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGsubFixtureFontsAsDiagnostics",
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gsubTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo",
+        "rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGsubFixtureFontsAsDiagnostics --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.m6SimpleLayoutFixturesAreCheckedInWithSyntheticProvenance --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubContextFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGsubContextFixturesAsDiagnostics --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserKeepsNestedOnlyGsubLookupsReachableFromContextRules",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gsubTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubContextFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineReservesNestedOnlyLookupsForContextMatches",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "GSUB trace golden changes require reviewed Latin fixture provenance, parser refusal diagnostics, deterministic lookup-order facts, and no broader script promotion.",
+      "updatePolicy": "GSUB trace golden changes require reviewed Latin simple/contextual fixture provenance, parser refusal diagnostics, deterministic nested-lookup and cycle-guard facts, and no broader script promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-target-support-claim",
         "no-complete-gsub-support-claim",
         "no-native-shaper-oracle-claim",
         "no-gpu-text-route-claim"
+      ]
+    },
+    {
+      "dumpId": "hit-test-map",
+      "ownerTicket": "KFONT-M8-005",
+      "classification": "producer-only",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Metrics And Boxes"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphHitTestMapTest.kt",
+        "reports/font/fixtures/expected/paragraph/hit-test-map.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphHitTestMapTest",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Hit-test dump changes require reviewed caret affinity, placeholder ID routing, out-of-bounds clamp behavior, and explicit non-claims without bidi visual ordering, word-boundary completeness, ellipsis, or GPU text promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-paragraph-layout-claim",
+        "no-skia-paragraph-parity-claim"
       ]
     },
     {
@@ -1722,6 +2464,40 @@
         "no-complete-gsub-gpos-support-claim",
         "no-greek-cyrillic-hebrew-promotion-claim",
         "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "dumpId": "line-breaks",
+      "ownerTicket": "KFONT-M8-003",
+      "classification": "producer-only",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Output Contracts"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphLineBreaking.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphLineBreakingTest.kt",
+        "reports/font/fixtures/expected/paragraph/line-breaks.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion",
+        "unicodeVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphLineBreakingTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutMergesLineBreakDiagnosticsIntoResultDump --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutRefusesWhenLineBreakUnicodeDataIsUnavailable",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Line-break dump changes require reviewed break-opportunity diffs, locale-refinement diagnostic review, deterministic inputHash review, and explicit non-claim preservation without complete UAX #14 or paragraph support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-uax14-claim",
+        "no-complete-paragraph-layout-claim",
+        "no-skia-paragraph-parity-claim"
       ]
     },
     {
@@ -1982,6 +2758,42 @@
       ]
     },
     {
+      "dumpId": "paragraph-layout",
+      "ownerTicket": "KFONT-M8-004",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Metrics And Boxes"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphEllipsisLayoutTest.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/paragraph/paragraph-layout.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphEllipsisLayoutTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutShapesAndSerializesEllipsisFactsForSimpleMaxLineOverflow --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutEllipsizesVisiblePlaceholderLineWhenPlaceholderHasRoomForEllipsis --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutDiagnosesPlaceholderEllipsisConflictWhenTerminalPlaceholderCannotFitEllipsis",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Paragraph layout golden changes require reviewed line-local truncation facts, ellipsis provenance diffs, mixed-style and RTL-direction case review, stable refusal-diagnostic review, and explicit non-claims without complete bidi visual ordering or GPU text promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-complete-paragraph-layout-claim",
+        "no-full-bidi-visual-ordering-claim",
+        "no-skia-paragraph-parity-claim"
+      ]
+    },
+    {
       "dumpId": "paragraph-layout-result",
       "ownerTicket": "PKT-09A",
       "classification": "producer-only",
@@ -1991,24 +2803,227 @@
       },
       "producerPaths": [
         "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphPlaceholderLayoutTest.kt",
         "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt"
       ],
       "expectedFields": [
         "diagnostics",
-        "glyphRunCounts",
-        "layoutRefused",
-        "lineRanges",
-        "maxWidth",
+        "input",
+        "layout",
+        "lines",
+        "paragraphShapingRequests",
+        "placeholderBoxes",
+        "schema"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphPlaceholderLayoutTest.paragraphLayoutDumpIncludesResolvedPlaceholderBoxes --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineShapesPerParagraphSegmentsAndRecordsSegmentRefs",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Paragraph layout dump changes require reviewed segment references, placeholder-box geometry review, merged shaping/fallback diagnostics, and explicit non-claims without bidi visual ordering, hit testing, or GPU text promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-paragraph-layout-claim",
+        "no-skia-paragraph-parity-claim"
+      ]
+    },
+    {
+      "dumpId": "paragraph-metrics",
+      "ownerTicket": "KFONT-M12-003",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Metrics And Boxes"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/paragraph-metrics.json"
+      ],
+      "expectedFields": [
+        "cacheState",
+        "diagnostics",
+        "domain",
+        "dumpId",
+        "environment",
+        "fixtureId",
+        "fontSourceSetHash",
+        "measurementPhase",
         "metrics",
-        "placeholders",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "sampleCount",
+        "samples",
+        "schemaVersion",
+        "unicodeDataVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Paragraph telemetry dump changes require reviewed line-break, hit-test, selection, placeholder, and refusal-diagnostic diffs without paragraph parity, GPU text, or performance-gate promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-complete-paragraph-layout-claim",
+        "no-gpu-route-support-claim"
+      ]
+    },
+    {
+      "dumpId": "paragraph-shaping-requests",
+      "ownerTicket": "KFONT-M8-002",
+      "classification": "producer-only",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Output Contracts"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphShapingSegmentation.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphShapingSegmentationTest.kt",
+        "reports/font/fixtures/expected/paragraph/paragraph-shaping-requests.json"
+      ],
+      "expectedFields": [
+        "diagnostics",
+        "paragraphDirection",
+        "placeholderRanges",
+        "requests",
         "schema",
-        "styleRanges",
         "text"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test"
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphShapingSegmentationTest",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "Paragraph dump changes require refusal tests and explicit shaping/fallback gates.",
+      "updatePolicy": "Paragraph shaping request dump changes require reviewed style/script/bidi/fallback segmentation diffs, placeholder exclusion review, and explicit non-claims without line breaking, hit testing, or GPU text promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-paragraph-layout-claim",
+        "no-skia-paragraph-parity-claim"
+      ]
+    },
+    {
+      "dumpId": "paragraph-shaping-requests-goldens",
+      "ownerTicket": "KFONT-M8-002",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Output Contracts"
+      },
+      "producerPaths": [
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphShapingSegmentationTest.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+        "reports/font/fixtures/expected/paragraph/paragraph-shaping-requests-goldens.json",
+        "reports/font/fixtures/expected/paragraph/paragraph-shaping-requests.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphShapingSegmentationTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphShapingRequestGoldenPinsMixedScriptFallbackAndClusterCases",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Paragraph shaping request golden changes require mixed-script, variation-axis, fallback, placeholder, and cluster-boundary case review without complete paragraph support promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-paragraph-layout-claim",
+        "no-skia-paragraph-parity-claim"
+      ]
+    },
+    {
+      "dumpId": "parser-metrics",
+      "ownerTicket": "KFONT-M12-002",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/parser-metrics.json"
+      ],
+      "expectedFields": [
+        "cacheState",
+        "counters",
+        "diagnostics",
+        "domain",
+        "dumpId",
+        "environment",
+        "fixtureId",
+        "fontSourceSetHash",
+        "max",
+        "measurementPhase",
+        "median",
+        "metrics",
+        "name",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "p90",
+        "sampleCount",
+        "samples",
+        "schemaVersion",
+        "tableTags",
+        "trendSeriesId",
+        "trendSeriesPrefix",
+        "unicodeDataVersion",
+        "unit"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk ./gradlew --no-daemon pipelinePmBundle",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Parser telemetry dump changes require reviewed fixture IDs, stable advisory trend series, semantic malformed-table diagnostics, and matrix checkpoint updates without performance-gate promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim"
+      ]
+    },
+    {
+      "dumpId": "placeholder-layout",
+      "ownerTicket": "KFONT-M8-006",
+      "classification": "producer-only",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+        "section": "Placeholders"
+      },
+      "producerPaths": [
+        "font/text/src/main/kotlin/org/graphiks/kanvas/text/paragraph/ParagraphTypes.kt",
+        "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphPlaceholderLayoutTest.kt",
+        "reports/font/fixtures/expected/paragraph/placeholder-layout.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "dumpId",
+        "nonClaims",
+        "ownerTickets",
+        "schemaVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphPlaceholderLayoutTest",
+        "rtk python3 scripts/validate_font_fixture_assets.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Placeholder layout dump changes require baseline/alignment geometry review, deterministic inputHash review, and explicit non-claims without selection, hit-testing, ellipsis, or GPU text promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-paragraph-layout-claim",
@@ -2095,6 +3110,63 @@
         "no-cluster-safe-fallback-claim",
         "no-platform-font-fallback-claim",
         "no-shaping-engine-claim"
+      ]
+    },
+    {
+      "dumpId": "scaler-metrics",
+      "ownerTicket": "KFONT-M12-002",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/scaler-metrics.json"
+      ],
+      "expectedFields": [
+        "cacheState",
+        "counters",
+        "diagnostics",
+        "domain",
+        "dumpId",
+        "environment",
+        "fixtureId",
+        "fontSourceSetHash",
+        "max",
+        "measurementPhase",
+        "median",
+        "metrics",
+        "name",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "p90",
+        "sampleCount",
+        "samples",
+        "schemaVersion",
+        "tableTags",
+        "trendSeriesId",
+        "trendSeriesPrefix",
+        "unicodeDataVersion",
+        "unit"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk ./gradlew --no-daemon pipelinePmBundle",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Scaler telemetry dump changes require reviewed fixture IDs, stable advisory trend series, malformed/refusal diagnostics, and matrix checkpoint updates without performance-gate promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim"
       ]
     },
     {
@@ -2310,7 +3382,7 @@
     },
     {
       "dumpId": "shaped-glyph-run",
-      "ownerTicket": "KFONT-M6-004",
+      "ownerTicket": "KFONT-M6-003",
       "classification": "golden-gated",
       "targetSpec": {
         "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
@@ -2329,16 +3401,63 @@
         "schemaVersion"
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGposFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedMarkAndCursiveFixtureFontsFromRepo",
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubContextFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGposFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedMarkAndCursiveFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineReservesNestedOnlyLookupsForContextMatches",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
-      "updatePolicy": "Shaped glyph run golden changes require reviewed GSUB, simple GPOS, and bounded mark/cursive fixture provenance, cluster-range review, and deterministic advance/offset facts without broader shaping promotion.",
+      "updatePolicy": "Shaped glyph run golden changes require reviewed Latin GSUB simple/contextual, simple GPOS, and bounded mark/cursive fixture provenance, cluster-range review, deterministic advance/offset facts, and bounded cycle/refusal diagnostics without broader shaping promotion.",
       "nonClaims": [
         "producer-only",
         "no-complete-target-support-claim",
         "no-complete-gsub-gpos-support-claim",
         "no-native-shaper-oracle-claim",
         "no-gpu-text-route-claim"
+      ]
+    },
+    {
+      "dumpId": "shaping-metrics",
+      "ownerTicket": "KFONT-M12-003",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+        "section": "Shaping Pipeline"
+      },
+      "producerPaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/shaping-metrics.json"
+      ],
+      "expectedFields": [
+        "cacheState",
+        "diagnostics",
+        "domain",
+        "dumpId",
+        "environment",
+        "fixtureId",
+        "fontSourceSetHash",
+        "measurementPhase",
+        "metrics",
+        "negativeCases",
+        "nonClaims",
+        "ownerTickets",
+        "sampleCount",
+        "samples",
+        "schemaVersion",
+        "unicodeDataVersion"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
+      ],
+      "updatePolicy": "Shaping telemetry dump changes require reviewed segmentation, bidi, script-itemization, fallback, emoji-refusal, and script-fixture diffs without script-support, GPU text, or performance-gate promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-emoji-support-claim",
+        "no-gpu-route-support-claim"
       ]
     },
     {

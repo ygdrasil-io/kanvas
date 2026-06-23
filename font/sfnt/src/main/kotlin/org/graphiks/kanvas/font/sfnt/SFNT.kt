@@ -6271,7 +6271,15 @@ data class OpenTypeGsubTable(
  */
 sealed interface OpenTypeGsubLookup {
     val featureTag: String
+    val extraFeatureTags: Set<String>
+    val lookupIndex: Int
     val lookupType: Int
+
+    val topLevelFeatureTags: Set<String>
+        get() = linkedSetOf<String>().apply {
+            if (featureTag.isNotBlank()) add(featureTag)
+            addAll(extraFeatureTags)
+        }
 }
 
 /**
@@ -6279,6 +6287,8 @@ sealed interface OpenTypeGsubLookup {
  */
 data class OpenTypeGsubSingleSubstitutionLookup(
     override val featureTag: String,
+    override val extraFeatureTags: Set<String> = emptySet(),
+    override val lookupIndex: Int = 0,
     val substitutions: List<OpenTypeGsubSingleSubstitution> = emptyList(),
 ) : OpenTypeGsubLookup {
     override val lookupType: Int = GSUB_SINGLE_SUBSTITUTION_LOOKUP_TYPE
@@ -6306,6 +6316,8 @@ data class OpenTypeGsubSingleSubstitution(
  */
 data class OpenTypeGsubMultipleSubstitutionLookup(
     override val featureTag: String,
+    override val extraFeatureTags: Set<String> = emptySet(),
+    override val lookupIndex: Int = 0,
     val substitutions: List<OpenTypeGsubMultipleSubstitution> = emptyList(),
 ) : OpenTypeGsubLookup {
     override val lookupType: Int = GSUB_MULTIPLE_SUBSTITUTION_LOOKUP_TYPE
@@ -6338,6 +6350,8 @@ data class OpenTypeGsubMultipleSubstitution(
  */
 data class OpenTypeGsubLigatureSubstitutionLookup(
     override val featureTag: String,
+    override val extraFeatureTags: Set<String> = emptySet(),
+    override val lookupIndex: Int = 0,
     val substitutions: List<OpenTypeGsubLigatureSubstitution> = emptyList(),
 ) : OpenTypeGsubLookup {
     override val lookupType: Int = GSUB_LIGATURE_SUBSTITUTION_LOOKUP_TYPE
@@ -6365,8 +6379,144 @@ data class OpenTypeGsubLigatureSubstitution(
     }
 }
 
+data class OpenTypeGsubNestedLookupRecord(
+    val sequenceIndex: Int,
+    val lookupIndex: Int,
+) {
+    init {
+        require(sequenceIndex in OPENTYPE_GLYPH_ID_RANGE) {
+            "OpenType GSUB nested sequence index $sequenceIndex is outside range 0..65535."
+        }
+        require(lookupIndex in OPENTYPE_GLYPH_ID_RANGE) {
+            "OpenType GSUB nested lookup index $lookupIndex is outside range 0..65535."
+        }
+    }
+}
+
+data class OpenTypeGsubContextGlyphLookup(
+    override val featureTag: String,
+    override val extraFeatureTags: Set<String> = emptySet(),
+    override val lookupIndex: Int = 0,
+    val rules: List<OpenTypeGsubContextGlyphRule> = emptyList(),
+) : OpenTypeGsubLookup {
+    override val lookupType: Int = GSUB_CONTEXTUAL_SUBSTITUTION_LOOKUP_TYPE
+}
+
+data class OpenTypeGsubContextGlyphRule(
+    val inputGlyphIds: List<Int>,
+    val nestedLookups: List<OpenTypeGsubNestedLookupRecord>,
+) {
+    init {
+        require(inputGlyphIds.size >= 2) {
+            "OpenType GSUB contextual glyph rule must consume at least two glyphs."
+        }
+        inputGlyphIds.forEach { glyphId ->
+            require(glyphId in OPENTYPE_GLYPH_ID_RANGE) {
+                "OpenType GSUB contextual glyph ID $glyphId is outside range 0..65535."
+            }
+        }
+        require(nestedLookups.isNotEmpty()) {
+            "OpenType GSUB contextual glyph rule must contain at least one nested lookup record."
+        }
+    }
+}
+
+data class OpenTypeGsubContextClassLookup(
+    override val featureTag: String,
+    override val extraFeatureTags: Set<String> = emptySet(),
+    override val lookupIndex: Int = 0,
+    val firstGlyphCoverage: Set<Int> = emptySet(),
+    val classDefinitions: Map<Int, Int> = emptyMap(),
+    val rules: List<OpenTypeGsubContextClassRule> = emptyList(),
+    val subtables: List<OpenTypeGsubContextClassSubtable> = emptyList(),
+) : OpenTypeGsubLookup {
+    override val lookupType: Int = GSUB_CONTEXTUAL_SUBSTITUTION_LOOKUP_TYPE
+
+    init {
+        firstGlyphCoverage.forEach { glyphId ->
+            require(glyphId in OPENTYPE_GLYPH_ID_RANGE) {
+                "OpenType GSUB contextual class coverage glyph ID $glyphId is outside range 0..65535."
+            }
+        }
+    }
+}
+
+data class OpenTypeGsubContextClassSubtable(
+    val firstGlyphCoverage: Set<Int> = emptySet(),
+    val classDefinitions: Map<Int, Int> = emptyMap(),
+    val rules: List<OpenTypeGsubContextClassRule> = emptyList(),
+) {
+    init {
+        firstGlyphCoverage.forEach { glyphId ->
+            require(glyphId in OPENTYPE_GLYPH_ID_RANGE) {
+                "OpenType GSUB contextual class coverage glyph ID $glyphId is outside range 0..65535."
+            }
+        }
+        classDefinitions.forEach { (glyphId, classId) ->
+            require(glyphId in OPENTYPE_GLYPH_ID_RANGE) {
+                "OpenType GSUB contextual class-definition glyph ID $glyphId is outside range 0..65535."
+            }
+            require(classId in OPENTYPE_GLYPH_ID_RANGE) {
+                "OpenType GSUB contextual class-definition class ID $classId is outside range 0..65535."
+            }
+        }
+    }
+}
+
+data class OpenTypeGsubContextClassRule(
+    val inputClasses: List<Int>,
+    val nestedLookups: List<OpenTypeGsubNestedLookupRecord>,
+) {
+    init {
+        require(inputClasses.size >= 2) {
+            "OpenType GSUB contextual class rule must consume at least two glyph positions."
+        }
+        inputClasses.forEach { classId ->
+            require(classId in OPENTYPE_GLYPH_ID_RANGE) {
+                "OpenType GSUB contextual class ID $classId is outside range 0..65535."
+            }
+        }
+        require(nestedLookups.isNotEmpty()) {
+            "OpenType GSUB contextual class rule must contain at least one nested lookup record."
+        }
+    }
+}
+
+data class OpenTypeGsubContextCoverageLookup(
+    override val featureTag: String,
+    override val extraFeatureTags: Set<String> = emptySet(),
+    override val lookupIndex: Int = 0,
+    val rules: List<OpenTypeGsubContextCoverageRule> = emptyList(),
+) : OpenTypeGsubLookup {
+    override val lookupType: Int = GSUB_CONTEXTUAL_SUBSTITUTION_LOOKUP_TYPE
+}
+
+data class OpenTypeGsubContextCoverageRule(
+    val inputCoverages: List<Set<Int>>,
+    val nestedLookups: List<OpenTypeGsubNestedLookupRecord>,
+) {
+    init {
+        require(inputCoverages.size >= 2) {
+            "OpenType GSUB contextual coverage rule must consume at least two glyph positions."
+        }
+        inputCoverages.forEachIndexed { index, coverage ->
+            require(coverage.isNotEmpty()) {
+                "OpenType GSUB contextual coverage at index $index must not be empty."
+            }
+            coverage.forEach { glyphId ->
+                require(glyphId in OPENTYPE_GLYPH_ID_RANGE) {
+                    "OpenType GSUB contextual coverage glyph ID $glyphId is outside range 0..65535."
+                }
+            }
+        }
+        require(nestedLookups.isNotEmpty()) {
+            "OpenType GSUB contextual coverage rule must contain at least one nested lookup record."
+        }
+    }
+}
+
 /**
- * Parser for the Kanvas-supported subset of OpenType GSUB simple lookups.
+ * Parser for the Kanvas-supported subset of OpenType GSUB lookups.
  */
 object OpenTypeGsubTableParser {
     fun parse(table: ByteArray): OpenTypeGsubTable {
@@ -6411,23 +6561,29 @@ object OpenTypeGsubTableParser {
             label = "OpenType GSUB LookupList offsets",
         )
 
-        val lookups = mutableListOf<OpenTypeGsubLookup>()
+        val topLevelFeatureTagsByLookupIndex = LinkedHashMap<Int, LinkedHashSet<String>>()
         featureLookups.forEach { featureLookup ->
             require(featureLookup.lookupIndex in 0 until lookupCount) {
                 "OpenType GSUB lookup index ${featureLookup.lookupIndex} is outside LookupList range 0 until $lookupCount."
             }
+            topLevelFeatureTagsByLookupIndex.getOrPut(featureLookup.lookupIndex) { LinkedHashSet() } += featureLookup.featureTag
+        }
+
+        val lookups = mutableListOf<OpenTypeGsubLookup>()
+        repeat(lookupCount) { lookupIndex ->
             val lookupOffset = table.readUInt16BE(
-                lookupListStart + UINT16_BYTE_LENGTH + featureLookup.lookupIndex * UINT16_BYTE_LENGTH,
-                "OpenType GSUB LookupList offset[${featureLookup.lookupIndex}]",
+                lookupListStart + UINT16_BYTE_LENGTH + lookupIndex * UINT16_BYTE_LENGTH,
+                "OpenType GSUB LookupList offset[$lookupIndex]",
             )
             parseLookup(
                 table = table,
                 lookupStart = table.checkedOffset(
                     base = lookupListStart,
                     offset = lookupOffset,
-                    label = "OpenType GSUB lookup ${featureLookup.lookupIndex}",
+                    label = "OpenType GSUB lookup $lookupIndex",
                 ),
-                featureTag = featureLookup.featureTag,
+                lookupIndex = lookupIndex,
+                featureTags = topLevelFeatureTagsByLookupIndex[lookupIndex].orEmpty(),
             )?.let(lookups::add)
         }
 
@@ -6618,7 +6774,8 @@ object OpenTypeGsubTableParser {
     private fun parseLookup(
         table: ByteArray,
         lookupStart: Int,
-        featureTag: String,
+        lookupIndex: Int,
+        featureTags: Collection<String>,
     ): OpenTypeGsubLookup? {
         table.requireRange(lookupStart, GPOS_LOOKUP_HEADER_SIZE, "OpenType GSUB LookupTable header")
         val lookupType = table.readUInt16BE(lookupStart, "OpenType GSUB LookupTable lookupType")
@@ -6634,9 +6791,10 @@ object OpenTypeGsubTableParser {
         )
 
         return when (lookupType) {
-            GSUB_SINGLE_SUBSTITUTION_LOOKUP_TYPE -> parseSingleLookup(table, lookupStart, subtableCount, featureTag)
-            GSUB_MULTIPLE_SUBSTITUTION_LOOKUP_TYPE -> parseMultipleLookup(table, lookupStart, subtableCount, featureTag)
-            GSUB_LIGATURE_SUBSTITUTION_LOOKUP_TYPE -> parseLigatureLookup(table, lookupStart, subtableCount, featureTag)
+            GSUB_SINGLE_SUBSTITUTION_LOOKUP_TYPE -> parseSingleLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
+            GSUB_MULTIPLE_SUBSTITUTION_LOOKUP_TYPE -> parseMultipleLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
+            GSUB_LIGATURE_SUBSTITUTION_LOOKUP_TYPE -> parseLigatureLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
+            GSUB_CONTEXTUAL_SUBSTITUTION_LOOKUP_TYPE -> parseContextLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
             else -> null
         }
     }
@@ -6644,8 +6802,9 @@ object OpenTypeGsubTableParser {
     private fun parseSingleLookup(
         table: ByteArray,
         lookupStart: Int,
+        lookupIndex: Int,
         subtableCount: Int,
-        featureTag: String,
+        featureTags: Collection<String>,
     ): OpenTypeGsubSingleSubstitutionLookup? {
         val substitutions = LinkedHashMap<Int, Int>()
         repeat(subtableCount) { subtableIndex ->
@@ -6664,8 +6823,11 @@ object OpenTypeGsubTableParser {
             )
         }
         return substitutions.takeUnless { it.isEmpty() }?.let { parsed ->
+            val orderedFeatureTags = featureTags.toList()
             OpenTypeGsubSingleSubstitutionLookup(
-                featureTag = featureTag,
+                featureTag = orderedFeatureTags.firstOrNull().orEmpty(),
+                extraFeatureTags = orderedFeatureTags.drop(1).toSet(),
+                lookupIndex = lookupIndex,
                 substitutions = parsed.map { (inputGlyphId, replacementGlyphId) ->
                     OpenTypeGsubSingleSubstitution(inputGlyphId = inputGlyphId, replacementGlyphId = replacementGlyphId)
                 },
@@ -6736,8 +6898,9 @@ object OpenTypeGsubTableParser {
     private fun parseMultipleLookup(
         table: ByteArray,
         lookupStart: Int,
+        lookupIndex: Int,
         subtableCount: Int,
-        featureTag: String,
+        featureTags: Collection<String>,
     ): OpenTypeGsubMultipleSubstitutionLookup? {
         val substitutions = LinkedHashMap<Int, List<Int>>()
         repeat(subtableCount) { subtableIndex ->
@@ -6756,8 +6919,11 @@ object OpenTypeGsubTableParser {
             )
         }
         return substitutions.takeUnless { it.isEmpty() }?.let { parsed ->
+            val orderedFeatureTags = featureTags.toList()
             OpenTypeGsubMultipleSubstitutionLookup(
-                featureTag = featureTag,
+                featureTag = orderedFeatureTags.firstOrNull().orEmpty(),
+                extraFeatureTags = orderedFeatureTags.drop(1).toSet(),
+                lookupIndex = lookupIndex,
                 substitutions = parsed.map { (inputGlyphId, replacementGlyphIds) ->
                     OpenTypeGsubMultipleSubstitution(inputGlyphId = inputGlyphId, replacementGlyphIds = replacementGlyphIds)
                 },
@@ -6843,11 +7009,541 @@ object OpenTypeGsubTableParser {
         }
     }
 
+    private fun parseContextLookup(
+        table: ByteArray,
+        lookupStart: Int,
+        lookupIndex: Int,
+        subtableCount: Int,
+        featureTags: Collection<String>,
+    ): OpenTypeGsubLookup? {
+        val glyphRules = mutableListOf<OpenTypeGsubContextGlyphRule>()
+        val classSubtables = mutableListOf<OpenTypeGsubContextClassSubtable>()
+        val coverageRules = mutableListOf<OpenTypeGsubContextCoverageRule>()
+        var format: Int? = null
+        repeat(subtableCount) { subtableIndex ->
+            val subtableOffset = table.readUInt16BE(
+                lookupStart + GPOS_LOOKUP_HEADER_SIZE + subtableIndex * UINT16_BYTE_LENGTH,
+                "OpenType GSUB LookupTable subtableOffset[$subtableIndex]",
+            )
+            val subtableStart = table.checkedOffset(
+                base = lookupStart,
+                offset = subtableOffset,
+                label = "OpenType GSUB ContextSubst subtable $subtableIndex",
+            )
+            table.requireRange(subtableStart, 4, "OpenType GSUB ContextSubst subtable header")
+            val subtableFormat = table.readUInt16BE(subtableStart, "OpenType GSUB ContextSubst substFormat")
+            if (format == null) {
+                format = subtableFormat
+            } else {
+                require(format == subtableFormat) {
+                    "OpenType GSUB ContextSubst subtable formats must stay consistent within one lookup."
+                }
+            }
+            when (subtableFormat) {
+                1 -> parseContextFormat1Subtable(table, subtableStart, glyphRules)
+                2 -> parseContextFormat2Subtable(table, subtableStart)?.let(classSubtables::add)
+                3 -> parseContextFormat3Subtable(table, subtableStart, coverageRules)
+                else -> throw IllegalArgumentException("OpenType GSUB ContextSubst format $subtableFormat is not supported.")
+            }
+        }
+        val orderedFeatureTags = featureTags.toList()
+        return when (format) {
+            1 -> glyphRules.takeUnless { it.isEmpty() }?.let {
+                OpenTypeGsubContextGlyphLookup(
+                    featureTag = orderedFeatureTags.firstOrNull().orEmpty(),
+                    extraFeatureTags = orderedFeatureTags.drop(1).toSet(),
+                    lookupIndex = lookupIndex,
+                    rules = it,
+                )
+            }
+            2 -> classSubtables.takeUnless { it.isEmpty() }?.let {
+                val singleSubtable = it.singleOrNull()
+                OpenTypeGsubContextClassLookup(
+                    featureTag = orderedFeatureTags.firstOrNull().orEmpty(),
+                    extraFeatureTags = orderedFeatureTags.drop(1).toSet(),
+                    lookupIndex = lookupIndex,
+                    firstGlyphCoverage = singleSubtable?.firstGlyphCoverage.orEmpty(),
+                    classDefinitions = singleSubtable?.classDefinitions.orEmpty(),
+                    rules = singleSubtable?.rules.orEmpty(),
+                    subtables = if (it.size > 1) it else emptyList(),
+                )
+            }
+            3 -> coverageRules.takeUnless { it.isEmpty() }?.let {
+                OpenTypeGsubContextCoverageLookup(
+                    featureTag = orderedFeatureTags.firstOrNull().orEmpty(),
+                    extraFeatureTags = orderedFeatureTags.drop(1).toSet(),
+                    lookupIndex = lookupIndex,
+                    rules = it,
+                )
+            }
+            else -> null
+        }
+    }
+
+    private fun parseContextFormat1Subtable(
+        table: ByteArray,
+        subtableStart: Int,
+        rules: MutableList<OpenTypeGsubContextGlyphRule>,
+    ) {
+        val coverageOffset = table.readUInt16BE(
+            subtableStart + UINT16_BYTE_LENGTH,
+            "OpenType GSUB ContextSubst format 1 coverageOffset",
+        )
+        val coverage = parseCoverageTable(
+            table = table,
+            coverageStart = table.checkedOffset(
+                base = subtableStart,
+                offset = coverageOffset,
+                label = "OpenType GSUB ContextSubst format 1 coverage",
+            ),
+        )
+        val subRuleSetCount = table.readUInt16BE(
+            subtableStart + UINT16_BYTE_LENGTH * 2,
+            "OpenType GSUB ContextSubst format 1 subRuleSetCount",
+        )
+        require(subRuleSetCount == coverage.size) {
+            "OpenType GSUB ContextSubst format 1 subRuleSetCount $subRuleSetCount must equal coverage glyph count ${coverage.size}."
+        }
+        val subRuleSetOffsetsStart = table.checkedOffset(
+            subtableStart,
+            6,
+            "OpenType GSUB ContextSubst format 1 subRuleSet offsets",
+        )
+        table.requireArrayRange(
+            offset = subRuleSetOffsetsStart,
+            count = subRuleSetCount,
+            recordSize = UINT16_BYTE_LENGTH,
+            label = "OpenType GSUB ContextSubst format 1 subRuleSet offsets",
+        )
+        repeat(subRuleSetCount) { setIndex ->
+            val subRuleSetOffset = table.readUInt16BE(
+                subRuleSetOffsetsStart + setIndex * UINT16_BYTE_LENGTH,
+                "OpenType GSUB ContextSubst format 1 subRuleSetOffset[$setIndex]",
+            )
+            if (subRuleSetOffset == 0) return@repeat
+            val subRuleSetStart = table.checkedOffset(
+                base = subtableStart,
+                offset = subRuleSetOffset,
+                label = "OpenType GSUB ContextSubst format 1 SubRuleSet $setIndex",
+            )
+            table.requireRange(
+                subRuleSetStart,
+                UINT16_BYTE_LENGTH,
+                "OpenType GSUB ContextSubst format 1 SubRuleSet $setIndex header",
+            )
+            val subRuleCount = table.readUInt16BE(
+                subRuleSetStart,
+                "OpenType GSUB ContextSubst format 1 SubRuleSet $setIndex subRuleCount",
+            )
+            val subRuleOffsetsStart = table.checkedOffset(
+                subRuleSetStart,
+                UINT16_BYTE_LENGTH,
+                "OpenType GSUB ContextSubst format 1 SubRuleSet $setIndex offsets",
+            )
+            table.requireArrayRange(
+                offset = subRuleOffsetsStart,
+                count = subRuleCount,
+                recordSize = UINT16_BYTE_LENGTH,
+                label = "OpenType GSUB ContextSubst format 1 SubRuleSet $setIndex offsets",
+            )
+            repeat(subRuleCount) { ruleIndex ->
+                val subRuleOffset = table.readUInt16BE(
+                    subRuleOffsetsStart + ruleIndex * UINT16_BYTE_LENGTH,
+                    "OpenType GSUB ContextSubst format 1 SubRuleSet $setIndex subRuleOffset[$ruleIndex]",
+                )
+                val subRuleStart = table.checkedOffset(
+                    base = subRuleSetStart,
+                    offset = subRuleOffset,
+                    label = "OpenType GSUB ContextSubst format 1 SubRule $setIndex/$ruleIndex",
+                )
+                table.requireRange(subRuleStart, 4, "OpenType GSUB ContextSubst format 1 SubRule $setIndex/$ruleIndex header")
+                val glyphCount = table.readUInt16BE(
+                    subRuleStart,
+                    "OpenType GSUB ContextSubst format 1 SubRule $setIndex/$ruleIndex glyphCount",
+                )
+                require(glyphCount >= 2) {
+                    "OpenType GSUB ContextSubst format 1 SubRule $setIndex/$ruleIndex glyphCount $glyphCount must be at least 2."
+                }
+                val substCount = table.readUInt16BE(
+                    subRuleStart + UINT16_BYTE_LENGTH,
+                    "OpenType GSUB ContextSubst format 1 SubRule $setIndex/$ruleIndex substCount",
+                )
+                val inputStart = table.checkedOffset(
+                    subRuleStart,
+                    4,
+                    "OpenType GSUB ContextSubst format 1 SubRule $setIndex/$ruleIndex input array",
+                )
+                table.requireArrayRange(
+                    offset = inputStart,
+                    count = glyphCount - 1,
+                    recordSize = UINT16_BYTE_LENGTH,
+                    label = "OpenType GSUB ContextSubst format 1 SubRule $setIndex/$ruleIndex input array",
+                )
+                val lookupRecordsStart = table.checkedOffset(
+                    inputStart,
+                    (glyphCount - 1) * UINT16_BYTE_LENGTH,
+                    "OpenType GSUB ContextSubst format 1 SubRule $setIndex/$ruleIndex lookup records",
+                )
+                val nestedLookups = parseNestedLookupRecords(
+                    table = table,
+                    recordsStart = lookupRecordsStart,
+                    substCount = substCount,
+                    matchLength = glyphCount,
+                    label = "OpenType GSUB ContextSubst format 1 SubRule $setIndex/$ruleIndex",
+                )
+                rules += OpenTypeGsubContextGlyphRule(
+                    inputGlyphIds = buildList(glyphCount) {
+                        add(coverage[setIndex])
+                        repeat(glyphCount - 1) { glyphIndex ->
+                            add(
+                                table.readUInt16BE(
+                                    inputStart + glyphIndex * UINT16_BYTE_LENGTH,
+                                    "OpenType GSUB ContextSubst format 1 SubRule $setIndex/$ruleIndex inputGlyphID[$glyphIndex]",
+                                ),
+                            )
+                        }
+                    },
+                    nestedLookups = nestedLookups,
+                )
+            }
+        }
+    }
+
+    private fun parseContextFormat2Subtable(
+        table: ByteArray,
+        subtableStart: Int,
+    ): OpenTypeGsubContextClassSubtable? {
+        val coverageOffset = table.readUInt16BE(
+            subtableStart + UINT16_BYTE_LENGTH,
+            "OpenType GSUB ContextSubst format 2 coverageOffset",
+        )
+        val coverage = parseCoverageTable(
+            table = table,
+            coverageStart = table.checkedOffset(
+                base = subtableStart,
+                offset = coverageOffset,
+                label = "OpenType GSUB ContextSubst format 2 coverage",
+            ),
+        )
+        val firstGlyphCoverage = coverage.toCollection(LinkedHashSet())
+        val classDefOffset = table.readUInt16BE(
+            subtableStart + UINT16_BYTE_LENGTH * 2,
+            "OpenType GSUB ContextSubst format 2 classDefOffset",
+        )
+        val parsedClassDefinitions = parseGsubClassDefTable(
+            table = table,
+            classDefStart = table.checkedOffset(
+                base = subtableStart,
+                offset = classDefOffset,
+                label = "OpenType GSUB ContextSubst format 2 ClassDef",
+            ),
+        )
+        val subClassSetCount = table.readUInt16BE(
+            subtableStart + UINT16_BYTE_LENGTH * 3,
+            "OpenType GSUB ContextSubst format 2 subClassSetCount",
+        )
+        val subClassSetOffsetsStart = table.checkedOffset(
+            subtableStart,
+            8,
+            "OpenType GSUB ContextSubst format 2 subClassSet offsets",
+        )
+        table.requireArrayRange(
+            offset = subClassSetOffsetsStart,
+            count = subClassSetCount,
+            recordSize = UINT16_BYTE_LENGTH,
+            label = "OpenType GSUB ContextSubst format 2 subClassSet offsets",
+        )
+        val rules = mutableListOf<OpenTypeGsubContextClassRule>()
+        repeat(subClassSetCount) { firstClass ->
+            val subClassSetOffset = table.readUInt16BE(
+                subClassSetOffsetsStart + firstClass * UINT16_BYTE_LENGTH,
+                "OpenType GSUB ContextSubst format 2 subClassSetOffset[$firstClass]",
+            )
+            if (subClassSetOffset == 0) return@repeat
+            val subClassSetStart = table.checkedOffset(
+                base = subtableStart,
+                offset = subClassSetOffset,
+                label = "OpenType GSUB ContextSubst format 2 SubClassSet $firstClass",
+            )
+            table.requireRange(
+                subClassSetStart,
+                UINT16_BYTE_LENGTH,
+                "OpenType GSUB ContextSubst format 2 SubClassSet $firstClass header",
+            )
+            val subClassRuleCount = table.readUInt16BE(
+                subClassSetStart,
+                "OpenType GSUB ContextSubst format 2 SubClassSet $firstClass subClassRuleCount",
+            )
+            val subClassRuleOffsetsStart = table.checkedOffset(
+                subClassSetStart,
+                UINT16_BYTE_LENGTH,
+                "OpenType GSUB ContextSubst format 2 SubClassSet $firstClass offsets",
+            )
+            table.requireArrayRange(
+                offset = subClassRuleOffsetsStart,
+                count = subClassRuleCount,
+                recordSize = UINT16_BYTE_LENGTH,
+                label = "OpenType GSUB ContextSubst format 2 SubClassSet $firstClass offsets",
+            )
+            repeat(subClassRuleCount) { ruleIndex ->
+                val subClassRuleOffset = table.readUInt16BE(
+                    subClassRuleOffsetsStart + ruleIndex * UINT16_BYTE_LENGTH,
+                    "OpenType GSUB ContextSubst format 2 SubClassSet $firstClass subClassRuleOffset[$ruleIndex]",
+                )
+                val subClassRuleStart = table.checkedOffset(
+                    base = subClassSetStart,
+                    offset = subClassRuleOffset,
+                    label = "OpenType GSUB ContextSubst format 2 SubClassRule $firstClass/$ruleIndex",
+                )
+                table.requireRange(
+                    subClassRuleStart,
+                    4,
+                    "OpenType GSUB ContextSubst format 2 SubClassRule $firstClass/$ruleIndex header",
+                )
+                val glyphCount = table.readUInt16BE(
+                    subClassRuleStart,
+                    "OpenType GSUB ContextSubst format 2 SubClassRule $firstClass/$ruleIndex glyphCount",
+                )
+                require(glyphCount >= 2) {
+                    "OpenType GSUB ContextSubst format 2 SubClassRule $firstClass/$ruleIndex glyphCount $glyphCount must be at least 2."
+                }
+                val substCount = table.readUInt16BE(
+                    subClassRuleStart + UINT16_BYTE_LENGTH,
+                    "OpenType GSUB ContextSubst format 2 SubClassRule $firstClass/$ruleIndex substCount",
+                )
+                val classArrayStart = table.checkedOffset(
+                    subClassRuleStart,
+                    4,
+                    "OpenType GSUB ContextSubst format 2 SubClassRule $firstClass/$ruleIndex class array",
+                )
+                table.requireArrayRange(
+                    offset = classArrayStart,
+                    count = glyphCount - 1,
+                    recordSize = UINT16_BYTE_LENGTH,
+                    label = "OpenType GSUB ContextSubst format 2 SubClassRule $firstClass/$ruleIndex class array",
+                )
+                val lookupRecordsStart = table.checkedOffset(
+                    classArrayStart,
+                    (glyphCount - 1) * UINT16_BYTE_LENGTH,
+                    "OpenType GSUB ContextSubst format 2 SubClassRule $firstClass/$ruleIndex lookup records",
+                )
+                val nestedLookups = parseNestedLookupRecords(
+                    table = table,
+                    recordsStart = lookupRecordsStart,
+                    substCount = substCount,
+                    matchLength = glyphCount,
+                    label = "OpenType GSUB ContextSubst format 2 SubClassRule $firstClass/$ruleIndex",
+                )
+                rules += OpenTypeGsubContextClassRule(
+                    inputClasses = buildList(glyphCount) {
+                        add(firstClass)
+                        repeat(glyphCount - 1) { classIndex ->
+                            add(
+                                table.readUInt16BE(
+                                    classArrayStart + classIndex * UINT16_BYTE_LENGTH,
+                                    "OpenType GSUB ContextSubst format 2 SubClassRule $firstClass/$ruleIndex class[$classIndex]",
+                                ),
+                            )
+                        }
+                    },
+                    nestedLookups = nestedLookups,
+                )
+            }
+        }
+        return OpenTypeGsubContextClassSubtable(
+            firstGlyphCoverage = firstGlyphCoverage,
+            classDefinitions = parsedClassDefinitions.toMap(),
+            rules = rules,
+        ).takeUnless { it.firstGlyphCoverage.isEmpty() || it.rules.isEmpty() }
+    }
+
+    private fun parseContextFormat3Subtable(
+        table: ByteArray,
+        subtableStart: Int,
+        rules: MutableList<OpenTypeGsubContextCoverageRule>,
+    ) {
+        table.requireRange(subtableStart, 6, "OpenType GSUB ContextSubst format 3 header")
+        val glyphCount = table.readUInt16BE(
+            subtableStart + UINT16_BYTE_LENGTH,
+            "OpenType GSUB ContextSubst format 3 glyphCount",
+        )
+        require(glyphCount >= 2) {
+            "OpenType GSUB ContextSubst format 3 glyphCount $glyphCount must be at least 2."
+        }
+        val substCount = table.readUInt16BE(
+            subtableStart + UINT16_BYTE_LENGTH * 2,
+            "OpenType GSUB ContextSubst format 3 substCount",
+        )
+        val coverageOffsetsStart = table.checkedOffset(
+            subtableStart,
+            6,
+            "OpenType GSUB ContextSubst format 3 coverage offsets",
+        )
+        table.requireArrayRange(
+            offset = coverageOffsetsStart,
+            count = glyphCount,
+            recordSize = UINT16_BYTE_LENGTH,
+            label = "OpenType GSUB ContextSubst format 3 coverage offsets",
+        )
+        val lookupRecordsStart = table.checkedOffset(
+            coverageOffsetsStart,
+            glyphCount * UINT16_BYTE_LENGTH,
+            "OpenType GSUB ContextSubst format 3 lookup records",
+        )
+        val nestedLookups = parseNestedLookupRecords(
+            table = table,
+            recordsStart = lookupRecordsStart,
+            substCount = substCount,
+            matchLength = glyphCount,
+            label = "OpenType GSUB ContextSubst format 3",
+        )
+        rules += OpenTypeGsubContextCoverageRule(
+            inputCoverages = List(glyphCount) { coverageIndex ->
+                val coverageOffset = table.readUInt16BE(
+                    coverageOffsetsStart + coverageIndex * UINT16_BYTE_LENGTH,
+                    "OpenType GSUB ContextSubst format 3 coverageOffset[$coverageIndex]",
+                )
+                parseCoverageTable(
+                    table = table,
+                    coverageStart = table.checkedOffset(
+                        base = subtableStart,
+                        offset = coverageOffset,
+                        label = "OpenType GSUB ContextSubst format 3 coverage[$coverageIndex]",
+                    ),
+                ).toCollection(LinkedHashSet())
+            },
+            nestedLookups = nestedLookups,
+        )
+    }
+
+    private fun parseNestedLookupRecords(
+        table: ByteArray,
+        recordsStart: Int,
+        substCount: Int,
+        matchLength: Int,
+        label: String,
+    ): List<OpenTypeGsubNestedLookupRecord> {
+        table.requireArrayRange(
+            offset = recordsStart,
+            count = substCount,
+            recordSize = 4,
+            label = "$label lookup records",
+        )
+        return List(substCount) { recordIndex ->
+            val sequenceIndex = table.readUInt16BE(
+                recordsStart + recordIndex * 4,
+                "$label sequenceIndex[$recordIndex]",
+            )
+            require(sequenceIndex in 0 until matchLength) {
+                "$label sequenceIndex[$recordIndex] $sequenceIndex must be within matched glyph count $matchLength."
+            }
+            OpenTypeGsubNestedLookupRecord(
+                sequenceIndex = sequenceIndex,
+                lookupIndex = table.readUInt16BE(
+                    recordsStart + recordIndex * 4 + UINT16_BYTE_LENGTH,
+                    "$label lookupListIndex[$recordIndex]",
+                ),
+            )
+        }
+    }
+
+    private fun parseGsubClassDefTable(
+        table: ByteArray,
+        classDefStart: Int,
+    ): Map<Int, Int> {
+        table.requireRange(classDefStart, 4, "OpenType GSUB ClassDef table header")
+        return when (val format = table.readUInt16BE(classDefStart, "OpenType GSUB ClassDef format")) {
+            1 -> {
+                val startGlyphId = table.readUInt16BE(
+                    classDefStart + UINT16_BYTE_LENGTH,
+                    "OpenType GSUB ClassDef format 1 startGlyphID",
+                )
+                val glyphCount = table.readUInt16BE(
+                    classDefStart + UINT16_BYTE_LENGTH * 2,
+                    "OpenType GSUB ClassDef format 1 glyphCount",
+                )
+                require(startGlyphId + glyphCount.toLong() <= GPOS_MAX_COVERAGE_GLYPHS) {
+                    "OpenType GSUB ClassDef format 1 glyph range starts at $startGlyphId with count $glyphCount and exceeds glyph ID range."
+                }
+                val classValueArrayStart = table.checkedOffset(
+                    classDefStart,
+                    6,
+                    "OpenType GSUB ClassDef format 1 classValueArray",
+                )
+                table.requireArrayRange(
+                    offset = classValueArrayStart,
+                    count = glyphCount,
+                    recordSize = UINT16_BYTE_LENGTH,
+                    label = "OpenType GSUB ClassDef format 1 classValueArray",
+                )
+                buildMap {
+                    repeat(glyphCount) { glyphIndex ->
+                        put(
+                            startGlyphId + glyphIndex,
+                            table.readUInt16BE(
+                                classValueArrayStart + glyphIndex * UINT16_BYTE_LENGTH,
+                                "OpenType GSUB ClassDef format 1 classValueArray[$glyphIndex]",
+                            ),
+                        )
+                    }
+                }
+            }
+            2 -> {
+                val classRangeCount = table.readUInt16BE(
+                    classDefStart + UINT16_BYTE_LENGTH,
+                    "OpenType GSUB ClassDef format 2 classRangeCount",
+                )
+                val classRangeRecordsStart = table.checkedOffset(
+                    classDefStart,
+                    4,
+                    "OpenType GSUB ClassDef format 2 class range records",
+                )
+                table.requireArrayRange(
+                    offset = classRangeRecordsStart,
+                    count = classRangeCount,
+                    recordSize = 6,
+                    label = "OpenType GSUB ClassDef format 2 class range records",
+                )
+                val classes = LinkedHashMap<Int, Int>()
+                var expandedGlyphs = 0
+                repeat(classRangeCount) { rangeIndex ->
+                    val rangeStart = classRangeRecordsStart + rangeIndex * 6
+                    val startGlyphId = table.readUInt16BE(
+                        rangeStart,
+                        "OpenType GSUB ClassDef format 2 range $rangeIndex startGlyphID",
+                    )
+                    val endGlyphId = table.readUInt16BE(
+                        rangeStart + UINT16_BYTE_LENGTH,
+                        "OpenType GSUB ClassDef format 2 range $rangeIndex endGlyphID",
+                    )
+                    val classId = table.readUInt16BE(
+                        rangeStart + UINT16_BYTE_LENGTH * 2,
+                        "OpenType GSUB ClassDef format 2 range $rangeIndex class",
+                    )
+                    require(endGlyphId >= startGlyphId) {
+                        "OpenType GSUB ClassDef format 2 range $rangeIndex endGlyphID $endGlyphId is before startGlyphID $startGlyphId."
+                    }
+                    val glyphCount = endGlyphId - startGlyphId + 1
+                    require(expandedGlyphs + glyphCount <= GPOS_MAX_COVERAGE_GLYPHS) {
+                        "OpenType GSUB ClassDef format 2 ranges expand beyond $GPOS_MAX_COVERAGE_GLYPHS glyphs."
+                    }
+                    repeat(glyphCount) { offset ->
+                        classes[startGlyphId + offset] = classId
+                    }
+                    expandedGlyphs += glyphCount
+                }
+                classes
+            }
+            else -> throw IllegalArgumentException("OpenType GSUB ClassDef format $format is not supported.")
+        }
+    }
+
     private fun parseLigatureLookup(
         table: ByteArray,
         lookupStart: Int,
+        lookupIndex: Int,
         subtableCount: Int,
-        featureTag: String,
+        featureTags: Collection<String>,
     ): OpenTypeGsubLigatureSubstitutionLookup? {
         val substitutions = mutableListOf<OpenTypeGsubLigatureSubstitution>()
         repeat(subtableCount) { subtableIndex ->
@@ -6866,7 +7562,13 @@ object OpenTypeGsubTableParser {
             )
         }
         return substitutions.takeUnless { it.isEmpty() }?.let { parsed ->
-            OpenTypeGsubLigatureSubstitutionLookup(featureTag = featureTag, substitutions = parsed)
+            val orderedFeatureTags = featureTags.toList()
+            OpenTypeGsubLigatureSubstitutionLookup(
+                featureTag = orderedFeatureTags.firstOrNull().orEmpty(),
+                extraFeatureTags = orderedFeatureTags.drop(1).toSet(),
+                lookupIndex = lookupIndex,
+                substitutions = parsed,
+            )
         }
     }
 
@@ -7086,6 +7788,7 @@ object OpenTypeGsubTableParser {
 private const val GSUB_SINGLE_SUBSTITUTION_LOOKUP_TYPE = 1
 private const val GSUB_MULTIPLE_SUBSTITUTION_LOOKUP_TYPE = 2
 private const val GSUB_LIGATURE_SUBSTITUTION_LOOKUP_TYPE = 4
+private const val GSUB_CONTEXTUAL_SUBSTITUTION_LOOKUP_TYPE = 5
 
 /**
  * Parsed bounded subset of OpenType GPOS pair-position kerning.

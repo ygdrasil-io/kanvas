@@ -41,6 +41,7 @@
         }
       ],
       "expectedDumps": [
+        "reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json",
         "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
       ],
       "nonClaims": [
@@ -53,7 +54,8 @@
       "fixtureId": "fallback-emoji-noto-color",
       "familyId": "font-fallback-catalog",
       "ownerTickets": [
-        "KFONT-M7-001"
+        "KFONT-M7-001",
+        "KFONT-M10-010"
       ],
       "source": {
         "kind": "vendored-external",
@@ -73,7 +75,9 @@
           "role": "emoji-colrv1-font"
         }
       ],
-      "expectedDumps": [],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json"
+      ],
       "nonClaims": [
         "no-complete-target-support-claim",
         "no-fallback-support-claim",
@@ -137,7 +141,11 @@
           "role": "arabic-ttf-font"
         }
       ],
-      "expectedDumps": [],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/arabic-gsub-trace.json",
+        "reports/font/fixtures/expected/shaping/arabic-gpos-trace.json",
+        "reports/font/fixtures/expected/shaping/arabic-shaping-report.json"
+      ],
       "nonClaims": [
         "no-complete-target-support-claim",
         "no-fallback-support-claim",
@@ -169,7 +177,9 @@
           "role": "devanagari-ttf-font"
         }
       ],
-      "expectedDumps": [],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/devanagari-shaping-report.json"
+      ],
       "nonClaims": [
         "no-complete-target-support-claim",
         "no-fallback-support-claim",
@@ -638,6 +648,65 @@
       ]
     },
     {
+      "fixtureId": "latin-gsub-context-fixtures",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-003"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "simoncozens/test-fonts FallbackPlus-Small",
+        "url": "https://github.com/simoncozens/test-fonts",
+        "version": "d1cd9d87b8a128b25ed9aaf2e7ccb3a37b0e2a23"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/test-fonts-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-context-format1.otf",
+          "sha256": "bbf5815e8fbea604d97a49b3678f793f69f5f9e9503fb48b3ce627e4e055fbfb",
+          "sizeBytes": 19712,
+          "role": "context-format1-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-context-format2-class.otf",
+          "sha256": "f72b76a2d82a3062519f82cc246871de98468ab9a822720b59447fd2584b359f",
+          "sizeBytes": 19732,
+          "role": "context-format2-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-context-format3-coverage.otf",
+          "sha256": "b0b6c9fa035d952764da00c9846b1275714551c62a6304997ff00f0ffd6f305e",
+          "sizeBytes": 19720,
+          "role": "context-format3-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-context-malformed-classdef.otf",
+          "sha256": "f29dbd4f890ce86924980960e5d88193080ac9d7cfd5b6f5e26facf0e0139b93",
+          "sizeBytes": 19732,
+          "role": "context-malformed-classdef-font"
+        },
+        {
+          "path": "reports/font/fixtures/fonts/shaping/gsub-context-nested-cycle.otf",
+          "sha256": "f5b221c73ae335fc576ba2837f11009845ea9740ec70788ac712552f04e8cc22",
+          "sizeBytes": 19728,
+          "role": "context-nested-cycle-font"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/shaping/gsub-trace.json",
+        "reports/font/fixtures/expected/shaping/shaped-glyph-run.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-gsub-support-claim",
+        "no-complete-gsub-gpos-support-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
       "fixtureId": "mark-cursive-gpos-amiri-fixtures",
       "familyId": "latin-gsub-gpos-fixtures",
       "ownerTickets": [
@@ -731,6 +800,74 @@
         "no-complete-gsub-gpos-support-claim",
         "no-arabic-complex-shaping-promotion-claim",
         "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
+      "fixtureId": "paragraph-line-breaking-synthetic",
+      "familyId": "paragraph",
+      "ownerTickets": [
+        "KFONT-M8-003"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M8 paragraph line breaking",
+        "url": "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphLineBreakingTest.kt",
+        "version": "2026-06-18 synthetic paragraph line breaking fixture v1"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/paragraph/paragraph-line-breaking-fixture.txt",
+          "sha256": "2a7297a73693bac378ed5b312c53b2e08e5a50b12b61600bd0d819c8335e8ed5",
+          "sizeBytes": 245,
+          "role": "synthetic-paragraph-input"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/paragraph/line-breaks.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-uax14-claim",
+        "no-complete-paragraph-layout-claim",
+        "no-skia-paragraph-parity-claim"
+      ]
+    },
+    {
+      "fixtureId": "paragraph-shaping-segmentation-synthetic",
+      "familyId": "paragraph",
+      "ownerTickets": [
+        "KFONT-M8-002"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M8 paragraph shaping segmentation",
+        "url": "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphShapingSegmentationTest.kt",
+        "version": "2026-06-18 synthetic paragraph shaping segmentation fixture v1"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/paragraph/paragraph-shaping-segmentation-fixture.txt",
+          "sha256": "ddb597d2ccc63b2e910b559d6768431d355520e5d9b040a9c4fd486eb6fad8d8",
+          "sizeBytes": 244,
+          "role": "synthetic-paragraph-input"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/paragraph/paragraph-shaping-requests-goldens.json",
+        "reports/font/fixtures/expected/paragraph/paragraph-shaping-requests.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-paragraph-layout-claim",
+        "no-skia-paragraph-parity-claim"
       ]
     },
     {

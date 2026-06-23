@@ -39,8 +39,4 @@ rtk git diff --check
 
 ## Remaining gate
 
-No schema-local gate remains for `KFONT-M12-001`. Downstream producer emission
-into the shared schema is owned by `KFONT-M12-002`, `KFONT-M12-003`,
-`KFONT-M12-004`, and `KFONT-M12-005`. This evidence stays schema-only,
-warning-only, and does not promote any performance budget, GPU route, or
-release-gate claim.
+No schema-local gate remains for `KFONT-M12-001`. All M12 telemetry domains now have checked-in deterministic producer evidence under `KFONT-M12-002` through `KFONT-M12-005`. This evidence stays schema-only, warning-only, and does not promote any performance budget, GPU route, `dftext` retirement, or release-gate claim.
