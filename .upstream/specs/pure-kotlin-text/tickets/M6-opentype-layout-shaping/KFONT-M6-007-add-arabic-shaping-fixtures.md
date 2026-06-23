@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-007"
 title: "Add Arabic shaping fixtures"
-status: "blocked"
+status: "done"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
