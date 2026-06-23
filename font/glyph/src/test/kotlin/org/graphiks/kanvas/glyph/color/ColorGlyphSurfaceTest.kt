@@ -2942,6 +2942,213 @@ class ColorGlyphSurfaceTest {
     }
 
     @Test
+    fun colorEmojiFixtureManifestConvergesM10FamiliesLegacyGatesAndRemainingGpuEvidence() {
+        val expected = readProjectFile("reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json")
+        val actual = colorEmojiFixtureManifestJson(
+            families = listOf(
+                ColorEmojiFixtureManifestFamilyCase(
+                    familyId = "color-glyphs",
+                    coveredTickets = listOf(
+                        "KFONT-M10-001",
+                        "KFONT-M10-002",
+                        "KFONT-M10-003",
+                        "KFONT-M10-004",
+                        "KFONT-M10-005",
+                    ),
+                    claimClassification = "current-supported",
+                    fixtureIds = listOf(
+                        "color-glyphs-colrv0-layer",
+                        "color-glyphs-colrv1-budget-refusal",
+                        "color-glyphs-colrv1-composite-clip",
+                        "color-glyphs-colrv1-cycle-refusal",
+                        "color-glyphs-colrv1-gradient-operation-group",
+                        "color-glyphs-colrv1-malformed-offset-refusal",
+                        "color-glyphs-colrv1-recursion-depth-refusal",
+                        "color-glyphs-colrv1-solid-glyph-colr-glyph",
+                        "color-glyphs-colrv1-solid-gradient-transform",
+                    ),
+                    expectedDumpFiles = listOf(
+                        "reports/font/fixtures/expected/color/color-glyph-plan.json",
+                        "reports/font/fixtures/expected/color/colrv1-paint-graph.json",
+                        "reports/font/fixtures/expected/color/color-glyph-composite-plan.json",
+                        "reports/font/fixtures/expected/color/colrv1-fixture-manifest.json",
+                        "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json",
+                    ),
+                    expectedDiagnostics = listOf(
+                        "text.color.COLRv1-cycle-detected",
+                        "text.color.COLRv1-budget-exceeded",
+                    ),
+                    legacyGates = listOf("coloremoji_blendmodes"),
+                    gpuEvidenceRequired = true,
+                    remainingGate =
+                        "Keep coloremoji_blendmodes open until M11 links reviewed GPU composite/blend route evidence for color glyph plans and emoji color dispatch.",
+                    provenanceKind = "mixed-fixture-sources",
+                    provenanceSource = "reports/font/fixtures/provenance/index.json + ColorGlyphSurfaceTest synthetic COLRv0/COLRv1 fixtures",
+                    licenseNotes = listOf(
+                        "Apache-2.0 vendored COLRv1 fixture assets remain coordination evidence only.",
+                        "Synthetic COLRv0/COLRv1 bytes generated inside ColorGlyphSurfaceTest stay CPU/text evidence only.",
+                    ),
+                    sourceHashes = listOf(
+                        "8aa611b1ca97044ac6f13dc982fde29256612f0a5acc6ef47ca541a7a5b99b28",
+                        "ad575a09d6748aebcb3b90ffd384c64d5c64b5fd9927967e7cd7cc0d70c98d34",
+                    ),
+                    generatedRecipe =
+                        "ColorGlyphSurfaceTest synthetic CPAL/COLRv0/COLRv1 table builders feed bounded plan, graph, composite, and refusal dumps with reviewed expected outputs.",
+                ),
+                ColorEmojiFixtureManifestFamilyCase(
+                    familyId = "emoji",
+                    coveredTickets = listOf("KFONT-M10-009"),
+                    claimClassification = "current-supported",
+                    fixtureIds = listOf(
+                        "emoji-color-glyph-unavailable-refusal",
+                        "emoji-emoji-fallback-unavailable-refusal",
+                        "emoji-emoji-flag",
+                        "emoji-emoji-keycap",
+                        "emoji-emoji-skin-tone",
+                        "emoji-emoji-unsupported-sequence-refusal",
+                        "emoji-emoji-vs15-vs16",
+                        "emoji-emoji-zwj-family",
+                    ),
+                    expectedDumpFiles = listOf(
+                        "reports/font/fixtures/expected/color/emoji-route-trace.json",
+                        "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json",
+                    ),
+                    expectedDiagnostics = listOf(
+                        "text.emoji.sequence-unsupported",
+                        "text.emoji.fallback-unavailable",
+                        "text.emoji.color-glyph-unavailable",
+                    ),
+                    legacyGates = listOf("scaledemoji"),
+                    gpuEvidenceRequired = true,
+                    remainingGate =
+                        "Keep scaledemoji open until reviewed emoji sequence shaping, fallback-family selection, and selected color route evidence is linked to M11 route execution proof where rendering is claimed.",
+                    provenanceKind = "mixed-fixture-sources",
+                    provenanceSource = "reports/font/fixtures/provenance/index.json + ColorGlyphSurfaceTest emoji route trace fixtures",
+                    licenseNotes = listOf(
+                        "SIL-OFL-1.1 Noto Emoji asset remains bundled provenance only.",
+                        "Emoji route traces are deterministic test-owned sequence dumps, not platform-engine or GPU evidence.",
+                    ),
+                    sourceHashes = listOf("469e3b92d63cfc203789f8742f1835b8672c7b5995ab4a832f1699b712a5afcc"),
+                    generatedRecipe =
+                        "ColorGlyphSurfaceTest builds deterministic emoji sequence traces for VS15/VS16, skin tone, ZWJ, flag, keycap, fallback-unavailable, color-glyph-unavailable, and unsupported-sequence cases.",
+                ),
+                ColorEmojiFixtureManifestFamilyCase(
+                    familyId = "png-bitmap-glyphs",
+                    coveredTickets = listOf("KFONT-M10-006"),
+                    claimClassification = "tracked-gap",
+                    fixtureIds = listOf(
+                        "png-bitmap-glyphs-cbdt-cblc-png",
+                        "png-bitmap-glyphs-malformed-png-refusal",
+                        "png-bitmap-glyphs-non-png-payload-refusal",
+                        "png-bitmap-glyphs-sbix-png",
+                        "png-bitmap-glyphs-unavailable-strike-refusal",
+                    ),
+                    expectedDumpFiles = listOf(
+                        "reports/font/fixtures/expected/color/bitmap-glyph-plan.json",
+                        "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json",
+                    ),
+                    expectedDiagnostics = listOf(
+                        "text.bitmap.PNG-decode-failed",
+                        "text.bitmap.strike-unavailable",
+                        "text.bitmap.payload-format-unsupported",
+                    ),
+                    legacyGates = listOf("scaledemoji_rendering"),
+                    gpuEvidenceRequired = true,
+                    remainingGate =
+                        "Keep scaledemoji_rendering open until M11 links reviewed bitmap upload, sampling, and renderer-route evidence; bitmap-glyph-plan.json remains CPU/text evidence only.",
+                    provenanceKind = "generated-test-data",
+                    provenanceSource = "ColorGlyphSurfaceTest bitmap plan bundle fixtures",
+                    licenseNotes = listOf(
+                        "Bitmap fixture payloads are bounded test-generated PNG bytes checked through ColorGlyphSurfaceTest.",
+                    ),
+                    sourceHashes = emptyList(),
+                    generatedRecipe =
+                        "ColorGlyphSurfaceTest emits deterministic CBDT/CBLC and sbix PNG plan bundles plus unavailable-strike, malformed-PNG, and non-PNG refusal cases.",
+                ),
+                ColorEmojiFixtureManifestFamilyCase(
+                    familyId = "svg-glyphs",
+                    coveredTickets = listOf("KFONT-M10-007", "KFONT-M10-008"),
+                    claimClassification = "fixture-gated",
+                    fixtureIds = listOf(
+                        "svg-glyphs-svg-animation-refusal",
+                        "svg-glyphs-svg-defs-symbol-use-radial-gradient",
+                        "svg-glyphs-svg-embedded-text-refusal",
+                        "svg-glyphs-svg-external-resource-refusal",
+                        "svg-glyphs-svg-filter-refusal",
+                        "svg-glyphs-svg-foreign-object-refusal",
+                        "svg-glyphs-svg-gradient-stop-budget-refusal",
+                        "svg-glyphs-svg-gradient-transform-clip",
+                        "svg-glyphs-svg-malformed-document-refusal",
+                        "svg-glyphs-svg-malformed-path-data-refusal",
+                        "svg-glyphs-svg-network-reference-refusal",
+                        "svg-glyphs-svg-path-command-budget-refusal",
+                        "svg-glyphs-svg-script-refusal",
+                        "svg-glyphs-svg-static-path",
+                        "svg-glyphs-svg-unsupported-css-selector-refusal",
+                        "svg-glyphs-svg-use-recursion-refusal",
+                    ),
+                    expectedDumpFiles = listOf(
+                        "reports/font/fixtures/expected/color/svg-glyph-plan.json",
+                        "reports/font/fixtures/expected/color/svg-glyph-fixture-manifest.json",
+                        "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json",
+                    ),
+                    expectedDiagnostics = listOf(
+                        "text.SVG.external-resource-refused",
+                        "text.SVG.feature-unsupported",
+                        "text.SVG.document-malformed",
+                        "text.SVG.budget-exceeded",
+                    ),
+                    legacyGates = listOf("scaledemoji_rendering"),
+                    gpuEvidenceRequired = true,
+                    remainingGate =
+                        "Keep scaledemoji_rendering open until reviewed glyph-scoped SVG renderer-route evidence lands in M11; the current SVG fixture manifest remains bounded CPU/text evidence.",
+                    provenanceKind = "generated-test-data",
+                    provenanceSource = "ColorGlyphSurfaceTest SVG fixture manifest fixtures",
+                    licenseNotes = listOf(
+                        "SVG glyph documents are deterministic test-owned inputs generated inside ColorGlyphSurfaceTest.",
+                    ),
+                    sourceHashes = emptyList(),
+                    generatedRecipe =
+                        "ColorGlyphSurfaceTest builds bounded static-path, gradient/transform/clip, defs/symbol/use, and refusal SVG documents, then records deterministic plan and fixture-manifest outputs.",
+                ),
+            ),
+            legacyGates = listOf(
+                ColorEmojiLegacyGateCase(
+                    gate = "coloremoji_blendmodes",
+                    familyIds = listOf("color-glyphs", "emoji"),
+                    remainingEvidence =
+                        "Reviewed GPU composite/blend execution evidence for COLRv1 and emoji color routes remains an M11 gate.",
+                ),
+                ColorEmojiLegacyGateCase(
+                    gate = "scaledemoji",
+                    familyIds = listOf("emoji"),
+                    remainingEvidence =
+                        "Emoji sequence shaping and fallback evidence is now linked here, but reviewed M11 renderer-route and GPU evidence still remain before any legacy-gate retirement.",
+                ),
+                ColorEmojiLegacyGateCase(
+                    gate = "scaledemoji_rendering",
+                    familyIds = listOf("emoji", "png-bitmap-glyphs", "svg-glyphs"),
+                    remainingEvidence =
+                        "Bitmap and SVG renderer upload/sampling proofs remain M11 work even when CPU/text dumps and fixture provenance are present.",
+                ),
+            ),
+        )
+
+        assertEquals(expected, actual)
+        assertEvidenceDumpClean(expected)
+        assertEquals("color-emoji-fixture-manifest", jsonStringField(expected, "dumpId"))
+        assertEquals(
+            listOf("color-glyphs", "emoji", "png-bitmap-glyphs", "svg-glyphs"),
+            jsonStringArrayField(expected, "fixtureFamilies"),
+        )
+        assertEquals(
+            listOf("coloremoji_blendmodes", "scaledemoji", "scaledemoji_rendering"),
+            jsonStringArrayField(expected, "legacyGates"),
+        )
+        assertTrue(expected.contains("\"gpuEvidenceRequired\": true"))
+    }
+
+    @Test
     fun colrv1FixtureManifestRecordsBoundsRoutesAndTraversalRefusals() {
         val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440419"))
         val strikeKey = strikeKey(typefaceId = typefaceId, paletteIdentity = "brand-colrv1-fixtures")
@@ -3136,70 +3343,6 @@ class ColorGlyphSurfaceTest {
 
         val dump = readProjectFile("reports/font/fixtures/expected/color/colrv1-fixture-manifest.json")
         assertEquals(expected.trim(), dump.trim())
-        assertEvidenceDumpClean(dump)
-    }
-
-    @Test
-    fun ColorEmojiFixtureManifestMatchesRepoFixture() {
-        val dump = readProjectFile("reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json")
-        assertEquals("color-emoji-fixture-manifest", jsonStringField(dump, "dumpId"))
-        assertEquals(
-            listOf("color-glyphs", "emoji", "png-bitmap-glyphs", "svg-glyphs"),
-            jsonStringArrayField(dump, "fixtureFamilies"),
-        )
-        assertEquals(
-            listOf(
-                "no-complete-target-support-claim",
-                "no-complete-colrv1-rendering-claim",
-                "no-complete-png-bitmap-glyph-routing-claim",
-                "no-complete-svg-in-opentype-rendering-claim",
-                "no-complete-emoji-sequence-shaping-claim",
-                "no-complete-color-glyph-fallback-support-claim",
-                "no-gpu-color-glyph-support-claim",
-                "no-gpu-bitmap-glyph-route-claim",
-                "no-gpu-svg-glyph-route-claim",
-                "no-platform-color-font-fallback-claim",
-                "no-platform-bitmap-codec-claim",
-                "no-platform-emoji-engine-claim",
-                "no-native-svg-renderer-claim",
-                "no-scaledemoji-retirement",
-                "no-scaledemoji-rendering-retirement",
-                "no-coloremoji-blendmodes-retirement",
-            ),
-            jsonStringArrayField(dump, "nonClaims"),
-        )
-
-        val legacyGates = jsonArrayField(dump, "legacyGates")
-        assertJsonPattern(legacyGates, """"gateId"\s*:\s*"coloremoji_blendmodes"""")
-        assertJsonPattern(legacyGates, """"fixtureIds"\s*:\s*\[\s*"color-glyphs-colrv1-composite-clip-bounds"""")
-        assertJsonPattern(legacyGates, """"gateId"\s*:\s*"scaledemoji"""")
-        assertJsonPattern(legacyGates, """"emoji-variation-selector-colr"""")
-        assertJsonPattern(legacyGates, """"emoji-unsupported-sequence"""")
-        assertJsonPattern(legacyGates, """"gateId"\s*:\s*"scaledemoji_rendering"""")
-        assertJsonPattern(legacyGates, """"png-bitmap-glyphs-cbdt-cblc-png"""")
-        assertJsonPattern(legacyGates, """"svg-glyphs-svg-static-path"""")
-
-        val rebaselinePolicy = jsonObjectField(dump, "rebaselinePolicy")
-        assertJsonPattern(rebaselinePolicy, """"ordinaryTestRuns"\s*:\s*"must-not-overwrite-goldens"""")
-        assertJsonPattern(rebaselinePolicy, """"autoOverwritePolicy"\s*:\s*"forbidden"""")
-        assertJsonPattern(rebaselinePolicy, """"reviewRequirement"\s*:\s*"color-emoji fixture-manifest updates require reviewed old/new manifest diffs, linked dump diffs, and a stated reason before check-in\."""")
-        assertJsonPattern(rebaselinePolicy, """"color-svg-emoji-goldens\.json"""")
-        assertJsonPattern(rebaselinePolicy, """"emoji-route-trace\.json"""")
-        assertJsonPattern(rebaselinePolicy, """"svg-glyph-fixture-manifest\.json"""")
-
-        val cases = jsonArrayField(dump, "cases")
-        assertEquals(39, Regex("\"fixtureId\":").findAll(cases).count())
-        assertJsonPattern(cases, """"fixtureId"\s*:\s*"color-glyphs-colrv0-layered-palette-override"""")
-        assertJsonPattern(cases, """"fixtureId"\s*:\s*"color-glyphs-colrv1-gradient-operation-group"""")
-        assertJsonPattern(cases, """"fixtureId"\s*:\s*"png-bitmap-glyphs-cbdt-cblc-png"""")
-        assertJsonPattern(cases, """"fixtureId"\s*:\s*"svg-glyphs-svg-static-path"""")
-        assertJsonPattern(cases, """"fixtureId"\s*:\s*"emoji-variation-selector-colr"""")
-        assertJsonPattern(cases, """"sourceSha256"\s*:\s*"8aa611b1ca97044ac6f13dc982fde29256612f0a5acc6ef47ca541a7a5b99b28"""")
-        assertJsonPattern(cases, """"sourceSha256"\s*:\s*"469e3b92d63cfc203789f8742f1835b8672c7b5995ab4a832f1699b712a5afcc"""")
-        assertJsonPattern(cases, """"generatedSourceRecipe"\s*:\s*\[""")
-        assertJsonPattern(cases, """"expectedDumpFiles"\s*:\s*\[\s*"emoji-route-trace\.json"\s*,\s*"color-glyph-plan\.json"""")
-        assertJsonPattern(cases, """"expectedDumpFiles"\s*:\s*\[\s*"emoji-route-trace\.json"\s*,\s*"bitmap-glyph-plan\.json"""")
-
         assertEvidenceDumpClean(dump)
     }
 
@@ -3733,6 +3876,29 @@ class ColorGlyphSurfaceTest {
         val provenanceNotes: String,
     )
 
+    private data class ColorEmojiFixtureManifestFamilyCase(
+        val familyId: String,
+        val coveredTickets: List<String>,
+        val claimClassification: String,
+        val fixtureIds: List<String>,
+        val expectedDumpFiles: List<String>,
+        val expectedDiagnostics: List<String>,
+        val legacyGates: List<String>,
+        val gpuEvidenceRequired: Boolean,
+        val remainingGate: String,
+        val provenanceKind: String,
+        val provenanceSource: String,
+        val licenseNotes: List<String>,
+        val sourceHashes: List<String>,
+        val generatedRecipe: String,
+    )
+
+    private data class ColorEmojiLegacyGateCase(
+        val gate: String,
+        val familyIds: List<String>,
+        val remainingEvidence: String,
+    )
+
     private data class ColorGlyphCompositePlanFixtureCase(
         val caseId: String,
         val compositePlanJson: String?,
@@ -3898,6 +4064,108 @@ class ColorGlyphSurfaceTest {
         append(
             "  \"nonClaims\": [\"no-complete-target-support-claim\", " +
                 "\"no-complete-colrv1-rendering-claim\", " +
+                "\"no-gpu-color-glyph-support-claim\", " +
+                "\"no-platform-color-font-fallback-claim\"]\n",
+        )
+        append("}\n")
+    }
+
+    private fun colorEmojiFixtureManifestJson(
+        families: List<ColorEmojiFixtureManifestFamilyCase>,
+        legacyGates: List<ColorEmojiLegacyGateCase>,
+    ): String = buildString {
+        val componentDumpFiles = listOf(
+            "reports/font/fixtures/expected/color/bitmap-glyph-plan.json",
+            "reports/font/fixtures/expected/color/color-glyph-composite-plan.json",
+            "reports/font/fixtures/expected/color/color-glyph-plan.json",
+            "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json",
+            "reports/font/fixtures/expected/color/colrv1-fixture-manifest.json",
+            "reports/font/fixtures/expected/color/colrv1-paint-graph.json",
+            "reports/font/fixtures/expected/color/emoji-route-trace.json",
+            "reports/font/fixtures/expected/color/svg-glyph-fixture-manifest.json",
+            "reports/font/fixtures/expected/color/svg-glyph-plan.json",
+        )
+
+        append("{\n")
+        append("  \"schemaVersion\": 1,\n")
+        append("  \"dumpId\": \"color-emoji-fixture-manifest\",\n")
+        append("  \"ownerTickets\": [\"KFONT-M10-010\"],\n")
+        append("  \"fixtureFamilies\": ").append(jsonStringArray(families.map { family -> family.familyId })).append(",\n")
+        append("  \"legacyGates\": ").append(jsonStringArray(legacyGates.map { gate -> gate.gate })).append(",\n")
+        append("  \"componentDumps\": [\n")
+        append(
+            componentDumpFiles.joinToString(",\n") { relativePath ->
+                val dump = readProjectFile(relativePath)
+                val dumpId = jsonStringField(dump, "dumpId")
+                buildString {
+                    append("    {\n")
+                    append("      \"dumpId\": ").append(jsonString(dumpId)).append(",\n")
+                    append("      \"path\": ").append(jsonString(relativePath)).append(",\n")
+                    append("      \"bodySha256\": ").append(jsonString(canonicalDumpBodySha256(dump))).append("\n")
+                    append("    }")
+                }
+            },
+        )
+        append("\n  ],\n")
+        append("  \"legacyGateCoverage\": [\n")
+        append(
+            legacyGates.joinToString(",\n") { gate ->
+                buildString {
+                    append("    {\n")
+                    append("      \"gate\": ").append(jsonString(gate.gate)).append(",\n")
+                    append("      \"familyIds\": ").append(jsonStringArray(gate.familyIds)).append(",\n")
+                    append("      \"gpuEvidenceRequired\": true,\n")
+                    append("      \"remainingEvidence\": ").append(jsonString(gate.remainingEvidence)).append("\n")
+                    append("    }")
+                }
+            },
+        )
+        append("\n  ],\n")
+        append("  \"families\": [\n")
+        append(
+            families.joinToString(",\n") { family ->
+                buildString {
+                    append("    {\n")
+                    append("      \"familyId\": ").append(jsonString(family.familyId)).append(",\n")
+                    append("      \"coveredTickets\": ").append(jsonStringArray(family.coveredTickets)).append(",\n")
+                    append("      \"claimClassification\": ").append(jsonString(family.claimClassification)).append(",\n")
+                    append("      \"fixtureIds\": ").append(jsonStringArray(family.fixtureIds)).append(",\n")
+                    append("      \"expectedDumpFiles\": ").append(jsonStringArray(family.expectedDumpFiles)).append(",\n")
+                    append("      \"expectedDiagnostics\": ").append(jsonStringArray(family.expectedDiagnostics)).append(",\n")
+                    append("      \"legacyGates\": ").append(jsonStringArray(family.legacyGates)).append(",\n")
+                    append("      \"gpuEvidenceRequired\": ").append(family.gpuEvidenceRequired).append(",\n")
+                    append("      \"remainingGate\": ").append(jsonString(family.remainingGate)).append(",\n")
+                    append("      \"provenance\": {\n")
+                    append("        \"kind\": ").append(jsonString(family.provenanceKind)).append(",\n")
+                    append("        \"source\": ").append(jsonString(family.provenanceSource)).append(",\n")
+                    append("        \"licenseNotes\": ").append(jsonStringArray(family.licenseNotes)).append(",\n")
+                    append("        \"sourceHashes\": ").append(jsonStringArray(family.sourceHashes)).append(",\n")
+                    append("        \"generatedRecipe\": ").append(jsonString(family.generatedRecipe)).append("\n")
+                    append("      }\n")
+                    append("    }")
+                }
+            },
+        )
+        append("\n  ],\n")
+        append("  \"rebaselinePolicy\": {\n")
+        append("    \"ordinaryTestRuns\": \"must-not-overwrite-goldens\",\n")
+        append(
+            "    \"reviewRequirement\": " +
+                jsonString(
+                    "Review old/new diffs for the component dumps and this convergence manifest before updating expected outputs.",
+                ) + ",\n",
+        )
+        append(
+            "    \"reasonRequired\": " +
+                jsonString("State whether behavior changed intentionally or the previous expectation was wrong.") + "\n",
+        )
+        append("  },\n")
+        append(
+            "  \"nonClaims\": [\"no-complete-target-support-claim\", " +
+                "\"no-complete-colrv1-rendering-claim\", " +
+                "\"no-complete-png-bitmap-glyph-routing-claim\", " +
+                "\"no-complete-svg-in-opentype-rendering-claim\", " +
+                "\"no-complete-emoji-sequence-shaping-claim\", " +
                 "\"no-gpu-color-glyph-support-claim\", " +
                 "\"no-platform-color-font-fallback-claim\"]\n",
         )
