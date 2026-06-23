@@ -53,7 +53,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | PKT-07 GSUB/GPOS simple script shaping | Partially implementable; bounded GSUB/GPOS fixture slices are done and script-policy adoption is now blocked on the remaining per-script shaping fixture families | Latin/Greek/Cyrillic/Hebrew defaults, features, clusters, fallback runs. | `font/text`, `font/sfnt`. | Requires parsed layout table fixtures and feature ordering evidence. |
 | PKT-08 complex shaping rows | Dependency-gated | Arabic, Devanagari, Thai, CJK, emoji shaping support/refusals. | `font/text`. | Requires PKT-07 and per-row positive/refusal fixtures. |
 | PKT-09 paragraph semantic layout | Partially implementable; full claim gated | Rich styles, bidi visual lines, placeholders, ellipsis, selection, hit testing. | `font/text/src/main/.../paragraph`, `font/text/src/test`. | Layout dumps; full claim waits on shaping/fallback support. |
-| PKT-10 A8/SDF glyph artifact planner | Implementable now | Route policy, key preimage, A8/SDF generation, atlas capacity/stale diagnostics. | `font/glyph`, `font/gpu-api`. | Mask/SDF hashes, atlas dump tests, stable `text.glyph.*` refusals. |
+| PKT-10 A8/SDF glyph artifact planner | Current-supported | Route policy, key preimage, A8/SDF generation, atlas capacity/stale diagnostics, eviction traces. | `font/glyph`, `font/gpu-api`. | Mask/SDF hashes, atlas dump tests, stable `text.glyph.*` refusals, atlas eviction traces. |
 | PKT-11 color/bitmap/SVG glyph plans | Plan slices implementable; final support gated | COLR/CPAL plan, PNG glyph plan, SVG subset plan, emoji dispatch. | `font/glyph/src/main/.../color`, `font/glyph/src/test/.../color`. | COLR/PNG/SVG/emoji fixtures and precise unsupported diagnostics. |
 | PKT-12 `DrawTextRun` handoff contract | Dependency-gated but contract slice implementable | Dumpable normalized text command, artifact refs, upload/generation facts, no `Sk*`. | `font/gpu-api`, `gpu-renderer/commands`, `gpu-renderer/text`. | Handoff tests and refusal diagnostics; no actual GPU draw claim. |
 | PKT-13 validation fixture and evidence harness | Implementable now | Fixture manifest, deterministic dumps, CPU oracle hooks, drift labels. | `font/*/src/test`, `reports/pure-kotlin-text`. | Golden update policy and no external normative oracle. |
@@ -4180,8 +4180,7 @@ future M12 promotion of advisory cache budgets.
 
 ### PKT-10B: Glyph Artifact Plan Decision Trace Dump
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -4217,8 +4216,7 @@ support, native/font-engine oracle behavior, or complete `glyph-artifact-plan`
 fixture generation.
 ### PKT-10C: Atlas Capacity Refusal Diagnostic Dump
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -4251,7 +4249,7 @@ atlas capacity policy, upload byte hashing, invalidation tokens, GPU text
 sampling, or complete `glyph-atlas.json` fixture coverage.
 ### PKT-10D: A8/SDF Atlas Lifecycle Fixture Contract
 
-Status: implemented; independent review pending.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -4299,8 +4297,7 @@ support, GPU upload execution, renderer resource ownership, or GPU text-route
 promotion.
 ### PKT-10E: A8 Mask Artifact Evidence Dump
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -4332,8 +4329,7 @@ support, GPU upload/sampling, LCD support, external rasterizer oracle parity,
 or broader GPU text-route promotion.
 ### PKT-10F: Atlas Stale Generation Refusal Diagnostic
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -4365,8 +4361,7 @@ artifact production, upload byte hashing, GPU resource lifecycle support, or
 complete `glyph-atlas.json` fixture coverage.
 ### PKT-10G: SDF Transform Refusal Diagnostic
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -4398,8 +4393,7 @@ or GPU text-route promotion.
 
 ### PKT-10H: SDF Glyph Artifact Evidence Dump
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -4434,8 +4428,7 @@ SDF production, or `dftext` retirement.
 
 ### PKT-10I: Glyph Atlas Artifact And Eviction Dumps
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -4467,6 +4460,67 @@ rtk ./gradlew --no-daemon :font:glyph:test --tests '*Atlas*'
 Remaining gate: this is CPU atlas lifecycle evidence only. It does not claim
 GPU upload execution, WebGPU texture ownership, GPU sampling validation, or
 `dftext` retirement.
+
+### PKT-10: A8/SDF Glyph Artifact Planner
+
+Status: implemented and independently reviewed.
+
+The PKT-10 vertical covers glyph strike-key preimage and route diagnostics
+(PKT-10A), glyph artifact plan decision traces (PKT-10B), atlas capacity
+refusal diagnostics (PKT-10C), A8/SDF atlas lifecycle fixture contracts
+(PKT-10D), A8 mask artifact evidence (PKT-10E), atlas stale generation
+refusal (PKT-10F), SDF transform refusal (PKT-10G), SDF glyph artifact
+evidence (PKT-10H), and glyph atlas artifact and eviction dumps (PKT-10I).
+All nine sub-slices are reviewed and checked in.
+
+Files:
+
+- `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/GlyphSurface.kt`
+- `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
+- `reports/font/fixtures/expected/glyph/a8-glyph-mask.json`
+- `reports/font/fixtures/expected/glyph/sdf-glyph-artifact.json`
+- `reports/font/fixtures/expected/glyph/glyph-atlas.json`
+- `reports/font/fixtures/expected/glyph/glyph-atlas-eviction-trace.json`
+- `reports/font/fixtures/expected/glyph/a8-sdf-atlas-lifecycle.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `GlyphStrikeKey` preimage and `text.glyph.*` route diagnostics are
+  deterministic and independently reviewed (PKT-10A).
+- `GlyphArtifactPlanDecision` records one selected or refused route per glyph
+  with strike-key hash, fallback policy, and rejected alternatives (PKT-10B).
+- `RowGlyphAtlasPacker.packWithDiagnostics()` emits stable
+  `text.glyph.atlas-capacity-exceeded` diagnostics (PKT-10C).
+- `a8-sdf-atlas-lifecycle.json` contract requires A8 pack, SDF normalization,
+  SDF transform refusal, capacity, stale generation, and budget gates (PKT-10D).
+- `A8GlyphMaskArtifactEvidence` builds deterministic A8 mask evidence with
+  coverage SHA-256 over addressable samples only (PKT-10E).
+- `GlyphRouteDiagnostic.atlasGenerationStale()` emits stable
+  `text.glyph.atlas-generation-stale` diagnostics (PKT-10F).
+- `GlyphRouteDiagnostic.sdfTransformUnsupported()` emits stable
+  `text.glyph.SDF-transform-unsupported` diagnostics (PKT-10G).
+- `SDFGlyphArtifactEvidence` builds deterministic per-glyph CPU SDF evidence
+  with bounds, spread, source resolution, and distance-field hash (PKT-10H).
+- `GlyphAtlasArtifactEvidence` and `GlyphAtlasEvictionTrace` emit CPU atlas
+  dumps with artifact-key hashes, generation, invalidation tokens, and
+  stale/capacity diagnostics (PKT-10I).
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk git diff --check
+```
+
+Remaining gate: all nine PKT-10 sub-slices are done. This vertical does not
+claim SDF generation fixture coverage beyond the bounded evidence, atlas
+eviction policy changes, GPU upload execution, WebGPU texture ownership, GPU
+sampling validation, complete COLR/bitmap/SVG plan refs, LCD support, or
+`dftext` retirement.
+
 ### PKT-11A: Color Glyph Planning Evidence Dumps
 
 Status: implemented and independently reviewed.
