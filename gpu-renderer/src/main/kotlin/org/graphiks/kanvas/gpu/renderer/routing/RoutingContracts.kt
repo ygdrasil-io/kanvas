@@ -143,6 +143,27 @@ object GPUFirstRouteDecisionBuilder {
             ),
         )
 
+    /**
+     * Builds a native DrawTextRun decision only after analysis has validated
+     * A8 atlas route facts.
+     */
+    fun nativeDrawTextRun(
+        commandIdValue: Int,
+        pipelinePreimageHash: String,
+        renderStepIdentity: String,
+        requirements: List<String>,
+        wgslModuleId: String,
+    ): GPURouteDecision.Native =
+        GPURouteDecision.Native(
+            route = GPUNativeRoute(
+                routeId = "route.draw_text_run.$commandIdValue",
+                consumerKind = "native.draw_text_run.a8_atlas",
+                renderStepIdentity = renderStepIdentity,
+                pipelinePreimageHash = pipelinePreimageHash,
+                requirements = requirements + listOf("wgsl_module=$wgslModuleId"),
+            ),
+        )
+
     /** Builds a terminal route refusal with the canonical reason code preserved for dumps and gates. */
     fun refused(code: String, stage: String, subject: String = "FillRect first native route"): GPURouteDecision.Refused =
         GPURouteDecision.Refused(
