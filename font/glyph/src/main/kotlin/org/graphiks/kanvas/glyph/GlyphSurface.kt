@@ -3361,6 +3361,110 @@ class GlyphCacheMetricsDump(
 }
 
 /**
+ * Derives one advisory glyph artifact metrics sample from a runtime glyph plan.
+ *
+ * The producer stays renderer-neutral: callers provide the already-dumpable route preimages and
+ * any refusal diagnostics that should remain visible in M12 evidence, while the plan contributes
+ * the source representation hashes used for deterministic artifact accounting.
+ */
+fun GlyphArtifactPlan.toMetricsSample(
+    metadata: GlyphCacheTelemetryMetadata,
+    timings: List<GlyphCacheTimingStats>,
+    routePreimages: List<GlyphStrikeKeyRoutePreimage>,
+    additionalRefusalDiagnostics: List<GlyphRouteDiagnostic> = emptyList(),
+): GlyphArtifactMetricsSample {
+    require(routePreimages.all { routePreimage ->
+        routePreimage.compactHash == glyphSha256(routePreimage.preimage.toByteArray(Charsets.UTF_8))
+    }) {
+        "routePreimages compactHash values must match their preimage payloads."
+    }
+    val expectedGlyphIds = run.glyphIDs.groupingBy { it }.eachCount()
+    val actualGlyphIds = routePreimages.groupingBy { it.glyphId }.eachCount()
+    require(actualGlyphIds == expectedGlyphIds) { "routePreimages glyph IDs must match the source glyph run." }
+    if (decisions.isNotEmpty()) {
+        val expectedDecisionTriples = decisions.groupingBy { decision ->
+            Triple(decision.glyphId, decision.selectedRoute, decision.keySha256)
+        }.eachCount()
+        val actualDecisionTriples = routePreimages.groupingBy { routePreimage ->
+            Triple(routePreimage.glyphId, routePreimage.route, routePreimage.compactHash)
+        }.eachCount()
+        require(actualDecisionTriples == expectedDecisionTriples) {
+            "routePreimages must match GlyphArtifactPlan decisions for glyphId, route, and compactHash."
+        }
+    }
+    val refusalRoutes = buildList {
+        decisions.forEach { decision ->
+            decision.rejectedAlternatives.forEach { rejection ->
+                if (rejection.reason != RouteRejectionUnavailable) {
+                    add(rejection.reason)
+                }
+            }
+            decision.diagnostic?.route?.let(::add)
+        }
+        val decisionDiagnosticKeys = decisions.mapNotNull { decision ->
+            decision.diagnostic?.let { diagnostic -> Triple(diagnostic.glyphId, diagnostic.route, diagnostic.message) }
+        }.toSet()
+        diagnostics.forEach { diagnostic ->
+            val key = Triple(diagnostic.glyphId, diagnostic.route, diagnostic.message)
+            if (key !in decisionDiagnosticKeys) {
+                add(diagnostic.route)
+            }
+        }
+        additionalRefusalDiagnostics.forEach { diagnostic -> add(diagnostic.route) }
+    }
+    return GlyphArtifactMetricsSample(
+        metadata = metadata,
+        routeCounts = if (decisions.isNotEmpty()) {
+            decisions.toMetricRouteCounts { decision -> decision.selectedRoute }
+        } else {
+            routePreimages.toMetricRouteCounts { record -> record.route }
+        },
+        timings = timings,
+        sourceMaskHashCount = representations.mapNotNull { representation -> representation.sourceRepresentationSha256() }.distinct().size,
+        refusalCounts = refusalRoutes.toMetricRouteCounts { route -> route },
+        routePreimages = routePreimages,
+    )
+}
+
+/**
+ * Projects one glyph cache telemetry sample plus atlas occupancy facts into the M12 cache sample
+ * shape. Atlas pack timing remains the only timing carried forward because the cache sample is
+ * intended to expose atlas/cache pressure separately from per-route generation timings.
+ */
+fun GlyphCacheTelemetrySample.toMetricsSample(
+    atlasOccupancy: GlyphAtlasOccupancyEntry,
+    glyphIds: Set<Int>,
+    atlasDiagnostics: List<GlyphRouteDiagnostic> = emptyList(),
+): GlyphCacheMetricsSample {
+    require(glyphIds.isNotEmpty()) { "glyphIds must be non-empty when scoping atlas diagnostics." }
+    require(atlasDiagnostics.all { diagnostic -> diagnostic.glyphId in glyphIds }) {
+        "atlasDiagnostics must already be scoped to the sample glyph IDs."
+    }
+    return GlyphCacheMetricsSample(
+        metadata = metadata,
+        atlasArtifactId = atlasOccupancy.artifactId,
+        strikeKeyCount = atlasOccupancy.keyPreimageSha256s.size,
+        keyPreimageSha256s = atlasOccupancy.keyPreimageSha256s,
+        occupancyRatio = atlasOccupancy.occupancyRatio,
+        timings = timings.filter { timing -> timing.metricName == "atlas-pack" },
+        cacheHitCount = cacheHitCount,
+        cacheMissCount = cacheMissCount,
+        evictionCount = evictionCount,
+        atlasCapacityPressureCount = atlasDiagnostics.count { diagnostic ->
+            diagnostic.route == GlyphAtlasCapacityExceededDiagnosticRoute
+        },
+        staleGenerationRefusalCount = atlasDiagnostics.count { diagnostic ->
+            diagnostic.route == GlyphAtlasGenerationStaleDiagnosticRoute
+        },
+        invalidationTokenChangeCount = invalidationCount,
+        cacheMemoryBytes = residentBytes,
+        uploadByteExpectation = uploadPreparationBytes,
+        artifactBudgetRefusalCount = artifactBudgetRefusalCount,
+        budgetRefusals = budgetRefusals,
+    )
+}
+
+/**
  * Deterministic in-memory implementation of [GlyphCache] for module-local glyph planning.
  *
  * The cache keys entries by every strike input that can affect representation reuse: typeface,
@@ -3430,6 +3534,11 @@ class InMemoryGlyphCache(
         }
     }
 }
+
+private fun <T> List<T>.toMetricRouteCounts(routeSelector: (T) -> String): List<GlyphCacheRouteCount> =
+    groupingBy(routeSelector)
+        .eachCount()
+        .map { (route, count) -> GlyphCacheRouteCount(route, count) }
 
 /**
  * Describes a routing decision, alternate route, or unsupported glyph condition observed while planning.
