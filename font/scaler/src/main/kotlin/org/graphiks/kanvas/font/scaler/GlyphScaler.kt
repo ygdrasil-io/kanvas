@@ -36,7 +36,7 @@ data class ScaledGlyph(
 
 sealed class GlyphScaleResult {
     data class Success(val glyph: ScaledGlyph) : GlyphScaleResult()
-    data class Unsupported(val code: String) : GlyphScaleResult()
+    data class Unsupported(val code: String, val reason: String) : GlyphScaleResult()
 }
 
 class GlyphScaler private constructor(
@@ -45,6 +45,7 @@ class GlyphScaler private constructor(
     private data class TableRecord(val offset: Int, val length: Int)
 
     private val tables: Map<String, TableRecord>
+    private val isCFF: Boolean
     private val numGlyphs: Int
     private val unitsPerEm: Int
     private val indexToLocFormat: Int
@@ -55,6 +56,8 @@ class GlyphScaler private constructor(
 
     init {
         tables = parseTableDirectory()
+        val sfntTag = String(fontBytes, 0, 4, Charsets.ISO_8859_1)
+        isCFF = sfntTag == "OTTO" || sfntTag == "typ1"
         numGlyphs = parseMaxp()
         unitsPerEm = parseHeadUnitsPerEm()
         indexToLocFormat = parseHeadLocFormat()
@@ -64,7 +67,10 @@ class GlyphScaler private constructor(
         glyphOffsets = parseLoca()
     }
 
-    fun glyphIdForCodepoint(codepoint: Int): Int = cmap.glyphId(codepoint).coerceIn(0, numGlyphs - 1)
+    fun glyphIdForCodepoint(codepoint: Int): Int? {
+        val id = cmap.glyphId(codepoint)
+        return if (id in 0 until numGlyphs) id else null
+    }
 
     fun scaleGlyph(glyphId: Int, size: Float, sourceCodepoint: Int = 0): ScaledGlyph {
         if (glyphId < 0 || glyphId >= numGlyphs) {
@@ -88,12 +94,32 @@ class GlyphScaler private constructor(
 
     fun scaleGlyphOrDiagnostic(glyphId: Int, size: Float): GlyphScaleResult {
         if (glyphId < 0 || glyphId >= numGlyphs) {
-            return GlyphScaleResult.Unsupported("font.scaler.glyph_id_out_of_range")
+            return GlyphScaleResult.Unsupported(
+                "font.scaler.glyph_id_out_of_range",
+                "Glyph ID $glyphId out of range [0, $numGlyphs)",
+            )
         }
         return try {
             GlyphScaleResult.Success(scaleGlyph(glyphId, size))
         } catch (e: Exception) {
-            GlyphScaleResult.Unsupported("font.scaler.outline_unavailable")
+            val code: String
+            val reason: String
+            val msg = e.message ?: ""
+            when {
+                "CFF/CFF2" in msg -> {
+                    code = "font.scaler.cff_not_yet_supported"
+                    reason = "CFF/CFF2 charstring parsing is deferred"
+                }
+                "point-matching" in msg -> {
+                    code = "font.scaler.composite_point_matching_unsupported"
+                    reason = "Composite glyph component uses point-matching (not xy values)"
+                }
+                else -> {
+                    code = "font.scaler.outline_unavailable"
+                    reason = msg.ifEmpty { "Unknown error" }
+                }
+            }
+            GlyphScaleResult.Unsupported(code, reason)
         }
     }
 
@@ -132,6 +158,7 @@ class GlyphScaler private constructor(
     }
 
     private fun parseHeadLocFormat(): Int {
+        if (isCFF) return 0
         val head = tables["head"] ?: error("Missing head table")
         return i16(fontBytes, head.offset + 50).toInt()
     }
@@ -157,6 +184,7 @@ class GlyphScaler private constructor(
     }
 
     private fun parseLoca(): IntArray {
+        if (isCFF) return intArrayOf()
         val loca = tables["loca"] ?: error("Missing loca table")
         val glyf = tables["glyf"] ?: error("Missing glyf table")
         val offsets = IntArray(numGlyphs + 1)
@@ -252,6 +280,7 @@ class GlyphScaler private constructor(
     }
 
     private fun parseGlyphOutline(glyphId: Int): GlyphData {
+        if (isCFF) error("CFF/CFF2 charstring parsing is deferred")
         val glyf = tables["glyf"] ?: error("Missing glyf table")
         val start = glyphOffsets[glyphId]
         val end = glyphOffsets.getOrElse(glyphId + 1) { start }
@@ -341,7 +370,7 @@ class GlyphScaler private constructor(
             val hasWords = (flags and 0x0001) != 0
             val xyValues = (flags and 0x0002) != 0
             if (!xyValues) {
-                return GlyphData.Empty
+                error("Composite glyph component uses point-matching (not xy values)")
             }
             val dx = if (xyValues) arg1 else 0
             val dy = if (xyValues) arg2 else 0

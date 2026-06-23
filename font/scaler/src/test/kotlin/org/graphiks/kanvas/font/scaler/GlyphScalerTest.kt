@@ -13,7 +13,7 @@ class GlyphScalerTest {
 
         val codepoint = 'A'.code
         val glyph = scaler.scaleGlyph(
-            glyphId = scaler.glyphIdForCodepoint(codepoint),
+            glyphId = scaler.glyphIdForCodepoint(codepoint)!!,
             size = 32.0f,
             sourceCodepoint = codepoint,
         )
@@ -24,7 +24,7 @@ class GlyphScalerTest {
         assertTrue(glyph.advanceWidth > 0f)
         assertTrue(glyph.bounds.width > 0f && glyph.bounds.height > 0f)
         // Deterministic: same input -> same output (hash-stable)
-        val secondRun = scaler.scaleGlyph(scaler.glyphIdForCodepoint(codepoint), 32.0f, sourceCodepoint = codepoint)
+        val secondRun = scaler.scaleGlyph(scaler.glyphIdForCodepoint(codepoint)!!, 32.0f, sourceCodepoint = codepoint)
         assertEquals(glyph.checksum(), secondRun.checksum())
     }
 
