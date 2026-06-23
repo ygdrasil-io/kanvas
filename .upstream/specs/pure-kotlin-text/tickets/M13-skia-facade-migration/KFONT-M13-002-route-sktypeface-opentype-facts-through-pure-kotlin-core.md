@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M13-002"
 title: "Route `SkTypeface` OpenType facts through pure Kotlin core"
-status: "blocked"
+status: "ready"
 milestone: "M13"
 priority: "P1"
 owner_area: "skia-facade"

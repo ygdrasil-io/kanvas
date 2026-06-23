@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M13-003"
 title: "Route explicit `SkShaper` APIs through pure Kotlin shaping"
-status: "blocked"
+status: "ready"
 milestone: "M13"
 priority: "P1"
 owner_area: "skia-facade"
