@@ -267,6 +267,7 @@
         "reports/pure-kotlin-text/dump-evidence-index.json",
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
         "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json",
         "reports/font/fixtures/expected/color/colrv1-fixture-manifest.json",
         "reports/font/fixtures/expected/color/color-glyph-composite-plan.json",
         "reports/font/fixtures/expected/color/color-glyph-plan.json",
@@ -279,10 +280,13 @@
         "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
       ],
       "requiredEvidenceGates": [
-        "KFONT-M10-001 through KFONT-M10-005 now check in typed COLRv0 plus bounded COLRv1 solid/glyph/colr-glyph, gradient, transform/composite/clip, and recursion/cycle/bounds fixture-manifest evidence with stable artifact-key, bounds, composite facts, expected dump links, and refusal diagnostics; keep bitmap/SVG routes, emoji sequence planning, and GPU registration on their owning M10/M11 tickets.",
-        "Do not claim color glyph rendering, emoji shaping, GPU composite execution, dedicated COLRv1 scale/rotate/skew parse-format support, or platform/native fallback from COLRv0/COLRv1 planning evidence alone."
+        "KFONT-M10-001 through KFONT-M10-005 now check in typed COLRv0 plus bounded COLRv1 solid/glyph/colr-glyph, gradient, transform/composite/clip, and recursion/cycle/bounds fixture-manifest evidence with stable artifact-key, bounds, composite facts, expected dump links, and refusal diagnostics; KFONT-M10-010 now cross-links that CPU-side evidence in color-emoji-fixture-manifest.json while keeping bitmap/SVG routes, emoji sequence planning, and GPU registration on their owning M10/M11 tickets.",
+        "Do not claim color glyph rendering, emoji shaping, GPU composite execution, dedicated COLRv1 scale/rotate/skew parse-format support, or platform/native fallback from COLRv0/COLRv1 planning evidence and color-emoji-fixture-manifest.json alone."
       ],
       "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.ColorEmojiFixtureManifestMatchesRepoFixture",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_color_emoji_fixture_manifest.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_color_emoji_fixture_manifest.py",
         "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
         "rtk python3 scripts/validate_font_fixture_assets.py",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
@@ -368,12 +372,25 @@
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
         "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
-        "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json"
+        "reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json",
+        "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json",
+        "reports/font/fixtures/expected/color/emoji-route-trace.json",
+        "reports/pure-kotlin-text/2026-06-17-kfont-m10-009-emoji-sequence-planner.md"
       ],
-      "requiredEvidenceGates": [],
+      "requiredEvidenceGates": [
+        "KFONT-M10-009 checks in CPU-side emoji-route-trace.json evidence for variation-selector, skin-tone, represented skin-tone role ZWJ, ZWJ family, keycap, flag, fallback-unavailable, color-glyph-unavailable, and unsupported-sequence cases, and KFONT-M10-010 now maps those rows plus legacy gates in color-emoji-fixture-manifest.json; keep M11 GPU route proof as a separate gate.",
+        "Do not claim complete emoji shaping support, complete color-glyph fallback support, platform emoji-engine parity, or retirement of scaledemoji from emoji-route-trace.json and color-emoji-fixture-manifest.json alone."
+      ],
       "validationCommands": [
-        "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
-        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest"
+        "rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperRecognizesKeycapAndFlagFixturesAsSingleClusters --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperExposesTypedFactsForPlannerSequenceKinds --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperDumpsVS15SkinToneAndZwjFamilyFixtures --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperKeepsRepresentedSkinToneRoleSequenceAsZwj",
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.ColorEmojiFixtureManifestMatchesRepoFixture",
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.emojiSequencePlannerGoldenMatchesRepoFixture --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.exposesColorGlyphPipelineSurface",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_color_emoji_fixture_manifest.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_color_emoji_fixture_manifest.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_font_fixtures.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py"
       ],
       "fixtureCommands": [
         "Generate deterministic emoji sequence fixtures and expected dispatch dumps before support promotion."
@@ -514,6 +531,174 @@
       ]
     },
     {
+      "familyId": "font-glyph-artifact-cache-telemetry",
+      "familyName": "Font glyph artifact and cache telemetry",
+      "classification": "tracked-gap",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "currentEvidencePaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/glyph-artifact-metrics.json",
+        "reports/pure-kotlin-text/glyph-cache-metrics.json",
+        "reports/pure-kotlin-text/glyph-atlas-occupancy.json",
+        "reports/pure-kotlin-text/2026-06-19-kfont-m12-004-glyph-cache-metrics.md",
+        "reports/pure-kotlin-text/font-claim-dashboard.json",
+        "reports/pure-kotlin-text/font-telemetry-pm-bundle.json",
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "reports/pure-kotlin-text/dump-evidence-index.json"
+      ],
+      "requiredEvidenceGates": [
+        "KFONT-M12-004 now lands deterministic glyph artifact, cache, and atlas-occupancy telemetry while keeping all budgets advisory-only.",
+        "Keep GPU text-route promotion, executed-upload claims, `dftext` retirement, and any support promotion on the broader M11 GPU handoff chain and explicit GPU evidence."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk ./gradlew --no-daemon pipelinePmBundle",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py"
+      ],
+      "fixtureCommands": [
+        "Glyph artifact/cache telemetry dumps are checked in under reports/pure-kotlin-text and asserted by FontTelemetrySchemaTest."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "familyId": "font-gpu-handoff-telemetry",
+      "familyName": "Font GPU handoff telemetry",
+      "classification": "tracked-gap",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "currentEvidencePaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextHandoffMetricsEvidence.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextHandoffMetricsEvidenceTest.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/gpu-text-handoff-metrics.json",
+        "reports/pure-kotlin-text/draw-text-run-upload-plan.json",
+        "reports/pure-kotlin-text/2026-06-19-kfont-m12-005-gpu-handoff-metrics.md",
+        "reports/pure-kotlin-text/font-claim-dashboard.json",
+        "reports/pure-kotlin-text/font-telemetry-pm-bundle.json",
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "reports/pure-kotlin-text/dump-evidence-index.json"
+      ],
+      "requiredEvidenceGates": [
+        "KFONT-M12-005 now lands deterministic advisory GPU handoff and upload-plan dumps with stable refusal diagnostics and bounded MaterialKey/no-Sk leakage audit evidence.",
+        "Keep `dftext` retirement, executed GPU upload claims, and any support promotion on the broader M11 GPU handoff chain and explicit GPU evidence."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextHandoffMetricsEvidenceTest*'",
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py"
+      ],
+      "fixtureCommands": [
+        "defaultGPUTextHandoffMetricsJson() and defaultDrawTextRunUploadPlanJson() emit checked-in advisory dumps under reports/pure-kotlin-text and are asserted by GPUTextHandoffMetricsEvidenceTest / FontTelemetrySchemaTest."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim",
+        "no-dftext-retirement"
+      ]
+    },
+    {
+      "familyId": "font-parser-scaler-telemetry",
+      "familyName": "Font parser/scaler telemetry",
+      "classification": "tracked-gap",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "currentEvidencePaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/parser-metrics.json",
+        "reports/pure-kotlin-text/scaler-metrics.json",
+        "reports/pure-kotlin-text/2026-06-17-kfont-m12-002-parser-scaler-metrics.md",
+        "reports/pure-kotlin-text/font-claim-dashboard.json",
+        "reports/pure-kotlin-text/font-telemetry-pm-bundle.json",
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "reports/pure-kotlin-text/dump-evidence-index.json"
+      ],
+      "requiredEvidenceGates": [
+        "All M12 telemetry domains now have checked-in deterministic producer evidence; parser/scaler rows stay advisory-only and do not promote GPU-route, `dftext`, or release-gate support.",
+        "Keep all parser/scaler telemetry rows advisory until the dedicated budget-promotion policy is updated."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk ./gradlew --no-daemon pipelinePmBundle",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py"
+      ],
+      "fixtureCommands": [
+        "FontTelemetryEvidenceWriter emits parser/scaler telemetry dumps under reports/pure-kotlin-text and FontTelemetrySchemaTest asserts byte-identical checked-in goldens."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-gpu-route-support-claim",
+        "no-native-engine-oracle-claim"
+      ]
+    },
+    {
+      "familyId": "font-shaping-paragraph-telemetry",
+      "familyName": "Font shaping and paragraph telemetry",
+      "classification": "tracked-gap",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/08-performance-budgets-and-telemetry.md",
+        "section": "Required Telemetry"
+      },
+      "currentEvidencePaths": [
+        "font/core/src/main/kotlin/org/graphiks/kanvas/font/FontTelemetry.kt",
+        "font/core/src/test/kotlin/org/graphiks/kanvas/font/FontTelemetrySchemaTest.kt",
+        "reports/pure-kotlin-text/shaping-metrics.json",
+        "reports/pure-kotlin-text/paragraph-metrics.json",
+        "reports/pure-kotlin-text/2026-06-19-kfont-m12-003-shaping-paragraph-metrics.md",
+        "reports/pure-kotlin-text/font-claim-dashboard.json",
+        "reports/pure-kotlin-text/font-telemetry-pm-bundle.json",
+        "reports/pure-kotlin-text/coverage-ticket-matrix.md",
+        "reports/pure-kotlin-text/dump-evidence-index.json"
+      ],
+      "requiredEvidenceGates": [
+        "KFONT-M12-003 now lands deterministic shaping and paragraph telemetry slices with explicit fallback, emoji-sequence, and placeholder-conflict diagnostics while keeping all budgets advisory.",
+        "Keep `scaledemoji`, broader script-support promotion, complete paragraph bidi visual-order evidence, and any GPU text claim on their owning tickets and legacy gates."
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'",
+        "rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings",
+        "rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence",
+        "rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
+        "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py"
+      ],
+      "fixtureCommands": [
+        "Shaping and paragraph telemetry dumps are checked in under reports/pure-kotlin-text and asserted by FontTelemetrySchemaTest."
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-performance-release-gate-claim",
+        "no-emoji-support-claim",
+        "no-gpu-route-support-claim"
+      ]
+    },
+    {
       "familyId": "font-source-sfnt",
       "familyName": "Font source/SFNT",
       "classification": "current-supported",
@@ -604,7 +789,7 @@
         "reports/pure-kotlin-text/dump-evidence-index.json"
       ],
       "requiredEvidenceGates": [
-        "KFONT-M12-002, KFONT-M12-003, KFONT-M12-004, and KFONT-M12-005 own parser/scaler/shaping/paragraph/glyph/GPU producer emission into the shared schema; keep this family schema-only advisory evidence until those subsystem tickets land.",
+        "All M12 telemetry domains now have checked-in deterministic producer evidence; this family remains schema-only/advisory evidence and does not promote GPU-route, `dftext`, or release-gate support.",
         "Keep performance budgets advisory until the dedicated promotion policy is updated."
       ],
       "validationCommands": [
@@ -715,23 +900,28 @@
       "currentEvidencePaths": [
         "reports/pure-kotlin-text/coverage-ticket-matrix.md",
         "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifacts.kt",
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextA8RoutePlan.kt",
         "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifactsSurfaceTest.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextA8RoutePlanTest.kt",
         "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/commands/NormalizedDrawCommand.kt",
         "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/text/TextContracts.kt",
-        "gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/text/GPUTextCommandHandoffTest.kt"
+        "gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/text/GPUTextCommandHandoffTest.kt",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SimpleLatinLineSceneEvidenceTest.kt",
+        "reports/pure-kotlin-text/gpu-text-a8-route-plan.json",
+        "reports/pure-kotlin-text/gpu-text-a8-route-refusals.json",
+        "reports/pure-kotlin-text/2026-06-19-kfont-m11-004-a8-route-plan.md"
       ],
       "requiredEvidenceGates": [
-        "Add DrawTextRun registered artifact fixture evidence.",
-        "Add unregistered artifact refusal evidence.",
-        "Add upload plan dump evidence.",
-        "Add route evidence proving no CPU-rendered texture route.",
-        "Add adapter-backed GPU evidence before any GPU support claim."
+        "KFONT-M11-004 now lands the first bounded accepted A8 atlas route plan plus checked-in missing-entry/stale-generation refusal snapshots, with explicit atlas page/entry refs, binding facts, and focused simple-Latin GPU evidence while keeping `routePromotion=not-promoted` and `productActivation=false`.",
+        "KFONT-M11-005 already covers refusal-only SDF/outline/color/bitmap/SVG/unregistered/upload/stale/CPU-texture cases; keep broader subrun/resource/upload/binding, ordering, WGSL route validation, and `MaterialKey` leakage work on KFONT-M11-006 through KFONT-M11-010.",
+        "Do not treat the current route as broad text GPU support or `dftext` retirement; adapter-backed evidence remains bounded to the accepted simple-Latin A8 atlas route."
       ],
       "validationCommands": [
-        "rtk ./gradlew --no-daemon :font:gpu-api:test :gpu-renderer:test"
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*A8Text*'",
+        "rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*A8Text*'"
       ],
       "fixtureCommands": [
-        "Current PKT-12A/PKT-12B evidence is contract-only and does not activate a GPU text route."
+        "The checked-in `gpu-text-a8-route-plan.json` and `gpu-text-a8-route-refusals.json` dumps are emitted by `defaultGPUTextA8RoutePlan()` / `defaultGPUTextA8RouteRefusalReport()` and paired with the simple-Latin route artifacts under `reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/`."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",
@@ -958,15 +1148,19 @@
         "reports/pure-kotlin-text/dump-evidence-index.json",
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
         "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json",
         "reports/font/fixtures/expected/color/bitmap-glyph-plan.json",
         "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json",
         "reports/pure-kotlin-text/2026-06-17-kfont-m10-006-png-bitmap-glyph-artifacts.md"
       ],
       "requiredEvidenceGates": [
-        "KFONT-M10-006 lands checked-in CPU-side bitmap plan and refusal evidence only; keep M11 GPU texture/upload/sampling proof as a separate gate before any renderer support claim.",
-        "Do not claim non-PNG bitmap payload support, platform/native codec support, emoji sequence support, or retirement of scaledemoji_rendering from bitmap-glyph-plan.json alone."
+        "KFONT-M10-006 lands checked-in CPU-side bitmap plan and refusal evidence only, and KFONT-M10-010 now records those fixtures plus scaledemoji_rendering linkage in color-emoji-fixture-manifest.json; keep M11 GPU texture/upload/sampling proof as a separate gate before any renderer support claim.",
+        "Do not claim non-PNG bitmap payload support, platform/native codec support, emoji sequence support, or retirement of scaledemoji_rendering from bitmap-glyph-plan.json and color-emoji-fixture-manifest.json alone."
       ],
       "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.ColorEmojiFixtureManifestMatchesRepoFixture",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_color_emoji_fixture_manifest.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_color_emoji_fixture_manifest.py",
         "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
         "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest"
       ],
@@ -1079,6 +1273,7 @@
         "reports/pure-kotlin-text/dump-evidence-index.json",
         "font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt",
         "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+        "reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json",
         "reports/font/fixtures/expected/color/color-svg-emoji-goldens.json",
         "reports/font/fixtures/expected/color/svg-glyph-fixture-manifest.json",
         "reports/font/fixtures/expected/color/svg-glyph-plan.json",
@@ -1086,10 +1281,13 @@
         "reports/pure-kotlin-text/2026-06-17-kfont-m10-008-svg-refusal-bounds-fixtures.md"
       ],
       "requiredEvidenceGates": [
-        "KFONT-M10-008 adds checked-in svg-glyph-fixture-manifest.json with positive bounds hashes and explicit refusal classes; keep KFONT-M10-010 color/emoji manifest convergence and M11 GPU SVG route proof as separate gates.",
-        "Do not claim dynamic SVG support, native SVG renderer parity, or GPU SVG route support from svg-glyph-plan.json and svg-glyph-fixture-manifest.json alone."
+        "KFONT-M10-008 adds checked-in svg-glyph-fixture-manifest.json with positive bounds hashes and explicit refusal classes, and KFONT-M10-010 now records those fixtures plus scaledemoji_rendering linkage in color-emoji-fixture-manifest.json; keep M11 GPU SVG route proof as a separate gate.",
+        "Do not claim dynamic SVG support, native SVG renderer parity, or GPU SVG route support from svg-glyph-plan.json, svg-glyph-fixture-manifest.json, and color-emoji-fixture-manifest.json alone."
       ],
       "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.ColorEmojiFixtureManifestMatchesRepoFixture",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_color_emoji_fixture_manifest.py",
+        "rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_color_emoji_fixture_manifest.py",
         "rtk python3 scripts/validate_pure_kotlin_text_font_fixtures.py",
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py",
         "rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest"
