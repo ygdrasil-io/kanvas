@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-006"
 title: "Add `GPUTextSubRunPlan` splitting tests"
-status: "blocked"
+status: "done"
 milestone: "M11"
 priority: "P1"
 owner_area: "gpu-api"
@@ -63,11 +63,11 @@ data class GPUTextSubRunPlan(
 
 ## Acceptance Criteria
 
-- [ ] Splits are deterministic for the same payload, artifact registry, and budget policy.
-- [ ] Multi-page or multi-generation atlas entries split into compatible subruns.
-- [ ] Unsupported SDF/color/bitmap/SVG artifacts produce refused subruns with route-specific diagnostics.
-- [ ] Instance-budget and binding-budget splits preserve glyph coverage order.
-- [ ] `gpu-text-subrun-plan.json` records source glyph ranges, split reasons, bounds, route, ordering token, and diagnostic outcome.
+- [x] Splits are deterministic for the same payload, artifact registry, and budget policy.
+- [x] Multi-page or multi-generation atlas entries split into compatible subruns.
+- [x] Unsupported SDF/color/bitmap/SVG artifacts produce refused subruns with route-specific diagnostics.
+- [x] Instance-budget and binding-budget splits preserve glyph coverage order.
+- [x] `gpu-text-subrun-plan.json` records source glyph ranges, split reasons, bounds, route, ordering token, and diagnostic outcome.
 
 ## Required Evidence
 
@@ -105,6 +105,14 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextSubRunPlan*'
   compatibility model, or accepted A8 route to split. Remaining gate: finish
   `KFONT-M11-004`, then re-review split reason taxonomy and visual-order
   policy.
+- `done` (2026-06-23): `GPUTextSubRunPlan` now emits checked-in
+  `gpu-text-subrun-plan.json` evidence for atlas page/generation splits,
+  clip/layer/destination-read barriers, instance-budget refusal, and mixed
+  A8/SDF/COLR/bitmap representation refusals. The dump preserves source glyph
+  ranges and ordering tokens, stays `GPU-gated`, keeps
+  `routePromotion=not-promoted` and `productActivation=false`, and does not
+  claim resource/upload/instance/binding materialization, upload-before-sample
+  execution, broad GPU text support, or `dftext` retirement.
 
 ## Linear Labels
 

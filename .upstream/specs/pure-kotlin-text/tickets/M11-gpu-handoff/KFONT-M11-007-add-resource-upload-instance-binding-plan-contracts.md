@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-007"
 title: "Add resource/upload/instance/binding plan contracts"
-status: "blocked"
+status: "ready"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -109,6 +109,13 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextResource*'
   with destination texture facts, row stride, staging requirements, binding
   layout hash, or lifetime scope. Remaining gate: finish `GPUTextSubRunPlan`
   planning first, then re-review the resource/upload/instance/binding schemas.
+- `ready` (2026-06-23): `KFONT-M11-006` now lands deterministic
+  `GPUTextSubRunPlan` evidence with stable subrun IDs, split reasons, route
+  outcomes, atlas page/generation facts, clip/layer/destination-read barriers,
+  and ordering-token placeholders. The resource/upload/instance/binding
+  contract scope remains valid and no external decision is pending; keep route
+  promotion, upload execution, and `dftext` retirement gated on this ticket's
+  own dumps and refusal evidence.
 
 ## Linear Labels
 

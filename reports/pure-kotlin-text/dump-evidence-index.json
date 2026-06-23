@@ -2404,6 +2404,62 @@
       ]
     },
     {
+      "dumpId": "gpu-text-subrun-plan",
+      "ownerTicket": "KFONT-M11-006",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md",
+        "section": "Text renderer handoff"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextSubRunPlan.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextSubRunPlanTest.kt",
+        "reports/pure-kotlin-text/gpu-text-subrun-plan.json"
+      ],
+      "expectedFields": [
+        "atlasGeneration",
+        "atlasPageId",
+        "classification",
+        "clipKey",
+        "destinationReadRequired",
+        "handoffDiagnostic",
+        "instanceBudgetGlyphLimit",
+        "layerKey",
+        "materialKey",
+        "nonClaims",
+        "orderingToken",
+        "ownerTickets",
+        "parentCommandId",
+        "productActivation",
+        "renderStep",
+        "rendererDiagnostic",
+        "representation",
+        "route",
+        "routeOutcome",
+        "routePromotion",
+        "scenarioId",
+        "scenarios",
+        "schema",
+        "sourceGlyphRange",
+        "splitKind",
+        "splitReasons",
+        "subRunId",
+        "subRuns"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextSubRunPlan*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "GPU text subrun plan dump changes require reviewed split reason, source glyph range, ordering token, refusal diagnostic, and non-claim diffs without broad GPU text, executed upload, or dftext promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-broad-gpu-text-support-claim",
+        "no-dftext-retirement",
+        "no-executed-gpu-upload-claim"
+      ]
+    },
+    {
       "dumpId": "gsub-trace",
       "ownerTicket": "KFONT-M6-003",
       "classification": "golden-gated",

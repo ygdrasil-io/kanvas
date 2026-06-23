@@ -107,6 +107,11 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*TextOrdering*'
   validation, eviction, and barriers. Remaining gate: finish A8 route and
   resource/upload/binding contracts, then re-review ordering token fields and
   negative ordering cases.
+- `blocked` (2026-06-23): `KFONT-M11-004` and `KFONT-M11-006` are now done,
+  and `KFONT-M11-007` is the ready prerequisite for resource/upload/instance/
+  binding contracts. This ticket stays blocked until those contracts land with
+  upload task, instance upload, draw sampling, generation validation, eviction,
+  and barrier evidence.
 
 ## Linear Labels
 

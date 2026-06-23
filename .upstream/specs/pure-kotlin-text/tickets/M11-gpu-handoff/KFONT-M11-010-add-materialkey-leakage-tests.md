@@ -102,6 +102,10 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*MaterialKey*Text*'
   glyph IDs, atlas UVs, atlas generations, upload tokens, and live handles stay
   out of material identity. Remaining gate: finish subrun and
   resource/binding contracts, then re-review allowed and forbidden key axes.
+- `blocked` (2026-06-23): `KFONT-M11-006` now supplies subrun IDs and split
+  evidence, and `KFONT-M11-007` is ready but not implemented. This ticket
+  stays blocked until `GPUTextBinding`, `GPUTextResourcePlan`, and text
+  material preimage fixtures exist for leakage validation.
 
 ## Linear Labels
 
