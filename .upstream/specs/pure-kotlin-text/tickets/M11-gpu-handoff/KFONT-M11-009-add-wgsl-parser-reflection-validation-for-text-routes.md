@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-009"
 title: "Add WGSL parser/reflection validation for text routes"
-status: "blocked"
+status: "ready"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -117,6 +117,10 @@ rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*TextWgsl
   until the resource/upload/instance/binding dumps exist, then text WGSL
   modules can be validated against reflected bindings and Kotlin plan
   comparisons.
+- `ready` (2026-06-23): `KFONT-M11-007` now lands binding layout hashes,
+  resource slots, atlas generation facts, and material refs for the accepted
+  A8 resource contract. This ticket can now validate text WGSL parser/
+  reflection evidence against Kotlin binding and resource plan comparisons.
 
 ## Linear Labels
 

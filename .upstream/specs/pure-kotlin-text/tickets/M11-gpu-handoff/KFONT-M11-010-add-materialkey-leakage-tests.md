@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-010"
 title: "Add `MaterialKey` leakage tests"
-status: "blocked"
+status: "ready"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -106,6 +106,11 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*MaterialKey*Text*'
   evidence, and `KFONT-M11-007` is ready but not implemented. This ticket
   stays blocked until `GPUTextBinding`, `GPUTextResourcePlan`, and text
   material preimage fixtures exist for leakage validation.
+- `ready` (2026-06-23): `KFONT-M11-007` now lands `GPUTextBinding` and
+  `GPUTextResourcePlan` evidence with explicit `MaterialKey` excluded fields
+  for glyph IDs, atlas rects, atlas generations, upload tokens, and live
+  texture handles. This ticket can now add the full material preimage leakage
+  validation and negative fixtures.
 
 ## Linear Labels
 

@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-008"
 title: "Add upload-before-sample ordering validation"
-status: "blocked"
+status: "ready"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -112,6 +112,11 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*TextOrdering*'
   binding contracts. This ticket stays blocked until those contracts land with
   upload task, instance upload, draw sampling, generation validation, eviction,
   and barrier evidence.
+- `ready` (2026-06-23): `KFONT-M11-007` now lands resource/upload/instance/
+  binding plan dumps with upload-before-sample and instance-upload-before-draw
+  dependency labels. This ticket can now validate real ordering traces,
+  generation checks, eviction barriers, and negative ordering cases without a
+  new PM decision.
 
 ## Linear Labels
 
