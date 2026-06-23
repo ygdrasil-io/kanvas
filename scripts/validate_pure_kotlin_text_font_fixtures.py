@@ -52,6 +52,9 @@ REQUIRED_FONT_FAMILY_GATES = {
         "atlas-capacity-refusal",
         "cache-budget-refusal",
         "cache-inventory",
+        "glyph-artifact-metrics",
+        "glyph-atlas-occupancy",
+        "glyph-cache-metrics",
         "cache-telemetry",
         "sdf-normalization",
         "sdf-transform-refusal",
@@ -151,6 +154,12 @@ FORBIDDEN_EXTERNAL_ENGINE_TERMS = [
     "native engines",
 ]
 
+COHERENT_NON_CLAIM_GATES = {
+    "glyph-artifact-metrics",
+    "glyph-atlas-occupancy",
+    "glyph-cache-metrics",
+}
+
 
 class ValidationError(RuntimeError):
     pass
@@ -178,6 +187,15 @@ def load_inventory(root: Path) -> dict[str, Any]:
     inventory = load_json(root, INVENTORY_PATH)
     require(isinstance(inventory, dict), "inventory root must be an object")
     return inventory
+
+
+def load_dump_artifact(root: Path, relative_path: str) -> dict[str, Any] | None:
+    payload = load_json(root, relative_path)
+    if not isinstance(payload, dict):
+        return None
+    if "dumpId" not in payload or "nonClaims" not in payload:
+        return None
+    return payload
 
 
 def require_keys(payload: dict[str, Any], expected: list[str], label: str) -> None:
@@ -255,6 +273,21 @@ def validate_fixture(root: Path, fixture: Any, family_id: str, index: int) -> di
     require_string_list(fixture["expectedArtifacts"], f"{fixture_id}.expectedArtifacts")
     non_claims = require_string_list(fixture["nonClaims"], f"{fixture_id}.nonClaims")
     require("no-complete-target-support-claim" in non_claims, f"{fixture_id}.nonClaims must include no-complete-target-support-claim")
+    if fixture_kind == "structured-dump" and target_gate in COHERENT_NON_CLAIM_GATES:
+        dump_artifacts = [
+            (path, payload)
+            for path in evidence_paths
+            if path.endswith(".json")
+            for payload in [load_dump_artifact(root, path)]
+            if payload is not None
+        ]
+        if len(dump_artifacts) == 1:
+            dump_path, payload = dump_artifacts[0]
+            dump_non_claims = require_string_list(payload["nonClaims"], f"{fixture_id} dump nonClaims")
+            require(
+                dump_non_claims == non_claims,
+                f"{fixture_id}.nonClaims must match dump nonClaims in {dump_path}",
+            )
     return fixture
 
 
