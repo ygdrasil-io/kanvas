@@ -20,18 +20,18 @@
         "sampleCount": 5,
         "timingMode": "fixture-counter",
         "releaseGatePromoted": false
-    
+
       },
       "routeCounts": [
         {
           "route": "text.glyph.mask.A8",
           "count": 2
-    
+
         },
         {
           "route": "text.glyph.mask.SDF",
           "count": 1
-    
+
         }
       ],
       "timings": [
@@ -42,7 +42,7 @@
           "p90": 11,
           "max": 12,
           "unit": "fixture-ticks"
-    
+
         },
         {
           "metricName": "atlas-pack",
@@ -51,7 +51,7 @@
           "p90": 8,
           "max": 9,
           "unit": "fixture-ticks"
-    
+
         },
         {
           "metricName": "sdf-generation",
@@ -60,7 +60,7 @@
           "p90": 16,
           "max": 18,
           "unit": "fixture-ticks"
-    
+
         }
       ],
       "cacheHitCount": 0,
@@ -77,7 +77,7 @@
           "keyPreimageSha256": "a0569c3c8330e5395459871ea90731d0c893889789e12cc26d0595ea09a6c609",
           "observedBytes": 544,
           "advisoryLimitBytes": 512
-    
+
         }
       ]
     },
@@ -91,18 +91,18 @@
         "sampleCount": 5,
         "timingMode": "fixture-counter",
         "releaseGatePromoted": false
-    
+
       },
       "routeCounts": [
         {
           "route": "text.glyph.mask.A8",
           "count": 2
-    
+
         },
         {
           "route": "text.glyph.mask.SDF",
           "count": 1
-    
+
         }
       ],
       "timings": [
@@ -113,7 +113,7 @@
           "p90": 3,
           "max": 4,
           "unit": "fixture-ticks"
-    
+
         },
         {
           "metricName": "atlas-pack",
@@ -122,7 +122,7 @@
           "p90": 2,
           "max": 2,
           "unit": "fixture-ticks"
-    
+
         },
         {
           "metricName": "sdf-generation",
@@ -131,7 +131,7 @@
           "p90": 5,
           "max": 6,
           "unit": "fixture-ticks"
-    
+
         }
       ],
       "cacheHitCount": 3,
@@ -148,7 +148,7 @@
           "keyPreimageSha256": "26872b4b6102bd9972c496976b9d25892a748d276e4d34511db2a1b2852a0298",
           "observedBytes": 1536,
           "advisoryLimitBytes": 1024
-    
+
         }
       ]
     }
@@ -162,5 +162,5 @@
     "no-gpu-upload-execution-claim",
     "no-hidden-performance-gate"
   ],
-  "dumpSha256": "11e559b6558b921ca01d2fb7a84a0d11dd459366c18d86d6ab687990618dd2d1"
+  "dumpSha256": "427f46c31b0f5a4931b489aabdc99aa2095f7406e13d36138a8b77d5c51923bd"
 }

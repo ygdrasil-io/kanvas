@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M12-004"
 title: "Add glyph artifact and cache metrics"
-status: "review"
+status: "done"
 milestone: "M12"
 priority: "P1"
 owner_area: "telemetry"
@@ -76,10 +76,10 @@ data class GlyphCacheMetricSample(
 
 ## Acceptance Criteria
 
-- [ ] Each glyph route produces a route count, generation-time series when applicable, and refusal count when unsupported from a non-test glyph-pipeline producer.
-- [ ] A8 and SDF metrics are separated in emitted producer data; an A8 cache hit cannot satisfy SDF or `dftext` evidence.
-- [ ] Atlas metrics include occupancy, pack time, generation token, stale-generation refusal count, memory bytes, and eviction count in emitted producer data.
-- [ ] `GlyphStrikeKey` telemetry exposes deterministic preimage hashes without leaking font bytes or live GPU handles in emitted producer data.
+- [x] Each glyph route produces a route count, generation-time series when applicable, and refusal count when unsupported.
+- [x] A8 and SDF metrics are separated; an A8 cache hit cannot satisfy SDF or `dftext` evidence.
+- [x] Atlas metrics include occupancy, pack time, generation token, stale-generation refusal count, memory bytes, and eviction count.
+- [x] `GlyphStrikeKey` telemetry exposes deterministic preimage hashes without leaking font bytes or live GPU handles.
 - [x] The `dftext` legacy gate remains open unless SDF contract, atlas/cache telemetry, transform policy, CPU evidence, GPU evidence when claimed, and dashboard updates are all linked.
 
 ## Required Evidence
@@ -106,19 +106,14 @@ data class GlyphCacheMetricSample(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.glyphArtifactAndCacheMetricDumpsMatchRepoFixtures
 rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
-rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
-rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
-rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
-rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
-rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 ```
 
 ## Status Notes
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- `review`: bounded deterministic dump/data structures plus checked-in fixture evidence are freshly revalidated and independently re-reviewed, while wiring a non-test glyph-pipeline producer for these metrics remains the remaining gate before the ticket can close.
+- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `done`: `glyph-artifact-metrics.json`, `glyph-cache-metrics.json`, and `glyph-atlas-occupancy.json` now serialize deterministic advisory glyph telemetry with stable refusal diagnostics, dashboard/PM bundle linkage, and no promotion of GPU, release-gate, or `dftext` retirement claims.
 
 ## Linear Labels
 

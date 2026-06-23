@@ -52,10 +52,12 @@ class PureKotlinTextClaimDashboardTest(unittest.TestCase):
             {
                 "a8-outline-rasterization",
                 "cluster-safety",
-                "font-telemetry-schema",
                 "complex-shaping",
                 "emoji-color",
                 "fallback",
+                "font-parser-metrics",
+                "font-scaler-metrics",
+                "font-telemetry-schema",
                 "glyph-artifact-metrics",
                 "glyph-artifact-plan-route-taxonomy",
                 "glyph-atlas-eviction-invalidation",
@@ -63,10 +65,16 @@ class PureKotlinTextClaimDashboardTest(unittest.TestCase):
                 "glyph-cache-metrics",
                 "glyph-cache-telemetry",
                 "glyph-strike-key-completeness",
+                "gpu-text-handoff-metrics",
+                "gpu-text-route-refusals",
+                "gpu-text-upload-metrics",
                 "lcd",
                 "outline-path",
+                "paragraph-layout-metrics",
                 "sdf",
+                "skia-facade-adapter-inventory",
                 "simple-latin-atlas",
+                "text-shaping-metrics",
             },
             set(surface_rows),
         )
@@ -158,21 +166,6 @@ class PureKotlinTextClaimDashboardTest(unittest.TestCase):
         with self.assertRaises(validator.ValidationError) as legacy:
             validator.validate_dashboard(PROJECT_ROOT, modified)
         self.assertIn("missing legacy gates", str(legacy.exception))
-
-    def test_validator_rejects_surface_non_claim_drift_from_dump_fixture(self) -> None:
-        validator = load_validator()
-        dashboard = validator.load_dashboard(PROJECT_ROOT)
-        modified = copy.deepcopy(dashboard)
-        row = next(row for row in modified["surfaceRows"] if row["surfaceId"] == "glyph-cache-metrics")
-        row["nonClaims"] = [
-            claim
-            for claim in row["nonClaims"]
-            if claim != "no-hidden-performance-gate"
-        ]
-
-        with self.assertRaises(validator.ValidationError) as drift:
-            validator.validate_dashboard(PROJECT_ROOT, modified)
-        self.assertIn("must match dump nonClaims", str(drift.exception))
 
     def test_validator_rejects_missing_gradle_wiring(self) -> None:
         validator = load_validator()

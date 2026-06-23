@@ -23,7 +23,7 @@ M10 spans COLRv0, COLRv1, PNG bitmap glyphs, SVG glyphs, and emoji routes. Suppo
 ## Scope
 
 - Create a manifest covering COLRv0 layers, COLRv1 solid/glyph/gradient/transform/composite/clip/cycle/budget cases, CBDT/CBLC PNG, sbix PNG, SVG supported/refused cases, and emoji sequence routes.
-- Record fixture ID, font source ID, glyph IDs or text sequence, provenance, license note, generated source recipe when applicable, expected route, expected diagnostics, expected dumps, and linked legacy gates.
+- Record fixture ID, font source ID, glyph IDs and/or text sequence (with sequence fixtures allowed to carry resolved glyph IDs when the planner already selected a glyph), provenance, license note, generated source recipe when applicable, expected route, expected diagnostics, expected dumps, and linked legacy gates.
 - Mark CPU/text evidence separately from future GPU evidence so metadata-only or CPU-only support cannot retire GPU rows.
 - Emit `color-emoji-fixture-manifest.json` with deterministic ordering and stable hashes.
 - Define rebaseline rules requiring old/new expected dump diffs and a reason for behavior changes.
@@ -71,7 +71,7 @@ data class ColorEmojiFixtureManifestEntry(
 
 - `color-emoji-fixture-manifest.json` with COLRv0, COLRv1, bitmap PNG, SVG, and emoji entries.
 - Cross-reference dump listing expected `color-glyph-plan.json`, `colrv1-paint-graph.json`, `bitmap-glyph-plan.json`, `svg-glyph-plan.json`, and `emoji-route-trace.json` files.
-- Dashboard snapshot keeping the `emoji/color` support surface non-promotable while the convergence manifest, CPU oracle gap, and M11 GPU route gate remain explicit.
+- Dashboard snapshot keeping fixture-gated rows classified as `fixture-gated` until all required evidence is attached.
 
 ## Fallback / Refusal Behavior
 
@@ -81,20 +81,26 @@ data class ColorEmojiFixtureManifestEntry(
 
 ## Dashboard Impact
 
-- Expected row: `emoji/color`.
-- Expected classification: `DependencyGated`.
+- Expected row: `Color and emoji fixture manifest`.
+- Expected classification: `fixture-gated`.
 - Claim promotion allowed: no, unless manifest provenance, expected diagnostics, and required evidence links are attached.
 
 ## Validation
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.colorEmojiFixtureManifestConvergesM10FamiliesLegacyGatesAndRemainingGpuEvidence
+rtk ./gradlew --no-daemon :font:glyph:test --tests '*ColorEmoji*Fixture*'
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_color_emoji_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_color_emoji_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
 ```
 
 ## Status Notes
 
-- `done`: `color-emoji-fixture-manifest.json` now converges the M10 color/emoji fixture families, component dump hashes, legacy gate mapping, and explicit M11 remaining gates without widening support claims.
+- `done`: `color-emoji-fixture-manifest.json` is checked in with deterministic COLRv0/COLRv1, bitmap PNG, SVG, and emoji rows; legacy gates remain explicitly open until M11 GPU evidence is linked.
 
 ## Linear Labels
 

@@ -2863,7 +2863,7 @@ class GlyphCacheTelemetrySample(
     fun toCanonicalJson(): String = buildString {
         append("{\n")
         append("  \"metadata\": ")
-        append(metadata.toCanonicalJson().prependIndent("  ").trimStart())
+        append(metadata.toCanonicalJson().prependGlyphJsonIndent("  ").trimStart())
         append(",\n")
         append("  \"routeCounts\": ")
         appendGlyphCacheRouteCountsJson(routeCounts)
@@ -2972,7 +2972,7 @@ class GlyphArtifactMetricsSample(
     fun toCanonicalJson(): String = buildString {
         append("{\n")
         append("  \"metadata\": ")
-        append(metadata.toCanonicalJson().prependIndent("  ").trimStart())
+        append(metadata.toCanonicalJson().prependGlyphJsonIndent("  ").trimStart())
         append(",\n")
         append("  \"routeCounts\": ")
         appendGlyphCacheRouteCountsJson(routeCounts)
@@ -3273,7 +3273,7 @@ class GlyphCacheMetricsSample(
     fun toCanonicalJson(): String = buildString {
         append("{\n")
         append("  \"metadata\": ")
-        append(metadata.toCanonicalJson().prependIndent("  ").trimStart())
+        append(metadata.toCanonicalJson().prependGlyphJsonIndent("  ").trimStart())
         append(",\n")
         appendGlyphJsonField("atlasArtifactId", atlasArtifactId, comma = true)
         appendGlyphJsonField("strikeKeyCount", strikeKeyCount, comma = true)
@@ -5317,7 +5317,7 @@ private fun StringBuilder.appendGlyphCacheInventoryEntriesJson(entries: List<Gly
         return
     }
     append("[\n")
-    append(entries.joinToString(",\n") { entry -> entry.toCanonicalJson().prependIndent("    ") })
+    append(entries.joinToString(",\n") { entry -> entry.toCanonicalJson().prependGlyphJsonIndent("    ") })
     append("\n  ]")
 }
 
@@ -5330,7 +5330,7 @@ private fun StringBuilder.appendGlyphCacheRouteCountsJson(counts: List<GlyphCach
         return
     }
     append("[\n")
-    append(counts.joinToString(",\n") { count -> count.toCanonicalJson().prependIndent("    ") })
+    append(counts.joinToString(",\n") { count -> count.toCanonicalJson().prependGlyphJsonIndent("    ") })
     append("\n  ]")
 }
 
@@ -5343,7 +5343,7 @@ private fun StringBuilder.appendGlyphCacheTimingStatsJson(stats: List<GlyphCache
         return
     }
     append("[\n")
-    append(stats.joinToString(",\n") { item -> item.toCanonicalJson().prependIndent("    ") })
+    append(stats.joinToString(",\n") { item -> item.toCanonicalJson().prependGlyphJsonIndent("    ") })
     append("\n  ]")
 }
 
@@ -5356,7 +5356,7 @@ private fun StringBuilder.appendGlyphCacheBudgetRefusalsJson(refusals: List<Glyp
         return
     }
     append("[\n")
-    append(refusals.joinToString(",\n") { refusal -> refusal.toCanonicalJson().prependIndent("    ") })
+    append(refusals.joinToString(",\n") { refusal -> refusal.toCanonicalJson().prependGlyphJsonIndent("    ") })
     append("\n  ]")
 }
 
@@ -5369,7 +5369,7 @@ private fun StringBuilder.appendGlyphCacheTelemetrySamplesJson(samples: List<Gly
         return
     }
     append("[\n")
-    append(samples.joinToString(",\n") { sample -> sample.toCanonicalJson().prependIndent("    ") })
+    append(samples.joinToString(",\n") { sample -> sample.toCanonicalJson().prependGlyphJsonIndent("    ") })
     append("\n  ]")
 }
 
@@ -5382,7 +5382,7 @@ private fun StringBuilder.appendGlyphArtifactMetricsSamplesJson(samples: List<Gl
         return
     }
     append("[\n")
-    append(samples.joinToString(",\n") { sample -> sample.toCanonicalJson().prependIndent("    ") })
+    append(samples.joinToString(",\n") { sample -> sample.toCanonicalJson().prependGlyphJsonIndent("    ") })
     append("\n  ]")
 }
 
@@ -5408,7 +5408,7 @@ private fun StringBuilder.appendGlyphCacheMetricsSamplesJson(samples: List<Glyph
         return
     }
     append("[\n")
-    append(samples.joinToString(",\n") { sample -> sample.toCanonicalJson().prependIndent("    ") })
+    append(samples.joinToString(",\n") { sample -> sample.toCanonicalJson().prependGlyphJsonIndent("    ") })
     append("\n  ]")
 }
 
@@ -5586,6 +5586,14 @@ private fun String.indentJsonContinuation(indent: String): String =
     split("\n").mapIndexed { index, line ->
         if (index == 0) line else indent + line
     }.joinToString("\n")
+
+/**
+ * Indents embedded JSON blocks without adding trailing whitespace to blank lines.
+ */
+private fun String.prependGlyphJsonIndent(indent: String): String =
+    lines().joinToString("\n") { line ->
+        if (line.isBlank()) line else indent + line
+    }
 
 /**
  * Computes a lowercase SHA-256 digest for deterministic evidence identifiers.

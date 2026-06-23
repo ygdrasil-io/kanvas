@@ -20,43 +20,43 @@
         "sampleCount": 5,
         "timingMode": "fixture-counter",
         "releaseGatePromoted": false
-    
+
       },
       "routeCounts": [
         {
           "route": "text.glyph.bitmap.png",
           "count": 1
-    
+
         },
         {
           "route": "text.glyph.color.colr",
           "count": 1
-    
+
         },
         {
           "route": "text.glyph.mask.A8",
           "count": 1
-    
+
         },
         {
           "route": "text.glyph.mask.SDF",
           "count": 1
-    
+
         },
         {
           "route": "text.glyph.outline",
           "count": 1
-    
+
         },
         {
           "route": "text.glyph.unsupported",
           "count": 1
-    
+
         },
         {
           "route": "text.glyph.vector.svg",
           "count": 1
-    
+
         }
       ],
       "timings": [
@@ -67,7 +67,7 @@
           "p90": 10,
           "max": 11,
           "unit": "fixture-ticks"
-    
+
         },
         {
           "metricName": "bitmap-decode",
@@ -76,7 +76,7 @@
           "p90": 24,
           "max": 27,
           "unit": "fixture-ticks"
-    
+
         },
         {
           "metricName": "colr-plan",
@@ -85,7 +85,7 @@
           "p90": 18,
           "max": 20,
           "unit": "fixture-ticks"
-    
+
         },
         {
           "metricName": "sdf-generation",
@@ -94,7 +94,7 @@
           "p90": 20,
           "max": 23,
           "unit": "fixture-ticks"
-    
+
         },
         {
           "metricName": "svg-plan",
@@ -103,7 +103,7 @@
           "p90": 22,
           "max": 26,
           "unit": "fixture-ticks"
-    
+
         }
       ],
       "sourceMaskHashCount": 3,
@@ -111,12 +111,12 @@
         {
           "route": "text.glyph.SDF-transform-unsupported",
           "count": 1
-    
+
         },
         {
           "route": "text.glyph.atlas-capacity-exceeded",
           "count": 1
-    
+
         }
       ],
       "routePreimages": [
@@ -300,43 +300,43 @@
         "sampleCount": 5,
         "timingMode": "fixture-counter",
         "releaseGatePromoted": false
-    
+
       },
       "routeCounts": [
         {
           "route": "text.glyph.bitmap.png",
           "count": 1
-    
+
         },
         {
           "route": "text.glyph.color.colr",
           "count": 1
-    
+
         },
         {
           "route": "text.glyph.mask.A8",
           "count": 1
-    
+
         },
         {
           "route": "text.glyph.mask.SDF",
           "count": 1
-    
+
         },
         {
           "route": "text.glyph.outline",
           "count": 1
-    
+
         },
         {
           "route": "text.glyph.unsupported",
           "count": 1
-    
+
         },
         {
           "route": "text.glyph.vector.svg",
           "count": 1
-    
+
         }
       ],
       "timings": [
@@ -347,7 +347,7 @@
           "p90": 3,
           "max": 4,
           "unit": "fixture-ticks"
-    
+
         },
         {
           "metricName": "bitmap-decode",
@@ -356,7 +356,7 @@
           "p90": 9,
           "max": 10,
           "unit": "fixture-ticks"
-    
+
         },
         {
           "metricName": "colr-plan",
@@ -365,7 +365,7 @@
           "p90": 6,
           "max": 8,
           "unit": "fixture-ticks"
-    
+
         },
         {
           "metricName": "sdf-generation",
@@ -374,7 +374,7 @@
           "p90": 5,
           "max": 7,
           "unit": "fixture-ticks"
-    
+
         },
         {
           "metricName": "svg-plan",
@@ -383,7 +383,7 @@
           "p90": 8,
           "max": 9,
           "unit": "fixture-ticks"
-    
+
         }
       ],
       "sourceMaskHashCount": 3,
@@ -391,12 +391,12 @@
         {
           "route": "text.glyph.SDF-transform-unsupported",
           "count": 1
-    
+
         },
         {
           "route": "text.glyph.atlas-capacity-exceeded",
           "count": 1
-    
+
         }
       ],
       "routePreimages": [
@@ -581,5 +581,5 @@
     "no-hidden-performance-gate",
     "no-dftext-retirement"
   ],
-  "dumpSha256": "f9bbe6256dab674974e4a0fdf5b2335a9e108599079bbd815ee2537f97b720ae"
+  "dumpSha256": "347c219e926ffc33dda0a23c5c0cc5a7714fbcb98b31b32eb38bcc446f041cae"
 }
