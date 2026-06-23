@@ -32,6 +32,7 @@ Required script rows depend on GPOS mark-to-base, mark-to-ligature, mark-to-mark
 
 - Do not implement device tables, variation adjustments, or extension positioning; KFONT-M6-010 owns those.
 - Do not implement script-specific syllable or joining policy; fixture tickets and feature policy own script behavior.
+- Do not claim ambiguous multi-component ligature-component resolution without dedicated component mapping evidence; those cases must stay on explicit refusal diagnostics.
 - Do not synthesize anchors when GPOS/GDEF data is missing.
 - Do not render glyphs or evaluate visual images in this ticket.
 

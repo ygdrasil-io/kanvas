@@ -6,6 +6,7 @@ import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import org.graphiks.kanvas.text.paragraph.BasicParagraphLayoutEngine
+import org.graphiks.kanvas.text.paragraph.PARAGRAPH_LAYOUT_ELLIPSIS_GLYPH_MISSING_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.paragraph.ParagraphBuilder
 import org.graphiks.kanvas.text.paragraph.ParagraphStyle
 import org.graphiks.kanvas.text.paragraph.PlaceholderAlignment
@@ -46,6 +47,48 @@ class ParagraphEllipsisLayoutTest {
         val expected = Files.readString(projectRoot().resolve("reports/font/fixtures/expected/paragraph/paragraph-layout.json"))
 
         assertEquals(expected, actual)
+    }
+
+    @Test
+    fun ellipsizedMultiLineRunReindexesTrimmedGlyphClusters() {
+        val result = BasicParagraphLayoutEngine(MultiGlyphClusterEllipsisShapingEngine()).layout(
+            ParagraphBuilder(ParagraphStyle(maxLines = 2, ellipsis = "..."))
+                .append("aa bb cc dd ee", TextStyle(fontSize = 10f))
+                .build(),
+            maxWidth = 50f,
+        )
+
+        val ellipsizedLine = result.lines.single { line -> line.isEllipsized }
+        val trimmedRun = ellipsizedLine.glyphRuns.single()
+
+        assertEquals(
+            listOf(0..1, 2..3),
+            trimmedRun.clusters.map { cluster -> cluster.glyphRange },
+        )
+    }
+
+    @Test
+    fun placeholderConflictDoesNotMaskMissingEllipsisGlyphDiagnostic() {
+        val result = BasicParagraphLayoutEngine(MissingEllipsisGlyphShapingEngine()).layout(
+            ParagraphBuilder(ParagraphStyle(maxLines = 1, ellipsis = "..."))
+                .append("a", TextStyle(fontSize = 10f))
+                .appendPlaceholder(
+                    PlaceholderStyle(
+                        width = 12f,
+                        height = 12f,
+                        baselineOffset = 10f,
+                        alignment = PlaceholderAlignment.BASELINE,
+                    ),
+                )
+                .append("\nb", TextStyle(fontSize = 10f))
+                .build(),
+            maxWidth = 24f,
+        )
+
+        assertEquals(
+            listOf(PARAGRAPH_LAYOUT_ELLIPSIS_GLYPH_MISSING_DIAGNOSTIC_CODE),
+            result.diagnostics.map { diagnostic -> diagnostic.code },
+        )
     }
 
     private fun ellipsisCases() = listOf(
@@ -158,6 +201,48 @@ private open class RecordingEllipsisShapingEngine : OpenTypeShapingEngine {
             glyphRuns = listOf(
                 ShapedGlyphRun(
                     glyphIds = clusters.indices.toList(),
+                    clusters = clusters,
+                    advanceX = clusters.sumOf { it.advanceX.toDouble() }.toFloat(),
+                    typefaceId = request.typefaceId,
+                    fontSize = request.fontSize,
+                ),
+            ),
+            diagnostics = emptyList(),
+        )
+    }
+}
+
+private class MultiGlyphClusterEllipsisShapingEngine : RecordingEllipsisShapingEngine() {
+    override fun shape(request: ShapingRequest): ShapingResult {
+        if (request.text == "...") {
+            return super.shape(request)
+        }
+        val glyphIds = mutableListOf<Int>()
+        val clusters = mutableListOf<GlyphCluster>()
+        request.textRange.forEach { textIndex ->
+            if (request.text[textIndex] == ' ') {
+                val glyphIndex = glyphIds.size
+                glyphIds += glyphIndex
+                clusters += GlyphCluster(
+                    textRange = textIndex..textIndex,
+                    glyphRange = glyphIndex..glyphIndex,
+                    advanceX = request.fontSize,
+                )
+            } else {
+                val firstGlyphIndex = glyphIds.size
+                glyphIds += firstGlyphIndex
+                glyphIds += firstGlyphIndex + 1
+                clusters += GlyphCluster(
+                    textRange = textIndex..textIndex,
+                    glyphRange = firstGlyphIndex..(firstGlyphIndex + 1),
+                    advanceX = request.fontSize,
+                )
+            }
+        }
+        return ShapingResult(
+            glyphRuns = listOf(
+                ShapedGlyphRun(
+                    glyphIds = glyphIds,
                     clusters = clusters,
                     advanceX = clusters.sumOf { it.advanceX.toDouble() }.toFloat(),
                     typefaceId = request.typefaceId,

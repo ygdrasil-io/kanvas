@@ -1,7 +1,7 @@
 ---
 id: KGPU-M10-003
 title: "Retire legacy routes after promoted replacements"
-status: blocked
+status: done
 milestone: M10
 priority: P1
 owner_area: legacy-cleanup
@@ -53,15 +53,18 @@ activation policy, rollback, and PM update.
 ## Design Sketch
 
 ```kotlin
-data class LegacyRetirementGate(val legacyRoute: String, val promotedReplacement: String)
+data class GpuRendererLegacyRetirementEvidence(
+    val family: GpuRendererLegacyRouteFamily,
+    val acceptedReplacementTicket: String,
+)
 ```
 
 ## Acceptance Criteria
 
-- [ ] Retirement requires accepted replacement ticket.
-- [ ] Rollback and PM evidence are linked.
-- [ ] Archived plans remain historical only.
-- [ ] Generic migration gates cannot retire a route unless the route-specific
+- [x] Retirement requires accepted replacement ticket.
+- [x] Rollback and PM evidence are linked.
+- [x] Archived plans remain historical only.
+- [x] Generic migration gates cannot retire a route unless the route-specific
       replacement ticket is accepted and linked.
 
 ## Required Evidence
@@ -82,15 +85,31 @@ accepted and linked, the legacy route remains.
 ## Validation
 
 ```bash
+rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.GpuRendererLegacyRetirementGateTest
+rtk ./gradlew --no-daemon :gpu-raster:test --tests '*GpuRenderer*Gate*'
+rtk ./gradlew --no-daemon :gpu-renderer:check
 rtk git diff --check
 ```
 
 ## Status Notes
 
-- `blocked`: Legacy retirement depends on KGPU-M10-002 plus accepted,
-  route-specific promoted replacement tickets, activation decision, rollback
-  evidence, old-path usage evidence, and PM evidence. No route can be retired
-  from the M10 inventory or generic migration gates alone.
+- `done`: Added `GpuRendererLegacyRetirementGate`, a deterministic
+  per-family retirement checklist for promoted replacement slices. Missing or
+  unsafe evidence keeps the legacy route active. Accepted evidence must name
+  the route family, accepted replacement ticket, activation decision, rollback
+  evidence, rollback validation hash, old-path usage evidence, PM row, and
+  M10-002 shadow parity result; it authorizes a future scoped removal but does
+  not disable the production route in this ticket. Broad deletion, generic
+  migration gates, archived-only evidence, product activation, release
+  blocking, readiness movement, duplicate rows, and shared evidence across
+  families are refused, including individually shared activation decisions,
+  rollback evidence, or old-path usage evidence. Evidence report:
+  `reports/gpu-renderer/2026-06-17-m10-003-legacy-retirement-gates.md`.
+- Independent review `019ed5fb-8292-7931-b494-9034a88e15e0` found one P1
+  partial shared-evidence gap and one P2 stale-report status issue. The follow
+  up added per-artifact shared evidence refusal, a red/green regression test,
+  and refreshed the M10 hygiene status matrix. Re-review found no remaining
+  P0/P1/P2 blockers and accepted the ticket for `done`.
 
 ## Linear Labels
 

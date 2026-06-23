@@ -128,7 +128,7 @@ rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixt
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
 - Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
-- `done`: `font-telemetry-schema.json`, `font-telemetry-schema-fixture.json`, and `font-telemetry-pm-bundle.json` now define deterministic cross-domain schema evidence plus advisory `pipelinePmBundle` ingestion. Downstream producer emission into this schema is owned by `KFONT-M12-002`, `KFONT-M12-003`, `KFONT-M12-004`, and `KFONT-M12-005`; this ticket stays schema-only, warning-only, and does not promote budgets, GPU routes, or release-gate claims.
+- `done`: `font-telemetry-schema.json`, `font-telemetry-schema-fixture.json`, and `font-telemetry-pm-bundle.json` now define deterministic cross-domain schema evidence plus advisory `pipelinePmBundle` ingestion. Parser/scaler, shaping/paragraph, glyph/cache, and GPU handoff producer evidence is now attached separately under `KFONT-M12-002` through `KFONT-M12-005`; this ticket stays schema-only, warning-only, and does not promote budgets, GPU routes, `dftext` retirement, or release-gate claims.
 
 ## Linear Labels
 

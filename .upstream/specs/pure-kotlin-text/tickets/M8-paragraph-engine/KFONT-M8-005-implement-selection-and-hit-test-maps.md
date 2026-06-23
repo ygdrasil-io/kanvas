@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M8-005"
 title: "Implement selection and hit-test maps"
-status: "review"
+status: "blocked"
 milestone: "M8"
 priority: "P1"
 owner_area: "paragraph"
@@ -25,7 +25,7 @@ Paragraph layout is not useful for editors or selectable UI text unless it can m
 - Build selection boxes for arbitrary text ranges from `ParagraphLayoutResult`, including multi-line and bidi ranges.
 - Build point hit testing with caret affinity, grapheme boundary snapping, placeholder boxes, and visual line order.
 - Expose word and grapheme boundary query facts sourced from M5 segmentation data.
-- Dump `hit-test-map.json` with line IDs, glyph cluster boxes, caret stops, text positions, affinities, and diagnostics.
+- Dump `hit-test-map.json` with visual line indices, glyph cluster boxes, caret stops, text positions, affinities, and diagnostics.
 - Add diagnostics for coordinates outside finite layout bounds, invalid text ranges, and cluster invariant failures.
 
 ## Non-Goals
@@ -71,7 +71,7 @@ data class HitTestMap(
 - [x] Hit testing at glyph cluster boundaries records upstream/downstream affinity and never returns an offset inside a grapheme cluster.
 - [x] Placeholder boxes participate in selection and hit testing with explicit placeholder IDs.
 - [x] Out-of-bounds points clamp or refuse according to a documented policy and emit diagnostics for non-finite coordinates.
-- [x] `hit-test-map.json` is deterministic and references line IDs from `paragraph-layout.json`.
+- [x] `hit-test-map.json` is deterministic and references visual line indices from `paragraph-layout.json`.
 
 ## Required Evidence
 
@@ -100,9 +100,9 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*HitTest*'
 
 ## Status Notes
 
-- `review`: `ParagraphLayoutResult` now exposes bounded `SelectionBox`, `CaretStop`, `HitTestEntry`, `HitTestMap`, `SelectionQueryResult`, and `HitTestQueryResult` contracts, with deterministic selection boxes, caret stops, placeholder IDs, and point hit testing backed by current line/placeholder geometry.
-- `review`: `hit-test-map.json` now checks in deterministic multi-line placeholder selection, non-participating placeholder overflow routing, combining-mark snapping, emoji cluster boundary snapping, and finite out-of-bounds clamp behavior, while invalid selection ranges and non-finite hit-test points emit stable refusal diagnostics.
-- Remaining gate before `done`: paragraph-owned bidi visual ordering and explicit word/grapheme boundary query APIs still need dedicated evidence beyond the current line-indexed, cluster-safe hit-test surface.
+- `blocked`: `ParagraphLayoutResult` now exposes bounded `SelectionBox`, `CaretStop`, `HitTestEntry`, `HitTestMap`, `SelectionQueryResult`, and `HitTestQueryResult` contracts, with deterministic selection boxes, caret stops, placeholder IDs, and point hit testing backed by current line/placeholder geometry.
+- `blocked`: `hit-test-map.json` now checks in deterministic multi-line placeholder selection, non-participating placeholder overflow routing, combining-mark snapping, emoji cluster boundary snapping, and finite out-of-bounds clamp behavior, while invalid selection ranges and non-finite hit-test points emit stable refusal diagnostics.
+- Remaining gate before `done`: land reviewed paragraph-owned bidi visual-order evidence for mixed-direction lines, then supply authoritative word/grapheme boundary query evidence beyond current hit-test snapping. Current M5 evidence does not provide a reviewed word-boundary source yet, so this ticket stays blocked until that source or an explicit product split lands.
 
 ## Linear Labels
 

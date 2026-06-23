@@ -16,7 +16,7 @@ boundaries.
 
 - [x] Legacy route ownership and replacement status are inventoried per family.
 - [x] Shadow parity evidence exists before any default route change.
-- [ ] Retirement gates are scoped to promoted replacement slices only.
+- [x] Retirement gates are scoped to promoted replacement slices only.
 - [x] Root PM packaging states whether evidence is adapter-independent or
       adapter-backed opt-in.
 
@@ -26,7 +26,7 @@ boundaries.
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M10-001 - Inventory legacy `gpu-raster` route ownership](KGPU-M10-001-inventory-legacy-gpu-raster-route-ownership.md) | `done` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `false` | `legacy-adapter` | `KGPU-M1-001` | `gpu-raster legacy` |
 | [KGPU-M10-002 - Add per-family shadow parity migration gates](KGPU-M10-002-add-per-family-shadow-parity-migration-gates.md) | `done` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `migration-validation` | `KGPU-M10-001` | `gpu-raster legacy` |
-| [KGPU-M10-003 - Retire legacy routes after promoted replacements](KGPU-M10-003-retire-legacy-routes-after-promoted-replacements.md) | `blocked` | `P1` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `legacy-cleanup` | `KGPU-M10-002`, `KGPU-M1-004` | `gpu-raster legacy` |
+| [KGPU-M10-003 - Retire legacy routes after promoted replacements](KGPU-M10-003-retire-legacy-routes-after-promoted-replacements.md) | `done` | `P1` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `legacy-cleanup` | `KGPU-M10-002`, `KGPU-M1-004` | `gpu-raster legacy` |
 | [KGPU-M10-004 - Add archived evidence hygiene for migrated routes](KGPU-M10-004-add-archived-evidence-hygiene-for-migrated-routes.md) | `done` | `P1` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `docs-evidence` | `KGPU-M10-001` | `archives` |
 
 ## Validation Bundle
@@ -60,8 +60,19 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*GpuRendererShadow*'
   `019ed714-fd15-72e2-a8f8-b1b0f9fbe2f5` accepted the implementation after
   remediation linked the review and added broad/shared evidence refusal plus
   explicit family coverage.
-- KGPU-M10-003 is blocked until KGPU-M10-002 and route-specific promoted
-  replacement evidence exist.
+- KGPU-M10-003 is done: `GpuRendererLegacyRetirementGate` now requires
+  each retirement row to be family-scoped and to name an accepted replacement
+  ticket, activation decision, rollback evidence, rollback validation hash,
+  old-path usage evidence, PM row, and M10-002 shadow parity result. Missing,
+  duplicate, shared, generic, archived-only, broad deletion, activated,
+  release-blocking, or readiness-moving evidence keeps the legacy route active;
+  individually shared activation, rollback, or old-path evidence is refused as
+  broad retirement evidence. Accepted rows authorize future scoped removal
+  only; this ticket does not disable production routes. Evidence report:
+  `reports/gpu-renderer/2026-06-17-m10-003-legacy-retirement-gates.md`.
+  Independent review `019ed5fb-8292-7931-b494-9034a88e15e0` accepted the
+  implementation after per-artifact shared evidence refusal and stale-report
+  status fixes.
 - Archive hygiene remains explicit: archived plans and root upstream snapshots
   are historical evidence only, not active backlog or acceptance criteria.
 - Independent review `019ec878-7c64-7e42-ab70-bb80043e53d1` accepted

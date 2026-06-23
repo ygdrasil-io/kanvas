@@ -30,6 +30,10 @@
 - `paragraph-layout.json` checks in bounded one-line, multi-line, mixed-style,
   RTL-direction, placeholder-conflict, no-room, and missing-glyph evidence,
   including trailing-style provenance and stable refusal diagnostics.
+- Independent review now also pins the refusal precedence rule that
+  `text.paragraph.ellipsis-glyph-missing` wins when the ellipsis cannot be
+  shaped, instead of letting placeholder-width heuristics mask that missing
+  glyph path with `text.paragraph.placeholder-ellipsis-conflict`.
 - Placeholder-ended overflow still emits the narrower
   `text.paragraph.placeholder-ellipsis-conflict` refusal when the ellipsis
   cannot fit without truncating a visible placeholder, while `text.paragraph.ellipsis-no-room`
