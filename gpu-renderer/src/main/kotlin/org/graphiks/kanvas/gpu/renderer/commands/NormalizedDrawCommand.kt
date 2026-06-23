@@ -505,6 +505,7 @@ object GPULinearGradientCommandBuilder {
 
 /** Builds Kanvas-owned M15 path-fill commands from tessellated vertex buffers. */
 object GPUFillPathCommandBuilder {
+    /** Builds a FillPath normalized command with tessellation facts bound to the target and material. */
     fun build(
         commandId: GPUDrawCommandID,
         pathKey: String,
