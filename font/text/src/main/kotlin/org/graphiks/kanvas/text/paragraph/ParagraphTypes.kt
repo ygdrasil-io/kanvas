@@ -11,6 +11,7 @@ import org.graphiks.kanvas.text.shaping.PinnedUnicodeDataGenerator
 import org.graphiks.kanvas.text.shaping.ShapedGlyphRun
 import org.graphiks.kanvas.text.shaping.ShapingDiagnostic
 import org.graphiks.kanvas.text.shaping.ShapingRequest
+import org.graphiks.kanvas.text.shaping.MISSING_GLYPH_DIAGNOSTIC_CODE
 
 /**
  * Incrementally builds immutable paragraph input for layout.
@@ -272,6 +273,18 @@ public const val PARAGRAPH_LAYOUT_CONSTRAINT_NEGATIVE_DIAGNOSTIC_CODE: String =
  */
 public const val PARAGRAPH_LAYOUT_MAX_LINES_ELLIPSIS_UNSUPPORTED_DIAGNOSTIC_CODE: String =
     "text.paragraph.max-lines-ellipsis-unsupported"
+
+/**
+ * Stable diagnostic family emitted when the configured ellipsis cannot be shaped into drawable glyphs.
+ */
+public const val PARAGRAPH_LAYOUT_ELLIPSIS_GLYPH_MISSING_DIAGNOSTIC_CODE: String =
+    "text.paragraph.ellipsis-glyph-missing"
+
+/**
+ * Stable diagnostic family emitted when the layout width cannot fit both retained content and the ellipsis run.
+ */
+public const val PARAGRAPH_LAYOUT_ELLIPSIS_NO_ROOM_DIAGNOSTIC_CODE: String =
+    "text.paragraph.ellipsis-no-room"
 
 /**
  * Stable diagnostic family emitted when ellipsis would truncate through a visible placeholder span.
@@ -573,17 +586,30 @@ public class BasicParagraphLayoutEngine(
                 metrics = metrics,
                 boxes = boxes,
             )
-        }
+        }.toMutableList()
         if (didOverflowHeight && paragraph.paragraphStyle.ellipsis != null) {
-            diagnostics += ellipsisOverflowDiagnostic(
-                paragraph = paragraph,
-                visibleRanges = visibleRanges,
-                brokenRanges = brokenRanges,
-                lines = lines,
-                paragraphShapingRequests = shapingPlan.requests,
-                maxWidth = maxWidth,
-                shapingEngine = shapingEngine,
-            )
+            when (
+                val ellipsisResolution = resolveEllipsisOverflow(
+                    paragraph = paragraph,
+                    visibleRanges = visibleRanges,
+                    brokenRanges = brokenRanges,
+                    lines = lines,
+                    paragraphShapingRequests = shapingPlan.requests,
+                    maxWidth = maxWidth,
+                    shapingEngine = shapingEngine,
+                    placeholderBoxes = placeholderBoxes,
+                )
+            ) {
+                is EllipsisOverflowResolution.Applied -> {
+                    lines[ellipsisResolution.lineIndex] = ellipsisResolution.line
+                    placeholderBoxes.retainAll { box ->
+                        lines.getOrNull(box.lineIndex)?.visibleRange?.overlaps(box.sourceRange) == true
+                    }
+                    paragraphWidth = lines.maxOfOrNull { line -> line.metrics.width } ?: 0f
+                }
+
+                is EllipsisOverflowResolution.Refused -> diagnostics += ellipsisResolution.diagnostic
+            }
         }
 
         return ParagraphLayoutResult(
@@ -971,6 +997,10 @@ public data class LineLayout(
     public val glyphRuns: List<ShapedGlyphRun> = emptyList(),
     public val metrics: LineMetrics = LineMetrics(),
     public val boxes: List<TextBox> = emptyList(),
+    public val isEllipsized: Boolean = false,
+    public val visibleRange: IntRange = textRange,
+    public val truncatedRange: IntRange? = null,
+    public val ellipsisGlyphRun: EllipsisGlyphRunDescriptor? = null,
 )
 
 /**
@@ -1007,6 +1037,20 @@ public data class TextBox(
     public val right: Float,
     public val bottom: Float,
     public val direction: Int = 1,
+)
+
+/**
+ * Serialized provenance for an inserted ellipsis glyph run.
+ */
+public data class EllipsisGlyphRunDescriptor(
+    public val text: String,
+    public val glyphCount: Int,
+    public val advanceX: Float,
+    public val fontSize: Float,
+    public val typefaceId: TypefaceID? = null,
+    public val sourceStyleRange: IntRange? = null,
+    public val script: String = "Zyyy",
+    public val bidiLevel: Int = 0,
 )
 
 /**
@@ -1375,54 +1419,141 @@ private fun hiddenTextRange(
     return if (firstHidden <= lastHidden) firstHidden..lastHidden else null
 }
 
-private fun ellipsisOverflowDiagnostic(
+private sealed interface EllipsisOverflowResolution {
+    data class Applied(
+        val lineIndex: Int,
+        val line: LineLayout,
+    ) : EllipsisOverflowResolution
+
+    data class Refused(
+        val diagnostic: ParagraphLayoutDiagnostic,
+    ) : EllipsisOverflowResolution
+}
+
+private data class EllipsisShapeResult(
+    val descriptor: EllipsisGlyphRunDescriptor,
+    val width: Float,
+)
+
+private data class LineContentSpan(
+    val textRange: IntRange,
+    val width: Float,
+)
+
+private fun resolveEllipsisOverflow(
     paragraph: Paragraph,
     visibleRanges: List<IntRange>,
     brokenRanges: List<IntRange>,
-    lines: List<LineLayout>,
+    lines: MutableList<LineLayout>,
     paragraphShapingRequests: List<ParagraphShapingRequest>,
     maxWidth: Float,
     shapingEngine: OpenTypeShapingEngine,
-): ParagraphLayoutDiagnostic {
+    placeholderBoxes: List<PlaceholderBox>,
+): EllipsisOverflowResolution {
+    val hiddenRange = hiddenTextRange(visibleRanges, brokenRanges)
+    val ellipsis = paragraph.paragraphStyle.ellipsis ?: return EllipsisOverflowResolution.Refused(
+        ParagraphLayoutDiagnostic(
+            code = PARAGRAPH_LAYOUT_MAX_LINES_ELLIPSIS_UNSUPPORTED_DIAGNOSTIC_CODE,
+            message = "maxLines ellipsis is not implemented by the current paragraph engine.",
+            textRange = hiddenRange,
+            severity = "refusal",
+        ),
+    )
+    val lastLineIndex = lines.lastIndex
+    val lastLine = lines.getOrNull(lastLineIndex) ?: return EllipsisOverflowResolution.Refused(
+        ParagraphLayoutDiagnostic(
+            code = PARAGRAPH_LAYOUT_ELLIPSIS_NO_ROOM_DIAGNOSTIC_CODE,
+            message = "ellipsis requested maxLines truncation, but no visible line was available to host the ellipsis run.",
+            textRange = hiddenRange,
+            severity = "refusal",
+        )
+    )
+    val ellipsisShape = shapeEllipsisRun(
+        paragraph = paragraph,
+        ellipsis = ellipsis,
+        visibleRange = lastLine.visibleRange,
+        paragraphShapingRequests = paragraphShapingRequests,
+        shapingEngine = shapingEngine,
+    ) ?: return EllipsisOverflowResolution.Refused(
+        ParagraphLayoutDiagnostic(
+            code = PARAGRAPH_LAYOUT_ELLIPSIS_GLYPH_MISSING_DIAGNOSTIC_CODE,
+            message = "ellipsis glyph shaping did not produce a drawable run.",
+            textRange = hiddenRange,
+            severity = "refusal",
+        ),
+    )
     val placeholderConflictRange = placeholderEllipsisConflictRange(
         paragraph = paragraph,
         lastVisibleRange = visibleRanges.lastOrNull(),
-        lastVisibleLine = lines.lastOrNull(),
-        paragraphShapingRequests = paragraphShapingRequests,
-        ellipsis = paragraph.paragraphStyle.ellipsis ?: return ParagraphLayoutDiagnostic(
-            code = PARAGRAPH_LAYOUT_MAX_LINES_ELLIPSIS_UNSUPPORTED_DIAGNOSTIC_CODE,
-            message = "maxLines ellipsis is not implemented by the current paragraph engine.",
-            textRange = hiddenTextRange(visibleRanges, brokenRanges),
-            severity = "refusal",
-        ),
+        lastVisibleLine = lastLine,
+        ellipsisWidth = ellipsisShape.width,
         maxWidth = maxWidth,
-        shapingEngine = shapingEngine,
     )
-    return if (placeholderConflictRange != null) {
-        ParagraphLayoutDiagnostic(
-            code = PARAGRAPH_PLACEHOLDER_ELLIPSIS_CONFLICT_DIAGNOSTIC_CODE,
-            message = "ellipsis cannot partially truncate a visible line containing a terminal placeholder in the bounded paragraph runtime.",
-            textRange = placeholderConflictRange,
-            severity = "refusal",
-        )
-    } else {
-        ParagraphLayoutDiagnostic(
-            code = PARAGRAPH_LAYOUT_MAX_LINES_ELLIPSIS_UNSUPPORTED_DIAGNOSTIC_CODE,
-            message = "maxLines ellipsis is not implemented by the current paragraph engine.",
-            textRange = hiddenTextRange(visibleRanges, brokenRanges),
-            severity = "refusal",
+    if (placeholderConflictRange != null) {
+        return EllipsisOverflowResolution.Refused(
+            ParagraphLayoutDiagnostic(
+                code = PARAGRAPH_PLACEHOLDER_ELLIPSIS_CONFLICT_DIAGNOSTIC_CODE,
+                message = "ellipsis cannot partially truncate a visible line containing a terminal placeholder in the bounded paragraph runtime.",
+                textRange = placeholderConflictRange,
+                severity = "refusal",
+            ),
         )
     }
+    val contentSpans = lastLine.contentSpans(paragraph, placeholderBoxes)
+    val keptSpans = contentSpans.toMutableList()
+    val removedSpans = mutableListOf<LineContentSpan>()
+    var keptWidth = keptSpans.sumOf { span -> span.width.toDouble() }.toFloat()
+    while (keptSpans.isNotEmpty() && keptWidth + ellipsisShape.width > maxWidth) {
+        val removed = keptSpans.removeAt(keptSpans.lastIndex)
+        keptWidth -= removed.width
+        removedSpans.add(0, removed)
+    }
+    if (keptSpans.isEmpty()) {
+        return EllipsisOverflowResolution.Refused(
+            ParagraphLayoutDiagnostic(
+                code = PARAGRAPH_LAYOUT_ELLIPSIS_NO_ROOM_DIAGNOSTIC_CODE,
+                message = "ellipsis requested maxLines truncation, but no cluster-safe prefix fits alongside the ellipsis run.",
+                textRange = hiddenRange ?: lastLine.visibleRange,
+                severity = "refusal",
+            ),
+        )
+    }
+    val visibleRange = keptSpans.first().textRange.first..keptSpans.last().textRange.last
+    val truncatedStart = removedSpans.firstOrNull()?.textRange?.first ?: hiddenRange?.first
+    val truncatedEnd = hiddenRange?.last ?: removedSpans.lastOrNull()?.textRange?.last
+    val truncatedRange = if (truncatedStart != null && truncatedEnd != null && truncatedStart <= truncatedEnd) {
+        truncatedStart..truncatedEnd
+    } else {
+        null
+    }
+    val trimmedGlyphRuns = lastLine.glyphRuns.mapNotNull { run -> run.trimTo(visibleRange) }
+    val ellipsizedLine = lastLine.copy(
+        textRange = visibleRange,
+        glyphRuns = trimmedGlyphRuns,
+        metrics = lastLine.metrics.copy(width = keptWidth + ellipsisShape.width),
+        boxes = lastLine.boxes.map { box ->
+            box.copy(
+                textRange = visibleRange,
+                right = box.left + keptWidth + ellipsisShape.width,
+            )
+        },
+        isEllipsized = true,
+        visibleRange = visibleRange,
+        truncatedRange = truncatedRange,
+        ellipsisGlyphRun = ellipsisShape.descriptor,
+    )
+    return EllipsisOverflowResolution.Applied(
+        lineIndex = lastLineIndex,
+        line = ellipsizedLine,
+    )
 }
 
 private fun placeholderEllipsisConflictRange(
     paragraph: Paragraph,
     lastVisibleRange: IntRange?,
     lastVisibleLine: LineLayout?,
-    paragraphShapingRequests: List<ParagraphShapingRequest>,
-    ellipsis: String,
+    ellipsisWidth: Float,
     maxWidth: Float,
-    shapingEngine: OpenTypeShapingEngine,
 ): IntRange? {
     val visibleRange = lastVisibleRange ?: return null
     val line = lastVisibleLine ?: return null
@@ -1431,24 +1562,17 @@ private fun placeholderEllipsisConflictRange(
         .lastOrNull { range -> range.overlaps(visibleRange) }
         ?: return null
     if (terminalPlaceholderRange.last != visibleRange.last) return null
-    val ellipsisWidth = ellipsisWidth(
-        paragraph = paragraph,
-        ellipsis = ellipsis,
-        visibleRange = visibleRange,
-        paragraphShapingRequests = paragraphShapingRequests,
-        shapingEngine = shapingEngine,
-    )
     return terminalPlaceholderRange.takeIf { line.metrics.width + ellipsisWidth > maxWidth }
 }
 
-private fun ellipsisWidth(
+private fun shapeEllipsisRun(
     paragraph: Paragraph,
     ellipsis: String,
     visibleRange: IntRange,
     paragraphShapingRequests: List<ParagraphShapingRequest>,
     shapingEngine: OpenTypeShapingEngine,
-): Float {
-    if (ellipsis.isEmpty()) return 0f
+): EllipsisShapeResult? {
+    if (ellipsis.isEmpty()) return null
     val referenceRequest = paragraphShapingRequests
         .filter { request -> request.textRange.overlaps(visibleRange) }
         .maxWithOrNull(compareBy<ParagraphShapingRequest> { minOf(it.textRange.last, visibleRange.last) }.thenBy { it.textRange.first })
@@ -1465,8 +1589,77 @@ private fun ellipsisWidth(
             preferredFamilies = referenceStyle.fontFamilies,
         ),
     )
-    return shapingResult.glyphRuns.sumOf { run -> run.advanceX.toDouble() }.toFloat().takeIf { it > 0f }
-        ?: ellipsis.length * referenceStyle.fontSize
+    val advanceX = shapingResult.glyphRuns.sumOf { run -> run.advanceX.toDouble() }.toFloat()
+    if (
+        shapingResult.glyphRuns.isEmpty() ||
+        advanceX <= 0f ||
+        shapingResult.diagnostics.any { diagnostic -> diagnostic.code == MISSING_GLYPH_DIAGNOSTIC_CODE }
+    ) {
+        return null
+    }
+    val descriptorRun = shapingResult.glyphRuns.first()
+    return EllipsisShapeResult(
+        descriptor = EllipsisGlyphRunDescriptor(
+            text = ellipsis,
+            glyphCount = shapingResult.glyphRuns.sumOf { run -> run.glyphIds.size },
+            advanceX = advanceX,
+            fontSize = descriptorRun.fontSize,
+            typefaceId = descriptorRun.typefaceId,
+            sourceStyleRange = referenceRequest?.textRange?.intersect(visibleRange) ?: visibleRange,
+            script = descriptorRun.script,
+            bidiLevel = descriptorRun.bidiLevel,
+        ),
+        width = advanceX,
+    )
+}
+
+private fun LineLayout.contentSpans(
+    paragraph: Paragraph,
+    placeholderBoxes: List<PlaceholderBox>,
+): List<LineContentSpan> {
+    if (visibleRange.isEmpty()) return emptyList()
+    val shapedClusters = glyphRuns
+        .flatMap { run -> run.clusters }
+        .sortedBy { cluster -> cluster.textRange.first }
+    val placeholderWidths = placeholderBoxes
+        .filter { box -> box.sourceRange.overlaps(visibleRange) }
+        .associate { box -> box.sourceRange to (box.right - box.left) }
+    val spans = mutableListOf<LineContentSpan>()
+    var index = visibleRange.first
+    while (index <= visibleRange.last) {
+        val placeholderRange = placeholderWidths.keys.firstOrNull { range -> range.first == index }
+        if (placeholderRange != null) {
+            spans += LineContentSpan(
+                textRange = placeholderRange,
+                width = placeholderWidths.getValue(placeholderRange),
+            )
+            index = placeholderRange.last + 1
+            continue
+        }
+        val shapedCluster = shapedClusters.firstOrNull { cluster ->
+            cluster.textRange.first == index && cluster.textRange.overlaps(visibleRange)
+        }
+        val clusterRange = shapedCluster?.textRange?.intersect(visibleRange)
+            ?: paragraph.text.clusterRangeAt(index).intersect(visibleRange)
+        val clusterWidth = shapedCluster?.advanceX ?: paragraph.estimatedWidth(clusterRange)
+        spans += LineContentSpan(
+            textRange = clusterRange,
+            width = clusterWidth,
+        )
+        index = clusterRange.last + 1
+    }
+    return spans
+}
+
+private fun ShapedGlyphRun.trimTo(visibleRange: IntRange): ShapedGlyphRun? {
+    val trimmedClusters = clusters.filter { cluster -> cluster.textRange.overlaps(visibleRange) }
+    if (trimmedClusters.isEmpty()) return null
+    val trimmedGlyphIds = trimmedClusters.flatMap { cluster -> glyphIds.slice(cluster.glyphRange) }
+    return copy(
+        glyphIds = trimmedGlyphIds,
+        clusters = trimmedClusters,
+        advanceX = trimmedClusters.sumOf { cluster -> cluster.advanceX.toDouble() }.toFloat(),
+    )
 }
 
 private fun requireValidMaxWidth(maxWidth: Float) {
@@ -1568,6 +1761,14 @@ private fun LineLayout.toDumpJson(index: Int): String = buildString {
         .append(boxes.joinToString(prefix = "[", postfix = "]") { box -> box.toDumpJson() })
         .append(", \"glyphRunCount\": ")
         .append(glyphRuns.size)
+        .append(", \"isEllipsized\": ")
+        .append(isEllipsized)
+        .append(", \"visibleRange\": ")
+        .append(paragraphJsonString(visibleRange.toDumpLabel()))
+        .append(", \"truncatedRange\": ")
+        .append(truncatedRange?.toDumpLabel()?.let(::paragraphJsonString) ?: "null")
+        .append(", \"ellipsisGlyphRun\": ")
+        .append(ellipsisGlyphRun?.toDumpJson() ?: "null")
         .append("}")
 }
 
@@ -1598,6 +1799,26 @@ private fun TextBox.toDumpJson(): String = buildString {
         .append(paragraphJsonFloat(bottom))
         .append(", \"direction\": ")
         .append(direction)
+        .append("}")
+}
+
+private fun EllipsisGlyphRunDescriptor.toDumpJson(): String = buildString {
+    append("{\"text\": ")
+        .append(paragraphJsonString(text))
+        .append(", \"glyphCount\": ")
+        .append(glyphCount)
+        .append(", \"advanceX\": ")
+        .append(paragraphJsonFloat(advanceX))
+        .append(", \"fontSize\": ")
+        .append(paragraphJsonFloat(fontSize))
+        .append(", \"typefaceId\": ")
+        .append(typefaceId?.value?.toString()?.let(::paragraphJsonString) ?: "null")
+        .append(", \"sourceStyleRange\": ")
+        .append(sourceStyleRange?.toDumpLabel()?.let(::paragraphJsonString) ?: "null")
+        .append(", \"script\": ")
+        .append(paragraphJsonString(script))
+        .append(", \"bidiLevel\": ")
+        .append(bidiLevel)
         .append("}")
 }
 

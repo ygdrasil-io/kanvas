@@ -51,7 +51,8 @@ rtk git diff --check
 
 ## Remaining Gate
 
-This evidence closes bounded selection and hit-test behavior only. It does not
-yet claim paragraph-owned bidi visual ordering, explicit word-boundary query
-APIs, full grapheme/word boundary dumps beyond hit-test snapping, complete
-paragraph layout parity, CPU oracle parity, or GPU text support.
+This evidence closes bounded selection and hit-test behavior only. Independent
+review reclassifies the ticket to `blocked`: it still lacks reviewed
+paragraph-owned bidi visual-order evidence and an authoritative word-boundary
+query source beyond hit-test snapping. It does not claim complete paragraph
+layout parity, CPU oracle parity, or GPU text support.

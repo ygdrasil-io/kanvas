@@ -36,6 +36,12 @@ M2 supplies color, bitmap, and SVG table facts. M5 supplies Unicode emoji data a
 ```bash
 rtk git diff --check
 rtk ./gradlew --no-daemon :font:glyph:test --tests '*COLR*' --tests '*BitmapGlyph*' --tests '*SVGGlyph*' --tests '*Emoji*'
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_color_emoji_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_color_emoji_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py
 ```
 
 Required evidence for this milestone includes `color-glyph-plan.json`, `colrv1-paint-graph.json`, `color-glyph-composite-plan.json`, `colrv1-fixture-manifest.json`, `bitmap-glyph-plan.json`, `svg-glyph-plan.json`, `svg-glyph-fixture-manifest.json`, `emoji-route-trace.json`, and `color-emoji-fixture-manifest.json`.

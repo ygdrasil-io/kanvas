@@ -799,7 +799,7 @@ fun defaultFontFixtureManifest(): FontFixtureManifest = FontFixtureManifest(
             faceCount = 1,
             coverageTags = listOf("sfnt-source", "single-ttf", "table:cmap", "table:glyf", "table:head", "table:name"),
             normativeStatus = FontFixtureNormativeStatus.NORMATIVE,
-            remainingGate = "Fallback routing, glyph coverage, and shaping tickets must attach separate evidence before support promotion.",
+            remainingGate = "Arabic shaping review evidence now covers joining forms, ticket-local GSUB/GPOS runtime traces, marks, mixed-bidi refusal, and a separate reviewed generic gdef-required refusal on gpos-missing-gdef.otf for Arabic base+mark input; lam-alef still has only a bounded non-promotional runtime check, vendored positive cursive, and Arabic-specific refusal fixtures remain separate shaping gates before support promotion.",
         ),
         BundledFontFixtureManifestEntry(
             fixtureId = "single-ttf-noto-sans-devanagari",
@@ -815,7 +815,7 @@ fun defaultFontFixtureManifest(): FontFixtureManifest = FontFixtureManifest(
             faceCount = 1,
             coverageTags = listOf("sfnt-source", "single-ttf", "table:cmap", "table:glyf", "table:head", "table:name"),
             normativeStatus = FontFixtureNormativeStatus.NORMATIVE,
-            remainingGate = "Fallback routing, glyph coverage, and shaping tickets must attach separate evidence before support promotion.",
+            remainingGate = "Devanagari review evidence now covers pinned Script_Extensions Deva script selection on the vendored pre-base matra case, consonant-cluster preservation, reph-like shaping, and mark placement only; syllable-plan evidence, the full required feature set, Devanagari-specific refusal fixtures/codes, and trace dumps remain separate shaping gates before support promotion.",
         ),
         BundledFontFixtureManifestEntry(
             fixtureId = "single-ttf-noto-sans-thai",
@@ -831,7 +831,7 @@ fun defaultFontFixtureManifest(): FontFixtureManifest = FontFixtureManifest(
             faceCount = 1,
             coverageTags = listOf("sfnt-source", "single-ttf", "table:cmap", "table:glyf", "table:head", "table:name"),
             normativeStatus = FontFixtureNormativeStatus.NORMATIVE,
-            remainingGate = "Fallback routing, glyph coverage, and shaping tickets must attach separate evidence before support promotion.",
+            remainingGate = "Thai/CJK boundary review evidence now covers Thai tone-mark positioning and mixed Latin/Thai script boundaries on vendored Noto Sans Thai only; paragraph-owned dictionary diagnostics, Thai refusal fixtures/codes, and ticket-local trace dumps remain separate gates before support promotion.",
         ),
         BundledFontFixtureManifestEntry(
             fixtureId = "single-otf-noto-sans-sc",
@@ -847,7 +847,7 @@ fun defaultFontFixtureManifest(): FontFixtureManifest = FontFixtureManifest(
             faceCount = 1,
             coverageTags = listOf("sfnt-source", "single-otf", "table:CFF", "table:cmap", "table:head", "table:name"),
             normativeStatus = FontFixtureNormativeStatus.NORMATIVE,
-            remainingGate = "Fallback routing, glyph coverage, and shaping tickets must attach separate evidence before support promotion.",
+            remainingGate = "Thai/CJK boundary review evidence now covers optional vert kana alternates on vendored Noto Sans SC only; Han direct-mapping rows, cmap format 14 variation selectors, Hangul coverage/refusals, paragraph-owned ruby/line-break diagnostics, and ticket-local trace dumps remain separate gates before support promotion.",
         ),
         BundledFontFixtureManifestEntry(
             fixtureId = "emoji-colrv1-noto-color",

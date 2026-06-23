@@ -1,0 +1,322 @@
+{
+  "schema": "org.graphiks.kanvas.font.FacadeAdapterInventory.v1",
+  "schemaVersion": 1,
+  "artifactId": "facade-adapter-inventory",
+  "ticketId": "KFONT-M13-001",
+  "generatedOn": "2026-06-19",
+  "sourceSpecs": [
+    {
+      "path": ".upstream/specs/pure-kotlin-text/README.md",
+      "section": "Hard Constraints"
+    },
+    {
+      "path": ".upstream/specs/pure-kotlin-text/00-architecture-and-module-boundaries.md",
+      "section": "Skia-like compatibility facade"
+    },
+    {
+      "path": ".upstream/specs/pure-kotlin-text/02-opentype-layout-shaping-engine.md",
+      "section": "Compatibility boundary"
+    },
+    {
+      "path": ".upstream/specs/pure-kotlin-text/03-paragraph-engine.md",
+      "section": "Paragraph API surface"
+    },
+    {
+      "path": ".upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md",
+      "section": "DrawTextRun"
+    },
+    {
+      "path": ".upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md",
+      "section": "Migration Categories"
+    },
+    {
+      "path": ".upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-001-add-facade-adapter-inventory.md",
+      "section": "Acceptance Criteria"
+    }
+  ],
+  "migrationCategories": [
+    "reuse-as-is",
+    "promote-with-contract",
+    "replace",
+    "keep-current-gate",
+    "expected-unsupported"
+  ],
+  "routes": [
+    {
+      "routeId": "paragraph-compatible-apis",
+      "facadeApi": "paragraph-compatible APIs",
+      "facadeSurface": "No public `org.skia.paragraph` facade package exists in `:kanvas-skia`; only pure Kotlin paragraph owners exist today.",
+      "targetContract": "ParagraphInput, paragraph shaping requests, paragraph layout result, hit-testing, and selection dumps.",
+      "targetOwner": "org.graphiks.kanvas.text.paragraph",
+      "migrationCategory": "replace",
+      "classification": "tracked-gap",
+      "legacyGates": [
+        "scaledemoji",
+        "scaledemoji_rendering"
+      ],
+      "targetDiagnosticFamilies": [
+        "text.paragraph",
+        "text.shaping",
+        "expected-unsupported"
+      ],
+      "blockingTickets": [
+        "KFONT-M13-003",
+        "KFONT-M6-010"
+      ],
+      "requiredEvidence": [
+        "Public facade scope decision that names which paragraph-compatible entry points Kanvas exposes.",
+        "Checked-in paragraph dumps with hit-test and selection evidence.",
+        "Stable refusal diagnostics for unsupported shaping/fallback/color subcases."
+      ],
+      "notes": "Keep this route visible as missing facade work. Do not claim paragraph facade support from the pure Kotlin owner package alone."
+    },
+    {
+      "routeId": "skcanvas-drawstring-simple-text",
+      "facadeApi": "SkCanvas.drawString",
+      "facadeSurface": "Current path is a simple deterministic compatibility route through `SkFont.makeTextPath`; complex shaping remains explicit and separate.",
+      "targetContract": "Simple-text-only path building over pure Kotlin typeface/scaler facts with no implicit GSUB, bidi, paragraph, or fallback expansion.",
+      "targetOwner": "org.graphiks.kanvas.font.scaler",
+      "migrationCategory": "reuse-as-is",
+      "classification": "current-supported",
+      "legacyGates": [
+        "coloremoji_blendmodes",
+        "scaledemoji",
+        "scaledemoji_rendering"
+      ],
+      "targetDiagnosticFamilies": [
+        "font.scaler",
+        "text.shaping",
+        "glyph.artifact",
+        "expected-unsupported"
+      ],
+      "blockingTickets": [],
+      "requiredEvidence": [
+        "Keep the `drawString` compatibility path explicitly simple and deterministic.",
+        "Separate any emoji/color/fallback promotion from complex shaping and GPU handoff tickets.",
+        "Retain stable refusal diagnostics when callers expect paragraph or explicit shaping behavior."
+      ],
+      "notes": "This route stays simple and deterministic by policy. It must not absorb explicit shaping, multi-font fallback splitting, or paragraph layout."
+    },
+    {
+      "routeId": "skfont-metrics-glyph-query",
+      "facadeApi": "SkFont",
+      "facadeSurface": "Metrics, glyph lookup, path/bounds, and positioning helpers already route through the attached `SkTypeface` hooks.",
+      "targetContract": "Typeface-backed metrics, glyph lookup, path/bounds, and positioning helpers over pure Kotlin scaler data.",
+      "targetOwner": "org.graphiks.kanvas.font.scaler",
+      "migrationCategory": "promote-with-contract",
+      "classification": "current-supported",
+      "legacyGates": [],
+      "targetDiagnosticFamilies": [
+        "font.scaler",
+        "text.glyph",
+        "expected-unsupported"
+      ],
+      "blockingTickets": [],
+      "requiredEvidence": [
+        "Keep route-specific diagnostics stable when glyph outlines or metrics are unavailable.",
+        "Do not turn glyph query helpers into shaping or GPU route claims.",
+        "Document that any richer paragraph/shaping behavior is owned elsewhere."
+      ],
+      "notes": "This inventory row is about the bounded metrics/glyph-query route only; it is not a broad text-layout claim."
+    },
+    {
+      "routeId": "skfontmgr-catalog",
+      "facadeApi": "SkFontMgr",
+      "facadeSurface": "Abstract family/style discovery plus bundled OpenType managers; portable surface avoids platform font APIs in `:kanvas-skia/foundation`.",
+      "targetContract": "FontSourceID, TypefaceID, family/style catalog facts, source loading, and bounded fallback discovery.",
+      "targetOwner": "org.graphiks.kanvas.font",
+      "migrationCategory": "promote-with-contract",
+      "classification": "current-supported",
+      "legacyGates": [],
+      "targetDiagnosticFamilies": [
+        "font.catalog",
+        "font.source",
+        "expected-unsupported"
+      ],
+      "blockingTickets": [],
+      "requiredEvidence": [
+        "Keep bundled/system scan behavior explicitly bounded and non-normative where host-dependent.",
+        "Do not imply platform fallback parity or native engine delegation.",
+        "Link catalog and source diagnostics to the pure Kotlin taxonomy before route promotion."
+      ],
+      "notes": "Current managers are reusable, but any support claim must stay bounded to the documented catalog/source route."
+    },
+    {
+      "routeId": "skshaper-explicit-shaping",
+      "facadeApi": "SkShaper",
+      "facadeSurface": "Explicit shaping boundary exists today, but it is still a compatibility layer and not the final pure Kotlin shaping engine.",
+      "targetContract": "ShapedGlyphRun, shaping-plan, fallback-run, and route-diagnostic dumps owned by the pure Kotlin shaping engine.",
+      "targetOwner": "org.graphiks.kanvas.text.shaping",
+      "migrationCategory": "replace",
+      "classification": "DependencyGated",
+      "legacyGates": [
+        "scaledemoji",
+        "scaledemoji_rendering"
+      ],
+      "targetDiagnosticFamilies": [
+        "text.shaping",
+        "text.paragraph",
+        "expected-unsupported"
+      ],
+      "blockingTickets": [
+        "KFONT-M13-003",
+        "KFONT-M6-010"
+      ],
+      "requiredEvidence": [
+        "Advanced GSUB/GPOS, variation-adjustment, and required-script fixture families from M6.",
+        "Pure Kotlin fallback and cluster-safe shaping evidence attached to the explicit SkShaper route.",
+        "Stable shaping diagnostics that do not silently broaden `SkCanvas.drawString`."
+      ],
+      "notes": "Keep this route explicitly gated on shaping evidence. The current compatibility layer must not become a second shaping implementation."
+    },
+    {
+      "routeId": "sktextblob-glyph-runs",
+      "facadeApi": "SkTextBlob",
+      "facadeSurface": "Current explicit glyph-run rendering exists on CPU, but typed descriptor and no-`Sk*` handoff evidence is still missing from the facade route.",
+      "targetContract": "GPUGlyphRunDescriptor, GPUTextArtifactReference, and NormalizedDrawCommand.DrawTextRun with deterministic route diagnostics.",
+      "targetOwner": "org.graphiks.kanvas.glyph.gpu + org.graphiks.kanvas.gpu.renderer.commands",
+      "migrationCategory": "promote-with-contract",
+      "classification": "DependencyGated",
+      "legacyGates": [
+        "dftext"
+      ],
+      "targetDiagnosticFamilies": [
+        "glyph.artifact",
+        "text.gpu",
+        "expected-unsupported"
+      ],
+      "blockingTickets": [
+        "KFONT-M13-004",
+        "KFONT-M11-010"
+      ],
+      "requiredEvidence": [
+        "Typed glyph-run descriptor and artifact-reference dumps with no façade `Sk*` payload leakage.",
+        "Stable handoff diagnostics and stale/unregistered refusal evidence.",
+        "GPU evidence only when a GPU route is actually claimed."
+      ],
+      "notes": "Current CPU rendering is not enough to claim typed handoff readiness or `dftext` retirement."
+    },
+    {
+      "routeId": "sktypeface-opentype-facts",
+      "facadeApi": "SkTypeface",
+      "facadeSurface": "Pure Kotlin OpenType-backed typefaces exist, but some high-level facts still expose `STUB.FONTATIONS` gaps and optional drift-only expectations.",
+      "targetContract": "TypefaceID plus SFNT table facts, variation facts, family-name iteration, and PostScript name access over pure Kotlin table data.",
+      "targetOwner": "org.graphiks.kanvas.font + org.graphiks.kanvas.font.scaler",
+      "migrationCategory": "promote-with-contract",
+      "classification": "tracked-gap",
+      "legacyGates": [
+        "fontations",
+        "fontations_ft_compare"
+      ],
+      "targetDiagnosticFamilies": [
+        "font.sfnt",
+        "font.scaler",
+        "expected-unsupported"
+      ],
+      "blockingTickets": [
+        "KFONT-M13-002"
+      ],
+      "requiredEvidence": [
+        "Route-specific parity dumps for PostScript name and localized family-name access.",
+        "Stable refusal or drift-only handling for any remaining external-engine comparison asks.",
+        "No hidden dependency on Fontations, FreeType, or platform name-table APIs."
+      ],
+      "notes": "Keep any Fontations/FreeType comparisons drift-only. The pure Kotlin route owns normative behavior."
+    }
+  ],
+  "legacyGateCoverage": [
+    {
+      "gate": "coloremoji_blendmodes",
+      "coverageKind": "route-owned",
+      "routeIds": [
+        "skcanvas-drawstring-simple-text"
+      ],
+      "rationale": "Current color-path and bitmap-glyph compatibility behavior is still surfaced through `SkCanvas.drawString`, but blend/composite policy remains a tracked gate."
+    },
+    {
+      "gate": "dftext",
+      "coverageKind": "route-owned",
+      "routeIds": [
+        "sktextblob-glyph-runs"
+      ],
+      "rationale": "Typed glyph-run descriptors and artifact handoff are the M13 facade route that must stay visible before any `dftext` retirement claim."
+    },
+    {
+      "gate": "fontations",
+      "coverageKind": "route-owned",
+      "routeIds": [
+        "sktypeface-opentype-facts"
+      ],
+      "rationale": "Remaining `STUB.FONTATIONS` expectations live on the `SkTypeface` facts surface and must stay drift-only or expected-unsupported."
+    },
+    {
+      "gate": "fontations_ft_compare",
+      "coverageKind": "route-owned",
+      "routeIds": [
+        "sktypeface-opentype-facts"
+      ],
+      "rationale": "Any Fontations/FreeType comparison attached to `SkTypeface` remains optional drift evidence only."
+    },
+    {
+      "gate": "pdf_never_embed",
+      "coverageKind": "adjacent-out-of-scope",
+      "routeIds": [],
+      "rationale": "The migration spec keeps PDF subset/embedding work adjacent to the runtime font facade. M13 inventory must keep the gate visible without pretending a facade route owns it."
+    },
+    {
+      "gate": "scaledemoji",
+      "coverageKind": "route-owned",
+      "routeIds": [
+        "paragraph-compatible-apis",
+        "skcanvas-drawstring-simple-text",
+        "skshaper-explicit-shaping"
+      ],
+      "rationale": "Emoji sequence shaping and fallback affect explicit shaping first, with paragraph and compatibility routes remaining bounded and non-promoted."
+    },
+    {
+      "gate": "scaledemoji_rendering",
+      "coverageKind": "route-owned",
+      "routeIds": [
+        "paragraph-compatible-apis",
+        "skcanvas-drawstring-simple-text",
+        "skshaper-explicit-shaping"
+      ],
+      "rationale": "Emoji rendering stays split across shaping, paragraph, and color/bitmap compatibility subroutes until dedicated evidence lands."
+    }
+  ],
+  "summary": {
+    "routeCount": 7,
+    "classificationCounts": {
+      "current-supported": 3,
+      "tracked-gap": 2,
+      "DependencyGated": 2
+    },
+    "migrationCategoryCounts": {
+      "promote-with-contract": 4,
+      "replace": 2,
+      "reuse-as-is": 1
+    }
+  },
+  "remainingGates": [
+    "KFONT-M13-002 remains gated on route-specific `SkTypeface` parity evidence after this inventory.",
+    "KFONT-M13-003 remains gated on `KFONT-M6-010`; explicit `SkShaper` must not imply broader complex-shaping support.",
+    "KFONT-M13-004 remains gated on typed descriptor and GPU handoff readiness evidence after this inventory.",
+    "Paragraph-compatible facade scope is still missing from `:kanvas-skia`; no public `org.skia.paragraph` route exists yet.",
+    "`pdf_never_embed` remains adjacent/out-of-scope for the runtime facade and stays visible without a false owner-route claim."
+  ],
+  "nonClaims": [
+    "inventory-only-no-support-promotion",
+    "no-complete-target-support-claim",
+    "no-gpu-route-support-claim",
+    "no-legacy-gate-retirement",
+    "no-hidden-native-engine-dependency"
+  ],
+  "validationCommands": [
+    "rtk python3 -m unittest scripts/test_validate_kfont_m13_001_facade_inventory.py",
+    "rtk python3 scripts/validate_kfont_m13_001_facade_inventory.py",
+    "rtk ./gradlew --no-daemon validateKfontM13001FacadeInventory",
+    "rtk git diff --check"
+  ],
+  "dashboardSurfaceId": "skia-facade-adapter-inventory",
+  "pmBundleTask": "pipelinePmBundle"
+}

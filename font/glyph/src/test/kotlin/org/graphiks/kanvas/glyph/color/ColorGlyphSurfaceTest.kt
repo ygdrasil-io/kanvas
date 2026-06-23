@@ -4553,6 +4553,21 @@ class ColorGlyphSurfaceTest {
         error("Unterminated JSON object field $field")
     }
 
+    private fun jsonArrayField(json: String, field: String): String {
+        val fieldToken = "\"$field\": ["
+        val start = json.indexOf(fieldToken)
+        require(start >= 0) { "Missing JSON array field $field" }
+        val arrayStart = json.indexOf('[', start)
+        return extractJsonArray(json, arrayStart)
+    }
+
+    private fun assertJsonPattern(json: String, pattern: String) {
+        assertTrue(
+            Regex(pattern, RegexOption.DOT_MATCHES_ALL).containsMatchIn(json),
+            "Missing JSON pattern $pattern in: $json",
+        )
+    }
+
     private fun sha256Utf8(value: String): String =
         MessageDigest.getInstance("SHA-256")
             .digest(value.toByteArray(Charsets.UTF_8))
