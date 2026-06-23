@@ -352,6 +352,67 @@ class SFNTSurfaceTest {
     }
 
     @Test
+    fun m6RemainingFixtureResourceWaveIsCheckedInWithReviewedProvenance() {
+        val expectedPaths = listOf(
+            "reports/font/fixtures/fonts/shaping/arabic-joining-forms.otf",
+            "reports/font/fixtures/fonts/shaping/arabic-lam-alef.otf",
+            "reports/font/fixtures/fonts/shaping/arabic-marks-cursive.otf",
+            "reports/font/fixtures/fonts/shaping/arabic-missing-cursive.otf",
+            "reports/font/fixtures/fonts/shaping/arabic-missing-mark.otf",
+            "reports/font/fixtures/fonts/shaping/devanagari-consonant-cluster.otf",
+            "reports/font/fixtures/fonts/shaping/devanagari-reph.otf",
+            "reports/font/fixtures/fonts/shaping/devanagari-prebase-matra.otf",
+            "reports/font/fixtures/fonts/shaping/devanagari-below-base.otf",
+            "reports/font/fixtures/fonts/shaping/devanagari-mark-placement.otf",
+            "reports/font/fixtures/fonts/shaping/devanagari-unsupported-syllable.otf",
+            "reports/font/fixtures/fonts/shaping/thai-base-marks.otf",
+            "reports/font/fixtures/fonts/shaping/thai-tone-marks.otf",
+            "reports/font/fixtures/fonts/shaping/cjk-han-variation-selector.otf",
+            "reports/font/fixtures/fonts/shaping/cjk-kana-vertical.otf",
+            "reports/font/fixtures/fonts/shaping/cjk-hangul-direct.otf",
+            "reports/font/fixtures/fonts/shaping/cjk-missing-vertical-alt.otf",
+            "reports/font/fixtures/fonts/shaping/gsub-chaining-context.otf",
+            "reports/font/fixtures/fonts/shaping/gsub-reverse-chaining.otf",
+            "reports/font/fixtures/fonts/shaping/gpos-contextual-positioning.otf",
+            "reports/font/fixtures/fonts/shaping/gpos-chaining-positioning.otf",
+            "reports/font/fixtures/fonts/shaping/gpos-extension-positioning.otf",
+            "reports/font/fixtures/fonts/shaping/gpos-variation-device.otf",
+            "reports/font/fixtures/expected/shaping/thai-latin-mixed.txt",
+            "reports/font/fixtures/expected/shaping/variation-adjustment-trace.json",
+        )
+        val provenanceIndex = Files.readString(fixturePath("reports/font/fixtures/provenance/index.json"))
+
+        expectedPaths.forEach { relativePath ->
+            assertTrue(
+                actual = Files.isRegularFile(fixturePath(relativePath)),
+                message = "Expected checked-in M6 fixture resource $relativePath",
+            )
+            if (relativePath.endsWith(".otf") || relativePath.endsWith(".ttf")) {
+                assertTrue(
+                    actual = provenanceIndex.contains(relativePath),
+                    message = "Fixture provenance index should reference $relativePath",
+                )
+            }
+        }
+
+        listOf(
+            "arabic-ticket-local-fixture-wave",
+            "devanagari-ticket-local-fixture-wave",
+            "thai-cjk-ticket-local-fixture-wave",
+            "advanced-lookup-ticket-local-fixture-wave",
+            "\"ownerTickets\": [\n        \"KFONT-M6-007\"",
+            "\"ownerTickets\": [\n        \"KFONT-M6-008\"",
+            "\"ownerTickets\": [\n        \"KFONT-M6-009\"",
+            "\"ownerTickets\": [\n        \"KFONT-M6-010\"",
+        ).forEach { requiredSnippet ->
+            assertTrue(
+                actual = provenanceIndex.contains(requiredSnippet),
+                message = "Fixture provenance index is missing $requiredSnippet",
+            )
+        }
+    }
+
+    @Test
     fun defaultOpenTypeFaceParserParsesSvgTableAndLooksUpDocumentsByGlyphId() {
         val svgBytes = "<svg><path id=\"glyph-eight\"/></svg>".toByteArray(Charsets.UTF_8)
         val svg = svgTable(

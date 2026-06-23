@@ -103,8 +103,9 @@ rtk git diff --check
 - `proposed`: Boundary fixtures depend on script itemization, feature policy, and positioning support.
 - Current blocker audit (2026-06-19): `KFONT-M6-004` and `KFONT-M6-005` are `done`, and `KFONT-M6-006` is now `blocked` only on the still-absent per-script fixture families. The refreshed asset/license audit at `reports/pure-kotlin-text/2026-06-19-kfont-m6-fixture-asset-license-audit.md` did not identify a reviewed ticket-local pack that would clear the full Thai/CJK gate.
 - `blocked`: `ThaiCjkBoundaryFixtureTest` plus `thai-cjk-boundary-report.json` now prove bounded vendored-font evidence for Thai tone-mark positioning, mixed Latin/Thai script boundaries, and CJK kana `vert` alternates on `NotoSansThai-Regular.ttf` and `NotoSansSC-Regular.otf` without promoting Thai or CJK shaping support.
+- `blocked` (2026-06-23 resource-seed wave): the named Thai/CJK fixture resources `thai-base-marks.otf`, `thai-tone-marks.otf`, `thai-latin-mixed.txt`, `cjk-han-variation-selector.otf`, `cjk-kana-vertical.otf`, `cjk-hangul-direct.otf`, and `cjk-missing-vertical-alt.otf` are now checked in under reviewed provenance as ticket-local subset/refusal seeds, but the ticket still needs refreshed runtime assertions, paragraph-owned diagnostics, and ticket-local dump families before it can leave `blocked`.
 - `blocked`: This wave intentionally keeps Thai paragraph-owned dictionary diagnostics, Thai refusal fixtures/codes, CJK `cmap` format 14 variation-selector evidence, Han/Hangul boundary rows, paragraph-owned ruby/line-break diagnostics, and ticket-local `shaping-plan.json` / `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` / `cmap-map.json` / `unicode-segments.json` families as explicit remaining gates.
-- Move back to `ready` only after paragraph-owned diagnostics and fixture scope are reviewed.
+- Move back to `ready` only after the checked-in resource seeds have refreshed paragraph-owned diagnostics, runtime assertions, and ticket-local dump scope reviewed.
 
 ## Linear Labels
 

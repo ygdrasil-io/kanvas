@@ -102,8 +102,9 @@ rtk git diff --check
 
 - `proposed`: Devanagari evidence depends on M5 clusters/itemization, contextual GSUB, mark positioning, and feature policy.
 - `blocked`: `DevanagariShapingFixtureTest` plus `devanagari-shaping-report.json` now prove bounded vendored-font evidence for pinned Script_Extensions `Deva` script selection on the pre-base matra case, consonant-cluster preservation, reph-like shaping, and mark placement on `NotoSansDevanagari-Regular.ttf` without promoting Devanagari or Indic shaping support.
+- `blocked` (2026-06-23 resource-seed wave): the named Devanagari fixture resources `devanagari-consonant-cluster.otf`, `devanagari-reph.otf`, `devanagari-prebase-matra.otf`, `devanagari-below-base.otf`, `devanagari-mark-placement.otf`, and `devanagari-unsupported-syllable.otf` are now checked in under reviewed provenance as ticket-local subset/refusal seeds, but the ticket still needs phase-aware runtime assertions and ticket-local trace dumps before it can leave `blocked`.
 - `blocked`: This wave intentionally keeps `indic-syllable-plan.json` or equivalent phase evidence, the full required `deva` / `dev2` feature set, dedicated unsupported-syllable and phase refusal fixtures/codes, and ticket-local `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` / `unicode-segments.json` families as explicit remaining gates.
-- Move to `ready` only after fixture coverage and syllable dump fields are reviewed.
+- Move to `ready` only after the checked-in resource seeds have refreshed syllable/phase assertions and ticket-local dump fields reviewed.
 
 ## Linear Labels
 
