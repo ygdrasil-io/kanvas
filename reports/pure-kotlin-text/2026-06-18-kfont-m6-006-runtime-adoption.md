@@ -2,7 +2,7 @@
 
 ## Scope
 
-This wave narrows the remaining `review` gate for script-specific default
+This wave narrows the remaining gate for script-specific default
 feature policy:
 
 - `BasicOpenTypeShapingEngine` now resolves per-run script policy before GSUB,
@@ -46,4 +46,5 @@ rtk ./gradlew --no-daemon :kanvas-skia:test --tests org.skia.foundation.opentype
 ## Non-Claims
 
 This wave does not claim complete script shaping support, native shaper parity,
-GPU evidence, paragraph layout readiness, or promotion beyond `review`.
+GPU evidence, paragraph layout readiness, or promotion beyond the current
+`blocked` ticket state.
