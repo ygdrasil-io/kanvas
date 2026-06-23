@@ -29,6 +29,61 @@
       "inputGlyphIds": [8, 66],
       "outputGlyphIds": [9, 70],
       "lookups": [{"lookupIndex": 23, "lookupType": 2, "featureTag": "init", "inputGlyphIds": [8, 66], "outputGlyphIds": [8, 70], "clusterAction": "preserved"}, {"lookupIndex": 25, "lookupType": 2, "featureTag": "fina", "inputGlyphIds": [8, 70], "outputGlyphIds": [9, 70], "clusterAction": "preserved"}]
+    },
+    {
+      "caseId": "lam-alef-fixture",
+      "ticketId": "KFONT-M6-007",
+      "status": "bounded",
+      "reportRef": "arabic-shaping-report#lam-alef-positive-evidence",
+      "fixtureFont": "reports/font/fixtures/fonts/shaping/arabic-lam-alef.otf",
+      "inputText": "لا",
+      "typefaceId": "550e8400-e29b-41d4-a716-446655440707",
+      "featureOrder": ["init", "medi", "fina", "isol", "rlig", "liga", "calt", "mark", "mkmk", "curs"],
+      "inputGlyphIds": [1, 5],
+      "outputGlyphIds": [2, 9],
+      "lookups": [{"lookupIndex": 4, "lookupType": 2, "featureTag": "init", "inputGlyphIds": [1, 5], "outputGlyphIds": [1, 9], "clusterAction": "preserved"}, {"lookupIndex": 6, "lookupType": 2, "featureTag": "fina", "inputGlyphIds": [1, 9], "outputGlyphIds": [2, 9], "clusterAction": "preserved"}],
+      "diagnostics": [{"code": "text.shaping.arabic-cursive-unsupported", "message": "No GPOS table available for cursive attachment on typeface 550e8400-e29b-41d4-a716-446655440707.", "textRange": "0..1"}, {"code": "text.shaping.arabic-mark-unsupported", "message": "No GPOS table available for mark positioning on typeface 550e8400-e29b-41d4-a716-446655440707.", "textRange": "0..1"}]
+    },
+    {
+      "caseId": "marks-cursive-fixture",
+      "ticketId": "KFONT-M6-007",
+      "status": "positive",
+      "reportRef": "arabic-shaping-report#marks",
+      "fixtureFont": "reports/font/fixtures/fonts/shaping/arabic-marks-cursive.otf",
+      "inputText": "لم",
+      "typefaceId": "550e8400-e29b-41d4-a716-446655440708",
+      "featureOrder": ["init", "medi", "fina", "isol", "rlig", "liga", "calt", "mark", "mkmk", "curs"],
+      "inputGlyphIds": [11, 5],
+      "outputGlyphIds": [16, 9],
+      "lookups": [{"lookupIndex": 6, "lookupType": 2, "featureTag": "init", "inputGlyphIds": [11, 5], "outputGlyphIds": [16, 9], "clusterAction": "preserved"}]
+    },
+    {
+      "caseId": "missing-cursive-fixture",
+      "ticketId": "KFONT-M6-007",
+      "status": "diagnostic",
+      "reportRef": "arabic-shaping-report#missing-cursive",
+      "fixtureFont": "reports/font/fixtures/fonts/shaping/arabic-missing-cursive.otf",
+      "inputText": "ب",
+      "typefaceId": "550e8400-e29b-41d4-a716-446655440709",
+      "featureOrder": ["init", "medi", "fina", "isol", "rlig", "liga", "calt", "mark", "mkmk", "curs"],
+      "inputGlyphIds": [17],
+      "outputGlyphIds": [17],
+      "lookups": [],
+      "diagnostics": [{"code": "text.shaping.arabic-cursive-unsupported", "message": "No GPOS table available for cursive attachment on typeface 550e8400-e29b-41d4-a716-446655440709.", "textRange": "0..0"}, {"code": "text.shaping.arabic-mark-unsupported", "message": "No GPOS table available for mark positioning on typeface 550e8400-e29b-41d4-a716-446655440709.", "textRange": "0..0"}]
+    },
+    {
+      "caseId": "missing-mark-fixture",
+      "ticketId": "KFONT-M6-007",
+      "status": "diagnostic",
+      "reportRef": "arabic-shaping-report#missing-mark",
+      "fixtureFont": "reports/font/fixtures/fonts/shaping/arabic-missing-mark.otf",
+      "inputText": "اَ",
+      "typefaceId": "550e8400-e29b-41d4-a716-446655440710",
+      "featureOrder": ["init", "medi", "fina", "isol", "rlig", "liga", "calt", "mark", "mkmk", "curs"],
+      "inputGlyphIds": [3, 1],
+      "outputGlyphIds": [3, 2],
+      "lookups": [{"lookupIndex": 2, "lookupType": 2, "featureTag": "fina", "inputGlyphIds": [3, 1], "outputGlyphIds": [3, 2], "clusterAction": "preserved"}],
+      "diagnostics": [{"code": "text.shaping.arabic-cursive-unsupported", "message": "No GPOS table available for cursive attachment on typeface 550e8400-e29b-41d4-a716-446655440710.", "textRange": "0..1"}, {"code": "text.shaping.arabic-mark-unsupported", "message": "No GPOS table available for mark positioning on typeface 550e8400-e29b-41d4-a716-446655440710.", "textRange": "0..1"}]
     }
   ],
   "nonClaims": ["producer-only", "no-arabic-shaping-support-claim", "no-complex-shaping-support-claim", "no-native-shaper-oracle-claim", "no-cpu-or-gpu-rendering-claim"]

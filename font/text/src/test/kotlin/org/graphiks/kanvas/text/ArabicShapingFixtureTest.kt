@@ -32,7 +32,11 @@ import org.graphiks.kanvas.text.shaping.RuntimeGposLookupTrace
 import org.graphiks.kanvas.text.shaping.RuntimeGsubLookupTrace
 import org.graphiks.kanvas.text.shaping.ScriptExtensionsItemizer
 import org.graphiks.kanvas.text.shaping.ShapingRequest
+import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_ARABIC_CURSIVE_UNSUPPORTED_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_ARABIC_MARK_UNSUPPORTED_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_CURSIVE_ATTACHMENT_UNAVAILABLE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_MARK_POSITIONING_UNAVAILABLE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_PARAGRAPH_BIDI_REQUIRED_DIAGNOSTIC_CODE
 
 class ArabicShapingFixtureTest {
@@ -143,6 +147,111 @@ class ArabicShapingFixtureTest {
     }
 
     @Test
+    fun basicOpenTypeShapingEngineAppliesVendoredArabicLamAlefFixture() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440707",
+            relativePath = "reports/font/fixtures/fonts/shaping/arabic-lam-alef.otf",
+        )
+        val text = "\u0644\u0627"
+        val rawGlyphIds = listOf('\u0644'.code, '\u0627'.code)
+            .map { codePoint -> requireNotNull(face.cmap.lookupGlyphId(codePoint)) }
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = text,
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        val shapedRun = result.glyphRuns.single()
+
+        assertEquals(1, result.glyphRuns.size)
+        assertEquals(2, shapedRun.glyphIds.size)
+        assertEquals(2, shapedRun.clusters.size)
+        val rawVisualOrderGlyphIds = rawGlyphIds.reversed()
+        assertFalse(
+            shapedRun.glyphIds == rawVisualOrderGlyphIds,
+            "Arabic lam-alef fixture should prove more than RTL reordering of raw cmap glyph IDs.",
+        )
+        assertTrue(
+            result.diagnostics.any { it.code == TEXT_SHAPING_ARABIC_CURSIVE_UNSUPPORTED_DIAGNOSTIC_CODE },
+            "lam-alef fixture without GPOS should emit arabic-cursive-unsupported.",
+        )
+        assertTrue(
+            result.diagnostics.any { it.code == TEXT_SHAPING_ARABIC_MARK_UNSUPPORTED_DIAGNOSTIC_CODE },
+            "lam-alef fixture without GPOS should emit arabic-mark-unsupported.",
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineAppliesVendoredArabicCursiveAttachment() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440708",
+            relativePath = "reports/font/fixtures/fonts/shaping/arabic-marks-cursive.otf",
+        )
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = "\u0644\u0645",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        val shapedRun = result.glyphRuns.single()
+
+        assertEquals(emptyList(), result.diagnostics)
+        assertEquals(1, result.glyphRuns.size)
+        assertEquals(2, shapedRun.clusters.size)
+        val rawGlyphIds = listOf('\u0644'.code, '\u0645'.code)
+            .map { codePoint -> requireNotNull(face.cmap.lookupGlyphId(codePoint)) }
+        val rawVisualOrderGlyphIds = rawGlyphIds.reversed()
+        assertFalse(
+            shapedRun.glyphIds == rawVisualOrderGlyphIds,
+            "Arabic marks-cursive fixture should prove GSUB joining form substitution beyond pure RTL reordering.",
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineEmitsArabicCursiveUnsupportedDiagnostic() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440709",
+            relativePath = "reports/font/fixtures/fonts/shaping/arabic-missing-cursive.otf",
+        )
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = "\u0628",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(1, result.glyphRuns.size)
+        assertTrue(
+            result.diagnostics.map { it.code }.contains(TEXT_SHAPING_ARABIC_CURSIVE_UNSUPPORTED_DIAGNOSTIC_CODE),
+            "arabic-missing-cursive.otf should emit arabic-cursive-unsupported diagnostic. Got: ${result.diagnostics}",
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineEmitsArabicMarkUnsupportedDiagnostic() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440710",
+            relativePath = "reports/font/fixtures/fonts/shaping/arabic-missing-mark.otf",
+        )
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = "\u0627\u064E",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+
+        assertEquals(1, result.glyphRuns.size)
+        assertTrue(
+            result.diagnostics.map { it.code }.contains(TEXT_SHAPING_ARABIC_MARK_UNSUPPORTED_DIAGNOSTIC_CODE),
+            "arabic-missing-mark.otf should emit arabic-mark-unsupported diagnostic. Got: ${result.diagnostics}",
+        )
+    }
+
+    @Test
     fun basicOpenTypeShapingEngineEmitsReviewedGenericGdefRequiredDiagnosticForArabicBasePlusMarkFixture() {
         val face = parsedFixtureFace(
             uuid = "550e8400-e29b-41d4-a716-446655440706",
@@ -172,15 +281,19 @@ class ArabicShapingFixtureTest {
         assertEquals(1L, report.requiredLong("schemaVersion"))
         assertEquals("arabic-shaping-report", report.requiredString("dumpId"))
         assertEquals(listOf("KFONT-M6-007"), report.requiredStringList("ownerTickets"))
-        assertEquals("single-ttf-noto-naskh-arabic", report.requiredString("fixtureId"))
+        assertEquals("arabic-shaping-fixtures", report.requiredString("fixtureId"))
         assertEquals(
-            listOf("joining-forms", "marks", "missing-mark-gdef-required", "mixed-bidi-paragraph-required"),
+            listOf("joining-forms", "marks", "missing-mark-gdef-required", "mixed-bidi-paragraph-required", "lam-alef-fixture", "marks-cursive-fixture", "missing-cursive-fixture", "missing-mark-fixture"),
             cases.map { it.requiredString("caseId") },
         )
         assertEquals("positive", cases[0].requiredString("status"))
         assertEquals("positive", cases[1].requiredString("status"))
         assertEquals("diagnostic", cases[2].requiredString("status"))
         assertEquals("diagnostic", cases[3].requiredString("status"))
+        assertEquals("bounded", cases[4].requiredString("status"))
+        assertEquals("positive", cases[5].requiredString("status"))
+        assertEquals("diagnostic", cases[6].requiredString("status"))
+        assertEquals("diagnostic", cases[7].requiredString("status"))
         assertEquals(null, cases[1]["requiredDiagnostics"])
         assertEquals(
             listOf(TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE),
@@ -196,9 +309,35 @@ class ArabicShapingFixtureTest {
         )
         assertEquals(
             listOf(
-                "lam-alef-positive-evidence",
-                "cursive-positive-on-vendored-arabic",
-                "arabic-specific-refusal-fixtures-and-codes",
+                "reports/font/fixtures/fonts/shaping/arabic-lam-alef.otf",
+                "reports/font/fixtures/fonts/shaping/arabic-marks-cursive.otf",
+                "reports/font/fixtures/fonts/shaping/arabic-missing-cursive.otf",
+                "reports/font/fixtures/fonts/shaping/arabic-missing-mark.otf",
+            ),
+            report.requiredStringList("fixtureShapingFonts"),
+        )
+        assertEquals(
+            listOf(
+                "text.shaping.arabic-cursive-unsupported",
+                "text.shaping.arabic-mark-unsupported",
+            ),
+            cases[4].requiredStringList("requiredDiagnostics"),
+        )
+        assertEquals(
+            listOf(
+                "text.shaping.arabic-cursive-unsupported",
+            ),
+            cases[6].requiredStringList("requiredDiagnostics"),
+        )
+        assertEquals(
+            listOf(
+                "text.shaping.arabic-mark-unsupported",
+            ),
+            cases[7].requiredStringList("requiredDiagnostics"),
+        )
+        assertEquals(
+            listOf(
+                "full-arabic-feature-policy-evidence",
             ),
             report.requiredObjectList("remainingGates").map { it.requiredString("remainingGateId") },
         )
@@ -312,6 +451,38 @@ class ArabicShapingFixtureTest {
                 relativePath = "reports/font/fixtures/fonts/shaping/gpos-missing-gdef.otf",
                 inputText = "\u0627\u064E",
             ),
+            buildArabicShapedGlyphRunCase(
+                caseId = "lam-alef-fixture",
+                status = "bounded",
+                reportRef = "arabic-shaping-report#lam-alef-positive-evidence",
+                uuid = "550e8400-e29b-41d4-a716-446655440707",
+                relativePath = "reports/font/fixtures/fonts/shaping/arabic-lam-alef.otf",
+                inputText = "\u0644\u0627",
+            ),
+            buildArabicShapedGlyphRunCase(
+                caseId = "marks-cursive-fixture",
+                status = "positive",
+                reportRef = "arabic-shaping-report#marks",
+                uuid = "550e8400-e29b-41d4-a716-446655440708",
+                relativePath = "reports/font/fixtures/fonts/shaping/arabic-marks-cursive.otf",
+                inputText = "\u0644\u0645",
+            ),
+            buildArabicShapedGlyphRunCase(
+                caseId = "missing-cursive-fixture",
+                status = "diagnostic",
+                reportRef = "arabic-shaping-report#missing-cursive",
+                uuid = "550e8400-e29b-41d4-a716-446655440709",
+                relativePath = "reports/font/fixtures/fonts/shaping/arabic-missing-cursive.otf",
+                inputText = "\u0628",
+            ),
+            buildArabicShapedGlyphRunCase(
+                caseId = "missing-mark-fixture",
+                status = "diagnostic",
+                reportRef = "arabic-shaping-report#missing-mark",
+                uuid = "550e8400-e29b-41d4-a716-446655440710",
+                relativePath = "reports/font/fixtures/fonts/shaping/arabic-missing-mark.otf",
+                inputText = "\u0627\u064E",
+            ),
         )
         return buildString {
             append("{\n")
@@ -366,6 +537,41 @@ class ArabicShapingFixtureTest {
                 inputText = "\u0627\u064E",
                 expectedDiagnostics = listOf(TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE),
             ),
+            buildArabicShapingPlanCase(
+                caseId = "lam-alef-fixture",
+                status = "bounded",
+                reportRef = "arabic-shaping-report#lam-alef-positive-evidence",
+                uuid = "550e8400-e29b-41d4-a716-446655440707",
+                relativePath = "reports/font/fixtures/fonts/shaping/arabic-lam-alef.otf",
+                inputText = "\u0644\u0627",
+                expectedDiagnostics = listOf(TEXT_SHAPING_ARABIC_CURSIVE_UNSUPPORTED_DIAGNOSTIC_CODE, TEXT_SHAPING_ARABIC_MARK_UNSUPPORTED_DIAGNOSTIC_CODE),
+            ),
+            buildArabicShapingPlanCase(
+                caseId = "marks-cursive-fixture",
+                status = "positive",
+                reportRef = "arabic-shaping-report#marks",
+                uuid = "550e8400-e29b-41d4-a716-446655440708",
+                relativePath = "reports/font/fixtures/fonts/shaping/arabic-marks-cursive.otf",
+                inputText = "\u0644\u0645",
+            ),
+            buildArabicShapingPlanCase(
+                caseId = "missing-cursive-fixture",
+                status = "diagnostic",
+                reportRef = "arabic-shaping-report#missing-cursive",
+                uuid = "550e8400-e29b-41d4-a716-446655440709",
+                relativePath = "reports/font/fixtures/fonts/shaping/arabic-missing-cursive.otf",
+                inputText = "\u0628",
+                expectedDiagnostics = listOf(TEXT_SHAPING_ARABIC_CURSIVE_UNSUPPORTED_DIAGNOSTIC_CODE, TEXT_SHAPING_ARABIC_MARK_UNSUPPORTED_DIAGNOSTIC_CODE),
+            ),
+            buildArabicShapingPlanCase(
+                caseId = "missing-mark-fixture",
+                status = "diagnostic",
+                reportRef = "arabic-shaping-report#missing-mark",
+                uuid = "550e8400-e29b-41d4-a716-446655440710",
+                relativePath = "reports/font/fixtures/fonts/shaping/arabic-missing-mark.otf",
+                inputText = "\u0627\u064E",
+                expectedDiagnostics = listOf(TEXT_SHAPING_ARABIC_CURSIVE_UNSUPPORTED_DIAGNOSTIC_CODE, TEXT_SHAPING_ARABIC_MARK_UNSUPPORTED_DIAGNOSTIC_CODE),
+            ),
         )
         return buildString {
             append("{\n")
@@ -405,6 +611,38 @@ class ArabicShapingFixtureTest {
                 relativePath = "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
                 inputText = "\u0644\u0627",
             ),
+            buildArabicGsubTraceCase(
+                caseId = "lam-alef-fixture",
+                status = "bounded",
+                reportRef = "arabic-shaping-report#lam-alef-positive-evidence",
+                uuid = "550e8400-e29b-41d4-a716-446655440707",
+                relativePath = "reports/font/fixtures/fonts/shaping/arabic-lam-alef.otf",
+                inputText = "\u0644\u0627",
+            ),
+            buildArabicGsubTraceCase(
+                caseId = "marks-cursive-fixture",
+                status = "positive",
+                reportRef = "arabic-shaping-report#marks",
+                uuid = "550e8400-e29b-41d4-a716-446655440708",
+                relativePath = "reports/font/fixtures/fonts/shaping/arabic-marks-cursive.otf",
+                inputText = "\u0644\u0645",
+            ),
+            buildArabicGsubTraceCase(
+                caseId = "missing-cursive-fixture",
+                status = "diagnostic",
+                reportRef = "arabic-shaping-report#missing-cursive",
+                uuid = "550e8400-e29b-41d4-a716-446655440709",
+                relativePath = "reports/font/fixtures/fonts/shaping/arabic-missing-cursive.otf",
+                inputText = "\u0628",
+            ),
+            buildArabicGsubTraceCase(
+                caseId = "missing-mark-fixture",
+                status = "diagnostic",
+                reportRef = "arabic-shaping-report#missing-mark",
+                uuid = "550e8400-e29b-41d4-a716-446655440710",
+                relativePath = "reports/font/fixtures/fonts/shaping/arabic-missing-mark.otf",
+                inputText = "\u0627\u064E",
+            ),
         )
         return buildString {
             append("{\n")
@@ -440,6 +678,38 @@ class ArabicShapingFixtureTest {
                 reportRef = "arabic-shaping-report#missing-mark-gdef-required",
                 uuid = "550e8400-e29b-41d4-a716-446655440706",
                 relativePath = "reports/font/fixtures/fonts/shaping/gpos-missing-gdef.otf",
+                inputText = "\u0627\u064E",
+            ),
+            buildArabicGposTraceCase(
+                caseId = "lam-alef-fixture",
+                status = "diagnostic",
+                reportRef = "arabic-shaping-report#lam-alef-positive-evidence",
+                uuid = "550e8400-e29b-41d4-a716-446655440707",
+                relativePath = "reports/font/fixtures/fonts/shaping/arabic-lam-alef.otf",
+                inputText = "\u0644\u0627",
+            ),
+            buildArabicGposTraceCase(
+                caseId = "marks-cursive-fixture",
+                status = "positive",
+                reportRef = "arabic-shaping-report#marks",
+                uuid = "550e8400-e29b-41d4-a716-446655440708",
+                relativePath = "reports/font/fixtures/fonts/shaping/arabic-marks-cursive.otf",
+                inputText = "\u0644\u0645",
+            ),
+            buildArabicGposTraceCase(
+                caseId = "missing-cursive-fixture",
+                status = "diagnostic",
+                reportRef = "arabic-shaping-report#missing-cursive",
+                uuid = "550e8400-e29b-41d4-a716-446655440709",
+                relativePath = "reports/font/fixtures/fonts/shaping/arabic-missing-cursive.otf",
+                inputText = "\u0628",
+            ),
+            buildArabicGposTraceCase(
+                caseId = "missing-mark-fixture",
+                status = "diagnostic",
+                reportRef = "arabic-shaping-report#missing-mark",
+                uuid = "550e8400-e29b-41d4-a716-446655440710",
+                relativePath = "reports/font/fixtures/fonts/shaping/arabic-missing-mark.otf",
                 inputText = "\u0627\u064E",
             ),
         )

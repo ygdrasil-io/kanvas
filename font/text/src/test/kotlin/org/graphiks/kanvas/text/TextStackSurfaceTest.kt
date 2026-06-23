@@ -125,6 +125,8 @@ import org.graphiks.kanvas.text.shaping.ShapingDiagnostic
 import org.graphiks.kanvas.text.shaping.ShapingRequest
 import org.graphiks.kanvas.text.shaping.ShapingResult
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_ARABIC_CURSIVE_UNSUPPORTED_DIAGNOSTIC_CODE
+import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_ARABIC_MARK_UNSUPPORTED_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_CURSIVE_ATTACHMENT_UNAVAILABLE_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_GDEF_REQUIRED_DIAGNOSTIC_CODE
 import org.graphiks.kanvas.text.shaping.TEXT_SHAPING_LOOKUP_MALFORMED_DIAGNOSTIC_CODE
@@ -3345,7 +3347,7 @@ class TextStackSurfaceTest {
         assertEquals(
             listOf(
                 ShapingDiagnostic(
-                    code = TEXT_SHAPING_CURSIVE_ATTACHMENT_UNAVAILABLE_DIAGNOSTIC_CODE,
+                    code = TEXT_SHAPING_ARABIC_CURSIVE_UNSUPPORTED_DIAGNOSTIC_CODE,
                     message = "No cursive attachment chain matched the shaped glyph sequence on typeface ${typefaceId.value}.",
                     textRange = 0..1,
                 ),
@@ -3391,7 +3393,7 @@ class TextStackSurfaceTest {
                 fontSize = fontSize,
             ),
         )
-        assertTrue(markToLigatureResult.diagnostics.map { it.code }.contains(TEXT_SHAPING_MARK_POSITIONING_UNAVAILABLE_DIAGNOSTIC_CODE))
+        assertTrue(markToLigatureResult.diagnostics.map { it.code }.contains(TEXT_SHAPING_ARABIC_MARK_UNSUPPORTED_DIAGNOSTIC_CODE))
         assertTrue(markToLigatureResult.diagnostics.single().message.contains("Ambiguous ligature component indexes [0, 1, 2, 3]"))
         val markToLigatureRun = markToLigatureResult.glyphRuns.single()
         markToLigatureRun.clusters.forEach { cluster ->

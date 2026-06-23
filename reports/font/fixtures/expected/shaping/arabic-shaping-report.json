@@ -2,8 +2,14 @@
   "schemaVersion": 1,
   "dumpId": "arabic-shaping-report",
   "ownerTickets": ["KFONT-M6-007"],
-  "fixtureId": "single-ttf-noto-naskh-arabic",
+  "fixtureId": "arabic-shaping-fixtures",
   "fixtureFont": "reports/font/fixtures/fonts/fallback/NotoNaskhArabic-Regular.ttf",
+  "fixtureShapingFonts": [
+    "reports/font/fixtures/fonts/shaping/arabic-lam-alef.otf",
+    "reports/font/fixtures/fonts/shaping/arabic-marks-cursive.otf",
+    "reports/font/fixtures/fonts/shaping/arabic-missing-cursive.otf",
+    "reports/font/fixtures/fonts/shaping/arabic-missing-mark.otf"
+  ],
   "cases": [
     {
       "caseId": "joining-forms",
@@ -26,7 +32,7 @@
         "reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json",
         "reports/font/fixtures/expected/shaping/arabic-shaping-plan.json"
       ],
-      "notes": "Vendored Noto Naskh Arabic proves a bounded base-plus-mark case by tying the positioning or zero-advance check to the mark cluster itself, the ticket-local arabic-gpos-trace dump now records the runtime mark attachment lookup and attachment vector for that row, the ticket-local arabic-shaped-glyph-run dump pins the shaped glyph/cluster facts, and the ticket-local arabic-shaping-plan dump records the required Arabic default feature set and refusal-on-missing expectations for that bounded case."
+      "notes": "Vendored Noto Naskh Arabic proves a bounded base-plus-mark case by tying the positioning or zero-advance check to the mark cluster itself, the ticket-local arabic-gpos-trace dump now records the runtime mark attachment lookup and attachment vector for that row, the ticket-local arabic-shaped-glyph-run dump pins the resulting RTL-ordered clusters, and the ticket-local arabic-shaping-plan dump records the required Arabic default feature set and refusal-on-missing expectations for that bounded case."
     },
     {
       "caseId": "missing-mark-gdef-required",
@@ -45,20 +51,57 @@
         "text.shaping.paragraph-bidi-required"
       ],
       "notes": "Single-run shaping emits the paragraph-owned bidi diagnostic instead of silently approximating mixed Arabic/LTR layout, while still returning shaped output."
+    },
+    {
+      "caseId": "lam-alef-fixture",
+      "status": "bounded",
+      "fixtureFont": "reports/font/fixtures/fonts/shaping/arabic-lam-alef.otf",
+      "evidence": [
+        "reports/font/fixtures/expected/shaping/arabic-gsub-trace.json",
+        "reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json",
+        "reports/font/fixtures/expected/shaping/arabic-shaping-plan.json"
+      ],
+      "requiredDiagnostics": [
+        "text.shaping.arabic-cursive-unsupported",
+        "text.shaping.arabic-mark-unsupported"
+      ],
+      "notes": "Ticket-local subset font arabic-lam-alef.otf shapes the logical lam-alef sequence with GSUB glyph changes beyond raw cmap visual-order reordering, while the absence of GPOS tables emits the reviewed arabic-cursive-unsupported and arabic-mark-unsupported diagnostics as fixture-bounded refusal evidence."
+    },
+    {
+      "caseId": "marks-cursive-fixture",
+      "status": "positive",
+      "fixtureFont": "reports/font/fixtures/fonts/shaping/arabic-marks-cursive.otf",
+      "evidence": [
+        "reports/font/fixtures/expected/shaping/arabic-gsub-trace.json",
+        "reports/font/fixtures/expected/shaping/arabic-gpos-trace.json",
+        "reports/font/fixtures/expected/shaping/arabic-shaped-glyph-run.json",
+        "reports/font/fixtures/expected/shaping/arabic-shaping-plan.json"
+      ],
+      "notes": "Ticket-local subset font arabic-marks-cursive.otf shapes lam-meem with GSUB joining-form init/medi substitution and GPOS mark-to-base positioning on the bounded open-type runtime path, providing positive evidence for Arabic GSUB joining and GPOS mark attachment without promoting full Arabic cursive attachment."
+    },
+    {
+      "caseId": "missing-cursive-fixture",
+      "status": "diagnostic",
+      "fixtureFont": "reports/font/fixtures/fonts/shaping/arabic-missing-cursive.otf",
+      "requiredDiagnostics": [
+        "text.shaping.arabic-cursive-unsupported"
+      ],
+      "notes": "Ticket-local refusal seed font arabic-missing-cursive.otf shapes beh with GSUB init/medi/fina lookups for joining forms but no GPOS table, emitting the reviewed text.shaping.arabic-cursive-unsupported diagnostic as fixture-bounded cursive refusal evidence."
+    },
+    {
+      "caseId": "missing-mark-fixture",
+      "status": "diagnostic",
+      "fixtureFont": "reports/font/fixtures/fonts/shaping/arabic-missing-mark.otf",
+      "requiredDiagnostics": [
+        "text.shaping.arabic-mark-unsupported"
+      ],
+      "notes": "Ticket-local refusal seed font arabic-missing-mark.otf shapes alef-fatha with GSUB fina substitution but no GPOS table, emitting the reviewed text.shaping.arabic-mark-unsupported diagnostic as fixture-bounded mark refusal evidence."
     }
   ],
   "remainingGates": [
     {
-      "remainingGateId": "lam-alef-positive-evidence",
-      "detail": "Vendored Noto Naskh Arabic now has ticket-local arabic-shaping-plan and arabic-shaped-glyph-run rows for logical text \\u0644\\u0627, but they still prove only bounded runtime divergence away from the raw visual-order cmap pair and do not yet close the feature-local lam-alef positive gate."
-    },
-    {
-      "remainingGateId": "cursive-positive-on-vendored-arabic",
-      "detail": "Positive cursive-attachment evidence is still proven only on the bounded reviewed M6-005 fixture family, not yet on the vendored Noto Arabic ticket-local fixture wave."
-    },
-    {
-      "remainingGateId": "arabic-specific-refusal-fixtures-and-codes",
-      "detail": "Dedicated arabic-missing-cursive/arabic-missing-mark fixtures and narrower text.shaping.arabic-* refusal codes remain absent; the reviewed generic gdef-required row is bounded evidence only."
+      "remainingGateId": "full-arabic-feature-policy-evidence",
+      "detail": "The full required Arabic feature set (rlig, liga, calt, isol, and cursive attachment via GPOS curs) is not yet proven by ticket-local reviewed runtime evidence on dedicated fixture fonts; the current fixture wave proves init, medi, fina, mark, mkmk, and basic refusal paths."
     }
   ],
   "nonClaims": [

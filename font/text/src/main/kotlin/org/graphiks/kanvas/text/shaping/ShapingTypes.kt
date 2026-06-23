@@ -1419,6 +1419,22 @@ public class BasicOpenTypeShapingEngine(
             gposSingleTablesByTypefaceId.isEmpty() &&
             gposPairTablesByTypefaceId.isEmpty()
         ) {
+            if (group.script == SCRIPT_ARABIC) {
+                if (features.isRuntimeEnabled("curs")) {
+                    diagnostics += ShapingDiagnostic(
+                        code = TEXT_SHAPING_ARABIC_CURSIVE_UNSUPPORTED_DIAGNOSTIC_CODE,
+                        message = "No GPOS table available for cursive attachment on typeface ${request.typefaceId?.value}.",
+                        textRange = group.textRange(),
+                    )
+                }
+                if (features.isRuntimeEnabled("mark") || features.isRuntimeEnabled("mkmk")) {
+                    diagnostics += ShapingDiagnostic(
+                        code = TEXT_SHAPING_ARABIC_MARK_UNSUPPORTED_DIAGNOSTIC_CODE,
+                        message = "No GPOS table available for mark positioning on typeface ${request.typefaceId?.value}.",
+                        textRange = group.textRange(),
+                    )
+                }
+            }
             return 0.0
         }
 
@@ -1433,16 +1449,17 @@ public class BasicOpenTypeShapingEngine(
             adjustmentContext = adjustmentContext,
             diagnostics = diagnostics,
         )
-        totalAdvanceAdjustment += applyGposAnchorAdjustments(
-            glyphIds = glyphIds,
-            clusters = clusters,
-            glyphClusterIndexes = glyphClusterIndexes,
-            features = features,
-            adjustmentContext = adjustmentContext,
-            textRange = group.textRange(),
-            diagnostics = diagnostics,
-            runtimeTraceCollector = runtimeTraceCollector,
-        )
+            totalAdvanceAdjustment += applyGposAnchorAdjustments(
+                glyphIds = glyphIds,
+                clusters = clusters,
+                glyphClusterIndexes = glyphClusterIndexes,
+                features = features,
+                adjustmentContext = adjustmentContext,
+                script = group.script,
+                textRange = group.textRange(),
+                diagnostics = diagnostics,
+                runtimeTraceCollector = runtimeTraceCollector,
+            )
         if (!features.isRuntimeEnabled("kern")) {
             return totalAdvanceAdjustment
         }
@@ -1483,6 +1500,7 @@ public class BasicOpenTypeShapingEngine(
         glyphClusterIndexes: IntArray,
         features: RuntimeFeatureGateSet,
         adjustmentContext: BasicPositionAdjustmentContext,
+        script: String,
         textRange: IntRange,
         diagnostics: MutableList<ShapingDiagnostic>,
         runtimeTraceCollector: RuntimeShapingTraceCollector?,
@@ -1526,6 +1544,7 @@ public class BasicOpenTypeShapingEngine(
             glyphClusterIndexes = glyphClusterIndexes,
             adjustmentContext = adjustmentContext,
             enabledLookups = enabledLookups,
+            script = script,
             diagnostics = diagnostics,
             runtimeTraceCollector = runtimeTraceCollector,
         )
@@ -1535,6 +1554,7 @@ public class BasicOpenTypeShapingEngine(
             glyphClusterIndexes = glyphClusterIndexes,
             adjustmentContext = adjustmentContext,
             enabledLookups = enabledLookups,
+            script = script,
             diagnostics = diagnostics,
             runtimeTraceCollector = runtimeTraceCollector,
         )
@@ -1547,6 +1567,7 @@ public class BasicOpenTypeShapingEngine(
         glyphClusterIndexes: IntArray,
         adjustmentContext: BasicPositionAdjustmentContext,
         enabledLookups: List<OpenTypeGposLookup>,
+        script: String,
         diagnostics: MutableList<ShapingDiagnostic>,
         runtimeTraceCollector: RuntimeShapingTraceCollector?,
     ): Double {
@@ -1635,7 +1656,7 @@ public class BasicOpenTypeShapingEngine(
                         )
                     } else {
                         diagnostics += ShapingDiagnostic(
-                            code = TEXT_SHAPING_MARK_POSITIONING_UNAVAILABLE_DIAGNOSTIC_CODE,
+                            code = markPositioningDiagnosticCode(script),
                             message = "No mark-to-base attachment matched glyphs $baseOrLigatureGlyphId,$markGlyphId on typeface ${adjustmentContext.typefaceId.value}.",
                             textRange = clusters[clusterIndex].textRange,
                         )
@@ -1683,7 +1704,7 @@ public class BasicOpenTypeShapingEngine(
                             "No mark-to-ligature attachment matched"
                         }
                         diagnostics += ShapingDiagnostic(
-                            code = TEXT_SHAPING_MARK_POSITIONING_UNAVAILABLE_DIAGNOSTIC_CODE,
+                            code = markPositioningDiagnosticCode(script),
                             message = "$detail glyphs $baseOrLigatureGlyphId,$markGlyphId on typeface ${adjustmentContext.typefaceId.value}.",
                             textRange = clusters[clusterIndex].textRange,
                         )
@@ -1700,6 +1721,7 @@ public class BasicOpenTypeShapingEngine(
         glyphClusterIndexes: IntArray,
         adjustmentContext: BasicPositionAdjustmentContext,
         enabledLookups: List<OpenTypeGposLookup>,
+        script: String,
         diagnostics: MutableList<ShapingDiagnostic>,
         runtimeTraceCollector: RuntimeShapingTraceCollector?,
     ): Double {
@@ -1755,7 +1777,7 @@ public class BasicOpenTypeShapingEngine(
 
         if (!matchedAttachmentChain && glyphIds.size > 1) {
             diagnostics += ShapingDiagnostic(
-                code = TEXT_SHAPING_CURSIVE_ATTACHMENT_UNAVAILABLE_DIAGNOSTIC_CODE,
+                code = cursiveAttachmentDiagnosticCode(script),
                 message = "No cursive attachment chain matched the shaped glyph sequence on typeface ${adjustmentContext.typefaceId.value}.",
                 textRange = clusters.minOf { cluster -> cluster.textRange.first }..clusters.maxOf { cluster -> cluster.textRange.last },
             )
@@ -2087,6 +2109,14 @@ public class BasicOpenTypeShapingEngine(
         }
 
 }
+
+private fun cursiveAttachmentDiagnosticCode(script: String): String =
+    if (script == SCRIPT_ARABIC) TEXT_SHAPING_ARABIC_CURSIVE_UNSUPPORTED_DIAGNOSTIC_CODE
+    else TEXT_SHAPING_CURSIVE_ATTACHMENT_UNAVAILABLE_DIAGNOSTIC_CODE
+
+private fun markPositioningDiagnosticCode(script: String): String =
+    if (script == SCRIPT_ARABIC) TEXT_SHAPING_ARABIC_MARK_UNSUPPORTED_DIAGNOSTIC_CODE
+    else TEXT_SHAPING_MARK_POSITIONING_UNAVAILABLE_DIAGNOSTIC_CODE
 
 /**
  * Shapes text through font fallback runs resolved by the pure Kotlin font core.
@@ -2572,6 +2602,30 @@ public const val TEXT_SHAPING_MARK_POSITIONING_UNAVAILABLE_DIAGNOSTIC_CODE: Stri
  */
 public const val TEXT_SHAPING_CURSIVE_ATTACHMENT_UNAVAILABLE_DIAGNOSTIC_CODE: String =
     "text.shaping.cursive-attachment-unavailable"
+
+/**
+ * Stable spec diagnostic family emitted when the shaping engine cannot form a valid Indic syllable.
+ */
+public const val TEXT_SHAPING_INDIC_SYLLABLE_UNSUPPORTED_DIAGNOSTIC_CODE: String =
+    "text.shaping.indic-syllable-unsupported"
+
+/**
+ * Stable spec diagnostic family emitted when a Devanagari feature phase cannot be applied.
+ */
+public const val TEXT_SHAPING_DEVANAGARI_PHASE_UNSUPPORTED_DIAGNOSTIC_CODE: String =
+    "text.shaping.devanagari-phase-unsupported"
+
+/**
+ * Stable spec diagnostic family emitted when cursive attachment is unavailable on an Arabic shaping run.
+ */
+public const val TEXT_SHAPING_ARABIC_CURSIVE_UNSUPPORTED_DIAGNOSTIC_CODE: String =
+    "text.shaping.arabic-cursive-unsupported"
+
+/**
+ * Stable spec diagnostic family emitted when mark positioning is unavailable on an Arabic shaping run.
+ */
+public const val TEXT_SHAPING_ARABIC_MARK_UNSUPPORTED_DIAGNOSTIC_CODE: String =
+    "text.shaping.arabic-mark-unsupported"
 
 /**
  * Semantic alias emitted when glyph mapping falls back to `.notdef`.
