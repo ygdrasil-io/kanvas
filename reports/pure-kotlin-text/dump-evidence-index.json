@@ -2403,8 +2403,7 @@
         "no-complete-target-support-claim",
         "no-broad-gpu-text-support-claim",
         "no-dftext-retirement",
-        "no-executed-gpu-upload-claim",
-        "no-material-key-leakage-validation-claim"
+        "no-executed-gpu-upload-claim"
       ]
     },
     {
@@ -2686,8 +2685,7 @@
         "no-complete-target-support-claim",
         "no-broad-gpu-text-support-claim",
         "no-dftext-retirement",
-        "no-executed-gpu-upload-claim",
-        "no-material-key-leakage-validation-claim"
+        "no-executed-gpu-upload-claim"
       ]
     },
     {
@@ -4141,6 +4139,46 @@
         "no-normative-system-font-claim",
         "no-platform-font-fallback-claim",
         "no-native-font-api-claim"
+      ]
+    },
+    {
+      "dumpId": "text-material-key-leakage-report",
+      "ownerTicket": "KFONT-M11-010",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md",
+        "section": "MaterialKey leakage validation"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextMaterialKeyLeakage.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextMaterialKeyLeakageTest.kt",
+        "reports/pure-kotlin-text/text-material-key-leakage-report.json"
+      ],
+      "expectedFields": [
+        "cases",
+        "classification",
+        "cleanCases",
+        "leakDetectedCases",
+        "leakageFindings",
+        "nonClaims",
+        "ownerTickets",
+        "productActivation",
+        "routePromotion",
+        "schema",
+        "status",
+        "totalCases"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextMaterialKeyLeakageTest*'"
+      ],
+      "updatePolicy": "MaterialKey leakage golden changes require variance-fixture expansion or new negative-fixture categories with explicit review of each excluded field and non-promotional diagnostics.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-broad-gpu-text-support-claim",
+        "no-dftext-retirement",
+        "no-visual-correctness-claim",
+        "no-executed-gpu-upload-claim"
       ]
     },
     {
