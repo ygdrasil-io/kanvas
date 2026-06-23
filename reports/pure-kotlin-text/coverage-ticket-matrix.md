@@ -56,7 +56,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | PKT-10 A8/SDF glyph artifact planner | Current-supported | Route policy, key preimage, A8/SDF generation, atlas capacity/stale diagnostics, eviction traces. | `font/glyph`, `font/gpu-api`. | Mask/SDF hashes, atlas dump tests, stable `text.glyph.*` refusals, atlas eviction traces. |
 | PKT-11 color/bitmap/SVG glyph plans | Plan slices implementable; final support gated | COLR/CPAL plan, PNG glyph plan, SVG subset plan, emoji dispatch. | `font/glyph/src/main/.../color`, `font/glyph/src/test/.../color`. | COLR/PNG/SVG/emoji fixtures and precise unsupported diagnostics. |
 | PKT-12 `DrawTextRun` handoff contract | Dependency-gated but contract slice implementable | Dumpable normalized text command, artifact refs, upload/generation facts, no `Sk*`. | `font/gpu-api`, `gpu-renderer/commands`, `gpu-renderer/text`. | Handoff tests and refusal diagnostics; no actual GPU draw claim. |
-| PKT-13 validation fixture and evidence harness | Implementable now | Fixture manifest, deterministic dumps, CPU oracle hooks, drift labels. | `font/*/src/test`, `reports/pure-kotlin-text`. | Golden update policy and no external normative oracle. |
+| PKT-13 validation fixture and evidence harness | Current-supported | Fixture manifest, deterministic dumps, golden update policy, drift label taxonomy. | `font/*/src/test`, `reports/pure-kotlin-text`, `scripts/`. | Golden update policy, fixture manifest, dump index, and no external normative oracle. |
 | PKT-14 text telemetry and cache counters | Skeleton implementable now | Cache keys, hit/miss/bytes/upload counters, advisory budget records. | `font/*`, `gpu-renderer/telemetry`. | Deterministic telemetry records; no blocking perf gate. |
 | PKT-15 GPU A8/SDF route registration | Dependency-gated | Artifact registry, A8/SDF route refusals, upload-before-sample ordering. | `gpu-renderer/text`, `gpu-renderer/resources`, `gpu-renderer/routing`. | Requires stable text artifacts plus GPU ABI route evidence. |
 | PKT-16 `:kanvas-skia` facade migration adapters | Dependency-gated; the M13 facade inventory slice is now checked in, while route implementation slices stay blocked on advanced shaping plus GPU handoff readiness gaps. | Delegate `SkFontMgr`, `SkTypeface`, `SkShaper`, `SkTextBlob` toward pure Kotlin dumps. | `kanvas-skia/src/main/kotlin/org/skia/foundation`. | Current gates preserved; no implicit complex `drawString`. |
@@ -5511,8 +5511,7 @@ complete target fixtures, provide CPU oracle artifacts, promote external drift
 comparisons to normative status, or claim GPU text support.
 ### PKT-13B: Font-Only Fixture Inventory
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -5552,6 +5551,53 @@ Remaining gate: this is font-fixture inventory and validation evidence only.
 It does not itself claim complete CFF/CFF2 target support, complete
 variable-font support, complete SVG rendering, complete emoji sequence shaping,
 complete target font support, or any GPU text route.
+
+### PKT-13C: Consolidated Golden Update Policy
+
+Status: implemented and independently reviewed.
+
+Files:
+
+- `reports/pure-kotlin-text/golden-update-policy.json`
+- `scripts/validate_pure_kotlin_text_golden_update_policy.py`
+- `scripts/test_validate_pure_kotlin_text_golden_update_policy.py`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `golden-update-policy.json` consolidates the golden update policy from
+  `dump-evidence-index.json`, `fixture-evidence-manifest.json`, and spec 07
+  into a single authoritative reference with explicit `ordinaryTestRuns`
+  (`must-not-overwrite-goldens`), `reviewRequirement`
+  (`old-new-diff-plus-rebaseline-reason-required`), `oraclePolicy` with
+  normative/external/forbidden-engine definitions, `driftLabels` taxonomy
+  with 5 allowed drift label types, and `goldenTypes` (`producer-only` and
+  `golden-gated`) with per-type update policies.
+- `validate_pure_kotlin_text_golden_update_policy.py` asserts structural
+  keys, oracle/drift/golden-type consistency, cross-file consistency with
+  `dump-evidence-index.json` and `fixture-evidence-manifest.json`, and
+  dump-row compliance (all classifications match known golden types,
+  golden-gated dumps have `expectedFields` and `updatePolicy`).
+- Tests cover the happy path plus missing-key rejection, unknown
+  classification rejection, missing-expected-fields rejection, and
+  cross-file consistency.
+- The policy references spec 07 (`07-validation-conformance-and-drift.md`)
+  and keeps all classification and non-claim invariants.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_golden_update_policy.py
+rtk python3 scripts/validate_pure_kotlin_text_golden_update_policy.py
+rtk git diff --check
+```
+
+Remaining gate: this is policy consolidation and validation only. It does
+not provide CPU oracle artifacts, add new test behavior, generate complete
+target fixtures, promote external drift comparisons to normative status, or
+claim GPU text support.
+
 ### PKT-14A: Text Artifact Telemetry Snapshot
 
 Status: implemented and independently reviewed.
