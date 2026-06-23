@@ -902,9 +902,11 @@
         "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifacts.kt",
         "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextA8RoutePlan.kt",
         "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextSubRunPlan.kt",
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextResourcePlan.kt",
         "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifactsSurfaceTest.kt",
         "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextA8RoutePlanTest.kt",
         "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextSubRunPlanTest.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextResourcePlanTest.kt",
         "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/commands/NormalizedDrawCommand.kt",
         "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/text/TextContracts.kt",
         "gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/text/GPUTextCommandHandoffTest.kt",
@@ -912,23 +914,32 @@
         "reports/pure-kotlin-text/gpu-text-a8-route-plan.json",
         "reports/pure-kotlin-text/gpu-text-a8-route-refusals.json",
         "reports/pure-kotlin-text/gpu-text-subrun-plan.json",
+        "reports/pure-kotlin-text/gpu-text-resource-plan.json",
+        "reports/pure-kotlin-text/gpu-text-upload-plan.json",
+        "reports/pure-kotlin-text/gpu-text-instance-layout.json",
+        "reports/pure-kotlin-text/gpu-text-binding-plan.json",
+        "reports/pure-kotlin-text/gpu-text-resource-refusals.json",
+        "reports/pure-kotlin-text/2026-06-23-kfont-m11-007-resource-plans.md",
         "reports/pure-kotlin-text/2026-06-23-kfont-m11-006-subrun-plan.md",
         "reports/pure-kotlin-text/2026-06-19-kfont-m11-004-a8-route-plan.md"
       ],
       "requiredEvidenceGates": [
         "KFONT-M11-004 now lands the first bounded accepted A8 atlas route plan plus checked-in missing-entry/stale-generation refusal snapshots, with explicit atlas page/entry refs, binding facts, and focused simple-Latin GPU evidence while keeping `routePromotion=not-promoted` and `productActivation=false`.",
         "KFONT-M11-006 now lands deterministic `gpu-text-subrun-plan.json` evidence for atlas page/generation splits, clip/layer/destination-read barriers, instance-budget refusal, and mixed representation refusals without route promotion.",
-        "KFONT-M11-005 already covers refusal-only SDF/outline/color/bitmap/SVG/unregistered/upload/stale/CPU-texture cases; KFONT-M11-007 is now ready for broader resource/upload/binding work, while ordering, WGSL route validation, and `MaterialKey` leakage stay gated on KFONT-M11-008 through KFONT-M11-010.",
-        "Do not treat the current route or subrun split evidence as broad text GPU support, executed GPU upload proof, or `dftext` retirement; adapter-backed evidence remains bounded to the accepted simple-Latin A8 atlas route."
+        "KFONT-M11-007 now lands deterministic resource/upload/instance/binding plan dumps plus missing upload, upload budget, unavailable page, missing entry, and binding layout refusal snapshots for the accepted A8 atlas subrun.",
+        "KFONT-M11-005 already covers refusal-only SDF/outline/color/bitmap/SVG/unregistered/upload/stale/CPU-texture cases; ordering, WGSL route validation, and full `MaterialKey` leakage stay gated on KFONT-M11-008 through KFONT-M11-010.",
+        "Do not treat the current route, subrun split, or resource-plan evidence as broad text GPU support, executed GPU upload proof, full MaterialKey leakage validation, or `dftext` retirement; adapter-backed evidence remains bounded to the accepted simple-Latin A8 atlas route."
       ],
       "validationCommands": [
         "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*A8Text*'",
         "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextSubRunPlan*'",
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextResourcePlan*'",
         "rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*A8Text*'"
       ],
       "fixtureCommands": [
         "The checked-in `gpu-text-a8-route-plan.json` and `gpu-text-a8-route-refusals.json` dumps are emitted by `defaultGPUTextA8RoutePlan()` / `defaultGPUTextA8RouteRefusalReport()` and paired with the simple-Latin route artifacts under `reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/`.",
-        "The checked-in `gpu-text-subrun-plan.json` dump is emitted by `defaultGPUTextSubRunPlanReport()` and covers split/refusal planning only."
+        "The checked-in `gpu-text-subrun-plan.json` dump is emitted by `defaultGPUTextSubRunPlanReport()` and covers split/refusal planning only.",
+        "The checked-in `gpu-text-resource-plan.json`, `gpu-text-upload-plan.json`, `gpu-text-instance-layout.json`, `gpu-text-binding-plan.json`, and `gpu-text-resource-refusals.json` dumps are emitted by the `GPUTextResourcePlan` default evidence helpers and cover resource/upload/instance/binding contracts only."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",
