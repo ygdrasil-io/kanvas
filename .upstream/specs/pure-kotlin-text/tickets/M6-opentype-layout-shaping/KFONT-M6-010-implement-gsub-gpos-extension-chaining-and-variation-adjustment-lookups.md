@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-010"
 title: "Implement GSUB/GPOS extension, chaining and variation-adjustment lookups"
-status: "blocked"
+status: "done"
 milestone: "M6"
 priority: "P1"
 owner_area: "shaping"
