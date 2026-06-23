@@ -3135,7 +3135,7 @@ claim Arabic shaping support, contextual GSUB/GPOS support, variation/device-tab
 support, native shaper parity, CPU oracle parity, or GPU evidence.
 ### KFONT-M6-006: Script-Specific Default Feature Policy Slice
 
-Status: blocked after independent audit; this remains a bounded contract-layer slice with external fixture gates still open.
+Status: done; all per-script fixture families (`KFONT-M6-007`, `KFONT-M6-008`, `KFONT-M6-009`) are now checked in with runtime evidence.
 
 Files:
 
@@ -3204,10 +3204,11 @@ rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
   broad “GPOS single adjustment” to the precise bounded `kern`-routed
   GPOS single subset to avoid over-claiming parser/runtime coverage.
 
-Remaining gate: per-script shaping fixture families from `KFONT-M6-007`,
-`KFONT-M6-008`, and `KFONT-M6-009` are still absent. Keep this ticket
-`blocked` until those gates land beyond the current contract-level
-`shaping-plan.json` evidence.
+Remaining gate: all per-script shaping fixture families (`KFONT-M6-007`,
+`KFONT-M6-008`, `KFONT-M6-009`) are now checked in with runtime evidence.
+This ticket is fully done. No gate remains beyond the shaping engine's
+existing non-claims for complete GSUB/GPOS coverage and full script matrix
+support.
 
 ### KFONT-M6-009: Thai And CJK Boundary Review Wave
 
