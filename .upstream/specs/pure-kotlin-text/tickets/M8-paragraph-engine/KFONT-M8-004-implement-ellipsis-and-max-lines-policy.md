@@ -85,7 +85,7 @@ interface ParagraphLineFitter {
 ## Fallback / Refusal Behavior
 
 - If ellipsis cannot be shaped, the line fit refuses the ellipsized layout instead of drawing unmarked clipped text.
-- If `maxLines` is invalid, layout returns `text.paragraph.invalid-max-lines`.
+- If `maxLines` is invalid, layout returns `text.paragraph.max-lines-invalid`.
 - Host paragraph truncation APIs are not allowed as fallback.
 
 ## Dashboard Impact
