@@ -20,6 +20,11 @@ All tickets start as `proposed`. Move a ticket to `ready` only after its scope, 
 | M13 | 0 | 0 | 0 | 4 | 0 | 1 |
 | **Total** | **0** | **1** | **0** | **13** | **0** | **72** |
 
+2026-06-23 note: M6 counts are unchanged, but the still-missing named fixture
+resources for `KFONT-M6-007` through `KFONT-M6-010` are now checked in under
+reviewed provenance; those tickets remain `blocked` on refreshed runtime,
+trace, and refusal-diagnostic evidence.
+
 ## Status Update Rule
 
 When a ticket status changes, update:

@@ -331,12 +331,13 @@
         "reports/pure-kotlin-text/2026-06-18-kfont-m6-007-arabic-shaping-fixtures.md",
         "reports/pure-kotlin-text/2026-06-18-kfont-m6-007-arabic-runtime-traces.md",
         "reports/pure-kotlin-text/2026-06-18-kfont-m6-008-devanagari-shaping-fixtures.md",
-        "reports/pure-kotlin-text/2026-06-18-kfont-m6-009-thai-cjk-boundaries.md"
+        "reports/pure-kotlin-text/2026-06-18-kfont-m6-009-thai-cjk-boundaries.md",
+        "reports/pure-kotlin-text/2026-06-23-kfont-m6-resource-seed-wave.md"
       ],
       "requiredEvidenceGates": [
-        "KFONT-M6-007 now lands bounded Arabic review evidence for joining-form behavior beyond pure RTL reordering, ticket-local arabic-gsub-trace and arabic-gpos-trace goldens for bounded runtime lookup evidence on the current joining/mark rows, mark positioning tied to the mark cluster itself, a ticket-local arabic-shaped-glyph-run golden for joining/marks/bounded lam-alef/generic gdef-required rows, a ticket-local arabic-shaping-plan golden for required Arabic defaults plus refusal-on-missing expectations, a reviewed generic text.shaping.gdef-required refusal on gpos-missing-gdef.otf for Arabic base+mark input, and mixed-bidi paragraph-required diagnostics on vendored Noto Naskh Arabic; lam-alef still lacks feature-local positive proof, and ticket-local positive cursive evidence, Arabic-specific missing-mark/missing-cursive refusal fixtures, and narrower arabic-specific refusal codes remain explicit gates.",
-        "KFONT-M6-008 now lands bounded Devanagari review evidence for pinned Script_Extensions Deva script selection on the pre-base matra case, consonant-cluster preservation, reph-like shaping, and mark placement on vendored Noto Sans Devanagari; syllable-plan evidence, the full required feature set, Devanagari-specific refusal fixtures/codes, and ticket-local trace dump families remain explicit gates.",
-        "KFONT-M6-009 now lands bounded Thai/CJK review evidence for Thai tone-mark positioning, mixed Latin/Thai script boundaries, and CJK kana vert alternates on vendored Noto fonts; paragraph-owned dictionary diagnostics, Thai refusal fixtures/codes, cmap format 14 variation selectors, Han/Hangul rows, paragraph-owned ruby/line-break diagnostics, and ticket-local trace dump families remain explicit gates.",
+        "KFONT-M6-007 now lands bounded Arabic review evidence for joining-form behavior beyond pure RTL reordering, ticket-local arabic-gsub-trace and arabic-gpos-trace goldens for bounded runtime lookup evidence on the current joining/mark rows, mark positioning tied to the mark cluster itself, a ticket-local arabic-shaped-glyph-run golden for joining/marks/bounded lam-alef/generic gdef-required rows, a ticket-local arabic-shaping-plan golden for required Arabic defaults plus refusal-on-missing expectations, a reviewed generic text.shaping.gdef-required refusal on gpos-missing-gdef.otf for Arabic base+mark input, mixed-bidi paragraph-required diagnostics on vendored Noto Naskh Arabic, and checked-in Arabic resource seeds for the remaining named fixture files; lam-alef still lacks feature-local positive proof, and ticket-local positive cursive evidence plus Arabic-specific refusal codes remain explicit gates.",
+        "KFONT-M6-008 now lands bounded Devanagari review evidence for pinned Script_Extensions Deva script selection on the pre-base matra case, consonant-cluster preservation, reph-like shaping, and mark placement on vendored Noto Sans Devanagari, and the remaining named Devanagari fixture resources are now checked in as reviewed subset/refusal seeds; syllable-plan evidence, the full required feature set, Devanagari-specific refusal fixtures/codes, and ticket-local trace dump families remain explicit gates.",
+        "KFONT-M6-009 now lands bounded Thai/CJK review evidence for Thai tone-mark positioning, mixed Latin/Thai script boundaries, and CJK kana vert alternates on vendored Noto fonts, and the remaining named Thai/CJK fixture resources are now checked in under reviewed provenance; paragraph-owned dictionary diagnostics, Thai refusal fixtures/codes, refreshed cmap format 14 variation-selector assertions, Han/Hangul rows, paragraph-owned ruby/line-break diagnostics, and ticket-local trace dump families remain explicit gates.",
         "Add emoji shaping positive and refusal rows for VS15/VS16, skin tone, ZWJ sequence, fallback emoji font, and unsupported-sequence refusals."
       ],
       "validationCommands": [
@@ -963,7 +964,8 @@
         "reports/pure-kotlin-text/2026-06-18-kfont-m6-002-004-latin-layout-fixtures.md",
         "reports/pure-kotlin-text/2026-06-17-kfont-m6-003-gsub-contextual-lookups.md",
         "reports/pure-kotlin-text/2026-06-17-kfont-m6-005-mark-cursive-positioning.md",
-        "reports/pure-kotlin-text/2026-06-23-kfont-m6-010-extension-fixture-wave2.md"
+        "reports/pure-kotlin-text/2026-06-23-kfont-m6-010-extension-fixture-wave2.md",
+        "reports/pure-kotlin-text/2026-06-23-kfont-m6-resource-seed-wave.md"
       ],
       "requiredEvidenceGates": [
         "Keep this row bounded to reviewed Latin GSUB LookupType 1/2/4/5, simple GPOS LookupType 1/2, and bounded mark/cursive GPOS LookupType 3/4/5/6 fixtures plus parser-owned malformed diagnostics; the contextual LookupType 5 slice is limited to mono-format lookups, while advanced variation/device tables remain separate gates.",
@@ -971,7 +973,7 @@
         "Keep Greek, Cyrillic, Hebrew, Arabic, Devanagari, Thai, CJK, and Emoji promotion out of this reviewed fixture slice even though the checked-in dumps now carry deterministic glyph IDs, cluster ranges, positioned advances, and bounded anchor vectors.",
         "Do not claim script-default runtime adoption from these dumps alone; `ResolvedFeatureSet` execution and `drawString` non-enablement remain owned by KFONT-M6-006 and later per-script fixture families.",
         "Do not claim mixed-format contextual same-lookup support or any acyclic deep re-entry budget from the current KFONT-M6-003 fixture family; only nested-cycle refusal and contextual-only nested lookup reachability are validated here.",
-        "KFONT-M6-010 now has checked-in synthetic GSUB extension substitution and self-targeting extension refusal fixtures, but chaining, reverse-chaining, advanced GPOS, and variation/device claims remain separate gates until their named fixtures and trace families land."
+        "KFONT-M6-010 now has checked-in synthetic GSUB extension substitution and self-targeting extension refusal fixtures, and the remaining named advanced-lookup resources are now present as reviewed seed files, but chaining, reverse-chaining, advanced GPOS, and variation/device runtime claims remain separate gates until refreshed runtime assertions and non-stub trace families land."
       ],
       "validationCommands": [
         "rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGsubFixtureFontsAsDiagnostics --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.m6SimpleLayoutFixturesAreCheckedInWithSyntheticProvenance --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubContextFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGsubContextFixturesAsDiagnostics --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserKeepsNestedOnlyGsubLookupsReachableFromContextRules --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGposFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGposFixtureFontsAsDiagnostics --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedMarkAndCursiveGposFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserPreservesMissingGdefAndMalformedAnchorFixtureFacts --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserStillReportsMalformedKernSubsetWhenGeneralGposSucceeds",
@@ -984,7 +986,8 @@
       ],
       "fixtureCommands": [
         "KFONT-M6-002, KFONT-M6-003, KFONT-M6-004, and KFONT-M6-005 fixture fonts are checked in under reports/font/fixtures/fonts/shaping and asserted by SFNTSurfaceTest/TextStackSurfaceTest against gsub-trace.json, gpos-trace.json, and shaped-glyph-run.json.",
-        "KFONT-M6-010 partial checked-in fixtures are now generated by scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts and asserted by ExtensionLookupFixtureTest plus SFNTSurfaceTest against extension-lookup-report.json."
+        "KFONT-M6-010 partial checked-in fixtures are now generated by scripts/generate_pure_kotlin_text_m6_shaping_fixtures.main.kts and asserted by ExtensionLookupFixtureTest plus SFNTSurfaceTest against extension-lookup-report.json.",
+        "The remaining named KFONT-M6-010 resources are now checked in as reviewed seed files, but they are not yet promoted as runtime/parser closeout evidence."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",

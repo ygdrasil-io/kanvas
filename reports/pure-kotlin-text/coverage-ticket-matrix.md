@@ -114,9 +114,9 @@ Evidence:
   remaining gate is the per-script shaping fixture families owned by
   `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`.
 - The named fixture families for `KFONT-M6-003`, `KFONT-M6-007`,
-  `KFONT-M6-008`, and `KFONT-M6-009` are still not present in-repo beyond
-  ticket text references, so those tickets must not be advanced by
-  synthetic-only substitutes.
+  `KFONT-M6-008`, and `KFONT-M6-009` are now checked in under reviewed
+  provenance, but they remain seed-only resources until the owning runtime,
+  dump, and refusal gates are refreshed.
 - `KFONT-M6-010` now has bounded generated-memory-font GSUB extension evidence
   for single and ligature substitution targets only; chaining, reverse
   chaining, GPOS advanced lookups, variation/device adjustments, and
@@ -132,13 +132,11 @@ Remaining gate: treat this audit as historical context only; current resumption
 work depends on the explicit fixture families and remaining ticket-local gates
 named in the active M6 tickets.
 
-2026-06-19 blocker closeout: the last two `proposed` M6 tickets are no longer
-treated as actionable. `KFONT-M6-009` is now `blocked` on the still-absent
-Thai/CJK ticket-local fixture family plus the upstream `KFONT-M6-006` script
-policy gate, and `KFONT-M6-010` is now `blocked` on the still-absent advanced
-lookup fixture family plus required `variation-adjustment-trace.json`
-evidence. The compatible-asset audit found candidate sources, but no reviewed
-in-repo pack clears either Required Evidence set yet.
+2026-06-23 resource-seed wave: the still-missing named M6 resources are now
+checked in under reviewed provenance. `KFONT-M6-009` and `KFONT-M6-010`
+remain `blocked`, but they are now blocked on runtime/parser assertions,
+ticket-local traces, and refusal diagnostics rather than on absent file names
+alone.
 
 ### KFONT-M13 Facade Migration Readiness Audit
 
@@ -255,9 +253,72 @@ Remaining gate: `KFONT-M6-010` still requires the named checked-in advanced
 lookup fixture family (`gsub-chaining-context.otf`,
 `gsub-reverse-chaining.otf`, `gpos-contextual-positioning.otf`,
 `gpos-chaining-positioning.otf`, `gpos-extension-positioning.otf`,
-`gpos-variation-device.otf`) plus `variation-adjustment-trace.json` and the
-runtime/parser support they exercise. Keep the ticket `blocked` until those
-gates land.
+`gpos-variation-device.otf`) plus live runtime/parser support and a refreshed
+non-stub `variation-adjustment-trace.json`. Keep the ticket `blocked` until
+those gates land.
+
+### KFONT-M6 Named Fixture Resource Seed Wave
+
+Status: coordination evidence; checked-in resource wave only.
+
+Files:
+
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/font/fixtures/fonts/shaping/arabic-joining-forms.otf`
+- `reports/font/fixtures/fonts/shaping/arabic-lam-alef.otf`
+- `reports/font/fixtures/fonts/shaping/arabic-marks-cursive.otf`
+- `reports/font/fixtures/fonts/shaping/arabic-missing-cursive.otf`
+- `reports/font/fixtures/fonts/shaping/arabic-missing-mark.otf`
+- `reports/font/fixtures/fonts/shaping/devanagari-consonant-cluster.otf`
+- `reports/font/fixtures/fonts/shaping/devanagari-reph.otf`
+- `reports/font/fixtures/fonts/shaping/devanagari-prebase-matra.otf`
+- `reports/font/fixtures/fonts/shaping/devanagari-below-base.otf`
+- `reports/font/fixtures/fonts/shaping/devanagari-mark-placement.otf`
+- `reports/font/fixtures/fonts/shaping/devanagari-unsupported-syllable.otf`
+- `reports/font/fixtures/fonts/shaping/thai-base-marks.otf`
+- `reports/font/fixtures/fonts/shaping/thai-tone-marks.otf`
+- `reports/font/fixtures/fonts/shaping/cjk-han-variation-selector.otf`
+- `reports/font/fixtures/fonts/shaping/cjk-kana-vertical.otf`
+- `reports/font/fixtures/fonts/shaping/cjk-hangul-direct.otf`
+- `reports/font/fixtures/fonts/shaping/cjk-missing-vertical-alt.otf`
+- `reports/font/fixtures/fonts/shaping/gsub-chaining-context.otf`
+- `reports/font/fixtures/fonts/shaping/gsub-reverse-chaining.otf`
+- `reports/font/fixtures/fonts/shaping/gpos-contextual-positioning.otf`
+- `reports/font/fixtures/fonts/shaping/gpos-chaining-positioning.otf`
+- `reports/font/fixtures/fonts/shaping/gpos-extension-positioning.otf`
+- `reports/font/fixtures/fonts/shaping/gpos-variation-device.otf`
+- `reports/font/fixtures/expected/shaping/thai-latin-mixed.txt`
+- `reports/font/fixtures/expected/shaping/variation-adjustment-trace.json`
+- `reports/pure-kotlin-text/2026-06-23-kfont-m6-resource-seed-wave.md`
+
+Evidence:
+
+- `SFNTSurfaceTest.m6RemainingFixtureResourceWaveIsCheckedInWithReviewedProvenance`
+  now proves every still-missing M6 resource name is present in-repo.
+- `reports/font/fixtures/provenance/index.json` now groups the checked-in seed
+  resources under `arabic-ticket-local-fixture-wave`,
+  `devanagari-ticket-local-fixture-wave`, `thai-cjk-ticket-local-fixture-wave`,
+  and `advanced-lookup-ticket-local-fixture-wave`.
+- The CJK seed wave preserves useful source facts without promoting support:
+  `cjk-han-variation-selector.otf` keeps `cmap` format 14,
+  `cjk-kana-vertical.otf` keeps `GSUB`, `cjk-missing-vertical-alt.otf`
+  intentionally drops `GSUB`, `cjk-hangul-direct.otf` keeps direct Hangul
+  mapping, and `gpos-variation-device.otf` remains a bounded variable-font
+  seed only.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.m6RemainingFixtureResourceWaveIsCheckedInWithReviewedProvenance
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk git diff --check
+```
+
+Remaining gate: this wave only lands the named resources. `KFONT-M6-007`
+through `KFONT-M6-010` remain `blocked` until their runtime assertions,
+ticket-local dump families, refusal diagnostics, and non-claims are refreshed
+against the checked-in assets.
 
 ### KFONT-M13-001 Facade Adapter Inventory
 
