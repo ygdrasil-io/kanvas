@@ -17,8 +17,8 @@ All tickets start as `proposed`. Move a ticket to `ready` only after its scope, 
 | M10 | 0 | 0 | 0 | 0 | 0 | 10 |
 | M11 | 0 | 0 | 0 | 0 | 0 | 10 |
 | M12 | 0 | 0 | 0 | 0 | 0 | 5 |
-| M13 | 0 | 0 | 0 | 4 | 0 | 1 |
-| **Total** | **0** | **0** | **0** | **4** | **0** | **82** |
+| M13 | 0 | 3 | 0 | 1 | 0 | 1 |
+| **Total** | **0** | **3** | **0** | **1** | **0** | **82** |
 
 2026-06-23 update: `KFONT-M11-010` is now `done` on deterministic
 `MaterialKey` leakage validation evidence. All 10 M11 tickets are now
