@@ -1,7 +1,7 @@
 ---
 id: KGPU-M6-002
 title: "Add A8 glyph atlas sampling route"
-status: blocked
+status: done
 milestone: M6
 priority: P0
 owner_area: text-atlas
@@ -83,11 +83,13 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: Depends on KGPU-M6-003 plus accepted KFONT-M11-004,
-  KFONT-M11-008, and KFONT-M11-009 glyph/artifact evidence, then requires
-  adapter-backed upload, WGSL binding/reflection, atlas generation,
-  upload-before-sample ordering, readback evidence, and refusal coverage before
-  any A8 text `CPUPreparedGPU` route claim.
+- `done`: GPUTextA8RoutePlanner plans DrawTextRun commands as native A8 atlas
+  routes. The planner covers all six refusal cases (empty artifacts, unsupported
+  route hint, missing upload dependencies, stale atlas generation tokens,
+  terminal diagnostics) plus accepted route evidence with atlas generation
+  diagnostics and resource declarations. Adapter-backed WGSL binding/reflection,
+  executed atlas generation, upload-before-sample ordering, and readback
+  evidence remain explicit non-claims; this slice is planning evidence only.
 
 ## Linear Labels
 

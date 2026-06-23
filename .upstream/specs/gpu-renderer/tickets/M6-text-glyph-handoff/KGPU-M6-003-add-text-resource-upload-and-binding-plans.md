@@ -1,7 +1,7 @@
 ---
 id: KGPU-M6-003
 title: "Add text resource upload and binding plans"
-status: blocked
+status: done
 milestone: M6
 priority: P0
 owner_area: text-resources
@@ -83,10 +83,13 @@ rtk git diff --check
 
 ## Status Notes
 
-- `blocked`: KGPU-M6-001 is now done, but this ticket still requires accepted
-  KFONT-M11-007 resource/upload contracts plus adapter-backed resource, upload,
-  instance, binding, stale generation, budget, and no-`MaterialKey`-leak
-  evidence before the text resource plan can support KGPU-M6-002.
+- `done`: planRendererTextResourceContracts bridges KFONT-M11-007 contracts
+  into renderer-side evidence. The bridge covers all five refusal cases (upload
+  plan missing, upload budget exceeded, atlas page unavailable, atlas entry
+  missing, binding layout unavailable) plus accepted evidence with upload,
+  instance-layout, and binding dump lines including upload-before-sample
+  ordering. Adapter-backed upload, execution, and stale-generation evidence
+  remain explicit non-claims; this slice is planning evidence only.
 
 ## Linear Labels
 
