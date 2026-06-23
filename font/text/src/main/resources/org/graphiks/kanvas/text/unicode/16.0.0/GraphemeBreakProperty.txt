@@ -20,5 +20,6 @@
 AC00 ; LV
 AC01..AC1B ; LVT
 FE0E..FE0F ; Extend
+E0100..E01EF ; Extend
 1F1E6..1F1FF ; Regional_Indicator
 1F3FB..1F3FF ; Extend

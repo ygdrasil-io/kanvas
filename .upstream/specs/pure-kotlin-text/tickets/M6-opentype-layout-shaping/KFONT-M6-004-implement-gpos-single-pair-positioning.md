@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-004"
 title: "Implement GPOS single/pair positioning"
-status: "review"
+status: "done"
 milestone: "M6"
 priority: "P0"
 owner_area: "shaping"
@@ -75,11 +75,11 @@ data class GposPairAdjustment(
 
 ## Acceptance Criteria
 
-- [ ] Single positioning fixture applies x/y placement and advance adjustments and records them in `gpos-trace.json`.
-- [ ] Pair positioning format 1 fixture applies a specific kerning pair.
-- [ ] Pair positioning format 2 fixture applies class-based kerning and records class IDs.
-- [ ] Malformed value formats, coverage tables, class definitions, and out-of-range pair records refuse with `text.shaping.lookup-malformed`.
-- [ ] `shaped-glyph-run.json` records final positions and advances after GPOS.
+- [x] Single positioning fixture applies x/y placement and advance adjustments and records them in `gpos-trace.json`.
+- [x] Pair positioning format 1 fixture applies a specific kerning pair.
+- [x] Pair positioning format 2 fixture applies class-based kerning and records class IDs.
+- [x] Malformed value formats, coverage tables, class definitions, and out-of-range pair records refuse with `text.shaping.lookup-malformed`.
+- [x] `shaped-glyph-run.json` records final positions and advances after GPOS.
 
 ## Required Evidence
 
@@ -113,6 +113,7 @@ rtk ./gradlew --no-daemon :font:text:test --tests '*GposPair*' --tests '*Kerning
 
 - `proposed`: Base GPOS positioning depends on shaping contract and parsed table facts.
 - `review`: bounded single/pair positioning parser and `BasicOpenTypeShapingEngine` application are implemented and freshly validated. Remaining gate: add reviewed fixture provenance and expected dumps for `gpos-single-adjustment.otf`, `gpos-pair-format1-kerning.otf`, `gpos-pair-format2-class.otf`, `gpos-valueformat-malformed.otf`, and `gpos-pair-out-of-range.otf`, then promote `gpos-trace.json` / `shaped-glyph-run.json` and layout-contract malformed/refusal diagnostics beyond the current contract-only goldens.
+- `done`: Reviewed synthetic Latin GPOS fixtures, provenance, and promoted `gpos-trace.json` / `shaped-glyph-run.json` evidence are checked in and freshly validated. Mark/cursive positioning, complex-script rows, and any support promotion remain separate gates outside this ticket.
 - Move to `ready` only after value-format coverage and kerning fixtures are reviewed.
 
 ## Linear Labels

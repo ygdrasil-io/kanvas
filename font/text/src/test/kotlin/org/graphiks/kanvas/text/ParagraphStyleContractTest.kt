@@ -114,6 +114,26 @@ class ParagraphStyleContractTest {
         )
     }
 
+    @Test
+    fun paragraphStyleContractRejectsMissingPlaceholderBaselineWhenAlignmentRequiresIt() {
+        val paragraph = ParagraphBuilder()
+            .append("a", TextStyle(fontSize = 10f))
+            .appendPlaceholder(
+                PlaceholderStyle(
+                    width = 12f,
+                    height = 8f,
+                    alignment = PlaceholderAlignment.BASELINE,
+                    baseline = null,
+                ),
+            )
+            .build()
+
+        assertEquals(
+            listOf("text.paragraph.invalid-constraint"),
+            paragraph.inputDiagnostics.map { it.code },
+        )
+    }
+
     private fun richParagraphBuilder(): ParagraphBuilder =
         ParagraphBuilder(
             ParagraphStyle(

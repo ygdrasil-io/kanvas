@@ -1,80 +1,15 @@
 {
-  "schemaVersion": 1,
-  "dumpId": "paragraph-shaping-requests",
-  "ownerTickets": [
-    "KFONT-M8-002"
+  "schema": "kanvas.paragraph.shaping-requests.v1",
+  "text": "ab\u0633\u0644\u0627\ufffcz",
+  "paragraphDirection": "ltr",
+  "requests": [
+    {"segmentId": "seg-000", "textRange": "0..1", "text": "ab", "fontFamilies": ["Liberation Sans"], "fallbackPreference": "prefer-declared-families", "typefaceId": "550e8400-e29b-41d4-a716-446655440811", "fontSize": 12.0, "locale": "en-US", "features": [], "variationCoordinates": [], "script": "Latn", "bidiLevel": 0},
+    {"segmentId": "seg-001", "textRange": "2..2", "text": "\u0633", "fontFamilies": ["Liberation Serif"], "fallbackPreference": "prefer-declared-families", "typefaceId": "550e8400-e29b-41d4-a716-446655440812", "fontSize": 14.0, "locale": "ar", "features": [], "variationCoordinates": [], "script": "Arab", "bidiLevel": 1},
+    {"segmentId": "seg-002", "textRange": "3..4", "text": "\u0644\u0627", "fontFamilies": ["Liberation Serif"], "fallbackPreference": "prefer-declared-families", "typefaceId": "550e8400-e29b-41d4-a716-446655440812", "fontSize": 14.0, "locale": "ar", "features": [], "variationCoordinates": [{"axisTag": "wght", "value": 625.0}], "script": "Arab", "bidiLevel": 1},
+    {"segmentId": "seg-003", "textRange": "6..6", "text": "z", "fontFamilies": ["Liberation Sans"], "fallbackPreference": "prefer-declared-families", "typefaceId": "550e8400-e29b-41d4-a716-446655440813", "fontSize": 12.0, "locale": "en-US", "features": [], "variationCoordinates": [], "script": "Latn", "bidiLevel": 0}
   ],
-  "cases": [
-    {
-      "caseId": "mixed-style-placeholder-fallback-preference",
-      "text": "ab\ufffc\u0633\u0644",
-      "paragraphDirection": "rtl",
-      "requests": [
-        {
-          "textRange": "0..1",
-          "sourceStyleRange": "0..1",
-          "fontFamilies": ["Liberation Sans"],
-          "fallbackPreference": "prefer-declared-families",
-          "fontSize": 10.0,
-          "locale": "en-US",
-          "scriptHint": null,
-          "featureTags": ["kern"],
-          "variationAxes": [],
-          "paragraphDirection": "rtl"
-        },
-        {
-          "textRange": "3..4",
-          "sourceStyleRange": "3..4",
-          "fontFamilies": ["Missing Arabic", "Noto Naskh Arabic"],
-          "fallbackPreference": "prefer-declared-families",
-          "fontSize": 14.0,
-          "locale": "ar",
-          "scriptHint": "Arab",
-          "featureTags": [],
-          "variationAxes": ["wght"],
-          "paragraphDirection": "rtl"
-        }
-      ],
-      "placeholderRanges": ["2..2"],
-      "diagnostics": []
-    },
-    {
-      "caseId": "cluster-boundary-violation-combining-mark",
-      "text": "a\u0301",
-      "paragraphDirection": "auto",
-      "requests": [
-        {
-          "textRange": "0..1",
-          "sourceStyleRange": "0..0",
-          "fontFamilies": ["Liberation Sans"],
-          "fallbackPreference": "system-default",
-          "fontSize": 12.0,
-          "locale": null,
-          "scriptHint": null,
-          "featureTags": [],
-          "variationAxes": [],
-          "paragraphDirection": "auto"
-        }
-      ],
-      "placeholderRanges": [],
-      "diagnostics": [
-        {
-          "code": "text.paragraph.cluster-boundary-violation",
-          "message": "Style boundary intersects grapheme cluster 0..1; the bounded paragraph segmenter widens to the leading style range.",
-          "textRange": "0..1",
-          "severity": "diagnostic"
-        }
-      ]
-    }
+  "placeholderRanges": [
+    "5..5"
   ],
-  "negativeCases": [
-    "cluster-boundary-violation-combining-mark"
-  ],
-  "nonClaims": [
-    "no-complete-target-support-claim",
-    "no-complete-paragraph-layout-claim",
-    "no-complete-bidi-visual-ordering-claim",
-    "no-fallback-policy-claim",
-    "no-skia-paragraph-parity-claim"
-  ]
+  "diagnostics": []
 }
