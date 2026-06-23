@@ -7,6 +7,7 @@ plugins {
 
 dependencies {
     api(project(":font:gpu-api"))
+    implementation(project(":font"))
 
     implementation(kotlin("stdlib"))
     implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")

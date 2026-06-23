@@ -14,7 +14,10 @@ import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
+import org.graphiks.kanvas.font.atlas.GlyphAtlasUploadPlan
+import org.graphiks.kanvas.gpu.renderer.analysis.GPUTextA8RoutePlanner
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnosticCodes
+import org.graphiks.kanvas.gpu.renderer.text.GPUTextRouteDecision
 
 /** Stable recording identifier. */
 @JvmInline
@@ -261,8 +264,20 @@ class GPURecorder(
         when (command) {
             is NormalizedDrawCommand.FillRect -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
             is NormalizedDrawCommand.FillRRect -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
-            is NormalizedDrawCommand.DrawTextRun -> refusedDrawTextRunPlan(command)
+            is NormalizedDrawCommand.DrawTextRun -> planDrawTextRun(command)
         }
+
+    private fun planDrawTextRun(command: NormalizedDrawCommand.DrawTextRun): GPUFirstRoutePlan {
+        val descriptor = command.glyphRunDescriptor
+        if (descriptor != null) {
+            val textRouteDecision = GPUTextA8RoutePlanner().planTextRoute(descriptor)
+            return when (textRouteDecision) {
+                is GPUTextRouteDecision.Accepted -> GPUTextA8RoutePlanner().plan(command)
+                is GPUTextRouteDecision.Refused -> refusedDrawTextRunPlan(command)
+            }
+        }
+        return refusedDrawTextRunPlan(command)
+    }
 
     private fun refusedDrawTextRunPlan(command: NormalizedDrawCommand.DrawTextRun): GPUFirstRoutePlan {
         val code = "unsupported.text.draw_run_route_unavailable"

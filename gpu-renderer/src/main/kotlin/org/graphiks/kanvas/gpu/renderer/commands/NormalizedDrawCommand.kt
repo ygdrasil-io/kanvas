@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.commands
 
+import org.graphiks.kanvas.font.handoff.GlyphRunDescriptor
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
 
@@ -492,6 +493,7 @@ sealed interface NormalizedDrawCommand {
         val textLayoutResultId: String?,
         val glyphRunId: String?,
         val glyphRunDescriptorRefs: List<String>,
+        val glyphRunDescriptor: GlyphRunDescriptor? = null,
         val artifactRefs: List<GPUTextArtifactRef>,
         val artifactKeyHashes: List<String>,
         val atlasGenerationTokens: List<String>,
