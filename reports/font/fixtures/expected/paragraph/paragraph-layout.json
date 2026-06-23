@@ -1,24 +1,20 @@
 {
-  "schema": "kanvas.paragraph.layout.v1",
-  "input": {
-    "schema": "kanvas.paragraph.input.v1",
-    "unicodeVersion": "16.0.0",
-    "inputHash": "7907f7276769ac31d0f6a9b219f68716cc7dea3c203468a6667dd8c32316f0e0",
-    "text": "ab\ufffc\u0633\u0644",
-    "textLength": 5,
-    "paragraphStyle": {"textAlign": "start", "textDirection": "rtl", "softWrap": true, "maxLines": null, "ellipsis": null, "ellipsisPolicy": "none", "lineHeight": null, "textHeightBehavior": "font-metrics", "defaultLocale": null},
-    "styleRuns": [
-      {"range": "0..1", "fontFamilies": ["Liberation Sans"], "fallbackPreference": "system-default", "typefaceId": null, "fontSize": 10.0, "fontWeight": 400, "fontWidth": 5, "fontSlant": "upright", "syntheticStylePolicy": "allow", "locale": "en-US", "scriptHint": null, "features": [{"tag": "kern", "value": 1}], "variationCoordinates": [], "palette": null, "colorRgba": "000000ff", "decoration": null, "letterSpacing": 0.0, "wordSpacing": 0.0, "heightMultiplier": null},
-      {"range": "3..4", "fontFamilies": ["Missing Arabic", "Noto Naskh Arabic"], "fallbackPreference": "prefer-declared-families", "typefaceId": null, "fontSize": 14.0, "fontWeight": 400, "fontWidth": 5, "fontSlant": "upright", "syntheticStylePolicy": "allow", "locale": "ar", "scriptHint": "Arab", "features": [], "variationCoordinates": [{"axisTag": "wght", "value": 550.0}], "palette": null, "colorRgba": "000000ff", "decoration": null, "letterSpacing": 0.0, "wordSpacing": 0.0, "heightMultiplier": null}
-    ],
-    "placeholders": [
-      {"range": "2..2", "width": 12.0, "height": 8.0, "baselineOffset": 8.0, "alignment": "baseline", "baseline": "alphabetic"}
-    ],
-    "diagnostics": []
-  },
-  "layout": {"maxWidth": 200.0, "width": 60.0, "height": 10.0, "didOverflowWidth": false, "didOverflowHeight": false, "layoutRefused": false},
-  "lines": [
-    {"index": 0, "textRange": "0..4", "metrics": {"ascent": -8.0, "descent": 2.0, "leading": 0.0, "width": 60.0, "baseline": 8.0}, "boxes": [{"textRange": "0..4", "left": 0.0, "top": 0.0, "right": 60.0, "bottom": 10.0, "direction": 1}], "segmentRefs": ["0..1", "3..4"], "glyphRunCount": 2}
+  "schemaVersion": 1,
+  "dumpId": "paragraph-layout",
+  "ownerTickets": ["KFONT-M8-004"],
+  "cases": [
+    {"caseId": "simple-one-line-overflow", "layout": {"width": 50.0, "height": 10.0, "didOverflowWidth": false, "didOverflowHeight": true}, "placeholderBoxes": [], "lines": [{"index": 0, "textRange": "0..1", "width": 50.0, "direction": 1, "isEllipsized": true, "visibleRange": "0..1", "truncatedRange": "2..6", "ellipsisText": "...", "ellipsisAdvance": 30.0, "ellipsisFontSize": 10.0, "ellipsisSourceStyleRange": "0..4", "ellipsisBidiLevel": 0}], "diagnostics": []},
+    {"caseId": "multi-line-overflow", "layout": {"width": 50.0, "height": 20.0, "didOverflowWidth": false, "didOverflowHeight": true}, "placeholderBoxes": [], "lines": [{"index": 0, "textRange": "0..4", "width": 50.0, "direction": 1, "isEllipsized": false, "visibleRange": "0..4", "truncatedRange": null, "ellipsisText": null, "ellipsisAdvance": 0.0, "ellipsisFontSize": 0.0, "ellipsisSourceStyleRange": null, "ellipsisBidiLevel": 0}, {"index": 1, "textRange": "6..7", "width": 50.0, "direction": 1, "isEllipsized": true, "visibleRange": "6..7", "truncatedRange": "8..13", "ellipsisText": "...", "ellipsisAdvance": 30.0, "ellipsisFontSize": 10.0, "ellipsisSourceStyleRange": "6..10", "ellipsisBidiLevel": 0}], "diagnostics": []},
+    {"caseId": "mixed-style-overflow", "layout": {"width": 48.0, "height": 22.0, "didOverflowWidth": false, "didOverflowHeight": true}, "placeholderBoxes": [], "lines": [{"index": 0, "textRange": "0..1", "width": 20.0, "direction": 1, "isEllipsized": false, "visibleRange": "0..1", "truncatedRange": null, "ellipsisText": null, "ellipsisAdvance": 0.0, "ellipsisFontSize": 0.0, "ellipsisSourceStyleRange": null, "ellipsisBidiLevel": 0}, {"index": 1, "textRange": "3..3", "width": 48.0, "direction": 1, "isEllipsized": true, "visibleRange": "3..3", "truncatedRange": "4..8", "ellipsisText": "...", "ellipsisAdvance": 36.0, "ellipsisFontSize": 12.0, "ellipsisSourceStyleRange": "3..6", "ellipsisBidiLevel": 0}], "diagnostics": []},
+    {"caseId": "bidi-overflow", "layout": {"width": 50.0, "height": 20.0, "didOverflowWidth": false, "didOverflowHeight": true}, "placeholderBoxes": [], "lines": [{"index": 0, "textRange": "0..1", "width": 20.0, "direction": -1, "isEllipsized": false, "visibleRange": "0..1", "truncatedRange": null, "ellipsisText": null, "ellipsisAdvance": 0.0, "ellipsisFontSize": 0.0, "ellipsisSourceStyleRange": null, "ellipsisBidiLevel": 0}, {"index": 1, "textRange": "3..4", "width": 50.0, "direction": -1, "isEllipsized": true, "visibleRange": "3..4", "truncatedRange": "5..8", "ellipsisText": "...", "ellipsisAdvance": 30.0, "ellipsisFontSize": 10.0, "ellipsisSourceStyleRange": "3..6", "ellipsisBidiLevel": 1}], "diagnostics": []},
+    {"caseId": "placeholder-conflict", "layout": {"width": 22.0, "height": 12.0, "didOverflowWidth": false, "didOverflowHeight": true}, "placeholderBoxes": [{"placeholderId": "ph-000", "sourceRange": "1..1", "lineIndex": 0, "left": 10.0, "right": 22.0}], "lines": [{"index": 0, "textRange": "0..1", "width": 22.0, "direction": 1, "isEllipsized": false, "visibleRange": "0..1", "truncatedRange": null, "ellipsisText": null, "ellipsisAdvance": 0.0, "ellipsisFontSize": 0.0, "ellipsisSourceStyleRange": null, "ellipsisBidiLevel": 0}], "diagnostics": ["text.paragraph.placeholder-ellipsis-conflict"]},
+    {"caseId": "ellipsis-no-room", "layout": {"width": 20.0, "height": 10.0, "didOverflowWidth": false, "didOverflowHeight": true}, "placeholderBoxes": [], "lines": [{"index": 0, "textRange": "0..1", "width": 20.0, "direction": 1, "isEllipsized": false, "visibleRange": "0..1", "truncatedRange": null, "ellipsisText": null, "ellipsisAdvance": 0.0, "ellipsisFontSize": 0.0, "ellipsisSourceStyleRange": null, "ellipsisBidiLevel": 0}], "diagnostics": ["text.paragraph.ellipsis-no-room"]},
+    {"caseId": "ellipsis-glyph-missing", "layout": {"width": 50.0, "height": 10.0, "didOverflowWidth": false, "didOverflowHeight": true}, "placeholderBoxes": [], "lines": [{"index": 0, "textRange": "0..4", "width": 50.0, "direction": 1, "isEllipsized": false, "visibleRange": "0..4", "truncatedRange": null, "ellipsisText": null, "ellipsisAdvance": 0.0, "ellipsisFontSize": 0.0, "ellipsisSourceStyleRange": null, "ellipsisBidiLevel": 0}], "diagnostics": ["text.paragraph.ellipsis-glyph-missing"]}
   ],
-  "diagnostics": []
+  "nonClaims": [
+    "no-complete-target-support-claim",
+    "no-complete-paragraph-layout-claim",
+    "no-complete-bidi-visual-ordering-claim",
+    "no-skia-paragraph-parity-claim"
+  ]
 }

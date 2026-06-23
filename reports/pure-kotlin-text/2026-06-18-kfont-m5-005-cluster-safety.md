@@ -1,7 +1,7 @@
 # KFONT-M5-005 Cluster Safety Evidence
 
-Date: 2026-06-17
-Status: review with bounded fixture evidence.
+Date: 2026-06-18
+Status: done with expanded reviewed CJK IVS fixture evidence.
 
 ## Scope
 
@@ -25,7 +25,9 @@ legacy gate rather than implying emoji support.
   `cluster-emoji-family-zwj.txt`, `cluster-emoji-skin-tone.txt`,
   `cluster-vs15-vs16.txt`, `cluster-arabic-mark.txt`,
   `cluster-devanagari-conjunct.txt`, `cluster-thai-tone.txt`,
-  `cluster-cjk-variation-selector.txt`, `cluster-mixed-bidi.txt`, and the
+  `cluster-cjk-variation-selector.txt`,
+  `cluster-cjk-ivs-supplementary.txt`,
+  `cluster-cjk-ivs-mixed-kana.txt`, `cluster-mixed-bidi.txt`, and the
   negative `cluster-negative-split.txt`.
 - The negative split fixture records a stable
   `text.shaping.cluster-invariant-failed` diagnostic without using any
@@ -36,8 +38,11 @@ legacy gate rather than implying emoji support.
   `text.shaping.unicode-data-version-mismatch` in the cluster-safety path.
 - `KFONT-M7-004` now covers the explicit `text.shaping.emoji-sequence-unsupported`
   refusal row and fallback-boundary evidence for the shared emoji-adjacent
-  cluster family, so those are no longer the blocking closeout gates for
+  cluster family, so those are no longer blocking closeout gates for
   `KFONT-M5-005`.
+- The expanded CJK IVS rows cover both a supplementary-plane selector pair and
+  a mixed Han-plus-Kana case, keeping the IVS code points inside the same
+  grapheme cluster while preserving the expected bidi and script boundaries.
 - Emoji-adjacent rows still carry the legacy gate `scaledemoji`, and this slice
   does not retire it or add color-glyph, route, or GPU evidence.
 
@@ -61,9 +66,8 @@ rtk git diff --check
 
 ## Remaining Gate
 
-This bounded M5-005 slice remains in `review`, not `done`. Remaining gate:
+No ticket-local gate remains for `KFONT-M5-005`.
 
-- broaden reviewed CJK IVS coverage beyond the current bounded
-  Script_Extensions/variation-selector context fixture family before claiming
-  complete CJK variation-selector cluster safety; explicit emoji refusal and
-  fallback-boundary evidence now live on the owning `KFONT-M7-004` slice.
+- `scaledemoji` stays explicitly fixture-gated on later emoji shaping,
+  route-selection, and rendering evidence; this slice does not claim emoji
+  support.

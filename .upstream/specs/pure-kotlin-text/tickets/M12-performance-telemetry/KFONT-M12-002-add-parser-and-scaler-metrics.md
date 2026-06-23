@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M12-002"
 title: "Add parser and scaler metrics"
-status: "proposed"
+status: "done"
 milestone: "M12"
 priority: "P1"
 owner_area: "telemetry"
@@ -77,11 +77,11 @@ data class ScalerMetricSample(
 
 ## Acceptance Criteria
 
-- [ ] Parser samples expose bytes read, parsed table tags, cache hits/misses, malformed table counts, and parse-time distributions per fixture.
-- [ ] Scaler samples expose glyph count, outline command count, glyph bounds/metrics lookup time, variation application time when applicable, and scaler cache hits/misses.
-- [ ] Malformed fixtures still emit semantic diagnostics such as bounds/offset failures; telemetry never converts a malformed table into a support claim.
-- [ ] Cold and warm cache runs are serialized separately and aggregate at least median, p90, max, and sample count.
-- [ ] The dashboard can show parser and scaler rows independently, with no parser metric used as evidence for scaler support or vice versa.
+- [x] Parser samples expose bytes read, parsed table tags, cache hits/misses, malformed table counts, and parse-time distributions per fixture.
+- [x] Scaler samples expose glyph count, outline command count, glyph bounds/metrics lookup time, variation application time when applicable, and scaler cache hits/misses.
+- [x] Malformed fixtures still emit semantic diagnostics such as bounds/offset failures; telemetry never converts a malformed table into a support claim.
+- [x] Cold and warm cache runs are serialized separately and aggregate at least median, p90, max, and sample count.
+- [x] The dashboard can show parser and scaler rows independently, with no parser metric used as evidence for scaler support or vice versa.
 
 ## Required Evidence
 
@@ -107,13 +107,19 @@ data class ScalerMetricSample(
 
 ```bash
 rtk git diff --check
+rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
 rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
+rtk ./gradlew --no-daemon pipelinePmBundle
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 ```
 
 ## Status Notes
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
 - Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `done`: `parser-metrics.json` and `scaler-metrics.json` now attach deterministic parser/scaler producer evidence to the shared M12 schema, including stable `font.parser.parse.time`, `font.parser.scan.time`, `font.scaler.outline.time`, `font.scaler.metrics.time`, `font.scaler.variation.time`, and `font.scaler.charstring.time` trend series, malformed/refusal diagnostics, advisory dashboard rows, and refreshed schema/PM-bundle remaining gates that now point only at `KFONT-M12-003`, `KFONT-M12-004`, and `KFONT-M12-005`. This ticket remains advisory telemetry evidence only and does not promote release-gate, GPU-route, or complete subsystem support claims.
 
 ## Linear Labels
 

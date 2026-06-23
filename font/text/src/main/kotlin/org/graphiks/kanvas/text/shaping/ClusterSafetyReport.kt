@@ -250,6 +250,14 @@ private fun defaultClusterSafetyFixtures(): List<ClusterSafetyFixture> = listOf(
         sourceText = "\u0627\u0651",
     ),
     ClusterSafetyFixture(
+        fixtureName = "cluster-cjk-ivs-mixed-kana.txt",
+        sourceText = "\u4E00\uDB40\uDD00\u30A2",
+    ),
+    ClusterSafetyFixture(
+        fixtureName = "cluster-cjk-ivs-supplementary.txt",
+        sourceText = "\u4E00\uDB40\uDD00",
+    ),
+    ClusterSafetyFixture(
         fixtureName = "cluster-cjk-variation-selector.txt",
         sourceText = "\u4E00\u3003\uFE0F",
     ),
