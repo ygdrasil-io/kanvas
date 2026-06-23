@@ -2,39 +2,48 @@
 
 ## Scope
 
-This wave implements a bounded `review` slice for simple GSUB support:
+This wave closes the remaining `review` gate for bounded simple GSUB support:
 
-- `font/sfnt` now parses LookupType 1 single substitution, LookupType 2
+- `font/sfnt` still parses LookupType 1 single substitution, LookupType 2
   multiple substitution, and LookupType 4 ligature substitution into
   `OpenTypeLayoutTables.gsub`.
-- `font/text` now applies those parsed lookups during basic shaping while
+- `font/text` still applies those parsed lookups during basic shaping while
   preserving cluster ranges for one-to-one, one-to-many, and many-to-one
   substitutions.
-- Explicit feature disable remains supported for this slice when a request sets
-  `FeatureSet.values[tag] == 0`, including `liga=0`.
+- Reviewed fixture provenance is now checked in for
+  `gsub-single-substitution.otf`, `gsub-multiple-substitution.otf`,
+  `gsub-ligature-fi.otf`, `gsub-coverage-malformed.otf`, and
+  `gsub-ligature-bad-component.otf`.
+- `gsub-trace.json` and `shaped-glyph-run.json` are now promoted from the
+  old contract-only placeholders to fixture-backed Latin evidence.
 
 ## Validation
 
 Fresh validations for this wave:
 
 ```bash
-rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserExposesParsedGsubSingleMultipleAndLigatureLookupsInLayout
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesParsedGsubSingleMultipleAndLigatureLookups --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineRespectsDisabledParsedGsubLigatureFeature
-rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserLoadsReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.defaultOpenTypeFaceParserReportsReviewedMalformedGsubFixtureFontsAsDiagnostics
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicOpenTypeShapingEngineAppliesReviewedGsubFixtureFontsFromRepo --tests org.graphiks.kanvas.text.TextStackSurfaceTest.gsubTraceGoldenPinsFixtureBackedLatinCasesAndMalformedDiagnostics --tests org.graphiks.kanvas.text.TextStackSurfaceTest.shapedGlyphRunGoldenPinsFixtureBackedGsubAndGposRuns
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 ```
 
-## Remaining Gates
+## Outcome
 
-- Promote `gsub-trace.json` and `shaped-glyph-run.json` at the
-  `OpenTypeLayoutEngineContract` layer.
-- Add malformed/refusal GSUB fixture coverage with stable diagnostics instead
-  of synthetic surface-only parser fixtures.
-- Prove explicit `ShapingPlan`-driven feature ordering and keep script-policy
-  ownership with `KFONT-M6-006`.
+- GSUB fixture provenance is now tracked in
+  `reports/font/fixtures/provenance/index.json`.
+- Parser tests now prove the checked-in positive and malformed GSUB fixture
+  fonts rather than synthetic-only lookup tables.
+- Runtime tests now prove the checked-in GSUB fixture glyph IDs and cluster
+  mappings.
+- `gsub-trace.json` now records fixture-backed lookup order and malformed
+  parser refusals for this bounded Latin slice.
+- `shaped-glyph-run.json` now links the GSUB output cases to the shared
+  GSUB/GPOS shaped-run dump.
 
 ## Non-Claims
 
-This wave does not claim complete GSUB support, contextual lookups, full
+This wave still does not claim complete GSUB support, contextual lookups, full
 default feature policy, Greek/Cyrillic/Hebrew readiness promotion, complex
 script shaping, native shaper parity, CPU oracle evidence, or GPU evidence.

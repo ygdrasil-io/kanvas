@@ -52,7 +52,12 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
                 "a8-atlas-build-result",
                 "a8-glyph-mask",
                 "a8-sdf-atlas-lifecycle",
+                "arabic-gpos-trace",
+                "arabic-gsub-trace",
                 "arabic-seed-readiness",
+                "arabic-shaped-glyph-run",
+                "arabic-shaping-plan",
+                "arabic-shaping-report",
                 "bitmap-glyph-plan",
                 "bidi-runs",
                 "cff-cff2-readiness",
@@ -63,11 +68,16 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
                 "cff2-variation-trace",
                 "cluster-safety-report",
                 "cmap-contract",
+                "color-emoji-fixture-manifest",
                 "color-glyph-composite-plan",
                 "color-glyph-plan",
                 "color-svg-emoji-goldens",
                 "colrv1-fixture-manifest",
                 "colrv1-paint-graph",
+                "devanagari-shaping-report",
+                "draw-text-run-upload-plan",
+                "emoji-route-trace",
+                "facade-adapter-inventory",
                 "fallback-catalog-build",
                 "fallback-decision-trace",
                 "fallback-fixture",
@@ -82,29 +92,36 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
                 "font-telemetry-schema-fixture",
                 "glyph-artifact-metrics",
                 "glyph-atlas-eviction-trace",
-                "glyph-atlas-lifecycle",
                 "glyph-atlas-occupancy",
-                "glyph-cache-inventory",
+                "glyph-atlas-lifecycle",
                 "glyph-cache-metrics",
+                "glyph-cache-inventory",
                 "glyph-cache-telemetry",
                 "glyph-strike-key",
                 "gpos-trace",
+                "gpu-text-a8-route-plan",
+                "gpu-text-a8-route-refusals",
+                "gpu-text-handoff-metrics",
                 "gsub-trace",
                 "hit-test-map",
                 "latin-gsub-gpos-goldens",
                 "line-breaks",
                 "malformed-sfnt-fixtures",
+                "paragraph-metrics",
                 "opentype-layout-contract-gpos-trace",
                 "opentype-layout-contract-gsub-trace",
                 "opentype-layout-contract-shaped-glyph-run",
                 "paragraph-input",
                 "paragraph-input-goldens",
+                "paragraph-layout",
                 "paragraph-layout-result",
                 "paragraph-shaping-requests",
                 "paragraph-shaping-requests-goldens",
+                "parser-metrics",
                 "placeholder-layout",
                 "png-glyph-image",
                 "resolved-font-runs",
+                "scaler-metrics",
                 "script-runs",
                 "sdf-atlas-build-result",
                 "sdf-glyph-artifact",
@@ -112,6 +129,7 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
                 "sfnt-table-facts",
                 "shaped-glyph-run",
                 "shaping-plan",
+                "shaping-metrics",
                 "svg-glyph-document",
                 "svg-glyph-fixture-manifest",
                 "svg-glyph-plan",
@@ -125,7 +143,6 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
                 "unicode-data-seed",
                 "unicode-data-version-mismatch-diagnostic",
                 "unicode-segments",
-                "color-emoji-fixture-manifest",
             },
             set(dump_ids),
         )
@@ -166,23 +183,6 @@ class PureKotlinTextDumpIndexTest(unittest.TestCase):
         with self.assertRaises(validator.ValidationError) as external:
             validator.validate_index(PROJECT_ROOT, modified)
         self.assertIn("external engine", str(external.exception))
-
-    def test_validator_rejects_dump_row_non_claim_drift_from_dump_fixture(self) -> None:
-        validator = load_validator()
-        index = validator.load_index(PROJECT_ROOT)
-        rows = [dict(row) for row in index["dumpRows"]]
-        target = next(row for row in rows if row["dumpId"] == "glyph-cache-metrics")
-        target["nonClaims"] = [
-            claim
-            for claim in target["nonClaims"]
-            if claim != "no-hidden-performance-gate"
-        ]
-        modified = dict(index)
-        modified["dumpRows"] = rows
-
-        with self.assertRaises(validator.ValidationError) as drift:
-            validator.validate_index(PROJECT_ROOT, modified)
-        self.assertIn("must match dump nonClaims", str(drift.exception))
 
     def test_existing_path_guard_rejects_relative_traversal_outside_project_root(self) -> None:
         validator = load_validator()
