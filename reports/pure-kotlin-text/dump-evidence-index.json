@@ -2358,6 +2358,56 @@
       ]
     },
     {
+      "dumpId": "gpu-text-binding-plan",
+      "ownerTicket": "KFONT-M11-007",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/gpu-renderer/21-text-glyph-pipeline.md",
+        "section": "WGSL And Binding ABI"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextResourcePlan.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextResourcePlanTest.kt",
+        "reports/pure-kotlin-text/gpu-text-binding-plan.json"
+      ],
+      "expectedFields": [
+        "artifactType",
+        "atlasGenerationFacts",
+        "binding",
+        "bindingLayoutHash",
+        "bindingPlanId",
+        "bindingPlans",
+        "classification",
+        "group",
+        "kind",
+        "materialKeyExcludedFields",
+        "materialPlanRef",
+        "name",
+        "nonClaims",
+        "ownerTickets",
+        "productActivation",
+        "renderStep",
+        "resourceRef",
+        "resourceSlots",
+        "routePromotion",
+        "schema",
+        "subRunId"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextResourcePlan*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "GPU text binding plan changes require reviewed resource slots, reflected layout hash intent, atlas generation facts, and evidence that glyph/atlas/upload/live-handle facts stay outside MaterialKey.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-broad-gpu-text-support-claim",
+        "no-dftext-retirement",
+        "no-executed-gpu-upload-claim",
+        "no-material-key-leakage-validation-claim"
+      ]
+    },
+    {
       "dumpId": "gpu-text-handoff-metrics",
       "ownerTicket": "KFONT-M12-005",
       "classification": "golden-gated",
@@ -2409,6 +2459,190 @@
       ]
     },
     {
+      "dumpId": "gpu-text-instance-layout",
+      "ownerTicket": "KFONT-M11-007",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/gpu-renderer/21-text-glyph-pipeline.md",
+        "section": "Validation Requirements"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextResourcePlan.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextResourcePlanTest.kt",
+        "reports/pure-kotlin-text/gpu-text-instance-layout.json"
+      ],
+      "expectedFields": [
+        "alignmentBytes",
+        "atlasGeneration",
+        "attributes",
+        "byteOffset",
+        "byteSize",
+        "classification",
+        "format",
+        "glyphId",
+        "instanceBufferPlanId",
+        "instanceBufferPlans",
+        "instanceCount",
+        "instanceLayoutHash",
+        "instanceLayouts",
+        "instanceUploadBeforeDrawDependency",
+        "instances",
+        "layoutHash",
+        "layoutId",
+        "lifetimeScope",
+        "name",
+        "nonClaims",
+        "ownerTickets",
+        "pageIndex",
+        "productActivation",
+        "representationFlags",
+        "routePromotion",
+        "schema",
+        "sdfParamsRef",
+        "sdfParamsRequired",
+        "sourceRect",
+        "strideBytes",
+        "subRunId",
+        "targetRect",
+        "uvRect"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextResourcePlan*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "GPU text instance layout changes require reviewed stride, alignment, attributes, glyph target/source/UV facts, page/generation facts, representation flags, and instance-upload-before-draw dependency.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-broad-gpu-text-support-claim",
+        "no-dftext-retirement",
+        "no-executed-gpu-upload-claim"
+      ]
+    },
+    {
+      "dumpId": "gpu-text-resource-plan",
+      "ownerTicket": "KFONT-M11-007",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/gpu-renderer/21-text-glyph-pipeline.md",
+        "section": "Resource Lifetime"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextResourcePlan.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextResourcePlanTest.kt",
+        "reports/pure-kotlin-text/gpu-text-resource-plan.json"
+      ],
+      "expectedFields": [
+        "artifactKeyHash",
+        "artifactType",
+        "atlasDescriptor",
+        "atlasEntryRefs",
+        "atlasGeneration",
+        "atlasPages",
+        "atlasRect",
+        "bindingPlanId",
+        "classification",
+        "commandId",
+        "descriptorHash",
+        "descriptorId",
+        "deviceScope",
+        "diagnostics",
+        "glyphId",
+        "height",
+        "instanceBufferPlanId",
+        "lifetimeScope",
+        "nonClaims",
+        "ownerScope",
+        "ownerTickets",
+        "ownershipPlanId",
+        "pageCount",
+        "pageId",
+        "pageIndex",
+        "productActivation",
+        "provenance",
+        "renderStep",
+        "resourceHandlesMaterialized",
+        "resourcePlanId",
+        "resourcePlans",
+        "resourceProvider",
+        "route",
+        "routePromotion",
+        "rowStrideBytes",
+        "schema",
+        "sourceBounds",
+        "sourceMaskHash",
+        "strikeKeyHash",
+        "subRunId",
+        "textureFormat",
+        "textureOwnership",
+        "texturePlanId",
+        "uploadPlanId",
+        "uvRect",
+        "width"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextResourcePlan*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "GPU text resource plan changes require reviewed ownership, atlas descriptor/page/entry refs, lifetime scope, refusal diagnostics, and explicit confirmation that no GPU handles, broad text support, executed upload, or dftext retirement claim was added.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-broad-gpu-text-support-claim",
+        "no-dftext-retirement",
+        "no-executed-gpu-upload-claim",
+        "no-material-key-leakage-validation-claim"
+      ]
+    },
+    {
+      "dumpId": "gpu-text-resource-refusals",
+      "ownerTicket": "KFONT-M11-007",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/gpu-renderer/21-text-glyph-pipeline.md",
+        "section": "Diagnostics"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextResourcePlan.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextResourcePlanTest.kt",
+        "reports/pure-kotlin-text/gpu-text-resource-refusals.json"
+      ],
+      "expectedFields": [
+        "artifactKeyHash",
+        "artifactType",
+        "attemptedRoute",
+        "blocker",
+        "blockerOwner",
+        "claimPromotionAllowed",
+        "classification",
+        "classificationRows",
+        "commandId",
+        "count",
+        "diagnosticMappings",
+        "fixtureName",
+        "glyphRange",
+        "handoffDiagnostic",
+        "legacyGates",
+        "refusalId",
+        "refusals",
+        "rendererDiagnostic",
+        "schema",
+        "textRange"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextResourcePlan*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "GPU text resource refusal changes require stable text.gpu/unsupported.text diagnostics for missing upload, upload budget overflow, unavailable page, missing entry, and binding layout unavailable cases.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-broad-gpu-text-support-claim",
+        "no-dftext-retirement",
+        "no-executed-gpu-upload-claim"
+      ]
+    },
+    {
       "dumpId": "gpu-text-subrun-plan",
       "ownerTicket": "KFONT-M11-006",
       "classification": "golden-gated",
@@ -2456,6 +2690,64 @@
         "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
       ],
       "updatePolicy": "GPU text subrun plan dump changes require reviewed split reason, source glyph range, ordering token, refusal diagnostic, and non-claim diffs without broad GPU text, executed upload, or dftext promotion.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-broad-gpu-text-support-claim",
+        "no-dftext-retirement",
+        "no-executed-gpu-upload-claim"
+      ]
+    },
+    {
+      "dumpId": "gpu-text-upload-plan",
+      "ownerTicket": "KFONT-M11-007",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/gpu-renderer/21-text-glyph-pipeline.md",
+        "section": "Planner, Sorting, And Batching"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextResourcePlan.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextResourcePlanTest.kt",
+        "reports/pure-kotlin-text/gpu-text-upload-plan.json"
+      ],
+      "expectedFields": [
+        "alignmentBytes",
+        "byteRanges",
+        "classification",
+        "destinationTexturePlan",
+        "height",
+        "label",
+        "lifetimeScope",
+        "nonClaims",
+        "offset",
+        "ownerTickets",
+        "ownershipPlanId",
+        "pageRegion",
+        "productActivation",
+        "requiresStagingBuffer",
+        "routePromotion",
+        "rowStrideBytes",
+        "schema",
+        "size",
+        "sourceArtifactKeyHash",
+        "stagingBufferBytes",
+        "stagingPlan",
+        "subRunId",
+        "textureFormat",
+        "texturePlanId",
+        "uploadBeforeSampleDependency",
+        "uploadExecution",
+        "uploadPlanId",
+        "uploadPlans",
+        "usageFlags",
+        "width"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextResourcePlan*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "GPU text upload plan changes require reviewed destination texture plan, byte range, row stride, staging, upload-before-sample dependency, and explicit non-execution wording.",
       "nonClaims": [
         "producer-only",
         "no-complete-target-support-claim",

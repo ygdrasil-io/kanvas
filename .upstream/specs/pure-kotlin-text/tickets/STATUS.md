@@ -15,10 +15,10 @@ All tickets start as `proposed`. Move a ticket to `ready` only after its scope, 
 | M8 | 0 | 0 | 0 | 1 | 0 | 5 |
 | M9 | 0 | 0 | 0 | 0 | 0 | 6 |
 | M10 | 0 | 0 | 0 | 0 | 0 | 10 |
-| M11 | 0 | 1 | 0 | 3 | 0 | 6 |
+| M11 | 0 | 3 | 0 | 0 | 0 | 7 |
 | M12 | 0 | 0 | 0 | 0 | 0 | 5 |
 | M13 | 0 | 0 | 0 | 4 | 0 | 1 |
-| **Total** | **0** | **1** | **0** | **13** | **0** | **72** |
+| **Total** | **0** | **3** | **0** | **10** | **0** | **73** |
 
 2026-06-23 note: M6 counts are unchanged, but the still-missing named fixture
 resources for `KFONT-M6-007` through `KFONT-M6-010` are now checked in under

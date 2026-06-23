@@ -24,8 +24,20 @@ enum class GPUTextRouteBlocker(
         ownerLabel = "text-upload-plan",
         classification = "GPU-gated",
     ),
+    UPLOAD_BUDGET(
+        ownerLabel = "text-upload-budget",
+        classification = "GPU-gated",
+    ),
+    ATLAS_PAGE(
+        ownerLabel = "text-atlas-page",
+        classification = "GPU-gated",
+    ),
     STALE_GENERATION(
         ownerLabel = "text-artifact-generation",
+        classification = "GPU-gated",
+    ),
+    BINDING_LAYOUT(
+        ownerLabel = "text-binding-layout",
         classification = "GPU-gated",
     ),
     CPU_RENDERED_TEXTURE(
