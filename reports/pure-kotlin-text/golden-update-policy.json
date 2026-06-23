@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "policyId": "pure-kotlin-text-golden-update-policy",
+  "sourceSpec": {
+    "path": ".upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md",
+    "section": "Evidence Artifacts and Fixture Strategy"
+  },
+  "supportClaim": "coordination-policy-artifact-no-support-claim",
+  "ordinaryTestRuns": "must-not-overwrite-goldens",
+  "reviewRequirement": "old-new-diff-plus-rebaseline-reason-required",
+  "rebaselineApproval": "reviewer-must-confirm-intentional-change-before-rebaseline",
+  "oraclePolicy": {
+    "normative": "Kanvas-owned fixtures, bundled deterministic fonts, versioned dumps, CPU oracle artifacts, route diagnostics, and GPU artifacts only when GPU support is claimed.",
+    "externalComparisons": "Optional external comparisons are drift-only and cannot define pass/fail behavior.",
+    "forbiddenEngines": [
+      "HarfBuzz",
+      "FreeType",
+      "Fontations",
+      "AWT",
+      "JNI",
+      "CoreText",
+      "DirectWrite",
+      "fontconfig",
+      "platform shapers",
+      "native font APIs"
+    ]
+  },
+  "driftLabels": {
+    "purpose": "Optional non-normative comparisons use drift labels to distinguish Kanvas-owned evidence from external-engine reference output.",
+    "allowedDriftLabels": [
+      "harfbuzz-drift",
+      "freetype-drift",
+      "fontations-drift",
+      "native-platform-drift",
+      "skia-native-drift"
+    ],
+    "driftLabelPolicy": "Drift labels must appear in dump or report file names or top-level metadata. Drift reports must not define pass/fail behavior for Kanvas tests."
+  },
+  "goldenTypes": {
+    "producer-only": {
+      "description": "Generated from deterministic sources; no golden comparison required.",
+      "updatePolicy": "Producer dump changes require focused test diffs and matrix checkpoint updates before any golden promotion.",
+      "reviewRequired": false
+    },
+    "golden-gated": {
+      "description": "Compared against checked-in golden artifact; golden mismatch fails the test.",
+      "updatePolicy": "Golden changes require deterministic generator source, old/new diff in review, reason for rebaseline, and statement of whether behavior changed intentionally.",
+      "reviewRequired": true
+    }
+  },
+  "nonClaims": [
+    "not-a-support-claim",
+    "policy-definition-only",
+    "no-complete-target-support-claim",
+    "no-CPU-or-GPU-oracle-artifacts-added",
+    "no-external-engine-normative-oracle"
+  ],
+  "validationCommand": "rtk python3 scripts/validate_pure_kotlin_text_golden_update_policy.py"
+}
