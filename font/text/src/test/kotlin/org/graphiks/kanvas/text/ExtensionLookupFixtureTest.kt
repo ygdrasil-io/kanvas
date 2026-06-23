@@ -5,6 +5,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 import org.graphiks.kanvas.font.FontSource
@@ -14,6 +15,7 @@ import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.kanvas.font.sfnt.CMapTable
 import org.graphiks.kanvas.font.sfnt.DefaultOpenTypeFaceParser
 import org.graphiks.kanvas.font.sfnt.OpenTypeFontBounds
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubChainingContextGlyphLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubLigatureSubstitution
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubLigatureSubstitutionLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubSingleSubstitution
@@ -208,6 +210,16 @@ class ExtensionLookupFixtureTest {
         assertTrue(report.contains(""""extension-unsupported-target-diagnostic""""))
         assertTrue(report.contains(""""no-complete-advanced-lookup-support-claim""""))
         assertTrue(report.contains(""""no-gpos-contextual-or-variation-claim""""))
+    }
+
+    @Test
+    fun defaultOpenTypeFaceParserResolvesCheckedInChainingContextFixtureFromRepo() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440750",
+            relativePath = "reports/font/fixtures/fonts/shaping/gsub-chaining-context.otf",
+        )
+        assertNotNull(face.gsub)
+        assertTrue(face.gsub!!.lookups.isNotEmpty())
     }
 
     private fun parsedFixtureFace(
