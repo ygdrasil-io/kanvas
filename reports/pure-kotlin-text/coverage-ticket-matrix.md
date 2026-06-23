@@ -49,7 +49,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | PKT-03 SFNT face and `cmap` contract | Implementable now | Required table diagnostics, TTC index, `cmap` format coverage/refusals. | `font/sfnt/src/main`, `font/sfnt/src/test`. | Malformed required/optional table fixtures and selected face dumps. |
 | PKT-04 TrueType `glyf` and variation evidence | Implementable now | Simple/composite outlines, component transforms, variation metadata and metrics dumps. | `font/scaler/src/main`, `font/scaler/src/test`. | Path hashes, bounds, variation delta fixtures. |
 | PKT-05 CFF/CFF2 vertical | Tracked-gap; generated fixture parser/scaler/operator/table/variation-store slices implemented | CFF INDEX/dicts/Type 2 operators/CFF2 variation. | `font/scaler/src/main`, `font/scaler/src/test`. | Generated CFF/CFF2 tables now expose typed INDEX/DICT evidence, stable parse refusals, and minimal CFF2 VariationStore region lookup; complete support still needs broader real-font corpus coverage. |
-| PKT-06 Unicode data and script matrix seed | Implementable now | Pinned Unicode version surface, basic segmentation/bidi/script dumps. | `font/text/src/main/.../shaping`, `font/text/src/test`. | Script/bidi/grapheme tests and explicit unsupported-script diagnostics. |
+| PKT-06 Unicode data and script matrix seed | Current-supported | Pinned Unicode 16.0.0 version surface, basic segmentation/bidi/script dumps, explicit unsupported-script diagnostics. | `font/text/src/main/.../shaping`, `font/text/src/test`. | Script/bidi/grapheme tests, golden Unicode dumps, cluster safety suite, and explicit `text.shaping.script-unsupported` diagnostics. |
 | PKT-07 GSUB/GPOS simple script shaping | Partially implementable; bounded GSUB/GPOS fixture slices are done and script-policy adoption is now blocked on the remaining per-script shaping fixture families | Latin/Greek/Cyrillic/Hebrew defaults, features, clusters, fallback runs. | `font/text`, `font/sfnt`. | Requires parsed layout table fixtures and feature ordering evidence. |
 | PKT-08 complex shaping rows | Dependency-gated | Arabic, Devanagari, Thai, CJK, emoji shaping support/refusals. | `font/text`. | Requires PKT-07 and per-row positive/refusal fixtures. |
 | PKT-09 paragraph semantic layout | Partially implementable; full claim gated | Rich styles, bidi visual lines, placeholders, ellipsis, selection, hit testing. | `font/text/src/main/.../paragraph`, `font/text/src/test`. | Layout dumps; full claim waits on shaping/fallback support. |
@@ -2227,6 +2227,77 @@ runtime mismatch diagnostics, claim a complete Unicode Character Database,
 claim UAX #9 bidi conformance, claim UAX #14 line breaking, claim UAX #29
 segmentation, claim emoji property coverage, or claim full script matrix
 support.
+
+### PKT-06: Unicode Data and Script Matrix Seed
+
+Status: implemented and independently reviewed.
+
+The PKT-06 vertical covers pinned Unicode 16.0.0 data generation, UAX #29
+grapheme segmentation, UAX #9 bidi resolution, Script_Extensions itemization,
+cluster safety regression, shaping diagnostic families, and explicit
+unsupported-script diagnostics. All sub-slices are reviewed and checked in.
+
+Files:
+
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/UnicodeDataGeneration.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/GraphemeSegmentation.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/BidiSegmentation.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ScriptItemization.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ClusterSafetyReport.kt`
+- `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/UnicodeDataGenerationTest.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/GraphemeSegmentationTest.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/BidiSegmentationTest.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ScriptItemizationTest.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ClusterSafetyTest.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/OpenTypeLayoutEngineContractTest.kt`
+- `reports/font/fixtures/expected/unicode/unicode-16-source-manifest.json`
+- `reports/font/fixtures/expected/unicode/script-runs.json`
+- `reports/font/fixtures/expected/unicode/bidi-runs.json`
+- `reports/font/fixtures/expected/unicode/unicode-segments.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `PinnedUnicodeDataGenerator` pins Unicode 16.0.0 with versioned source
+  extracts, input hashes, and mismatch diagnostics.
+- `GraphemeClusterer` implements UAX #29 GB1-GB999 with CR/LF, Control,
+  Extend, ZWJ, SpacingMark, Prepend, RI, Hangul, Extended_Pictographic,
+  Indic_Conjunct_Break, and Variation_Selector rules.
+- `DefaultBidiResolver` implements UAX #9 explicit controls, W1-W7 weak type
+  resolution, neutral assignment, and unbalanced-control diagnostics.
+- `ScriptExtensionsItemizer` resolves Script_Extensions via UnicodeDataSet,
+  maps to OpenType script tags (latn/grek/cyrl/hebr/arab/deva/thai/hani/kana/
+  hira/hang/Zsye/Zsym), and emits `text.shaping.script-unsupported` for
+  unsupported scripts (e.g. Geor, `\u10A0`).
+- `ClusterSafetySuite` asserts grapheme clusters are not split by bidi/script/
+  fallback boundaries with emoji ZWJ, skin tone, VS15/VS16, Arabic marks,
+  Devanagari, Thai, CJK IVS, mixed bidi, and negative split fixtures.
+- `OpenTypeLayoutEngineContractTest` verifies `text.shaping.script-unsupported`
+  diagnostic for unsupported-script shaping inputs.
+- The dump evidence index registers `script-runs`, `bidi-runs`,
+  `unicode-segments`, `unicode-data-manifest`, `unicode-data-seed`, and
+  `unicode-data-version-mismatch-diagnostic` dumps with golden fixtures.
+- `BasicUnicodeData` legacy path remains but is not required for pinned 16.0.0
+  code paths; `PinnedUnicodeDataSetResources.load()` is used by all current
+  segmentation, bidi, and script itemization callers.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: full UAX #9 conformance (paired brackets, paragraph-level
+ordering), complete UCD coverage beyond the bounded seed, word/sentence
+segmentation, full UAX #14 line breaking, and Unicode normalization are
+separate tracked gaps. This checkpoint does not claim shaping, paragraph,
+GPU text, or `dftext` retirement.
 
 ### KFONT-M5-001: Pinned Unicode Data Generation
 
