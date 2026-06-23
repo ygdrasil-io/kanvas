@@ -4894,6 +4894,9 @@ private const val GPOS_CURSIVE_ATTACHMENT_LOOKUP_TYPE = 3
 private const val GPOS_MARK_TO_BASE_LOOKUP_TYPE = 4
 private const val GPOS_MARK_TO_LIGATURE_LOOKUP_TYPE = 5
 private const val GPOS_MARK_TO_MARK_LOOKUP_TYPE = 6
+private const val GPOS_CONTEXTUAL_POSITIONING_LOOKUP_TYPE = 7
+private const val GPOS_CHAINING_CONTEXT_POSITIONING_LOOKUP_TYPE = 8
+private const val GPOS_EXTENSION_POSITIONING_LOOKUP_TYPE = 9
 private const val GPOS_CURSIVE_SUBTABLE_HEADER_SIZE = 6
 private const val GPOS_MARK_SUBTABLE_HEADER_SIZE = 12
 private const val GPOS_MARK_ARRAY_HEADER_SIZE = 2
@@ -6516,6 +6519,68 @@ data class OpenTypeGsubContextCoverageRule(
 }
 
 /**
+ * GSUB chaining context substitution (lookup type 6) glyph rule for format 1.
+ */
+data class OpenTypeGsubChainingContextGlyphRule(
+    val backtrackGlyphIds: List<Int>,
+    val inputGlyphIds: List<Int>,
+    val lookAheadGlyphIds: List<Int>,
+    val nestedLookups: List<OpenTypeGsubNestedLookupRecord>,
+) {
+    init {
+        require(inputGlyphIds.isNotEmpty()) {
+            "OpenType GSUB chaining context glyph rule must consume at least one glyph."
+        }
+        require(nestedLookups.isNotEmpty()) {
+            "OpenType GSUB chaining context glyph rule must contain at least one nested lookup record."
+        }
+    }
+}
+
+/**
+ * GSUB chaining context substitution format 1 (glyph) lookup.
+ */
+data class OpenTypeGsubChainingContextGlyphLookup(
+    override val featureTag: String,
+    override val extraFeatureTags: Set<String> = emptySet(),
+    override val lookupIndex: Int = 0,
+    val rules: List<OpenTypeGsubChainingContextGlyphRule> = emptyList(),
+) : OpenTypeGsubLookup {
+    override val lookupType: Int = GSUB_CHAINING_CONTEXT_SUBSTITUTION_LOOKUP_TYPE
+}
+
+/**
+ * GPOS contextual positioning (lookup type 7) placeholder.
+ * Parsed but not applied at shaping runtime.
+ */
+data class OpenTypeGposContextualLookup(
+    override val featureTag: String,
+    override val lookupIndex: Int,
+) : OpenTypeGposLookup {
+    override val lookupType: Int = GPOS_CONTEXTUAL_POSITIONING_LOOKUP_TYPE
+}
+
+/**
+ * GPOS chaining contextual positioning (lookup type 8) placeholder.
+ */
+data class OpenTypeGposChainingLookup(
+    override val featureTag: String,
+    override val lookupIndex: Int,
+) : OpenTypeGposLookup {
+    override val lookupType: Int = GPOS_CHAINING_CONTEXT_POSITIONING_LOOKUP_TYPE
+}
+
+/**
+ * GPOS extension positioning (lookup type 9) placeholder.
+ */
+data class OpenTypeGposExtensionLookup(
+    override val featureTag: String,
+    override val lookupIndex: Int,
+) : OpenTypeGposLookup {
+    override val lookupType: Int = GPOS_EXTENSION_POSITIONING_LOOKUP_TYPE
+}
+
+/**
  * Parser for the Kanvas-supported subset of OpenType GSUB lookups.
  */
 object OpenTypeGsubTableParser {
@@ -6795,7 +6860,9 @@ object OpenTypeGsubTableParser {
             GSUB_MULTIPLE_SUBSTITUTION_LOOKUP_TYPE -> parseMultipleLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
             GSUB_LIGATURE_SUBSTITUTION_LOOKUP_TYPE -> parseLigatureLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
             GSUB_CONTEXTUAL_SUBSTITUTION_LOOKUP_TYPE -> parseContextLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
+            GSUB_CHAINING_CONTEXT_SUBSTITUTION_LOOKUP_TYPE -> parseChainingContextLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
             GSUB_EXTENSION_SUBSTITUTION_LOOKUP_TYPE -> parseExtensionLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
+            GSUB_REVERSE_CHAINING_SUBSTITUTION_LOOKUP_TYPE -> parseReverseChainingLookup(table, lookupStart, lookupIndex, subtableCount, featureTags)
             else -> null
         }
     }
@@ -7505,6 +7572,210 @@ object OpenTypeGsubTableParser {
         )
     }
 
+    private fun parseChainingContextLookup(
+        table: ByteArray,
+        lookupStart: Int,
+        lookupIndex: Int,
+        subtableCount: Int,
+        featureTags: Collection<String>,
+    ): OpenTypeGsubLookup? {
+        val chainingContextGlyphRules = mutableListOf<OpenTypeGsubChainingContextGlyphRule>()
+        var chainingContextFormat = 0
+        repeat(subtableCount) { subtableIndex ->
+            val subtableOffset = table.readUInt16BE(
+                lookupStart + GPOS_LOOKUP_HEADER_SIZE + subtableIndex * UINT16_BYTE_LENGTH,
+                "OpenType GSUB LookupTable subtableOffset[$subtableIndex]",
+            )
+            val subtableStart = table.checkedOffset(
+                base = lookupStart,
+                offset = subtableOffset,
+                label = "OpenType GSUB LookupTable Subtable $subtableIndex",
+            )
+            chainingContextFormat = table.readUInt16BE(subtableStart, "OpenType GSUB ChainingContextSubst format")
+            try {
+                when (chainingContextFormat) {
+                    1 -> parseChainingContextFormat1Subtable(table, subtableStart, chainingContextGlyphRules)
+                    else -> {} // format 2/3 not yet implemented
+                }
+            } catch (e: IllegalArgumentException) {
+                // Malformed chaining subtable - skip gracefully
+            }
+        }
+        val orderedFeatureTags = featureTags.toList()
+        return when (chainingContextFormat) {
+            1 -> chainingContextGlyphRules.takeUnless { it.isEmpty() }?.let {
+                OpenTypeGsubChainingContextGlyphLookup(
+                    featureTag = orderedFeatureTags.firstOrNull().orEmpty(),
+                    extraFeatureTags = orderedFeatureTags.drop(1).toSet(),
+                    lookupIndex = lookupIndex,
+                    rules = it,
+                )
+            }
+            else -> null
+        }
+    }
+
+    private fun parseChainingContextFormat1Subtable(
+        table: ByteArray,
+        subtableStart: Int,
+        rules: MutableList<OpenTypeGsubChainingContextGlyphRule>,
+    ) {
+        val coverageOffset = table.readUInt16BE(
+            subtableStart + UINT16_BYTE_LENGTH,
+            "OpenType GSUB ChainingContextSubst format 1 coverageOffset",
+        )
+        val coverage = parseCoverageTable(
+            table = table,
+            coverageStart = table.checkedOffset(
+                base = subtableStart,
+                offset = coverageOffset,
+                label = "OpenType GSUB ChainingContextSubst format 1 coverage",
+            ),
+        )
+        val subRuleSetCount = table.readUInt16BE(
+            subtableStart + UINT16_BYTE_LENGTH * 2,
+            "OpenType GSUB ChainingContextSubst format 1 subRuleSetCount",
+        )
+        require(subRuleSetCount == coverage.size) {
+            "OpenType GSUB ChainingContextSubst format 1 subRuleSetCount $subRuleSetCount must equal coverage glyph count ${coverage.size}."
+        }
+        val subRuleSetOffsetsStart = table.checkedOffset(
+            subtableStart, 6,
+            "OpenType GSUB ChainingContextSubst format 1 subRuleSet offsets",
+        )
+        table.requireArrayRange(
+            offset = subRuleSetOffsetsStart,
+            count = subRuleSetCount,
+            recordSize = UINT16_BYTE_LENGTH,
+            label = "OpenType GSUB ChainingContextSubst format 1 subRuleSet offsets",
+        )
+        repeat(subRuleSetCount) { setIndex ->
+            val subRuleSetOffset = table.readUInt16BE(
+                subRuleSetOffsetsStart + setIndex * UINT16_BYTE_LENGTH,
+                "OpenType GSUB ChainingContextSubst format 1 subRuleSetOffset[$setIndex]",
+            )
+            if (subRuleSetOffset == 0) return@repeat
+            val subRuleSetStart = table.checkedOffset(
+                base = subtableStart,
+                offset = subRuleSetOffset,
+                label = "OpenType GSUB ChainingContextSubst format 1 SubRuleSet $setIndex",
+            )
+            table.requireRange(
+                subRuleSetStart, UINT16_BYTE_LENGTH,
+                "OpenType GSUB ChainingContextSubst format 1 SubRuleSet $setIndex header",
+            )
+            val subRuleCount = table.readUInt16BE(
+                subRuleSetStart,
+                "OpenType GSUB ChainingContextSubst format 1 SubRuleSet $setIndex subRuleCount",
+            )
+            val subRuleOffsetsStart = table.checkedOffset(
+                subRuleSetStart, UINT16_BYTE_LENGTH,
+                "OpenType GSUB ChainingContextSubst format 1 SubRuleSet $setIndex offsets",
+            )
+            table.requireArrayRange(
+                offset = subRuleOffsetsStart,
+                count = subRuleCount,
+                recordSize = UINT16_BYTE_LENGTH,
+                label = "OpenType GSUB ChainingContextSubst format 1 SubRuleSet $setIndex offsets",
+            )
+            repeat(subRuleCount) { ruleIndex ->
+                val subRuleOffset = table.readUInt16BE(
+                    subRuleOffsetsStart + ruleIndex * UINT16_BYTE_LENGTH,
+                    "OpenType GSUB ChainingContextSubst format 1 SubRuleSet $setIndex subRuleOffset[$ruleIndex]",
+                )
+                val subRuleStart = table.checkedOffset(
+                    base = subRuleSetStart,
+                    offset = subRuleOffset,
+                    label = "OpenType GSUB ChainingContextSubst format 1 SubRule $setIndex/$ruleIndex",
+                )
+                table.requireRange(
+                    subRuleStart, 2,
+                    "OpenType GSUB ChainingContextSubst format 1 SubRule $setIndex/$ruleIndex header",
+                )
+                val backtrackGlyphCount = table.readUInt16BE(
+                    subRuleStart,
+                    "OpenType GSUB ChainingContextSubst format 1 SubRule $setIndex/$ruleIndex backtrackGlyphCount",
+                )
+                var cursor = subRuleStart + UINT16_BYTE_LENGTH
+                val backtrackGlyphIds = buildList(backtrackGlyphCount) {
+                    table.requireArrayRange(
+                        offset = cursor,
+                        count = backtrackGlyphCount,
+                        recordSize = UINT16_BYTE_LENGTH,
+                        label = "OpenType GSUB ChainingContextSubst format 1 SubRule $setIndex/$ruleIndex backtrack array",
+                    )
+                    repeat(backtrackGlyphCount) {
+                        add(table.readUInt16BE(cursor, "OpenType GSUB ChainingContextSubst format 1 SubRule $setIndex/$ruleIndex backtrack[$it]"))
+                        cursor += UINT16_BYTE_LENGTH
+                    }
+                }
+                val inputGlyphCount = table.readUInt16BE(
+                    cursor,
+                    "OpenType GSUB ChainingContextSubst format 1 SubRule $setIndex/$ruleIndex inputGlyphCount",
+                )
+                require(inputGlyphCount >= 1) {
+                    "OpenType GSUB ChainingContextSubst format 1 SubRule $setIndex/$ruleIndex inputGlyphCount $inputGlyphCount must be at least 1."
+                }
+                cursor += UINT16_BYTE_LENGTH
+                val inputGlyphIds = buildList(inputGlyphCount) {
+                    table.requireArrayRange(
+                        offset = cursor,
+                        count = inputGlyphCount,
+                        recordSize = UINT16_BYTE_LENGTH,
+                        label = "OpenType GSUB ChainingContextSubst format 1 SubRule $setIndex/$ruleIndex input array",
+                    )
+                    repeat(inputGlyphCount) {
+                        add(table.readUInt16BE(cursor, "OpenType GSUB ChainingContextSubst format 1 SubRule $setIndex/$ruleIndex input[$it]"))
+                        cursor += UINT16_BYTE_LENGTH
+                    }
+                }
+                val lookAheadGlyphCount = table.readUInt16BE(
+                    cursor,
+                    "OpenType GSUB ChainingContextSubst format 1 SubRule $setIndex/$ruleIndex lookAheadGlyphCount",
+                )
+                cursor += UINT16_BYTE_LENGTH
+                val lookAheadGlyphIds = buildList(lookAheadGlyphCount) {
+                    table.requireArrayRange(
+                        offset = cursor,
+                        count = lookAheadGlyphCount,
+                        recordSize = UINT16_BYTE_LENGTH,
+                        label = "OpenType GSUB ChainingContextSubst format 1 SubRule $setIndex/$ruleIndex lookAhead array",
+                    )
+                    repeat(lookAheadGlyphCount) {
+                        add(table.readUInt16BE(cursor, "OpenType GSUB ChainingContextSubst format 1 SubRule $setIndex/$ruleIndex lookAhead[$it]"))
+                        cursor += UINT16_BYTE_LENGTH
+                    }
+                }
+                val substCount = table.readUInt16BE(
+                    cursor,
+                    "OpenType GSUB ChainingContextSubst format 1 SubRule $setIndex/$ruleIndex substCount",
+                )
+                cursor += UINT16_BYTE_LENGTH
+                val nestedLookups = parseNestedLookupRecords(
+                    table = table,
+                    recordsStart = cursor,
+                    substCount = substCount,
+                    matchLength = inputGlyphCount,
+                    label = "OpenType GSUB ChainingContextSubst format 1 SubRule $setIndex/$ruleIndex",
+                )
+                rules += OpenTypeGsubChainingContextGlyphRule(
+                    backtrackGlyphIds = backtrackGlyphIds,
+                    inputGlyphIds = inputGlyphIds,
+                    lookAheadGlyphIds = lookAheadGlyphIds,
+                    nestedLookups = nestedLookups,
+                )
+            }
+        }
+    }
+
+    private fun parseReverseChainingLookup(
+        table: ByteArray,
+        lookupStart: Int,
+        lookupIndex: Int,
+        subtableCount: Int,
+        featureTags: Collection<String>,
+    ): OpenTypeGsubLookup? = null // not yet implemented
+
     private fun parseNestedLookupRecords(
         table: ByteArray,
         recordsStart: Int,
@@ -7878,7 +8149,9 @@ private const val GSUB_SINGLE_SUBSTITUTION_LOOKUP_TYPE = 1
 private const val GSUB_MULTIPLE_SUBSTITUTION_LOOKUP_TYPE = 2
 private const val GSUB_LIGATURE_SUBSTITUTION_LOOKUP_TYPE = 4
 private const val GSUB_CONTEXTUAL_SUBSTITUTION_LOOKUP_TYPE = 5
+private const val GSUB_CHAINING_CONTEXT_SUBSTITUTION_LOOKUP_TYPE = 6
 private const val GSUB_EXTENSION_SUBSTITUTION_LOOKUP_TYPE = 7
+private const val GSUB_REVERSE_CHAINING_SUBSTITUTION_LOOKUP_TYPE = 8
 
 /**
  * Parsed bounded subset of OpenType GPOS pair-position kerning.
@@ -8264,6 +8537,9 @@ object OpenTypeGposTableParser {
                 GPOS_MARK_TO_BASE_LOOKUP_TYPE,
                 GPOS_MARK_TO_LIGATURE_LOOKUP_TYPE,
                 GPOS_MARK_TO_MARK_LOOKUP_TYPE,
+                GPOS_CONTEXTUAL_POSITIONING_LOOKUP_TYPE,
+                GPOS_CHAINING_CONTEXT_POSITIONING_LOOKUP_TYPE,
+                GPOS_EXTENSION_POSITIONING_LOOKUP_TYPE,
             )
         ) {
             return null
@@ -8308,7 +8584,7 @@ object OpenTypeGposTableParser {
                         }
                     },
                 )
-                else -> OpenTypeGposMarkToMarkLookup(
+                GPOS_MARK_TO_MARK_LOOKUP_TYPE -> OpenTypeGposMarkToMarkLookup(
                     featureTag = featureTag,
                     lookupIndex = lookupIndex,
                     attachments = buildList {
@@ -8317,6 +8593,24 @@ object OpenTypeGposTableParser {
                             addAll(parseMarkToMarkSubtable(table, subtableStart))
                         }
                     },
+                )
+                GPOS_CONTEXTUAL_POSITIONING_LOOKUP_TYPE -> OpenTypeGposContextualLookup(
+                    featureTag = featureTag,
+                    lookupIndex = lookupIndex,
+                )
+                GPOS_CHAINING_CONTEXT_POSITIONING_LOOKUP_TYPE -> OpenTypeGposChainingLookup(
+                    featureTag = featureTag,
+                    lookupIndex = lookupIndex,
+                )
+                GPOS_EXTENSION_POSITIONING_LOOKUP_TYPE -> OpenTypeGposExtensionLookup(
+                    featureTag = featureTag,
+                    lookupIndex = lookupIndex,
+                )
+                else -> OpenTypeGposMalformedLookup(
+                    featureTag = featureTag,
+                    lookupIndex = lookupIndex,
+                    lookupType = lookupType,
+                    message = "Unsupported GPOS lookup type $lookupType.",
                 )
             }
         }.getOrElse { error ->

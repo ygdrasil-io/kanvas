@@ -17,6 +17,7 @@ import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToLigatureAttachment
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToLigatureLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToMarkLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposTable
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubChainingContextGlyphLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassRule
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassSubtable
@@ -916,6 +917,7 @@ public class BasicOpenTypeShapingEngine(
                     applyContextClassLookup(glyphUnits, lookup, lookupsByIndex, diagnostics)
                 is OpenTypeGsubContextCoverageLookup ->
                     applyContextCoverageLookup(glyphUnits, lookup, lookupsByIndex, diagnostics)
+                is OpenTypeGsubChainingContextGlyphLookup -> {} // parsed but not yet applied at shaping runtime
             }
             val afterUnits = runtimeTraceCollector?.let { glyphUnits.toList() }
             if (
@@ -1296,6 +1298,7 @@ public class BasicOpenTypeShapingEngine(
                 )
                 if (shouldStop) return true
             }
+            is OpenTypeGsubChainingContextGlyphLookup -> {} // parsed but not applied at runtime
         }
         val hasOverlappingGlyph = glyphUnits.any { glyph ->
             glyph.textRange.first <= textRange.last && glyph.textRange.last >= textRange.first
@@ -1840,6 +1843,7 @@ public class BasicOpenTypeShapingEngine(
             is OpenTypeGsubContextClassLookup,
             is OpenTypeGsubContextCoverageLookup,
             -> 5
+            is OpenTypeGsubChainingContextGlyphLookup -> 6
         }
 
     private fun OpenTypeGsubLookup.contextFormatOrNull(): Int? =
@@ -1847,6 +1851,7 @@ public class BasicOpenTypeShapingEngine(
             is OpenTypeGsubContextGlyphLookup -> 1
             is OpenTypeGsubContextClassLookup -> 2
             is OpenTypeGsubContextCoverageLookup -> 3
+            is OpenTypeGsubChainingContextGlyphLookup -> null
             else -> null
         }
 
