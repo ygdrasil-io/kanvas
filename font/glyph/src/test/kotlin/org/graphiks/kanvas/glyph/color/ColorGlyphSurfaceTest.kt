@@ -18,6 +18,10 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
+import org.graphiks.kanvas.text.shaping.EmojiSequenceFact
+import org.graphiks.kanvas.text.shaping.EmojiSequenceKind
+import org.graphiks.kanvas.text.shaping.EmojiSequenceShaper
+import org.graphiks.kanvas.text.shaping.ShapingRequest
 
 /**
  * Verifies that the pure Kotlin color glyph package exposes the planned public surface.
@@ -43,6 +47,11 @@ class ColorGlyphSurfaceTest {
             SVGGlyphRenderer::class.simpleName,
             SVGGlyphParser::class.simpleName,
             EmojiGlyphDispatcher::class.simpleName,
+            SimpleEmojiSequencePlanner::class.simpleName,
+            EmojiRouteTrace::class.simpleName,
+            EmojiRouteRequest::class.simpleName,
+            EmojiFallbackAttempt::class.simpleName,
+            EmojiRoutePlanReference::class.simpleName,
             ColorGlyphDiagnostic::class.simpleName,
         )
 
@@ -61,6 +70,11 @@ class ColorGlyphSurfaceTest {
                 "SVGGlyphRenderer",
                 "SVGGlyphParser",
                 "EmojiGlyphDispatcher",
+                "SimpleEmojiSequencePlanner",
+                "EmojiRouteTrace",
+                "EmojiRouteRequest",
+                "EmojiFallbackAttempt",
+                "EmojiRoutePlanReference",
                 "ColorGlyphDiagnostic",
             ),
             names,
@@ -533,6 +547,263 @@ class ColorGlyphSurfaceTest {
         )
         assertTrue(dispatch.toCanonicalJson().contains("\"code\": \"text.emoji.fallback-unavailable\""))
         assertEvidenceDumpClean(dispatch.toCanonicalJson())
+    }
+
+    @Test
+    fun emojiSequencePlannerGoldenMatchesRepoFixture() {
+        val planner = SimpleEmojiSequencePlanner()
+        val sequenceText = "\u2764\uFE0F \uD83D\uDC4B\uD83C\uDFFD \uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67 1\uFE0F\u20E3 \uD83C\uDDEB\uD83C\uDDF7"
+        val facts = EmojiSequenceShaper().sequenceFacts(
+            ShapingRequest(
+                text = sequenceText,
+                textRange = sequenceText.indices,
+                fontSize = 16f,
+            ),
+        ).associateBy { it.kind }
+        val supportedRoleText = "\uD83D\uDC69\uD83C\uDFFD\u200D\uD83D\uDCBB"
+        val supportedRoleFact = EmojiSequenceShaper().sequenceFacts(
+            ShapingRequest(
+                text = supportedRoleText,
+                textRange = supportedRoleText.indices,
+                fontSize = 16f,
+            ),
+        ).single()
+        val unsupportedText = "\u270C\uFE0F\uD83C\uDFFF\u200D\uD83D\uDCBB"
+        val unsupportedFact = EmojiSequenceShaper().sequenceFacts(
+            ShapingRequest(
+                text = unsupportedText,
+                textRange = unsupportedText.indices,
+                fontSize = 16f,
+            ),
+        ).single()
+        val colorTypeface = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655441301"))
+        val outlineTypeface = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655441302"))
+
+        val dump = emojiRouteTraceFixtureDump(
+            listOf(
+                EmojiRouteTraceFixtureCase(
+                    caseId = "variation-selector-colr",
+                    sourceText = "\u2764\uFE0F",
+                    trace = planner.plan(
+                        EmojiRouteRequest(
+                            sequenceFact = requireNotNull(facts[EmojiSequenceKind.VariationSelector]),
+                            unicodeVersion = "16.0.0",
+                            glyphId = 510,
+                            strikeKey = strikeKey(typefaceId = colorTypeface),
+                            fallbackAttempts = listOf(
+                                emojiFallbackAttempt(
+                                    familyName = "Alpha Sans",
+                                    typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655441303")),
+                                    covered = false,
+                                    reason = "requested-family",
+                                ),
+                                emojiFallbackAttempt(
+                                    familyName = "Noto Color Emoji",
+                                    typefaceId = colorTypeface,
+                                    covered = true,
+                                    reason = "emoji-preference",
+                                    selected = true,
+                                ),
+                            ),
+                            availability = EmojiGlyphRouteAvailability(colrGlyphs = setOf(510)),
+                            evidenceRef = EmojiRoutePlanReference(
+                                dumpId = "color-glyph-plan",
+                                caseId = "colrv0-layered-palette-override",
+                            ),
+                        ),
+                    ),
+                ),
+                EmojiRouteTraceFixtureCase(
+                    caseId = "skin-tone-bitmap",
+                    sourceText = "\uD83D\uDC4B\uD83C\uDFFD",
+                    trace = planner.plan(
+                        EmojiRouteRequest(
+                            sequenceFact = requireNotNull(facts[EmojiSequenceKind.SkinTone]),
+                            unicodeVersion = "16.0.0",
+                            glyphId = 511,
+                            strikeKey = strikeKey(typefaceId = colorTypeface),
+                            fallbackAttempts = listOf(
+                                emojiFallbackAttempt(
+                                    familyName = "Noto Color Emoji",
+                                    typefaceId = colorTypeface,
+                                    covered = true,
+                                    reason = "emoji-preference",
+                                    selected = true,
+                                ),
+                            ),
+                            availability = EmojiGlyphRouteAvailability(
+                                bitmapGlyphs = setOf(511),
+                                pngGlyphs = setOf(511),
+                                outlineGlyphs = setOf(511),
+                            ),
+                            evidenceRef = EmojiRoutePlanReference(
+                                dumpId = "bitmap-glyph-plan",
+                                caseId = "cbdt-cblc-png",
+                            ),
+                        ),
+                    ),
+                ),
+                EmojiRouteTraceFixtureCase(
+                    caseId = "zwj-outline-fallback",
+                    sourceText = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67",
+                    trace = planner.plan(
+                        EmojiRouteRequest(
+                            sequenceFact = requireNotNull(facts[EmojiSequenceKind.ZWJ]),
+                            unicodeVersion = "16.0.0",
+                            glyphId = 512,
+                            strikeKey = strikeKey(typefaceId = outlineTypeface),
+                            fallbackAttempts = listOf(
+                                emojiFallbackAttempt(
+                                    familyName = "Monochrome Emoji",
+                                    typefaceId = outlineTypeface,
+                                    covered = true,
+                                    reason = "outline-fallback",
+                                    selected = true,
+                                ),
+                            ),
+                            availability = EmojiGlyphRouteAvailability(outlineGlyphs = setOf(512)),
+                        ),
+                    ),
+                ),
+                EmojiRouteTraceFixtureCase(
+                    caseId = "role-skin-tone-colr",
+                    sourceText = "\uD83D\uDC69\uD83C\uDFFD\u200D\uD83D\uDCBB",
+                    trace = planner.plan(
+                        EmojiRouteRequest(
+                            sequenceFact = supportedRoleFact,
+                            unicodeVersion = "16.0.0",
+                            glyphId = 515,
+                            strikeKey = strikeKey(typefaceId = colorTypeface),
+                            fallbackAttempts = listOf(
+                                emojiFallbackAttempt(
+                                    familyName = "Noto Color Emoji",
+                                    typefaceId = colorTypeface,
+                                    covered = true,
+                                    reason = "emoji-preference",
+                                    selected = true,
+                                ),
+                            ),
+                            availability = EmojiGlyphRouteAvailability(
+                                colrGlyphs = setOf(515),
+                                outlineGlyphs = setOf(515),
+                            ),
+                        ),
+                    ),
+                ),
+                EmojiRouteTraceFixtureCase(
+                    caseId = "keycap-png",
+                    sourceText = "1\uFE0F\u20E3",
+                    trace = planner.plan(
+                        EmojiRouteRequest(
+                            sequenceFact = requireNotNull(facts[EmojiSequenceKind.Keycap]),
+                            unicodeVersion = "16.0.0",
+                            glyphId = 513,
+                            strikeKey = strikeKey(typefaceId = colorTypeface),
+                            fallbackAttempts = listOf(
+                                emojiFallbackAttempt(
+                                    familyName = "Noto Color Emoji",
+                                    typefaceId = colorTypeface,
+                                    covered = true,
+                                    reason = "emoji-preference",
+                                    selected = true,
+                                ),
+                            ),
+                            availability = EmojiGlyphRouteAvailability(
+                                pngGlyphs = setOf(513),
+                                outlineGlyphs = setOf(513),
+                            ),
+                            evidenceRef = EmojiRoutePlanReference(
+                                dumpId = "bitmap-glyph-plan",
+                                caseId = "sbix-png",
+                            ),
+                        ),
+                    ),
+                ),
+                EmojiRouteTraceFixtureCase(
+                    caseId = "flag-svg",
+                    sourceText = "\uD83C\uDDEB\uD83C\uDDF7",
+                    trace = planner.plan(
+                        EmojiRouteRequest(
+                            sequenceFact = requireNotNull(facts[EmojiSequenceKind.Flag]),
+                            unicodeVersion = "16.0.0",
+                            glyphId = 514,
+                            strikeKey = strikeKey(typefaceId = colorTypeface),
+                            fallbackAttempts = listOf(
+                                emojiFallbackAttempt(
+                                    familyName = "Noto Color Emoji",
+                                    typefaceId = colorTypeface,
+                                    covered = true,
+                                    reason = "emoji-preference",
+                                    selected = true,
+                                ),
+                            ),
+                            availability = EmojiGlyphRouteAvailability(
+                                svgGlyphs = setOf(514),
+                                outlineGlyphs = setOf(514),
+                            ),
+                        ),
+                    ),
+                ),
+                EmojiRouteTraceFixtureCase(
+                    caseId = "fallback-unavailable",
+                    sourceText = "1\uFE0F\u20E3",
+                    trace = planner.plan(
+                        EmojiRouteRequest(
+                            sequenceFact = requireNotNull(facts[EmojiSequenceKind.Keycap]),
+                            unicodeVersion = "16.0.0",
+                            glyphId = 520,
+                            strikeKey = strikeKey(),
+                            fallbackAttempts = listOf(
+                                emojiFallbackAttempt(
+                                    familyName = "Alpha Sans",
+                                    typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655441304")),
+                                    covered = false,
+                                    reason = "requested-family",
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                EmojiRouteTraceFixtureCase(
+                    caseId = "color-glyph-unavailable",
+                    sourceText = "\uD83C\uDDEB\uD83C\uDDF7",
+                    trace = planner.plan(
+                        EmojiRouteRequest(
+                            sequenceFact = requireNotNull(facts[EmojiSequenceKind.Flag]),
+                            unicodeVersion = "16.0.0",
+                            glyphId = 521,
+                            strikeKey = strikeKey(typefaceId = colorTypeface),
+                            fallbackAttempts = listOf(
+                                emojiFallbackAttempt(
+                                    familyName = "Noto Color Emoji",
+                                    typefaceId = colorTypeface,
+                                    covered = true,
+                                    reason = "emoji-preference",
+                                    selected = true,
+                                ),
+                            ),
+                            availability = EmojiGlyphRouteAvailability(outlineGlyphs = setOf(521)),
+                            allowMonochromeFallback = false,
+                        ),
+                    ),
+                ),
+                EmojiRouteTraceFixtureCase(
+                    caseId = "unsupported-sequence",
+                    sourceText = "\u270C\uFE0F\uD83C\uDFFF\u200D\uD83D\uDCBB",
+                    trace = planner.plan(
+                        EmojiRouteRequest(
+                            sequenceFact = unsupportedFact,
+                            unicodeVersion = "16.0.0",
+                            glyphId = null,
+                            strikeKey = strikeKey(),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(readProjectFile("reports/font/fixtures/expected/color/emoji-route-trace.json").trim(), dump.trim())
+        assertEvidenceDumpClean(dump)
     }
 
     @Test
@@ -2868,6 +3139,70 @@ class ColorGlyphSurfaceTest {
         assertEvidenceDumpClean(dump)
     }
 
+    @Test
+    fun ColorEmojiFixtureManifestMatchesRepoFixture() {
+        val dump = readProjectFile("reports/font/fixtures/expected/color/color-emoji-fixture-manifest.json")
+        assertEquals("color-emoji-fixture-manifest", jsonStringField(dump, "dumpId"))
+        assertEquals(
+            listOf("color-glyphs", "emoji", "png-bitmap-glyphs", "svg-glyphs"),
+            jsonStringArrayField(dump, "fixtureFamilies"),
+        )
+        assertEquals(
+            listOf(
+                "no-complete-target-support-claim",
+                "no-complete-colrv1-rendering-claim",
+                "no-complete-png-bitmap-glyph-routing-claim",
+                "no-complete-svg-in-opentype-rendering-claim",
+                "no-complete-emoji-sequence-shaping-claim",
+                "no-complete-color-glyph-fallback-support-claim",
+                "no-gpu-color-glyph-support-claim",
+                "no-gpu-bitmap-glyph-route-claim",
+                "no-gpu-svg-glyph-route-claim",
+                "no-platform-color-font-fallback-claim",
+                "no-platform-bitmap-codec-claim",
+                "no-platform-emoji-engine-claim",
+                "no-native-svg-renderer-claim",
+                "no-scaledemoji-retirement",
+                "no-scaledemoji-rendering-retirement",
+                "no-coloremoji-blendmodes-retirement",
+            ),
+            jsonStringArrayField(dump, "nonClaims"),
+        )
+
+        val legacyGates = jsonArrayField(dump, "legacyGates")
+        assertJsonPattern(legacyGates, """"gateId"\s*:\s*"coloremoji_blendmodes"""")
+        assertJsonPattern(legacyGates, """"fixtureIds"\s*:\s*\[\s*"color-glyphs-colrv1-composite-clip-bounds"""")
+        assertJsonPattern(legacyGates, """"gateId"\s*:\s*"scaledemoji"""")
+        assertJsonPattern(legacyGates, """"emoji-variation-selector-colr"""")
+        assertJsonPattern(legacyGates, """"emoji-unsupported-sequence"""")
+        assertJsonPattern(legacyGates, """"gateId"\s*:\s*"scaledemoji_rendering"""")
+        assertJsonPattern(legacyGates, """"png-bitmap-glyphs-cbdt-cblc-png"""")
+        assertJsonPattern(legacyGates, """"svg-glyphs-svg-static-path"""")
+
+        val rebaselinePolicy = jsonObjectField(dump, "rebaselinePolicy")
+        assertJsonPattern(rebaselinePolicy, """"ordinaryTestRuns"\s*:\s*"must-not-overwrite-goldens"""")
+        assertJsonPattern(rebaselinePolicy, """"autoOverwritePolicy"\s*:\s*"forbidden"""")
+        assertJsonPattern(rebaselinePolicy, """"reviewRequirement"\s*:\s*"color-emoji fixture-manifest updates require reviewed old/new manifest diffs, linked dump diffs, and a stated reason before check-in\."""")
+        assertJsonPattern(rebaselinePolicy, """"color-svg-emoji-goldens\.json"""")
+        assertJsonPattern(rebaselinePolicy, """"emoji-route-trace\.json"""")
+        assertJsonPattern(rebaselinePolicy, """"svg-glyph-fixture-manifest\.json"""")
+
+        val cases = jsonArrayField(dump, "cases")
+        assertEquals(39, Regex("\"fixtureId\":").findAll(cases).count())
+        assertJsonPattern(cases, """"fixtureId"\s*:\s*"color-glyphs-colrv0-layered-palette-override"""")
+        assertJsonPattern(cases, """"fixtureId"\s*:\s*"color-glyphs-colrv1-gradient-operation-group"""")
+        assertJsonPattern(cases, """"fixtureId"\s*:\s*"png-bitmap-glyphs-cbdt-cblc-png"""")
+        assertJsonPattern(cases, """"fixtureId"\s*:\s*"svg-glyphs-svg-static-path"""")
+        assertJsonPattern(cases, """"fixtureId"\s*:\s*"emoji-variation-selector-colr"""")
+        assertJsonPattern(cases, """"sourceSha256"\s*:\s*"8aa611b1ca97044ac6f13dc982fde29256612f0a5acc6ef47ca541a7a5b99b28"""")
+        assertJsonPattern(cases, """"sourceSha256"\s*:\s*"469e3b92d63cfc203789f8742f1835b8672c7b5995ab4a832f1699b712a5afcc"""")
+        assertJsonPattern(cases, """"generatedSourceRecipe"\s*:\s*\[""")
+        assertJsonPattern(cases, """"expectedDumpFiles"\s*:\s*\[\s*"emoji-route-trace\.json"\s*,\s*"color-glyph-plan\.json"""")
+        assertJsonPattern(cases, """"expectedDumpFiles"\s*:\s*\[\s*"emoji-route-trace\.json"\s*,\s*"bitmap-glyph-plan\.json"""")
+
+        assertEvidenceDumpClean(dump)
+    }
+
     private fun syntheticCpalV0(): ByteArray {
         val bytes = ByteArray(32)
         writeU16(bytes, 0, 0)
@@ -3291,11 +3626,63 @@ class ColorGlyphSurfaceTest {
             ((green and 0xFF) shl 8) or
             (blue and 0xFF)
 
+    private data class EmojiRouteTraceFixtureCase(
+        val caseId: String,
+        val sourceText: String,
+        val trace: EmojiRouteTrace,
+    )
+
     private fun glyphRun(glyphIds: List<Int>): GPUGlyphRunDescriptor =
         GPUGlyphRunDescriptor(
             runID = GPUGlyphRunID(Uuid.parse("550e8400-e29b-41d4-a716-446655441202")),
             glyphIDs = glyphIds,
         )
+
+    private fun emojiFallbackAttempt(
+        familyName: String,
+        typefaceId: TypefaceID?,
+        covered: Boolean,
+        reason: String,
+        selected: Boolean = false,
+        diagnosticCode: String? = null,
+    ): EmojiFallbackAttempt =
+        EmojiFallbackAttempt(
+            familyName = familyName,
+            typefaceId = typefaceId,
+            covered = covered,
+            reason = reason,
+            selected = selected,
+            diagnosticCode = diagnosticCode,
+        )
+
+    private fun emojiRouteTraceFixtureDump(cases: List<EmojiRouteTraceFixtureCase>): String = buildString {
+        append("{\n")
+        append("  \"schemaVersion\": 1,\n")
+        append("  \"dumpId\": \"emoji-route-trace\",\n")
+        append("  \"ownerTickets\": [\"KFONT-M10-009\"],\n")
+        append("  \"cases\": [\n")
+        append(
+            cases.joinToString(",\n") { case ->
+                buildString {
+                    append("    {\n")
+                    append("      \"caseId\": ").append(jsonString(case.caseId)).append(",\n")
+                    append("      \"sourceText\": ").append(jsonString(case.sourceText)).append(",\n")
+                    append("      \"trace\": ").append(normalizeEmbeddedJson(case.trace.toCanonicalJson()).prependIndent("      ").trimStart())
+                    append("\n    }")
+                }
+            },
+        )
+        append("\n  ],\n")
+        append("  \"nonClaims\": [\n")
+        append("    \"no-complete-target-support-claim\",\n")
+        append("    \"no-complete-emoji-sequence-shaping-claim\",\n")
+        append("    \"no-complete-color-glyph-fallback-support-claim\",\n")
+        append("    \"no-gpu-color-glyph-support-claim\",\n")
+        append("    \"no-platform-emoji-engine-claim\",\n")
+        append("    \"no-scaledemoji-retirement\"\n")
+        append("  ]\n")
+        append("}\n")
+    }
 
     private fun strikeKey(
         typefaceId: TypefaceID = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655441201")),
@@ -3669,7 +4056,7 @@ class ColorGlyphSurfaceTest {
 
     private fun assertEvidenceDumpClean(dump: String) {
         val forbiddenTokens = listOf(
-            "Sk",
+            "Skia",
             "HarfBuzz",
             "FreeType",
             "Fontations",
@@ -3686,6 +4073,10 @@ class ColorGlyphSurfaceTest {
         forbiddenTokens.forEach { token ->
             assertTrue(!dump.contains(token), "Dump must not contain forbidden token $token: $dump")
         }
+        assertTrue(
+            !Regex("""\bSk[A-Z][A-Za-z0-9_]*\b""").containsMatchIn(dump),
+            "Dump must not contain Sk-prefixed API symbols: $dump",
+        )
         assertTrue(!Regex("@[0-9a-fA-F]{4,}").containsMatchIn(dump), "Dump must not contain object identity: $dump")
     }
 
@@ -3892,6 +4283,21 @@ class ColorGlyphSurfaceTest {
             }
         }
         error("Unterminated JSON object field $field")
+    }
+
+    private fun jsonArrayField(json: String, field: String): String {
+        val fieldToken = "\"$field\": ["
+        val start = json.indexOf(fieldToken)
+        require(start >= 0) { "Missing JSON array field $field" }
+        val arrayStart = json.indexOf('[', start)
+        return extractJsonArray(json, arrayStart)
+    }
+
+    private fun assertJsonPattern(json: String, pattern: String) {
+        assertTrue(
+            Regex(pattern, RegexOption.DOT_MATCHES_ALL).containsMatchIn(json),
+            "Missing JSON pattern $pattern in: $json",
+        )
     }
 
     private fun sha256Utf8(value: String): String =

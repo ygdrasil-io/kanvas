@@ -82,11 +82,14 @@ REQUIRED_FONT_FAMILY_GATES = {
         "colrv1-solid-gradient-transform",
     ],
     "emoji": [
-        "emoji-vs15-vs16",
-        "emoji-skin-tone",
-        "emoji-zwj-family",
-        "emoji-fallback-unavailable-refusal",
         "emoji-color-glyph-unavailable-refusal",
+        "emoji-fallback-unavailable-refusal",
+        "emoji-flag",
+        "emoji-keycap",
+        "emoji-skin-tone",
+        "emoji-unsupported-sequence-refusal",
+        "emoji-vs15-vs16",
+        "emoji-zwj-family",
     ],
     "font-source-sfnt": [
         "single-ttf-provenance",

@@ -70,9 +70,10 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*GpuRendererShadow*'
 - Independent review `019ec878-7c64-7e42-ab70-bb80043e53d1` accepted
   KGPU-M10-001 and KGPU-M10-004 for `done` after remediation added explicit
   material/paint, rect/rrect stroke, and clear/discard inventory rows.
-- `KGPU-M10-002` remains blocked until adapter-backed shadow parity evidence
-  exists per family, including before/after dumps, PM rows, rollback labels, and
-  skipped/refused diagnostics.
+- `KGPU-M10-002` was closed on 2026-06-17 by
+  `reports/gpu-renderer/2026-06-17-m10-002-shadow-parity-gates.md`, which adds
+  the per-family shadow parity gate and stable missing/unsafe evidence refusals
+  while keeping legacy defaults active.
 - `KGPU-M10-003` remains blocked until KGPU-M10-002 is accepted and each
   retirement row names an accepted replacement ticket, activation decision,
   rollback evidence, old-path usage evidence, and PM evidence.
