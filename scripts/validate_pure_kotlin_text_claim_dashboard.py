@@ -45,6 +45,7 @@ REQUIRED_SURFACES = {
     "lcd",
     "outline-path",
     "sdf",
+    "skia-facade-adapter-inventory",
     "simple-latin-atlas",
 }
 

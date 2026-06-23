@@ -104,6 +104,10 @@ class UnicodeDataGenerationTest {
         assertTrue(facts.getValue(0x1F600).emoji)
         assertTrue(facts.getValue(0x1F600).extendedPictographic)
         assertTrue(facts.getValue(0xFE0F).variationSelector)
+        assertEquals("Extend", first.graphemeBreak.valueAt(0xE0100))
+        assertEquals("Zinh", first.script.valueAt(0xE0100))
+        assertTrue(first.defaultIgnorable.valueAt(0xE0100))
+        assertTrue(first.variationSelector.valueAt(0xE0100))
     }
 
     @Test

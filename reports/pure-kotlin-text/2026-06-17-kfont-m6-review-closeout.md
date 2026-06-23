@@ -1,6 +1,6 @@
 # 2026-06-17 KFONT M6 Review Closeout Audit
 
-Status: documentation-only audit wave.
+Status: documentation-only audit wave; later fixture closeout and runtime-adoption waves superseded parts of this snapshot.
 
 ## Scope
 
@@ -33,9 +33,9 @@ Status: documentation-only audit wave.
 
 ## Outcome
 
-- `KFONT-M6-002` stays in `review`.
-- `KFONT-M6-004` stays in `review`.
-- `KFONT-M6-006` stays in `review`.
+- Historical snapshot only: `KFONT-M6-002` and `KFONT-M6-004` were later closed
+  out on reviewed fixture evidence, while `KFONT-M6-006` remains in `review`
+  with narrower runtime and fixture gates.
 
 The merged slices remain valid prerequisite evidence. The review state here
 records that the remaining work is fixture/dump/runtime-gated, but the bounded
