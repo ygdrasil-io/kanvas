@@ -151,6 +151,10 @@ val requiredPipelineConformanceSuites = listOf(
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
     RequiredPipelineConformanceSuite(
+        className = "org.skia.gpu.webgpu.TextWgslValidationPipelineConformanceTest",
+        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
         className = "org.skia.gpu.webgpu.SimpleLinearGradientSceneEvidenceTest",
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
@@ -604,7 +608,7 @@ project(":cpu-raster").registerPipelineConformanceTest(
 )
 
 project(":gpu-raster").registerPipelineConformanceTest(
-    descriptionText = "Runs generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SaveLayer image-filter, simple SimpleRT runtime effect, and selector conformance tests.",
+    descriptionText = "Runs generated WGSL, text WGSL validation, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SaveLayer image-filter, simple SimpleRT runtime effect, and selector conformance tests.",
     testPatterns = listOf(
         "org.skia.gpu.webgpu.tools.WgslValidationReportTest",
         "org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest",
@@ -615,6 +619,7 @@ project(":gpu-raster").registerPipelineConformanceTest(
         "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest",
         "org.skia.gpu.webgpu.SkWebGpuGlyphAtlasTest",
         "org.skia.gpu.webgpu.SimpleLatinLineSceneEvidenceTest",
+        "org.skia.gpu.webgpu.TextWgslValidationPipelineConformanceTest",
         "org.skia.gpu.webgpu.SimpleLinearGradientSceneEvidenceTest",
         "org.skia.gpu.webgpu.SimpleBitmapRectSceneEvidenceTest",
         "org.skia.gpu.webgpu.SimpleSrcOverAlphaSceneEvidenceTest",
@@ -884,7 +889,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED KAN-056 glyph atlas route hardening PM gates and non-claim guards: validateKan056GlyphAtlasRouteHardening
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
-            |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
+            |- REQUIRED generated WGSL, text WGSL validation, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
             |- REQUIRED runtime descriptor registry and CPU dispatch tests: :cpu-raster:pipelineConformanceTest
             |- REQUIRED PipelineIR, CPU executor, and geometry oracle tests: :render-pipeline:pipelineConformanceTest
             |- REQUIRED kanvas-skia production descriptor-route tests: :kanvas-skia:pipelineConformanceTest
