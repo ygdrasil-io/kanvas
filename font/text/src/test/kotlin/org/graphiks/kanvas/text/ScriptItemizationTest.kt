@@ -51,6 +51,11 @@ class ScriptItemizationTest {
         assertEquals("script-extension", cjk.runs.single().reason)
         assertEquals(emptyList(), cjk.diagnostics)
 
+        val mixedCjkSupplementaryVariationSelector = itemizer.itemize("\u4E00\uDB40\uDD00\u30A2")
+        assertEquals(listOf("Hani", "Kana"), mixedCjkSupplementaryVariationSelector.runs.map { it.selectedScript })
+        assertEquals(listOf(0..2, 3..3), mixedCjkSupplementaryVariationSelector.runs.map { it.utf16Range })
+        assertEquals(emptyList(), mixedCjkSupplementaryVariationSelector.diagnostics)
+
         val ambiguous = itemizer.itemize("\u3003")
         assertEquals("Zyyy", ambiguous.runs.single().selectedScript)
         assertEquals(listOf("Bopo", "Hang", "Hani", "Hira", "Kana"), ambiguous.runs.single().extensionCandidates)

@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M13-002"
 title: "Route `SkTypeface` OpenType facts through pure Kotlin core"
-status: "proposed"
+status: "blocked"
 milestone: "M13"
 priority: "P1"
 owner_area: "skia-facade"
@@ -107,6 +107,13 @@ rtk ./gradlew --no-daemon pipelinePmBundle
 ## Status Notes
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
+- `blocked` (2026-06-19): Readiness audit confirmed that `KFONT-M1-003` and
+  `KFONT-M2-004` are `done`, and `KFONT-M13-001` has now landed the facade
+  adapter inventory for this route. Remaining gate: add route-specific
+  `SkTypeface` parity dumps over pure Kotlin SFNT/variation facts, keep any
+  Fontations or FreeType comparisons drift-only, and attach stable refusal /
+  dashboard evidence before facade-core promotion or any `typeface` legacy
+  gate retirement claim.
 - Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
 
 ## Linear Labels
