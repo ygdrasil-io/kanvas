@@ -6051,7 +6051,7 @@ explicit in `fixture-evidence-manifest.json`.
 
 ### KFONT-M11 Readiness Gate Audit
 
-Status: KFONT-M11-004 and KFONT-M11-006 done on bounded A8 route and subrun evidence; KFONT-M11-007 is ready.
+Status: KFONT-M11-004, KFONT-M11-006, and KFONT-M11-007 done on bounded A8 route, subrun, and resource contract evidence; KFONT-M11-008 through KFONT-M11-010 are ready.
 
 Files:
 
@@ -6078,11 +6078,13 @@ Evidence:
   `reports/wgsl4k-evolution/generated/text-wgsl-reflection.json` linkage,
   and focused simple-Latin GPU evidence via
   `reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/`.
-- `KFONT-M11-006` is now done on deterministic subrun split evidence, and
-  `KFONT-M11-007` is ready for resource/upload/instance/binding contracts.
-  `KFONT-M11-008`, `KFONT-M11-009`, and `KFONT-M11-010` remain blocked on that
-  downstream resource/binding work before ordering, route-specific WGSL
-  validation, and `MaterialKey` leakage work.
+- `KFONT-M11-006` is now done on deterministic subrun split evidence.
+- `KFONT-M11-007` is now done on deterministic resource/upload/instance/
+  binding plan dumps and refusal snapshots for missing upload, upload budget,
+  unavailable atlas page, missing atlas entry, and unavailable binding layout.
+- `KFONT-M11-008`, `KFONT-M11-009`, and `KFONT-M11-010` are now ready for
+  ordering, route-specific WGSL validation, and full `MaterialKey` leakage
+  work.
 - The bounded A8 route does not promote broad text GPU support, SDF/outline/
   color/bitmap/SVG routes, or `dftext` retirement.
 
@@ -6092,15 +6094,15 @@ Validation:
 rtk git diff --check
 ```
 
-Remaining gate: implement `KFONT-M11-007`, then unblock `KFONT-M11-008`,
-`KFONT-M11-009`, and `KFONT-M11-010` for ordering, WGSL validation, and
-`MaterialKey` leakage proof. This bounded wave does not claim broad GPU text
-support, SDF/outline/color/bitmap/SVG text support, or retirement of `dftext`,
-`scaledemoji_rendering`, or `coloremoji_blendmodes`.
+Remaining gate: implement `KFONT-M11-008`, `KFONT-M11-009`, and
+`KFONT-M11-010` for ordering, WGSL validation, and full `MaterialKey` leakage
+proof. This bounded wave does not claim broad GPU text support,
+SDF/outline/color/bitmap/SVG text support, executed upload ordering, or
+retirement of `dftext`, `scaledemoji_rendering`, or `coloremoji_blendmodes`.
 
 ### KFONT-M11-006: GPUTextSubRunPlan Splitting
 
-Status: implemented; PR review pending.
+Status: done; merged and freshly revalidated for closeout.
 
 Files:
 
@@ -6139,5 +6141,63 @@ rtk git diff --check
 Remaining gate: no ticket-local subrun split gate remains for KFONT-M11-006.
 This slice does not claim resource/upload/instance/binding materialization,
 upload-before-sample execution, route-specific WGSL validation,
+`MaterialKey` leakage validation, broad GPU text support, or `dftext`
+retirement.
+
+### KFONT-M11-007: GPU Text Resource/Upload/Instance/Binding Plans
+
+Status: implemented; PR review pending.
+
+Files:
+
+- `font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextResourcePlan.kt`
+- `font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextResourcePlanTest.kt`
+- `reports/pure-kotlin-text/gpu-text-resource-plan.json`
+- `reports/pure-kotlin-text/gpu-text-upload-plan.json`
+- `reports/pure-kotlin-text/gpu-text-instance-layout.json`
+- `reports/pure-kotlin-text/gpu-text-binding-plan.json`
+- `reports/pure-kotlin-text/gpu-text-resource-refusals.json`
+- `reports/pure-kotlin-text/2026-06-23-kfont-m11-007-resource-plans.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/KFONT-M11-007-add-resource-upload-instance-binding-plan-contracts.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/KFONT-M11-008-add-upload-before-sample-ordering-validation.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/KFONT-M11-009-add-wgsl-parser-reflection-validation-for-text-routes.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/KFONT-M11-010-add-materialkey-leakage-tests.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `gpu-text-resource-plan.json` records texture ownership, atlas descriptor/
+  page/entry refs, upload/instance/binding plan IDs, lifetime scope, and
+  `resourceHandlesMaterialized=false` for the accepted A8 atlas subrun.
+- `gpu-text-upload-plan.json` records source artifact key, destination texture
+  plan, byte ranges, row stride, page region, staging plan, and upload-before-
+  sample dependency while keeping `uploadExecution=not-executed`.
+- `gpu-text-instance-layout.json` records stride, alignment, attributes,
+  target/source/UV rects, page index, atlas generation, representation flags,
+  and instance-upload-before-draw dependency.
+- `gpu-text-binding-plan.json` records resource slots, binding layout hash,
+  atlas generation facts, material plan ref, and explicit `MaterialKey`
+  exclusions for glyph IDs, atlas rects, atlas generations, upload tokens, and
+  live texture handles.
+- `gpu-text-resource-refusals.json` records route-specific refusals for missing
+  upload plan, upload budget overflow, unavailable atlas page, missing atlas
+  entry, and unavailable binding layout.
+- `KFONT-M11-008`, `KFONT-M11-009`, and `KFONT-M11-010` are promoted to
+  `ready`; they remain separate gates for executed ordering, route-specific
+  WGSL validation, and full material-key leakage validation.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextResourcePlan*'
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: no ticket-local resource/upload/instance/binding contract gate
+remains for KFONT-M11-007. This slice does not claim executed GPU uploads,
+upload-before-sample ordering validation, route-specific WGSL validation, full
 `MaterialKey` leakage validation, broad GPU text support, or `dftext`
 retirement.

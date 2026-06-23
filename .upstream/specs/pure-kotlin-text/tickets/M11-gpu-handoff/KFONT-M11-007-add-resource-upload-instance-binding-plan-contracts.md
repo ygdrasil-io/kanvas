@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-007"
 title: "Add resource/upload/instance/binding plan contracts"
-status: "ready"
+status: "done"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -68,11 +68,11 @@ data class GPUTextBinding(
 
 ## Acceptance Criteria
 
-- [ ] Resource, upload, instance, and binding dumps are deterministic and reference subrun IDs.
-- [ ] Upload plans record source artifact key, destination texture plan, byte ranges, row stride, page/region, staging needs, and upload-before-sample dependency.
-- [ ] Instance layout dumps include glyph target rect/origin, UV/source rect, page index, SDF params where relevant, representation flags, stride, and alignment.
-- [ ] Bindings reference atlas/page generations and resource slots without entering material identity.
-- [ ] Missing upload plan, upload budget overflow, missing atlas page, and binding layout failure emit route-specific diagnostics.
+- [x] Resource, upload, instance, and binding dumps are deterministic and reference subrun IDs.
+- [x] Upload plans record source artifact key, destination texture plan, byte ranges, row stride, page/region, staging needs, and upload-before-sample dependency.
+- [x] Instance layout dumps include glyph target rect/origin, UV/source rect, page index, SDF params where relevant, representation flags, stride, and alignment.
+- [x] Bindings reference atlas/page generations and resource slots without entering material identity.
+- [x] Missing upload plan, upload budget overflow, missing atlas page, and binding layout failure emit route-specific diagnostics.
 
 ## Required Evidence
 
@@ -116,6 +116,15 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextResource*'
   contract scope remains valid and no external decision is pending; keep route
   promotion, upload execution, and `dftext` retirement gated on this ticket's
   own dumps and refusal evidence.
+- `done` (2026-06-23): `GPUTextResourcePlan`, renderer-facing upload,
+  instance layout/buffer, binding plan, atlas descriptor/page/entry refs, and
+  refusal evidence now land as checked-in deterministic dumps:
+  `gpu-text-resource-plan.json`, `gpu-text-upload-plan.json`,
+  `gpu-text-instance-layout.json`, `gpu-text-binding-plan.json`, and
+  `gpu-text-resource-refusals.json`. This is contract evidence only:
+  `uploadExecution` remains `not-executed`, GPU handles are not materialized,
+  `MaterialKey` leakage is scoped to exclusion evidence rather than the full
+  KFONT-M11-010 validation, and `dftext` remains open.
 
 ## Linear Labels
 
