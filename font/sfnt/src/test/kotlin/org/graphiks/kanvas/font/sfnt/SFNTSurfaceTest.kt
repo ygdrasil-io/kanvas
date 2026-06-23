@@ -328,6 +328,30 @@ class SFNTSurfaceTest {
     }
 
     @Test
+    fun m6FallbackPlusSourceAssetIsCheckedInWithApacheProvenance() {
+        val relativePath = "reports/font/fixtures/fonts/shaping/FallbackPlus-Small.otf"
+        val provenanceIndex = Files.readString(fixturePath("reports/font/fixtures/provenance/index.json"))
+
+        assertTrue(
+            actual = Files.isRegularFile(fixturePath(relativePath)),
+            message = "Expected checked-in shaping source asset $relativePath",
+        )
+        listOf(
+            "fallbackplus-small-source",
+            relativePath,
+            "\"ownerTickets\": [\n        \"KFONT-M6-010\"",
+            "\"project\": \"simoncozens/test-fonts FallbackPlus-Small\"",
+            "\"url\": \"https://raw.githubusercontent.com/simoncozens/test-fonts/master/FallbackPlus-Small.otf\"",
+            "\"path\": \"reports/font/fixtures/licenses/test-fonts-Apache-2.0.txt\"",
+        ).forEach { requiredSnippet ->
+            assertTrue(
+                actual = provenanceIndex.contains(requiredSnippet),
+                message = "FallbackPlus source provenance index is missing $requiredSnippet",
+            )
+        }
+    }
+
+    @Test
     fun defaultOpenTypeFaceParserParsesSvgTableAndLooksUpDocumentsByGlyphId() {
         val svgBytes = "<svg><path id=\"glyph-eight\"/></svg>".toByteArray(Charsets.UTF_8)
         val svg = svgTable(

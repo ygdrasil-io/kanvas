@@ -252,6 +252,38 @@
       ]
     },
     {
+      "fixtureId": "fallbackplus-small-source",
+      "familyId": "latin-gsub-gpos-fixtures",
+      "ownerTickets": [
+        "KFONT-M6-010"
+      ],
+      "source": {
+        "kind": "vendored-external",
+        "project": "simoncozens/test-fonts FallbackPlus-Small",
+        "url": "https://raw.githubusercontent.com/simoncozens/test-fonts/master/FallbackPlus-Small.otf",
+        "version": "master blob c41f518d3f49ab112170123780a0bf8f50231ec4"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/test-fonts-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/shaping/FallbackPlus-Small.otf",
+          "sha256": "8438e42609b3d542a89038119c694606ca2de9133da4234ba1d18879152076d8",
+          "sizeBytes": 19584,
+          "role": "shaping-source-font"
+        }
+      ],
+      "expectedDumps": [],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-advanced-lookup-support-claim",
+        "no-direct-kfont-m6-010-closeout-claim",
+        "no-native-shaper-oracle-claim"
+      ]
+    },
+    {
       "fixtureId": "font-source-liberation-core",
       "familyId": "font-source-sfnt",
       "ownerTickets": [
