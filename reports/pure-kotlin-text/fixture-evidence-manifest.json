@@ -905,15 +905,19 @@
         "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextSubRunPlan.kt",
         "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextResourcePlan.kt",
         "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextOrderingTrace.kt",
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/TextWgslValidation.kt",
         "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifactsSurfaceTest.kt",
         "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextA8RoutePlanTest.kt",
         "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextSubRunPlanTest.kt",
         "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextResourcePlanTest.kt",
         "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextOrderingTraceTest.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/TextWgslValidationTest.kt",
         "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/commands/NormalizedDrawCommand.kt",
         "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/text/TextContracts.kt",
         "gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/text/GPUTextCommandHandoffTest.kt",
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SimpleLatinLineSceneEvidenceTest.kt",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/TextWgslValidationPipelineConformanceTest.kt",
+        "build.gradle.kts",
         "reports/pure-kotlin-text/gpu-text-a8-route-plan.json",
         "reports/pure-kotlin-text/gpu-text-a8-route-refusals.json",
         "reports/pure-kotlin-text/gpu-text-subrun-plan.json",
@@ -923,7 +927,10 @@
         "reports/pure-kotlin-text/gpu-text-binding-plan.json",
         "reports/pure-kotlin-text/gpu-text-resource-refusals.json",
         "reports/pure-kotlin-text/gpu-text-ordering-trace.json",
+        "reports/pure-kotlin-text/text-wgsl-reflection.json",
+        "reports/pure-kotlin-text/text-wgsl-validation-report.json",
         "reports/pure-kotlin-text/2026-06-23-kfont-m11-008-ordering-trace.md",
+        "reports/pure-kotlin-text/2026-06-23-kfont-m11-009-text-wgsl-validation.md",
         "reports/pure-kotlin-text/2026-06-23-kfont-m11-007-resource-plans.md",
         "reports/pure-kotlin-text/2026-06-23-kfont-m11-006-subrun-plan.md",
         "reports/pure-kotlin-text/2026-06-19-kfont-m11-004-a8-route-plan.md"
@@ -933,21 +940,25 @@
         "KFONT-M11-006 now lands deterministic `gpu-text-subrun-plan.json` evidence for atlas page/generation splits, clip/layer/destination-read barriers, instance-budget refusal, and mixed representation refusals without route promotion.",
         "KFONT-M11-007 now lands deterministic resource/upload/instance/binding plan dumps plus missing upload, upload budget, unavailable page, missing entry, and binding layout refusal snapshots for the accepted A8 atlas subrun.",
         "KFONT-M11-008 now lands deterministic `gpu-text-ordering-trace.json` evidence for upload-before-sample, instance-upload-before-draw, generation validation, draw-before-eviction barriers, and negative ordering refusals for the accepted A8 atlas subrun.",
-        "KFONT-M11-005 already covers refusal-only SDF/outline/color/bitmap/SVG/unregistered/upload/stale/CPU-texture cases; WGSL route validation and full `MaterialKey` leakage stay gated on KFONT-M11-009 through KFONT-M11-010.",
-        "Do not treat the current route, subrun split, resource-plan, or ordering-trace evidence as broad text GPU support, executed GPU upload proof, a general GPU task graph scheduler, full MaterialKey leakage validation, or `dftext` retirement; adapter-backed evidence remains bounded to the accepted simple-Latin A8 atlas route."
+        "KFONT-M11-009 now lands deterministic `text-wgsl-reflection.json` and `text-wgsl-validation-report.json` evidence linking parser-validated WGSL module metadata, reflected bindings, uniform layout, instance layout expectations, and Kotlin resource/binding/ordering plan comparisons for the accepted A8 atlas subrun.",
+        "KFONT-M11-005 already covers refusal-only SDF/outline/color/bitmap/SVG/unregistered/upload/stale/CPU-texture cases; full `MaterialKey` leakage stays gated on KFONT-M11-010.",
+        "Do not treat the current route, subrun split, resource-plan, ordering-trace, or WGSL validation evidence as broad text GPU support, executed GPU upload proof, a general GPU task graph scheduler, full MaterialKey leakage validation, route promotion, or `dftext` retirement; adapter-backed evidence remains bounded to the accepted simple-Latin A8 atlas route."
       ],
       "validationCommands": [
         "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*A8Text*'",
         "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextSubRunPlan*'",
         "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextResourcePlan*'",
         "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextOrderingTrace*'",
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*TextWgsl*'",
+        "rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*TextWgsl*'",
         "rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*A8Text*'"
       ],
       "fixtureCommands": [
         "The checked-in `gpu-text-a8-route-plan.json` and `gpu-text-a8-route-refusals.json` dumps are emitted by `defaultGPUTextA8RoutePlan()` / `defaultGPUTextA8RouteRefusalReport()` and paired with the simple-Latin route artifacts under `reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/`.",
         "The checked-in `gpu-text-subrun-plan.json` dump is emitted by `defaultGPUTextSubRunPlanReport()` and covers split/refusal planning only.",
         "The checked-in `gpu-text-resource-plan.json`, `gpu-text-upload-plan.json`, `gpu-text-instance-layout.json`, `gpu-text-binding-plan.json`, and `gpu-text-resource-refusals.json` dumps are emitted by the `GPUTextResourcePlan` default evidence helpers and cover resource/upload/instance/binding contracts only.",
-        "The checked-in `gpu-text-ordering-trace.json` dump is emitted by `defaultGPUTextOrderingTraceReportJson()` and covers ordering validation plus negative ordering refusals only."
+        "The checked-in `gpu-text-ordering-trace.json` dump is emitted by `defaultGPUTextOrderingTraceReportJson()` and covers ordering validation plus negative ordering refusals only.",
+        "The checked-in `text-wgsl-reflection.json` and `text-wgsl-validation-report.json` dumps are emitted by `defaultTextWgslReflectionReportJson()` / `defaultTextWgslValidationReportJson()` and cover parser/reflection validation, Kotlin plan comparisons, and negative parser/binding/SDF/registration refusals only."
       ],
       "nonClaims": [
         "no-complete-target-support-claim",

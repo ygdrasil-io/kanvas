@@ -4144,6 +4144,135 @@
       ]
     },
     {
+      "dumpId": "text-wgsl-reflection",
+      "ownerTicket": "KFONT-M11-009",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/wgsl4k-evolution/01-validation-reflection-contract.md",
+        "section": "Validation Report Contract"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/TextWgslValidation.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/TextWgslValidationTest.kt",
+        "reports/pure-kotlin-text/text-wgsl-reflection.json"
+      ],
+      "expectedFields": [
+        "access",
+        "addressSpace",
+        "alignment",
+        "binding",
+        "byteOffset",
+        "classification",
+        "diagnostics",
+        "entryPoints",
+        "format",
+        "group",
+        "instanceInputExpectations",
+        "layoutHash",
+        "members",
+        "minBindingSize",
+        "moduleHash",
+        "moduleId",
+        "name",
+        "nonClaims",
+        "offset",
+        "ownerTickets",
+        "parserValidation",
+        "productActivation",
+        "reflectedBindings",
+        "renderStep",
+        "resourceKind",
+        "routePromotion",
+        "schema",
+        "size",
+        "sourceId",
+        "stage",
+        "stride",
+        "strideBytes",
+        "structName",
+        "type",
+        "uniformLayouts",
+        "wgsl4kSha",
+        "wgslLanguage"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*TextWgsl*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Text WGSL reflection dump changes require reviewed module hash, entry point, binding, uniform layout, instance input, wgsl4k SHA, and non-claim diffs without route promotion or broad GPU text support.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-broad-gpu-text-support-claim",
+        "no-dftext-retirement",
+        "no-route-promotion-claim",
+        "no-sdf-route-support-claim"
+      ]
+    },
+    {
+      "dumpId": "text-wgsl-validation-report",
+      "ownerTicket": "KFONT-M11-009",
+      "classification": "golden-gated",
+      "targetSpec": {
+        "path": ".upstream/specs/gpu-renderer/21-text-glyph-pipeline.md",
+        "section": "WGSL And Binding ABI"
+      },
+      "producerPaths": [
+        "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/TextWgslValidation.kt",
+        "font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/TextWgslValidationTest.kt",
+        "reports/pure-kotlin-text/text-wgsl-validation-report.json"
+      ],
+      "expectedFields": [
+        "bindingLayoutHash",
+        "bindingPlanId",
+        "classification",
+        "code",
+        "comparisonId",
+        "diagnostics",
+        "expectedKind",
+        "fieldOrBinding",
+        "instanceLayoutHash",
+        "kotlinPlanComparisons",
+        "kotlinPlanRef",
+        "message",
+        "moduleHash",
+        "moduleId",
+        "nonClaims",
+        "orderingTokenId",
+        "ownerTickets",
+        "productActivation",
+        "reflectedKind",
+        "reflectedRef",
+        "refusals",
+        "renderStep",
+        "resourcePlanId",
+        "route",
+        "routePromotion",
+        "schema",
+        "sdfParamsRequired",
+        "sdfParamsStatus",
+        "sourceId",
+        "status",
+        "subRunId",
+        "terminal",
+        "wgsl4kSha",
+        "wgslLanguage"
+      ],
+      "validationCommands": [
+        "rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*TextWgsl*'",
+        "rtk python3 scripts/validate_pure_kotlin_text_dump_index.py"
+      ],
+      "updatePolicy": "Text WGSL validation report changes require reviewed Kotlin plan comparisons, reflected binding refs, refusal diagnostics, SDF parameter policy, route-promotion policy, and non-claim diffs.",
+      "nonClaims": [
+        "producer-only",
+        "no-complete-target-support-claim",
+        "no-broad-gpu-text-support-claim",
+        "no-dftext-retirement",
+        "no-route-promotion-claim",
+        "no-sdf-route-support-claim"
+      ]
+    },
+    {
       "dumpId": "thai-cjk-boundary-report",
       "ownerTicket": "KFONT-M6-009",
       "classification": "golden-gated",

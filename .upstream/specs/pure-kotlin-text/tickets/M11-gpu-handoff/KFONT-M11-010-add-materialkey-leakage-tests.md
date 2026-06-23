@@ -115,6 +115,12 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*MaterialKey*Text*'
   generations, resource refs, and draw refs through deterministic ordering
   trace evidence. The full leakage tests can now prove those facts remain
   resource/order identity, not material identity.
+- `ready` (2026-06-23): `KFONT-M11-009` now adds route-specific WGSL
+  reflection and validation reports for the accepted A8 text mask route,
+  including binding layout hashes, instance layout expectations, ordering token
+  references, and non-promotional refusal diagnostics. This ticket remains the
+  next M11 gate for proving glyph IDs, atlas coordinates/generations, upload
+  tokens, and live handles stay out of `MaterialKey`.
 
 ## Linear Labels
 

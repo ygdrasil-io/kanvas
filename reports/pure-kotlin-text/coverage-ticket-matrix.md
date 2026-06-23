@@ -6112,7 +6112,7 @@ explicit in `fixture-evidence-manifest.json`.
 
 ### KFONT-M11 Readiness Gate Audit
 
-Status: KFONT-M11-004, KFONT-M11-006, KFONT-M11-007, and KFONT-M11-008 done on bounded A8 route, subrun, resource contract, and ordering trace evidence; KFONT-M11-009 and KFONT-M11-010 are ready.
+Status: KFONT-M11-004, KFONT-M11-006, KFONT-M11-007, KFONT-M11-008, and KFONT-M11-009 done on bounded A8 route, subrun, resource contract, ordering trace, and WGSL validation evidence; KFONT-M11-010 is ready.
 
 Files:
 
@@ -6125,6 +6125,7 @@ Files:
 - `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/README.md`
 - `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
 - `reports/pure-kotlin-text/2026-06-16-kfont-m11-readiness-gates.md`
+- `reports/pure-kotlin-text/2026-06-23-kfont-m11-009-text-wgsl-validation.md`
 
 Evidence:
 
@@ -6146,8 +6147,11 @@ Evidence:
 - `KFONT-M11-008` is now done on deterministic upload-before-sample,
   instance-upload-before-draw, generation-validation, draw-before-eviction
   barrier, and negative ordering refusal evidence.
-- `KFONT-M11-009` and `KFONT-M11-010` are now ready for route-specific WGSL
-  validation and full `MaterialKey` leakage work.
+- `KFONT-M11-009` is now done on deterministic text WGSL reflection and
+  validation evidence linked to the accepted A8 atlas subrun, Kotlin binding/
+  resource/ordering plans, and stable parser/binding/SDF/registration refusal
+  diagnostics.
+- `KFONT-M11-010` is now ready for full `MaterialKey` leakage work.
 - The bounded A8 route does not promote broad text GPU support, SDF/outline/
   color/bitmap/SVG routes, or `dftext` retirement.
 
@@ -6157,11 +6161,11 @@ Validation:
 rtk git diff --check
 ```
 
-Remaining gate: implement `KFONT-M11-009` and `KFONT-M11-010` for WGSL
-validation and full `MaterialKey` leakage proof. This bounded wave does not
-claim broad GPU text support, SDF/outline/color/bitmap/SVG text support,
-executed GPU uploads, a general GPU task graph scheduler, or retirement of
-`dftext`, `scaledemoji_rendering`, or `coloremoji_blendmodes`.
+Remaining gate: implement `KFONT-M11-010` for full `MaterialKey` leakage
+proof. This bounded wave does not claim broad GPU text support, SDF/outline/
+color/bitmap/SVG text support, executed GPU uploads, a general GPU task graph
+scheduler, route promotion, or retirement of `dftext`,
+`scaledemoji_rendering`, or `coloremoji_blendmodes`.
 
 ### KFONT-M11-006: GPUTextSubRunPlan Splitting
 
@@ -6266,7 +6270,7 @@ GPU text support, or `dftext` retirement.
 
 ### KFONT-M11-008: GPU Text Upload-Before-Sample Ordering Trace
 
-Status: implemented; PR review pending.
+Status: done; merged.
 
 Files:
 
@@ -6309,3 +6313,51 @@ Remaining gate: no ticket-local ordering validation gate remains for
 KFONT-M11-008. This slice does not claim executed GPU uploads, a general GPU
 task graph scheduler, SDF ordering support, broad GPU text support, or
 `dftext` retirement.
+
+### KFONT-M11-009: Text WGSL Parser/Reflection Validation
+
+Status: implemented; PR review pending.
+
+Files:
+
+- `font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/TextWgslValidation.kt`
+- `font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/TextWgslValidationTest.kt`
+- `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/TextWgslValidationPipelineConformanceTest.kt`
+- `build.gradle.kts`
+- `reports/pure-kotlin-text/text-wgsl-reflection.json`
+- `reports/pure-kotlin-text/text-wgsl-validation-report.json`
+- `reports/pure-kotlin-text/2026-06-23-kfont-m11-009-text-wgsl-validation.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/KFONT-M11-009-add-wgsl-parser-reflection-validation-for-text-routes.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/KFONT-M11-010-add-materialkey-leakage-tests.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `text-wgsl-reflection.json` records the `text.a8-mask` WGSL module hash,
+  wgsl4k SHA, fragment entry point, texture/sampler/uniform bindings,
+  `TextParams` uniform layout, and instance input expectations.
+- `text-wgsl-validation-report.json` links reflected WGSL bindings to
+  `GPUTextBinding`, `GPUTextResourcePlan`, instance layout, and
+  `GPUTextOrderingToken` refs for the accepted A8 atlas subrun.
+- Stable refusal diagnostics cover parser failure, binding reflection mismatch,
+  missing SDF params, and unregistered text WGSL modules without route
+  promotion or product activation.
+- `TextWgslValidationPipelineConformanceTest` makes the ticket-listed
+  `gpu-raster:pipelineConformanceTest --tests '*TextWgsl*'` gate executable
+  against the same checked-in WGSL dumps.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*TextWgsl*'
+rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest --tests '*TextWgsl*'
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: no ticket-local WGSL validation gate remains for
+KFONT-M11-009. This slice does not claim route promotion, visual correctness,
+executed GPU uploads, SDF route support, broad GPU text support, full
+`MaterialKey` leakage validation, or `dftext` retirement.
