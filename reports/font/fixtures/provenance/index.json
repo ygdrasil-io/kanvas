@@ -807,6 +807,40 @@
       ]
     },
     {
+      "fixtureId": "paragraph-ellipsis-synthetic",
+      "familyId": "paragraph",
+      "ownerTickets": [
+        "KFONT-M8-004"
+      ],
+      "source": {
+        "kind": "synthetic-kanvas",
+        "project": "KFONT synthetic M8 paragraph ellipsis layout",
+        "url": "font/text/src/test/kotlin/org/graphiks/kanvas/text/ParagraphEllipsisLayoutTest.kt",
+        "version": "2026-06-18 synthetic paragraph ellipsis fixture v1"
+      },
+      "license": {
+        "id": "Apache-2.0",
+        "path": "reports/font/fixtures/licenses/kanvas-generated-Apache-2.0.txt"
+      },
+      "assets": [
+        {
+          "path": "reports/font/fixtures/fonts/paragraph/paragraph-ellipsis-fixture.txt",
+          "sha256": "fb59eaca7976b879fcb06e39345f6b7152043f09e23a8fc96182d75a60860f3a",
+          "sizeBytes": 379,
+          "role": "synthetic-paragraph-input"
+        }
+      ],
+      "expectedDumps": [
+        "reports/font/fixtures/expected/paragraph/paragraph-layout.json"
+      ],
+      "nonClaims": [
+        "no-complete-target-support-claim",
+        "no-complete-bidi-visual-ordering-claim",
+        "no-complete-paragraph-layout-claim",
+        "no-skia-paragraph-parity-claim"
+      ]
+    },
+    {
       "fixtureId": "paragraph-line-breaking-synthetic",
       "familyId": "paragraph",
       "ownerTickets": [
