@@ -956,5 +956,4 @@ private val DEFAULT_RESOURCE_NON_CLAIMS = listOf(
     "no-broad-gpu-text-support-claim",
     "no-dftext-retirement",
     "no-executed-gpu-upload-claim",
-    "no-material-key-leakage-validation-claim",
 )
