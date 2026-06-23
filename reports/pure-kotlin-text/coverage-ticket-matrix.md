@@ -44,10 +44,10 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 
 | Ticket | Classification | Scope | Probable Write Set | Ready Evidence |
 |---|---|---|---|---|
-| PKT-01 identity and diagnostics foundation | Implementable now | Promote `FontSourceID`, `TypefaceID`, `GlyphStrikeKey`, text route diagnostics, deterministic dumps. | `font/core`, `font/glyph`, `font/gpu-api`. | Surface tests proving stable UUID/value semantics and no object identity in dumps. |
-| PKT-02 font source catalog and fallback facts | Implementable now | Source provenance, explicit root scans, duplicate/skipped diagnostics, fallback plan dumps. | `font/core/src/main`, `font/core/src/test`. | Scan fixtures, host-dependent markers, fallback ordering tests. |
-| PKT-03 SFNT face and `cmap` contract | Implementable now | Required table diagnostics, TTC index, `cmap` format coverage/refusals. | `font/sfnt/src/main`, `font/sfnt/src/test`. | Malformed required/optional table fixtures and selected face dumps. |
-| PKT-04 TrueType `glyf` and variation evidence | Implementable now | Simple/composite outlines, component transforms, variation metadata and metrics dumps. | `font/scaler/src/main`, `font/scaler/src/test`. | Path hashes, bounds, variation delta fixtures. |
+| PKT-01 identity and diagnostics foundation | Current-supported | Promote `FontSourceID`, `TypefaceID`, `GlyphStrikeKey`, text route diagnostics, deterministic dumps. | `font/core`, `font/glyph`, `font/gpu-api`. | Surface tests proving stable UUID/value semantics and no object identity in dumps, boundary contract validation. |
+| PKT-02 font source catalog and fallback facts | Current-supported | Source provenance, explicit root scans, duplicate/skipped diagnostics, fallback plan dumps. | `font/core/src/main`, `font/core/src/test`. | Scan fixtures, host-dependent markers, fallback ordering tests, golden scan root. |
+| PKT-03 SFNT face and `cmap` contract | Current-supported | Required table diagnostics, TTC index, `cmap` format coverage/refusals. | `font/sfnt/src/main`, `font/sfnt/src/test`. | Malformed required/optional table fixtures, selected face dumps, directory diagnostics. |
+| PKT-04 TrueType `glyf` and variation evidence | Current-supported | Simple/composite outlines, component transforms, variation metadata and metrics dumps, avar mapping, gvar deltas, IUP, vertical metrics. | `font/scaler/src/main`, `font/scaler/src/test`. | Path hashes, bounds, variation delta fixtures, composite trace, avar mapping, gvar IUP, vertical metrics. |
 | PKT-05 CFF/CFF2 vertical | Tracked-gap; generated fixture parser/scaler/operator/table/variation-store slices implemented | CFF INDEX/dicts/Type 2 operators/CFF2 variation. | `font/scaler/src/main`, `font/scaler/src/test`. | Generated CFF/CFF2 tables now expose typed INDEX/DICT evidence, stable parse refusals, and minimal CFF2 VariationStore region lookup; complete support still needs broader real-font corpus coverage. |
 | PKT-06 Unicode data and script matrix seed | Current-supported | Pinned Unicode 16.0.0 version surface, basic segmentation/bidi/script dumps, explicit unsupported-script diagnostics. | `font/text/src/main/.../shaping`, `font/text/src/test`. | Script/bidi/grapheme tests, golden Unicode dumps, cluster safety suite, and explicit `text.shaping.script-unsupported` diagnostics. |
 | PKT-07 GSUB/GPOS simple script shaping | Partially implementable; bounded GSUB/GPOS fixture slices are done and script-policy adoption is now blocked on the remaining per-script shaping fixture families | Latin/Greek/Cyrillic/Hebrew defaults, features, clusters, fallback runs. | `font/text`, `font/sfnt`. | Requires parsed layout table fixtures and feature ordering evidence. |
@@ -417,6 +417,42 @@ rtk python3 scripts/validate_pure_kotlin_text_boundary_contracts.py
 Remaining gate: this is architecture and boundary audit infrastructure only.
 It does not add rendering behavior, complete target fixtures, CPU/GPU oracle
 evidence, or GPU text route support.
+
+### PKT-01: Identity and Diagnostics Foundation
+
+Status: implemented and independently reviewed.
+
+The PKT-01 vertical covers identity contracts (`FontSourceID`, `TypefaceID`,
+`GlyphStrikeKey`, `GPUGlyphRunDescriptor`, `GPUTextArtifactID`,
+`GPUTextArtifactGeneration`), text route diagnostics, and boundary validation.
+All sub-slices are reviewed and checked in.
+
+Files:
+
+- `reports/pure-kotlin-text/boundary-contracts.json`
+- `scripts/validate_pure_kotlin_text_boundary_contracts.py`
+- `scripts/test_validate_pure_kotlin_text_boundary_contracts.py`
+
+Evidence:
+
+- `boundary-contracts.json` records the spec 00 package-root ownership map and
+  required identity symbols with declaration checks.
+- Import-boundary scans reject forbidden Skia, AWT, JNI, FreeType, HarfBuzz,
+  Fontations, CoreText, DirectWrite, fontconfig, and native font-engine imports.
+- Architecture diagnostic codes: `font.architecture.skia-api-leak`,
+  `font.architecture.gpu-backedge`, `font.architecture.gpu-font-dependency`,
+  `font.architecture.native-font-dependency`, `font.architecture.forbidden-import`.
+
+Validation:
+
+```bash
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_boundary_contracts.py
+rtk python3 scripts/validate_pure_kotlin_text_boundary_contracts.py
+```
+
+Remaining gate: this is architecture and identity infrastructure only. It does
+not add rendering behavior, complete target fixtures, CPU/GPU oracle evidence,
+or GPU text route support.
 
 ### KFONT-M0-001/M0-002: Pure Kotlin Font CI Foundation
 
@@ -822,6 +858,52 @@ rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontC
 
 Remaining gate: this is explicit scan skipped-file evidence only. It does not
 claim implicit system font scanning, bundled fallback catalog completeness,
+parser-backed glyph coverage, shaping fallback completeness, or GPU text-route
+support.
+
+### PKT-02: Font Source Catalog and Fallback Facts
+
+Status: implemented and independently reviewed.
+
+The PKT-02 vertical covers font source provenance evidence (PKT-02A),
+fallback decision trace dumps (PKT-02B), system-scan refusal and provenance
+fixture planning (PKT-02C), deterministic system scan fixture goldens
+(PKT-02D), and font scan skipped-file diagnostic fixtures (PKT-02E). All five
+sub-slices are reviewed and checked in.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
+- `font/core/src/test/kotlin/org/graphiks/kanvas/font/FontCoreSurfaceTest.kt`
+- `reports/font/fixtures/expected/font-source/liberation-scan-root.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `FontSourceEvidence` records stable source ID, provenance kind, display name,
+  captured-byte SHA-256, host-dependent marker, face count, and table tags.
+- `CatalogFontResolver.trace()` records deterministic `FallbackDecisionTrace`
+  with candidate ordering, selected face, coverage state, and refusal diagnostics.
+- `FontFileScanner.scanRoots()` supports `reportSkippedFiles` for explicit
+  fixture scans with stable `font.scan.file-skipped` diagnostics.
+- The fixture manifest records the `font-source-system-scan` family as
+  `fixture-gated` and `font-source-liberation-scan-root` as `golden-gated`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this is font source catalog and fallback evidence only. It does
+not claim implicit system font scanning, bundled fallback catalog completeness,
 parser-backed glyph coverage, shaping fallback completeness, or GPU text-route
 support.
 
@@ -1342,6 +1424,60 @@ Remaining gate: this is selected-face directory diagnostic evidence only. It
 does not claim full malformed SFNT fixture manifest completion, automatic parse
 refusal policy, complete `cmap` coverage, complete TTC/OTC conformance, scaler
 support, shaping support, color glyph support, or GPU text-route support.
+
+### PKT-03: SFNT Face and CMap Contract
+
+Status: implemented and independently reviewed.
+
+The PKT-03 vertical covers SFNT/OpenType face evidence dumps (PKT-03A),
+bounded SFNT table directory diagnostics (PKT-03B), malformed table and
+format-14 fixture planning (PKT-03C), malformed SFNT and cmap format 14
+fixture packs (PKT-03D), and SFNT directory diagnostics in face evidence
+(PKT-03E). All five sub-slices are reviewed and checked in.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTParserEntryPointTest.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTTableFactDumpTest.kt`
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/MalformedSFNTFixtureSuiteTest.kt`
+- `reports/font/fixtures/expected/sfnt/sfnt-cmap-format14-readiness.json`
+- `reports/pure-kotlin-text/sfnt-directory.json`
+- `reports/pure-kotlin-text/font-diagnostic-taxonomy.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `OpenTypeFaceData.faceEvidence()` emits deterministic face evidence with
+  sorted table records, raw table SHA-256 hashes, preferred cmap facts, metrics,
+  and parse diagnostics.
+- `SFNTTableDirectoryValidator` detects missing required tables, zero-length
+  required tables, duplicate tags, out-of-bounds ranges, and overlapping ranges.
+- `CMapTable` supports formats 0, 4, 6, 12, 14 with priority-based subtable
+  selection and stable `font.sfnt.cmap-format-unsupported` diagnostics.
+- `DefaultOpenTypeFaceParser` handles TTC/OTC face selection with bounded face
+  indices and collection-level diagnostics.
+- Diagnostic codes: `font.sfnt.required-table-missing`, `font.sfnt.table-duplicate`,
+  `font.sfnt.table-out-of-bounds`, `font.sfnt.table-overlap`,
+  `font.sfnt.cmap-format-unsupported`, `font.sfnt.cmap-unusable`,
+  `font.collection-index-invalid`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this is SFNT face and cmap contract evidence only. It does not
+claim complete SFNT parser conformance, complete cmap format 14 support,
+CFF/CFF2 support, scaler support, shaping support, or GPU text-route support.
+
 ### PKT-04A: TrueType Scaler Evidence Dumps
 
 Status: implemented and independently reviewed.
@@ -1471,8 +1607,7 @@ scaler oracle, no hinting VM, no HVAR/VVAR/MVAR implementation support, and no
 GPU text route support.
 ### PKT-04D: TrueType Avar Coordinate Mapping Fixture
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -1513,8 +1648,7 @@ claim full IUP interpolation, phantom-point metrics, CFF/CFF2 support, hinting
 VM parity, or GPU glyph route support.
 ### PKT-04E: TrueType Composite Gvar Delta Fixture
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -1655,6 +1789,64 @@ Remaining gate: this is vertical metric extraction evidence only. It does not
 claim vertical shaping, vertical glyph substitution, line layout, paragraph
 layout, complete HVAR/MVAR parity, native scaler parity, or GPU glyph route
 support.
+
+### PKT-04: TrueType Glyf and Variation Evidence
+
+Status: implemented and independently reviewed.
+
+The PKT-04 vertical covers TrueType scaler evidence dumps (PKT-04A),
+composite component trace evidence (PKT-04B), variation fixture goldens
+(PKT-04C), avar coordinate mapping (PKT-04D), composite gvar delta fixtures
+(PKT-04E), gvar IUP interpolation (PKT-04F), and vertical metric evidence
+(PKT-04G). All seven sub-slices are reviewed and checked in.
+
+Files:
+
+- `font/scaler/src/main/kotlin/org/graphiks/kanvas/font/scaler/FontScaler.kt`
+- `font/scaler/src/test/kotlin/org/graphiks/kanvas/font/scaler/FontScalerSurfaceTest.kt`
+- `reports/font/fixtures/fonts/scaler/RobotoFlex-Variable.ttf`
+- `reports/font/fixtures/expected/scaler/truetype-variation-readiness.json`
+- `reports/font/fixtures/expected/scaler/truetype-vertical-metrics.json`
+- `reports/font/fixtures/expected/scaler/truetype-gvar-iup.json`
+- `reports/font/fixtures/expected/scaler/cff-charstring-trace.json`
+- `reports/pure-kotlin-text/font-fixture-inventory.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/coverage-ticket-matrix.md`
+
+Evidence:
+
+- `ParsedTrueTypeGlyphScaler.scaledGlyphEvidence()` emits deterministic
+  TrueType glyf evidence with outline command dump and SHA-256, bounds,
+  metrics, and stable diagnostics.
+- `ScaledTrueTypeGlyphEvidence` includes `compositeComponents` facts for
+  decoded composite glyph component edges.
+- `TrueTypeGlyfScaler` applies parsed `avar` segment maps after `fvar`
+  normalization and before `gvar` deltas.
+- Composite `gvar` delta resolution passes normalized variation coordinates
+  into component glyph resolution through recursive outline resolution.
+- `OpenTypeMetricsTableParser` parses bounded optional `vhea`/`vmtx` facts
+  with malformed-table diagnostics.
+- `truetype-variation-readiness.json` vendors Roboto Flex variable font under
+  SIL-OFL-1.1 with IUP, phantom-point, avar, and HVAR/VVAR/MVAR gates.
+- Vendored `RobotoFlex-Variable.ttf` with GitHub blob provenance
+  `0abe2ee29292f1b39f59103d069feda87cde585e`.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:scaler:test
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: this is TrueType glyf and variation evidence only. It does not
+claim complete CFF/CFF2 support, full IUP interpolation, phantom-point metrics,
+complete HVAR/MVAR parity, native scaler oracle parity, hinting VM, or GPU
+glyph route support.
+
 ### KFONT-M3-005: Malformed glyf isolation suite
 
 Status: implemented.
