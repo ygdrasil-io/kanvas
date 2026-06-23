@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M11-008"
 title: "Add upload-before-sample ordering validation"
-status: "ready"
+status: "done"
 milestone: "M11"
 priority: "P0"
 owner_area: "gpu-api"
@@ -65,11 +65,11 @@ data class GPUTextOrderingValidation(
 
 ## Acceptance Criteria
 
-- [ ] Accepted A8 atlas draws have explicit upload-before-sample and instance-upload-before-draw edges.
-- [ ] Stale atlas generation refuses with `unsupported.text.atlas_generation_stale`.
-- [ ] Missing upload edge refuses with `unsupported.text.upload_plan_missing` or `unsupported.text.upload_failed`.
-- [ ] Eviction or compaction cannot move before dependent draws without a recorded barrier.
-- [ ] `gpu-text-ordering-trace.json` is deterministic and references subrun, resource, upload, and draw IDs.
+- [x] Accepted A8 atlas draws have explicit upload-before-sample and instance-upload-before-draw edges.
+- [x] Stale atlas generation refuses with `unsupported.text.atlas_generation_stale`.
+- [x] Missing upload edge refuses with `unsupported.text.upload_plan_missing` or `unsupported.text.upload_failed`.
+- [x] Eviction or compaction cannot move before dependent draws without a recorded barrier.
+- [x] `gpu-text-ordering-trace.json` is deterministic and references subrun, resource, upload, and draw IDs.
 
 ## Required Evidence
 
@@ -117,6 +117,14 @@ rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*TextOrdering*'
   dependency labels. This ticket can now validate real ordering traces,
   generation checks, eviction barriers, and negative ordering cases without a
   new PM decision.
+- `done` (2026-06-23): Added deterministic `GPUTextOrderingTrace` contracts,
+  `gpu-text-ordering-trace.json`, upload-before-sample and
+  instance-upload-before-draw edges, atlas generation validation,
+  draw-before-eviction barrier evidence, and negative refusals for missing
+  upload edge, stale generation, unsafe eviction-before-draw, and
+  instance-upload-after-draw. Evidence remains GPU-gated and does not claim
+  executed uploads, a general GPU task graph scheduler, SDF ordering, broad GPU
+  text support, or `dftext` retirement.
 
 ## Linear Labels
 
