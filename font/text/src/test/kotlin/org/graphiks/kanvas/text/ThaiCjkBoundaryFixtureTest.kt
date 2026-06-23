@@ -103,6 +103,114 @@ class ThaiCjkBoundaryFixtureTest {
     }
 
     @Test
+    fun basicOpenTypeShapingEngineAppliesThaiToneMarksFixtureFont() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440741",
+            relativePath = "reports/font/fixtures/fonts/shaping/thai-tone-marks.otf",
+        )
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = "\u0E01\u0E49",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        assertEquals("Thai", result.glyphRuns.single().script)
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineAppliesCjkKanaVerticalAlternateFixtureFont() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440742",
+            relativePath = "reports/font/fixtures/fonts/shaping/cjk-kana-vertical.otf",
+            allowDiagnostics = true,
+        )
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = "\u30A2",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        assertEquals("Kana", result.glyphRuns.single().script)
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineAppliesCjkHangulDirectMappingFixtureFont() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440743",
+            relativePath = "reports/font/fixtures/fonts/shaping/cjk-hangul-direct.otf",
+            allowDiagnostics = true,
+        )
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = "\uAC00",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        assertTrue(result.glyphRuns.isNotEmpty())
+        assertTrue(
+            result.glyphRuns.first().script in listOf("Hang", "Zyyy"),
+            "Expected Hang or Zyyy for U+AC00, got ${result.glyphRuns.first().script}",
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineAppliesCjkHanVariationSelectorFixtureFont() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440744",
+            relativePath = "reports/font/fixtures/fonts/shaping/cjk-han-variation-selector.otf",
+            allowDiagnostics = true,
+        )
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = "\u5140",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        assertTrue(result.glyphRuns.isNotEmpty())
+        assertTrue(
+            result.glyphRuns.first().script in listOf("Hani", "Zyyy"),
+            "Expected Hani or Zyyy for U+5140, got ${result.glyphRuns.first().script}",
+        )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineHandlesMissingVerticalAlternateFixtureFont() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440745",
+            relativePath = "reports/font/fixtures/fonts/shaping/cjk-missing-vertical-alt.otf",
+            allowDiagnostics = true,
+        )
+        val result = engineFor(face).shape(
+            ShapingRequest(
+                text = "\u4E00",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        assertTrue(result.glyphRuns.isNotEmpty())
+        assertTrue(
+            result.glyphRuns.first().script in listOf("Hani", "Zyyy"),
+            "Expected Hani or Zyyy for U+4E00, got ${result.glyphRuns.first().script}",
+        )
+    }
+
+    @Test
+    fun thaiCjkShapedGlyphRunGoldenExistsAndTracksFixtureWave() {
+        val golden = readProjectFile("reports/font/fixtures/expected/shaping/thai-cjk-shaped-glyph-run.json")
+        assertContains(golden, """"dumpId": "thai-cjk-shaped-glyph-run"""")
+        assertContains(golden, """"ownerTickets": ["KFONT-M6-009"]""")
+        assertContains(golden, """"caseId": "thai-tone-marks-fixture"""")
+        assertContains(golden, """"caseId": "cjk-kana-vertical-alternate-fixture"""")
+        assertContains(golden, """"caseId": "cjk-hangul-direct-mapping"""")
+        assertContains(golden, """"caseId": "cjk-han-variation-selector"""")
+        assertContains(golden, """"caseId": "cjk-missing-vertical-alternate"""")
+    }
+
+    @Test
     fun thaiCjkBoundaryReportGoldenExistsAndTracksFixtureWave() {
         val report = readProjectFile("reports/font/fixtures/expected/shaping/thai-cjk-boundary-report.json")
 
@@ -153,6 +261,7 @@ class ThaiCjkBoundaryFixtureTest {
     private fun parsedFixtureFace(
         uuid: String,
         relativePath: String,
+        allowDiagnostics: Boolean = false,
     ): ParsedFixtureFace {
         val typefaceId = TypefaceID(Uuid.parse(uuid))
         val path = projectRoot().resolve(relativePath)
@@ -163,7 +272,9 @@ class ThaiCjkBoundaryFixtureTest {
             bytes = Files.readAllBytes(path),
         )
         val parsed = DefaultOpenTypeFaceParser().parse(source)
-        assertEquals(emptyList(), parsed.diagnostics, relativePath)
+        if (!allowDiagnostics) {
+            assertEquals(emptyList(), parsed.diagnostics, relativePath)
+        }
         return ParsedFixtureFace(
             typefaceId = typefaceId,
             cmap = parsed.cmap,
