@@ -114,11 +114,13 @@ Evidence:
   remaining gate is the per-script shaping fixture families owned by
   `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`.
 - The named fixture families for `KFONT-M6-003`, `KFONT-M6-007`,
-  `KFONT-M6-008`, `KFONT-M6-009`, and `KFONT-M6-010` are still not present
-  in-repo beyond ticket text references, so those tickets must not be advanced
-  by synthetic-only substitutes.
-- `KFONT-M6-010` also remains gated by `KFONT-M4-005`, which is still
-  `proposed` in the current ticket catalog.
+  `KFONT-M6-008`, and `KFONT-M6-009` are still not present in-repo beyond
+  ticket text references, so those tickets must not be advanced by
+  synthetic-only substitutes.
+- `KFONT-M6-010` now has bounded generated-memory-font GSUB extension evidence
+  for single and ligature substitution targets only; chaining, reverse
+  chaining, GPOS advanced lookups, variation/device adjustments, and
+  ticket-local trace families remain explicit gates.
 
 Validation:
 
@@ -3172,6 +3174,49 @@ unsupported-syllable and phase refusal fixtures/codes, and ticket-local
 `gsub-trace.json` / `gpos-trace.json` / `shaped-glyph-run.json` /
 `unicode-segments.json` dump families remain open. Keep this ticket `blocked`
 until those gates land.
+
+### KFONT-M6-010: GSUB Extension Lookup Bounded Wave
+
+Status: blocked after bounded generated-memory-font evidence landed.
+
+Files:
+
+- `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ExtensionLookupFixtureTest.kt`
+- `reports/font/fixtures/expected/shaping/extension-lookup-report.json`
+- `reports/pure-kotlin-text/2026-06-19-kfont-m6-010-gsub-extension-lookups.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-010-implement-gsub-gpos-extension-chaining-and-variation-adjustment-lookups.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `DefaultOpenTypeFaceParser` now resolves GSUB lookup type `7` extension
+  subtables into bounded single-substitution and ligature-substitution lookup
+  models on deterministic generated-memory-font fixtures.
+- `ExtensionLookupFixtureTest` now proves those parsed extension targets shape
+  `A -> glyph 15` under `ccmp` defaults and `fi -> glyph 42` under `liga`
+  defaults without introducing native shaper dependencies or broader advanced
+  lookup claims.
+- `extension-lookup-report.json` records the bounded single/ligature extension
+  cases and keeps chaining, reverse-chaining, GPOS advanced lookup, and
+  variation/device work as explicit remaining gates.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ExtensionLookupFixtureTest
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk git diff --check
+```
+
+Remaining gate: GSUB extension lookup targets beyond single and ligature
+substitution, GSUB chaining contextual substitution, GSUB reverse chaining
+substitution, GPOS contextual/chaining/extension positioning, device/variation
+adjustments, and ticket-local `gsub-trace.json` / `gpos-trace.json` /
+`variation-adjustment-trace.json` evidence remain open. Keep this ticket
+`blocked` until those gates land.
 ### PKT-09A: Paragraph Semantic Layout Dumps And Refusals
 
 Status: implemented and independently reviewed.
