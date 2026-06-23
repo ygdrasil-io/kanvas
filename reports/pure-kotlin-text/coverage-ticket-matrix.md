@@ -2840,6 +2840,56 @@ Remaining gate: per-script shaping fixture families from `KFONT-M6-007`,
 `blocked` until those gates land beyond the current contract-level
 `shaping-plan.json` evidence.
 
+### KFONT-M6-009: Thai And CJK Boundary Review Wave
+
+Status: blocked after bounded vendored-font evidence landed and was independently reviewed.
+
+Files:
+
+- `font/core/src/main/kotlin/org/graphiks/kanvas/font/FontCore.kt`
+- `font/text/src/test/kotlin/org/graphiks/kanvas/text/ThaiCjkBoundaryFixtureTest.kt`
+- `reports/font/fixtures/expected/shaping/thai-cjk-boundary-report.json`
+- `reports/pure-kotlin-text/2026-06-18-kfont-m6-009-thai-cjk-boundaries.md`
+- `reports/pure-kotlin-text/dump-evidence-index.json`
+- `reports/pure-kotlin-text/fixture-evidence-manifest.json`
+- `reports/pure-kotlin-text/font-fixtures-manifest.json`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-009-add-thai-and-cjk-shaping-boundaries.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `ThaiCjkBoundaryFixtureTest` now injects the pinned Script_Extensions
+  itemizer locally so the bounded `Aก้A` case proves `Latn` / `Thai` /
+  `Latn` shaping boundaries without changing the default engine surface.
+- `ThaiCjkBoundaryFixtureTest` now proves bounded vendored-font evidence for
+  Thai tone-mark positioning, mixed Latin/Thai script boundaries, and CJK
+  kana `vert` alternates on `NotoSansThai-Regular.ttf` and
+  `NotoSansSC-Regular.otf` without promoting broader Thai or CJK shaping
+  support.
+- `thai-cjk-boundary-report.json` records those bounded rows and keeps
+  dictionary diagnostics, variation-selector evidence, Han/Hangul rows,
+  paragraph-owned ruby/line-break diagnostics, and ticket-local trace dump
+  families as explicit remaining gates.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:core:test --tests org.graphiks.kanvas.font.FontFixtureManifestTest
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ThaiCjkBoundaryFixtureTest
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: `KFONT-M6-009` is still not `done`. Paragraph-owned Thai
+dictionary diagnostics, Thai refusal fixtures/codes, `cmap` format 14
+variation-selector evidence, Han/Hangul rows, paragraph-owned ruby/line-break
+diagnostics, and ticket-local `shaping-plan.json` / `gsub-trace.json` /
+`gpos-trace.json` / `shaped-glyph-run.json` / `cmap-map.json` /
+`unicode-segments.json` dump families remain open.
+
 ### PKT-07A: Latin GSUB/GPOS Fixture Contract
 
 Status: implemented with local diff review.
