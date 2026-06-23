@@ -9,20 +9,28 @@ import org.graphiks.kanvas.font.sfnt.CMapTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeAnchor
 import org.graphiks.kanvas.font.sfnt.OpenTypeGdefTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposCursiveLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposMalformedLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToBaseAttachment
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToBaseLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToLigatureAttachment
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToLigatureLookup
-import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToMarkAttachment
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToMarkLookup
-import org.graphiks.kanvas.font.sfnt.OpenTypeGposLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGposTable
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassRule
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassSubtable
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextCoverageLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextCoverageRule
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextGlyphLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextGlyphRule
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubLigatureSubstitution
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubLigatureSubstitutionLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubMultipleSubstitutionLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubNestedLookupRecord
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubSingleSubstitutionLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubTable
-import org.graphiks.kanvas.font.sfnt.OpenTypeGposTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposPairAdjustment
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposPairTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposSingleTable
@@ -62,6 +70,54 @@ public data class ShapingRequest(
 public data class ShapingResult(
     public val glyphRuns: List<ShapedGlyphRun> = emptyList(),
     public val diagnostics: List<ShapingDiagnostic> = emptyList(),
+)
+
+internal data class RuntimeShapingTraceResult(
+    val result: ShapingResult,
+    val runs: List<RuntimeShapingRunTrace> = emptyList(),
+) {
+    val gsubLookups: List<RuntimeGsubLookupTrace>
+        get() = runs.flatMap(RuntimeShapingRunTrace::gsubLookups)
+
+    val gposLookups: List<RuntimeGposLookupTrace>
+        get() = runs.flatMap(RuntimeShapingRunTrace::gposLookups)
+}
+
+internal data class RuntimeShapingRunTrace(
+    val inputGlyphIds: List<Int>,
+    val featureOrder: List<String>,
+    val bidiLevel: Int,
+    val preGposClusterMetrics: List<RuntimeClusterMetric> = emptyList(),
+    val gsubLookups: List<RuntimeGsubLookupTrace> = emptyList(),
+    val gposLookups: List<RuntimeGposLookupTrace> = emptyList(),
+)
+
+internal data class RuntimeClusterMetric(
+    val advanceX: Float,
+    val offsetX: Float,
+    val offsetY: Float,
+)
+
+internal data class RuntimeGsubLookupTrace(
+    val lookupIndex: Int,
+    val lookupType: Int,
+    val featureTag: String,
+    val inputGlyphIds: List<Int>,
+    val outputGlyphIds: List<Int>,
+    val clusterAction: String,
+    val contextFormat: Int? = null,
+)
+
+internal data class RuntimeGposLookupTrace(
+    val lookupIndex: Int,
+    val lookupType: Int,
+    val featureTag: String,
+    val matchedGlyphIds: List<Int>,
+    val glyphClasses: List<Int> = emptyList(),
+    val markClass: Int? = null,
+    val anchorFormats: List<Int> = emptyList(),
+    val attachmentVector: List<Int> = emptyList(),
+    val cursiveChain: List<List<Int>> = emptyList(),
 )
 
 /**
@@ -641,6 +697,21 @@ public class BasicOpenTypeShapingEngine(
      * Shapes [request] into bounded script/bidi glyph runs.
      */
     override fun shape(request: ShapingRequest): ShapingResult {
+        return shapeInternal(request, runtimeTraceCollector = null)
+    }
+
+    internal fun shapeWithRuntimeTrace(request: ShapingRequest): RuntimeShapingTraceResult {
+        val runtimeTraceCollector = RuntimeShapingTraceCollector()
+        return RuntimeShapingTraceResult(
+            result = shapeInternal(request, runtimeTraceCollector = runtimeTraceCollector),
+            runs = runtimeTraceCollector.snapshotRuns(),
+        )
+    }
+
+    private fun shapeInternal(
+        request: ShapingRequest,
+        runtimeTraceCollector: RuntimeShapingTraceCollector?,
+    ): ShapingResult {
         val requestedTextRange = codePointSafeTextRange(request.text, request.textRange) ?: return ShapingResult()
         val textRange = clusterSafeTextRange(request.text, requestedTextRange)
         val scopedRequest = request.copy(textRange = textRange)
@@ -660,7 +731,7 @@ public class BasicOpenTypeShapingEngine(
 
         val glyphRuns = shapingClusters
             .groupByShapingState()
-            .map { group -> shapeGroup(request, group, diagnostics) }
+            .map { group -> shapeGroup(request, group, diagnostics, runtimeTraceCollector) }
 
         return ShapingResult(glyphRuns = glyphRuns, diagnostics = diagnostics)
     }
@@ -719,7 +790,9 @@ public class BasicOpenTypeShapingEngine(
         request: ShapingRequest,
         group: BasicShapingGroup,
         diagnostics: MutableList<ShapingDiagnostic>,
+        runtimeTraceCollector: RuntimeShapingTraceCollector?,
     ): ShapedGlyphRun {
+        val resolvedFeatures = resolveRuntimeFeatureSet(request, group)
         val glyphUnits = mutableListOf<ShapingGlyphUnit>()
         val clusterRanges = if (group.isRightToLeft) group.clusterRanges.asReversed() else group.clusterRanges
 
@@ -737,16 +810,30 @@ public class BasicOpenTypeShapingEngine(
             }
         }
 
-        applyStandardLigatures(request, glyphUnits)
-        applyGsubLookups(request, glyphUnits)
+        applyStandardLigatures(request, resolvedFeatures, glyphUnits)
+        runtimeTraceCollector?.beginRun(
+            inputGlyphIds = glyphUnits.map(ShapingGlyphUnit::glyphId),
+            featureOrder = resolvedFeatures.resolved.enabled.map { feature -> feature.tag },
+            bidiLevel = group.bidiLevel,
+        )
+        applyGsubLookups(request, resolvedFeatures, glyphUnits, diagnostics, runtimeTraceCollector)
         val glyphIds = glyphUnits.map { it.glyphId }
         val clusters = glyphClustersFor(
             glyphUnits = glyphUnits,
             fontSize = request.fontSize,
             preservePerGlyphClusters = shouldPreservePerGlyphClusters(request.typefaceId, glyphIds),
         )
+        runtimeTraceCollector?.recordPreGposClusters(clusters)
         val baseAdvanceX = clusters.sumOf { cluster -> cluster.advanceX.toDouble() }
-        val totalAdvanceAdjustment = applyPositionAdjustments(request, group, glyphIds, clusters, diagnostics)
+        val totalAdvanceAdjustment = applyPositionAdjustments(
+            request = request,
+            group = group,
+            features = resolvedFeatures,
+            glyphIds = glyphIds,
+            clusters = clusters,
+            diagnostics = diagnostics,
+            runtimeTraceCollector = runtimeTraceCollector,
+        )
 
         return ShapedGlyphRun(
             glyphIds = glyphIds,
@@ -769,9 +856,10 @@ public class BasicOpenTypeShapingEngine(
 
     private fun applyStandardLigatures(
         request: ShapingRequest,
+        features: RuntimeFeatureGateSet,
         glyphUnits: MutableList<ShapingGlyphUnit>,
     ) {
-        if (request.features.values["liga"] == 0) return
+        if (!features.isRuntimeEnabled("liga")) return
         val ligatureGlyphId = glyphMapper.glyphIdFor(request.typefaceId, LATIN_SMALL_FI_LIGATURE_CODE_POINT)
             ?: return
 
@@ -802,19 +890,50 @@ public class BasicOpenTypeShapingEngine(
 
     private fun applyGsubLookups(
         request: ShapingRequest,
+        features: RuntimeFeatureGateSet,
         glyphUnits: MutableList<ShapingGlyphUnit>,
+        diagnostics: MutableList<ShapingDiagnostic>,
+        runtimeTraceCollector: RuntimeShapingTraceCollector?,
     ) {
         val typefaceId = request.typefaceId ?: return
         val gsubTable = gsubTablesByTypefaceId[typefaceId] ?: return
+        val lookupsByIndex = gsubTable.lookups.associateBy { it.lookupIndex }
 
         gsubTable.lookups.forEach { lookup ->
-            if (request.features.values[lookup.featureTag] == 0) {
+            if (lookup.topLevelFeatureTags.isEmpty()) {
                 return@forEach
             }
+            if (lookup.topLevelFeatureTags.none(features::isRuntimeEnabled)) {
+                return@forEach
+            }
+            val beforeUnits = runtimeTraceCollector?.let { glyphUnits.toList() }
             when (lookup) {
                 is OpenTypeGsubSingleSubstitutionLookup -> applySingleSubstitutionLookup(glyphUnits, lookup)
                 is OpenTypeGsubMultipleSubstitutionLookup -> applyMultipleSubstitutionLookup(glyphUnits, lookup)
                 is OpenTypeGsubLigatureSubstitutionLookup -> applyLigatureSubstitutionLookup(glyphUnits, lookup)
+                is OpenTypeGsubContextGlyphLookup -> applyContextGlyphLookup(glyphUnits, lookup, lookupsByIndex, diagnostics)
+                is OpenTypeGsubContextClassLookup ->
+                    applyContextClassLookup(glyphUnits, lookup, lookupsByIndex, diagnostics)
+                is OpenTypeGsubContextCoverageLookup ->
+                    applyContextCoverageLookup(glyphUnits, lookup, lookupsByIndex, diagnostics)
+            }
+            val afterUnits = runtimeTraceCollector?.let { glyphUnits.toList() }
+            if (
+                beforeUnits != null &&
+                afterUnits != null &&
+                beforeUnits.map(ShapingGlyphUnit::glyphId) != afterUnits.map(ShapingGlyphUnit::glyphId)
+            ) {
+                runtimeTraceCollector.recordGsub(
+                    RuntimeGsubLookupTrace(
+                        lookupIndex = lookup.lookupIndex,
+                        lookupType = lookup.lookupType(),
+                        featureTag = lookup.primaryFeatureTag(),
+                        inputGlyphIds = beforeUnits.map(ShapingGlyphUnit::glyphId),
+                        outputGlyphIds = afterUnits.map(ShapingGlyphUnit::glyphId),
+                        clusterAction = gsubClusterAction(beforeUnits, afterUnits),
+                        contextFormat = lookup.contextFormatOrNull(),
+                    ),
+                )
             }
         }
     }
@@ -885,6 +1004,328 @@ public class BasicOpenTypeShapingEngine(
             glyphIndex += 1
         }
     }
+
+    private fun applyContextGlyphLookup(
+        glyphUnits: MutableList<ShapingGlyphUnit>,
+        lookup: OpenTypeGsubContextGlyphLookup,
+        lookupsByIndex: Map<Int, OpenTypeGsubLookup>,
+        diagnostics: MutableList<ShapingDiagnostic>,
+    ) {
+        var glyphIndex = 0
+        while (glyphIndex < glyphUnits.size) {
+            val rule = lookup.rules.firstOrNull { contextGlyphRuleMatchesAt(glyphUnits, glyphIndex, it) }
+            if (rule == null) {
+                glyphIndex += 1
+                continue
+            }
+            val stop = applyNestedLookupsForMatch(
+                glyphUnits = glyphUnits,
+                matchStart = glyphIndex,
+                matchLength = rule.inputGlyphIds.size,
+                nestedLookups = rule.nestedLookups,
+                lookupsByIndex = lookupsByIndex,
+                diagnostics = diagnostics,
+                lookupStack = listOf(lookup.lookupIndex),
+            )
+            glyphIndex += if (stop) rule.inputGlyphIds.size else 1
+        }
+    }
+
+    private fun applyContextClassLookup(
+        glyphUnits: MutableList<ShapingGlyphUnit>,
+        lookup: OpenTypeGsubContextClassLookup,
+        lookupsByIndex: Map<Int, OpenTypeGsubLookup>,
+        diagnostics: MutableList<ShapingDiagnostic>,
+    ) {
+        var glyphIndex = 0
+        while (glyphIndex < glyphUnits.size) {
+            val match = lookup.contextClassSubtables().asSequence().mapNotNull { subtable ->
+                subtable.rules.firstOrNull {
+                    contextClassRuleMatchesAt(glyphUnits, glyphIndex, subtable.firstGlyphCoverage, subtable.classDefinitions, it)
+                }?.let { rule -> subtable to rule }
+            }.firstOrNull()
+            if (match == null) {
+                glyphIndex += 1
+                continue
+            }
+            val (_, rule) = match
+            val stop = applyNestedLookupsForMatch(
+                glyphUnits = glyphUnits,
+                matchStart = glyphIndex,
+                matchLength = rule.inputClasses.size,
+                nestedLookups = rule.nestedLookups,
+                lookupsByIndex = lookupsByIndex,
+                diagnostics = diagnostics,
+                lookupStack = listOf(lookup.lookupIndex),
+            )
+            glyphIndex += if (stop) rule.inputClasses.size else 1
+        }
+    }
+
+    private fun applyContextCoverageLookup(
+        glyphUnits: MutableList<ShapingGlyphUnit>,
+        lookup: OpenTypeGsubContextCoverageLookup,
+        lookupsByIndex: Map<Int, OpenTypeGsubLookup>,
+        diagnostics: MutableList<ShapingDiagnostic>,
+    ) {
+        var glyphIndex = 0
+        while (glyphIndex < glyphUnits.size) {
+            val rule = lookup.rules.firstOrNull { contextCoverageRuleMatchesAt(glyphUnits, glyphIndex, it) }
+            if (rule == null) {
+                glyphIndex += 1
+                continue
+            }
+            val stop = applyNestedLookupsForMatch(
+                glyphUnits = glyphUnits,
+                matchStart = glyphIndex,
+                matchLength = rule.inputCoverages.size,
+                nestedLookups = rule.nestedLookups,
+                lookupsByIndex = lookupsByIndex,
+                diagnostics = diagnostics,
+                lookupStack = listOf(lookup.lookupIndex),
+            )
+            glyphIndex += if (stop) rule.inputCoverages.size else 1
+        }
+    }
+
+    private fun contextGlyphRuleMatchesAt(
+        glyphUnits: List<ShapingGlyphUnit>,
+        glyphIndex: Int,
+        rule: OpenTypeGsubContextGlyphRule,
+    ): Boolean {
+        val endIndex = glyphIndex + rule.inputGlyphIds.size
+        if (endIndex > glyphUnits.size) return false
+        return rule.inputGlyphIds.indices.all { offset ->
+            glyphUnits[glyphIndex + offset].glyphId == rule.inputGlyphIds[offset]
+        }
+    }
+
+    private fun contextClassRuleMatchesAt(
+        glyphUnits: List<ShapingGlyphUnit>,
+        glyphIndex: Int,
+        firstGlyphCoverage: Set<Int>,
+        classDefinitions: Map<Int, Int>,
+        rule: OpenTypeGsubContextClassRule,
+    ): Boolean {
+        val endIndex = glyphIndex + rule.inputClasses.size
+        if (endIndex > glyphUnits.size) return false
+        if (firstGlyphCoverage.isNotEmpty() && glyphUnits[glyphIndex].glyphId !in firstGlyphCoverage) return false
+        return rule.inputClasses.indices.all { offset ->
+            val glyphClass = classDefinitions[glyphUnits[glyphIndex + offset].glyphId] ?: 0
+            glyphClass == rule.inputClasses[offset]
+        }
+    }
+
+    private fun contextCoverageRuleMatchesAt(
+        glyphUnits: List<ShapingGlyphUnit>,
+        glyphIndex: Int,
+        rule: OpenTypeGsubContextCoverageRule,
+    ): Boolean {
+        val endIndex = glyphIndex + rule.inputCoverages.size
+        if (endIndex > glyphUnits.size) return false
+        return rule.inputCoverages.indices.all { offset ->
+            glyphUnits[glyphIndex + offset].glyphId in rule.inputCoverages[offset]
+        }
+    }
+
+    private fun applyNestedLookupsForMatch(
+        glyphUnits: MutableList<ShapingGlyphUnit>,
+        matchStart: Int,
+        matchLength: Int,
+        nestedLookups: List<OpenTypeGsubNestedLookupRecord>,
+        lookupsByIndex: Map<Int, OpenTypeGsubLookup>,
+        diagnostics: MutableList<ShapingDiagnostic>,
+        lookupStack: List<Int>,
+    ): Boolean {
+        val textRange = glyphUnits.subList(matchStart, matchStart + matchLength).let { matched ->
+            matched.minOf { it.textRange.first }..matched.maxOf { it.textRange.last }
+        }
+        val matchSnapshot = glyphUnits.toList()
+        val positionShifts = IntArray(matchLength)
+        for (record in nestedLookups) {
+            if (record.sequenceIndex !in 0 until matchLength) {
+                diagnostics += ShapingDiagnostic(
+                    code = TEXT_SHAPING_LOOKUP_MALFORMED_DIAGNOSTIC_CODE,
+                    message = "GSUB contextual nested lookup sequence index is outside the matched glyph range.",
+                    textRange = textRange,
+                )
+                glyphUnits.clear()
+                glyphUnits.addAll(matchSnapshot)
+                return true
+            }
+            val nestedLookup = lookupsByIndex[record.lookupIndex]
+            if (nestedLookup == null) {
+                diagnostics += ShapingDiagnostic(
+                    code = TEXT_SHAPING_LOOKUP_MALFORMED_DIAGNOSTIC_CODE,
+                    message = "GSUB contextual nested lookup index is missing from the lookup list.",
+                    textRange = textRange,
+                )
+                glyphUnits.clear()
+                glyphUnits.addAll(matchSnapshot)
+                return true
+            }
+            if (record.lookupIndex in lookupStack) {
+                diagnostics += ShapingDiagnostic(
+                    code = TEXT_SHAPING_LOOKUP_CYCLE_DETECTED_DIAGNOSTIC_CODE,
+                    message = "GSUB contextual nested lookup cycle detected.",
+                    textRange = textRange,
+                )
+                glyphUnits.clear()
+                glyphUnits.addAll(matchSnapshot)
+                return true
+            }
+            val targetIndex = matchStart + record.sequenceIndex + positionShifts[record.sequenceIndex]
+            if (targetIndex !in glyphUnits.indices) {
+                diagnostics += ShapingDiagnostic(
+                    code = TEXT_SHAPING_LOOKUP_MALFORMED_DIAGNOSTIC_CODE,
+                    message = "GSUB contextual nested lookup sequence index is outside the matched glyph range.",
+                    textRange = textRange,
+                )
+                glyphUnits.clear()
+                glyphUnits.addAll(matchSnapshot)
+                return true
+            }
+            val sizeBefore = glyphUnits.size
+            val shouldStop = applyLookupAtIndex(
+                glyphUnits = glyphUnits,
+                glyphIndex = targetIndex,
+                lookup = nestedLookup,
+                lookupsByIndex = lookupsByIndex,
+                diagnostics = diagnostics,
+                lookupStack = lookupStack + record.lookupIndex,
+                textRange = textRange,
+            )
+            if (shouldStop) {
+                glyphUnits.clear()
+                glyphUnits.addAll(matchSnapshot)
+                return true
+            }
+            val sizeDelta = glyphUnits.size - sizeBefore
+            if (sizeDelta != 0) {
+                for (position in record.sequenceIndex + 1 until matchLength) {
+                    positionShifts[position] += sizeDelta
+                }
+            }
+        }
+        return false
+    }
+
+    private fun applyLookupAtIndex(
+        glyphUnits: MutableList<ShapingGlyphUnit>,
+        glyphIndex: Int,
+        lookup: OpenTypeGsubLookup,
+        lookupsByIndex: Map<Int, OpenTypeGsubLookup>,
+        diagnostics: MutableList<ShapingDiagnostic>,
+        lookupStack: List<Int>,
+        textRange: IntRange,
+    ): Boolean {
+        when (lookup) {
+            is OpenTypeGsubSingleSubstitutionLookup -> {
+                lookup.substitutions.firstOrNull { it.inputGlyphId == glyphUnits[glyphIndex].glyphId }?.let { substitution ->
+                    glyphUnits[glyphIndex] = glyphUnits[glyphIndex].copy(glyphId = substitution.replacementGlyphId)
+                }
+            }
+            is OpenTypeGsubMultipleSubstitutionLookup -> {
+                lookup.substitutions.firstOrNull { it.inputGlyphId == glyphUnits[glyphIndex].glyphId }?.let { substitution ->
+                    val sourceRange = glyphUnits[glyphIndex].textRange
+                    glyphUnits.removeAt(glyphIndex)
+                    glyphUnits.addAll(
+                        glyphIndex,
+                        substitution.replacementGlyphIds.map { replacementGlyphId ->
+                            ShapingGlyphUnit(glyphId = replacementGlyphId, textRange = sourceRange, codePoint = null)
+                        },
+                    )
+                }
+            }
+            is OpenTypeGsubLigatureSubstitutionLookup -> {
+                lookup.substitutions.firstOrNull { ligatureMatchesAt(glyphUnits, glyphIndex, it) }?.let { substitution ->
+                    val matchedUnits = glyphUnits.subList(glyphIndex, glyphIndex + substitution.inputGlyphIds.size).toList()
+                    repeat(substitution.inputGlyphIds.size) {
+                        glyphUnits.removeAt(glyphIndex)
+                    }
+                    glyphUnits.add(
+                        glyphIndex,
+                        ShapingGlyphUnit(
+                            glyphId = substitution.replacementGlyphId,
+                            textRange = matchedUnits.minOf { it.textRange.first }..matchedUnits.maxOf { it.textRange.last },
+                            codePoint = null,
+                        ),
+                    )
+                }
+            }
+            is OpenTypeGsubContextGlyphLookup -> {
+                val rule = lookup.rules.firstOrNull { contextGlyphRuleMatchesAt(glyphUnits, glyphIndex, it) } ?: return false
+                val shouldStop = applyNestedLookupsForMatch(
+                    glyphUnits = glyphUnits,
+                    matchStart = glyphIndex,
+                    matchLength = rule.inputGlyphIds.size,
+                    nestedLookups = rule.nestedLookups,
+                    lookupsByIndex = lookupsByIndex,
+                    diagnostics = diagnostics,
+                    lookupStack = lookupStack,
+                )
+                if (shouldStop) return true
+            }
+            is OpenTypeGsubContextClassLookup -> {
+                val rule = lookup.contextClassSubtables().asSequence().mapNotNull { subtable ->
+                    subtable.rules.firstOrNull {
+                        contextClassRuleMatchesAt(glyphUnits, glyphIndex, subtable.firstGlyphCoverage, subtable.classDefinitions, it)
+                    }
+                }.firstOrNull() ?: return false
+                val shouldStop = applyNestedLookupsForMatch(
+                    glyphUnits = glyphUnits,
+                    matchStart = glyphIndex,
+                    matchLength = rule.inputClasses.size,
+                    nestedLookups = rule.nestedLookups,
+                    lookupsByIndex = lookupsByIndex,
+                    diagnostics = diagnostics,
+                    lookupStack = lookupStack,
+                )
+                if (shouldStop) return true
+            }
+            is OpenTypeGsubContextCoverageLookup -> {
+                val rule = lookup.rules.firstOrNull { contextCoverageRuleMatchesAt(glyphUnits, glyphIndex, it) } ?: return false
+                val shouldStop = applyNestedLookupsForMatch(
+                    glyphUnits = glyphUnits,
+                    matchStart = glyphIndex,
+                    matchLength = rule.inputCoverages.size,
+                    nestedLookups = rule.nestedLookups,
+                    lookupsByIndex = lookupsByIndex,
+                    diagnostics = diagnostics,
+                    lookupStack = lookupStack,
+                )
+                if (shouldStop) return true
+            }
+        }
+        val hasOverlappingGlyph = glyphUnits.any { glyph ->
+            glyph.textRange.first <= textRange.last && glyph.textRange.last >= textRange.first
+        }
+        val escapedClusterRange = glyphUnits.any { glyph ->
+            glyph.textRange.first <= textRange.last &&
+                glyph.textRange.last >= textRange.first &&
+                (glyph.textRange.first < textRange.first || glyph.textRange.last > textRange.last)
+        }
+        if (!hasOverlappingGlyph || escapedClusterRange) {
+            diagnostics += ShapingDiagnostic(
+                code = TEXT_SHAPING_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE,
+                message = "GSUB contextual lookup left the matched cluster range.",
+                textRange = textRange,
+            )
+            return true
+        }
+        return false
+    }
+
+    private fun OpenTypeGsubContextClassLookup.contextClassSubtables(): List<OpenTypeGsubContextClassSubtable> =
+        subtables.ifEmpty {
+            listOf(
+                OpenTypeGsubContextClassSubtable(
+                    firstGlyphCoverage = firstGlyphCoverage,
+                    classDefinitions = classDefinitions,
+                    rules = rules,
+                ),
+            )
+        }
 
     private fun ligatureMatchesAt(
         glyphUnits: List<ShapingGlyphUnit>,
@@ -966,9 +1407,11 @@ public class BasicOpenTypeShapingEngine(
     private fun applyPositionAdjustments(
         request: ShapingRequest,
         group: BasicShapingGroup,
+        features: RuntimeFeatureGateSet,
         glyphIds: List<Int>,
         clusters: MutableList<GlyphCluster>,
         diagnostics: MutableList<ShapingDiagnostic>,
+        runtimeTraceCollector: RuntimeShapingTraceCollector?,
     ): Double {
         if (
             kernTablesByTypefaceId.isEmpty() &&
@@ -986,6 +1429,7 @@ public class BasicOpenTypeShapingEngine(
             glyphIds = glyphIds,
             clusters = clusters,
             glyphClusterIndexes = glyphClusterIndexes,
+            features = features,
             adjustmentContext = adjustmentContext,
             diagnostics = diagnostics,
         )
@@ -993,11 +1437,13 @@ public class BasicOpenTypeShapingEngine(
             glyphIds = glyphIds,
             clusters = clusters,
             glyphClusterIndexes = glyphClusterIndexes,
+            features = features,
             adjustmentContext = adjustmentContext,
             textRange = group.textRange(),
             diagnostics = diagnostics,
+            runtimeTraceCollector = runtimeTraceCollector,
         )
-        if (request.features.values["kern"] == 0) {
+        if (!features.isRuntimeEnabled("kern")) {
             return totalAdvanceAdjustment
         }
         if (glyphIds.size < 2) {
@@ -1035,13 +1481,15 @@ public class BasicOpenTypeShapingEngine(
         glyphIds: List<Int>,
         clusters: MutableList<GlyphCluster>,
         glyphClusterIndexes: IntArray,
+        features: RuntimeFeatureGateSet,
         adjustmentContext: BasicPositionAdjustmentContext,
         textRange: IntRange,
         diagnostics: MutableList<ShapingDiagnostic>,
+        runtimeTraceCollector: RuntimeShapingTraceCollector?,
     ): Double {
         val gposTable = adjustmentContext.gposTable ?: return 0.0
         val enabledLookups = gposTable.lookups.filter { lookup ->
-            adjustmentContext.featureValue(lookup.featureTag) != 0
+            features.isRuntimeEnabled(lookup.featureTag)
         }
         if (enabledLookups.isEmpty()) return 0.0
 
@@ -1079,6 +1527,7 @@ public class BasicOpenTypeShapingEngine(
             adjustmentContext = adjustmentContext,
             enabledLookups = enabledLookups,
             diagnostics = diagnostics,
+            runtimeTraceCollector = runtimeTraceCollector,
         )
         totalAdvanceAdjustment += applyCursiveAnchorAdjustments(
             glyphIds = glyphIds,
@@ -1087,6 +1536,7 @@ public class BasicOpenTypeShapingEngine(
             adjustmentContext = adjustmentContext,
             enabledLookups = enabledLookups,
             diagnostics = diagnostics,
+            runtimeTraceCollector = runtimeTraceCollector,
         )
         return totalAdvanceAdjustment
     }
@@ -1098,6 +1548,7 @@ public class BasicOpenTypeShapingEngine(
         adjustmentContext: BasicPositionAdjustmentContext,
         enabledLookups: List<OpenTypeGposLookup>,
         diagnostics: MutableList<ShapingDiagnostic>,
+        runtimeTraceCollector: RuntimeShapingTraceCollector?,
     ): Double {
         val gdefTable = adjustmentContext.gdefTable ?: return 0.0
         var totalAdvanceAdjustment = 0.0
@@ -1114,11 +1565,11 @@ public class BasicOpenTypeShapingEngine(
                 enabledLookups.filterIsInstance<OpenTypeGposMarkToMarkLookup>().firstNotNullOfOrNull { lookup ->
                     lookup.attachments.firstOrNull { attachment ->
                         attachment.mark1GlyphId == markGlyphId && attachment.mark2GlyphId == glyphIds[candidateIndex]
-                    }?.let { attachment -> candidateIndex to attachment }
+                    }?.let { attachment -> Triple(candidateIndex, lookup, attachment) }
                 }
             }
             if (markToMarkAttachment != null) {
-                val (candidateIndex, attachment) = markToMarkAttachment
+                val (candidateIndex, lookup, attachment) = markToMarkAttachment
                 totalAdvanceAdjustment += attachMarkGlyph(
                     clusters = clusters,
                     currentClusterIndex = clusterIndex,
@@ -1127,6 +1578,21 @@ public class BasicOpenTypeShapingEngine(
                     targetAnchor = attachment.mark2Anchor,
                     scale = adjustmentContext.fontUnitsToFontSizeUnitsScale,
                 )
+                runtimeTraceCollector?.recordGpos(
+                    RuntimeGposLookupTrace(
+                        lookupIndex = lookup.lookupIndex,
+                        lookupType = lookup.lookupType,
+                        featureTag = lookup.featureTag,
+                        matchedGlyphIds = listOf(markGlyphId, glyphIds[candidateIndex]),
+                        glyphClasses = listOf(GDEF_MARK_GLYPH_CLASS, GDEF_MARK_GLYPH_CLASS),
+                        markClass = attachment.markClass,
+                        anchorFormats = listOf(attachment.mark1Anchor.format, attachment.mark2Anchor.format),
+                        attachmentVector = listOf(
+                            attachment.mark2Anchor.x - attachment.mark1Anchor.x,
+                            attachment.mark2Anchor.y - attachment.mark1Anchor.y,
+                        ),
+                    ),
+                )
                 return@forEachIndexed
             }
 
@@ -1134,15 +1600,16 @@ public class BasicOpenTypeShapingEngine(
                 gdefTable.glyphClasses[glyphIds[candidateIndex]] in setOf(GDEF_BASE_GLYPH_CLASS, GDEF_LIGATURE_GLYPH_CLASS)
             } ?: return@forEachIndexed
             val baseOrLigatureGlyphId = glyphIds[baseOrLigatureIndex]
-            val baseOrLigatureClass = gdefTable.glyphClasses[baseOrLigatureGlyphId]
-            when (baseOrLigatureClass) {
+            when (gdefTable.glyphClasses[baseOrLigatureGlyphId]) {
                 GDEF_BASE_GLYPH_CLASS -> {
-                    val attachment = enabledLookups.filterIsInstance<OpenTypeGposMarkToBaseLookup>().firstNotNullOfOrNull { lookup ->
-                        lookup.attachments.firstOrNull { candidate ->
-                            candidate.markGlyphId == markGlyphId && candidate.baseGlyphId == baseOrLigatureGlyphId
+                    val lookupAndAttachment =
+                        enabledLookups.filterIsInstance<OpenTypeGposMarkToBaseLookup>().firstNotNullOfOrNull { lookup ->
+                            lookup.attachments.firstOrNull { candidate ->
+                                candidate.markGlyphId == markGlyphId && candidate.baseGlyphId == baseOrLigatureGlyphId
+                            }?.let { attachment -> lookup to attachment }
                         }
-                    }
-                    if (attachment != null) {
+                    if (lookupAndAttachment != null) {
+                        val (lookup, attachment) = lookupAndAttachment
                         totalAdvanceAdjustment += attachMarkGlyph(
                             clusters = clusters,
                             currentClusterIndex = clusterIndex,
@@ -1150,6 +1617,21 @@ public class BasicOpenTypeShapingEngine(
                             markAnchor = attachment.markAnchor,
                             targetAnchor = attachment.baseAnchor,
                             scale = adjustmentContext.fontUnitsToFontSizeUnitsScale,
+                        )
+                        runtimeTraceCollector?.recordGpos(
+                            RuntimeGposLookupTrace(
+                                lookupIndex = lookup.lookupIndex,
+                                lookupType = lookup.lookupType,
+                                featureTag = lookup.featureTag,
+                                matchedGlyphIds = listOf(baseOrLigatureGlyphId, markGlyphId),
+                                glyphClasses = listOf(GDEF_BASE_GLYPH_CLASS, GDEF_MARK_GLYPH_CLASS),
+                                markClass = attachment.markClass,
+                                anchorFormats = listOf(attachment.baseAnchor.format, attachment.markAnchor.format),
+                                attachmentVector = listOf(
+                                    attachment.baseAnchor.x - attachment.markAnchor.x,
+                                    attachment.baseAnchor.y - attachment.markAnchor.y,
+                                ),
+                            ),
                         )
                     } else {
                         diagnostics += ShapingDiagnostic(
@@ -1160,17 +1642,17 @@ public class BasicOpenTypeShapingEngine(
                     }
                 }
                 GDEF_LIGATURE_GLYPH_CLASS -> {
-                    val attachments = enabledLookups.filterIsInstance<OpenTypeGposMarkToLigatureLookup>().flatMap { lookup ->
+                    val lookupAttachments = enabledLookups.filterIsInstance<OpenTypeGposMarkToLigatureLookup>().flatMap { lookup ->
                         lookup.attachments.filter { candidate ->
                             candidate.markGlyphId == markGlyphId && candidate.ligatureGlyphId == baseOrLigatureGlyphId
-                        }
+                        }.map { attachment -> lookup to attachment }
                     }
+                    val attachments = lookupAttachments.map { (_, attachment) -> attachment }
                     val distinctComponentIndexes = attachments.map(OpenTypeGposMarkToLigatureAttachment::componentIndex).distinct()
-                    val attachment = when {
-                        distinctComponentIndexes.size == 1 -> attachments.firstOrNull()
-                        else -> null
-                    }
-                    if (attachment != null) {
+                    val lookupAndAttachment =
+                        if (distinctComponentIndexes.size == 1) lookupAttachments.firstOrNull() else null
+                    if (lookupAndAttachment != null) {
+                        val (lookup, attachment) = lookupAndAttachment
                         totalAdvanceAdjustment += attachMarkGlyph(
                             clusters = clusters,
                             currentClusterIndex = clusterIndex,
@@ -1178,6 +1660,21 @@ public class BasicOpenTypeShapingEngine(
                             markAnchor = attachment.markAnchor,
                             targetAnchor = attachment.ligatureAnchor,
                             scale = adjustmentContext.fontUnitsToFontSizeUnitsScale,
+                        )
+                        runtimeTraceCollector?.recordGpos(
+                            RuntimeGposLookupTrace(
+                                lookupIndex = lookup.lookupIndex,
+                                lookupType = lookup.lookupType,
+                                featureTag = lookup.featureTag,
+                                matchedGlyphIds = listOf(baseOrLigatureGlyphId, markGlyphId),
+                                glyphClasses = listOf(GDEF_LIGATURE_GLYPH_CLASS, GDEF_MARK_GLYPH_CLASS),
+                                markClass = attachment.markClass,
+                                anchorFormats = listOf(attachment.ligatureAnchor.format, attachment.markAnchor.format),
+                                attachmentVector = listOf(
+                                    attachment.ligatureAnchor.x - attachment.markAnchor.x,
+                                    attachment.ligatureAnchor.y - attachment.markAnchor.y,
+                                ),
+                            ),
                         )
                     } else {
                         val detail = if (distinctComponentIndexes.size > 1) {
@@ -1192,7 +1689,6 @@ public class BasicOpenTypeShapingEngine(
                         )
                     }
                 }
-                else -> Unit
             }
         }
         return totalAdvanceAdjustment
@@ -1205,6 +1701,7 @@ public class BasicOpenTypeShapingEngine(
         adjustmentContext: BasicPositionAdjustmentContext,
         enabledLookups: List<OpenTypeGposLookup>,
         diagnostics: MutableList<ShapingDiagnostic>,
+        runtimeTraceCollector: RuntimeShapingTraceCollector?,
     ): Double {
         val cursiveLookups = enabledLookups.filterIsInstance<OpenTypeGposCursiveLookup>()
         if (cursiveLookups.isEmpty()) return 0.0
@@ -1218,23 +1715,20 @@ public class BasicOpenTypeShapingEngine(
             val currentClusterIndex = glyphClusterIndexes[glyphIndex]
             if (previousClusterIndex !in clusters.indices || currentClusterIndex !in clusters.indices) continue
 
-            val cursiveMatch = cursiveLookups.firstNotNullOfOrNull { lookup ->
+            val lookupAndMatch = cursiveLookups.firstNotNullOfOrNull { lookup ->
                 val previousAttachment = lookup.attachments.firstOrNull { attachment ->
                     attachment.glyphId == previousGlyphId && attachment.exitAnchor != null
                 }
                 val currentAttachment = lookup.attachments.firstOrNull { attachment ->
                     attachment.glyphId == currentGlyphId && attachment.entryAnchor != null
                 }
-                if (previousAttachment == null || currentAttachment == null) {
-                    null
-                } else {
-                    previousAttachment.exitAnchor!! to currentAttachment.entryAnchor!!
-                }
+                if (previousAttachment == null || currentAttachment == null) null
+                else Triple(lookup, previousAttachment.exitAnchor!!, currentAttachment.entryAnchor!!)
             }
-            if (cursiveMatch == null) continue
+            if (lookupAndMatch == null) continue
 
             matchedAttachmentChain = true
-            val (exitAnchor, entryAnchor) = cursiveMatch
+            val (lookup, exitAnchor, entryAnchor) = lookupAndMatch
             val deltaX = (exitAnchor.x - entryAnchor.x) * adjustmentContext.fontUnitsToFontSizeUnitsScale
             val deltaY = (exitAnchor.y - entryAnchor.y) * adjustmentContext.fontUnitsToFontSizeUnitsScale
             val previousCluster = clusters[previousClusterIndex]
@@ -1246,9 +1740,20 @@ public class BasicOpenTypeShapingEngine(
                 offsetY = currentCluster.offsetY + deltaY.toFloat(),
             )
             totalAdvanceAdjustment += deltaX
+            runtimeTraceCollector?.recordGpos(
+                RuntimeGposLookupTrace(
+                    lookupIndex = lookup.lookupIndex,
+                    lookupType = lookup.lookupType,
+                    featureTag = lookup.featureTag,
+                    matchedGlyphIds = listOf(previousGlyphId, currentGlyphId),
+                    anchorFormats = listOf(exitAnchor.format, entryAnchor.format),
+                    attachmentVector = listOf(exitAnchor.x - entryAnchor.x, exitAnchor.y - entryAnchor.y),
+                    cursiveChain = listOf(listOf(previousGlyphId, currentGlyphId)),
+                ),
+            )
         }
 
-        if (cursiveLookups.isNotEmpty() && !matchedAttachmentChain && glyphIds.size > 1) {
+        if (!matchedAttachmentChain && glyphIds.size > 1) {
             diagnostics += ShapingDiagnostic(
                 code = TEXT_SHAPING_CURSIVE_ATTACHMENT_UNAVAILABLE_DIAGNOSTIC_CODE,
                 message = "No cursive attachment chain matched the shaped glyph sequence on typeface ${adjustmentContext.typefaceId.value}.",
@@ -1286,14 +1791,109 @@ public class BasicOpenTypeShapingEngine(
         return advanceAdjustment
     }
 
+    private fun gsubClusterAction(
+        beforeUnits: List<ShapingGlyphUnit>,
+        afterUnits: List<ShapingGlyphUnit>,
+    ): String {
+        val beforeRanges = beforeUnits.map(ShapingGlyphUnit::textRange).distinct()
+        val afterRanges = afterUnits.map(ShapingGlyphUnit::textRange).distinct()
+        return when {
+            afterUnits.size > beforeUnits.size && beforeRanges.size == 1 && afterRanges == beforeRanges ->
+                "expanded-single-cluster"
+            afterUnits.size < beforeUnits.size && afterRanges.size <= beforeRanges.size ->
+                "merged-clusters"
+            else -> "preserved"
+        }
+    }
+
+    private fun OpenTypeGsubLookup.primaryFeatureTag(): String =
+        topLevelFeatureTags.firstOrNull() ?: "unknown"
+
+    private fun OpenTypeGsubLookup.lookupType(): Int =
+        when (this) {
+            is OpenTypeGsubSingleSubstitutionLookup -> 1
+            is OpenTypeGsubMultipleSubstitutionLookup -> 2
+            is OpenTypeGsubLigatureSubstitutionLookup -> 4
+            is OpenTypeGsubContextGlyphLookup,
+            is OpenTypeGsubContextClassLookup,
+            is OpenTypeGsubContextCoverageLookup,
+            -> 5
+        }
+
+    private fun OpenTypeGsubLookup.contextFormatOrNull(): Int? =
+        when (this) {
+            is OpenTypeGsubContextGlyphLookup -> 1
+            is OpenTypeGsubContextClassLookup -> 2
+            is OpenTypeGsubContextCoverageLookup -> 3
+            else -> null
+        }
+
+    private class RuntimeShapingTraceCollector {
+        private val runs = mutableListOf<MutableRuntimeShapingRunTrace>()
+        private var currentRun: MutableRuntimeShapingRunTrace? = null
+
+        fun beginRun(
+            inputGlyphIds: List<Int>,
+            featureOrder: List<String>,
+            bidiLevel: Int,
+        ) {
+            currentRun = MutableRuntimeShapingRunTrace(
+                inputGlyphIds = inputGlyphIds,
+                featureOrder = featureOrder,
+                bidiLevel = bidiLevel,
+            ).also(runs::add)
+        }
+
+        fun recordPreGposClusters(clusters: List<GlyphCluster>) {
+            currentRun?.preGposClusterMetrics = clusters.map { cluster ->
+                RuntimeClusterMetric(
+                    advanceX = cluster.advanceX,
+                    offsetX = cluster.offsetX,
+                    offsetY = cluster.offsetY,
+                )
+            }
+        }
+
+        fun recordGsub(trace: RuntimeGsubLookupTrace) {
+            currentRun?.gsubLookups?.add(trace)
+        }
+
+        fun recordGpos(trace: RuntimeGposLookupTrace) {
+            currentRun?.gposLookups?.add(trace)
+        }
+
+        fun snapshotRuns(): List<RuntimeShapingRunTrace> =
+            runs.map { run ->
+                RuntimeShapingRunTrace(
+                    inputGlyphIds = run.inputGlyphIds,
+                    featureOrder = run.featureOrder,
+                    bidiLevel = run.bidiLevel,
+                    preGposClusterMetrics = run.preGposClusterMetrics,
+                    gsubLookups = run.gsubLookups.toList(),
+                    gposLookups = run.gposLookups.toList(),
+                )
+            }
+
+        private data class MutableRuntimeShapingRunTrace(
+            val inputGlyphIds: List<Int>,
+            val featureOrder: List<String>,
+            val bidiLevel: Int,
+            var preGposClusterMetrics: List<RuntimeClusterMetric> = emptyList(),
+            val gsubLookups: MutableList<RuntimeGsubLookupTrace> = mutableListOf(),
+            val gposLookups: MutableList<RuntimeGposLookupTrace> = mutableListOf(),
+        )
+    }
+
     private fun applyGposSingleAdjustments(
         glyphIds: List<Int>,
         clusters: MutableList<GlyphCluster>,
         glyphClusterIndexes: IntArray,
+        features: RuntimeFeatureGateSet,
         adjustmentContext: BasicPositionAdjustmentContext,
         diagnostics: MutableList<ShapingDiagnostic>,
     ): Double {
         val gposSingleTable = adjustmentContext.gposSingleTable ?: return 0.0
+        if (!features.isRuntimeEnabled("kern")) return 0.0
         var totalAdvanceAdjustment = 0.0
         glyphIds.forEachIndexed { glyphIndex, glyphId ->
             val valueRecord =
@@ -1335,6 +1935,44 @@ public class BasicOpenTypeShapingEngine(
             offsetY = cluster.offsetY + offsetYAdjustment.toFloat(),
         )
         return advanceAdjustment
+    }
+
+    private fun resolveRuntimeFeatureSet(
+        request: ShapingRequest,
+        group: BasicShapingGroup,
+    ): RuntimeFeatureGateSet {
+        val requested = request.features.values.entries
+            .sortedBy { it.key }
+            .map { (tag, value) -> ShapingFeatureRequest(tag, value) }
+        val scriptRun = ScriptItemizationRun(
+            clusterRange = 0..0,
+            utf16Range = group.textRange(),
+            codePointRange = group.textRange(),
+            selectedScript = group.script,
+            openTypeScriptTags = emptyList(),
+            extensionCandidates = listOf(group.script),
+            languageHint = request.locale,
+            reason = "basic-open-type-runtime",
+        )
+        val hasPolicy = RequiredScriptFeaturePolicies.rows.any { policy ->
+            group.script in policy.selectedScripts
+        }
+        return if (hasPolicy) {
+            RuntimeFeatureGateSet(
+                resolved = RequiredScriptFeaturePolicies.resolve(scriptRun, requested),
+                defaultEnabledWhenUnspecified = false,
+            )
+        } else {
+            RuntimeFeatureGateSet(
+                resolved = ResolvedFeatureSet(
+                    requested = requested,
+                    enabled = requested.filter { it.value > 0 },
+                    disabled = requested.filter { it.value <= 0 },
+                    languageSystem = DEFAULT_OPEN_TYPE_LANGUAGE_SYSTEM,
+                ),
+                defaultEnabledWhenUnspecified = true,
+            )
+        }
     }
 
     private fun adjustmentContextFor(
@@ -1385,7 +2023,6 @@ public class BasicOpenTypeShapingEngine(
 
         return BasicPositionAdjustmentContext(
             typefaceId = typefaceId,
-            featureValues = request.features.values,
             gdefTable = gdefTable,
             gposTable = gposAnchorTable,
             gposSingleTable = gposSingleTable,
@@ -1448,6 +2085,7 @@ public class BasicOpenTypeShapingEngine(
             )
             null
         }
+
 }
 
 /**
@@ -1677,6 +2315,7 @@ public class FallbackOpenTypeShapingEngine(
             textRange = textRange,
         )
     }
+
 }
 
 /**
@@ -1733,14 +2372,44 @@ public data class GDEFData(
  * zero or more ZWJ plus base emoji parts with their own optional variation
  * selectors. Non-emoji text is skipped.
  */
+public enum class EmojiSequenceKind {
+    Base,
+    VariationSelector,
+    SkinTone,
+    ZWJ,
+    Keycap,
+    Flag,
+    Unsupported,
+}
+
+public data class EmojiSequenceFact(
+    public val textRange: IntRange,
+    public val kind: EmojiSequenceKind,
+    public val codePoints: List<Int>,
+)
+
 public class EmojiSequenceShaper {
     /**
      * Shapes emoji sequences in [request].
      */
     public fun shapeEmoji(request: ShapingRequest): List<GlyphCluster> {
+        val facts = sequenceFacts(request)
+        return facts.mapIndexed { index, fact ->
+            GlyphCluster(
+                textRange = fact.textRange,
+                glyphRange = index..index,
+                advanceX = request.fontSize,
+            )
+        }
+    }
+
+    /**
+     * Extracts typed emoji sequence facts for [request].
+     */
+    public fun sequenceFacts(request: ShapingRequest): List<EmojiSequenceFact> {
         val textRange = codePointSafeTextRange(request.text, request.textRange) ?: return emptyList()
         val codePoints = codePointRanges(request.text, textRange)
-        val clusters = mutableListOf<GlyphCluster>()
+        val facts = mutableListOf<EmojiSequenceFact>()
         var index = 0
 
         while (index < codePoints.size) {
@@ -1750,33 +2419,78 @@ public class EmojiSequenceShaper {
                 continue
             }
 
-            clusters += GlyphCluster(
+            facts += EmojiSequenceFact(
                 textRange = sequence.textRange,
-                glyphRange = clusters.size..clusters.size,
-                advanceX = request.fontSize,
+                kind = sequence.kind,
+                codePoints = sequence.codePoints,
             )
             index = sequence.nextIndex
         }
 
-        return clusters
+        return facts
     }
 
     private fun emojiSequenceAt(codePoints: List<CodePointRange>, startIndex: Int): EmojiSequence? {
         val first = codePoints.getOrNull(startIndex) ?: return null
+        flagSequenceAt(codePoints, startIndex)?.let { return it }
+        keycapSequenceAt(codePoints, startIndex)?.let { return it }
         if (!isBaseEmoji(first.codePoint)) return null
 
         var index = consumeEmojiComponent(codePoints, startIndex) ?: return null
         var last = codePoints[index - 1].textRange.last
+        var hasJoiner = false
 
         while (index + 1 < codePoints.size && codePoints[index].codePoint == ZERO_WIDTH_JOINER) {
             val nextComponentEnd = consumeEmojiComponent(codePoints, index + 1) ?: break
             last = codePoints[nextComponentEnd - 1].textRange.last
             index = nextComponentEnd
+            hasJoiner = true
         }
 
+        val codePointSlice = codePoints.subList(startIndex, index).map { it.codePoint }
+        val kind = when {
+            hasJoiner && isExplicitUnsupportedEmojiSequence(codePointSlice) -> EmojiSequenceKind.Unsupported
+            hasJoiner -> EmojiSequenceKind.ZWJ
+            codePointSlice.any(::isEmojiModifier) -> EmojiSequenceKind.SkinTone
+            codePointSlice.any(::isVariationSelector) -> EmojiSequenceKind.VariationSelector
+            else -> EmojiSequenceKind.Base
+        }
         return EmojiSequence(
             textRange = first.textRange.first..last,
+            kind = kind,
+            codePoints = codePointSlice,
             nextIndex = index,
+        )
+    }
+
+    private fun flagSequenceAt(codePoints: List<CodePointRange>, startIndex: Int): EmojiSequence? {
+        val first = codePoints.getOrNull(startIndex) ?: return null
+        val second = codePoints.getOrNull(startIndex + 1) ?: return null
+        if (!isRegionalIndicator(first.codePoint) || !isRegionalIndicator(second.codePoint)) return null
+        return EmojiSequence(
+            textRange = first.textRange.first..second.textRange.last,
+            kind = EmojiSequenceKind.Flag,
+            codePoints = listOf(first.codePoint, second.codePoint),
+            nextIndex = startIndex + 2,
+        )
+    }
+
+    private fun keycapSequenceAt(codePoints: List<CodePointRange>, startIndex: Int): EmojiSequence? {
+        val first = codePoints.getOrNull(startIndex) ?: return null
+        if (!isKeycapBase(first.codePoint)) return null
+
+        var index = startIndex + 1
+        if (codePoints.getOrNull(index)?.codePoint == VARIATION_SELECTOR_16) {
+            index += 1
+        }
+        val combiningKeycap = codePoints.getOrNull(index) ?: return null
+        if (combiningKeycap.codePoint != COMBINING_ENCLOSING_KEYCAP) return null
+
+        return EmojiSequence(
+            textRange = first.textRange.first..combiningKeycap.textRange.last,
+            kind = EmojiSequenceKind.Keycap,
+            codePoints = codePoints.subList(startIndex, index + 1).map { it.codePoint },
+            nextIndex = index + 1,
         )
     }
 
@@ -1793,6 +2507,16 @@ public class EmojiSequenceShaper {
             index += 1
         }
         return index
+    }
+
+    // Keep unsupported-sequence refusals fixture-bounded until broader Unicode
+    // sequence coverage lands with pinned denominator evidence.
+    private fun isExplicitUnsupportedEmojiSequence(codePoints: List<Int>): Boolean =
+        codePoints == EXPLICIT_UNSUPPORTED_EMOJI_SEQUENCE
+
+    private companion object {
+        val EXPLICIT_UNSUPPORTED_EMOJI_SEQUENCE: List<Int> =
+            listOf(0x270C, 0xFE0F, 0x1F3FF, 0x200D, 0x1F4BB)
     }
 }
 
@@ -1824,6 +2548,13 @@ public const val TEXT_SHAPING_FEATURE_UNSUPPORTED_DIAGNOSTIC_CODE: String = "tex
  */
 public const val TEXT_SHAPING_CLUSTER_INVARIANT_FAILED_DIAGNOSTIC_CODE: String =
     "text.shaping.cluster-invariant-failed"
+
+/**
+ * Stable spec diagnostic family emitted when nested GSUB contextual lookups recurse back into
+ * an already active lookup chain.
+ */
+public const val TEXT_SHAPING_LOOKUP_CYCLE_DETECTED_DIAGNOSTIC_CODE: String =
+    "text.shaping.lookup-cycle-detected"
 
 /**
  * Stable spec diagnostic family emitted when GDEF metadata is required for a shaping lookup.
@@ -1870,6 +2601,8 @@ private const val SCRIPT_COMMON = "Zyyy"
 private const val SCRIPT_INHERITED = "Zinh"
 private const val SCRIPT_EMOJI = "Zsye"
 private const val ZERO_WIDTH_JOINER = 0x200D
+private const val VARIATION_SELECTOR_16 = 0xFE0F
+private const val COMBINING_ENCLOSING_KEYCAP = 0x20E3
 private const val LATIN_SMALL_F_CODE_POINT = 0x0066
 private const val LATIN_SMALL_I_CODE_POINT = 0x0069
 private const val LATIN_SMALL_FI_LIGATURE_CODE_POINT = 0xFB01
@@ -1918,6 +2651,16 @@ private data class BasicShapingGroup(
 private fun BasicShapingGroup.textRange(): IntRange =
     clusterRanges.minOf { it.first }..clusterRanges.maxOf { it.last }
 
+private data class RuntimeFeatureGateSet(
+    val resolved: ResolvedFeatureSet,
+    val defaultEnabledWhenUnspecified: Boolean,
+) {
+    fun isRuntimeEnabled(tag: String): Boolean {
+        if (resolved.disabled.any { it.tag == tag }) return false
+        return defaultEnabledWhenUnspecified || resolved.enabled.any { it.tag == tag }
+    }
+}
+
 private data class ResolvedShapingFontRun(
     val textRange: IntRange,
     val typefaceId: TypefaceID,
@@ -1926,7 +2669,6 @@ private data class ResolvedShapingFontRun(
 
 private data class BasicPositionAdjustmentContext(
     val typefaceId: TypefaceID,
-    val featureValues: Map<String, Int>,
     val gdefTable: OpenTypeGdefTable?,
     val gposTable: OpenTypeGposTable?,
     val gposSingleTable: OpenTypeGposSingleTable?,
@@ -1934,9 +2676,7 @@ private data class BasicPositionAdjustmentContext(
     val gposPairTable: OpenTypeGposPairTable?,
     val tableLabel: String,
     val fontUnitsToFontSizeUnitsScale: Double,
-) {
-    fun featureValue(tag: String): Int = featureValues[tag] ?: 1
-}
+)
 
 private data class ShapingGlyphUnit(
     val glyphId: Int,
@@ -1946,6 +2686,8 @@ private data class ShapingGlyphUnit(
 
 private data class EmojiSequence(
     val textRange: IntRange,
+    val kind: EmojiSequenceKind,
+    val codePoints: List<Int>,
     val nextIndex: Int,
 )
 
@@ -2095,6 +2837,12 @@ private fun isVariationSelector(codePoint: Int): Boolean =
 
 private fun isEmojiModifier(codePoint: Int): Boolean =
     codePoint in 0x1F3FB..0x1F3FF
+
+private fun isRegionalIndicator(codePoint: Int): Boolean =
+    codePoint in 0x1F1E6..0x1F1FF
+
+private fun isKeycapBase(codePoint: Int): Boolean =
+    codePoint in 0x0030..0x0039 || codePoint == 0x0023 || codePoint == 0x002A
 
 private fun isBaseEmoji(codePoint: Int): Boolean =
     !isEmojiModifier(codePoint) && codePoint in 0x1F000..0x1FAFF ||

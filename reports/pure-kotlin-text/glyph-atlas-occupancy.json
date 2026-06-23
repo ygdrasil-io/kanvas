@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "dumpId": "glyph-atlas-occupancy",
+  "ownerTickets": ["KFONT-M12-004"],
+  "sourceDumps": ["reports/font/fixtures/expected/glyph/glyph-atlas.json", "reports/font/fixtures/expected/glyph/glyph-cache-inventory.json"],
+  "atlases": [
+    {"atlasArtifactId": "2811ca06954ad09572dbc82a74b338559e8b1df2477847ff559c8760d9720354","textureFormat": "A8","generation": 7,"invalidationToken": "font-source-v7","dimensions":{"width": 3,"height": 3,"rowStride": 3},"entryCount": 1,"occupiedPixelCount": 4,"totalPixelCount": 9,"occupancyRatio": 0.444444,"strikeKeySha256": ["33db747e82cc559bbad2c4b83ffc9873b243ad7b21e2fdbeaa82cf7d830ccf56"],"keyPreimageSha256": ["33c026d3c2a10f25400ef02380634c1dfa168349cb330a1589c385b9fafd6c63"]},
+    {"atlasArtifactId": "43eccb8fcc53683f26bf42562370d025bba6e07087a4b6fa87164604461df337","textureFormat": "R8Unorm","generation": 8,"invalidationToken": "font-source-v8","dimensions":{"width": 3,"height": 3,"rowStride": 3},"entryCount": 1,"occupiedPixelCount": 4,"totalPixelCount": 9,"occupancyRatio": 0.444444,"strikeKeySha256": ["18d6a60bd014e768f1875bce635e5f2298b86bdfc51526856e6a40d8d6252351"],"keyPreimageSha256": ["62a0d1d6ddb02139d37c0bb66aa10ec45abcebc7149ac8d666bb16d5c884d485"]}
+  ],
+  "nonClaims": ["no-complete-target-support-claim", "no-performance-release-gate-claim", "no-gpu-route-support-claim", "no-dftext-retirement"]
+}

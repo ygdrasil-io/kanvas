@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M10-009"
 title: "Implement emoji sequence planner"
-status: "proposed"
+status: "done"
 milestone: "M10"
 priority: "P0"
 owner_area: "color"
@@ -68,11 +68,11 @@ sealed interface EmojiSequence {
 
 ## Acceptance Criteria
 
-- [ ] Fixtures cover VS15/VS16, skin tone, ZWJ family sequence, keycap, flag, missing emoji-capable fallback, and color glyph unavailable.
-- [ ] Each trace records Unicode version, source cluster range, fallback attempts, selected typeface, selected representation, and diagnostics.
-- [ ] Unsupported sequences emit `text.emoji.sequence-unsupported` with the cluster range and codepoint list.
-- [ ] Missing emoji fallback emits `text.emoji.fallback-unavailable`; unavailable color glyph emits `text.emoji.color-glyph-unavailable`.
-- [ ] Monochrome fallback is cluster-safe and visible in the route trace.
+- [x] Fixtures cover VS15/VS16, skin tone, ZWJ family sequence, keycap, flag, missing emoji-capable fallback, and color glyph unavailable.
+- [x] Each trace records Unicode version, source cluster range, fallback attempts, selected typeface, selected representation, and diagnostics.
+- [x] Unsupported sequences emit `text.emoji.sequence-unsupported` with the cluster range and codepoint list.
+- [x] Missing emoji fallback emits `text.emoji.fallback-unavailable`; unavailable color glyph emits `text.emoji.color-glyph-unavailable`.
+- [x] Monochrome fallback is cluster-safe and visible in the route trace.
 
 ## Required Evidence
 
@@ -95,14 +95,21 @@ sealed interface EmojiSequence {
 ## Validation
 
 ```bash
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperRecognizesKeycapAndFlagFixturesAsSingleClusters --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperExposesTypedFactsForPlannerSequenceKinds --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperDumpsVS15SkinToneAndZwjFamilyFixtures --tests org.graphiks.kanvas.text.TextStackSurfaceTest.emojiSequenceShaperKeepsRepresentedSkinToneRoleSequenceAsZwj
+rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.emojiSequencePlannerGoldenMatchesRepoFixture --tests org.graphiks.kanvas.glyph.color.ColorGlyphSurfaceTest.exposesColorGlyphPipelineSurface
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
+rtk env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_validate_pure_kotlin_text_font_fixtures.py
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:glyph:test --tests '*Emoji*'
 ```
 
 ## Status Notes
 
 - `proposed`: Bridges Unicode emoji data, fallback, shaping output, and color glyph dispatch.
-- Move to `ready` only after sequence kinds, fallback trace fields, and diagnostics are reviewed.
+- `done`: `EmojiSequenceShaper.sequenceFacts(...)` and `SimpleEmojiSequencePlanner.plan(...)` now emit checked-in `emoji-route-trace.json` evidence for variation-selector, skin-tone, represented skin-tone role ZWJ, ZWJ family, keycap, flag, fallback-unavailable, color-glyph-unavailable, and unsupported-sequence cases with fresh validation.
+- Remaining gate: this is CPU-side emoji route-planning evidence only. `KFONT-M10-010` still owns color/emoji fixture-manifest convergence, M11 still owns any GPU emoji route claim, and `scaledemoji` remains open until shaping, fallback, representation, and dashboard evidence converge without broadening support claims.
 
 ## Linear Labels
 

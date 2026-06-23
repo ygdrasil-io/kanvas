@@ -1,7 +1,7 @@
 ---
 id: KGPU-M11-009
 title: "Add paint dictionary and blend-plan execution boundary"
-status: proposed
+status: done
 milestone: M11
 priority: P1
 owner_area: paint-blend
@@ -79,16 +79,16 @@ data class GPUPaintBlendExecutionBoundary(
 
 ## Acceptance Criteria
 
-- [ ] Accepted material dictionary roots and snippet IDs map to an executable
+- [x] Accepted material dictionary roots and snippet IDs map to an executable
       pipeline key without including payload values or concrete resources.
-- [ ] Fixed-function blend plans materialize target color state and blend
+- [x] Fixed-function blend plans materialize target color state and blend
       constants in pass commands.
-- [ ] Shader or destination-read blend plans require an accepted
+- [x] Shader or destination-read blend plans require an accepted
       `GPUDestinationReadPlan` materialization or refuse before pipeline
       creation.
-- [ ] Material payload boundary and render-step payload boundary remain visible
+- [x] Material payload boundary and render-step payload boundary remain visible
       so multi-step routes can share paint payloads safely.
-- [ ] Unsupported blend modes, missing destination-read strategy, incompatible
+- [x] Unsupported blend modes, missing destination-read strategy, incompatible
       alpha plans, and active-attachment sampling refuse stably.
 
 ## Required Evidence
@@ -115,13 +115,22 @@ all-mode support.
 ## Validation
 
 ```bash
+rtk ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.paintblend.PaintBlendExecutionBoundaryTest
+rtk ./gradlew --no-daemon :gpu-renderer:check
 rtk git diff --check
 ```
 
 ## Status Notes
 
-- `proposed`: Planning-only gap ticket for the paint dictionary and blend plan
-  execution boundary not covered by KGPU-M7-003.
+- `done`: Added a contract-only paint dictionary plus fixed-function blend
+  execution boundary for accepted solid material routes. The lane derives
+  render/cache keys through `GPUPipelineKeys`, validates target state against
+  the accepted blend gate, materializes payload upload, bind group, render
+  pipeline operand, and pass commands, and keeps payload values and concrete
+  resources out of executable keys.
+- Independent review found three P2 gaps around target-state validation,
+  destination-read linkage, and refusal coverage. Follow-up fixes landed, and
+  re-review found no remaining P0/P1/P2 findings.
 
 ## Linear Labels
 

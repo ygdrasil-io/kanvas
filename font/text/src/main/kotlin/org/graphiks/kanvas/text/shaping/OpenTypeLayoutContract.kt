@@ -73,7 +73,7 @@ public object RequiredScriptFeaturePolicies {
             scriptFamily = "Arabic",
             selectedScripts = listOf("Arab"),
             openTypeScriptTags = listOf("arab"),
-            requiredDefaults = listOf("init", "medi", "fina", "isol", "rlig", "liga", "calt", "mark", "mkmk"),
+            requiredDefaults = listOf("init", "medi", "fina", "isol", "rlig", "liga", "calt", "mark", "mkmk", "curs"),
             refusalWhenMissing = listOf("mark", "mkmk", "cursive-attachment"),
         ),
         ScriptFeaturePolicy(
@@ -373,13 +373,13 @@ public class OpenTypeLayoutEngineContract(
             direction = input.direction,
             languageSystem = input.features.languageSystem ?: input.scriptRun.languageHint ?: DEFAULT_OPEN_TYPE_LANGUAGE_SYSTEM,
             features = input.features,
-            gsubTraceRef = "gsub-trace",
-            gposTraceRef = "gpos-trace",
+            gsubTraceRef = "opentype-layout-contract-gsub-trace",
+            gposTraceRef = "opentype-layout-contract-gpos-trace",
             fallbackRun = input.fallbackRun,
             directGlyphInput = input.directGlyphInput != null,
         )
-        val gsubTrace = traceFor("gsub-trace", "GSUB", input, sourceTextHash, diagnostics)
-        val gposTrace = traceFor("gpos-trace", "GPOS", input, sourceTextHash, diagnostics)
+        val gsubTrace = traceFor("opentype-layout-contract-gsub-trace", "GSUB", input, sourceTextHash, diagnostics)
+        val gposTrace = traceFor("opentype-layout-contract-gpos-trace", "GPOS", input, sourceTextHash, diagnostics)
         val shapedRun = OpenTypeShapedRun(
             unicodeVersion = unicodeVersion,
             sourceTextHash = sourceTextHash,
@@ -742,7 +742,7 @@ private fun OpenTypeLookupTrace.toCanonicalJson(): String = buildString {
 private fun OpenTypeShapedRun.toCanonicalJson(): String = buildString {
     append("{\n")
     append("  \"schemaVersion\": 1,\n")
-    append("  \"dumpId\": \"shaped-glyph-run\",\n")
+    append("  \"dumpId\": \"opentype-layout-contract-shaped-glyph-run\",\n")
     append("  \"ownerTickets\": [\"KFONT-M6-001\"],\n")
     appendJsonField("unicodeVersion", unicodeVersion, comma = true)
     appendJsonField("sourceTextHashAlgorithm", "SHA-256-UTF-8", comma = true)

@@ -707,16 +707,17 @@
           "generationPolicy": "Use a glyph with no available color glyph route and assert stable unavailable-route diagnostics.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/emoji-route-trace.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
             "text.emoji.color-glyph-unavailable diagnostic",
-            "route candidate dump"
+            "emoji-route-trace.json case"
           ],
           "nonClaims": [
             "no-complete-target-support-claim",
-            "no-emoji-zwj-shaping-claim",
-            "no-color-glyph-fallback-support-claim"
+            "no-complete-emoji-sequence-shaping-claim",
+            "no-complete-color-glyph-fallback-support-claim"
           ]
         },
         {
@@ -727,16 +728,63 @@
           "generationPolicy": "Use an emoji dispatch request with no fallback family and assert stable fallback refusal.",
           "evidencePaths": [
             "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/emoji-route-trace.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
             "text.emoji.fallback-unavailable diagnostic",
-            "fallback policy dump"
+            "emoji-route-trace.json case"
           ],
           "nonClaims": [
             "no-complete-target-support-claim",
-            "no-emoji-zwj-shaping-claim",
-            "no-color-glyph-fallback-support-claim"
+            "no-complete-emoji-sequence-shaping-claim",
+            "no-complete-color-glyph-fallback-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "emoji-emoji-flag",
+          "targetGate": "emoji-flag",
+          "status": "current-positive-evidence",
+          "fixtureKind": "generated-test-data",
+          "generationPolicy": "Use a bounded regional-indicator flag pair and record sequence facts plus the selected emoji route trace.",
+          "evidencePaths": [
+            "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+            "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/emoji-route-trace.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "flag sequence fact dump",
+            "emoji-route-trace.json case"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-emoji-sequence-shaping-claim",
+            "no-complete-color-glyph-fallback-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "emoji-emoji-keycap",
+          "targetGate": "emoji-keycap",
+          "status": "current-positive-evidence",
+          "fixtureKind": "generated-test-data",
+          "generationPolicy": "Use a bounded keycap sequence and record sequence facts plus the selected emoji route trace.",
+          "evidencePaths": [
+            "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
+            "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/emoji-route-trace.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "keycap sequence fact dump",
+            "emoji-route-trace.json case"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-emoji-sequence-shaping-claim",
+            "no-complete-color-glyph-fallback-support-claim"
           ]
         },
         {
@@ -744,21 +792,45 @@
           "targetGate": "emoji-skin-tone",
           "status": "current-positive-evidence",
           "fixtureKind": "generated-test-data",
-          "generationPolicy": "Use a base emoji plus one skin-tone modifier and record the expected sequence facts and dispatch route.",
+          "generationPolicy": "Use a base emoji plus one skin-tone modifier plus one represented skin-tone role ZWJ sequence and record the expected sequence facts and dispatch routes.",
           "evidencePaths": [
             "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
             "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/emoji-route-trace.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
             "emoji sequence input",
             "sequence fact dump",
-            "dispatch expectation"
+            "represented skin-tone role ZWJ fact dump",
+            "emoji-route-trace.json case"
           ],
           "nonClaims": [
             "no-complete-target-support-claim",
-            "no-emoji-zwj-shaping-claim",
-            "no-color-glyph-fallback-support-claim"
+            "no-complete-emoji-sequence-shaping-claim",
+            "no-complete-color-glyph-fallback-support-claim"
+          ]
+        },
+        {
+          "fixtureId": "emoji-emoji-unsupported-sequence-refusal",
+          "targetGate": "emoji-unsupported-sequence-refusal",
+          "status": "current-refusal-evidence",
+          "fixtureKind": "route-diagnostic",
+          "generationPolicy": "Use an unsupported multi-code-point emoji cluster and assert the stable sequence-level refusal without splitting the cluster.",
+          "evidencePaths": [
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/emoji-route-trace.json",
+            "reports/pure-kotlin-text/coverage-ticket-matrix.md"
+          ],
+          "expectedArtifacts": [
+            "text.emoji.sequence-unsupported diagnostic",
+            "emoji-route-trace.json case"
+          ],
+          "nonClaims": [
+            "no-complete-target-support-claim",
+            "no-complete-emoji-sequence-shaping-claim",
+            "no-complete-color-glyph-fallback-support-claim"
           ]
         },
         {
@@ -770,17 +842,19 @@
           "evidencePaths": [
             "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
             "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/emoji-route-trace.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
             "VS15 sequence dump",
             "VS16 sequence dump",
-            "dispatch expectation"
+            "emoji-route-trace.json case"
           ],
           "nonClaims": [
             "no-complete-target-support-claim",
-            "no-emoji-zwj-shaping-claim",
-            "no-color-glyph-fallback-support-claim"
+            "no-complete-emoji-sequence-shaping-claim",
+            "no-complete-color-glyph-fallback-support-claim"
           ]
         },
         {
@@ -788,21 +862,24 @@
           "targetGate": "emoji-zwj-family",
           "status": "current-positive-evidence",
           "fixtureKind": "generated-test-data",
-          "generationPolicy": "Use a bounded family sequence joined by ZWJ and record the expected cluster and dispatch facts.",
+          "generationPolicy": "Use a bounded family sequence and one represented skin-tone role sequence joined by ZWJ and record the expected cluster and dispatch facts.",
           "evidencePaths": [
             "font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt",
             "font/text/src/test/kotlin/org/graphiks/kanvas/text/TextStackSurfaceTest.kt",
+            "font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurfaceTest.kt",
+            "reports/font/fixtures/expected/color/emoji-route-trace.json",
             "reports/pure-kotlin-text/coverage-ticket-matrix.md"
           ],
           "expectedArtifacts": [
             "ZWJ sequence input",
             "cluster fact dump",
-            "dispatch expectation"
+            "represented skin-tone role ZWJ route-trace case",
+            "emoji-route-trace.json case"
           ],
           "nonClaims": [
             "no-complete-target-support-claim",
-            "no-emoji-zwj-shaping-claim",
-            "no-color-glyph-fallback-support-claim"
+            "no-complete-emoji-sequence-shaping-claim",
+            "no-complete-color-glyph-fallback-support-claim"
           ]
         }
       ]
