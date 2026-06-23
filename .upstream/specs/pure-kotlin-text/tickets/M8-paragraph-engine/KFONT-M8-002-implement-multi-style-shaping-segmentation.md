@@ -97,7 +97,7 @@ interface ParagraphShapingSegmenter {
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineSplitsMixedStyleRangesIntoSeparateShapingRequests --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphShapingSegmenterCoalescesAdjacentEquivalentStyleRuns --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphShapingSegmenterReportsClusterBoundaryViolationsWithoutSplittingCluster --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutGoldenMatchesRepoFixture --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphShapingRequestsGoldenMatchesRepoFixture --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphShapingRequestsGoldenPinsCasesAndNonClaims
+rtk ./gradlew --no-daemon :font:text:test --tests org.graphiks.kanvas.text.ParagraphShapingSegmentationTest --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphLayoutResultDumpsCurrentSemanticLayoutFactsDeterministically --tests org.graphiks.kanvas.text.TextStackSurfaceTest.basicParagraphLayoutEngineShapesPerParagraphSegmentsAndRecordsSegmentRefs --tests org.graphiks.kanvas.text.TextStackSurfaceTest.paragraphShapingRequestGoldenPinsMixedScriptFallbackAndClusterCases
 rtk python3 scripts/validate_font_fixture_assets.py
 rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
@@ -105,8 +105,8 @@ rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
 
 ## Status Notes
 
-- `done`: bounded multi-style segmentation evidence now lands `ParagraphShapingRequest` planning, coalescing of adjacent shaping-equivalent ranges, placeholder exclusion, `text.paragraph.cluster-boundary-violation`, deterministic `paragraph-shaping-requests.json`, and `segmentRefs` in `paragraph-layout.json`.
-- This ticket records requested family/typeface segmentation facts only; complete fallback selection policy, native oracle parity, full bidi visual ordering, and downstream paragraph features remain explicit later-ticket gates.
+- `done`: `DefaultParagraphShapingSegmenter` now emits deterministic style/script/bidi/fallback/placeholder-aware shaping requests, cluster-boundary widening diagnostics, and fallback-unresolved refusals with checked-in `paragraph-shaping-requests.json` evidence.
+- `done`: `BasicParagraphLayoutEngine` now consumes paragraph shaping segments, records per-line `segmentIds`, merges paragraph plus shaping diagnostics by text range in the layout dump, and preserves deterministic width for visible placeholder or unshaped ranges without claiming line breaking, hit testing, or GPU text support.
 
 ## Linear Labels
 

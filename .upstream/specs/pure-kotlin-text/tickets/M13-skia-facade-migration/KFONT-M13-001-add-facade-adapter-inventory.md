@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M13-001"
 title: "Add facade adapter inventory"
-status: "proposed"
+status: "done"
 milestone: "M13"
 priority: "P0"
 owner_area: "skia-facade"
@@ -71,11 +71,11 @@ data class FacadeAdapterInventoryRow(
 
 ## Acceptance Criteria
 
-- [ ] Every public font/text facade route listed in scope has an inventory row with owner, target contract, migration category, claim impact, diagnostics, and required evidence.
-- [ ] Every durable legacy gate from `09-migration-from-current-font-pack.md` appears in at least one row or is explicitly marked adjacent/out-of-scope with rationale.
-- [ ] `SkCanvas.drawString` is inventoried as the simple deterministic path and not as broad complex shaping support.
-- [ ] Inventory rows distinguish optional drift-only native comparison from normative pure Kotlin behavior.
-- [ ] PM bundle/dashboard output can show which facade routes are blocked by dependencies, fixtures, GPU evidence, or expected unsupported policy.
+- [x] Every public font/text facade route listed in scope has an inventory row with owner, target contract, migration category, claim impact, diagnostics, and required evidence.
+- [x] Every durable legacy gate from `09-migration-from-current-font-pack.md` appears in at least one row or is explicitly marked adjacent/out-of-scope with rationale.
+- [x] `SkCanvas.drawString` is inventoried as the simple deterministic path and not as broad complex shaping support.
+- [x] Inventory rows distinguish optional drift-only native comparison from normative pure Kotlin behavior.
+- [x] PM bundle/dashboard output can show which facade routes are blocked by dependencies, fixtures, GPU evidence, or expected unsupported policy.
 
 ## Required Evidence
 
@@ -100,14 +100,35 @@ data class FacadeAdapterInventoryRow(
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :kanvas-skia:test
+rtk python3 -m unittest scripts/test_validate_kfont_m13_001_facade_inventory.py
+rtk python3 scripts/validate_kfont_m13_001_facade_inventory.py
+rtk ./gradlew --no-daemon validateKfontM13001FacadeInventory
 rtk ./gradlew --no-daemon pipelinePmBundle
 ```
 
 ## Status Notes
 
 - `proposed`: Initial markdown ticket written from the pure Kotlin font roadmap.
-- Move to `ready` only after scope, dependencies, evidence, and validation commands are reviewed.
+- `proposed` (2026-06-19 readiness audit): `KFONT-M1-004`, `KFONT-M2-005`,
+  `KFONT-M8-006`, `KFONT-M9-006`, and `KFONT-M12-005` are `done`. The still-open
+  `KFONT-M6-010` and `KFONT-M11-010` slices are inputs that the inventory must
+  classify as shaping/GPU-gated facade rows, not blockers that prevent writing
+  the inventory itself. Remaining gate to move `ready`: review the exact
+  facade-route surface, PM/dashboard row shape, diagnostic mapping, and legacy
+  gate coverage expected from the inventory output before implementation starts.
+- `done` (2026-06-19): Added `reports/pure-kotlin-text/facade-adapter-inventory.json`
+  and `reports/pure-kotlin-text/2026-06-19-kfont-m13-001-facade-adapter-inventory.md`,
+  wired the new `skia-facade-adapter-inventory` dashboard row plus
+  `validateKfontM13001FacadeInventory`, and copied the inventory into
+  `pipelinePmBundle`. The inventory keeps `SkCanvas.drawString` explicitly
+  simple/deterministic, maps all durable legacy gates including adjacent
+  `pdf_never_embed`, records the missing public `org.skia.paragraph` facade,
+  and leaves route-specific promotions to `KFONT-M13-002`, `KFONT-M13-003`,
+  and `KFONT-M13-004`. Fresh validation: `rtk python3 -m unittest
+  scripts/test_validate_kfont_m13_001_facade_inventory.py`,
+  `rtk python3 scripts/validate_kfont_m13_001_facade_inventory.py`,
+  `rtk ./gradlew --no-daemon validateKfontM13001FacadeInventory`,
+  `rtk ./gradlew --no-daemon pipelinePmBundle`, and `rtk git diff --check`.
 
 ## Linear Labels
 

@@ -23,7 +23,7 @@ M8 supplies paragraph and glyph run outputs. M9 supplies strike keys, A8/SDF art
 | [KFONT-M11-001 - Align `font:gpu-api` with target artifact registry](KFONT-M11-001-align-font-gpu-api-with-target-artifact-registry.md) | `done` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M9-002`, `KFONT-M10-010` | `dftext`, `scaledemoji_rendering`, `coloremoji_blendmodes` |
 | [KFONT-M11-002 - Add no-`Sk*` leakage validation](KFONT-M11-002-add-no-sk-leakage-validation.md) | `done` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-001` | - |
 | [KFONT-M11-003 - Add normalized `DrawTextRun` contract](KFONT-M11-003-add-normalized-drawtextrun-contract.md) | `done` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M8-002`, `KFONT-M9-002`, `KFONT-M11-002` | - |
-| [KFONT-M11-004 - Wire atlas A8 artifact route](KFONT-M11-004-wire-atlas-a8-artifact-route.md) | `blocked` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M9-003`, `KFONT-M9-005`, `KFONT-M11-003` | - |
+| [KFONT-M11-004 - Wire atlas A8 artifact route](KFONT-M11-004-wire-atlas-a8-artifact-route.md) | `done` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M9-003`, `KFONT-M9-005`, `KFONT-M11-003` | - |
 | [KFONT-M11-005 - Wire dependency-gated diagnostics for unsupported routes](KFONT-M11-005-wire-dependency-gated-diagnostics-for-unsupported-routes.md) | `done` | `P0` | `DependencyGated` | `gpu-api` | `KFONT-M11-001`, `KFONT-M11-003` | `dftext`, `scaledemoji_rendering`, `coloremoji_blendmodes` |
 | [KFONT-M11-006 - Add `GPUTextSubRunPlan` splitting tests](KFONT-M11-006-add-gputextsubrunplan-splitting-tests.md) | `blocked` | `P1` | `GPU-gated` | `gpu-api` | `KFONT-M11-003`, `KFONT-M11-004`, `KFONT-M11-005` | - |
 | [KFONT-M11-007 - Add resource/upload/instance/binding plan contracts](KFONT-M11-007-add-resource-upload-instance-binding-plan-contracts.md) | `blocked` | `P0` | `GPU-gated` | `gpu-api` | `KFONT-M11-006` | `dftext` |
@@ -50,14 +50,13 @@ Required evidence for this milestone includes `text-gpu-artifact-registry.json`,
 
 ## Current Readiness Gate
 
-2026-06-16 audit result: the six remaining M11 tickets are blocked rather than
-ready. `KFONT-M11-004` is the first topological implementation ticket, but it
-requires M9 A8 mask and atlas artifact evidence (`KFONT-M9-003` and
-`KFONT-M9-005`) before an A8 route can be claimed. `KFONT-M11-006` through
-`KFONT-M11-010` depend on that route and its resource/upload/binding contracts.
-The merged wgsl4k evolution fixtures are prerequisite validation evidence only;
-they do not provide real text WGSL route modules, reflected `GPUTextBinding`
-comparisons, CPU/GPU/reference evidence, or product activation.
+2026-06-19 update: `KFONT-M11-004` is now `done` on the bounded A8 atlas route
+plan, checked-in `gpu-text-a8-route-plan.json`, reviewed text WGSL reflection
+linkage, and focused simple-Latin GPU evidence. `KFONT-M11-006` through
+`KFONT-M11-010` remain blocked because they still need subrun splitting,
+resource/upload/instance/binding expansion, upload-before-sample ordering,
+route-specific WGSL validation, and `MaterialKey` leakage fixtures beyond the
+first accepted A8 route.
 
 ## Status Update Rule
 

@@ -15,7 +15,7 @@ boundaries.
 ## Exit Criteria
 
 - [x] Legacy route ownership and replacement status are inventoried per family.
-- [ ] Shadow parity evidence exists before any default route change.
+- [x] Shadow parity evidence exists before any default route change.
 - [ ] Retirement gates are scoped to promoted replacement slices only.
 - [x] Root PM packaging states whether evidence is adapter-independent or
       adapter-backed opt-in.
@@ -25,7 +25,7 @@ boundaries.
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M10-001 - Inventory legacy `gpu-raster` route ownership](KGPU-M10-001-inventory-legacy-gpu-raster-route-ownership.md) | `done` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `false` | `legacy-adapter` | `KGPU-M1-001` | `gpu-raster legacy` |
-| [KGPU-M10-002 - Add per-family shadow parity migration gates](KGPU-M10-002-add-per-family-shadow-parity-migration-gates.md) | `blocked` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `migration-validation` | `KGPU-M10-001` | `gpu-raster legacy` |
+| [KGPU-M10-002 - Add per-family shadow parity migration gates](KGPU-M10-002-add-per-family-shadow-parity-migration-gates.md) | `done` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `migration-validation` | `KGPU-M10-001` | `gpu-raster legacy` |
 | [KGPU-M10-003 - Retire legacy routes after promoted replacements](KGPU-M10-003-retire-legacy-routes-after-promoted-replacements.md) | `blocked` | `P1` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `legacy-cleanup` | `KGPU-M10-002`, `KGPU-M1-004` | `gpu-raster legacy` |
 | [KGPU-M10-004 - Add archived evidence hygiene for migrated routes](KGPU-M10-004-add-archived-evidence-hygiene-for-migrated-routes.md) | `done` | `P1` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `docs-evidence` | `KGPU-M10-001` | `archives` |
 
@@ -53,8 +53,13 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*GpuRendererShadow*'
 - Root PM packaging is classified as adapter-independent for the root activation
   candidate, while executed R6 PM evidence remains adapter-backed opt-in and is
   not a root `pipelinePmBundle` dependency.
-- KGPU-M10-002 is blocked until per-family adapter-backed shadow parity tests,
-  before/after dumps, PM rows, rollback labels, and raw evidence exist.
+- KGPU-M10-002 is done: `GpuRendererShadowParityMigrationGate` now records
+  per-family shadow parity requirements and refuses missing, duplicate,
+  broad, non-adapter-backed, activated, release-blocking, or readiness-moving
+  evidence while keeping legacy defaults active. Independent review
+  `019ed714-fd15-72e2-a8f8-b1b0f9fbe2f5` accepted the implementation after
+  remediation linked the review and added broad/shared evidence refusal plus
+  explicit family coverage.
 - KGPU-M10-003 is blocked until KGPU-M10-002 and route-specific promoted
   replacement evidence exist.
 - Archive hygiene remains explicit: archived plans and root upstream snapshots
