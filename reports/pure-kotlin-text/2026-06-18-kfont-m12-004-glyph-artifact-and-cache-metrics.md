@@ -6,7 +6,9 @@ Files:
 - `font/glyph/src/test/kotlin/org/graphiks/kanvas/glyph/GlyphSurfaceTest.kt`
 - `reports/font/fixtures/expected/glyph/glyph-artifact-metrics.json`
 - `reports/font/fixtures/expected/glyph/glyph-atlas-occupancy.json`
+- `reports/font/fixtures/expected/glyph/glyph-cache-inventory.json`
 - `reports/font/fixtures/expected/glyph/glyph-cache-metrics.json`
+- `reports/font/fixtures/expected/glyph/glyph-cache-telemetry.json`
 - `reports/font/fixtures/provenance/index.json`
 - `reports/pure-kotlin-text/font-fixture-inventory.json`
 - `reports/pure-kotlin-text/fixture-evidence-manifest.json`
@@ -20,14 +22,20 @@ Files:
 Evidence:
 
 - `GlyphSurface.kt` now exposes deterministic `GlyphArtifactMetricsDump`,
-  `GlyphAtlasOccupancyDump`, and `GlyphCacheMetricsDump` data structures with
-  canonical JSON writers and fail-fast occupancy validation for impossible
-  atlas states.
+  `GlyphAtlasOccupancyDump`, and `GlyphCacheMetricsDump` data structures plus
+  runtime-sample producers that validate route/hash coherence against
+  `GlyphArtifactPlan.decisions` and reject atlas diagnostics that are not
+  scoped to the sample glyph set before emitting canonical JSON.
 - `GlyphSurfaceTest.glyphArtifactAndCacheMetricDumpsMatchRepoFixtures()` now
-  assembles deterministic cold/warm dump samples and asserts byte-identical
-  checked-in dumps for `glyph-artifact-metrics.json`,
-  `glyph-atlas-occupancy.json`, and `glyph-cache-metrics.json`.
-- `glyph-artifact-metrics.json`, `glyph-atlas-occupancy.json`, and
+  assembles deterministic decision traces plus sample-scoped cold/warm atlas
+  diagnostics and asserts byte-identical checked-in dumps for
+  `glyph-artifact-metrics.json`, `glyph-atlas-occupancy.json`, and
+  `glyph-cache-metrics.json`.
+- `glyph-cache-inventory.json` and `glyph-cache-telemetry.json` were refreshed
+  in the same wave so the checked-in M9 cache evidence matches the current
+  stable strike-key hashes and `nonClaims` used by the reviewed M12 producers.
+- `glyph-artifact-metrics.json`, `glyph-atlas-occupancy.json`,
+  `glyph-cache-inventory.json`, `glyph-cache-telemetry.json`, and
   `glyph-cache-metrics.json` remain CPU-only checked-in advisory evidence; they
   do not by themselves prove a wired non-test glyph-pipeline producer.
 - `font-claim-dashboard.json` now exposes `Glyph artifact metrics`,
@@ -37,19 +45,20 @@ Evidence:
 Validation:
 
 ```bash
-rtk ./gradlew --no-daemon :font:glyph:test --tests org.graphiks.kanvas.glyph.GlyphSurfaceTest.glyphArtifactAndCacheMetricDumpsMatchRepoFixtures
+rtk ./gradlew --no-daemon :font:glyph:test
 rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_font_fixture_assets.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_font_fixtures.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
+rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_dump_index.py scripts/test_validate_pure_kotlin_text_claim_dashboard.py scripts/test_validate_pure_kotlin_text_font_fixtures.py
 rtk git diff --check
 ```
 
-Review: independent re-review accepted after remediating overclaim wording,
-`nonClaims` coherence, occupancy invariants, and budget-refusal hash
-coherence.
+Review: independent re-review accepted after remediating decision-trace
+route/hash validation, sample-scoped atlas diagnostics, stale cache fixture
+drift, and earlier overclaim / `nonClaims` coherence issues.
 
 Remaining gate: wiring a non-test glyph-pipeline producer that emits these
 metrics remains open. This wave is CPU-only advisory glyph/cache dump/data
