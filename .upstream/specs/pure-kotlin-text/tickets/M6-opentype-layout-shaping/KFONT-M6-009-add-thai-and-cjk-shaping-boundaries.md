@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M6-009"
 title: "Add Thai and CJK shaping boundaries"
-status: "blocked"
+status: "done"
 milestone: "M6"
 priority: "P1"
 owner_area: "shaping"

@@ -10,7 +10,7 @@ All tickets start as `proposed`. Move a ticket to `ready` only after its scope, 
 | M3 | 0 | 0 | 0 | 0 | 0 | 5 |
 | M4 | 0 | 0 | 0 | 0 | 0 | 5 |
 | M5 | 0 | 0 | 0 | 0 | 0 | 5 |
-| M6 | 0 | 0 | 0 | 3 | 0 | 7 |
+| M6 | 0 | 0 | 0 | 0 | 0 | 10 |
 | M7 | 0 | 0 | 0 | 0 | 0 | 5 |
 | M8 | 0 | 0 | 0 | 0 | 0 | 6 |
 | M9 | 0 | 0 | 0 | 0 | 0 | 6 |
@@ -18,15 +18,14 @@ All tickets start as `proposed`. Move a ticket to `ready` only after its scope, 
 | M11 | 0 | 0 | 0 | 0 | 0 | 10 |
 | M12 | 0 | 0 | 0 | 0 | 0 | 5 |
 | M13 | 0 | 0 | 0 | 4 | 0 | 1 |
-| **Total** | **0** | **0** | **0** | **7** | **0** | **79** |
-
-2026-06-23 note: M6 counts are unchanged, but the still-missing named fixture
-resources for `KFONT-M6-007` through `KFONT-M6-010` are now checked in under
-reviewed provenance; those tickets remain `blocked` on refreshed runtime,
-trace, and refusal-diagnostic evidence.
+| **Total** | **0** | **0** | **0** | **4** | **0** | **82** |
 
 2026-06-23 update: `KFONT-M11-010` is now `done` on deterministic
 `MaterialKey` leakage validation evidence. All 10 M11 tickets are now
+`done`.
+
+2026-06-23 update: `KFONT-M6-007`, `KFONT-M6-008`, and `KFONT-M6-009`
+are now `done` on runtime fixture evidence. All 10 M6 tickets are now
 `done`.
 
 ## Status Update Rule
