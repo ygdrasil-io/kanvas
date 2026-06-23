@@ -38,6 +38,12 @@ EVIDENCE_FIELDS = [
     "refusalDiagnostics",
 ]
 
+COHERENT_NON_CLAIM_SURFACES = {
+    "glyph-artifact-metrics",
+    "glyph-atlas-occupancy",
+    "glyph-cache-metrics",
+}
+
 REQUIRED_SURFACES = {
     "complex-shaping",
     "emoji-color",
@@ -177,6 +183,15 @@ def load_dashboard(root: Path) -> dict[str, Any]:
     return dashboard
 
 
+def load_dump_artifact(root: Path, relative_path: str) -> dict[str, Any] | None:
+    payload = load_json(root, relative_path)
+    if not isinstance(payload, dict):
+        return None
+    if "dumpId" not in payload or "nonClaims" not in payload:
+        return None
+    return payload
+
+
 def load_build_gradle_text(root: Path) -> str:
     return require_existing_path(root, BUILD_GRADLE_PATH, BUILD_GRADLE_PATH).read_text(encoding="utf-8")
 
@@ -249,9 +264,10 @@ def validate_evidence(root: Path, evidence: Any, label: str) -> dict[str, list[s
     return validated
 
 
-def validate_non_claims(non_claims: Any, label: str) -> None:
+def validate_non_claims(non_claims: Any, label: str) -> list[str]:
     values = require_string_list(non_claims, label)
     require("no-complete-target-support-claim" in values, f"{label} must include no-complete-target-support-claim")
+    return values
 
 
 def validate_surface_row(root: Path, row: Any, index: int) -> dict[str, Any]:
@@ -272,7 +288,21 @@ def validate_surface_row(root: Path, row: Any, index: int) -> dict[str, Any]:
     legacy_gates = require_string_list(row["legacyGates"], f"{surface_id}.legacyGates", allow_empty=True)
     unknown_legacy = [gate for gate in legacy_gates if gate not in REQUIRED_LEGACY_GATES]
     require(not unknown_legacy, f"{surface_id}.legacyGates contains unknown gates: {unknown_legacy}")
-    validate_non_claims(row["nonClaims"], f"{surface_id}.nonClaims")
+    non_claims = validate_non_claims(row["nonClaims"], f"{surface_id}.nonClaims")
+    dump_artifacts = [
+        (path, payload)
+        for path in evidence["deterministicDumps"]
+        if path.endswith(".json")
+        for payload in [load_dump_artifact(root, path)]
+        if payload is not None
+    ]
+    if surface_id in COHERENT_NON_CLAIM_SURFACES and len(dump_artifacts) == 1:
+        dump_path, payload = dump_artifacts[0]
+        dump_non_claims = require_string_list(payload["nonClaims"], f"{surface_id} dump nonClaims")
+        require(
+            dump_non_claims == non_claims,
+            f"{surface_id}.nonClaims must match dump nonClaims in {dump_path}",
+        )
 
     if row["gpuClaimed"] and not evidence["gpuArtifacts"]:
         require(classification == "GPU-gated", f"{surface_id}: GPU claimed without GPU artifact must stay GPU-gated")

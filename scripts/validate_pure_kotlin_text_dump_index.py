@@ -94,6 +94,12 @@ FORBIDDEN_EXTERNAL_ENGINE_TERMS = [
     "native engines",
 ]
 
+COHERENT_NON_CLAIM_DUMP_IDS = {
+    "glyph-artifact-metrics",
+    "glyph-atlas-occupancy",
+    "glyph-cache-metrics",
+}
+
 
 class ValidationError(RuntimeError):
     pass
@@ -121,6 +127,15 @@ def load_index(root: Path) -> dict[str, Any]:
     index = load_json(root, INDEX_PATH)
     require(isinstance(index, dict), "index root must be an object")
     return index
+
+
+def load_dump_artifact(root: Path, relative_path: str) -> dict[str, Any] | None:
+    payload = load_json(root, relative_path)
+    if not isinstance(payload, dict):
+        return None
+    if "dumpId" not in payload or "nonClaims" not in payload:
+        return None
+    return payload
 
 
 def require_string(value: Any, label: str) -> str:
@@ -205,6 +220,18 @@ def validate_row(root: Path, row: Any, index: int) -> dict[str, Any]:
     require_string(row["updatePolicy"], f"{dump_id}.updatePolicy")
     non_claims = require_string_list(row["nonClaims"], f"{dump_id}.nonClaims")
     require("producer-only" in non_claims, f"{dump_id}.nonClaims must include producer-only")
+    for producer_path in producer_paths:
+        if dump_id not in COHERENT_NON_CLAIM_DUMP_IDS or not producer_path.endswith(".json"):
+            continue
+        payload = load_dump_artifact(root, producer_path)
+        if payload is None or payload.get("dumpId") != dump_id:
+            continue
+        dump_non_claims = require_string_list(payload["nonClaims"], f"{dump_id} dump nonClaims")
+        expected_dump_non_claims = [claim for claim in non_claims if claim != "producer-only"]
+        require(
+            dump_non_claims == expected_dump_non_claims,
+            f"{dump_id}.nonClaims must match dump nonClaims in {producer_path}",
+        )
     return row
 
 
