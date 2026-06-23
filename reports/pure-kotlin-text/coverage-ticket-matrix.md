@@ -6001,7 +6001,7 @@ explicit in `fixture-evidence-manifest.json`.
 
 ### KFONT-M11 Readiness Gate Audit
 
-Status: KFONT-M11-004 done on bounded A8 route evidence; downstream M11 wave remains blocked.
+Status: KFONT-M11-004 and KFONT-M11-006 done on bounded A8 route and subrun evidence; KFONT-M11-007 is ready.
 
 Files:
 
@@ -6028,9 +6028,11 @@ Evidence:
   `reports/wgsl4k-evolution/generated/text-wgsl-reflection.json` linkage,
   and focused simple-Latin GPU evidence via
   `reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/`.
-- `KFONT-M11-006`, `KFONT-M11-007`, `KFONT-M11-008`, `KFONT-M11-009`, and
-  `KFONT-M11-010` remain blocked on downstream subrun/resource/upload/binding,
-  ordering, route-specific WGSL validation, and `MaterialKey` leakage work.
+- `KFONT-M11-006` is now done on deterministic subrun split evidence, and
+  `KFONT-M11-007` is ready for resource/upload/instance/binding contracts.
+  `KFONT-M11-008`, `KFONT-M11-009`, and `KFONT-M11-010` remain blocked on that
+  downstream resource/binding work before ordering, route-specific WGSL
+  validation, and `MaterialKey` leakage work.
 - The bounded A8 route does not promote broad text GPU support, SDF/outline/
   color/bitmap/SVG routes, or `dftext` retirement.
 
@@ -6040,9 +6042,52 @@ Validation:
 rtk git diff --check
 ```
 
-Remaining gate: complete `KFONT-M11-006`, `KFONT-M11-007`, `KFONT-M11-008`,
-`KFONT-M11-009`, and `KFONT-M11-010` for downstream subrun/resource/upload/
-binding, ordering, WGSL validation, and `MaterialKey` leakage proof. This
-bounded wave does not claim broad GPU text support, SDF/outline/color/bitmap/
-SVG text support, or retirement of `dftext`, `scaledemoji_rendering`, or
-`coloremoji_blendmodes`.
+Remaining gate: implement `KFONT-M11-007`, then unblock `KFONT-M11-008`,
+`KFONT-M11-009`, and `KFONT-M11-010` for ordering, WGSL validation, and
+`MaterialKey` leakage proof. This bounded wave does not claim broad GPU text
+support, SDF/outline/color/bitmap/SVG text support, or retirement of `dftext`,
+`scaledemoji_rendering`, or `coloremoji_blendmodes`.
+
+### KFONT-M11-006: GPUTextSubRunPlan Splitting
+
+Status: implemented; PR review pending.
+
+Files:
+
+- `font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextSubRunPlan.kt`
+- `font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextSubRunPlanTest.kt`
+- `reports/pure-kotlin-text/gpu-text-subrun-plan.json`
+- `reports/pure-kotlin-text/2026-06-23-kfont-m11-006-subrun-plan.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/KFONT-M11-006-add-gputextsubrunplan-splitting-tests.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/KFONT-M11-007-add-resource-upload-instance-binding-plan-contracts.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/README.md`
+- `.upstream/specs/pure-kotlin-text/tickets/STATUS.md`
+
+Evidence:
+
+- `gpu-text-subrun-plan.json` records atlas page/generation splits,
+  clip/layer/destination-read barriers, instance-budget refusal, and mixed
+  A8/SDF/COLR/bitmap representation refusals with source glyph ranges and
+  ordering tokens preserved.
+- Refused subruns keep route-specific `text.gpu.*` and `unsupported.text.*`
+  diagnostics without claim promotion.
+- Ticket status is promoted from `blocked` to `done`; downstream
+  `KFONT-M11-007` is now ready for resource/upload/instance/binding
+  implementation. `KFONT-M11-008` through `KFONT-M11-010` remain blocked on
+  that resource/binding evidence before ordering, WGSL validation, and
+  `MaterialKey` leakage evidence can land.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests '*GPUTextSubRunPlan*'
+rtk python3 scripts/validate_pure_kotlin_text_dump_index.py
+rtk python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
+rtk git diff --check
+```
+
+Remaining gate: no ticket-local subrun split gate remains for KFONT-M11-006.
+This slice does not claim resource/upload/instance/binding materialization,
+upload-before-sample execution, route-specific WGSL validation,
+`MaterialKey` leakage validation, broad GPU text support, or `dftext`
+retirement.
