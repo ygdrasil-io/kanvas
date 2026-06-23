@@ -464,6 +464,146 @@ fun gsubLigatureTable(): ByteArray {
     return table
 }
 
+fun gsubExtensionSingleAndLigatureTable(): ByteArray {
+    val table = ByteArray(134)
+    val scriptListOffset = 10
+    val featureListOffset = 32
+    val lookupListOffset = 58
+    val scriptStart = scriptListOffset + 8
+    val langSysStart = scriptStart + 4
+    val firstFeatureStart = featureListOffset + 14
+    val secondFeatureStart = firstFeatureStart + 6
+    val lookupStart = lookupListOffset + 6
+    val singleLookupStart = lookupStart
+    val ligatureLookupStart = singleLookupStart + 30
+    val singleExtensionSubtableStart = singleLookupStart + 8
+    val ligatureExtensionSubtableStart = ligatureLookupStart + 8
+    val singleSubtableStart = singleExtensionSubtableStart + 8
+    val ligatureSubtableStart = ligatureExtensionSubtableStart + 8
+    val singleCoverageStart = singleSubtableStart + 8
+    val ligatureCoverageStart = ligatureSubtableStart + 8
+    val ligatureSetStart = ligatureCoverageStart + 6
+    val ligatureStart = ligatureSetStart + 4
+
+    table.writeUInt16(0, 1)
+    table.writeUInt16(2, 0)
+    table.writeUInt16(4, scriptListOffset)
+    table.writeUInt16(6, featureListOffset)
+    table.writeUInt16(8, lookupListOffset)
+
+    table.writeUInt16(scriptListOffset, 1)
+    "latn".toByteArray(Charsets.ISO_8859_1).copyInto(table, scriptListOffset + 2)
+    table.writeUInt16(scriptListOffset + 6, 8)
+    table.writeUInt16(scriptStart, 4)
+    table.writeUInt16(scriptStart + 2, 0)
+    table.writeUInt16(langSysStart, 0)
+    table.writeUInt16(langSysStart + 2, 0xffff)
+    table.writeUInt16(langSysStart + 4, 2)
+    table.writeUInt16(langSysStart + 6, 0)
+    table.writeUInt16(langSysStart + 8, 1)
+
+    table.writeUInt16(featureListOffset, 2)
+    "ccmp".toByteArray(Charsets.ISO_8859_1).copyInto(table, featureListOffset + 2)
+    table.writeUInt16(featureListOffset + 6, 14)
+    "liga".toByteArray(Charsets.ISO_8859_1).copyInto(table, featureListOffset + 8)
+    table.writeUInt16(featureListOffset + 12, 20)
+
+    table.writeUInt16(firstFeatureStart, 0)
+    table.writeUInt16(firstFeatureStart + 2, 1)
+    table.writeUInt16(firstFeatureStart + 4, 0)
+    table.writeUInt16(secondFeatureStart, 0)
+    table.writeUInt16(secondFeatureStart + 2, 1)
+    table.writeUInt16(secondFeatureStart + 4, 1)
+
+    table.writeUInt16(lookupListOffset, 2)
+    table.writeUInt16(lookupListOffset + 2, 6)
+    table.writeUInt16(lookupListOffset + 4, 36)
+
+    table.writeUInt16(singleLookupStart, 7)
+    table.writeUInt16(singleLookupStart + 2, 0)
+    table.writeUInt16(singleLookupStart + 4, 1)
+    table.writeUInt16(singleLookupStart + 6, 8)
+    table.writeUInt16(singleExtensionSubtableStart, 1)
+    table.writeUInt16(singleExtensionSubtableStart + 2, 1)
+    table.writeUInt32(singleExtensionSubtableStart + 4, 8)
+    table.writeUInt16(singleSubtableStart, 2)
+    table.writeUInt16(singleSubtableStart + 2, 8)
+    table.writeUInt16(singleSubtableStart + 4, 1)
+    table.writeUInt16(singleSubtableStart + 6, 15)
+    table.writeUInt16(singleCoverageStart, 1)
+    table.writeUInt16(singleCoverageStart + 2, 1)
+    table.writeUInt16(singleCoverageStart + 4, 5)
+
+    table.writeUInt16(ligatureLookupStart, 7)
+    table.writeUInt16(ligatureLookupStart + 2, 0)
+    table.writeUInt16(ligatureLookupStart + 4, 1)
+    table.writeUInt16(ligatureLookupStart + 6, 8)
+    table.writeUInt16(ligatureExtensionSubtableStart, 1)
+    table.writeUInt16(ligatureExtensionSubtableStart + 2, 4)
+    table.writeUInt32(ligatureExtensionSubtableStart + 4, 8)
+    table.writeUInt16(ligatureSubtableStart, 1)
+    table.writeUInt16(ligatureSubtableStart + 2, 8)
+    table.writeUInt16(ligatureSubtableStart + 4, 1)
+    table.writeUInt16(ligatureSubtableStart + 6, 14)
+    table.writeUInt16(ligatureCoverageStart, 1)
+    table.writeUInt16(ligatureCoverageStart + 2, 1)
+    table.writeUInt16(ligatureCoverageStart + 4, 7)
+    table.writeUInt16(ligatureSetStart, 1)
+    table.writeUInt16(ligatureSetStart + 2, 4)
+    table.writeUInt16(ligatureStart, 42)
+    table.writeUInt16(ligatureStart + 2, 2)
+    table.writeUInt16(ligatureStart + 4, 8)
+
+    return table
+}
+
+fun gsubExtensionSelfTargetingCycleTable(): ByteArray {
+    val table = ByteArray(64)
+    val scriptListOffset = 10
+    val featureListOffset = 30
+    val lookupListOffset = 44
+    val scriptStart = scriptListOffset + 8
+    val langSysStart = scriptStart + 4
+    val featureStart = featureListOffset + 8
+    val lookupStart = lookupListOffset + 4
+    val extensionSubtableStart = lookupStart + 8
+
+    table.writeUInt16(0, 1)
+    table.writeUInt16(2, 0)
+    table.writeUInt16(4, scriptListOffset)
+    table.writeUInt16(6, featureListOffset)
+    table.writeUInt16(8, lookupListOffset)
+
+    table.writeUInt16(scriptListOffset, 1)
+    "latn".toByteArray(Charsets.ISO_8859_1).copyInto(table, scriptListOffset + 2)
+    table.writeUInt16(scriptListOffset + 6, 8)
+    table.writeUInt16(scriptStart, 4)
+    table.writeUInt16(scriptStart + 2, 0)
+    table.writeUInt16(langSysStart, 0)
+    table.writeUInt16(langSysStart + 2, 0xffff)
+    table.writeUInt16(langSysStart + 4, 1)
+    table.writeUInt16(langSysStart + 6, 0)
+
+    table.writeUInt16(featureListOffset, 1)
+    "ccmp".toByteArray(Charsets.ISO_8859_1).copyInto(table, featureListOffset + 2)
+    table.writeUInt16(featureListOffset + 6, 8)
+    table.writeUInt16(featureStart, 0)
+    table.writeUInt16(featureStart + 2, 1)
+    table.writeUInt16(featureStart + 4, 0)
+
+    table.writeUInt16(lookupListOffset, 1)
+    table.writeUInt16(lookupListOffset + 2, 4)
+    table.writeUInt16(lookupStart, 7)
+    table.writeUInt16(lookupStart + 2, 0)
+    table.writeUInt16(lookupStart + 4, 1)
+    table.writeUInt16(lookupStart + 6, 8)
+    table.writeUInt16(extensionSubtableStart, 1)
+    table.writeUInt16(extensionSubtableStart + 2, 7)
+    table.writeUInt32(extensionSubtableStart + 4, 0)
+
+    return table
+}
+
 fun gposPairAdjustmentFormat1Table(
     leftGlyphId: Int,
     rightGlyphId: Int,
@@ -687,6 +827,24 @@ val fixtures = linkedMapOf(
         numGlyphs = 64,
         layoutTag = "GSUB",
         layoutTable = gsubLigatureTable().also { it.writeUInt16(70, 1) },
+    ),
+    "gsub-extension-substitution.otf" to baseFont(
+        family = "KFONT GSUB Extension",
+        cmapSegments = listOf(
+            testFormat4Segment(startCode = 0x0041, endCode = 0x0041, startGlyphId = 5),
+            testFormat4Segment(startCode = 0x0066, endCode = 0x0066, startGlyphId = 7),
+            testFormat4Segment(startCode = 0x0069, endCode = 0x0069, startGlyphId = 8),
+        ),
+        numGlyphs = 64,
+        layoutTag = "GSUB",
+        layoutTable = gsubExtensionSingleAndLigatureTable(),
+    ),
+    "layout-extension-cycle.otf" to baseFont(
+        family = "KFONT GSUB Extension Cycle",
+        cmapSegments = listOf(testFormat4Segment(startCode = 0x0041, endCode = 0x0041, startGlyphId = 5)),
+        numGlyphs = 32,
+        layoutTag = "GSUB",
+        layoutTable = gsubExtensionSelfTargetingCycleTable(),
     ),
     "gpos-single-adjustment.otf" to baseFont(
         family = "KFONT GPOS Single",
