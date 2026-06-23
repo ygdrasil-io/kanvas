@@ -16,7 +16,7 @@ class M2SimpleSceneEvidenceTest {
                 "scene:m2.simple.rrect-gradient-scissor-batch mode=contract-fixture",
                 "rrect:accepted routeCandidate=native.fill_rrect.solid geometry=rrect.corner_radii=tl(6.0,6.0);tr(10.0,10.0);br(14.0,14.0);bl(4.0,4.0)",
                 "gradient:accepted materialKey=material:linear-gradient.clamp.inline2 payload=gradient.inline2 stops=2 tileMode=clamp",
-                "wgsl:accepted module=m2-simple-rrect-linear-gradient parser=unavailable:wgsl4k reflection=fixture-declared",
+                "wgsl:accepted module=m2-simple-rrect-linear-gradient parser=parser-backed:wgsl4k reflection=wgsl4k-parsed",
                 "clip:accepted stack=m2-simple-device-scissor element=scissor rect=0.0,0.0,96.0,64.0 mode=intersect",
                 "batch:accepted key=batch:rrect.linear-gradient.scissor draws=2 boundaries=materialKey,clipStack,layer,ordering",
                 "batch:split reason=material-key-mismatch before=draw-2 after=draw-3",

@@ -14,7 +14,11 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     implementation(project(":codec-api"))
     implementation(project(":kanvas-skia"))
+    compileOnly("org.graphiks:core-jvm:1.0.0-SNAPSHOT")
+    compileOnly("org.graphiks:parser-jvm:1.0.0-SNAPSHOT")
     testImplementation(kotlin("test"))
+    testImplementation("org.graphiks:core-jvm:1.0.0-SNAPSHOT")
+    testImplementation("org.graphiks:parser-jvm:1.0.0-SNAPSHOT")
 }
 
 tasks.withType<Test> {
