@@ -216,6 +216,49 @@ Remaining gate: this is coordination-only blocker evidence. It does not add
 Thai shaping support, CJK shaping support, extension/chaining lookup support,
 variation-adjustment support, or any fixture-ready claim.
 
+### KFONT-M6-010 Compatible Source Intake
+
+Status: coordination evidence.
+
+Files:
+
+- `font/sfnt/src/test/kotlin/org/graphiks/kanvas/font/sfnt/SFNTSurfaceTest.kt`
+- `reports/font/fixtures/fonts/shaping/FallbackPlus-Small.otf`
+- `reports/font/fixtures/provenance/index.json`
+- `reports/pure-kotlin-text/2026-06-23-kfont-m6-010-compatible-source-intake.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/KFONT-M6-010-implement-gsub-gpos-extension-chaining-and-variation-adjustment-lookups.md`
+- `.upstream/specs/pure-kotlin-text/tickets/M6-opentype-layout-shaping/README.md`
+
+Evidence:
+
+- `FallbackPlus-Small.otf` from `simoncozens/test-fonts` is now checked in
+  under Apache-2.0 provenance as an offline shaping source asset for
+  `KFONT-M6-010`.
+- `SFNTSurfaceTest` now pins the checked-in source path, the exact upstream raw
+  URL, the Apache-2.0 license record, and the `KFONT-M6-010` owner mapping so
+  future fixture derivation can rely on repo-local bytes instead of network
+  fetches.
+- This source intake deliberately keeps the non-claim explicit: the named
+  advanced-lookup fixture family is still incomplete, and no chaining,
+  reverse-chaining, advanced GPOS, or variation/device support claim is
+  promoted by the source asset alone.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:sfnt:test --tests org.graphiks.kanvas.font.sfnt.SFNTSurfaceTest.m6FallbackPlusSourceAssetIsCheckedInWithApacheProvenance
+rtk python3 scripts/validate_font_fixture_assets.py
+rtk git diff --check
+```
+
+Remaining gate: `KFONT-M6-010` still requires the named checked-in advanced
+lookup fixture family (`gsub-chaining-context.otf`,
+`gsub-reverse-chaining.otf`, `gpos-contextual-positioning.otf`,
+`gpos-chaining-positioning.otf`, `gpos-extension-positioning.otf`,
+`gpos-variation-device.otf`) plus `variation-adjustment-trace.json` and the
+runtime/parser support they exercise. Keep the ticket `blocked` until those
+gates land.
+
 ### KFONT-M13-001 Facade Adapter Inventory
 
 Status: done; implementation evidence.
