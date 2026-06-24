@@ -1,7 +1,7 @@
 ---
 id: KGPU-M13-005
 title: "Add gpu-renderer-scenes evidence: rrect-card, gradient-swatch, clipped-stack"
-status: review
+status: done
 milestone: M13
 priority: P0
 owner_area: scenes-evidence
@@ -82,6 +82,18 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:test --tests '*M13Scene*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done` (2026-06-24): 3 scenes already defined in M10M13CandidatePromotionScenes.kt and registered in GPURendererSceneRegistry:
+  - `rounded-rect-solids`: 3 FillRRect commands with varying radii (large 28px, small 8px, medium 16px)
+  - `linear-gradient-lanes`: 3 LinearGradientRect commands (horizontal, vertical, diagonal)
+  - `scissor-overlay`: Clip rect + 3 FillRect commands inside scissor window
+- GPURendererSceneRegistryTest updated with 3 SceneExpectationRow entries
+- 41 scene tests pass including validation of the 3 new entries
+
+## Evidence
+
+- 41 GPURendererSceneRegistryTest tests pass
+- Scene IDs: `rounded-rect-solids`, `linear-gradient-lanes`, `scissor-overlay`
+- All scenes have SceneExpectation.ShouldRender, valid tags, and M10 milestone links
 
 ## Linear Labels
 

@@ -19,7 +19,7 @@ product activation, and updates the owning milestone table in the same change.
 | M10 | 0 | 0 | 0 | 0 | 0 | 4 |
 | M11 | 0 | 0 | 0 | 0 | 0 | 9 |
 | M12 | 0 | 0 | 0 | 0 | 0 | 10 |
-| M13 | 0 | 0 | 0 | 0 | 5 | 0 |
+| M13 | 0 | 0 | 0 | 0 | 0 | 5 |
 | M14 | 3 | 0 | 0 | 0 | 0 | 0 |
 | M15 | 4 | 0 | 0 | 0 | 0 | 0 |
 | M16 | 4 | 0 | 0 | 0 | 0 | 0 |
@@ -30,7 +30,7 @@ product activation, and updates the owning milestone table in the same change.
 | M21 | 4 | 0 | 0 | 0 | 0 | 0 |
 | M22 | 4 | 0 | 0 | 0 | 0 | 0 |
 | M23 | 5 | 0 | 0 | 0 | 0 | 0 |
-| **Total** | **43** | **0** | **0** | **0** | **5** | **65** |
+| **Total** | **43** | **0** | **0** | **0** | **0** | **70** |
 
 ## Status Update Rule
 

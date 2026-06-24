@@ -1,7 +1,7 @@
 ---
 id: KGPU-M13-003
 title: "Add scissor clip execution: device-rect clip -> WebGPU setScissor + uniform"
-status: review
+status: done
 milestone: M13
 priority: P0
 owner_area: clips-passes
@@ -82,6 +82,13 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*ScissorClip*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done` (2026-06-24): Scissor clip (DeviceRect) already accepted by planner via `acceptedClipKinds`. Added `first_slice.scissor.native` capability check for both FillRect and FillRRect routes. Product flag `kanvas.gpu.renderer.product.scissor` with `.disable` rollback in ProductFlags.kt. The pass builder and command stream already emit SetScissor commands when scissor bounds hash is present.
+
+## Evidence
+
+- 2 new FirstRoutePlannerTest tests pass (DeviceRect acceptance + refusal without capability)
+- 7 ProductFlagConfigTest tests pass
+- Scissor capability `first_slice.scissor.native` gated by product flag
 
 ## Linear Labels
 
