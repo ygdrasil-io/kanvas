@@ -23,17 +23,14 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
 class M25ExecutorWiringTest {
     @Test
     fun `KGPU-M25-001 bitmap shader routes through the real snippet identity`() {
-        // KGPU-M25-001 note: Bitmap integration is by snippet identity/reference
-        // (BitmapShaderSnippetSourceHash + BitmapShaderClampEntryPoint), NOT by invoking a
-        // dedicated executor. The real texture sampling (textureSample over an uploaded texture)
-        // requires M26; until then the offscreen fullscreen-uniform backend only carries the
-        // snippet identity + packed color uniform, with the procedural test texture staying in the
-        // renderer wrapper (realTextureDeferred=M26).
+        // KGPU-M26-002: M26 replaces the procedural wrapper with real texture upload.
+        // The M25 snippet+entry+pipeline wiring evidence stays; the deferral line is
+        // replaced by real-texture-uploaded evidence.
         val lines = bitmapShaderWiringDiagnostics()
         assertTrue(lines.any { it.contains("snippetSourceHash=fragment:bitmap_shader:v1") }, lines.toString())
         assertTrue(lines.any { it.contains("entryPoint=bitmap_shader_clamp") }, lines.toString())
-        assertTrue(lines.any { it.contains("uniformPacker=UniformPacker.bitmapBytes") }, lines.toString())
-        assertTrue(lines.any { it.contains("realTextureDeferred=M26") }, lines.toString())
+        assertTrue(lines.any { it.contains("uniformPacker=UniformPacker.bitmapTextureBytes") }, lines.toString())
+        assertTrue(lines.any { it.contains("realTextureUploaded=true") }, lines.toString())
     }
 
     @Test
@@ -43,7 +40,7 @@ class M25ExecutorWiringTest {
         assertTrue(lines.any { it.contains("nonclaim:no-gpu-atlas-pages") }, lines.toString())
         assertTrue(lines.any { it.startsWith("textSdf:generator accepted=true") }, lines.toString())
         assertTrue(lines.any { it.contains("nonclaim:no-hybrid-sdf") }, lines.toString())
-        assertTrue(lines.any { it.contains("realAtlasDeferred=M26") }, lines.toString())
+        assertTrue(lines.any { it.contains("realAtlasUploaded=true") }, lines.toString())
     }
 
     @Test

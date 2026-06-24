@@ -22,6 +22,12 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.ColorMatrixWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.StrokeWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderClampEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderSnippetSourceHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.TextAtlasA8Wgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.TextAtlasA8EntryPoint
+import org.graphiks.kanvas.gpu.renderer.images.decodePngToRgba
+import org.graphiks.kanvas.gpu.renderer.text.GlyphAtlasTextureBuilder
+import org.graphiks.kanvas.gpu.renderer.text.GlyphAtlasTextureResult
 import org.graphiks.kanvas.gpu.renderer.wgsl.LayerCompositeEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.LayerCompositeSnippetSourceHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
@@ -231,14 +237,23 @@ class RectOnlyOffscreenRenderer {
 
             val bitmapFills = drawPlan.fills.filter { it.family == "bitmap-rect" }
             if (bitmapFills.isNotEmpty()) {
-                val wgsl = composeRectWgsl("bitmap", BITMAP_SHADER_WRAPPER_WGSL, "bitmap_procedural", "uniforms.color")
-                drawFullscreenRawUniformPass(
+                val pngBytes = this::class.java.classLoader.getResourceAsStream("bitmap-test-32x32.png")?.readBytes()
+                val decoded = pngBytes?.let { decodePngToRgba(it, "bitmap-test-32x32") }
+                val wgsl = composeBitmapTextureWgsl()
+                drawFullscreenTextureUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    textureRgba = decoded?.rgba ?: ByteArray(4),
+                    textureWidth = decoded?.width ?: 1,
+                    textureHeight = decoded?.height ?: 1,
+                    textureFormat = "rgba8unorm",
                     draws = bitmapFills.map { fill ->
-                        val bytes = UniformPacker.bitmapBytes(fill.startColor)
+                        val rectWidth = fill.right - fill.left
+                        val rectHeight = fill.bottom - fill.top
                         GPUBackendRawUniformDraw(
-                            uniformBytes = bytes,
+                            uniformBytes = UniformPacker.bitmapTextureBytes(
+                                fill.startColor, fill.left, fill.top, rectWidth, rectHeight,
+                            ),
                             scissorX = fill.scissorX,
                             scissorY = fill.scissorY,
                             scissorWidth = fill.scissorWidth,
@@ -269,14 +284,23 @@ class RectOnlyOffscreenRenderer {
 
             val textFills = drawPlan.fills.filter { it.family == "text-run" }
             if (textFills.isNotEmpty()) {
-                val wgsl = composeRectWgsl("text", TEXT_ATLAS_WRAPPER_WGSL, "text_procedural", "uniforms.color")
-                drawFullscreenRawUniformPass(
+                val atlasResult = GlyphAtlasTextureBuilder().build("TheQuickBrownFoxJumpsOver", fontSize = 24f)
+                val atlas = (atlasResult as? GlyphAtlasTextureResult.Built)?.atlas
+                val wgsl = composeTextAtlasWgsl()
+                drawFullscreenTextureUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    textureRgba = atlas?.a8Bytes ?: ByteArray(1),
+                    textureWidth = atlas?.width ?: 1,
+                    textureHeight = atlas?.height ?: 1,
+                    textureFormat = "r8unorm",
                     draws = textFills.map { fill ->
-                        val bytes = UniformPacker.solidColorBytes(fill.startColor)
+                        val rectWidth = fill.right - fill.left
+                        val rectHeight = fill.bottom - fill.top
                         GPUBackendRawUniformDraw(
-                            uniformBytes = bytes,
+                            uniformBytes = UniformPacker.textAtlasBytes(
+                                fill.startColor, fill.left, fill.top, rectWidth, rectHeight,
+                            ),
                             scissorX = fill.scissorX,
                             scissorY = fill.scissorY,
                             scissorWidth = fill.scissorWidth,
@@ -455,6 +479,48 @@ $snippetWgsl
 @fragment
 fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     return $entryPoint(pos, $uniformArgs);
+}
+"""
+
+        fun composeBitmapTextureWgsl(): String = """
+struct Uniforms { color: vec4f, texRect: vec4f }
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+${BitmapShaderWgsl}
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let uv = (pos.xy - uniforms.texRect.xy) / uniforms.texRect.zw;
+    let c = bitmap_shader_clamp(uv) * uniforms.color;
+    return vec4f(c.rgb * c.a, c.a);
+}
+"""
+
+        fun composeTextAtlasWgsl(): String = """
+struct Uniforms { color: vec4f, texRect: vec4f }
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+${TextAtlasA8Wgsl}
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let uv = (pos.xy - uniforms.texRect.xy) / uniforms.texRect.zw;
+    let t = text_atlas_source(uv);
+    return vec4f(uniforms.color.rgb * t.a, uniforms.color.a * t.a);
 }
 """
 
@@ -866,15 +932,15 @@ internal fun prepareRectOnlyDrawPlan(
 }
 
 /**
- * KGPU-M25-001: routes BitmapRect through the real [BitmapShaderSnippetSourceHash] snippet identity
- * (BitmapShaderSnippet, M17) for diagnostic evidence. The procedural test texture stays in the
- * renderer wrapper; real decoded textures are deferred to M26.
+ * KGPU-M26-002: bitmap now samples a real decoded image texture uploaded via the
+ * offscreen texture-uniform backend. The M25 wiring evidence (snippet identity,
+ * entry point, packer) stays; the procedural wrapper is removed per M26 exit criteria.
  */
 internal fun bitmapShaderWiringDiagnostics(): List<String> = listOf(
     "bitmapShader:snippetSourceHash=$BitmapShaderSnippetSourceHash",
     "bitmapShader:entryPoint=$BitmapShaderClampEntryPoint",
-    "bitmapShader:uniformPacker=UniformPacker.bitmapBytes",
-    "bitmapShader:catalogWired=true proceduralTexture=true realTextureDeferred=M26 productActivation=false",
+    "bitmapShader:uniformPacker=UniformPacker.bitmapTextureBytes",
+    "bitmapShader:catalogWired=true realTextureUploaded=true bitmapDecodedSource=bitmap-test-32x32 productActivation=false",
 )
 
 /**
@@ -904,7 +970,7 @@ internal fun textAtlasWiringDiagnostics(width: Int, height: Int): List<String> =
     )
     add("textSdf:smoothing=${SDFGenerator.SDF_SMOOTHING} threshold=${SDFGenerator.SDF_THRESHOLD}")
     add("textSdf:${SDFGenerator.nonClaimLine}")
-    add("textAtlas:proceduralAtlas=true realAtlasDeferred=M26 productActivation=false")
+    add("textAtlas:realAtlasUploaded=true atlasFont=LiberationSans productActivation=false")
 }
 
 /**

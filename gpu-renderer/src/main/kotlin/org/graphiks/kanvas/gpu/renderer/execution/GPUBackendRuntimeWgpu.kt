@@ -18,6 +18,7 @@ import io.ygdrasil.webgpu.CompositeAlphaMode
 import io.ygdrasil.webgpu.Extent3D
 import io.ygdrasil.webgpu.FragmentState
 import io.ygdrasil.webgpu.GLFWContext
+import io.ygdrasil.webgpu.GPUAddressMode
 import io.ygdrasil.webgpu.GPUBlendFactor
 import io.ygdrasil.webgpu.GPUBlendOperation
 import io.ygdrasil.webgpu.GPUAdapterInfo
@@ -28,28 +29,38 @@ import io.ygdrasil.webgpu.GPUBufferBindingType
 import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUErrorFilter
+import io.ygdrasil.webgpu.GPUFilterMode
 import io.ygdrasil.webgpu.GPULoadOp
 import io.ygdrasil.webgpu.GPUMapMode
 import io.ygdrasil.webgpu.GPUPipelineLayout
 import io.ygdrasil.webgpu.GPUQueue
 import io.ygdrasil.webgpu.GPURenderPipeline
+import io.ygdrasil.webgpu.GPUSampler
+import io.ygdrasil.webgpu.GPUSamplerBindingType
 import io.ygdrasil.webgpu.GPUShaderModule
 import io.ygdrasil.webgpu.GPUShaderStage
 import io.ygdrasil.webgpu.GPUStoreOp
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureSampleType
 import io.ygdrasil.webgpu.GPUTextureUsage
+import io.ygdrasil.webgpu.GPUTextureView
+import io.ygdrasil.webgpu.GPUTextureViewDimension
 import io.ygdrasil.webgpu.NativeSurface
 import io.ygdrasil.webgpu.PipelineLayoutDescriptor
 import io.ygdrasil.webgpu.PrimitiveState
 import io.ygdrasil.webgpu.RenderPassColorAttachment
 import io.ygdrasil.webgpu.RenderPassDescriptor
 import io.ygdrasil.webgpu.RenderPipelineDescriptor
+import io.ygdrasil.webgpu.SamplerBindingLayout
+import io.ygdrasil.webgpu.SamplerDescriptor
 import io.ygdrasil.webgpu.ShaderModuleDescriptor
 import io.ygdrasil.webgpu.SurfaceConfiguration
 import io.ygdrasil.webgpu.SurfaceTextureStatus
 import io.ygdrasil.webgpu.TexelCopyBufferInfo
+import io.ygdrasil.webgpu.TexelCopyBufferLayout
 import io.ygdrasil.webgpu.TexelCopyTextureInfo
+import io.ygdrasil.webgpu.TextureBindingLayout
 import io.ygdrasil.webgpu.TextureDescriptor
 import io.ygdrasil.webgpu.VertexState
 import io.ygdrasil.webgpu.WGPU
@@ -526,6 +537,172 @@ private class WgpuRenderRecorder(
         )
     }
 
+    override fun drawFullscreenTextureUniformPass(
+        wgsl: String,
+        colorFormat: String,
+        textureRgba: ByteArray,
+        textureWidth: Int,
+        textureHeight: Int,
+        textureFormat: String,
+        draws: List<GPUBackendRawUniformDraw>,
+    ) {
+        recordFullscreenTextureUniformPass(
+            wgsl = wgsl,
+            colorFormat = colorFormat,
+            textureRgba = textureRgba,
+            textureWidth = textureWidth,
+            textureHeight = textureHeight,
+            textureFormat = textureFormat,
+            draws = draws.map { draw ->
+                WgpuFullscreenUniformDraw(
+                    uniformPayload = ArrayBuffer.of(draw.uniformBytes),
+                    uniformSizeBytes = draw.uniformBytes.size.toULong(),
+                    scissorX = draw.scissorX,
+                    scissorY = draw.scissorY,
+                    scissorWidth = draw.scissorWidth,
+                    scissorHeight = draw.scissorHeight,
+                )
+            },
+        )
+    }
+
+    private fun recordFullscreenTextureUniformPass(
+        wgsl: String,
+        colorFormat: String,
+        textureRgba: ByteArray,
+        textureWidth: Int,
+        textureHeight: Int,
+        textureFormat: String,
+        draws: List<WgpuFullscreenUniformDraw>,
+    ) {
+        require(wgsl.isNotBlank()) { "wgsl must not be blank" }
+        require(colorFormat.normalizedColorFormat() == targetFormat.toBackendColorFormat()) {
+            "Requested color format $colorFormat does not match target format ${targetFormat.toBackendColorFormat()}"
+        }
+        require(textureRgba.isNotEmpty()) { "textureRgba must not be empty" }
+        require(textureWidth > 0) { "textureWidth must be positive" }
+        require(textureHeight > 0) { "textureHeight must be positive" }
+        if (draws.isEmpty()) return
+
+        val gpuTextureFormat = textureFormat.toWgpuTextureFormat()
+        val textureBytesPerPixel = gpuTextureFormat.bytesPerPixel()
+        val tightTextureBytesPerRow = textureWidth * textureBytesPerPixel
+        val paddedTextureBytesPerRow = alignCopyBytesPerRow(tightTextureBytesPerRow)
+        val expectedTextureBytes = paddedTextureBytesPerRow * textureHeight
+        val paddedTextureData = if (paddedTextureBytesPerRow == tightTextureBytesPerRow) {
+            textureRgba
+        } else {
+            val padded = ByteArray(expectedTextureBytes)
+            for (row in 0 until textureHeight) {
+                System.arraycopy(
+                    textureRgba, row * tightTextureBytesPerRow,
+                    padded, row * paddedTextureBytesPerRow,
+                    tightTextureBytesPerRow,
+                )
+            }
+            padded
+        }
+
+        val keys = fullscreenTextureExecutionCacheKeys(
+            wgsl = wgsl,
+            targetFormat = targetFormat,
+            textureFormat = gpuTextureFormat,
+        )
+        executionCaches.recordPreimages(keys)
+        val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
+        val textureBindGroupLayout = executionCaches.textureBindGroupLayout(device = device, keys = keys)
+        val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = keys)
+        val pipelineLayout = executionCaches.texturePipelineLayout(
+            device = device,
+            bindGroupLayouts = listOf(bindGroupLayout, textureBindGroupLayout),
+            keys = keys,
+        )
+        val pipeline = executionCaches.renderPipeline(
+            device = device,
+            shader = shader,
+            pipelineLayout = pipelineLayout,
+            targetFormat = targetFormat,
+            keys = keys,
+        )
+
+        val texture = resourceScope.track(
+            device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(width = textureWidth.toUInt(), height = textureHeight.toUInt()),
+                    format = gpuTextureFormat,
+                    usage = GPUTextureUsage.TextureBinding or GPUTextureUsage.CopyDst,
+                    label = "GPUBackend.texture.uniform",
+                ),
+            ),
+        ) { it.close() }
+        queue.writeTexture(
+            destination = TexelCopyTextureInfo(texture = texture),
+            data = ArrayBuffer.of(paddedTextureData),
+            dataLayout = TexelCopyBufferLayout(
+                offset = 0uL,
+                bytesPerRow = paddedTextureBytesPerRow.toUInt(),
+                rowsPerImage = textureHeight.toUInt(),
+            ),
+            size = Extent3D(width = textureWidth.toUInt(), height = textureHeight.toUInt()),
+        )
+        val textureView = resourceScope.track(texture.createView()) { it.close() }
+        val sampler = resourceScope.track(
+            device.createSampler(
+                SamplerDescriptor(
+                    addressModeU = GPUAddressMode.ClampToEdge,
+                    addressModeV = GPUAddressMode.ClampToEdge,
+                    magFilter = GPUFilterMode.Nearest,
+                    minFilter = GPUFilterMode.Nearest,
+                ),
+            ),
+        ) { it.close() }
+
+        setPipelineAction(pipeline)
+        draws.forEach { draw ->
+            val uniform = resourceScope.track(
+                device.createBuffer(
+                    BufferDescriptor(
+                        size = draw.uniformSizeBytes,
+                        usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                        label = "GPUBackend.texture.color",
+                    ),
+                ),
+            ) { it.close() }
+            queue.writeBuffer(uniform, 0uL, draw.uniformPayload)
+            val bindGroup = resourceScope.track(
+                device.createBindGroup(
+                    BindGroupDescriptor(
+                        layout = bindGroupLayout,
+                        entries = listOf(
+                            BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                        ),
+                    ),
+                ),
+            ) { it.close() }
+            val textureBindGroup = resourceScope.track(
+                device.createBindGroup(
+                    BindGroupDescriptor(
+                        layout = textureBindGroupLayout,
+                        entries = listOf(
+                            BindGroupEntry(binding = 1u, resource = textureView),
+                            BindGroupEntry(binding = 2u, resource = sampler),
+                        ),
+                    ),
+                ),
+            ) { it.close() }
+
+            setBindGroupAction(0u, bindGroup)
+            setBindGroupAction(1u, textureBindGroup)
+            setScissorAction(
+                draw.scissorX.toUInt(),
+                draw.scissorY.toUInt(),
+                draw.scissorWidth.toUInt(),
+                draw.scissorHeight.toUInt(),
+            )
+            drawAction(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+        }
+    }
+
     private fun recordFullscreenUniformPass(
         wgsl: String,
         colorFormat: String,
@@ -707,6 +884,64 @@ private class WgpuExecutionCaches(
         return decision.readyHandle()
     }
 
+    /** Returns the cached texture bind-group layout (binding 1=texture, binding 2=sampler) at @group(1). */
+    fun textureBindGroupLayout(
+        device: GPUDevice,
+        keys: FullscreenExecutionCacheKeys,
+    ): GPUBindGroupLayout {
+        val decision = bindGroupLayoutCache.getOrCreate(
+            request = request(
+                domain = GPUExecutionCacheDomain.BindGroupLayout,
+                keyHash = keys.textureBindGroupLayoutKeyHash,
+                subjectHash = keys.textureBindGroupLayoutSubjectHash,
+            ),
+        ) {
+            device.createBindGroupLayout(
+                BindGroupLayoutDescriptor(
+                    entries = listOf(
+                        BindGroupLayoutEntry(
+                            binding = 1u,
+                            visibility = GPUShaderStage.Fragment,
+                            texture = TextureBindingLayout(
+                                sampleType = GPUTextureSampleType.Float,
+                                viewDimension = GPUTextureViewDimension.TwoD,
+                                multisampled = false,
+                            ),
+                        ),
+                        BindGroupLayoutEntry(
+                            binding = 2u,
+                            visibility = GPUShaderStage.Fragment,
+                            sampler = SamplerBindingLayout(type = GPUSamplerBindingType.Filtering),
+                        ),
+                    ),
+                ),
+            )
+        }
+        record(decision)
+        return decision.readyHandle()
+    }
+
+    /** Returns the cached pipeline layout for texture passes with two bind-group layouts. */
+    fun texturePipelineLayout(
+        device: GPUDevice,
+        bindGroupLayouts: List<GPUBindGroupLayout>,
+        keys: FullscreenExecutionCacheKeys,
+    ): GPUPipelineLayout {
+        val decision = pipelineLayoutCache.getOrCreate(
+            request = request(
+                domain = GPUExecutionCacheDomain.PipelineLayout,
+                keyHash = keys.pipelineLayoutKeyHash,
+                subjectHash = keys.pipelineLayoutSubjectHash,
+            ),
+        ) {
+            device.createPipelineLayout(
+                PipelineLayoutDescriptor(bindGroupLayouts = bindGroupLayouts),
+            )
+        }
+        record(decision)
+        return decision.readyHandle()
+    }
+
     /** Returns the cached render pipeline for the module, layout, target, and blend-state facts. */
     fun renderPipeline(
         device: GPUDevice,
@@ -794,6 +1029,9 @@ private data class FullscreenExecutionCacheKeys(
     val bindGroupLayoutKeyHash: String,
     val bindGroupLayoutSubjectHash: String,
     val bindGroupLayoutPreimage: String,
+    val textureBindGroupLayoutKeyHash: String = "",
+    val textureBindGroupLayoutSubjectHash: String = "",
+    val textureBindGroupLayoutPreimage: String = "",
     val pipelineLayoutKeyHash: String,
     val pipelineLayoutSubjectHash: String,
     val pipelineLayoutPreimage: String,
@@ -802,8 +1040,8 @@ private data class FullscreenExecutionCacheKeys(
     val renderPipelinePreimage: String,
 ) {
     /** Emits backend-neutral cache-key preimage dumps without WGPU handles. */
-    fun preimageDumpLines(): List<String> =
-        listOf(
+    fun preimageDumpLines(): List<String> {
+        val lines = mutableListOf(
             preimageDumpLine(
                 domain = GPUExecutionCacheDomain.Module.telemetryDomain,
                 keyHash = moduleKeyHash,
@@ -816,6 +1054,16 @@ private data class FullscreenExecutionCacheKeys(
                 subjectHash = bindGroupLayoutSubjectHash,
                 preimage = bindGroupLayoutPreimage,
             ),
+        )
+        if (textureBindGroupLayoutKeyHash.isNotEmpty()) {
+            lines += preimageDumpLine(
+                domain = GPUExecutionCacheDomain.BindGroupLayout.telemetryDomain,
+                keyHash = textureBindGroupLayoutKeyHash,
+                subjectHash = textureBindGroupLayoutSubjectHash,
+                preimage = textureBindGroupLayoutPreimage,
+            )
+        }
+        lines += listOf(
             preimageDumpLine(
                 domain = GPUExecutionCacheDomain.PipelineLayout.telemetryDomain,
                 keyHash = pipelineLayoutKeyHash,
@@ -829,6 +1077,8 @@ private data class FullscreenExecutionCacheKeys(
                 preimage = renderPipelinePreimage,
             ),
         )
+        return lines
+    }
 
     private fun preimageDumpLine(
         domain: String,
@@ -838,6 +1088,87 @@ private data class FullscreenExecutionCacheKeys(
     ): String =
         "execution.cache.preimage domain=$domain key=$keyHash subject=$subjectHash " +
             "deviceScope=runtime-helper preimage=${preimage.dumpPreimage()}"
+}
+
+private fun fullscreenTextureExecutionCacheKeys(
+    wgsl: String,
+    targetFormat: GPUTextureFormat,
+    textureFormat: GPUTextureFormat,
+): FullscreenExecutionCacheKeys {
+    val targetFormatClass = targetFormat.toBackendColorFormat()
+    val wgslHash = stableSha256(wgsl)
+    val bindGroupLayoutPreimage = listOf(
+        "kind=bind-group-layout",
+        "role=fullscreen-uniform",
+        "version=1",
+        "binding=0",
+        "visibility=fragment",
+        "bufferType=uniform",
+        "dynamicOffsets=false",
+    ).joinToString("\n")
+    val bindGroupLayoutHash = stableSha256(bindGroupLayoutPreimage)
+    val textureBindGroupLayoutPreimage = listOf(
+        "kind=bind-group-layout",
+        "role=fullscreen-texture-sampler",
+        "version=1",
+        "binding=1:type=texture:format=${textureFormat.name}",
+        "binding=2:type=sampler:filtering",
+        "visibility=fragment",
+    ).joinToString("\n")
+    val textureBindGroupLayoutHash = stableSha256(textureBindGroupLayoutPreimage)
+    val modulePreimage = listOf(
+        "kind=wgsl-module",
+        "role=fullscreen-texture-pass",
+        "entryPoints=vs_main,fs_main",
+        "wgsl=$wgslHash",
+    ).joinToString("\n")
+    val moduleHash = stableSha256(modulePreimage)
+    val pipelineLayoutPreimage = listOf(
+        "kind=pipeline-layout",
+        "role=fullscreen-texture-pass",
+        "version=1",
+        "bindGroupLayouts=$bindGroupLayoutHash,$textureBindGroupLayoutHash",
+    ).joinToString("\n")
+    val pipelineLayoutHash = stableSha256(pipelineLayoutPreimage)
+    val renderPreimage = GPUPipelineKeyPreimage.Render(
+        renderStepIdentity = "gpu-backend.fullscreen-texture-pass",
+        renderStepVersion = "1",
+        primitiveTopology = "triangle-list",
+        materialKeyHash = stableSha256("material:fullscreen-texture-color-uniform:v1"),
+        materialProgramId = "wgsl.fullscreen-texture-color",
+        materialDictionaryVersion = "runtime-helper-v1",
+        materialLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
+        snippetIdentityHash = stableSha256("snippet:fullscreen-texture:v1"),
+        moduleHash = moduleHash,
+        vertexLayoutHash = stableSha256("vertex-layout:fullscreen-triangle:vertex-index-only"),
+        targetFormatClass = targetFormatClass,
+        blendStateHash = stableSha256("blend:src-over-premul:v1"),
+        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
+        bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
+        capabilityClass = "webgpu-wgsl-fullscreen-texture-pass",
+        capabilityFacts = listOf("adapter-backed-helper", "targetFormat=$targetFormatClass", "textureFormat=${textureFormat.name}"),
+        rendererSalt = "kgpu-m26-001",
+    )
+    val canonicalRenderPreimage = GPUPipelineKeys.canonicalRenderPreimage(renderPreimage)
+    val renderPipelineKey = GPUPipelineKeys.renderPipelineKey(renderPreimage).value
+
+    return FullscreenExecutionCacheKeys(
+        moduleKeyHash = "module:$moduleHash",
+        moduleSubjectHash = "wgsl:$wgslHash",
+        modulePreimage = modulePreimage,
+        bindGroupLayoutKeyHash = "bind-group-layout:$bindGroupLayoutHash",
+        bindGroupLayoutSubjectHash = "layout-shape:$bindGroupLayoutHash",
+        bindGroupLayoutPreimage = bindGroupLayoutPreimage,
+        textureBindGroupLayoutKeyHash = "bind-group-layout:$textureBindGroupLayoutHash",
+        textureBindGroupLayoutSubjectHash = "layout-shape:$textureBindGroupLayoutHash",
+        textureBindGroupLayoutPreimage = textureBindGroupLayoutPreimage,
+        pipelineLayoutKeyHash = "pipeline-layout:$pipelineLayoutHash",
+        pipelineLayoutSubjectHash = "bind-groups:$bindGroupLayoutHash,$textureBindGroupLayoutHash",
+        pipelineLayoutPreimage = pipelineLayoutPreimage,
+        renderPipelineKeyHash = renderPipelineKey,
+        renderPipelineSubjectHash = stableSha256(canonicalRenderPreimage),
+        renderPipelinePreimage = canonicalRenderPreimage,
+    )
 }
 
 private fun fullscreenExecutionCacheKeys(
@@ -1068,6 +1399,7 @@ private fun GPUTextureFormat.bytesPerPixel(): Int =
         GPUTextureFormat.RGBA8UnormSrgb,
         GPUTextureFormat.BGRA8Unorm,
         GPUTextureFormat.BGRA8UnormSrgb -> RGBA_BYTES_PER_PIXEL
+        GPUTextureFormat.R8Unorm -> 1
         else -> error("Unsupported bytes-per-pixel mapping for texture format $this")
     }
 
@@ -1077,6 +1409,7 @@ private fun String.toWgpuTextureFormat(): GPUTextureFormat =
         "rgba8unorm-srgb" -> GPUTextureFormat.RGBA8UnormSrgb
         "bgra8unorm" -> GPUTextureFormat.BGRA8Unorm
         "bgra8unorm-srgb" -> GPUTextureFormat.BGRA8UnormSrgb
+        "r8unorm" -> GPUTextureFormat.R8Unorm
         else -> error("Unsupported GPU color format $this")
     }
 

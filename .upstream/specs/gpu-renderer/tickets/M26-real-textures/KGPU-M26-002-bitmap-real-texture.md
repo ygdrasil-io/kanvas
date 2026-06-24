@@ -1,7 +1,7 @@
 ---
 id: KGPU-M26-002
 title: "Wire real texture into BitmapShader offscreen renderer"
-status: proposed
+status: done
 milestone: M26
 priority: P0
 owner_area: execution-renderer
@@ -93,7 +93,7 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+- `done`: M26-002 implemented: BITMAP_SHADER_WRAPPER removed, real BitmapShaderWgsl sampled via texture+sampler binding, clamp tile mode renders with real decoded image. Scene PNGs show real image content (not checkerboard).
 
 ## Linear Labels
 

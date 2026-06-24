@@ -17,20 +17,20 @@ Depends on M25 wiring (real executors in the offscreen renderer), M17's
 
 ## Exit Criteria
 
-- [ ] PNG/JPEG bytes upload to a GPU texture via `ImageUploadMaterializer` (staging buffer -> texture)
-- [ ] BitmapShader offscreen render samples real decoded image bytes (no procedural `CHECKERBOARD`)
-- [ ] Text offscreen render samples a real A8 atlas built from Liberation Sans (no procedural coverage)
-- [ ] Bitmap/tile-mode scene PNGs show real images instead of checkerboard
-- [ ] All replaced scene PNGs are committed and show real decoded content
+- [x] PNG/JPEG bytes upload to a GPU texture via `ImageUploadMaterializer` (staging buffer -> texture)
+- [x] BitmapShader offscreen render samples real decoded image bytes (no procedural `CHECKERBOARD`)
+- [x] Text offscreen render samples a real A8 atlas built from Liberation Sans (no procedural coverage)
+- [x] Bitmap/tile-mode scene PNGs show real images instead of checkerboard
+- [x] All replaced scene PNGs are committed and show real decoded content
 
 ## Tickets
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M26-001 - Upload PNG/JPEG to GPU texture via ImageUploadMaterializer](KGPU-M26-001-image-upload-texture.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M25-001, KGPU-M17-003] | null |
-| [KGPU-M26-002 - Wire real texture into BitmapShader offscreen renderer](KGPU-M26-002-bitmap-real-texture.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M26-001] | null |
-| [KGPU-M26-003 - Wire real A8 glyph atlas into Text offscreen renderer](KGPU-M26-003-text-real-atlas.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M25-002, KGPU-M12-003] | null |
-| [KGPU-M26-004 - Replace bitmap/tile-mode scene PNGs with real-image renders](KGPU-M26-004-scene-real-image-pngs.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `scenes-evidence` | [KGPU-M26-001, KGPU-M26-002] | null |
+| [KGPU-M26-001 - Upload PNG/JPEG to GPU texture via ImageUploadMaterializer](KGPU-M26-001-image-upload-texture.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M25-001, KGPU-M17-003] | null |
+| [KGPU-M26-002 - Wire real texture into BitmapShader offscreen renderer](KGPU-M26-002-bitmap-real-texture.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M26-001] | null |
+| [KGPU-M26-003 - Wire real A8 glyph atlas into Text offscreen renderer](KGPU-M26-003-text-real-atlas.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M25-002, KGPU-M12-003] | null |
+| [KGPU-M26-004 - Replace bitmap/tile-mode scene PNGs with real-image renders](KGPU-M26-004-scene-real-image-pngs.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `scenes-evidence` | [KGPU-M26-001, KGPU-M26-002] | null |
 
 ## Validation Bundle
 

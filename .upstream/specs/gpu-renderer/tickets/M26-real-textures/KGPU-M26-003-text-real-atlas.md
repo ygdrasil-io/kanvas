@@ -1,7 +1,7 @@
 ---
 id: KGPU-M26-003
 title: "Wire real A8 glyph atlas into Text offscreen renderer"
-status: proposed
+status: done
 milestone: M26
 priority: P0
 owner_area: execution-renderer
@@ -94,7 +94,7 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+- `done`: M26-003 implemented: TEXT_ATLAS_WRAPPER removed, real A8 glyph atlas built from Liberation Sans (GlyphAtlasTextureBuilder via M12 A8Rasterizer+GlyphAtlasUploadPlanner), uploaded as R8Unorm texture, sampled by TextAtlasA8Wgsl fragment shader.
 
 ## Linear Labels
 

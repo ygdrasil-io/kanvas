@@ -1,7 +1,7 @@
 ---
 id: KGPU-M26-004
 title: "Replace bitmap/tile-mode scene PNGs with real-image renders"
-status: proposed
+status: done
 milestone: M26
 priority: P0
 owner_area: scenes-evidence
@@ -95,7 +95,7 @@ rtk cat reports/gpu-renderer-scenes/offscreen/bitmap-sampler-matrix/run.json | r
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+- `done`: M26-004 completed: bitmap-sampler-matrix, tile-mode-strip, glyph-atlas-strip, sdf-glyph-scale PNGs regenerated with real decoded textures/atlases. All 4 scenes render and produce committed real-image PNGs.
 
 ## Linear Labels
 

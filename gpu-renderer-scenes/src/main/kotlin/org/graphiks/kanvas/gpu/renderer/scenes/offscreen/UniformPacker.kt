@@ -112,6 +112,22 @@ object UniformPacker {
         return buf.array()
     }
 
+    fun bitmapTextureBytes(
+        color: SceneColor,
+        texLeft: Float,
+        texTop: Float,
+        texWidth: Float,
+        texHeight: Float,
+    ): ByteArray {
+        val buf = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putFloat(color.r); buf.putFloat(color.g); buf.putFloat(color.b); buf.putFloat(color.a)
+        buf.putFloat(texLeft); buf.putFloat(texTop); buf.putFloat(texWidth); buf.putFloat(texHeight)
+        return buf.array()
+    }
+
+    fun textAtlasBytes(color: SceneColor, texLeft: Float, texTop: Float, texWidth: Float, texHeight: Float): ByteArray =
+        bitmapTextureBytes(color, texLeft, texTop, texWidth, texHeight)
+
     fun strokeBytes(color: SceneColor, capJoin: Int, centerX: Float, centerY: Float, halfW: Float, halfH: Float): ByteArray {
         val buf = ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN)
         buf.putFloat(color.r); buf.putFloat(color.g); buf.putFloat(color.b); buf.putFloat(color.a)

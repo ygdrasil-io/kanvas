@@ -1,7 +1,7 @@
 ---
 id: KGPU-M26-001
 title: "Upload PNG/JPEG to GPU texture via ImageUploadMaterializer"
-status: proposed
+status: done
 milestone: M26
 priority: P0
 owner_area: execution-renderer
@@ -92,7 +92,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+- `done`: M26-001 implemented: PNG decode via SkCodec, real texture upload+binding through drawFullscreenTextureUniformPass, ImageUploadMaterializer wired for upload transcript evidence.
 
 ## Linear Labels
 

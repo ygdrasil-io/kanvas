@@ -131,6 +131,17 @@ interface GPUBackendRenderRecorder {
         colorFormat: String,
         draws: List<GPUBackendRawUniformDraw>,
     )
+
+    /** Draws a fullscreen pass with a generated texture+sampler binding alongside packed uniforms. */
+    fun drawFullscreenTextureUniformPass(
+        wgsl: String,
+        colorFormat: String,
+        textureRgba: ByteArray,
+        textureWidth: Int,
+        textureHeight: Int,
+        textureFormat: String,
+        draws: List<GPUBackendRawUniformDraw>,
+    )
 }
 
 /** Raw uniform bytes for a fullscreen draw, bypassing provider materialization contracts. */
