@@ -1,10 +1,17 @@
 package org.skia.foundation
 
+import org.graphiks.kanvas.font.TypefaceID
+import org.graphiks.kanvas.text.shaping.BasicOpenTypeShapingEngine
+import org.graphiks.kanvas.text.shaping.GlyphMapper
+import org.graphiks.kanvas.text.shaping.ShapingRequest as PureKotlinShapingRequest
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import kotlin.uuid.Uuid
 
 class SkShaperTest {
     @Test
@@ -200,6 +207,93 @@ class SkShaperTest {
         assertEquals(1, ligatured.glyphCount)
         assertArrayEquals(intArrayOf(222), ligatured.runs.single().glyphs)
         assertArrayEquals(intArrayOf(0), ligatured.runs.single().clusters)
+    }
+
+    @Test
+    fun `shapeWithShapingRequest routes latin text through pure kotlin engine`() {
+        val typefaceId = TypefaceID(Uuid.parse("00000000-0000-0000-0000-000000000001"))
+        val mapper = object : GlyphMapper {
+            override fun glyphIdFor(typefaceId: TypefaceID?, codePoint: Int): Int? = when (codePoint) {
+                'A'.code -> 1
+                'B'.code -> 2
+                else -> null
+            }
+        }
+        val engine = BasicOpenTypeShapingEngine(glyphMapper = mapper)
+        val shaper = SkShaper.MakeWithPureKotlinShaping(engine)
+
+        val request = PureKotlinShapingRequest(
+            text = "AB",
+            textRange = 0..1,
+            typefaceId = typefaceId,
+            fontSize = 12f,
+        )
+        val result = shaper.shapeWithShapingRequest(request)
+
+        assertEquals(1, result.glyphRuns.size)
+        assertEquals(listOf(1, 2), result.glyphRuns.single().glyphIds)
+        assertEquals(2, result.glyphRuns.single().clusters.size)
+        assertTrue(result.diagnostics.isEmpty(), "Expected no diagnostics, got: ${result.diagnostics}")
+    }
+
+    @Test
+    fun `shapeWithShapingRequest without engine returns no-engine diagnostic`() {
+        val shaper = SkShaper.MakePrimitive()
+        val request = PureKotlinShapingRequest(
+            text = "AB",
+            textRange = 0..1,
+            fontSize = 12f,
+        )
+        val result = shaper.shapeWithShapingRequest(request)
+
+        assertTrue(result.glyphRuns.isEmpty())
+        assertEquals(1, result.diagnostics.size)
+        assertEquals("text.shaping.facade-no-engine", result.diagnostics.single().code)
+    }
+
+    @Test
+    fun `hbShape falls back to legacy when engine is not configured`() {
+        val font = SkFont(TestTypeface(mapOf('A'.code to 1)), 12f)
+        val shaper = SkShaper.MakePrimitive()
+
+        val result = shaper.hbShape("A", font)
+
+        assertEquals(1, result.glyphCount)
+    }
+
+    @Test
+    fun `facadeParityEvidence returns null when engine is not configured`() {
+        val shaper = SkShaper.MakePrimitive()
+        assertNull(shaper.facadeParityEvidence())
+    }
+
+    @Test
+    fun `facadeParityEvidence returns dump when engine is configured`() {
+        val mapper = object : GlyphMapper {
+            override fun glyphIdFor(typefaceId: TypefaceID?, codePoint: Int): Int? = null
+        }
+        val engine = BasicOpenTypeShapingEngine(glyphMapper = mapper)
+        val shaper = SkShaper.MakeWithPureKotlinShaping(engine)
+
+        val dump = shaper.facadeParityEvidence()
+        assertNotNull(dump)
+        assertEquals(true, dump?.engineAvailable)
+        assertNotNull(dump?.engineClassName)
+    }
+
+    @Test
+    fun `MakeWithPureKotlinShaping creates shaper without breaking existing shape method`() {
+        val mapper = object : GlyphMapper {
+            override fun glyphIdFor(typefaceId: TypefaceID?, codePoint: Int): Int? = null
+        }
+        val engine = BasicOpenTypeShapingEngine(glyphMapper = mapper)
+        val shaper = SkShaper.MakeWithPureKotlinShaping(engine)
+
+        val font = SkFont(TestTypeface(mapOf('A'.code to 10)), 12f)
+        val result = shaper.shape("A", font)
+
+        assertEquals(1, result.glyphCount)
+        assertArrayEquals(intArrayOf(10), result.runs.single().glyphs)
     }
 
     private class TestTypeface(
