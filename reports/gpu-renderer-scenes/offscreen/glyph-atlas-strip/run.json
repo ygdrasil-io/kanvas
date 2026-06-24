@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "sceneId": "glyph-atlas-strip",
-  "status": "not-yet-rendered",
+  "status": "rendered",
   "productRefusal": false,
   "backend": "webgpu-offscreen",
-  "imagePath": null,
-  "width": null,
-  "height": null,
-  "byteCount": null,
-  "nonTransparentPixels": null,
-  "diagnostics": ["sceneId=glyph-atlas-strip","commandFamily=text-run","label=glyph-atlas-strip-run","text=ABCabc123","fontSourceId=kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf","fontFamily=Liberation Sans","fontSize=32.0","baseline=24.0,100.0","shapingMode=simple-latin","glyphRoute=font.glyph.a8-atlas","webGpuCandidateRoute=webgpu.text.glyph-atlas.a8-sampled","fallbackReason=unsupported.text.draw_run_route_unavailable","lowerLevelTextRoutesAvailable=font.glyph.a8-atlas,webgpu.text.glyph-atlas.a8-sampled","sceneRoutePromoted=false","nonClaims=no fake glyph substitute,no CPU-rendered text texture,no system font fallback,no broad shaping fallback emoji SDF LCD Kadre-windowed claim"]
+  "imagePath": "render.png",
+  "width": 320,
+  "height": 200,
+  "byteCount": 256000,
+  "nonTransparentPixels": 64000,
+  "diagnostics": ["rendered glyph-atlas-strip via WebGPU offscreen","adapter=Apple M2 Max","clearCommands=1","fillRectCommands=1","fillRRectCommands=0","linearGradientRectCommands=0","radialGradientRectCommands=0","sweepGradientRectCommands=0","clipCommands=0","bitmapRectCommands=0","blurRectCommands=0","colorMatrixRectCommands=0","strokeRectCommands=0","textRunCommands=1","saveLayerRectCommands=0","pathFillStencilCommands=0","convexFanMeshCommands=0"]
 }

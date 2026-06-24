@@ -1,12 +1,17 @@
 rendered dash-pattern-ladder via WebGPU offscreen
 adapter=Apple M2 Max
 clearCommands=1
-fillRectCommands=5
+fillRectCommands=0
 fillRRectCommands=0
 linearGradientRectCommands=0
 radialGradientRectCommands=0
 sweepGradientRectCommands=0
 clipCommands=0
 bitmapRectCommands=0
+blurRectCommands=0
+colorMatrixRectCommands=0
+strokeRectCommands=5
+textRunCommands=0
+saveLayerRectCommands=0
 pathFillStencilCommands=0
 convexFanMeshCommands=0

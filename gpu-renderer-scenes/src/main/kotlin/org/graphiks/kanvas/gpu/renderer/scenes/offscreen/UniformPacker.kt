@@ -49,4 +49,49 @@ object UniformPacker {
         buf.putFloat(endColor.r); buf.putFloat(endColor.g); buf.putFloat(endColor.b); buf.putFloat(endColor.a)
         return buf.array()
     }
+
+    fun blurBytes(color: SceneColor, centerX: Float, centerY: Float, radius: Float): ByteArray {
+        val buf = ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putFloat(color.r); buf.putFloat(color.g); buf.putFloat(color.b); buf.putFloat(color.a)
+        buf.putFloat(centerX); buf.putFloat(centerY); buf.putFloat(0f); buf.putFloat(0f)
+        buf.putFloat(radius); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f)
+        return buf.array()
+    }
+
+    fun colorMatrixBytes(color: SceneColor, kind: Int): ByteArray {
+        val buf = ByteBuffer.allocate(96).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putFloat(color.r); buf.putFloat(color.g); buf.putFloat(color.b); buf.putFloat(color.a)
+        when (kind) {
+            1 -> {
+                buf.putFloat(0.3f); buf.putFloat(0.3f); buf.putFloat(0.3f); buf.putFloat(0f)
+                buf.putFloat(0.6f); buf.putFloat(0.6f); buf.putFloat(0.6f); buf.putFloat(0f)
+                buf.putFloat(0.1f); buf.putFloat(0.1f); buf.putFloat(0.1f); buf.putFloat(0f)
+                buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(1f)
+                buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f)
+            }
+            2 -> {
+                buf.putFloat(0.213f); buf.putFloat(0.715f); buf.putFloat(0.072f); buf.putFloat(0f)
+                buf.putFloat(0.213f); buf.putFloat(0.715f); buf.putFloat(0.072f); buf.putFloat(0f)
+                buf.putFloat(0.213f); buf.putFloat(0.715f); buf.putFloat(0.072f); buf.putFloat(0f)
+                buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(1f)
+                buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f)
+            }
+            else -> {
+                buf.putFloat(1f); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f)
+                buf.putFloat(0f); buf.putFloat(1f); buf.putFloat(0f); buf.putFloat(0f)
+                buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(1f); buf.putFloat(0f)
+                buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(1f)
+                buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f)
+            }
+        }
+        return buf.array()
+    }
+
+    fun strokeBytes(color: SceneColor, capJoin: Int, centerX: Float, centerY: Float, halfW: Float, halfH: Float): ByteArray {
+        val buf = ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putFloat(color.r); buf.putFloat(color.g); buf.putFloat(color.b); buf.putFloat(color.a)
+        buf.putFloat(capJoin.toFloat()); buf.putFloat(4f); buf.putFloat(centerX); buf.putFloat(centerY)
+        buf.putFloat(8f); buf.putFloat(4f); buf.putFloat(0f); buf.putFloat(0f)
+        return buf.array()
+    }
 }

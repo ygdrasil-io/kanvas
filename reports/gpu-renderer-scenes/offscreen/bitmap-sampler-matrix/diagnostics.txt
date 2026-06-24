@@ -1,1 +1,17 @@
-rect-only offscreen render supports only clear, fill-rect, and clip command families: fill-rrect, bitmap-rect
+rendered bitmap-sampler-matrix via WebGPU offscreen
+adapter=Apple M2 Max
+clearCommands=1
+fillRectCommands=0
+fillRRectCommands=1
+linearGradientRectCommands=0
+radialGradientRectCommands=0
+sweepGradientRectCommands=0
+clipCommands=1
+bitmapRectCommands=4
+blurRectCommands=0
+colorMatrixRectCommands=0
+strokeRectCommands=0
+textRunCommands=0
+saveLayerRectCommands=0
+pathFillStencilCommands=0
+convexFanMeshCommands=0
