@@ -1,7 +1,7 @@
 ---
 id: "KFONT-M13-005"
 title: "Retire stale font docs and stubs after evidence promotion"
-status: "blocked"
+status: "done"
 milestone: "M13"
 priority: "P1"
 owner_area: "docs-validation"
