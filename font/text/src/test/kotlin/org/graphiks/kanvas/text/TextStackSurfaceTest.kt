@@ -34,6 +34,8 @@ import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassRule
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassSubtable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextCoverageLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextCoverageRule
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubChainingContextGlyphLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubChainingContextGlyphRule
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextGlyphLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextGlyphRule
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubLigatureSubstitution
@@ -2361,6 +2363,161 @@ class TextStackSurfaceTest {
             ),
             result.diagnostics,
         )
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineAppliesChainingContextGlyphLookupWhenBacktrackInputAndLookaheadMatch() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440650"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                'a'.code to 1,
+                'b'.code to 2,
+                'c'.code to 3,
+                'x'.code to 100,
+            ),
+            gsubTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubSingleSubstitutionLookup(
+                            featureTag = "",
+                            lookupIndex = 0,
+                            substitutions = listOf(
+                                OpenTypeGsubSingleSubstitution(inputGlyphId = 2, replacementGlyphId = 22),
+                            ),
+                        ),
+                        OpenTypeGsubChainingContextGlyphLookup(
+                            featureTag = "calt",
+                            lookupIndex = 1,
+                            rules = listOf(
+                                OpenTypeGsubChainingContextGlyphRule(
+                                    backtrackGlyphIds = listOf(1),
+                                    inputGlyphIds = listOf(2),
+                                    lookAheadGlyphIds = listOf(3),
+                                    nestedLookups = listOf(
+                                        OpenTypeGsubNestedLookupRecord(sequenceIndex = 0, lookupIndex = 0),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val positive = engine.shape(
+            ShapingRequest(
+                text = "abc",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+                features = FeatureSet(mapOf("calt" to 1)),
+            ),
+        )
+        assertEquals(emptyList(), positive.diagnostics)
+        assertEquals(listOf(1, 22, 3), positive.glyphRuns.single().glyphIds)
+
+        val backtrackMismatch = engine.shape(
+            ShapingRequest(
+                text = "xbc",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+                features = FeatureSet(mapOf("calt" to 1)),
+            ),
+        )
+        assertEquals(emptyList(), backtrackMismatch.diagnostics)
+        assertEquals(listOf(100, 2, 3), backtrackMismatch.glyphRuns.single().glyphIds)
+
+        val lookaheadMismatch = engine.shape(
+            ShapingRequest(
+                text = "abx",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+                features = FeatureSet(mapOf("calt" to 1)),
+            ),
+        )
+        assertEquals(emptyList(), lookaheadMismatch.diagnostics)
+        assertEquals(listOf(1, 2, 100), lookaheadMismatch.glyphRuns.single().glyphIds)
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineSkipsChainingContextGlyphLookupWhenInputExtendsBeyondEndOfGlyphUnits() {
+        val typefaceId = TypefaceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440651"))
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = mapGlyphs(
+                'a'.code to 1,
+                'b'.code to 2,
+                'c'.code to 3,
+            ),
+            gsubTablesByTypefaceId = mapOf(
+                typefaceId to OpenTypeGsubTable(
+                    lookups = listOf(
+                        OpenTypeGsubSingleSubstitutionLookup(
+                            featureTag = "",
+                            lookupIndex = 0,
+                            substitutions = listOf(
+                                OpenTypeGsubSingleSubstitution(inputGlyphId = 2, replacementGlyphId = 22),
+                            ),
+                        ),
+                        OpenTypeGsubChainingContextGlyphLookup(
+                            featureTag = "calt",
+                            lookupIndex = 1,
+                            rules = listOf(
+                                OpenTypeGsubChainingContextGlyphRule(
+                                    backtrackGlyphIds = listOf(1),
+                                    inputGlyphIds = listOf(2, 3),
+                                    lookAheadGlyphIds = emptyList(),
+                                    nestedLookups = listOf(
+                                        OpenTypeGsubNestedLookupRecord(sequenceIndex = 0, lookupIndex = 0),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val missingTail = engine.shape(
+            ShapingRequest(
+                text = "a",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+                features = FeatureSet(mapOf("calt" to 1)),
+            ),
+        )
+        assertEquals(emptyList(), missingTail.diagnostics)
+        assertEquals(listOf(1), missingTail.glyphRuns.single().glyphIds)
+
+        val exactMatch = engine.shape(
+            ShapingRequest(
+                text = "abc",
+                typefaceId = typefaceId,
+                fontSize = 20f,
+                features = FeatureSet(mapOf("calt" to 1)),
+            ),
+        )
+        assertEquals(emptyList(), exactMatch.diagnostics)
+        assertEquals(listOf(1, 22, 3), exactMatch.glyphRuns.single().glyphIds)
+    }
+
+    @Test
+    fun basicOpenTypeShapingEngineAppliesChainingContextGlyphLookupFromFixtureFont() {
+        val face = parsedFixtureFace(
+            uuid = "550e8400-e29b-41d4-a716-446655440652",
+            relativePath = "reports/font/fixtures/fonts/shaping/gsub-chaining-context.otf",
+        )
+        val engine = BasicOpenTypeShapingEngine(
+            glyphMapper = CMapGlyphMapper(cmapsByTypefaceId = mapOf(face.typefaceId to face.cmap)),
+            gsubTablesByTypefaceId = mapOf(face.typefaceId to requireNotNull(face.gsub)),
+            kernUnitsPerEmByTypefaceId = mapOf(face.typefaceId to face.unitsPerEm),
+        )
+        val result = engine.shape(
+            ShapingRequest(
+                text = "abc",
+                typefaceId = face.typefaceId,
+                fontSize = 20f,
+            ),
+        )
+        assertEquals(emptyList(), result.diagnostics)
     }
 
     @Test
