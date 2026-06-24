@@ -4,5 +4,7 @@ clearCommands=1
 fillRectCommands=0
 fillRRectCommands=0
 linearGradientRectCommands=3
+radialGradientRectCommands=0
+sweepGradientRectCommands=0
 clipCommands=0
 bitmapRectCommands=0

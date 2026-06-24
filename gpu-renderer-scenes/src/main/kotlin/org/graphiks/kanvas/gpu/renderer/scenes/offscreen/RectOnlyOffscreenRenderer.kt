@@ -6,6 +6,7 @@ import javax.imageio.ImageIO
 import kotlin.io.path.createDirectories
 import kotlin.math.ceil
 import kotlin.math.floor
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
@@ -97,19 +98,68 @@ class RectOnlyOffscreenRenderer {
         drawPlan: RectOnlyDrawPlan,
     ): ByteArray {
         target.encode(clearColor = drawPlan.clearColor.toGpuClearColor()) {
-            drawFullscreenPass(
-                wgsl = SOLID_RECT_WGSL,
-                colorFormat = OFFSCREEN_COLOR_FORMAT,
-                draws = drawPlan.fills.map { fill ->
-                    GPUBackendRectDraw(
-                        rgbaPremul = fill.toPremulColorArray(),
-                        scissorX = fill.scissorX,
-                        scissorY = fill.scissorY,
-                        scissorWidth = fill.scissorWidth,
-                        scissorHeight = fill.scissorHeight,
-                    )
-                },
+            val gradientTypes = setOf(
+                "linear-gradient-rect", "radial-gradient-rect", "sweep-gradient-rect",
             )
+            val solidFills = drawPlan.fills.filter { it.family !in gradientTypes && it.family != "vertices" }
+            if (solidFills.isNotEmpty()) {
+                drawFullscreenPass(
+                    wgsl = WgslComposer.solidColorWgsl(),
+                    colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    draws = solidFills.map { fill ->
+                        GPUBackendRectDraw(
+                            rgbaPremul = fill.toPremulColorArray(),
+                            scissorX = fill.scissorX,
+                            scissorY = fill.scissorY,
+                            scissorWidth = fill.scissorWidth,
+                            scissorHeight = fill.scissorHeight,
+                        )
+                    },
+                )
+            }
+            val gradientFills = drawPlan.fills.filter { it.family in gradientTypes }
+            gradientFills.groupBy { it.family }.forEach { (family, fills) ->
+                val wgsl = when (family) {
+                    "linear-gradient-rect" -> WgslComposer.linearGradientWgsl()
+                    "radial-gradient-rect" -> WgslComposer.radialGradientWgsl()
+                    "sweep-gradient-rect" -> WgslComposer.sweepGradientWgsl()
+                    else -> error("Unknown gradient family: $family")
+                }
+                drawFullscreenRawUniformPass(
+                    wgsl = wgsl,
+                    colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    draws = fills.map { fill ->
+                        val bytes = when (family) {
+                            "linear-gradient-rect" -> UniformPacker.linearGradientBytes(
+                                startX = fill.left, startY = fill.top,
+                                endX = fill.right, endY = fill.bottom,
+                                startColor = fill.startColor, endColor = fill.endColor,
+                            )
+                            "radial-gradient-rect" -> UniformPacker.radialGradientBytes(
+                                centerX = fill.gradientCenterX ?: ((fill.left + fill.right) / 2f),
+                                centerY = fill.gradientCenterY ?: ((fill.top + fill.bottom) / 2f),
+                                radius = fill.gradientRadius ?: ((fill.right - fill.left) / 2f),
+                                startColor = fill.startColor, endColor = fill.endColor,
+                            )
+                            "sweep-gradient-rect" -> UniformPacker.sweepGradientBytes(
+                                centerX = fill.gradientCenterX ?: ((fill.left + fill.right) / 2f),
+                                centerY = fill.gradientCenterY ?: ((fill.top + fill.bottom) / 2f),
+                                startAngle = fill.gradientStartAngle ?: 0f,
+                                endAngle = fill.gradientEndAngle ?: 360f,
+                                startColor = fill.startColor, endColor = fill.endColor,
+                            )
+                            else -> error("Unknown gradient family: $family")
+                        }
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = bytes,
+                            scissorX = fill.scissorX,
+                            scissorY = fill.scissorY,
+                            scissorWidth = fill.scissorWidth,
+                            scissorHeight = fill.scissorHeight,
+                        )
+                    },
+                )
+            }
         }
         return target.readRgba()
     }
@@ -279,6 +329,11 @@ internal data class RectOnlyFillDraw(
     val runtimeEffectUniformLayout: String? = null,
     val runtimeEffectPipelineKey: String? = null,
     val meshRibbonKind: String? = null,
+    val gradientCenterX: Float? = null,
+    val gradientCenterY: Float? = null,
+    val gradientRadius: Float? = null,
+    val gradientStartAngle: Float? = null,
+    val gradientEndAngle: Float? = null,
 )
 
 private data class RectOnlyIndexedDraw(
@@ -331,6 +386,8 @@ internal fun prepareRectOnlyDrawPlan(
             }.thenBy { it.index },
         )
         .map { (_, command, clip) ->
+            val radialCommand = command as? SceneCommand.RadialGradientRect
+            val sweepCommand = command as? SceneCommand.SweepGradientRect
             rectOnlyFillDraw(
                 sceneId = sceneId,
                 label = command.label,
@@ -347,6 +404,11 @@ internal fun prepareRectOnlyDrawPlan(
                 clip = clip,
                 width = width,
                 height = height,
+                gradientCenterX = radialCommand?.centerX ?: sweepCommand?.centerX,
+                gradientCenterY = radialCommand?.centerY ?: sweepCommand?.centerY,
+                gradientRadius = radialCommand?.radius,
+                gradientStartAngle = sweepCommand?.startAngle,
+                gradientEndAngle = sweepCommand?.endAngle,
             )
         }
     require(fills.isNotEmpty()) {
@@ -386,6 +448,11 @@ private fun rectOnlyFillDraw(
     runtimeEffectUniformLayout: String? = null,
     runtimeEffectPipelineKey: String? = null,
     meshRibbonKind: String? = null,
+    gradientCenterX: Float? = null,
+    gradientCenterY: Float? = null,
+    gradientRadius: Float? = null,
+    gradientStartAngle: Float? = null,
+    gradientEndAngle: Float? = null,
 ): RectOnlyFillDraw {
     requireInsideTarget(sceneId, label, rect, width, height, "fill shape")
     clip?.let { requireInsideTarget(sceneId, it.label, it.rect, width, height, "clip") }
@@ -423,6 +490,11 @@ private fun rectOnlyFillDraw(
         runtimeEffectUniformLayout = runtimeEffectUniformLayout,
         runtimeEffectPipelineKey = runtimeEffectPipelineKey,
         meshRibbonKind = meshRibbonKind,
+        gradientCenterX = gradientCenterX,
+        gradientCenterY = gradientCenterY,
+        gradientRadius = gradientRadius,
+        gradientStartAngle = gradientStartAngle,
+        gradientEndAngle = gradientEndAngle,
     )
 }
 

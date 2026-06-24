@@ -124,6 +124,28 @@ interface GPUBackendRenderRecorder {
         colorFormat: String,
         draws: List<GPUBackendUniformPayloadDraw>,
     )
+
+    /** Draws a fullscreen pass with raw uniform bytes per draw, bypassing provider materialization. */
+    fun drawFullscreenRawUniformPass(
+        wgsl: String,
+        colorFormat: String,
+        draws: List<GPUBackendRawUniformDraw>,
+    )
+}
+
+/** Raw uniform bytes for a fullscreen draw, bypassing provider materialization contracts. */
+data class GPUBackendRawUniformDraw(
+    val uniformBytes: ByteArray,
+    val scissorX: Int,
+    val scissorY: Int,
+    val scissorWidth: Int,
+    val scissorHeight: Int,
+) {
+    init {
+        require(uniformBytes.isNotEmpty()) { "GPUBackendRawUniformDraw.uniformBytes must not be empty" }
+        require(scissorWidth > 0) { "GPUBackendRawUniformDraw.scissorWidth must be positive" }
+        require(scissorHeight > 0) { "GPUBackendRawUniformDraw.scissorHeight must be positive" }
+    }
 }
 
 /** Encodes the rect-scoped payload consumed by the fullscreen pass helper. */
