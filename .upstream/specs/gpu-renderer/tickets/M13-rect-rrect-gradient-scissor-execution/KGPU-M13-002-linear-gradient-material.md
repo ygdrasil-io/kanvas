@@ -1,7 +1,7 @@
 ---
 id: KGPU-M13-002
 title: "Add LinearGradient material execution: WGSL snippet + uniform layout + payload"
-status: review
+status: done
 milestone: M13
 priority: P0
 owner_area: materials-wgsl
@@ -82,6 +82,14 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*LinearGradient*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done` (2026-06-24): LinearGradient WGSL snippet added in LinearGradientSnippet.kt with `compute_t_raw`, `sample_stops_at`, `linear_gradient_clamp` functions. GPULinearGradientMaterialLowering + GPULinearGradientMaterialDictionary created with dictionary expansion and material key derivation. Planner checks `first_slice.linear_gradient.native` capability for FillRect with LinearGradient material. Product flag `kanvas.gpu.renderer.product.linearGradient` with `.disable` rollback in ProductFlags.kt.
+
+## Evidence
+
+- 6 LinearGradientMaterialLoweringTest tests pass
+- 2 new FirstRoutePlannerTest tests pass (LinearGradient acceptance + refusal)
+- 7 ProductFlagConfigTest tests pass
+- LinearGradient capability `first_slice.linear_gradient.native` gated by product flag
 
 ## Linear Labels
 

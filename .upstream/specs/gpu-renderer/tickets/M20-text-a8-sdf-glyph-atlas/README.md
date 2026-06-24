@@ -25,6 +25,7 @@ Depends on M12 text dependencies (KGPU-M12-001 through KGPU-M12-004). Wave 3 mil
 | [KGPU-M20-003 - Add DrawTextRun execution: subrun batch -> atlas bind -> draw fullscreen pass](KGPU-M20-003-draw-text-run.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `text-rendering` | [KGPU-M20-001, KGPU-M20-002] | null |
 | [KGPU-M20-004 - Add text shaper integration: SkShaper -> GlyphRunDescriptor -> GPU route](KGPU-M20-004-text-shaper-integration.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `text-shaper` | [KGPU-M12-001, KGPU-M12-004] | null |
 | [KGPU-M20-005 - Activate M20 routes: A8 + SDF text default ON with rollback](KGPU-M20-005-route-activation.md) | `proposed` | `P0` | `PolicyGated` | `GPUNative` | `false` | `true` | `product-validation` | [KGPU-M20-001, KGPU-M20-002, KGPU-M20-003, KGPU-M20-004] | legacy drawText |
+| [KGPU-M20-006 - Add gpu-renderer-scenes evidence: glyph-atlas-strip, sdf-glyph-scale](KGPU-M20-006-scenes-evidence.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `scenes-evidence` | [KGPU-M20-001, KGPU-M20-002, KGPU-M20-003, KGPU-M20-004] | null |
 
 ## Validation Bundle
 

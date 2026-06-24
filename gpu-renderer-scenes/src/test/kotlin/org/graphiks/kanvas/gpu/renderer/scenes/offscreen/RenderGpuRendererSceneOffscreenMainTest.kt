@@ -77,6 +77,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
         val rectOnlyScenes = listOf(
             RenderedShapeExpectation("activation-candidate-boundary-board", fillRectCount = 6),
             RenderedShapeExpectation("first-route-rollback-panel", fillRectCount = 4),
+            RenderedShapeExpectation("rounded-panel-gradient", fillRectCount = 0, fillRRectCount = 1, linearGradientRectCount = 1, clipCount = 1),
             RenderedShapeExpectation("gradient-tile-mode-boundary", fillRectCount = 6),
             RenderedShapeExpectation("path-aa-stroke-join-board", fillRectCount = 6),
             RenderedShapeExpectation("blend-mode-strip", fillRectCount = 1),
@@ -99,7 +100,6 @@ class RenderGpuRendererSceneOffscreenMainTest {
     fun `catalogued richer scenes stay not yet rendered offscreen until the faithful subset grows`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
         val unsupportedScenes = listOf(
-            "rounded-panel-gradient" to listOf("fill-rrect", "linear-gradient-rect"),
             "texture-swatch-board" to listOf("bitmap-rect"),
             "layered-shadow-card" to listOf("save-layer", "filter-node"),
             "runtime-effect-color-tile" to listOf("runtime-effect"),
@@ -209,7 +209,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "at least one FillRect")
+        assertContains(failure.message ?: "", "at least one FillRect, FillRRect, or LinearGradientRect")
     }
 
     @Test
@@ -223,7 +223,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, and clip command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
         assertContains(failure.message ?: "", "bitmap-rect")
     }
 
@@ -238,7 +238,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, and clip command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
         assertContains(failure.message ?: "", "filter-node")
     }
 
@@ -253,7 +253,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, and clip command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
         assertContains(failure.message ?: "", "save-layer")
     }
 
@@ -268,7 +268,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, and clip command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
         assertContains(failure.message ?: "", "runtime-effect")
     }
 
@@ -283,7 +283,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, and clip command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
         assertContains(failure.message ?: "", "vertices")
     }
 
@@ -306,7 +306,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, and clip command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
         assertContains(failure.message ?: "", "runtime-effect")
     }
 
@@ -348,7 +348,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, and clip command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
         assertContains(failure.message ?: "", "vertices")
     }
 
@@ -626,8 +626,8 @@ class RenderGpuRendererSceneOffscreenMainTest {
         assertContains(runJson, "\"status\": \"${OffscreenRunStatus.NotYetRendered.wireName}\"")
         assertContains(runJson, "\"productRefusal\": false")
         assertContains(runJson, "\"imagePath\": null")
-        assertContains(runJson, "supports only clear, fill-rect, and clip command families")
-        assertContains(diagnostics, "supports only clear, fill-rect, and clip command families")
+        assertContains(runJson, "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
+        assertContains(diagnostics, "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
         unsupportedFamilies.forEach { family ->
             assertContains(runJson, family, ignoreCase = false, message = sceneId)
             assertContains(diagnostics, family, ignoreCase = false, message = sceneId)

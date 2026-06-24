@@ -1,7 +1,7 @@
 ---
 id: KGPU-M13-001
 title: "Add FillRRect execution: analytic rrect coverage WGSL + GPU command stream"
-status: review
+status: done
 milestone: M13
 priority: P0
 owner_area: geometry-passes
@@ -82,6 +82,13 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*FillRRect*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done` (2026-06-24): FillRRect planner implemented in AnalysisContracts.kt with `first_slice.fill_rrect.native` capability check. GPUFirstRoutePassBuilder emits rrect render-step invocations. WGSL rrect_cov snippet added in RRectCoverageSnippet.kt. Product flag `kanvas.gpu.renderer.product.fillRRect` with `.disable` rollback in ProductFlags.kt. Tests: 2 new planner tests (acceptance + refusal), 7 ProductFlagConfig tests.
+
+## Evidence
+
+- 9 FirstRoutePlannerTest tests pass including `solid fill rrect builds native route`, `device rect clip without scissor capability refuses diagnostically`
+- 7 ProductFlagConfigTest tests pass
+- FillRRect capability `first_slice.fill_rrect.native` gated by product flag
 
 ## Linear Labels
 

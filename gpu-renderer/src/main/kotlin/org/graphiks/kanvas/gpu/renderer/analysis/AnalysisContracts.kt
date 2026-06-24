@@ -312,6 +312,11 @@ class GPUFirstRoutePlanner(
             material.kind !in acceptedMaterialKinds -> "unsupported.material.source_unimplemented"
             material is GPUMaterialDescriptor.LinearGradient && material.refusalCode() != null ->
                 material.refusalCode()
+            material is GPUMaterialDescriptor.LinearGradient &&
+                !capabilities.hasFact(firstLinearGradientCapabilityName) ->
+                "unsupported.material.linear_gradient_capability_missing"
+            clip.kind == GPUClipKind.DeviceRect && !capabilities.hasFact(firstScissorCapabilityName) ->
+                "unsupported.clip.scissor_capability_missing"
             blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
@@ -333,6 +338,8 @@ class GPUFirstRoutePlanner(
             transform.type !in acceptedTransformTypes -> "unsupported.transform.class_downgrade"
             clip.kind == GPUClipKind.ComplexStack -> "unsupported.clip.complex_stack"
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
+            clip.kind == GPUClipKind.DeviceRect && !capabilities.hasFact(firstScissorCapabilityName) ->
+                "unsupported.clip.scissor_capability_missing"
             material.kind != GPUMaterialKind.SolidColor -> "unsupported.material.source_unimplemented"
             blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
@@ -375,6 +382,12 @@ class GPUFirstRoutePlanner(
 
         /** Required capability fact for the first native FillRRect expansion route. */
         const val firstRRectRouteCapabilityName = "first_slice.fill_rrect.native"
+
+        /** Required capability fact for the linear gradient material route. */
+        const val firstLinearGradientCapabilityName = "first_slice.linear_gradient.native"
+
+        /** Required capability fact for the scissor clip route. */
+        const val firstScissorCapabilityName = "first_slice.scissor.native"
 
         /** Transform classes supported by the first native FillRect route. */
         val acceptedTransformTypes = setOf(GPUTransformType.Identity, GPUTransformType.Translate)

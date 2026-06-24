@@ -24,6 +24,7 @@ Depends on M12 (wgsl4k gate KGPU-M12-010). Wave 3 milestone.
 | [KGPU-M21-002 - Register LinearGradientRT + SpiralRT: same pattern, validated WGSL](KGPU-M21-002-linear-spiral-rt-registration.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `runtime-effects` | [KGPU-M21-001] | null |
 | [KGPU-M21-003 - Add RuntimeEffect execution lane: descriptor lookup -> WGSL snippet -> GPU submit](KGPU-M21-003-runtime-effect-execution.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `runtime-effects` | [KGPU-M21-001, KGPU-M21-002] | null |
 | [KGPU-M21-004 - Activate M21 routes: registered effects default ON, unregistered -> refusal](KGPU-M21-004-route-activation.md) | `proposed` | `P0` | `PolicyGated` | `GPUNative` | `false` | `true` | `product-validation` | [KGPU-M21-001, KGPU-M21-002, KGPU-M21-003] | legacy drawRuntimeEffect |
+| [KGPU-M21-005 - Add gpu-renderer-scenes evidence: runtime-effect-uniform, runtime-effect-child](KGPU-M21-005-scenes-evidence.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `scenes-evidence` | [KGPU-M21-001, KGPU-M21-002, KGPU-M21-003] | null |
 
 ## Validation Bundle
 
