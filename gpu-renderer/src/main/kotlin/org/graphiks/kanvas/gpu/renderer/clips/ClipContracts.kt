@@ -133,6 +133,92 @@ class GPUBoundedClipPreparedPlanner(
     private val maxMaskPixels: Int = 4096,
 ) {
     /**
+     * Plans one bounded rrect-only intersect element as a typed CPU-prepared mask.
+     *
+     * Complex clips (non-intersect operations, inverse fills) remain refused.
+     * Accepts single rrect elements with identity or translate transforms.
+     * This is contract evidence only: it does not allocate an atlas, upload a
+     * texture, submit adapter work, or make arbitrary clip-stack support available.
+     */
+    fun planBoundedRRectClip(
+        stack: GPUClipStackDescriptor,
+        element: GPUClipElementDescriptor,
+    ): GPUClipPlan {
+        val stackRefusal = stack.boundedRRectRefusalCode()
+        val elementRefusal = element.boundedRRectRefusalCode()
+        val refusalCode = stackRefusal ?: elementRefusal
+        if (refusalCode != null) {
+            val diagnostic = GPUClipDiagnostic(
+                code = refusalCode,
+                stackId = stack.stackId,
+                message = "Bounded rrect clip refused: $refusalCode",
+                terminal = true,
+            )
+            return GPUClipPlan(
+                stack = stack,
+                elements = listOf(GPUClipElementPlan.Refused(diagnostic)),
+                orderingToken = GPUClipOrderingToken(stack.boundedRRectOrderingLabel(element)),
+                routeKind = "RefuseDiagnostic",
+                elementDescriptors = listOf(element),
+                diagnostics = listOf(diagnostic),
+            )
+        }
+
+        val maskPlan = GPUClipMaskPlan(
+            maskArtifactKey = stack.boundedRRectMaskArtifactKey(element),
+            boundsLabel = stack.boundsLabel,
+            samplingPolicy = "nearest",
+        )
+        return GPUClipPlan(
+            stack = stack,
+            elements = listOf(GPUClipElementPlan.Mask(maskPlan)),
+            orderingToken = GPUClipOrderingToken(stack.boundedRRectOrderingLabel(element)),
+            routeKind = "CPUPreparedGPU",
+            elementDescriptors = listOf(element),
+            diagnostics = listOf(
+                GPUClipDiagnostic(
+                    code = "clip:rrect.prepared",
+                    stackId = stack.stackId,
+                    message = "Prepared bounded rrect clip mask is available for ${maskPlan.consumerKind}",
+                    terminal = false,
+                ),
+            ),
+        )
+    }
+
+    private fun GPUClipStackDescriptor.boundedRRectRefusalCode(): String? =
+        when {
+            stackId.isBlank() || generation < 0 -> "unsupported.clip.descriptor_invalid"
+            boundsLabel.isBlank() || boundsLabel == "unbounded" -> "unsupported.clip.stack_unbounded"
+            stateLabel != "Complex" -> "unsupported.clip.descriptor_invalid"
+            activeElementCount != 1 -> "unsupported.clip.descriptor_invalid"
+            else -> null
+        }
+
+    private fun GPUClipElementDescriptor.boundedRRectRefusalCode(): String? =
+        when {
+            shapeKind != "rrect" -> "unsupported.clip.shape_unsupported"
+            operation != "Intersect" -> "unsupported.clip.operation"
+            inverseFill -> "unsupported.clip.inverse_unaccepted"
+            !shapeKey.isCanonicalClipShapeKey() -> "unsupported.clip.element_key_nondeterministic"
+            !shapeKey.matchesClipShapeKind("rrect") -> "unsupported.clip.element_key_mismatch"
+            boundsLabel.isBlank() || boundsLabel == "unbounded" -> "unsupported.clip.mask_bounds_invalid"
+            transformClass !in setOf("identity", "translate") -> "unsupported.clip.geometric_intersection_unproven"
+            antiAliasMode !in setOf("coverage-aa", "none") -> "unsupported.clip.analytic_unsupported"
+            fillRule !in setOf("NonZero", "EvenOdd") -> "unsupported.clip.descriptor_invalid"
+            coveragePixelEstimate <= 0 -> "unsupported.clip.mask_bounds_invalid"
+            coveragePixelEstimate > maxMaskPixels -> "unsupported.clip.mask_budget_exceeded"
+            else -> null
+        }
+
+    private fun GPUClipStackDescriptor.boundedRRectOrderingLabel(element: GPUClipElementDescriptor): String =
+        "clip-order.${stackId.sanitizeForClipKey()}.gen$generation.rrect"
+
+    private fun GPUClipStackDescriptor.boundedRRectMaskArtifactKey(element: GPUClipElementDescriptor): String =
+        "coverage.clip.${stackId.sanitizeForClipKey()}.gen$generation.rrect." +
+            "${element.contentKeySegment()}"
+
+    /**
      * Plans one bounded rrect/path intersect stack as a typed CPU-prepared mask.
      *
      * This is contract evidence only: it names a future GPU mask consumer and

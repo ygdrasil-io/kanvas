@@ -1,7 +1,7 @@
 ---
 id: KGPU-M16-003
 title: "Add bounded clip expansion: rrect/path clip stacks beyond simple scissor"
-status: proposed
+status: done
 milestone: M16
 priority: P0
 owner_area: clips-passes
@@ -83,7 +83,14 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*ClipStack*'
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- StrokeExpander, DashPathEffect, bounded clip expansion
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

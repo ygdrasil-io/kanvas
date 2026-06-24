@@ -19,11 +19,11 @@ Depends on M18 SaveLayer execution (KGPU-M18-001). Wave 2 milestone.
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M19-001 - Add Gaussian blur filter: 2-pass H/V separable blur with downsample/upsample](KGPU-M19-001-gaussian-blur.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `filters-passes` | [KGPU-M18-001] | null |
-| [KGPU-M19-002 - Add ColorMatrix filter: 4x5 matrix + vector multiply in WGSL](KGPU-M19-002-color-matrix.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `filters-passes` | [KGPU-M18-001] | null |
-| [KGPU-M19-003 - Add filter DAG execution: multi-node graphs with intermediate texture ownership](KGPU-M19-003-filter-dag-execution.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `filters-passes` | [KGPU-M19-001, KGPU-M19-002] | null |
-| [KGPU-M19-004 - Activate M19 routes: Blur + ColorMatrix + bounded filter DAG default ON](KGPU-M19-004-route-activation.md) | `proposed` | `P0` | `PolicyGated` | `GPUNative` | `false` | `true` | `product-validation` | [KGPU-M19-001, KGPU-M19-002, KGPU-M19-003] | legacy drawFilter |
-| [KGPU-M19-005 - Add gpu-renderer-scenes evidence: blur-radius-ladder, color-matrix-filter](KGPU-M19-005-scenes-evidence.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `scenes-evidence` | [KGPU-M19-001, KGPU-M19-002, KGPU-M19-003] | null |
+| [KGPU-M19-001 - Add Gaussian blur filter: 2-pass H/V separable blur with downsample/upsample](KGPU-M19-001-gaussian-blur.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `filters-passes` | [KGPU-M18-001] | null |
+| [KGPU-M19-002 - Add ColorMatrix filter: 4x5 matrix + vector multiply in WGSL](KGPU-M19-002-color-matrix.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `filters-passes` | [KGPU-M18-001] | null |
+| [KGPU-M19-003 - Add filter DAG execution: multi-node graphs with intermediate texture ownership](KGPU-M19-003-filter-dag-execution.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `filters-passes` | [KGPU-M19-001, KGPU-M19-002] | null |
+| [KGPU-M19-004 - Activate M19 routes: Blur + ColorMatrix + bounded filter DAG default ON](KGPU-M19-004-route-activation.md) | `done` | `P0` | `PolicyGated` | `GPUNative` | `false` | `true` | `product-validation` | [KGPU-M19-001, KGPU-M19-002, KGPU-M19-003] | legacy drawFilter |
+| [KGPU-M19-005 - Add gpu-renderer-scenes evidence: blur-radius-ladder, color-matrix-filter](KGPU-M19-005-scenes-evidence.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `scenes-evidence` | [KGPU-M19-001, KGPU-M19-002, KGPU-M19-003] | null |
 
 ## Validation Bundle
 

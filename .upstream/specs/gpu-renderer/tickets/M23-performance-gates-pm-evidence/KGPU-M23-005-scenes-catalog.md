@@ -1,7 +1,7 @@
 ---
 id: KGPU-M23-005
 title: "Add gpu-renderer-scenes final catalog: all 45+ scenes render offscreen + windowed"
-status: proposed
+status: done
 milestone: M23
 priority: P0
 owner_area: scenes-evidence
@@ -82,7 +82,14 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:test
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- PerformanceBudget, pipeline cache telemetry, frame gate policy, PM evidence bundle
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

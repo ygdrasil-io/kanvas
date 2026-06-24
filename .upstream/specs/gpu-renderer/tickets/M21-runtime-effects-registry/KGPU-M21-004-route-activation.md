@@ -1,7 +1,7 @@
 ---
 id: KGPU-M21-004
 title: "Activate M21 routes: registered effects default ON, unregistered -> refusal"
-status: proposed
+status: done
 milestone: M21
 priority: P0
 owner_area: product-validation
@@ -83,7 +83,14 @@ rtk ./gradlew --no-daemon :gpu-renderer:check && rtk ./gradlew --no-daemon :gpu-
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- SimpleRT/LinearGradientRT/SpiralRT descriptors, GPURuntimeEffectExecutor
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

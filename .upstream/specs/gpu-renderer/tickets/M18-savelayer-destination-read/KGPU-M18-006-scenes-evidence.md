@@ -1,7 +1,7 @@
 ---
 id: KGPU-M18-006
 title: "Add gpu-renderer-scenes evidence: savelayer-isolated, dst-read-strategy"
-status: proposed
+status: done
 milestone: M18
 priority: P0
 owner_area: scenes-evidence
@@ -87,7 +87,14 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 
 ## Status Notes
 
-- `proposed`: Initial ticket. Follows M14-004 pattern with offscreen render validation.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- SaveLayerExecutor, layer composite WGSL, destination read executor
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

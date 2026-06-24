@@ -1,7 +1,7 @@
 ---
 id: KGPU-M17-002
 title: "Add BitmapRect execution: image rect draw with texture binding + sampler"
-status: proposed
+status: done
 milestone: M17
 priority: P0
 owner_area: geometry-passes
@@ -81,7 +81,14 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*BitmapRect*'
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- BitmapShader WGSL + material lowering, BitmapRect execution, image upload materialization, tile modes
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

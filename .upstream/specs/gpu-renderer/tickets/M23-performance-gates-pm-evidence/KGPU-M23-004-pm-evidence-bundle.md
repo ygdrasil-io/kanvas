@@ -1,7 +1,7 @@
 ---
 id: KGPU-M23-004
 title: "Add final PM evidence bundle: all families activated, gates green, rollback tested"
-status: proposed
+status: done
 milestone: M23
 priority: P0
 owner_area: validation-pm
@@ -83,7 +83,14 @@ rtk ./gradlew --no-daemon pipelinePmBundle
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- PerformanceBudget, pipeline cache telemetry, frame gate policy, PM evidence bundle
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

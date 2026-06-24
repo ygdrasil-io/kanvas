@@ -1,7 +1,7 @@
 ---
 id: KGPU-M20-001
 title: "Add text A8 atlas execution: glyph mask upload -> atlas texture -> WGSL sample"
-status: proposed
+status: done
 milestone: M20
 priority: P0
 owner_area: text-rendering
@@ -82,7 +82,14 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*TextA8*'
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- TextA8AtlasExecutor, SDFGenerator, GPUDrawTextRunExecutor, WGSL snippets
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 
