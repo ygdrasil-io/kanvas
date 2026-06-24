@@ -18,6 +18,7 @@ import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToLigatureLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposMarkToMarkLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGposTable
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubChainingContextGlyphLookup
+import org.graphiks.kanvas.font.sfnt.OpenTypeGsubChainingContextGlyphRule
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassLookup
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassRule
 import org.graphiks.kanvas.font.sfnt.OpenTypeGsubContextClassSubtable
@@ -917,7 +918,8 @@ public class BasicOpenTypeShapingEngine(
                     applyContextClassLookup(glyphUnits, lookup, lookupsByIndex, diagnostics)
                 is OpenTypeGsubContextCoverageLookup ->
                     applyContextCoverageLookup(glyphUnits, lookup, lookupsByIndex, diagnostics)
-                is OpenTypeGsubChainingContextGlyphLookup -> {} // parsed but not yet applied at shaping runtime
+                is OpenTypeGsubChainingContextGlyphLookup ->
+                    applyChainingContextGlyphLookup(glyphUnits, lookup, lookupsByIndex, diagnostics)
             }
             val afterUnits = runtimeTraceCollector?.let { glyphUnits.toList() }
             if (
@@ -1088,6 +1090,55 @@ public class BasicOpenTypeShapingEngine(
             )
             glyphIndex += if (stop) rule.inputCoverages.size else 1
         }
+    }
+
+    private fun applyChainingContextGlyphLookup(
+        glyphUnits: MutableList<ShapingGlyphUnit>,
+        lookup: OpenTypeGsubChainingContextGlyphLookup,
+        lookupsByIndex: Map<Int, OpenTypeGsubLookup>,
+        diagnostics: MutableList<ShapingDiagnostic>,
+    ) {
+        var glyphIndex = 0
+        while (glyphIndex < glyphUnits.size) {
+            val rule = lookup.rules.firstOrNull { chainingContextGlyphRuleMatchesAt(glyphUnits, glyphIndex, it) }
+            if (rule == null) {
+                glyphIndex += 1
+                continue
+            }
+            val stop = applyNestedLookupsForMatch(
+                glyphUnits = glyphUnits,
+                matchStart = glyphIndex,
+                matchLength = rule.inputGlyphIds.size,
+                nestedLookups = rule.nestedLookups,
+                lookupsByIndex = lookupsByIndex,
+                diagnostics = diagnostics,
+                lookupStack = listOf(lookup.lookupIndex),
+            )
+            glyphIndex += if (stop) rule.inputGlyphIds.size else 1
+        }
+    }
+
+    private fun chainingContextGlyphRuleMatchesAt(
+        glyphUnits: List<ShapingGlyphUnit>,
+        glyphIndex: Int,
+        rule: OpenTypeGsubChainingContextGlyphRule,
+    ): Boolean {
+        val inputEnd = glyphIndex + rule.inputGlyphIds.size
+        if (inputEnd > glyphUnits.size) return false
+        if (rule.inputGlyphIds.indices.any { offset ->
+                glyphUnits[glyphIndex + offset].glyphId != rule.inputGlyphIds[offset]
+            }) return false
+        rule.backtrackGlyphIds.indices.reversed().forEach { offset ->
+            val backtrackIndex = glyphIndex - offset - 1
+            if (backtrackIndex < 0) return false
+            if (glyphUnits[backtrackIndex].glyphId != rule.backtrackGlyphIds[offset]) return false
+        }
+        rule.lookAheadGlyphIds.indices.forEach { offset ->
+            val lookaheadIndex = inputEnd + offset
+            if (lookaheadIndex >= glyphUnits.size) return false
+            if (glyphUnits[lookaheadIndex].glyphId != rule.lookAheadGlyphIds[offset]) return false
+        }
+        return true
     }
 
     private fun contextGlyphRuleMatchesAt(
@@ -1298,7 +1349,19 @@ public class BasicOpenTypeShapingEngine(
                 )
                 if (shouldStop) return true
             }
-            is OpenTypeGsubChainingContextGlyphLookup -> {} // parsed but not applied at runtime
+            is OpenTypeGsubChainingContextGlyphLookup -> {
+                val rule = lookup.rules.firstOrNull { chainingContextGlyphRuleMatchesAt(glyphUnits, glyphIndex, it) } ?: return false
+                val shouldStop = applyNestedLookupsForMatch(
+                    glyphUnits = glyphUnits,
+                    matchStart = glyphIndex,
+                    matchLength = rule.inputGlyphIds.size,
+                    nestedLookups = rule.nestedLookups,
+                    lookupsByIndex = lookupsByIndex,
+                    diagnostics = diagnostics,
+                    lookupStack = lookupStack,
+                )
+                if (shouldStop) return true
+            }
         }
         val hasOverlappingGlyph = glyphUnits.any { glyph ->
             glyph.textRange.first <= textRange.last && glyph.textRange.last >= textRange.first
