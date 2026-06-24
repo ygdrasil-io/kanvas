@@ -214,3 +214,54 @@ sealed interface WGSLModuleAssemblyResult {
         val diagnostics: List<WGSLValidationDiagnostic>,
     ) : WGSLModuleAssemblyResult
 }
+
+/** Validates that Kotlin packing plans match WGSL reflection layout ABI. */
+sealed interface WGSLAbiValidationResult {
+    /** Packing plan matches reflected WGSL layout exactly. */
+    data object Match : WGSLAbiValidationResult
+
+    /** Packing plan does not match reflected WGSL layout. Diagnostic describes the mismatch. */
+    data class Mismatch(val diagnostic: String) : WGSLAbiValidationResult
+}
+
+/** Compares reflected WGSL uniform layouts against Kotlin packing plans for ABI correctness. */
+object WGSLAbiValidator {
+    /**
+     * Validates that a Kotlin packing plan matches a reflected WGSL uniform layout.
+     *
+     * Compares field offsets and total size. Returns [WGSLAbiValidationResult.Match]
+     * when all fields match; otherwise returns [WGSLAbiValidationResult.Mismatch]
+     * with a stable diagnostic message.
+     */
+    fun validate(layout: WGSLUniformLayout, packing: WGSLPackingPlan): WGSLAbiValidationResult {
+        val mismatches = mutableListOf<String>()
+
+        for (field in layout.fieldLayouts) {
+            val packingOffset = packing.offsets[field.name]
+            if (packingOffset == null) {
+                mismatches += "Field ${field.name} is in WGSL layout but missing from Kotlin packing plan"
+            } else if (packingOffset != field.offset) {
+                mismatches += "Field ${field.name} Kotlin packing offset $packingOffset does not match WGSL layout offset ${field.offset}"
+            }
+        }
+
+        for (fieldName in packing.offsets.keys) {
+            if (layout.fieldLayouts.none { it.name == fieldName }) {
+                mismatches += "Field $fieldName is in Kotlin packing plan but missing from WGSL layout"
+            }
+        }
+
+        if (layout.sizeBytes != packing.offsets.values.sumOf { 0L } + packing.paddingBytes) {
+            val expectedSize = layout.fieldLayouts.sumOf { it.sizeBytes }
+            if (expectedSize != layout.sizeBytes) {
+                mismatches += "Kotlin packing total does not match WGSL layout size ${layout.sizeBytes}"
+            }
+        }
+
+        if (mismatches.isNotEmpty()) {
+            return WGSLAbiValidationResult.Mismatch(mismatches.joinToString("; "))
+        }
+
+        return WGSLAbiValidationResult.Match
+    }
+}

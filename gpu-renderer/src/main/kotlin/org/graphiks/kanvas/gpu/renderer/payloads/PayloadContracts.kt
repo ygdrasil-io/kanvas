@@ -373,6 +373,146 @@ class GPUSolidPayloadGatherer : GPUPayloadGatherer {
     }
 }
 
+/**
+ * Minimal pass-local gatherer for first-expansion 2-stop linear gradient payloads.
+ *
+ * This gatherer packs start/end points, colors, and tile mode into a uniform block
+ * following the same pattern as [GPUSolidPayloadGatherer]. It supports only
+ * clamp tile mode and 2-stop gradients for the first expansion slice.
+ */
+class GPULinearGradientPayloadGatherer : GPUPayloadGatherer {
+    private val uniformSlots = LinkedHashMap<GPUPayloadFingerprint, GPUUniformPayloadSlot>()
+    private var currentScopeId: String? = null
+
+    override fun gather(plan: GPUPayloadGatherPlan, payload: GPUMaterialPayload): GPUDrawPayloadRef {
+        require(plan.unsupportedReason == null) { "Cannot gather unsupported payload plan ${plan.planHash}" }
+        require(payload.payloadClass == linearGradientPayloadClass) {
+            "GPULinearGradientPayloadGatherer only supports $linearGradientPayloadClass payloads"
+        }
+        enterScope(plan.dedupScope)
+
+        val fieldValues = linearGradientFieldValues(payload.valueFacts)
+        val bytes = linearGradientPayloadBytes(fieldValues)
+        val fingerprint = GPUPayloadFingerprint(
+            sha256Hex(
+                listOf(
+                    "kind=linear-gradient-uniform",
+                    "material=${payload.materialKeyHash}",
+                    "write=${plan.writePlanHash}",
+                    "bytes=${bytes.joinToString(",")}",
+                ).joinToString("\n"),
+            ),
+        )
+        val block = GPUUniformPayloadBlock(
+            fingerprint = fingerprint,
+            packingPlanHash = linearGradientPackingPlanHash,
+            byteSize = linearGradientByteSize.toLong(),
+            zeroedPadding = bytes.drop(linearGradientUsedByteSize).all { it == 0 },
+            scope = plan.dedupScope,
+            bytes = bytes,
+            fields = linearGradientFields(fieldValues),
+        )
+        val slot = uniformSlots.getOrPut(fingerprint) {
+            GPUUniformPayloadSlot(
+                slotId = GPUPayloadSlotID("${plan.dedupScope}:uniform:${uniformSlots.size}"),
+                fingerprint = fingerprint,
+                byteOffset = 0L,
+            )
+        }
+
+        return GPUDrawPayloadRef(
+            commandIdValue = payload.valueFacts.requiredInt("command.id"),
+            renderStepIdentity = plan.renderStepIdentity,
+            uniformSlot = slot,
+            uniformBlock = block,
+        )
+    }
+
+    override fun reset(scopeId: String) {
+        enterScope(scopeId)
+        uniformSlots.clear()
+    }
+
+    private fun enterScope(scopeId: String) {
+        require(scopeId.isNotBlank()) { "scopeId must not be blank" }
+        if (currentScopeId != scopeId) {
+            uniformSlots.clear()
+            currentScopeId = scopeId
+        }
+    }
+
+    private fun linearGradientFieldValues(valueFacts: Map<String, String>): List<Pair<String, Float>> =
+        linearGradientFloatFields.map { fieldPath ->
+            fieldPath to valueFacts.requiredFiniteFloat(fieldPath)
+        }
+
+    private fun linearGradientPayloadBytes(fieldValues: List<Pair<String, Float>>): List<Int> {
+        val buffer = ByteBuffer.allocate(linearGradientByteSize).order(ByteOrder.LITTLE_ENDIAN)
+        fieldValues.forEach { (_, value) ->
+            buffer.putFloat(value)
+        }
+        return buffer.array().map { byte -> byte.toInt() and 0xff }
+    }
+
+    private fun linearGradientFields(fieldValues: List<Pair<String, Float>>): List<GPUUniformPayloadField> =
+        fieldValues.mapIndexed { index, (fieldPath, value) ->
+            GPUUniformPayloadField(
+                fieldPath = fieldPath,
+                byteOffset = index * Float.SIZE_BYTES.toLong(),
+                byteSize = Float.SIZE_BYTES.toLong(),
+                valueClass = "f32",
+                zeroFilled = value.toRawBits() == 0,
+            )
+        } + GPUUniformPayloadField(
+            fieldPath = "padding.reserved",
+            byteOffset = linearGradientUsedByteSize.toLong(),
+            byteSize = (linearGradientByteSize - linearGradientUsedByteSize).toLong(),
+            valueClass = "padding",
+            zeroFilled = true,
+        )
+
+    private fun Map<String, String>.requiredFiniteFloat(fieldPath: String): Float {
+        val rawValue = this[fieldPath]
+        require(rawValue != null) { "Payload field $fieldPath is required" }
+        val value = rawValue.toFloatOrNull()
+        require(value != null) { "Payload field $fieldPath must be a float" }
+        require(value.isFinite()) { "Payload field $fieldPath must be finite" }
+        if (fieldPath.startsWith("color.") || fieldPath.startsWith("startColor.") || fieldPath.startsWith("endColor.")) {
+            require(value in 0f..1f) { "Payload field $fieldPath must be in 0..1" }
+        }
+        return value
+    }
+
+    private fun Map<String, String>.requiredInt(fieldPath: String): Int {
+        val rawValue = this[fieldPath]
+        require(rawValue != null) { "Payload field $fieldPath is required" }
+        return requireNotNull(rawValue.toIntOrNull()) { "Payload field $fieldPath must be an integer" }
+    }
+
+    private companion object {
+        private const val linearGradientPayloadClass = "linear-gradient-2stop"
+        private const val linearGradientPackingPlanHash = "linear-gradient-layout-v1"
+        private const val linearGradientByteSize = 64
+        private const val linearGradientUsedByteSize = 40
+
+        private val linearGradientFloatFields = listOf(
+            "start.x",
+            "start.y",
+            "end.x",
+            "end.y",
+            "startColor.r",
+            "startColor.g",
+            "startColor.b",
+            "startColor.a",
+            "endColor.r",
+            "endColor.g",
+            "endColor.b",
+            "endColor.a",
+        )
+
+    }
+}
+
 /** Payload diagnostic. */
 data class GPUPayloadDiagnostic(
     val code: String,

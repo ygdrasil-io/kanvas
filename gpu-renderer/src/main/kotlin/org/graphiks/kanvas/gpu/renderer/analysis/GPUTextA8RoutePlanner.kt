@@ -1,10 +1,17 @@
 package org.graphiks.kanvas.gpu.renderer.analysis
 
+import org.graphiks.kanvas.font.atlas.GlyphAtlasUploadPlan
+import org.graphiks.kanvas.font.handoff.GlyphRunDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
+import org.graphiks.kanvas.gpu.renderer.text.GPUTextAtlasPlan
+import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic
+import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnosticCodes
+import org.graphiks.kanvas.gpu.renderer.text.GPUTextRoute
+import org.graphiks.kanvas.gpu.renderer.text.GPUTextRouteDecision
 
 /**
  * Plans a DrawTextRun command as a native A8 atlas route when the command
@@ -75,6 +82,37 @@ class GPUTextA8RoutePlanner {
             pass = pass,
         )
     }
+
+    /**
+     * Plans the text route decision from a glyph run descriptor's atlas plan.
+     *
+     * Returns [GPUTextRouteDecision.Accepted] when the atlas plan is accepted,
+     * wrapping the route in [GPUTextRoute.AtlasA8]. Returns
+     * [GPUTextRouteDecision.Refused] when the atlas plan is refused.
+     */
+    fun planTextRoute(descriptor: GlyphRunDescriptor): GPUTextRouteDecision =
+        when (val plan = descriptor.atlasPlan) {
+            is GlyphAtlasUploadPlan.Accepted -> {
+                val atlas = GPUTextAtlasPlan(
+                    atlasKind = "A8",
+                    atlasKey = "a8-atlas-${plan.atlasWidth}x${plan.atlasHeight}",
+                    pageCount = 1,
+                    budgetClass = "glyph-atlas-budget",
+                )
+                GPUTextRouteDecision.Accepted(
+                    route = GPUTextRoute.AtlasA8(atlas = atlas),
+                )
+            }
+            is GlyphAtlasUploadPlan.Refused -> {
+                GPUTextRouteDecision.Refused(
+                    diagnostic = GPUTextDiagnostic(
+                        code = GPUTextDiagnosticCodes.ATLAS_DESCRIPTOR_UNACCEPTED,
+                        message = "Glyph atlas upload refused: ${plan.reason}",
+                        terminal = true,
+                    ),
+                )
+            }
+        }
 
     private fun refusedPlan(
         command: NormalizedDrawCommand.DrawTextRun,

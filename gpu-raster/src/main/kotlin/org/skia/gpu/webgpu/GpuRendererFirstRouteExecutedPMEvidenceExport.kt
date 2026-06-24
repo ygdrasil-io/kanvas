@@ -383,7 +383,7 @@ private class GpuRendererFirstRouteExecutedPMEvidenceScenario(
         require(result.status == GpuRendererShadowHandoffStatus.Native) {
             "Diagnostic first-route shadow command must stay native: ${result.status}"
         }
-        return result.normalizedCommand
+        return result.normalizedCommand as? NormalizedDrawCommand.FillRect
             ?: error("Diagnostic first-route shadow command did not produce FillRect")
     }
 

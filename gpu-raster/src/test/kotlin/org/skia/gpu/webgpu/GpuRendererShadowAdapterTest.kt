@@ -30,15 +30,23 @@ class GpuRendererShadowAdapterTest {
         context!!.use { ctx ->
             val rect = SkRect.MakeLTRB(1f, 2f, 11f, 12f)
             val clip = SkIRect.MakeLTRB(0, 0, 32, 32)
-            val disabled = renderDeviceFillRect(ctx, rect, clip, shadowProperty = null)
+            val defaultMode = renderDeviceFillRect(ctx, rect, clip, shadowProperty = null)
             val shadowed = renderDeviceFillRect(ctx, rect, clip, shadowProperty = "true")
 
-            assertArrayEquals(disabled.pixels, shadowed.pixels)
+            assertArrayEquals(defaultMode.pixels, shadowed.pixels)
 
-            val disabledResult = disabled.shadowResult
-            assertNotNull(disabledResult)
-            assertEquals(GpuRendererShadowHandoffStatus.Skipped, disabledResult!!.status)
-            assertNull(disabledResult.normalizedCommand)
+            val defaultResult = defaultMode.shadowResult
+            assertNotNull(defaultResult)
+            assertEquals(GpuRendererShadowHandoffStatus.ProductFlagged, defaultResult!!.status)
+            assertNotNull(defaultResult.normalizedCommand)
+            val defaultCommand = assertInstanceOf(
+                NormalizedDrawCommand.FillRect::class.java,
+                defaultResult.normalizedCommand,
+            )
+            assertEquals("legacy.fillRect.product_flag", defaultCommand.source.operation)
+            assertEquals("product_flag.native.fill_rect.solid", defaultResult.routeLabel)
+            assertTrue(defaultResult.productFlag.enabled)
+            assertTrue(defaultResult.legacyRouteAvailable)
 
             val shadowResult = shadowed.shadowResult
             assertNotNull(shadowResult)
@@ -69,10 +77,12 @@ class GpuRendererShadowAdapterTest {
                 val clip = SkIRect.MakeLTRB(0, 0, 32, 32)
 
                 device.drawRect(rect, clip, SkPaint(SK_ColorMAGENTA))
-                val disabled = device.gpuRendererShadowResultForTests()
-                assertNotNull(disabled)
-                assertEquals(GpuRendererShadowHandoffStatus.Skipped, disabled!!.status)
-                assertNull(disabled.normalizedCommand)
+                val productFlagged = device.gpuRendererShadowResultForTests()
+                assertNotNull(productFlagged)
+                assertEquals(GpuRendererShadowHandoffStatus.ProductFlagged, productFlagged!!.status)
+                assertNotNull(productFlagged.normalizedCommand)
+                assertTrue(productFlagged.productFlag.enabled)
+                assertTrue(productFlagged.legacyRouteAvailable)
 
                 withShadowFillRectProperty("true") {
                     val strokeAndFillPaint = SkPaint(SK_ColorMAGENTA).apply {
@@ -107,7 +117,7 @@ class GpuRendererShadowAdapterTest {
             context!!.use { ctx ->
                 val rect = SkRect.MakeLTRB(1f, 2f, 11f, 12f)
                 val clip = SkIRect.MakeLTRB(0, 0, 32, 32)
-                val disabled = renderDeviceFillRect(ctx, rect, clip, shadowProperty = null, productProperty = null)
+                val disabled = renderDeviceFillRect(ctx, rect, clip, shadowProperty = null, productProperty = null, disableProperty = "true")
                 val productFlagged = renderDeviceFillRect(ctx, rect, clip, shadowProperty = null, productProperty = "true")
 
                 assertArrayEquals(disabled.pixels, productFlagged.pixels)
@@ -136,9 +146,9 @@ class GpuRendererShadowAdapterTest {
         }
 
     @Test
-    fun `legacy fill rect hook is disabled by default and treats stroke and fill as fill evidence`() {
+    fun `legacy fill rect hook respects disabled mode and treats stroke and fill as fill evidence`() {
         val disabled = shadowFillRectForLegacyPath(
-            config = GpuRendererShadowConfig(),
+            config = GpuRendererShadowConfig(mode = GpuRendererShadowMode.Disabled),
             commandId = 0,
             rect = SkRect.MakeLTRB(1f, 2f, 11f, 12f),
             clip = SkIRect.MakeLTRB(0, 0, 32, 32),
@@ -168,25 +178,25 @@ class GpuRendererShadowAdapterTest {
     }
 
     @Test
-    fun `first route product flag is explicit and disabled by default`() {
+    fun `first route product flag is explicit and product flag is the default mode`() {
         fun configFor(vararg pairs: Pair<String, String?>): GpuRendererShadowConfig {
             val values = pairs.toMap()
             return GpuRendererShadowConfig.fromSystemProperties { key -> values[key] }
         }
 
-        val disabled = configFor()
+        val defaultMode = configFor()
         val shadow = configFor(GpuRendererShadowConfig.ShadowFillRectProperty to "true")
         val productFlag = configFor(GpuRendererShadowConfig.ProductFillRectProperty to "true")
-        val productFlagWins = configFor(
+        val shadowWins = configFor(
             GpuRendererShadowConfig.ShadowFillRectProperty to "true",
             GpuRendererShadowConfig.ProductFillRectProperty to "true",
         )
 
-        assertEquals(GpuRendererShadowMode.Disabled, disabled.mode)
+        assertEquals(GpuRendererShadowMode.ProductFlag, defaultMode.mode)
         assertEquals(GpuRendererShadowMode.Shadow, shadow.mode)
         assertEquals(GpuRendererShadowMode.ProductFlag, productFlag.mode)
-        assertEquals(GpuRendererShadowMode.ProductFlag, productFlagWins.mode)
-        assertFalse(disabled.productFlag.enabled)
+        assertEquals(GpuRendererShadowMode.Shadow, shadowWins.mode)
+        assertTrue(defaultMode.productFlag.enabled)
         assertFalse(shadow.productFlag.enabled)
         assertTrue(productFlag.productFlag.enabled)
         assertEquals("solid-fill-rect", productFlag.productFlag.routeScope)
@@ -270,17 +280,20 @@ class GpuRendererShadowAdapterTest {
     }
 
     @Test
-    fun `default mode skips shadow handoff and captures no renderer command`() {
+    fun `default mode records product flagged diagnostics with normalized command`() {
         val result = GpuRendererShadowAdapter().shadowFillRect(firstFillRectState())
 
-        assertEquals(GpuRendererShadowHandoffStatus.Skipped, result.status)
-        assertEquals("skipped.gpu_renderer_shadow.disabled", result.routeLabel)
-        assertEquals("shadow.disabled", result.diagnosticCode)
-        assertNull(result.normalizedCommand)
-        assertNull(result.firstRouteDecision)
-        assertNull(result.commandFacts)
-        assertTrue(result.dump().contains("status=skipped"))
-        assertTrue(result.dump().contains("route=skipped.gpu_renderer_shadow.disabled"))
+        assertEquals(GpuRendererShadowHandoffStatus.ProductFlagged, result.status)
+        assertEquals("product_flag.native.fill_rect.solid", result.routeLabel)
+        assertNull(result.diagnosticCode)
+        assertNotNull(result.normalizedCommand)
+        assertNotNull(result.firstRouteDecision)
+        assertNotNull(result.commandFacts)
+        assertTrue(result.productFlag.enabled)
+        assertTrue(result.legacyRouteAvailable)
+        assertTrue(result.dump().contains("status=product-flagged"))
+        assertTrue(result.dump().contains("route=product_flag.native.fill_rect.solid"))
+        assertTrue(result.dump().contains("productFlag=true:solid-fill-rect"))
     }
 
     @Test
@@ -432,8 +445,9 @@ class GpuRendererShadowAdapterTest {
         clip: SkIRect,
         shadowProperty: String?,
         productProperty: String? = null,
+        disableProperty: String? = null,
     ): DeviceFillRectPixels =
-        withGpuRendererFillRectProperties(shadow = shadowProperty, product = productProperty) {
+        withGpuRendererFillRectProperties(shadow = shadowProperty, product = productProperty, disable = disableProperty) {
             SkWebGpuDevice(context, 32, 32).use { device ->
                 device.drawRect(rect, clip, SkPaint(SK_ColorMAGENTA))
                 val shadowResult = device.gpuRendererShadowResultForTests()
@@ -449,25 +463,204 @@ class GpuRendererShadowAdapterTest {
         val shadowResult: GpuRendererShadowResult?,
     )
 
-    private fun <T> withShadowFillRectProperty(value: String?, block: () -> T): T {
-        return withGpuRendererFillRectProperties(shadow = value, product = null, block = block)
+    private fun <T> withShadowFillRectProperty(value: String?, disable: String? = null, block: () -> T): T {
+        return withGpuRendererFillRectProperties(shadow = value, product = null, disable = disable, block = block)
     }
 
     private fun <T> withGpuRendererFillRectProperties(
         shadow: String?,
         product: String?,
+        disable: String? = null,
         block: () -> T,
     ): T {
         val previousShadow = System.getProperty(GpuRendererShadowConfig.ShadowFillRectProperty)
         val previousProduct = System.getProperty(GpuRendererShadowConfig.ProductFillRectProperty)
+        val previousDisable = System.getProperty(GpuRendererShadowConfig.ProductFillRectDisableProperty)
         setOrClearProperty(GpuRendererShadowConfig.ShadowFillRectProperty, shadow)
         setOrClearProperty(GpuRendererShadowConfig.ProductFillRectProperty, product)
+        setOrClearProperty(GpuRendererShadowConfig.ProductFillRectDisableProperty, disable)
         return try {
             block()
         } finally {
-            setOrClearProperty(GpuRendererShadowConfig.ShadowFillRectProperty, previousShadow)
+            setOrClearProperty(GpuRendererShadowConfig.ProductFillRectDisableProperty, previousDisable)
             setOrClearProperty(GpuRendererShadowConfig.ProductFillRectProperty, previousProduct)
+            setOrClearProperty(GpuRendererShadowConfig.ShadowFillRectProperty, previousShadow)
         }
+    }
+
+    @Test
+    fun `path fill product flag properties exist with rollback`() {
+        assertEquals(
+            "kanvas.gpu.renderer.product.pathFill",
+            GpuRendererShadowConfig.ProductPathFillProperty,
+        )
+        assertEquals(
+            "kanvas.gpu.renderer.product.pathFill.disable",
+            GpuRendererShadowConfig.ProductPathFillDisableProperty,
+        )
+        assertEquals(
+            "kanvas.gpu.renderer.product.stencilCover",
+            GpuRendererShadowConfig.ProductStencilCoverProperty,
+        )
+        assertEquals(
+            "kanvas.gpu.renderer.product.stencilCover.disable",
+            GpuRendererShadowConfig.ProductStencilCoverDisableProperty,
+        )
+    }
+
+    @Test
+    fun `shadow path fill captures vertex buffers and records evidence`() {
+        val result = GpuRendererShadowAdapter(
+            config = GpuRendererShadowConfig(mode = GpuRendererShadowMode.Shadow),
+        ).shadowFillPath(
+            GpuRendererShadowPathState(
+                commandId = 1,
+                pathKey = "path:test:triangle:v1",
+                tessellatedVertices = listOf(0f, 0f, 16f, 0f, 8f, 16f),
+                contourStarts = listOf(0),
+                verbCount = 4,
+                pointCount = 3,
+                fillRule = "NonZero",
+                inverseFill = false,
+                edgeCount = 3,
+                boundsMinX = 0f,
+                boundsMinY = 0f,
+                boundsMaxX = 16f,
+                boundsMaxY = 16f,
+                paint = SkPaint(SK_ColorMAGENTA),
+                targetWidth = 32,
+                targetHeight = 32,
+            ),
+        )
+
+        assertEquals(GpuRendererShadowHandoffStatus.Native, result.status)
+        assertEquals("native.fill_path", result.routeLabel)
+        assertNull(result.diagnosticCode)
+        assertNotNull(result.normalizedCommand)
+        assertTrue(result.legacyRouteAvailable)
+        assertTrue(result.dump().contains("cpuFallback=false"))
+        assertFalse(result.dump().contains("GPUCommandSubmission.Submitted"))
+    }
+
+    @Test
+    fun `product flag path fill records candidate with legacy route visible`() {
+        val result = GpuRendererShadowAdapter(
+            config = GpuRendererShadowConfig(mode = GpuRendererShadowMode.ProductFlag),
+        ).shadowFillPath(
+            GpuRendererShadowPathState(
+                commandId = 2,
+                pathKey = "path:test:triangle:pf",
+                tessellatedVertices = listOf(0f, 0f, 16f, 0f, 8f, 16f),
+                contourStarts = listOf(0),
+                verbCount = 4,
+                pointCount = 3,
+                fillRule = "NonZero",
+                inverseFill = false,
+                edgeCount = 3,
+                boundsMinX = 0f,
+                boundsMinY = 0f,
+                boundsMaxX = 16f,
+                boundsMaxY = 16f,
+                paint = SkPaint(SK_ColorMAGENTA),
+                targetWidth = 32,
+                targetHeight = 32,
+            ),
+        )
+
+        assertEquals(GpuRendererShadowHandoffStatus.ProductFlagged, result.status)
+        assertEquals("product_flag.native.fill_path", result.routeLabel)
+        assertTrue(result.legacyRouteAvailable)
+        assertTrue(result.dump().contains("cpuFallback=false"))
+        assertTrue(result.dump().contains("status=product-flagged"))
+    }
+
+    @Test
+    fun `path fill refuses degenerate paths`() {
+        val result = GpuRendererShadowAdapter(
+            config = GpuRendererShadowConfig(mode = GpuRendererShadowMode.Shadow),
+        ).shadowFillPath(
+            GpuRendererShadowPathState(
+                commandId = 3,
+                pathKey = "path:test:degenerate",
+                tessellatedVertices = listOf(0f, 0f, 16f, 0f),
+                contourStarts = listOf(0),
+                verbCount = 2,
+                pointCount = 2,
+                fillRule = "NonZero",
+                inverseFill = false,
+                edgeCount = 2,
+                boundsMinX = 0f,
+                boundsMinY = 0f,
+                boundsMaxX = 16f,
+                boundsMaxY = 0f,
+                paint = SkPaint(SK_ColorMAGENTA),
+                targetWidth = 32,
+                targetHeight = 32,
+            ),
+        )
+
+        assertEquals(GpuRendererShadowHandoffStatus.Refused, result.status)
+        assertEquals("unsupported.adapter.path_degenerate", result.diagnosticCode)
+        assertNull(result.normalizedCommand)
+    }
+
+    @Test
+    fun `path fill refuses inverse fills`() {
+        val result = GpuRendererShadowAdapter(
+            config = GpuRendererShadowConfig(mode = GpuRendererShadowMode.Shadow),
+        ).shadowFillPath(
+            GpuRendererShadowPathState(
+                commandId = 4,
+                pathKey = "path:test:inverse",
+                tessellatedVertices = listOf(0f, 0f, 16f, 0f, 8f, 16f),
+                contourStarts = listOf(0),
+                verbCount = 4,
+                pointCount = 3,
+                fillRule = "NonZero",
+                inverseFill = true,
+                edgeCount = 3,
+                boundsMinX = 0f,
+                boundsMinY = 0f,
+                boundsMaxX = 16f,
+                boundsMaxY = 16f,
+                paint = SkPaint(SK_ColorMAGENTA),
+                targetWidth = 32,
+                targetHeight = 32,
+            ),
+        )
+
+        assertEquals(GpuRendererShadowHandoffStatus.Refused, result.status)
+        assertEquals("unsupported.adapter.path_inverse_fill", result.diagnosticCode)
+    }
+
+    @Test
+    fun `path fill refuses edge budget exceeded`() {
+        val oversizedVerts = (0 until 258).flatMap { listOf(it.toFloat(), 0f) }
+        val result = GpuRendererShadowAdapter(
+            config = GpuRendererShadowConfig(mode = GpuRendererShadowMode.Shadow),
+        ).shadowFillPath(
+            GpuRendererShadowPathState(
+                commandId = 5,
+                pathKey = "path:test:oversized",
+                tessellatedVertices = oversizedVerts,
+                contourStarts = listOf(0),
+                verbCount = 258,
+                pointCount = 258,
+                fillRule = "NonZero",
+                inverseFill = false,
+                edgeCount = 258,
+                boundsMinX = 0f,
+                boundsMinY = 0f,
+                boundsMaxX = 257f,
+                boundsMaxY = 0f,
+                paint = SkPaint(SK_ColorMAGENTA),
+                targetWidth = 512,
+                targetHeight = 512,
+            ),
+        )
+
+        assertEquals(GpuRendererShadowHandoffStatus.Refused, result.status)
+        assertEquals("unsupported.adapter.path_edge_budget", result.diagnosticCode)
     }
 
     private fun setOrClearProperty(key: String, value: String?) {

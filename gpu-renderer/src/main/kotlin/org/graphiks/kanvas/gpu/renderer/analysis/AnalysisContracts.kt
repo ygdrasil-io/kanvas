@@ -6,6 +6,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerScopeKind
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
@@ -308,7 +309,9 @@ class GPUFirstRoutePlanner(
             transform.type !in acceptedTransformTypes -> "unsupported.transform.class_downgrade"
             clip.kind == GPUClipKind.ComplexStack -> "unsupported.clip.complex_stack"
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
-            material.kind != GPUMaterialKind.SolidColor -> "unsupported.material.source_unimplemented"
+            material.kind !in acceptedMaterialKinds -> "unsupported.material.source_unimplemented"
+            material is GPUMaterialDescriptor.LinearGradient && material.refusalCode() != null ->
+                material.refusalCode()
             blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
@@ -347,6 +350,22 @@ class GPUFirstRoutePlanner(
             fact.name == name && fact.value == "supported" && fact.affectsValidity
         }
 
+    /** Returns a terminal gradient refusal code, or null when gradient facts are accepted. */
+    private fun GPUMaterialDescriptor.LinearGradient.refusalCode(): String? =
+        when {
+            !startX.isFinite() || !startY.isFinite() || !endX.isFinite() || !endY.isFinite() ->
+                "unsupported.material.gradient_non_finite_coords"
+            (endX - startX).let { dx -> !dx.isFinite() } || (endY - startY).let { dy -> !dy.isFinite() } ->
+                "unsupported.material.gradient_non_finite_coords"
+            !startR.isFinite() || !startG.isFinite() || !startB.isFinite() || !startA.isFinite() ->
+                "unsupported.material.gradient_non_finite_color"
+            !endR.isFinite() || !endG.isFinite() || !endB.isFinite() || !endA.isFinite() ->
+                "unsupported.material.gradient_non_finite_color"
+            tileMode !in acceptedGradientTileModes ->
+                "unsupported.material.gradient_tile_mode_unsupported"
+            else -> null
+        }
+
     private companion object {
         /** Required target format for the first native FillRect route. */
         const val firstRouteTargetFormat = "rgba8unorm"
@@ -362,6 +381,12 @@ class GPUFirstRoutePlanner(
 
         /** Clip classes supported by the first native FillRect route. */
         val acceptedClipKinds = setOf(GPUClipKind.WideOpen, GPUClipKind.DeviceRect)
+
+        /** Material kinds supported by the first native FillRect expansion route. */
+        val acceptedMaterialKinds = setOf(GPUMaterialKind.SolidColor, GPUMaterialKind.LinearGradient)
+
+        /** Gradient tile modes accepted by the first expansion route. */
+        val acceptedGradientTileModes = setOf("clamp")
     }
 }
 

@@ -14,7 +14,10 @@ import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
+import org.graphiks.kanvas.font.atlas.GlyphAtlasUploadPlan
+import org.graphiks.kanvas.gpu.renderer.analysis.GPUTextA8RoutePlanner
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnosticCodes
+import org.graphiks.kanvas.gpu.renderer.text.GPUTextRouteDecision
 
 /** Stable recording identifier. */
 @JvmInline
@@ -261,8 +264,21 @@ class GPURecorder(
         when (command) {
             is NormalizedDrawCommand.FillRect -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
             is NormalizedDrawCommand.FillRRect -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
-            is NormalizedDrawCommand.DrawTextRun -> refusedDrawTextRunPlan(command)
+            is NormalizedDrawCommand.DrawTextRun -> planDrawTextRun(command)
+            is NormalizedDrawCommand.FillPath -> refusedFillPathPlan(command)
         }
+
+    private fun planDrawTextRun(command: NormalizedDrawCommand.DrawTextRun): GPUFirstRoutePlan {
+        val descriptor = command.glyphRunDescriptor
+        if (descriptor != null) {
+            val textRouteDecision = GPUTextA8RoutePlanner().planTextRoute(descriptor)
+            return when (textRouteDecision) {
+                is GPUTextRouteDecision.Accepted -> GPUTextA8RoutePlanner().plan(command)
+                is GPUTextRouteDecision.Refused -> refusedDrawTextRunPlan(command)
+            }
+        }
+        return refusedDrawTextRunPlan(command)
+    }
 
     private fun refusedDrawTextRunPlan(command: NormalizedDrawCommand.DrawTextRun): GPUFirstRoutePlan {
         val code = "unsupported.text.draw_run_route_unavailable"
@@ -292,6 +308,38 @@ class GPURecorder(
             renderStepCandidates = emptyList(),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = listOf(diagnostic) + textDiagnostics + payloadDiagnostics,
+        )
+        return GPUFirstRoutePlan(
+            analysisRecord = analysisRecord,
+            analysisDecision = GPUDrawAnalysisDecision.Refuse(recordId = recordId, diagnostic = diagnostic),
+            routeDecision = GPUFirstRouteDecisionBuilder.refused(code = code, stage = "analysis"),
+            pass = GPUFirstRoutePassBuilder.refusedFillRect(
+                commandIdValue = command.commandId.value,
+                targetStateHash = command.recordingTargetStateHash(),
+                code = code,
+            ),
+        )
+    }
+
+    private fun refusedFillPathPlan(command: NormalizedDrawCommand.FillPath): GPUFirstRoutePlan {
+        val code = "unsupported.command.fill_path"
+        val recordId = "analysis.fill_path.${command.commandId.value}"
+        val diagnostic = GPUAnalysisDiagnostic(
+            code = code,
+            recordId = recordId,
+            decisionId = "refused.fill_path.${command.commandId.value}",
+            terminal = true,
+        )
+        val analysisRecord = GPUDrawAnalysisRecord(
+            recordId = recordId,
+            commandIdValue = command.commandId.value,
+            commandFamily = "FillPath",
+            boundsHash = command.bounds.recordingBoundsHash(),
+            routeDecisionLabel = "refused.$code",
+            materialKeyHash = "none",
+            renderStepCandidates = emptyList(),
+            sortKey = SortKey(command.ordering.paintOrder.toLong()),
+            diagnostics = listOf(diagnostic),
         )
         return GPUFirstRoutePlan(
             analysisRecord = analysisRecord,

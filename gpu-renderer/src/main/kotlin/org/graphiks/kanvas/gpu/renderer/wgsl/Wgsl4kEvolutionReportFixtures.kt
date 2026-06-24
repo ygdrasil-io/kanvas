@@ -5,6 +5,29 @@ import java.nio.file.Path
 
 const val REVIEWED_WGSL4K_REFLECTION_SHA: String = "72a35b58758f241756d984a84768ae77308730da"
 
+/** Evaluates whether all registered WGSL modules have graduated to parser-backed reflection. */
+sealed interface Wgsl4kEvolutionGate {
+    /** All WGSL modules use parser-backed reflection. */
+    data object Passed : Wgsl4kEvolutionGate
+
+    /** One or more WGSL modules still use fixture-declared reflection. */
+    data class NotPassed(val fixtureModules: List<String>) : Wgsl4kEvolutionGate
+}
+
+/** Evaluates all WGSL modules and returns an evolution gate result. */
+fun evaluateWgsl4kEvolutionGate(modules: List<WGSLModule>): Wgsl4kEvolutionGate {
+    val fixtureModules = modules.filter { module ->
+        val reflection = module.reflection
+        reflection is WGSLReflectionResult.Accepted && reflection.reflectionSource == "fixture-declared"
+    }
+
+    return if (fixtureModules.isNotEmpty()) {
+        Wgsl4kEvolutionGate.NotPassed(fixtureModules.map { it.moduleLabel })
+    } else {
+        Wgsl4kEvolutionGate.Passed
+    }
+}
+
 /** A deterministic report fixture path and JSON payload generated for WGSL4K-EVO evidence. */
 data class WgslEvolutionReportFixture(
     val relativePath: String,

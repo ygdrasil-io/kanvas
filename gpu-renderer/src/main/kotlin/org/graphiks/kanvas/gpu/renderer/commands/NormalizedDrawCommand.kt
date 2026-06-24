@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.commands
 
+import org.graphiks.kanvas.font.handoff.GlyphRunDescriptor
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
 
@@ -67,6 +68,8 @@ enum class GPUDrawKind {
     FillRect,
     /** Filled rounded rectangle command family. */
     FillRRect,
+    /** Filled path command family with tessellated vertex buffers. */
+    FillPath,
     /** Text run command family with prepared text stack artifacts. */
     DrawTextRun,
 }
@@ -101,6 +104,8 @@ enum class GPUClipKind {
 enum class GPUMaterialKind {
     /** Solid source color material. */
     SolidColor,
+    /** Linear gradient source material. */
+    LinearGradient,
 }
 
 /** Rectangle geometry in local command coordinates. */
@@ -145,6 +150,19 @@ data class GPUBounds(
     val top: Float,
     val right: Float,
     val bottom: Float,
+)
+
+/** M15 path-fill facts captured from the legacy path fill before tessellation. */
+data class GPUPathFacts(
+    val pathKey: String,
+    val verbCount: Int,
+    val pointCount: Int,
+    val fillRule: String,
+    val inverseFill: Boolean,
+    val finiteProof: String,
+    val volatility: String,
+    val transformClass: String,
+    val edgeCount: Int,
 )
 
 /** Captured transform facts owned by commands and consumed by analysis without replaying Canvas state. */
@@ -309,6 +327,25 @@ sealed interface GPUMaterialDescriptor {
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.SolidColor
     }
+
+    /** Linear gradient descriptor with start/end colors and tile mode for the first GPU expansion slice. */
+    data class LinearGradient(
+        val startX: Float,
+        val startY: Float,
+        val endX: Float,
+        val endY: Float,
+        val startR: Float,
+        val startG: Float,
+        val startB: Float,
+        val startA: Float,
+        val endR: Float,
+        val endG: Float,
+        val endB: Float,
+        val endA: Float,
+        val tileMode: String = "clamp",
+    ) : GPUMaterialDescriptor {
+        override val kind: GPUMaterialKind = GPUMaterialKind.LinearGradient
+    }
 }
 
 /** Captured ordering facts for normalized draw commands. */
@@ -422,6 +459,109 @@ object GPUFillRRectCommandBuilder {
     }
 }
 
+/** Builds Kanvas-owned first-expansion LinearGradient rect commands from already-normalized facts. */
+object GPULinearGradientCommandBuilder {
+    /**
+     * Builds an immutable FillRect command with a linear gradient material descriptor.
+     *
+     * The builder reuses the FillRect command family with a
+     * [GPUMaterialDescriptor.LinearGradient] material so the planner can accept
+     * gradient rects without a new command family. Gradient-specific validation
+     * (non-degenerate endpoints, finite colors, valid tile mode) is deferred to
+     * analysis-time refusal checks.
+     */
+    fun build(
+        commandId: GPUDrawCommandID,
+        rect: GPURect,
+        target: GPUTargetFacts,
+        material: GPUMaterialDescriptor.LinearGradient,
+        transform: GPUTransformFacts = GPUTransformFacts.identity(),
+        clip: GPUClipFacts? = null,
+        layer: GPULayerFacts? = null,
+        blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        paintOrder: Int = 0,
+        source: GPUCommandSource = GPUCommandSource(adapter = "gpu-renderer", operation = "linearGradientRect"),
+    ): NormalizedDrawCommand.FillRect {
+        val bounds = rect.toBounds()
+        val resolvedClip = clip ?: GPUClipFacts.wideOpen(bounds = bounds)
+        return NormalizedDrawCommand.FillRect(
+            commandId = commandId,
+            rect = rect,
+            transform = transform,
+            clip = resolvedClip,
+            layer = layer ?: GPULayerFacts.root(target = target),
+            material = material,
+            blend = blend,
+            bounds = bounds,
+            ordering = GPUOrderingFacts(
+                paintOrder = paintOrder,
+                dependsOnDestination = false,
+                requiresBarrier = false,
+            ),
+            source = source,
+        )
+    }
+}
+
+/** Builds Kanvas-owned M15 path-fill commands from tessellated vertex buffers. */
+object GPUFillPathCommandBuilder {
+    /** Builds a FillPath normalized command with tessellation facts bound to the target and material. */
+    fun build(
+        commandId: GPUDrawCommandID,
+        pathKey: String,
+        pathDescriptor: GPUPathFacts,
+        tessellatedVertices: List<Float>,
+        contourStarts: List<Int>,
+        edgeCount: Int,
+        target: GPUTargetFacts,
+        material: GPUMaterialDescriptor,
+        transform: GPUTransformFacts = GPUTransformFacts.identity(),
+        clip: GPUClipFacts? = null,
+        layer: GPULayerFacts? = null,
+        blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        paintOrder: Int = 0,
+        source: GPUCommandSource = GPUCommandSource(adapter = "gpu-renderer", operation = "fillPath.shadow"),
+    ): NormalizedDrawCommand.FillPath {
+        val vertexCount = tessellatedVertices.size / 2
+        val minBounds = if (vertexCount > 0) {
+            var minX = Float.POSITIVE_INFINITY; var minY = Float.POSITIVE_INFINITY
+            var maxX = Float.NEGATIVE_INFINITY; var maxY = Float.NEGATIVE_INFINITY
+            var i = 0
+            while (i < tessellatedVertices.size) {
+                val x = tessellatedVertices[i]; val y = tessellatedVertices[i + 1]
+                minX = minOf(minX, x); minY = minOf(minY, y)
+                maxX = maxOf(maxX, x); maxY = maxOf(maxY, y)
+                i += 2
+            }
+            GPUBounds(minX, minY, maxX, maxY)
+        } else {
+            GPUBounds(0f, 0f, 0f, 0f)
+        }
+        val resolvedClip = clip ?: GPUClipFacts.wideOpen(bounds = minBounds)
+        return NormalizedDrawCommand.FillPath(
+            commandId = commandId,
+            pathKey = pathKey,
+            pathDescriptor = pathDescriptor,
+            tessellatedVertices = tessellatedVertices,
+            contourStarts = contourStarts,
+            totalVertexCount = vertexCount,
+            edgeCount = edgeCount,
+            transform = transform,
+            clip = resolvedClip,
+            layer = layer ?: GPULayerFacts.root(target = target),
+            material = material,
+            blend = blend,
+            bounds = minBounds,
+            ordering = GPUOrderingFacts(
+                paintOrder = paintOrder,
+                dependsOnDestination = false,
+                requiresBarrier = false,
+            ),
+            source = source,
+        )
+    }
+}
+
 /** High-level draw command after legacy state has been captured and normalized. */
 sealed interface NormalizedDrawCommand {
     /** Recording-local command identifier. */
@@ -481,6 +621,27 @@ sealed interface NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRRect
     }
 
+    /** M15 path-fill command with tessellated vertex buffers from the shadow adapter. */
+    data class FillPath(
+        override val commandId: GPUDrawCommandID,
+        val pathKey: String,
+        val pathDescriptor: GPUPathFacts,
+        val tessellatedVertices: List<Float>,
+        val contourStarts: List<Int>,
+        val totalVertexCount: Int,
+        val edgeCount: Int,
+        override val transform: GPUTransformFacts,
+        override val clip: GPUClipFacts,
+        override val layer: GPULayerFacts,
+        override val material: GPUMaterialDescriptor,
+        override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        override val bounds: GPUBounds,
+        override val ordering: GPUOrderingFacts,
+        override val source: GPUCommandSource,
+    ) : NormalizedDrawCommand {
+        override val drawKind: GPUDrawKind = GPUDrawKind.FillPath
+    }
+
     /**
      * Text run command with only dumpable text-stack artifact references.
      *
@@ -492,6 +653,7 @@ sealed interface NormalizedDrawCommand {
         val textLayoutResultId: String?,
         val glyphRunId: String?,
         val glyphRunDescriptorRefs: List<String>,
+        val glyphRunDescriptor: GlyphRunDescriptor? = null,
         val artifactRefs: List<GPUTextArtifactRef>,
         val artifactKeyHashes: List<String>,
         val atlasGenerationTokens: List<String>,

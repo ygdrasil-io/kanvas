@@ -13,7 +13,7 @@ import kotlin.math.round
 /**
  * Scales glyph outlines and metrics from parsed font data into requested design positions.
  */
-interface GlyphScaler {
+interface OutlineScaler {
     /**
      * Produces an outline for one glyph at a variation position.
      *
@@ -2662,7 +2662,7 @@ class ParsedTrueTypeGlyphScaler(
     private val scale: Double = 1.0,
     private val gvar: TrueTypeGvarTable? = null,
     normalizedAxisOrder: List<String> = emptyList(),
-) : GlyphScaler {
+) : OutlineScaler {
     private val normalizedAxisOrder: List<String> = normalizedAxisOrder.toList()
     private val normalizedAxisTags: Set<String> = this.normalizedAxisOrder.toSet()
 
@@ -3793,7 +3793,7 @@ private data class PackedGvarInts(
  */
 class TrueTypeGlyfScaler(
     private val face: OpenTypeFaceData,
-) : GlyphScaler {
+) : OutlineScaler {
     private val parsedScaler: ParsedTrueTypeGlyphScaler by lazy {
         val gvarTable = face.rawTableBytesOrNull("gvar")
         val normalizedAxisOrder = if (gvarTable != null) {
@@ -4617,7 +4617,7 @@ private fun List<Int>.toRawSfntTableBytes(tag: String): ByteArray =
  */
 class CFFScaler(
     private val face: OpenTypeFaceData,
-) : GlyphScaler {
+) : OutlineScaler {
     private val parsedCFF: ParsedCFFProgram? by lazy {
         face.rawTableBytesOrNull("CFF ")?.let(::parseCFFTable)
     }
@@ -4718,7 +4718,7 @@ class CFFScaler(
  */
 class CFF2Scaler(
     private val face: OpenTypeFaceData,
-) : GlyphScaler {
+) : OutlineScaler {
     private val parsedCFF2: ParsedCFFProgram? by lazy {
         face.rawTableBytesOrNull("CFF2")?.let(::parseCFF2Table)
     }

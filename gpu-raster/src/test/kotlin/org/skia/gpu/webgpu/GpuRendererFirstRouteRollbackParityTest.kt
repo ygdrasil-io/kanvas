@@ -22,9 +22,9 @@ class GpuRendererFirstRouteRollbackParityTest {
             context!!.use { ctx ->
                 val rect = SkRect.MakeLTRB(1f, 2f, 11f, 12f)
                 val clip = SkIRect.MakeLTRB(0, 0, 32, 32)
-                val legacyBefore = renderDeviceFillRect(ctx, rect, clip, productProperty = null)
+                val legacyBefore = renderDeviceFillRect(ctx, rect, clip, productProperty = null, disableProperty = "true")
                 val productFlagged = renderDeviceFillRect(ctx, rect, clip, productProperty = "true")
-                val legacyRollback = renderDeviceFillRect(ctx, rect, clip, productProperty = null)
+                val legacyRollback = renderDeviceFillRect(ctx, rect, clip, productProperty = null, disableProperty = "true")
                 val unsupported = productFlagUnsupportedStrokeAndFill()
 
                 val report = GpuRendererFirstRouteRollbackParityValidator.validate(
@@ -108,8 +108,9 @@ class GpuRendererFirstRouteRollbackParityTest {
         rect: SkRect,
         clip: SkIRect,
         productProperty: String?,
+        disableProperty: String? = null,
     ): DeviceFillRectRun =
-        withGpuRendererFillRectProperties(shadow = null, product = productProperty) {
+        withGpuRendererFillRectProperties(shadow = null, product = productProperty, disable = disableProperty) {
             SkWebGpuDevice(context, 32, 32).use { device ->
                 device.drawRect(rect, clip, SkPaint(SK_ColorMAGENTA))
                 val result = device.gpuRendererShadowResultForTests()
@@ -150,7 +151,7 @@ class GpuRendererFirstRouteRollbackParityTest {
 
     private fun skippedResult(): GpuRendererShadowResult =
         shadowFillRectForLegacyPath(
-            config = GpuRendererShadowConfig(),
+            config = GpuRendererShadowConfig(mode = GpuRendererShadowMode.Disabled),
             commandId = 0,
             rect = SkRect.MakeLTRB(1f, 2f, 11f, 12f),
             clip = SkIRect.MakeLTRB(0, 0, 32, 32),
@@ -189,17 +190,21 @@ class GpuRendererFirstRouteRollbackParityTest {
     private fun <T> withGpuRendererFillRectProperties(
         shadow: String?,
         product: String?,
+        disable: String? = null,
         block: () -> T,
     ): T {
         val previousShadow = System.getProperty(GpuRendererShadowConfig.ShadowFillRectProperty)
         val previousProduct = System.getProperty(GpuRendererShadowConfig.ProductFillRectProperty)
+        val previousDisable = System.getProperty(GpuRendererShadowConfig.ProductFillRectDisableProperty)
         setOrClearProperty(GpuRendererShadowConfig.ShadowFillRectProperty, shadow)
         setOrClearProperty(GpuRendererShadowConfig.ProductFillRectProperty, product)
+        setOrClearProperty(GpuRendererShadowConfig.ProductFillRectDisableProperty, disable)
         return try {
             block()
         } finally {
-            setOrClearProperty(GpuRendererShadowConfig.ShadowFillRectProperty, previousShadow)
+            setOrClearProperty(GpuRendererShadowConfig.ProductFillRectDisableProperty, previousDisable)
             setOrClearProperty(GpuRendererShadowConfig.ProductFillRectProperty, previousProduct)
+            setOrClearProperty(GpuRendererShadowConfig.ShadowFillRectProperty, previousShadow)
         }
     }
 
