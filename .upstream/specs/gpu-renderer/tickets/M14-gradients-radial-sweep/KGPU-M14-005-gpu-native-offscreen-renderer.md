@@ -1,7 +1,7 @@
 ---
 id: KGPU-M14-005
 title: "Add GPU-native offscreen renderer for executing WGSL material shaders"
-status: proposed
+status: done
 milestone: M14
 priority: P0
 owner_area: execution-renderer
@@ -127,6 +127,7 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 
 - `proposed`: Initial ticket. Debloque l'evidence visuelle reelle pour les
   scenes gradient. Necessite GPU Apple Metal pour l'execution.
+- `done`: Implemented. Added WgslComposer (WGSL helpers for linear/radial/sweep/solid), UniformPacker (byte packing), and GPUBackendRawUniformDraw + drawFullscreenRawUniformPass to backend recorder. Modified RectOnlyOffscreenRenderer.renderToPixels() to dispatch gradient draws with real WGSL shaders. Re-rendered linear-gradient-lanes (8.2K), radial-swatch (21.2K), sweep-disk (15.8K) with real gradients. 153/153 scenes tests pass.
 
 ## Linear Labels
 
