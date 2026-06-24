@@ -5,7 +5,7 @@
   "unicodeVersion": "16.0.0",
   "sourceTextHashAlgorithm": "sha256-utf16-code-units",
   "sourceDumpRefs": [
-    {"dumpId": "cluster-safety-report", "dumpSha256": "dfa7cd157e1205791eee5c8482b832d8cc08c55ed29cc174d9a7339634391c67"},
+    {"dumpId": "cluster-safety-report", "dumpSha256": "2f7322d40fda810262963cdb30e6c60a12a222a034d35617dd0e9b74e953ae81"},
     {"dumpId": "fallback-decision-trace", "dumpSha256": "eaf927a39fdb5b6c0b4b2541d83fe52afe984b159ac5157e6c2bb02363b638eb"},
     {"dumpId": "resolved-font-runs", "dumpSha256": "7b4549a8ce71c244501ec6428b1525e3ff25f564c2fcaf8ab8874cedef6b067a"},
     {"dumpId": "shaped-glyph-run", "dumpSha256": "eb2e38df7e840a527b5a24b22eef3c6b64dfbfe88cca8f95ab7a2472b1bb3c6d"}

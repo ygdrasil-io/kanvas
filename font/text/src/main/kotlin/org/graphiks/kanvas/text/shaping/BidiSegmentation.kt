@@ -214,6 +214,7 @@ public class DefaultBidiResolver(
                 resolvedClass = bidiClassFor(codePoint),
                 explicitDirection = null,
                 explicitRule = null,
+                bidiBracketType = bidiBracketTypeFor(codePoint),
                 trace = emptyList(),
             )
         }
@@ -227,7 +228,11 @@ public class DefaultBidiResolver(
             in 0x0590..0x05FF -> "R"
             in 0x0600..0x06FF, in 0x0750..0x077F, in 0x08A0..0x08FF -> "AL"
             0x0020 -> "WS"
-            0x0021, 0x002C, 0x002E, 0x003A, 0x003B, 0x003F, 0x2603 -> "ON"
+            0x0021, 0x003F, 0x2603 -> "ON"
+            0x0023, 0x0024, 0x0025, 0x002D -> "ET"
+            0x002B -> "ES"
+            0x002C, 0x002E, 0x003A, 0x003B -> "CS"
+            0x0028, 0x0029, 0x005B, 0x005D, 0x007B, 0x007D -> "ON"
             0x202A -> "LRE"
             0x202B -> "RLE"
             0x202C -> "PDF"
@@ -339,25 +344,166 @@ public class DefaultBidiResolver(
                     resolvedClass = "R",
                     trace = scalar.trace + BidiTraceEvent("W2/AN-inside-rtl-run", scalar.utf16Range, "AN", "R"),
                 )
-                "EN" -> scalar.copy(
-                    resolvedClass = if (nearestStrongBefore(scalars, index) == "R") "R" else "L",
-                    trace = scalar.trace + BidiTraceEvent(
-                        "W7/EN-from-nearest-strong",
-                        scalar.utf16Range,
-                        "EN",
-                        if (nearestStrongBefore(scalars, index) == "R") "R" else "L",
-                    ),
-                )
                 else -> scalar
                 }
             }
         }
-        return withStrong.mapIndexed { index, scalar ->
+        val withWeak = applyW4W5W6(withStrong)
+        val withEnResolved = applyW7(withWeak, paragraphDirection)
+        val withBrackets = applyN0(withEnResolved, paragraphDirection)
+        return applyNeutralResolution(withBrackets, paragraphDirection)
+    }
+
+    private fun applyW4W5W6(scalars: List<BidiScalar>): List<BidiScalar> {
+        val mutable = scalars.toMutableList()
+
+        for (i in mutable.indices) {
+            val cls = mutable[i].resolvedClass
+            val prev = if (i > 0) mutable[i - 1] else null
+            val next = if (i < mutable.lastIndex) mutable[i + 1] else null
+            val prevIsEN = prev != null && resolvedAsEN(prev)
+            val nextIsEN = next != null && resolvedAsEN(next)
+            val prevIsAN = prev != null && resolvedAsAN(prev)
+            val nextIsAN = next != null && resolvedAsAN(next)
+            when {
+                cls == "ES" && prevIsEN && nextIsEN -> {
+                    mutable[i] = mutable[i].copy(
+                        resolvedClass = "EN",
+                        trace = mutable[i].trace + BidiTraceEvent("W4/ES-to-EN", mutable[i].utf16Range, "ES", "EN"),
+                    )
+                }
+                cls == "CS" && prevIsEN && nextIsEN -> {
+                    mutable[i] = mutable[i].copy(
+                        resolvedClass = "EN",
+                        trace = mutable[i].trace + BidiTraceEvent("W4/CS-to-EN", mutable[i].utf16Range, "CS", "EN"),
+                    )
+                }
+                cls == "CS" && prevIsAN && nextIsAN -> {
+                    mutable[i] = mutable[i].copy(
+                        resolvedClass = "AN",
+                        trace = mutable[i].trace + BidiTraceEvent("W4/CS-to-AN", mutable[i].utf16Range, "CS", "AN"),
+                    )
+                }
+                cls == "ET" && prevIsEN && nextIsEN -> {
+                    mutable[i] = mutable[i].copy(
+                        resolvedClass = "EN",
+                        trace = mutable[i].trace + BidiTraceEvent("W4/ET-to-EN", mutable[i].utf16Range, "ET", "EN"),
+                    )
+                }
+            }
+        }
+
+        var changed = true
+        while (changed) {
+            changed = false
+            for (i in mutable.indices) {
+                if (mutable[i].resolvedClass == "ET") {
+                    val prev = if (i > 0) mutable[i - 1] else null
+                    val next = if (i < mutable.lastIndex) mutable[i + 1] else null
+                    val prevIsEN = prev != null && resolvedAsEN(prev)
+                    val nextIsEN = next != null && resolvedAsEN(next)
+                    if (prevIsEN || nextIsEN) {
+                        mutable[i] = mutable[i].copy(
+                            resolvedClass = "EN",
+                            trace = mutable[i].trace + BidiTraceEvent("W5/ET-to-EN", mutable[i].utf16Range, "ET", "EN"),
+                        )
+                        changed = true
+                    }
+                }
+            }
+        }
+
+        for (i in mutable.indices) {
+            val cls = mutable[i].resolvedClass
+            when (cls) {
+                "ES", "CS" -> {
+                    mutable[i] = mutable[i].copy(
+                        resolvedClass = "ON",
+                        trace = mutable[i].trace + BidiTraceEvent("W6/$cls-to-ON", mutable[i].utf16Range, cls, "ON"),
+                    )
+                }
+                "ET" -> {
+                    mutable[i] = mutable[i].copy(
+                        resolvedClass = "ON",
+                        trace = mutable[i].trace + BidiTraceEvent("W6/ET-to-ON", mutable[i].utf16Range, "ET", "ON"),
+                    )
+                }
+            }
+        }
+
+        return mutable
+    }
+
+    private fun applyW7(scalars: List<BidiScalar>, paragraphDirection: String): List<BidiScalar> =
+        scalars.mapIndexed { index, scalar ->
+            if (scalar.explicitDirection != null || scalar.resolvedClass != "EN") {
+                scalar
+            } else {
+                val resolved = if (nearestStrongBefore(scalars, index) == "R") "R" else "L"
+                scalar.copy(
+                    resolvedClass = resolved,
+                    trace = scalar.trace + BidiTraceEvent(
+                        "W7/EN-from-nearest-strong",
+                        scalar.utf16Range,
+                        "EN",
+                        resolved,
+                    ),
+                )
+            }
+        }
+
+    private fun applyN0(scalars: List<BidiScalar>, paragraphDirection: String): List<BidiScalar> {
+        val mutable = scalars.toMutableList()
+        var i = 0
+        while (i < mutable.size) {
+            val scalar = mutable[i]
+            val expectedClosing = BracketMap[scalar.codePoint]
+            if (expectedClosing != null && scalar.bidiBracketType == "o") {
+                var depth = 1
+                var matchIndex = -1
+                for (j in i + 1 until mutable.size) {
+                    if (mutable[j].bidiBracketType == "o" && BracketMap[mutable[j].codePoint] == expectedClosing) {
+                        depth++
+                    } else if (mutable[j].codePoint == expectedClosing) {
+                        depth--
+                        if (depth == 0) {
+                            matchIndex = j
+                            break
+                        }
+                    }
+                }
+                if (matchIndex > 0) {
+                    val oClass = mutable[i].resolvedClass
+                    val cClass = mutable[matchIndex].resolvedClass
+                    if (oClass == cClass) {
+                        val strong = findFirstStrongBetween(mutable, i + 1, matchIndex - 1)
+                        val s = strong ?: baseDirectionCode(paragraphDirection)
+                        if (oClass != s) {
+                            mutable[i] = mutable[i].copy(
+                                resolvedClass = s,
+                                trace = mutable[i].trace + BidiTraceEvent("N0/bracket-to-$s", mutable[i].utf16Range, mutable[i].originalClass, s),
+                            )
+                            mutable[matchIndex] = mutable[matchIndex].copy(
+                                resolvedClass = s,
+                                trace = mutable[matchIndex].trace + BidiTraceEvent("N0/bracket-to-$s", mutable[matchIndex].utf16Range, mutable[matchIndex].originalClass, s),
+                            )
+                        }
+                    }
+                    i = matchIndex
+                }
+            }
+            i++
+        }
+        return mutable
+    }
+
+    private fun applyNeutralResolution(scalars: List<BidiScalar>, paragraphDirection: String): List<BidiScalar> =
+        scalars.mapIndexed { index, scalar ->
             if (scalar.resolvedClass !in NeutralBidiClasses) {
                 scalar
             } else {
-                val previous = withStrong.take(index).lastOrNull { it.resolvedClass in setOf("L", "R") }?.resolvedClass
-                val next = withStrong.drop(index + 1).firstOrNull { it.resolvedClass in setOf("L", "R") }?.resolvedClass
+                val previous = scalars.take(index).lastOrNull { it.resolvedClass in setOf("L", "R") }?.resolvedClass
+                val next = scalars.drop(index + 1).firstOrNull { it.resolvedClass in setOf("L", "R") }?.resolvedClass
                 val resolved = when {
                     previous != null && previous == next -> previous
                     previous != null && next == null -> previous
@@ -366,11 +512,10 @@ public class DefaultBidiResolver(
                 }
                 scalar.copy(
                     resolvedClass = resolved,
-                    trace = scalar.trace + BidiTraceEvent("W7/ON-neutral-resolution", scalar.utf16Range, scalar.originalClass, resolved),
+                    trace = scalar.trace + BidiTraceEvent("W7/ON-neutral-resolution", scalar.utf16Range, scalar.resolvedClass, resolved),
                 )
             }
         }
-    }
 
     private fun buildRuns(
         scalars: List<BidiScalar>,
@@ -440,6 +585,7 @@ private data class BidiScalar(
     val resolvedClass: String,
     val explicitDirection: String?,
     val explicitRule: String?,
+    val bidiBracketType: String?,
     val trace: List<BidiTraceEvent>,
 )
 
@@ -500,6 +646,48 @@ private fun controlKind(bidiClass: String): String? =
         "LRE", "RLE", "LRO", "RLO", "PDF", "LRI", "RLI", "FSI", "PDI" -> bidiClass
         else -> null
     }
+
+private fun bidiBracketTypeFor(codePoint: Int): String? =
+    if (codePoint in BracketMap) "o" else if (codePoint in BracketClosingSet) "c" else null
+
+private val BracketMap: Map<Int, Int> = mapOf(
+    0x0028 to 0x0029, 0x005B to 0x005D, 0x007B to 0x007D,
+    0x207D to 0x207E, 0x208D to 0x208E,
+    0x2329 to 0x232A, 0x2768 to 0x2769, 0x276A to 0x276B,
+    0x276C to 0x276D, 0x276E to 0x276F, 0x2770 to 0x2771,
+    0x2772 to 0x2773, 0x2774 to 0x2775,
+    0x27C5 to 0x27C6, 0x27E6 to 0x27E7, 0x27E8 to 0x27E9,
+    0x27EA to 0x27EB, 0x27EC to 0x27ED, 0x27EE to 0x27EF,
+    0x2983 to 0x2984, 0x2985 to 0x2986, 0x2987 to 0x2988,
+    0x2989 to 0x298A, 0x298B to 0x298C, 0x298D to 0x298E,
+    0x298F to 0x2990, 0x2991 to 0x2992, 0x2993 to 0x2994,
+    0x2995 to 0x2996, 0x2997 to 0x2998,
+    0x29D8 to 0x29D9, 0x29DA to 0x29DB, 0x29FC to 0x29FD,
+    0x300C to 0x300D, 0x300E to 0x300F,
+    0x3010 to 0x3011, 0x3014 to 0x3015, 0x3016 to 0x3017,
+    0x3018 to 0x3019, 0x301A to 0x301B,
+    0xFD3E to 0xFD3F,
+    0xFE59 to 0xFE5A, 0xFE5B to 0xFE5C, 0xFE5D to 0xFE5E,
+    0xFF08 to 0xFF09, 0xFF3B to 0xFF3D,
+    0xFF5B to 0xFF5D, 0xFF5F to 0xFF60, 0xFF62 to 0xFF63,
+    0x3008 to 0x3009, 0x300A to 0x300B,
+)
+
+private val BracketClosingSet: Set<Int> = BracketMap.values.toSet()
+
+private fun resolvedAsEN(scalar: BidiScalar): Boolean =
+    scalar.explicitDirection == null && (scalar.resolvedClass == "EN" || scalar.originalClass == "EN")
+
+private fun resolvedAsAN(scalar: BidiScalar): Boolean =
+    scalar.explicitDirection == null && (scalar.resolvedClass == "AN" || scalar.originalClass == "AN")
+
+private fun findFirstStrongBetween(scalars: List<BidiScalar>, from: Int, to: Int): String? {
+    for (i in from..to) {
+        val cls = scalars[i].resolvedClass
+        if (cls == "L" || cls == "R") return cls
+    }
+    return null
+}
 
 private fun List<BidiControl>.markOpenControls(openDepth: Int): List<BidiControl> {
     if (openDepth == 0) return this

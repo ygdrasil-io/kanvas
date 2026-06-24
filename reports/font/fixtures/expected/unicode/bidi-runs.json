@@ -54,6 +54,7 @@
         {"rule": "W3/AL-to-R", "utf16Range": "0..0", "beforeClass": "AL", "afterClass": "R"},
         {"rule": "W2/AN-inside-rtl-run", "utf16Range": "1..1", "beforeClass": "AN", "afterClass": "R"},
         {"rule": "W2/AN-inside-rtl-run", "utf16Range": "2..2", "beforeClass": "AN", "afterClass": "R"},
+        {"rule": "W6/CS-to-ON", "utf16Range": "3..3", "beforeClass": "CS", "afterClass": "ON"},
         {"rule": "W7/ON-neutral-resolution", "utf16Range": "3..3", "beforeClass": "ON", "afterClass": "R"},
         {"rule": "W7/ON-neutral-resolution", "utf16Range": "4..4", "beforeClass": "WS", "afterClass": "R"}
       ],
